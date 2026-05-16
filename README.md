@@ -84,13 +84,15 @@ Or upload the file through the UI at **Docs → Import manifest**. See
 ## Production deployment
 
 Severino HQ is designed for **homelab / small VPS deployment, reachable only
-over Tailscale**. Two supported paths:
+over Tailscale**. Three documents cover this:
 
-- **Containerized (recommended for homelab):** see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
-  for `docker compose` with named volumes for the SQLite database, uploaded
-  receipts, and exports, plus a Tailscale sidecar pattern.
-- **systemd + Caddy/Nginx on a VPS:** also in
-  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+- [`docs/HOMELAB.md`](docs/HOMELAB.md) — the **concrete homelab deployment**
+  running today (`/opt/apps/severino-hq` on `homelab-server`, NPM at
+  `severino-hq.homelab`, read-only deploy key, AdGuard DNS rewrite). Read this
+  first if you are redeploying our setup.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — generic deploy recipes:
+  containerized (Docker Compose with named volumes for SQLite / receipts /
+  exports, optional Tailscale sidecar) and systemd + Caddy/Nginx on a VPS.
 
 Either way, the app binds to localhost (or the Tailscale interface), the
 reverse proxy terminates TLS, and the public internet never sees it.
