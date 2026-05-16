@@ -91,6 +91,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
+    # after SecurityMiddleware so it can short-circuit static-file requests
+    # before sessions / auth do any work.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -176,6 +180,16 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles")))
+
+# WhiteNoise: serve compressed, far-future-cached static files in production.
+# Use the non-manifest backend so a missing collectstatic run doesn't 500 the
+# whole site; we accept that asset URLs aren't fingerprinted.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
