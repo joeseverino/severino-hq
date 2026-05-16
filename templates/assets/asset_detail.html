@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ asset.item_name }} · Assets{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ asset.item_name }}</h1>
+    <p class="muted">{{ asset.get_category_display }} · <span class="pill pill-{{ asset.status }}">{{ asset.get_status_display }}</span></p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'assets:edit' asset.slug %}">Edit</a>
+    <a class="btn danger" href="{% url 'assets:delete' asset.slug %}">Delete</a>
+  </div>
+</div>
+
+<dl class="kv">
+  <dt>Slug</dt><dd><code>{{ asset.slug }}</code></dd>
+  {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor }}</dd>{% endif %}
+  <dt>Purchased</dt><dd>{{ asset.purchase_date|default:"—" }}</dd>
+  <dt>Total cost</dt><dd>${{ asset.total_cost|floatformat:2|intcomma }}</dd>
+  <dt>Business use</dt><dd>{{ asset.business_use_percentage }}%</dd>
+  <dt>Estimated deductible</dt><dd>${{ asset.estimated_deductible_amount|floatformat:2|intcomma }} <span class="muted">— estimate only, not tax advice</span></dd>
+  {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display }}</dd>{% endif %}
+  {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number }}</code></dd>{% endif %}
+  {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date }}</dd>{% endif %}
+</dl>
+
+{% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|linebreaksbr }}</p>{% endif %}
+
+<section>
+  <h2>Related</h2>
+  <div class="two-col">
+    <div><h3>Projects</h3>
+      {% if asset.related_projects.all %}<ul>{% for p in asset.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div><h3>Content items</h3>
+      {% if asset.content_items.all %}<ul>{% for c in asset.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div><h3>Documentation</h3>
+      {% if asset.documentation_records.all %}<ul>{% for d in asset.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div><h3>Expenses</h3>
+      {% if asset.expenses.all %}<ul>{% for e in asset.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div><h3>Receipts</h3>
+      {% if asset.receipts.all %}<ul>{% for r in asset.receipts.all %}<li><a href="{{ r.get_absolute_url }}">{{ r.original_filename|default:"receipt" }}</a> <span class="muted">${{ r.amount }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

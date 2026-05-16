@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete receipt{% endblock %}
+{% block content %}
+<h1>Delete receipt?</h1>
+<p>This will permanently remove the receipt record <strong>and the underlying file on disk</strong>.</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete</button>
+    <a class="btn" href="{{ receipt.get_absolute_url }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Dashboard · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="muted">Operating console for Severino LLC.</p>
+
+<section class="kpi-grid">
+  <div class="kpi">
+    <span class="label">Active projects</span>
+    <span class="value">{{ active_projects|length }}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Draft content</span>
+    <span class="value">{{ draft_content|length }}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Published content</span>
+    <span class="value">{{ published_content_count }}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Active assets</span>
+    <span class="value">{{ active_asset_count }}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Expenses {{ this_year }}</span>
+    <span class="value">${{ expenses_ytd_total|floatformat:2|intcomma }}</span>
+    <span class="muted">{{ expenses_ytd_count }} record{{ expenses_ytd_count|pluralize }}</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Est. deductible {{ this_year }}</span>
+    <span class="value">${{ deductible_ytd_total|floatformat:2|intcomma }}</span>
+    <span class="muted">Estimate — not tax advice.</span>
+  </div>
+  <div class="kpi">
+    <span class="label">Docs needing review</span>
+    <span class="value">{{ docs_needing_review_count }}</span>
+  </div>
+</section>
+
+<div class="two-col">
+  <section>
+    <h2>Active projects</h2>
+    {% if active_projects %}
+      <ul class="list-rows">
+        {% for p in active_projects %}
+          <li>
+            <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
+            <span class="muted">{{ p.get_category_display }} · {{ p.get_status_display }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No active projects.</p>
+    {% endif %}
+    <p><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
+  </section>
+
+  <section>
+    <h2>Draft content</h2>
+    {% if draft_content %}
+      <ul class="list-rows">
+        {% for c in draft_content %}
+          <li>
+            <a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a>
+            <span class="muted">{{ c.get_content_type_display }} · {{ c.get_status_display }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No drafts in flight.</p>
+    {% endif %}
+    <p><a href="{% url 'content:list' %}">All content &rarr;</a></p>
+  </section>
+
+  <section>
+    <h2>Recent receipts</h2>
+    {% if recent_receipts %}
+      <ul class="list-rows">
+        {% for r in recent_receipts %}
+          <li>
+            <a href="{{ r.get_absolute_url }}">{{ r.vendor|default:r.original_filename|default:"Receipt" }}</a>
+            <span class="muted">{{ r.uploaded_at|naturaltime }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No receipts uploaded yet.</p>
+    {% endif %}
+    <p><a href="{% url 'receipts:list' %}">All receipts &rarr;</a></p>
+  </section>
+
+  <section>
+    <h2>Docs needing review</h2>
+    {% if docs_needing_review %}
+      <ul class="list-rows">
+        {% for d in docs_needing_review %}
+          <li>
+            <a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a>
+            <span class="muted">last reviewed: {{ d.last_reviewed|default:"never" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">All active docs reviewed recently.</p>
+    {% endif %}
+    <p><a href="{% url 'docs_index:list' %}?needs_review=1">All docs needing review &rarr;</a></p>
+  </section>
+</div>
+
+<section>
+  <h2>Recent activity</h2>
+  {% if recent_audit %}
+    <ul class="audit-list">
+      {% for ev in recent_audit %}
+        <li>
+          <span class="muted">{{ ev.created_at|date:"Y-m-d H:i" }}</span>
+          <strong>{{ ev.user.get_username|default:"system" }}</strong>
+          {{ ev.get_action_display|lower }}
+          {% if ev.object_type %}<span class="muted">{{ ev.object_type }}</span>{% endif %}
+          {% if ev.object_repr %}— {{ ev.object_repr }}{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    <p><a href="{% url 'core:audit_list' %}">Full audit log &rarr;</a></p>
+  {% else %}
+    <p class="muted">No activity yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

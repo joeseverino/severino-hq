@@ -1,0 +1,52 @@
+# Severino HQ — homelab Docker Compose.
+#
+# Binds gunicorn ONLY to the host's loopback interface (127.0.0.1:8000).
+# Put a Tailscale-only reverse proxy (Caddy on the host, or a tailscale
+# sidecar — see docs/DEPLOYMENT.md) in front of it. The container is NOT
+# reachable from the LAN until you do.
+#
+# Volumes:
+#   data/    SQLite DB
+#   media/   Uploaded receipt files (private — never publicly exposed)
+#   exports/ Generated exports
+#   static/  Collected static files
+#
+# The image runs as UID/GID 10001. `chown -R 10001:10001` the host bind
+# mounts before first boot (or use docker volumes, as below, and let the
+# container manage permissions).
+
+services:
+  app:
+    build: .
+    image: severino-hq:latest
+    container_name: severino-hq
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the container we always use these paths; the .env file may
+      # override them for non-container deploys.
+      SEVERINO_DATABASE_PATH: /data/severino.sqlite3
+      SEVERINO_MEDIA_ROOT: /media
+      SEVERINO_EXPORTS_ROOT: /exports
+      DJANGO_STATIC_ROOT: /static
+    ports:
+      # Loopback only. Reverse proxy on the host (or a tailscale sidecar)
+      # handles TLS and Tailscale exposure.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - severino_data:/data
+      - severino_media:/media
+      - severino_exports:/exports
+      - severino_static:/static
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/',timeout=3).status in (200,302) else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  severino_data:
+  severino_media:
+  severino_exports:
+  severino_static:

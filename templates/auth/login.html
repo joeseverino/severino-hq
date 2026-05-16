@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Sign in · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>Sign in to {{ SITE_NAME }}</h1>
+  <p class="muted">Private internal app. No public registration.</p>
+
+  {% if form.non_field_errors %}
+    <div class="msg msg-error">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <form method="post" action="">
+    {% csrf_token %}
+    <label for="id_username">Username</label>
+    <input type="text" name="username" id="id_username" autocomplete="username" required autofocus>
+
+    <label for="id_password">Password</label>
+    <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+</div>
+{% endblock %}

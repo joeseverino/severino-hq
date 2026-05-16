@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Receipt · {{ receipt.vendor|default:"upload" }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ receipt.vendor|default:"Receipt" }}</h1>
+    <p class="muted">{{ receipt.original_filename|default:"file" }} · uploaded {{ receipt.uploaded_at|naturaltime }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn primary" href="{% url 'receipts:file' receipt.pk %}">Download file</a>
+    <a class="btn" href="{% url 'receipts:edit' receipt.pk %}">Edit</a>
+    <a class="btn danger" href="{% url 'receipts:delete' receipt.pk %}">Delete</a>
+  </div>
+</div>
+
+<dl class="kv">
+  <dt>Date</dt><dd>{{ receipt.date|default:"—" }}</dd>
+  <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
+  {% if receipt.content_type %}<dt>Content type</dt><dd><code>{{ receipt.content_type }}</code></dd>{% endif %}
+  {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|filesizeformat }}</dd>{% endif %}
+  {% if receipt.related_expense %}<dt>Expense</dt><dd><a href="{{ receipt.related_expense.get_absolute_url }}">{{ receipt.related_expense }}</a></dd>{% endif %}
+  {% if receipt.related_asset %}<dt>Asset</dt><dd><a href="{{ receipt.related_asset.get_absolute_url }}">{{ receipt.related_asset.item_name }}</a></dd>{% endif %}
+</dl>
+
+{% if receipt.notes %}<h2>Notes</h2><p>{{ receipt.notes|linebreaksbr }}</p>{% endif %}
+{% endblock %}

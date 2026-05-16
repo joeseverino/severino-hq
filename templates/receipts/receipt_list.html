@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Receipts · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Receipts</h1>
+  <a class="btn primary" href="{% url 'receipts:create' %}">Upload receipt</a>
+</div>
+<p class="muted">Receipt files are stored privately on disk. They are never publicly accessible — only signed-in users can fetch them through this app.</p>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search vendor / filename / notes…">
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Uploaded</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Filename</th><th>Links</th></tr>
+  </thead>
+  <tbody>
+    {% for r in receipts_list %}
+      <tr>
+        <td><a href="{{ r.get_absolute_url }}">{{ r.uploaded_at|date:"Y-m-d" }}</a></td>
+        <td>{{ r.vendor|default:"—" }}</td>
+        <td>{{ r.date|default:"—" }}</td>
+        <td>${{ r.amount|floatformat:2|intcomma }}</td>
+        <td class="muted">{{ r.original_filename|default:"—" }}</td>
+        <td class="muted">
+          {% if r.related_expense %}<a href="{{ r.related_expense.get_absolute_url }}">expense</a>{% endif %}
+          {% if r.related_asset %}<a href="{{ r.related_asset.get_absolute_url }}">asset</a>{% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="muted">No receipts yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

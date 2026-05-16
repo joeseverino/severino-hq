@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ item.title }}{% endblock %}
+{% block content %}
+<h1>Delete content item?</h1>
+<p>This will permanently remove <strong>{{ item.title }}</strong>.</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete</button>
+    <a class="btn" href="{{ item.get_absolute_url }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ project.name }}{% endblock %}
+{% block content %}
+<h1>Delete project?</h1>
+<p>This will permanently remove <strong>{{ project.name }}</strong>. Related expenses, assets, and content items will lose their reference to it.</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete project</button>
+    <a class="btn" href="{{ project.get_absolute_url }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

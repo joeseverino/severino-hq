@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} project · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<h1>{% if form.instance.pk %}Edit project{% else %}New project{% endif %}</h1>
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}
+    {% include "partials/_form_field.html" %}
+  {% endfor %}
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Create project{% endif %}</button>
+    <a class="btn" href="{% if form.instance.pk %}{{ form.instance.get_absolute_url }}{% else %}{% url 'projects:list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

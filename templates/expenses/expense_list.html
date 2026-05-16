@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Expenses · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Expenses</h1>
+  <a class="btn primary" href="{% url 'expenses:create' %}">New expense</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search expenses…">
+  <select name="category">
+    <option value="">All categories</option>
+    {% for value, label in category_choices %}<option value="{{ value }}" {% if value == selected_category %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="year">
+    <option value="">All years</option>
+    {% for y in available_years %}
+      <option value="{{ y.year }}" {% if selected_year == y.year|stringformat:'s' %}selected{% endif %}>{{ y.year }}</option>
+    {% endfor %}
+  </select>
+  <select name="sort">
+    <option value="-date" {% if sort == "-date" %}selected{% endif %}>Date (newest)</option>
+    <option value="date" {% if sort == "date" %}selected{% endif %}>Date (oldest)</option>
+    <option value="-total_cost" {% if sort == "-total_cost" %}selected{% endif %}>Cost (high→low)</option>
+    <option value="vendor" {% if sort == "vendor" %}selected{% endif %}>Vendor</option>
+    <option value="category" {% if sort == "category" %}selected{% endif %}>Category</option>
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<p class="muted">Filtered totals: <strong>${{ total_filtered|floatformat:2|intcomma }}</strong> total — <strong>${{ deductible_filtered|floatformat:2|intcomma }}</strong> estimated deductible.</p>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Date</th><th>Vendor</th><th>Item</th><th>Category</th><th>Cost</th><th>% biz</th><th>Est. deduct.</th></tr>
+  </thead>
+  <tbody>
+    {% for e in expenses_list %}
+      <tr>
+        <td><a href="{{ e.get_absolute_url }}">{{ e.date }}</a></td>
+        <td>{{ e.vendor }}</td>
+        <td>{{ e.item }}</td>
+        <td>{{ e.get_category_display }}</td>
+        <td>${{ e.total_cost|floatformat:2|intcomma }}</td>
+        <td class="muted">{{ e.business_use_percentage }}%</td>
+        <td>${{ e.estimated_deductible_amount|floatformat:2|intcomma }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7" class="muted">No expenses yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

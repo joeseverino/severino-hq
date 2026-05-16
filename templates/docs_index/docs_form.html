@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} doc record{% endblock %}
+{% block content %}
+<h1>{% if form.instance.pk %}Edit doc record{% else %}New doc record{% endif %}</h1>
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if form.instance.pk %}Save changes{% else %}Create{% endif %}</button>
+    <a class="btn" href="{% url 'docs_index:list' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

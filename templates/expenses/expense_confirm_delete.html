@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete expense{% endblock %}
+{% block content %}
+<h1>Delete expense?</h1>
+<p>{{ expense.date }} · {{ expense.vendor }} — {{ expense.item }} (${{ expense.total_cost }})</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete</button>
+    <a class="btn" href="{{ expense.get_absolute_url }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

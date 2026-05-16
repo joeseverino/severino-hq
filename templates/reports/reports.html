@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Reports · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Reports &amp; exports</h1>
+  <form method="get" class="inline">
+    <label for="year">Year:</label>
+    <select name="year" id="year" onchange="this.form.submit()">
+      {% for y in available_years %}
+        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<section class="kpi-grid">
+  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{{ expenses_count }} record{{ expenses_count|pluralize }}</span></div>
+  <div class="kpi"><span class="label">Est. deductible {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate — not tax advice.</span></div>
+  <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">${{ assets_total|floatformat:2|intcomma }} total</span></div>
+  <div class="kpi"><span class="label">Docs needing review</span><span class="value">{{ docs_needing_review_count }}</span></div>
+</section>
+
+<div class="two-col">
+  <section>
+    <h2>Expenses by category — {{ year }}</h2>
+    {% if expenses_by_category %}
+      <table class="data-table">
+        <thead><tr><th>Category</th><th>Total</th><th>Deductible</th></tr></thead>
+        <tbody>
+          {% for row in expenses_by_category %}
+            <tr><td>{{ row.category }}</td><td>${{ row.total|floatformat:2|intcomma }}</td><td>${{ row.deductible|floatformat:2|intcomma }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}<p class="muted">No expenses this year.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Largest expenses — {{ year }}</h2>
+    {% if largest_expenses %}
+      <ul class="list-rows">
+        {% for e in largest_expenses %}
+          <li><a href="{{ e.get_absolute_url }}">{{ e.vendor }} — {{ e.item }}</a> <span class="muted">{{ e.date }} · {{ e.get_category_display }}</span> <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></li>
+        {% endfor %}
+      </ul>
+    {% else %}<p class="muted">None.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Content by status</h2>
+    {% if content_status_counts %}
+      <ul class="list-rows">{% for row in content_status_counts %}<li>{{ row.status }} — <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
+    {% else %}<p class="muted">No content.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Projects by status</h2>
+    {% if project_status_counts %}
+      <ul class="list-rows">{% for row in project_status_counts %}<li>{{ row.status }} — <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
+    {% else %}<p class="muted">No projects.</p>{% endif %}
+  </section>
+</div>
+
+<section>
+  <h2>Docs needing review</h2>
+  {% if docs_needing_review %}
+    <ul class="list-rows">
+      {% for d in docs_needing_review %}
+        <li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a> <span class="muted">last reviewed: {{ d.last_reviewed|default:"never" }}</span></li>
+      {% endfor %}
+    </ul>
+  {% else %}<p class="muted">All caught up.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Exports</h2>
+  <p class="muted">All exports omit secrets and sensitive doc bodies. Receipt files are never exported.</p>
+  <div class="export-grid">
+    <a class="btn" href="{% url 'reports:expenses_csv' %}?year={{ year }}">expenses-{{ year }}.csv</a>
+    <a class="btn" href="{% url 'reports:assets_csv' %}?year={{ year }}">assets-{{ year }}.csv</a>
+    <a class="btn" href="{% url 'reports:expenses_csv' %}">expenses.csv (all)</a>
+    <a class="btn" href="{% url 'reports:assets_csv' %}">assets.csv (all)</a>
+    <a class="btn" href="{% url 'reports:content_csv' %}">content.csv</a>
+    <a class="btn" href="{% url 'reports:projects_csv' %}">projects.csv</a>
+    <a class="btn" href="{% url 'reports:documentation_csv' %}">documentation.csv</a>
+    <a class="btn primary" href="{% url 'reports:year_summary_json' %}?year={{ year }}">year-summary-{{ year }}.json</a>
+    <a class="btn primary" href="{% url 'reports:year_summary_md' %}?year={{ year }}">year-summary-{{ year }}.md</a>
+  </div>
+</section>
+
+<section>
+  <h2>Recent audit events</h2>
+  {% if recent_audit %}
+    <ul class="audit-list">
+      {% for ev in recent_audit %}
+        <li><span class="muted">{{ ev.created_at|date:"Y-m-d H:i" }}</span> <strong>{{ ev.user.get_username|default:"system" }}</strong> {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.object_type }}</span>{% endif %}{% if ev.object_repr %} — {{ ev.object_repr }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endblock %}
