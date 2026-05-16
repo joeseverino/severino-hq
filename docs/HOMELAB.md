@@ -78,11 +78,20 @@ ssh homelab-server "cd /opt/apps/severino-hq && git pull && sudo docker compose 
 # Logs
 ssh homelab-server "cd /opt/apps/severino-hq && sudo docker compose logs --tail=100 app"
 
-# Shell inside the container
-ssh homelab-server "cd /opt/apps/severino-hq && sudo docker compose exec app python manage.py shell"
+# Interactive command — `ssh -t` is required for a TTY (createsuperuser,
+# changepassword, shell, dbshell). Without -t Django silently skips with
+# "Superuser creation skipped due to not running in a TTY".
+ssh -t homelab-server "cd /opt/apps/severino-hq && sudo docker compose exec app python manage.py createsuperuser"
 
-# One-off Django command
+# Shell inside the container
+ssh -t homelab-server "cd /opt/apps/severino-hq && sudo docker compose exec app python manage.py shell"
+
+# Non-interactive one-off
 ssh homelab-server "cd /opt/apps/severino-hq && sudo docker compose exec app python manage.py <command>"
+
+# Piping stdin in — use -T on docker exec, plain ssh
+ssh homelab-server "cd /opt/apps/severino-hq && sudo docker compose exec -T app python manage.py import_docs_manifest -" \
+  < /path/to/local/docs_manifest.json
 
 # Container health
 ssh homelab-server "sudo docker inspect --format '{{.State.Health.Status}}' severino-hq"
