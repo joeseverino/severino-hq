@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Import documentation manifest{% endblock %}
+{% block content %}
+<h1>Import documentation manifest</h1>
+<p class="muted">Upload a JSON array of doc records (one entry per Obsidian doc). See <code>docs_index/importer.py</code> for the schema.</p>
+<form method="post" enctype="multipart/form-data" class="form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+  <div class="form-actions">
+    <button type="submit" class="primary">Import</button>
+    <a class="btn" href="{% url 'docs_index:list' %}">Cancel</a>
+  </div>
+</form>
+
+<h2>Example manifest entry</h2>
+<pre><code>{
+  "doc_id": "rb-adguard-001",
+  "title": "AdGuard Home Runbook",
+  "path": "Infra/DNS/AdGuard Home.md",
+  "doc_type": "runbook",
+  "system": "AdGuard Home",
+  "environment": "homelab",
+  "status": "active",
+  "sensitivity": "sensitive",
+  "related_projects": ["homelab-dns"],
+  "related_assets": ["optiplex-7050"],
+  "last_reviewed": "2026-05-16"
+}</code></pre>
+{% endblock %}

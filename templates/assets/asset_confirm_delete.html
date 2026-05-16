@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ asset.item_name }}{% endblock %}
+{% block content %}
+<h1>Delete asset?</h1>
+<p>This will permanently remove <strong>{{ asset.item_name }}</strong>. Linked expenses and receipts will lose their reference to it.</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete</button>
+    <a class="btn" href="{{ asset.get_absolute_url }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

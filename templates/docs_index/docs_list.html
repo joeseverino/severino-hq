@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Documentation index · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Documentation index</h1>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'docs_index:import' %}">Import manifest</a>
+    <a class="btn primary" href="{% url 'docs_index:create' %}">New doc record</a>
+  </div>
+</div>
+<p class="muted">Severino HQ indexes metadata only. Full runbook bodies live in the Obsidian vault — that's the source of truth.</p>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search docs…">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}<option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="environment">
+    <option value="">All environments</option>
+    {% for value, label in env_choices %}<option value="{{ value }}" {% if value == selected_env %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="doc_type">
+    <option value="">All types</option>
+    {% for value, label in type_choices %}<option value="{{ value }}" {% if value == selected_type %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="sensitivity">
+    <option value="">All sensitivities</option>
+    {% for value, label in sensitivity_choices %}<option value="{{ value }}" {% if value == selected_sensitivity %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <label class="inline"><input type="checkbox" name="needs_review" value="1" {% if needs_review %}checked{% endif %}> Needs review</label>
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Doc ID</th><th>Title</th><th>Type</th><th>Environment</th><th>Status</th><th>Sensitivity</th><th>Last reviewed</th></tr>
+  </thead>
+  <tbody>
+    {% for d in records %}
+      <tr>
+        <td><a href="{{ d.get_absolute_url }}"><code>{{ d.doc_id }}</code></a></td>
+        <td>{{ d.title }}</td>
+        <td>{{ d.get_doc_type_display }}</td>
+        <td>{{ d.get_environment_display }}</td>
+        <td><span class="pill pill-{{ d.status }}">{{ d.get_status_display }}</span></td>
+        <td><span class="pill pill-{{ d.sensitivity }}">{{ d.get_sensitivity_display }}</span></td>
+        <td class="muted">{{ d.last_reviewed|default:"never" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7" class="muted">No documentation records.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

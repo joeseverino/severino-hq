@@ -1,0 +1,57 @@
+{% load static %}
+{% load humanize %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
+    {% if user.is_authenticated %}
+      <nav class="primary-nav">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <a href="{% url 'projects:list' %}">Projects</a>
+        <a href="{% url 'content:list' %}">Content</a>
+        <a href="{% url 'docs_index:list' %}">Docs</a>
+        <a href="{% url 'assets:list' %}">Assets</a>
+        <a href="{% url 'expenses:list' %}">Expenses</a>
+        <a href="{% url 'receipts:list' %}">Receipts</a>
+        <a href="{% url 'reports:dashboard' %}">Reports</a>
+        <a href="{% url 'core:audit_list' %}">Audit</a>
+      </nav>
+      <div class="user-block">
+        <span class="user">{{ user.get_username }}</span>
+        <a href="{% url 'admin:index' %}" class="muted">Admin</a>
+        <form action="{% url 'logout' %}" method="post" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="link-button">Sign out</button>
+        </form>
+      </div>
+    {% endif %}
+  </header>
+
+  <main class="content">
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <span>{{ SITE_NAME }} · Private internal app · Not connected to the public site.</span>
+  </footer>
+
+  {% block scripts_extra %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Audit log · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<p class="muted">Every important action — create / update / delete / login / export — is recorded here.</p>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search by object or message…">
+  <select name="action">
+    <option value="">All actions</option>
+    {% for value, label in actions %}<option value="{{ value }}" {% if value == selected_action %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for ev in events %}
+      <tr>
+        <td class="muted">{{ ev.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td>{{ ev.user.get_username|default:"system" }}</td>
+        <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
+        <td>{% if ev.object_type %}<code>{{ ev.object_type }}</code>{% if ev.object_id %} #{{ ev.object_id }}{% endif %}{% endif %}<br><span class="muted">{{ ev.object_repr }}</span></td>
+        <td class="muted">{{ ev.message }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No audit events.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

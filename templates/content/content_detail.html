@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }} · Content{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ item.title }}</h1>
+    <p class="muted">{{ item.get_content_type_display }} · <span class="pill pill-{{ item.status }}">{{ item.get_status_display }}</span></p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'content:edit' item.slug %}">Edit</a>
+    <a class="btn danger" href="{% url 'content:delete' item.slug %}">Delete</a>
+  </div>
+</div>
+
+<dl class="kv">
+  <dt>Slug</dt><dd><code>{{ item.slug }}</code></dd>
+  {% if item.topic %}<dt>Topic</dt><dd>{{ item.topic }}</dd>{% endif %}
+  {% if item.tag_list %}<dt>Tags</dt><dd>{% for t in item.tag_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
+  {% if item.published_url %}<dt>Published URL</dt><dd><a href="{{ item.published_url }}" rel="noopener noreferrer">{{ item.published_url }}</a></dd>{% endif %}
+  {% if item.wordpress_post_id %}<dt>WordPress</dt><dd>post #{{ item.wordpress_post_id }}{% if item.wordpress_slug %} (<code>{{ item.wordpress_slug }}</code>){% endif %}</dd>{% endif %}
+  {% if item.published_at %}<dt>Published at</dt><dd>{{ item.published_at }}</dd>{% endif %}
+  <dt>Created</dt><dd class="muted">{{ item.created_at|date:"Y-m-d H:i" }}</dd>
+  <dt>Updated</dt><dd class="muted">{{ item.updated_at|date:"Y-m-d H:i" }}</dd>
+</dl>
+
+{% if item.notes %}<h2>Notes</h2><p>{{ item.notes|linebreaksbr }}</p>{% endif %}
+
+<section>
+  <h2>Related</h2>
+  <div class="two-col">
+    <div>
+      <h3>Projects</h3>
+      {% if item.related_projects.all %}<ul>{% for p in item.related_projects.all %}<li><a href="{{ p.get_absolute_url }}">{{ p.name }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Assets</h3>
+      {% if item.related_assets.all %}<ul>{% for a in item.related_assets.all %}<li><a href="{{ a.get_absolute_url }}">{{ a.item_name }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Documentation</h3>
+      {% if item.related_documentation.all %}<ul>{% for d in item.related_documentation.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Expenses</h3>
+      {% if item.related_expenses.all %}<ul>{% for e in item.related_expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

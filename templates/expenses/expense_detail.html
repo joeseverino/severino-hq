@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Expense {{ expense.id }} · {{ expense.vendor }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ expense.vendor }} — {{ expense.item }}</h1>
+    <p class="muted">{{ expense.date }} · {{ expense.get_category_display }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'expenses:edit' expense.pk %}">Edit</a>
+    <a class="btn danger" href="{% url 'expenses:delete' expense.pk %}">Delete</a>
+  </div>
+</div>
+
+<dl class="kv">
+  <dt>Total cost</dt><dd>${{ expense.total_cost|floatformat:2|intcomma }}</dd>
+  <dt>Business use</dt><dd>{{ expense.business_use_percentage }}%</dd>
+  <dt>Estimated deductible</dt><dd>${{ expense.estimated_deductible_amount|floatformat:2|intcomma }} <span class="muted">— estimate only, not tax advice</span></dd>
+  {% if expense.payment_method %}<dt>Payment method</dt><dd>{{ expense.get_payment_method_display }}</dd>{% endif %}
+  {% if expense.business_purpose %}<dt>Business purpose</dt><dd>{{ expense.business_purpose }}</dd>{% endif %}
+  {% if expense.related_project %}<dt>Project</dt><dd><a href="{{ expense.related_project.get_absolute_url }}">{{ expense.related_project.name }}</a></dd>{% endif %}
+  {% if expense.related_asset %}<dt>Asset</dt><dd><a href="{{ expense.related_asset.get_absolute_url }}">{{ expense.related_asset.item_name }}</a></dd>{% endif %}
+  {% if expense.related_content %}<dt>Content</dt><dd><a href="{{ expense.related_content.get_absolute_url }}">{{ expense.related_content.title }}</a></dd>{% endif %}
+  {% if expense.related_documentation %}<dt>Documentation</dt><dd><a href="{{ expense.related_documentation.get_absolute_url }}">{{ expense.related_documentation.doc_id }}</a></dd>{% endif %}
+</dl>
+
+{% if expense.notes %}<h2>Notes</h2><p>{{ expense.notes|linebreaksbr }}</p>{% endif %}
+
+<section>
+  <h2>Receipts</h2>
+  {% if expense.receipts.all %}
+    <ul>{% for r in expense.receipts.all %}<li><a href="{{ r.get_absolute_url }}">{{ r.original_filename|default:"receipt" }}</a> — ${{ r.amount }}</li>{% endfor %}</ul>
+  {% else %}
+    <p class="muted">No receipts linked. <a href="{% url 'receipts:create' %}?related_expense={{ expense.pk }}">Upload one</a>.</p>
+  {% endif %}
+</section>
+{% endblock %}

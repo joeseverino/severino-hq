@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Django check + tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    env:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
+      DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Verify no missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run tests
+        run: python manage.py test --verbosity 2
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t severino-hq:ci .

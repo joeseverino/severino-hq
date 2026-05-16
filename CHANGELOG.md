@@ -1,0 +1,59 @@
+# Changelog
+
+All notable changes to Severino HQ.
+Format roughly follows [Keep a Changelog](https://keepachangelog.com); versions
+follow [SemVer](https://semver.org/) once we publish a tagged release.
+
+## [Unreleased]
+
+## [0.1.0] — 2026-05-16
+
+Initial v1 cut: the private operating system for Severino LLC.
+
+### Added
+
+- Django 5 + SQLite scaffold with `core` (audit log, middleware, dashboard),
+  `projects`, `content`, `docs_index`, `assets`, `expenses`, `receipts`,
+  `reports` apps.
+- Authentication: login-required on every URL except `/accounts/login/` and
+  `/static/`. No public registration.
+- Dashboard with YTD KPIs (expenses total, estimated deductible, active
+  projects/assets, draft content, docs needing review, recent activity).
+- CRUD UI for projects, content items, documentation records, assets,
+  expenses, receipts — with search, filter, sort, pagination.
+- Auto-computed `estimated_deductible_amount = total_cost × business_use_pct`
+  for assets and expenses.
+- Receipts: random UUID filenames, storage outside app code, no public URL,
+  auth-gated streaming download view.
+- Documentation manifest importer (CLI + web upload) for syncing Obsidian
+  metadata into the docs index without storing runbook bodies.
+- Reports page + CSV exports (expenses / assets / content / projects /
+  documentation), plus relationship-aware JSON and AI-readable Markdown
+  year-summary exports (designed for the future severino-knowledge-router
+  MCP).
+- Audit log via signals + middleware on every create / update / delete /
+  login / logout / login-failed / upload / export / import.
+- Demo seeder (`manage.py seed_demo`) and manifest importer
+  (`manage.py import_docs_manifest`).
+- Production security defaults: SECRET_KEY required at startup in prod,
+  ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS from env, secure cookies, secure
+  headers, SQLite WAL + foreign-keys ON.
+- Dockerfile (non-root UID 10001, multi-stage, healthcheck),
+  docker-compose.yml that binds to `127.0.0.1:8000` only, named volumes
+  for db / media / exports / staticfiles, `entrypoint.sh` auto-migrate +
+  collectstatic.
+- `scripts/backup.sh` — SQLite `VACUUM INTO` snapshot, tarballed with media
+  + exports, optional `age` encryption.
+- Docs: `README`, `docs/DEPLOYMENT.md` (Docker on homelab + systemd/Caddy
+  fallback), `docs/SECURITY.md`, `docs/BACKUP.md`, `docs/ROADMAP.md`.
+
+### Security
+
+- DEBUG off in production (startup error if `DJANGO_SECRET_KEY` is missing).
+- Audit logging on every important action.
+- Documentation index is metadata-only; sensitivity labels gate AI-safe
+  exports.
+- Receipt files never publicly URL-addressable.
+
+[Unreleased]: https://github.com/joeseverino/severino-hq/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/joeseverino/severino-hq/releases/tag/v0.1.0

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Content · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Content pipeline</h1>
+  <a class="btn primary" href="{% url 'content:create' %}">New content item</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search content…">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="content_type">
+    <option value="">All types</option>
+    {% for value, label in type_choices %}
+      <option value="{{ value }}" {% if value == selected_type %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="sort">
+    <option value="-updated_at" {% if sort == "-updated_at" %}selected{% endif %}>Updated (newest)</option>
+    <option value="title" {% if sort == "title" %}selected{% endif %}>Title A→Z</option>
+    <option value="-published_at" {% if sort == "-published_at" %}selected{% endif %}>Published (newest)</option>
+    <option value="status" {% if sort == "status" %}selected{% endif %}>Status</option>
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Title</th><th>Type</th><th>Status</th><th>Topic</th><th>Published</th><th>Updated</th></tr>
+  </thead>
+  <tbody>
+    {% for c in items %}
+      <tr>
+        <td><a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a><br><span class="muted">{{ c.slug }}</span></td>
+        <td>{{ c.get_content_type_display }}</td>
+        <td><span class="pill pill-{{ c.status }}">{{ c.get_status_display }}</span></td>
+        <td class="muted">{{ c.topic|default:"—" }}</td>
+        <td class="muted">{{ c.published_at|default:"—" }}</td>
+        <td class="muted">{{ c.updated_at|date:"Y-m-d" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="muted">No content yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

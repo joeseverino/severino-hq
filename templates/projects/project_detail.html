@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · Projects{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ project.name }}</h1>
+    <p class="muted">{{ project.get_category_display }} · <span class="pill pill-{{ project.status }}">{{ project.get_status_display }}</span></p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'projects:edit' project.slug %}">Edit</a>
+    <a class="btn danger" href="{% url 'projects:delete' project.slug %}">Delete</a>
+  </div>
+</div>
+
+<dl class="kv">
+  <dt>Slug</dt><dd><code>{{ project.slug }}</code></dd>
+  {% if project.repository_url %}<dt>Repository</dt><dd><a href="{{ project.repository_url }}" rel="noopener noreferrer">{{ project.repository_url }}</a></dd>{% endif %}
+  {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a></dd>{% endif %}
+  {% if project.tech_list %}<dt>Technologies</dt><dd>{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
+  <dt>Created</dt><dd class="muted">{{ project.created_at|date:"Y-m-d H:i" }}</dd>
+  <dt>Updated</dt><dd class="muted">{{ project.updated_at|date:"Y-m-d H:i" }}</dd>
+</dl>
+
+{% if project.description %}<h2>Description</h2><p>{{ project.description|linebreaksbr }}</p>{% endif %}
+{% if project.deployment_notes %}<h2>Deployment notes</h2><p>{{ project.deployment_notes|linebreaksbr }}</p>{% endif %}
+{% if project.security_notes %}<h2>Security notes</h2><p>{{ project.security_notes|linebreaksbr }}</p>{% endif %}
+{% if project.notes %}<h2>Notes</h2><p>{{ project.notes|linebreaksbr }}</p>{% endif %}
+
+<section>
+  <h2>Related</h2>
+  <div class="two-col">
+    <div>
+      <h3>Content items</h3>
+      {% if project.content_items.all %}
+        <ul>{% for c in project.content_items.all %}<li><a href="{{ c.get_absolute_url }}">{{ c.title }}</a> <span class="muted">{{ c.get_status_display }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Assets</h3>
+      {% if project.assets.all %}
+        <ul>{% for a in project.assets.all %}<li><a href="{{ a.get_absolute_url }}">{{ a.item_name }}</a> <span class="muted">${{ a.total_cost }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Documentation</h3>
+      {% if project.documentation_records.all %}
+        <ul>{% for d in project.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a></li>{% endfor %}</ul>
+      {% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Expenses</h3>
+      {% if project.expenses.all %}
+        <ul>{% for e in project.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} — {{ e.item }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>
+      {% else %}<p class="muted">None.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

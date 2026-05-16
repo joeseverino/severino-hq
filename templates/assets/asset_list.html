@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Assets · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Assets &amp; equipment</h1>
+  <a class="btn primary" href="{% url 'assets:create' %}">New asset</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search assets…">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}<option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="category">
+    <option value="">All categories</option>
+    {% for value, label in category_choices %}<option value="{{ value }}" {% if value == selected_category %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="sort">
+    <option value="-purchase_date" {% if sort == "-purchase_date" %}selected{% endif %}>Purchase date (newest)</option>
+    <option value="item_name" {% if sort == "item_name" %}selected{% endif %}>Name A→Z</option>
+    <option value="-total_cost" {% if sort == "-total_cost" %}selected{% endif %}>Cost (high→low)</option>
+    <option value="status" {% if sort == "status" %}selected{% endif %}>Status</option>
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Item</th><th>Vendor</th><th>Category</th><th>Purchased</th><th>Cost</th><th>% biz</th><th>Est. deduct.</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for a in assets_list %}
+      <tr>
+        <td><a href="{{ a.get_absolute_url }}"><strong>{{ a.item_name }}</strong></a></td>
+        <td>{{ a.vendor }}</td>
+        <td>{{ a.get_category_display }}</td>
+        <td class="muted">{{ a.purchase_date|default:"—" }}</td>
+        <td>${{ a.total_cost|floatformat:2|intcomma }}</td>
+        <td class="muted">{{ a.business_use_percentage }}%</td>
+        <td>${{ a.estimated_deductible_amount|floatformat:2|intcomma }}</td>
+        <td><span class="pill pill-{{ a.status }}">{{ a.get_status_display }}</span></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="muted">No assets yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}

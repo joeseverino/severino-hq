@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Projects · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Projects &amp; Labs</h1>
+  <a class="btn primary" href="{% url 'projects:create' %}">New project</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search projects…">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="category">
+    <option value="">All categories</option>
+    {% for value, label in category_choices %}
+      <option value="{{ value }}" {% if value == selected_category %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="sort">
+    <option value="-updated_at" {% if sort == "-updated_at" %}selected{% endif %}>Updated (newest)</option>
+    <option value="updated_at" {% if sort == "updated_at" %}selected{% endif %}>Updated (oldest)</option>
+    <option value="name" {% if sort == "name" %}selected{% endif %}>Name A→Z</option>
+    <option value="-name" {% if sort == "-name" %}selected{% endif %}>Name Z→A</option>
+    <option value="status" {% if sort == "status" %}selected{% endif %}>Status</option>
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Name</th><th>Category</th><th>Status</th><th>Tech</th><th>Updated</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for p in projects %}
+      <tr>
+        <td><a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a><br><span class="muted">{{ p.slug }}</span></td>
+        <td>{{ p.get_category_display }}</td>
+        <td><span class="pill pill-{{ p.status }}">{{ p.get_status_display }}</span></td>
+        <td class="muted">{{ p.technologies_used|truncatechars:60 }}</td>
+        <td class="muted">{{ p.updated_at|date:"Y-m-d" }}</td>
+        <td class="row-actions">
+          <a href="{% url 'projects:edit' p.slug %}">Edit</a>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="muted">No projects yet. <a href="{% url 'projects:create' %}">Create one</a>.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "partials/_pagination.html" %}
+{% endblock %}
