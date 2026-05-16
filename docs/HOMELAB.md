@@ -17,15 +17,15 @@ choices for our environment so future redeploys are mechanical.
 | Host | `homelab-server` (Hyper-V VM, Ubuntu 26.04, LAN `192.168.1.233`, Tailscale `100.85.33.67`) |
 | Install path | `/opt/apps/severino-hq/` (owned by `joe:joe`) |
 | Container | `severino-hq` |
-| Container bind | `127.0.0.1:8000` (loopback only on the VM) |
-| LAN-reachable URL | `https://severino-hq.homelab` (provided by Nginx Proxy Manager) |
-| TLS | Local CA (Severino Labs Root CA), NOT Let's Encrypt — `.homelab` is internal |
-| DNS | AdGuard Home wildcard `*.homelab → 192.168.1.233` |
-| Monitoring | Uptime Kuma HTTP(s) check on `https://severino-hq.homelab/accounts/login/` |
+| Container bind | `0.0.0.0:8000` on the VM (NPM is bridge-networked and cannot reach host loopback; access control is the app's auth gate, not the bind address) |
+| LAN-reachable URL | `https://hq.jseverino.com` (via Nginx Proxy Manager) |
+| TLS | Local CA (Severino Labs Root CA), NOT Let's Encrypt — name resolves only inside the network |
+| DNS | AdGuard Home rewrite `hq.jseverino.com → 192.168.1.233`. NOTE: any device that doesn't use AdGuard as its resolver (e.g. a Mac on Wi-Fi using ISP DNS) won't see this name. |
+| Monitoring | Uptime Kuma HTTP(s) check on `https://hq.jseverino.com/accounts/login/` |
 | Backups | `scripts/backup.sh` — `VACUUM INTO` then tar + optional age |
 
 The container is **not** reachable from the LAN directly. The only way in
-is the NPM HTTPS frontend on `severino-hq.homelab` (LAN + Tailscale).
+is the NPM HTTPS frontend on `hq.jseverino.com` (LAN + Tailscale).
 
 ---
 
@@ -54,8 +54,8 @@ Owned by `joe`, `chmod 600`, not in git. Generated on first deploy:
 ```
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=<64-byte token_urlsafe>
-DJANGO_ALLOWED_HOSTS=severino-hq.homelab,localhost,127.0.0.1
-DJANGO_CSRF_TRUSTED_ORIGINS=https://severino-hq.homelab
+DJANGO_ALLOWED_HOSTS=hq.jseverino.com,hq.jseverino.com,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=https://hq.jseverino.com,https://hq.jseverino.com
 DJANGO_BEHIND_TLS_PROXY=1
 DJANGO_SESSION_COOKIE_SECURE=1
 DJANGO_CSRF_COOKIE_SECURE=1
@@ -94,17 +94,19 @@ ssh homelab-server "sudo docker inspect --format '{{.State.Health.Status}}' seve
 
 The vault has runbooks for this — these are the manual UI steps in NPM:
 
-1. `cert-gen severino-hq.homelab` on the Mac → produces
-   `severino-hq.homelab.key` + `fullchain.pem`.
-2. NPM → Certificates → Add Certificate → Custom → upload both files.
+1. AdGuard: add a DNS rewrite `hq.jseverino.com → 192.168.1.233` (the
+   `*.homelab` wildcard does NOT cover `.jseverino.com`).
+2. Cert: reuse the existing `*.jseverino.com` wildcard already loaded in
+   NPM — no `cert-gen` for this hostname.
 3. NPM → Hosts → Proxy Hosts → Add Proxy Host:
-   - Domain Names: `severino-hq.homelab`
+   - Domain Names: `hq.jseverino.com`
    - Scheme: `http`
-   - Forward Hostname/IP: `127.0.0.1`
+   - **Forward Hostname / IP: `192.168.1.233`** (NPM is bridge-networked;
+     `127.0.0.1` here is NPM's own container loopback and returns 502)
    - Forward Port: `8000`
-   - SSL: select the cert above, Force SSL on, HTTP/2 on.
-4. Verify: `curl -sI https://severino-hq.homelab/accounts/login/` returns
-   `HTTP/2 200`.
+   - SSL tab → pick the `*.jseverino.com` cert, Force SSL on, HTTP/2 on.
+4. Save. Verify with `curl -kI --resolve hq.jseverino.com:443:192.168.1.233
+   https://hq.jseverino.com/accounts/login/` — expect `HTTP/2 200`.
 
 ---
 
@@ -120,6 +122,49 @@ this deploy uses Docker named volumes, the practical backup is one of:
 
 A nightly systemd timer fires `scripts/backup.sh` against the mounts; the
 unit file template is in [`BACKUP.md`](BACKUP.md).
+
+---
+
+## Troubleshooting
+
+### NPM returns 502 for `hq.jseverino.com`
+
+NPM runs in a bridge-networked container. From inside it, `127.0.0.1` is its
+own loopback, not the host's. Set the NPM proxy host's **Forward Hostname /
+IP** to `192.168.1.233` (the VM's LAN IP), not `127.0.0.1`.
+
+### `192.168.1.233:8000` from a browser returns 400 "Disallowed Host"
+
+That's correct — Django rejects requests whose `Host` header isn't in
+`DJANGO_ALLOWED_HOSTS`. The intended path is through NPM, which rewrites the
+`Host` header to `hq.jseverino.com`. If you really need to hit the backend
+directly for debugging, add `192.168.1.233` to `DJANGO_ALLOWED_HOSTS` in
+`.env` and recreate the container — but don't leave it there.
+
+### `https://hq.jseverino.com` won't resolve on my Mac
+
+Your Mac probably isn't using AdGuard as its DNS resolver. The Spectrum
+router hands out its own IP for DHCP regardless, and Tailscale's "Use
+nameservers globally" must be on (with `100.85.33.67` as the nameserver) for
+tailnet devices to see the rewrite. Confirm with:
+
+```bash
+scutil --dns | grep 'nameserver\[0\]' | head -3
+dig +short hq.jseverino.com
+```
+
+For a quick one-off test, you can curl with a forced resolve:
+
+```bash
+curl -kI --resolve hq.jseverino.com:443:192.168.1.233 https://hq.jseverino.com/accounts/login/
+```
+
+### CSRF errors after sign-in via NPM
+
+`DJANGO_CSRF_TRUSTED_ORIGINS` doesn't list the full origin the browser is
+using. It must be scheme + host with no path — e.g.
+`https://hq.jseverino.com`, not `hq.jseverino.com` or
+`https://hq.jseverino.com/`.
 
 ---
 
