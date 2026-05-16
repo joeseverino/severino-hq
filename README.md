@@ -88,7 +88,7 @@ over Tailscale**. Three documents cover this:
 
 - [`docs/HOMELAB.md`](docs/HOMELAB.md) — the **concrete homelab deployment**
   running today (`/opt/apps/severino-hq` on `homelab-server`, NPM at
-  `severino-hq.homelab`, read-only deploy key, AdGuard DNS rewrite). Read this
+  `hq.jseverino.com`, read-only deploy key, AdGuard DNS rewrite). Read this
   first if you are redeploying our setup.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — generic deploy recipes:
   containerized (Docker Compose with named volumes for SQLite / receipts /

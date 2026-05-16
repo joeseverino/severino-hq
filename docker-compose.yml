@@ -1,9 +1,12 @@
 # Severino HQ — homelab Docker Compose.
 #
-# Binds gunicorn ONLY to the host's loopback interface (127.0.0.1:8000).
-# Put a Tailscale-only reverse proxy (Caddy on the host, or a tailscale
-# sidecar — see docs/DEPLOYMENT.md) in front of it. The container is NOT
-# reachable from the LAN until you do.
+# Publishes gunicorn on host port 8000 so a bridge-networked reverse proxy
+# (e.g. Nginx Proxy Manager in its own container) on the same host can reach
+# the app at <host-LAN-IP>:8000. Access control is the app's
+# authentication-required middleware, not the bind address.
+#
+# If your reverse proxy uses host networking instead, you can tighten the
+# port mapping below to "127.0.0.1:8000:8000".
 #
 # Volumes:
 #   data/    SQLite DB
@@ -30,9 +33,12 @@ services:
       SEVERINO_EXPORTS_ROOT: /exports
       DJANGO_STATIC_ROOT: /static
     ports:
-      # Loopback only. Reverse proxy on the host (or a tailscale sidecar)
-      # handles TLS and Tailscale exposure.
-      - "127.0.0.1:8000:8000"
+      # Exposed on the LAN-facing interface so a bridge-networked reverse proxy
+      # (e.g. Nginx Proxy Manager in its own container) can reach the app at
+      # <host-LAN-IP>:8000. The app's auth gate is the actual access control —
+      # not the bind address. If your reverse proxy is host-networked, you can
+      # tighten this to "127.0.0.1:8000:8000".
+      - "8000:8000"
     volumes:
       - severino_data:/data
       - severino_media:/media
