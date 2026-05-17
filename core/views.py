@@ -74,6 +74,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             published_content_count=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED
             ).count(),
+            recent_published=ContentItem.objects.filter(
+                status=ContentItem.Status.PUBLISHED
+            ).order_by("-published_at", "-updated_at")[:8],
             active_assets=Asset.objects.filter(
                 status=Asset.Status.ACTIVE
             ).order_by("-purchase_date")[:8],

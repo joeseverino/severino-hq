@@ -99,6 +99,35 @@
 
   <section>
     <div class="section-head">
+      <h2>Recent published</h2>
+      {% if recent_published %}<span class="count">{{ published_content_count }}</span>{% endif %}
+    </div>
+    {% if recent_published %}
+      <ul class="list-rows">
+        {% for c in recent_published %}
+          <li>
+            <span class="row-main">
+              {% if c.published_url %}
+                <a href="{{ c.published_url }}" target="_blank" rel="noopener"><strong>{{ c.title }}</strong></a>
+              {% else %}
+                <a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a>
+              {% endif %}
+              <span class="muted">· {{ c.get_content_type_display }}</span>
+            </span>
+            <span class="row-meta">{% if c.published_at %}{{ c.published_at|naturaltime }}{% else %}{{ c.updated_at|naturaltime }}{% endif %}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="section-foot"><a href="{% url 'content:list' %}?status=published">All published &rarr;</a></p>
+    {% else %}
+      <div class="empty">
+        <p>Nothing published yet.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>Recent receipts</h2>
       {% if recent_receipts %}<span class="count">{{ recent_receipts|length }}</span>{% endif %}
     </div>
