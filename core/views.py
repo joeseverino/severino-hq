@@ -62,7 +62,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ctx.update(
             active_projects=Project.objects.filter(
                 status=Project.Status.ACTIVE
-            ).order_by("-updated_at")[:8],
+            ).order_by("-updated_at")[:6],
             draft_content=ContentItem.objects.filter(
                 status__in=[
                     ContentItem.Status.IDEA,
@@ -70,16 +70,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                     ContentItem.Status.DRAFTING,
                     ContentItem.Status.EDITING,
                 ]
-            ).order_by("-updated_at")[:8],
+            ).order_by("-updated_at")[:6],
             published_content_count=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED
             ).count(),
             recent_published=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED
-            ).order_by("-published_at", "-updated_at")[:8],
+            ).order_by("-published_at", "-updated_at")[:6],
             active_assets=Asset.objects.filter(
                 status=Asset.Status.ACTIVE
-            ).order_by("-purchase_date")[:8],
+            ).order_by("-purchase_date")[:6],
             active_asset_count=Asset.objects.filter(
                 status=Asset.Status.ACTIVE
             ).count(),
@@ -87,8 +87,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             or Decimal("0.00"),
             expenses_ytd_count=expenses_ytd.count(),
             deductible_ytd_total=deductible_ytd,
-            recent_receipts=Receipt.objects.order_by("-uploaded_at")[:8],
-            docs_needing_review=docs_needing_review.order_by("last_reviewed")[:8],
+            recent_receipts=Receipt.objects.order_by("-uploaded_at")[:6],
+            docs_needing_review=docs_needing_review.order_by("last_reviewed")[:6],
             docs_needing_review_count=docs_needing_review.count(),
             docs_by_system=docs_by_system,
             docs_by_environment=docs_by_environment,
