@@ -109,12 +109,13 @@ def import_manifest_data(
             doc_id=doc_id, defaults=defaults
         )
         if created:
-            stats["created"] += 1
+            changed = True
         elif update_existing:
-            for k, v in defaults.items():
-                setattr(record, k, v)
-            record.save()
-            stats["updated"] += 1
+            changed = any(getattr(record, k) != v for k, v in defaults.items())
+            if changed:
+                for k, v in defaults.items():
+                    setattr(record, k, v)
+                record.save()
         else:
             stats["skipped"] += 1
             continue
@@ -124,11 +125,26 @@ def import_manifest_data(
 
         if project_slugs:
             qs = Project.objects.filter(slug__in=project_slugs)
-            record.related_projects.set(qs)
+            desired = set(qs.values_list("pk", flat=True))
+            current = set(record.related_projects.values_list("pk", flat=True))
+            if desired != current:
+                record.related_projects.set(qs)
+                changed = True
             stats["missing_relations"] += len(project_slugs) - qs.count()
         if asset_slugs:
             qs = Asset.objects.filter(slug__in=asset_slugs)
-            record.related_assets.set(qs)
+            desired = set(qs.values_list("pk", flat=True))
+            current = set(record.related_assets.values_list("pk", flat=True))
+            if desired != current:
+                record.related_assets.set(qs)
+                changed = True
             stats["missing_relations"] += len(asset_slugs) - qs.count()
+
+        if created:
+            stats["created"] += 1
+        elif changed:
+            stats["updated"] += 1
+        else:
+            stats["skipped"] += 1
 
     return stats
