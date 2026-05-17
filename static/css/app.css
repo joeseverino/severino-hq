@@ -207,7 +207,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 }
 .list-rows li:last-child { border-bottom: 0; }
 .list-rows li:first-child { padding-top: 4px; }
-.list-rows .row-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.list-rows .row-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; flex-wrap: wrap; }
+.list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
 .list-rows .row-meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
