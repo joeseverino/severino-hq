@@ -114,7 +114,7 @@
               {% endif %}
               <span class="muted">· {{ c.get_content_type_display }}</span>
             </span>
-            <span class="row-meta">{% if c.published_at %}{{ c.published_at|naturaltime }}{% else %}{{ c.updated_at|naturaltime }}{% endif %}</span>
+            <span class="row-meta">{% if c.published_at %}{{ c.published_at|date:"M j, Y" }}{% else %}{{ c.updated_at|naturaltime }}{% endif %}</span>
           </li>
         {% endfor %}
       </ul>
