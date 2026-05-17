@@ -35,6 +35,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Do not update existing doc_id records — only create new ones.",
         )
+        parser.add_argument(
+            "--report-orphans",
+            action="store_true",
+            help="After import, list doc_ids that exist in HQ but not in the manifest.",
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
@@ -55,15 +60,36 @@ class Command(BaseCommand):
             stats = import_manifest_data(
                 data,
                 update_existing=not options["no_update"],
+                report_orphans=options["report_orphans"],
             )
         except ManifestImportError as exc:
             raise CommandError(str(exc)) from exc
 
+        summary = {
+            k: v for k, v in stats.items()
+            if k not in {"missing_relations_detail", "orphans"}
+        }
         record_event(
             action=AuditLog.Action.IMPORTED,
             type_label="DocumentationRecord",
-            message=f"CLI manifest import: {stats}",
+            message=f"CLI manifest import: {summary}",
             metadata=stats,
         )
 
-        self.stdout.write(self.style.SUCCESS(f"Manifest imported: {stats}"))
+        self.stdout.write(self.style.SUCCESS(f"Manifest imported: {summary}"))
+
+        for entry in stats.get("missing_relations_detail", []):
+            self.stdout.write(self.style.WARNING(
+                f"  missing {entry['kind']}: {entry['doc_id']} → {entry['slug']}"
+            ))
+
+        if options["report_orphans"]:
+            orphans = stats.get("orphans", [])
+            if orphans:
+                self.stdout.write(self.style.WARNING(
+                    f"Orphans ({len(orphans)} HQ rows with no manifest entry):"
+                ))
+                for doc_id in orphans:
+                    self.stdout.write(self.style.WARNING(f"  orphan: {doc_id}"))
+            else:
+                self.stdout.write("No orphans.")
