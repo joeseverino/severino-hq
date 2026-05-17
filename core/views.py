@@ -40,6 +40,25 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             models_last_reviewed_or_null(review_cutoff)
         )
 
+        docs_by_system = list(
+            DocumentationRecord.objects
+            .exclude(system_service="")
+            .values_list("system_service")
+            .annotate(n=Count("id"))
+            .order_by("-n", "system_service")[:10]
+        )
+        env_counts = dict(
+            DocumentationRecord.objects
+            .values_list("environment")
+            .annotate(n=Count("id"))
+            .values_list("environment", "n")
+        )
+        docs_by_environment = [
+            (label, env_counts.get(value, 0))
+            for value, label in DocumentationRecord.Environment.choices
+            if env_counts.get(value, 0) > 0
+        ]
+
         ctx.update(
             active_projects=Project.objects.filter(
                 status=Project.Status.ACTIVE
@@ -68,6 +87,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             recent_receipts=Receipt.objects.order_by("-uploaded_at")[:8],
             docs_needing_review=docs_needing_review.order_by("last_reviewed")[:8],
             docs_needing_review_count=docs_needing_review.count(),
+            docs_by_system=docs_by_system,
+            docs_by_environment=docs_by_environment,
             recent_audit=AuditLog.objects.select_related("user")[:15],
             project_status_counts=_status_counts(
                 Project, Project.Status.choices
