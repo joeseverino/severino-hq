@@ -123,6 +123,16 @@ def _upsert_content_item(
     if not item.related_documentation.filter(pk=record.pk).exists():
         item.related_documentation.add(record)
 
+    # Mirror the doc's project/asset relationships onto the ContentItem so
+    # article cards and project pages cross-reference directly without a
+    # join through DocumentationRecord.
+    doc_project_ids = set(record.related_projects.values_list("pk", flat=True))
+    if set(item.related_projects.values_list("pk", flat=True)) != doc_project_ids:
+        item.related_projects.set(doc_project_ids)
+    doc_asset_ids = set(record.related_assets.values_list("pk", flat=True))
+    if set(item.related_assets.values_list("pk", flat=True)) != doc_asset_ids:
+        item.related_assets.set(doc_asset_ids)
+
     stats.setdefault("content_items_synced", 0)
     stats["content_items_synced"] += 1
 
