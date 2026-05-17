@@ -63,17 +63,29 @@ def import_manifest_data(
     items: Iterable[dict],
     *,
     update_existing: bool = True,
-) -> dict[str, int]:
+    report_orphans: bool = False,
+) -> dict[str, Any]:
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
 
-    stats = {"created": 0, "updated": 0, "skipped": 0, "missing_relations": 0}
+    stats: dict[str, Any] = {
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "missing_relations": 0,
+        "missing_relations_detail": [],
+    }
+    if report_orphans:
+        stats["orphans"] = []
+
+    manifest_doc_ids: set[str] = set()
 
     for entry in items:
         doc_id = (entry.get("doc_id") or "").strip()
         if not doc_id:
             stats["skipped"] += 1
             continue
+        manifest_doc_ids.add(doc_id)
 
         defaults = {
             "title": entry.get("title") or doc_id,
@@ -130,7 +142,13 @@ def import_manifest_data(
             if desired != current:
                 record.related_projects.set(qs)
                 changed = True
-            stats["missing_relations"] += len(project_slugs) - qs.count()
+            found_slugs = set(qs.values_list("slug", flat=True))
+            for slug in project_slugs:
+                if slug not in found_slugs:
+                    stats["missing_relations"] += 1
+                    stats["missing_relations_detail"].append(
+                        {"doc_id": doc_id, "kind": "project", "slug": slug}
+                    )
         if asset_slugs:
             qs = Asset.objects.filter(slug__in=asset_slugs)
             desired = set(qs.values_list("pk", flat=True))
@@ -138,7 +156,13 @@ def import_manifest_data(
             if desired != current:
                 record.related_assets.set(qs)
                 changed = True
-            stats["missing_relations"] += len(asset_slugs) - qs.count()
+            found_slugs = set(qs.values_list("slug", flat=True))
+            for slug in asset_slugs:
+                if slug not in found_slugs:
+                    stats["missing_relations"] += 1
+                    stats["missing_relations_detail"].append(
+                        {"doc_id": doc_id, "kind": "asset", "slug": slug}
+                    )
 
         if created:
             stats["created"] += 1
@@ -146,5 +170,11 @@ def import_manifest_data(
             stats["updated"] += 1
         else:
             stats["skipped"] += 1
+
+    if report_orphans:
+        db_doc_ids = set(
+            DocumentationRecord.objects.values_list("doc_id", flat=True)
+        )
+        stats["orphans"] = sorted(db_doc_ids - manifest_doc_ids)
 
     return stats
