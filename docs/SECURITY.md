@@ -55,7 +55,7 @@
 - [ ] Restore drill done once, and documented locally.
 - [ ] Superuser created via `manage.py createsuperuser`; no shared accounts.
 - [ ] Documentation index records carrying secrets are flagged
-      `sensitivity=sensitive` or `secret_adjacent` (these are excluded from
+      `sensitivity=sensitive` or `restricted` (these are excluded from
       AI-safe references).
 
 ## What v1 deliberately does NOT do

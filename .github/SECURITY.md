@@ -20,7 +20,7 @@ reproduce and, where applicable, a suggested mitigation.
 - Auth bypass on any Severino HQ route.
 - Receipt file disclosure to unauthenticated parties.
 - CSRF / XSS / injection in the admin or app UI.
-- Exposure of secret-adjacent documentation records via exports.
+- Exposure of restricted documentation records via exports.
 - Container escape / privilege escalation in the shipped Docker image.
 
 ## What's out of scope

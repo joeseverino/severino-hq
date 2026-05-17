@@ -47,7 +47,7 @@ class DocumentationRecord(TimestampedModel):
         PUBLIC = "public", "Public"
         INTERNAL = "internal", "Internal"
         SENSITIVE = "sensitive", "Sensitive"
-        SECRET_ADJACENT = "secret_adjacent", "Secret-adjacent"
+        RESTRICTED = "restricted", "Restricted"
 
     doc_id = models.SlugField(
         max_length=80,
@@ -80,7 +80,7 @@ class DocumentationRecord(TimestampedModel):
         default=Sensitivity.INTERNAL,
         help_text=(
             "Sensitivity label. Public/internal docs can be referenced by the "
-            "future MCP; sensitive/secret-adjacent should not be."
+            "future MCP; sensitive/restricted should not be."
         ),
     )
 

@@ -157,7 +157,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .pill-idea, .pill-draft, .pill-viewed { background: #e4ebf3; color: #1f3656; border-color: #c9d3e3; }
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned, .pill-replaced, .pill-deleted, .pill-login_failed { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
 .pill-completed { background: #dfe6f1; color: #1c3463; border-color: #c5d2e9; }
-.pill-sensitive, .pill-secret_adjacent { background: #fcdcd0; color: #843300; border-color: #ffbfa8; }
+.pill-sensitive, .pill-restricted { background: #fcdcd0; color: #843300; border-color: #ffbfa8; }
 .pill-internal { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
 .pill-public { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
 .pill-imported, .pill-exported { background: #ebe0f0; color: #4a2a72; border-color: #d3c2e8; }
