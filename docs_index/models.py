@@ -97,6 +97,11 @@ class DocumentationRecord(TimestampedModel):
     external_url = models.URLField(blank=True)
 
     last_reviewed = models.DateField(null=True, blank=True)
+    published_at = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Publication date for public articles. Empty for operational docs.",
+    )
     notes = models.TextField(
         blank=True,
         help_text="Index-level notes only. Do not paste runbook contents here.",

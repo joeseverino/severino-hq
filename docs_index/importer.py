@@ -29,6 +29,7 @@ from typing import Any, Iterable
 from django.db import transaction
 
 from assets.models import Asset
+from content.models import ContentItem
 from projects.models import Project
 
 from .models import DocumentationRecord
@@ -56,6 +57,74 @@ def _validate_choice(value: str, choices, *, field: str) -> str:
     raise ManifestImportError(
         f"Invalid {field}={value!r}. Allowed: {sorted(allowed)}"
     )
+
+
+# Map vault `content_type` frontmatter values to ContentItem.Type.
+CONTENT_TYPE_MAP = {
+    "portfolio_article": ContentItem.Type.PORTFOLIO_PAGE,
+    "blog_post": ContentItem.Type.ARTICLE,
+    "lab_writeup": ContentItem.Type.LAB_WRITEUP,
+    "case_study": ContentItem.Type.CASE_STUDY,
+    "guide": ContentItem.Type.GUIDE,
+    "review": ContentItem.Type.REVIEW,
+    "video": ContentItem.Type.VIDEO,
+    "service_page": ContentItem.Type.SERVICE_PAGE,
+}
+
+
+def _upsert_content_item(
+    record: "DocumentationRecord",
+    entry: dict,
+    defaults: dict,
+    stats: dict,
+) -> None:
+    """Mirror a public-article DocumentationRecord into ContentItem.
+
+    Keyed by slug derived from `doc_id` (e.g. `article-foo` -> `foo`). Idempotent:
+    if a ContentItem with that slug already exists, its fields are refreshed.
+    """
+    doc_id = record.doc_id
+    article_slug = doc_id.removeprefix("article-") or doc_id
+
+    ct_raw = (entry.get("content_type") or "").strip().lower()
+    content_type = CONTENT_TYPE_MAP.get(ct_raw, ContentItem.Type.PORTFOLIO_PAGE)
+
+    has_publish_marker = bool(
+        defaults.get("published_at") or defaults.get("external_url")
+    )
+    item_status = (
+        ContentItem.Status.PUBLISHED
+        if has_publish_marker
+        else ContentItem.Status.DRAFTING
+    )
+
+    tags = entry.get("tags") or []
+    tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
+
+    content_defaults = {
+        "title": defaults["title"],
+        "content_type": content_type,
+        "status": item_status,
+        "topic": entry.get("system") or "",
+        "tags": tags_str,
+        "published_url": defaults.get("external_url") or "",
+        "published_at": defaults.get("published_at"),
+    }
+
+    item, created = ContentItem.objects.get_or_create(
+        slug=article_slug, defaults=content_defaults
+    )
+    if not created:
+        if any(getattr(item, k) != v for k, v in content_defaults.items()):
+            for k, v in content_defaults.items():
+                setattr(item, k, v)
+            item.save()
+
+    if not item.related_documentation.filter(pk=record.pk).exists():
+        item.related_documentation.add(record)
+
+    stats.setdefault("content_items_synced", 0)
+    stats["content_items_synced"] += 1
 
 
 @transaction.atomic
@@ -114,6 +183,7 @@ def import_manifest_data(
             "github_path": entry.get("github_path") or "",
             "external_url": entry.get("external_url") or "",
             "last_reviewed": _coerce_date(entry.get("last_reviewed")),
+            "published_at": _coerce_date(entry.get("published_at")),
             "notes": entry.get("notes") or "",
         }
 
@@ -170,6 +240,11 @@ def import_manifest_data(
             stats["updated"] += 1
         else:
             stats["skipped"] += 1
+
+        # Mirror public-article docs into ContentItem so they show up in
+        # the publishing-pipeline KPIs and lists.
+        if defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
+            _upsert_content_item(record, entry, defaults, stats)
 
     if report_orphans:
         db_doc_ids = set(
