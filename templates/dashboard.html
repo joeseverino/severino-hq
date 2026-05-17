@@ -146,6 +146,46 @@
       </div>
     {% endif %}
   </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Docs by system</h2>
+      {% if docs_by_system %}<span class="count">{{ docs_by_system|length }}</span>{% endif %}
+    </div>
+    {% if docs_by_system %}
+      <ul class="list-rows">
+        {% for system, n in docs_by_system %}
+          <li>
+            <span class="row-main">
+              <a href="{% url 'docs_index:list' %}?q={{ system|urlencode }}"><strong>{{ system }}</strong></a>
+            </span>
+            <span class="row-meta">{{ n }} doc{{ n|pluralize }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty"><p>No system-tagged docs yet.</p></div>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Docs by environment</h2>
+      {% if docs_by_environment %}<span class="count">{{ docs_by_environment|length }}</span>{% endif %}
+    </div>
+    {% if docs_by_environment %}
+      <ul class="list-rows">
+        {% for label, n in docs_by_environment %}
+          <li>
+            <span class="row-main"><strong>{{ label }}</strong></span>
+            <span class="row-meta">{{ n }} doc{{ n|pluralize }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty"><p>No docs indexed yet.</p></div>
+    {% endif %}
+  </section>
 </div>
 
 <section class="card" style="margin-top: 16px;">
