@@ -25,6 +25,7 @@
   <section>
     <h2>Expenses by category — {{ year }}</h2>
     {% if expenses_by_category %}
+      <div class="table-scroll">
       <table class="data-table">
         <thead><tr><th>Category</th><th>Total</th><th>Deductible</th></tr></thead>
         <tbody>
@@ -33,6 +34,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     {% else %}<p class="muted">No expenses this year.</p>{% endif %}
   </section>
 

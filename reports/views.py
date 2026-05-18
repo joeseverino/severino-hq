@@ -35,10 +35,19 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         expenses = Expense.objects.filter(date__year=year)
         assets = Asset.objects.filter(purchase_date__year=year)
 
+        zero = Decimal("0.00")
+        expense_summary = expenses.aggregate(
+            n=Count("id"),
+            total=Sum("total_cost"),
+            deductible=Sum("estimated_deductible_amount"),
+        )
+        asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
+
         review_cutoff = timezone.localdate() - timedelta(days=180)
         docs_needing_review = DocumentationRecord.objects.filter(
+            Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
             status=DocumentationRecord.Status.ACTIVE,
-        ).filter(Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff))
+        )
 
         ctx.update(
             year=year,
@@ -48,14 +57,11 @@ class ReportsView(LoginRequiredMixin, TemplateView):
                 | {timezone.localdate().year},
                 reverse=True,
             ),
-            expenses_count=expenses.count(),
-            expenses_total=expenses.aggregate(s=Sum("total_cost"))["s"]
-            or Decimal("0.00"),
-            expenses_deductible=expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]
-            or Decimal("0.00"),
-            assets_count=assets.count(),
-            assets_total=assets.aggregate(s=Sum("total_cost"))["s"]
-            or Decimal("0.00"),
+            expenses_count=expense_summary["n"] or 0,
+            expenses_total=expense_summary["total"] or zero,
+            expenses_deductible=expense_summary["deductible"] or zero,
+            assets_count=asset_summary["n"] or 0,
+            assets_total=asset_summary["total"] or zero,
             expenses_by_category=list(
                 expenses.values("category")
                 .annotate(

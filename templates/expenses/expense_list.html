@@ -31,6 +31,7 @@
 
 <p class="muted">Filtered totals: <strong>${{ total_filtered|floatformat:2|intcomma }}</strong> total — <strong>${{ deductible_filtered|floatformat:2|intcomma }}</strong> estimated deductible.</p>
 
+<div class="table-scroll">
 <table class="data-table">
   <thead>
     <tr><th>Date</th><th>Vendor</th><th>Item</th><th>Category</th><th>Cost</th><th>% biz</th><th>Est. deduct.</th></tr>
@@ -51,5 +52,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "partials/_pagination.html" %}
 {% endblock %}

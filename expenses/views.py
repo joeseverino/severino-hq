@@ -23,9 +23,7 @@ class ExpenseListView(LoginRequiredMixin, ListView):
     paginate_by = 50
 
     def get_queryset(self):
-        qs = Expense.objects.select_related(
-            "related_project", "related_asset", "related_content"
-        )
+        qs = Expense.objects.all()
         q = self.request.GET.get("q", "").strip()
         category = self.request.GET.get("category", "").strip()
         year = self.request.GET.get("year", "").strip()
@@ -51,7 +49,7 @@ class ExpenseListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        totals = self.get_queryset().aggregate(
+        totals = self.object_list.aggregate(
             total=Sum("total_cost"),
             deductible=Sum("estimated_deductible_amount"),
         )
@@ -72,6 +70,12 @@ class ExpenseDetailView(LoginRequiredMixin, DetailView):
     model = Expense
     template_name = "expenses/expense_detail.html"
     context_object_name = "expense"
+    queryset = Expense.objects.select_related(
+        "related_project",
+        "related_asset",
+        "related_content",
+        "related_documentation",
+    ).prefetch_related("receipts")
 
 
 class ExpenseCreateView(LoginRequiredMixin, CreateView):
