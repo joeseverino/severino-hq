@@ -63,6 +63,9 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     slug_field = "slug"
     slug_url_kwarg = "slug"
     context_object_name = "project"
+    queryset = Project.objects.prefetch_related(
+        "content_items", "assets", "documentation_records", "expenses"
+    )
 
 
 class ProjectCreateView(LoginRequiredMixin, CreateView):

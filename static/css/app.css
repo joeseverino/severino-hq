@@ -1,6 +1,8 @@
 /* Severino HQ — internal ops console. */
 
 :root {
+  color-scheme: light;
+  accent-color: #1f4d57;
   --bg: #f6f6f3;
   --bg-tint: #efefe9;
   --surface: #ffffff;
@@ -137,6 +139,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 /* ── Data table ─────────────────────────────────────────────────── */
 
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
+.table-scroll .data-table { margin-bottom: 0; }
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .data-table th, .data-table td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
 .data-table thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
@@ -282,3 +286,78 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .auth-card button { margin-top: 16px; width: 100%; }
 
 .site-footer { text-align: center; padding: 28px 24px; color: var(--muted-2); font-size: 12px; }
+
+/* Dashboard tail card spacing (replaces inline style) */
+.two-col + .card { margin-top: 16px; }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+@media (max-width: 900px) {
+  .content { padding: 22px 18px; }
+  .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 14px 16px; }
+  .kv dt { margin-top: 8px; font-size: 12px; }
+  .kv dt:first-of-type { margin-top: 0; }
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 14px;
+  }
+  .brand { font-size: 14px; }
+  .primary-nav {
+    order: 3;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 2px -14px 0;
+    padding: 2px 14px 4px;
+    scrollbar-width: none;
+  }
+  .primary-nav::-webkit-scrollbar { display: none; }
+  .primary-nav a { white-space: nowrap; padding: 7px 10px; font-size: 13.5px; }
+  .user-block { margin-left: auto; gap: 10px; }
+  .user-block .muted { display: none; }
+
+  .content { padding: 16px 14px; }
+  h1 { font-size: 19px; }
+  h2 { font-size: 12px; }
+
+  .page-head { flex-wrap: wrap; gap: 8px; }
+  .page-head .page-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
+
+  .filter-bar { padding: 8px; gap: 6px; }
+  .filter-bar input[type=search] { flex-basis: 100%; }
+
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); margin-bottom: 18px; }
+  .kpi { padding: 11px 13px; }
+  .kpi .value { font-size: 20px; }
+
+  .two-col { grid-template-columns: 1fr; gap: 12px; }
+  .two-col > section, .two-col > div, .card { padding: 14px 16px; }
+
+  .list-rows li { gap: 6px 10px; padding: 10px 0; }
+  .list-rows .row-meta { margin-left: 0; flex-basis: 100%; font-size: 11.5px; }
+
+  .form { padding: 16px; }
+  .form-actions { flex-wrap: wrap; }
+
+  .auth-card { margin: 40px 12px; padding: 22px; }
+
+  .btn, button { padding: 8px 14px; font-size: 14px; min-height: 38px; }
+  .btn.ghost { min-height: 0; }
+  .link-button { min-height: 0; font-size: 13.5px; }
+
+  .data-table th, .data-table td { padding: 8px 10px; font-size: 13px; }
+
+  .site-footer { padding: 22px 16px; }
+}
+
+@media (max-width: 420px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}

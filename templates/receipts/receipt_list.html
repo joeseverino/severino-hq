@@ -13,6 +13,7 @@
   <button type="submit">Apply</button>
 </form>
 
+<div class="table-scroll">
 <table class="data-table">
   <thead>
     <tr><th>Uploaded</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Filename</th><th>Links</th></tr>
@@ -35,5 +36,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "partials/_pagination.html" %}
 {% endblock %}

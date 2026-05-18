@@ -66,6 +66,13 @@ class AssetDetailView(LoginRequiredMixin, DetailView):
     slug_field = "slug"
     slug_url_kwarg = "slug"
     context_object_name = "asset"
+    queryset = Asset.objects.prefetch_related(
+        "related_projects",
+        "content_items",
+        "documentation_records",
+        "expenses",
+        "receipts",
+    )
 
 
 class AssetCreateView(LoginRequiredMixin, CreateView):

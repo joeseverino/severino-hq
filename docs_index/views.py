@@ -95,6 +95,12 @@ class DocsDetailView(LoginRequiredMixin, DetailView):
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
     context_object_name = "record"
+    queryset = DocumentationRecord.objects.prefetch_related(
+        "related_projects",
+        "related_assets",
+        "related_expenses",
+        "content_items",
+    )
 
 
 class DocsCreateView(LoginRequiredMixin, CreateView):

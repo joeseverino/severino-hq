@@ -30,6 +30,7 @@
   <button type="submit">Apply</button>
 </form>
 
+<div class="table-scroll">
 <table class="data-table">
   <thead>
     <tr><th>Name</th><th>Category</th><th>Status</th><th>Tech</th><th>Updated</th><th></th></tr>
@@ -51,5 +52,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% include "partials/_pagination.html" %}
 {% endblock %}

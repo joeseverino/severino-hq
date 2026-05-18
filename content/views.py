@@ -64,6 +64,12 @@ class ContentDetailView(LoginRequiredMixin, DetailView):
     slug_field = "slug"
     slug_url_kwarg = "slug"
     context_object_name = "item"
+    queryset = ContentItem.objects.prefetch_related(
+        "related_projects",
+        "related_assets",
+        "related_documentation",
+        "related_expenses",
+    )
 
 
 class ContentCreateView(LoginRequiredMixin, CreateView):
