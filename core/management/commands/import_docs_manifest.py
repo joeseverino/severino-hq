@@ -40,6 +40,16 @@ class Command(BaseCommand):
             action="store_true",
             help="After import, list doc_ids that exist in HQ but not in the manifest.",
         )
+        parser.add_argument(
+            "--prune",
+            action="store_true",
+            help=(
+                "Delete orphan DocumentationRecord rows (doc_ids in HQ but not in "
+                "the manifest). Implies --report-orphans. Use after a doc_id rename "
+                "or doc retirement. ContentItems are not touched — they re-key by "
+                "slug and get re-linked by the manifest's new record."
+            ),
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
@@ -56,11 +66,14 @@ class Command(BaseCommand):
         except json.JSONDecodeError as exc:
             raise CommandError(f"Invalid JSON: {exc}") from exc
 
+        report_orphans = options["report_orphans"] or options["prune"]
+
         try:
             stats = import_manifest_data(
                 data,
                 update_existing=not options["no_update"],
-                report_orphans=options["report_orphans"],
+                report_orphans=report_orphans,
+                prune_orphans=options["prune"],
             )
         except ManifestImportError as exc:
             raise CommandError(str(exc)) from exc
@@ -83,13 +96,19 @@ class Command(BaseCommand):
                 f"  missing {entry['kind']}: {entry['doc_id']} → {entry['slug']}"
             ))
 
-        if options["report_orphans"]:
+        if report_orphans:
             orphans = stats.get("orphans", [])
             if orphans:
+                verb = "pruned" if options["prune"] else "found"
                 self.stdout.write(self.style.WARNING(
-                    f"Orphans ({len(orphans)} HQ rows with no manifest entry):"
+                    f"Orphans {verb} ({len(orphans)} HQ rows with no manifest entry):"
                 ))
                 for doc_id in orphans:
                     self.stdout.write(self.style.WARNING(f"  orphan: {doc_id}"))
+                if options["prune"]:
+                    self.stdout.write(self.style.SUCCESS(
+                        f"Deleted {stats.get('orphans_pruned_records', 0)} row(s) "
+                        f"({stats['orphans_pruned']} DocumentationRecord + cascades)."
+                    ))
             else:
                 self.stdout.write("No orphans.")
