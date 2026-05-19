@@ -4,6 +4,12 @@ from .models import ContentItem
 
 
 class ContentItemForm(forms.ModelForm):
+    topic = forms.CharField(
+        label="Description",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
     class Meta:
         model = ContentItem
         fields = [

@@ -7,6 +7,9 @@
     <p class="muted">{{ item.get_content_type_display }} · <span class="pill pill-{{ item.status }}">{{ item.get_status_display }}</span></p>
   </div>
   <div class="page-actions">
+    {% if item.published_url %}
+      <a class="btn" href="{{ item.published_url }}" target="_blank" rel="noopener noreferrer">↗ Published</a>
+    {% endif %}
     <a class="btn" href="{% url 'content:edit' item.slug %}">Edit</a>
     <a class="btn danger" href="{% url 'content:delete' item.slug %}">Delete</a>
   </div>
@@ -14,7 +17,7 @@
 
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ item.slug }}</code></dd>
-  {% if item.topic %}<dt>Topic</dt><dd>{{ item.topic }}</dd>{% endif %}
+  {% if item.topic %}<dt>Description</dt><dd>{{ item.topic }}</dd>{% endif %}
   {% if item.tag_list %}<dt>Tags</dt><dd>{% for t in item.tag_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
   {% if item.published_url %}<dt>Published URL</dt><dd><a href="{{ item.published_url }}" rel="noopener noreferrer">{{ item.published_url }}</a></dd>{% endif %}
   {% if item.wordpress_post_id %}<dt>WordPress</dt><dd>post #{{ item.wordpress_post_id }}{% if item.wordpress_slug %} (<code>{{ item.wordpress_slug }}</code>){% endif %}</dd>{% endif %}

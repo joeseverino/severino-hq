@@ -147,6 +147,27 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table tbody tr:hover { background: var(--surface-2); }
 .row-actions a { font-size: 13px; }
+.actions-col { width: 1%; text-align: right; white-space: nowrap; }
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent-2);
+  font-weight: 650;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+}
+.icon-link:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+  border-color: #c4c4c0;
+  text-decoration: none;
+}
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
 
