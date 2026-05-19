@@ -108,14 +108,20 @@ def _upsert_content_item(
         ContentItem.Status.PUBLISHED if is_published else ContentItem.Status.DRAFT
     )
 
-    tags = entry.get("tags") or []
+    tags = entry.get("tags") or entry.get("technologies") or []
     tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
 
     content_defaults = {
         "title": defaults["title"],
         "content_type": content_type,
         "status": item_status,
-        "topic": entry.get("system") or "",
+        "topic": (
+            entry.get("topic")
+            or entry.get("description")
+            or entry.get("excerpt")
+            or entry.get("system")
+            or ""
+        ),
         "tags": tags_str,
         "published_url": defaults.get("external_url") or "",
         "published_at": defaults.get("published_at"),
