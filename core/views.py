@@ -66,12 +66,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 status=Project.Status.ACTIVE
             ).order_by("-updated_at")[:4],
             draft_content=ContentItem.objects.filter(
-                status__in=[
-                    ContentItem.Status.IDEA,
-                    ContentItem.Status.RESEARCHING,
-                    ContentItem.Status.DRAFTING,
-                    ContentItem.Status.EDITING,
-                ]
+                status=ContentItem.Status.DRAFT
             ).order_by("-updated_at")[:4],
             published_content_count=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED

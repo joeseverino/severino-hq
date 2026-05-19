@@ -113,7 +113,7 @@ class ExportSmokeTests(_AuthedTestCase):
             obsidian_path="Infra/Test.md",
         )
         self.content = ContentItem.objects.create(
-            title="Test article", status=ContentItem.Status.DRAFTING
+            title="Test article", status=ContentItem.Status.DRAFT
         )
 
     def test_csv_exports(self):
