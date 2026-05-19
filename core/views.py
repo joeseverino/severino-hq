@@ -62,6 +62,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ]
 
         ctx.update(
+            active_project_count=Project.objects.filter(
+                status=Project.Status.ACTIVE
+            ).count(),
             active_projects=Project.objects.filter(
                 status=Project.Status.ACTIVE
             ).order_by("-updated_at")[:4],
