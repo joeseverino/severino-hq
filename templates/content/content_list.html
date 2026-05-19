@@ -32,7 +32,7 @@
 <div class="table-scroll">
 <table class="data-table">
   <thead>
-    <tr><th>Title</th><th>Type</th><th>Status</th><th>Topic</th><th>Published</th><th>Updated</th></tr>
+    <tr><th>Title</th><th>Type</th><th>Status</th><th>Description</th><th>Published</th><th>Updated</th><th class="actions-col">Open</th></tr>
   </thead>
   <tbody>
     {% for c in items %}
@@ -43,9 +43,16 @@
         <td class="muted">{{ c.topic|default:"—" }}</td>
         <td class="muted">{{ c.published_at|default:"—" }}</td>
         <td class="muted">{{ c.updated_at|date:"Y-m-d" }}</td>
+        <td class="actions-col">
+          {% if c.published_url %}
+            <a class="icon-link" href="{{ c.published_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
       </tr>
     {% empty %}
-      <tr><td colspan="6" class="muted">No content yet.</td></tr>
+      <tr><td colspan="7" class="muted">No content yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
