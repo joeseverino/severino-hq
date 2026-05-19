@@ -10,9 +10,9 @@
 </div>
 
 <section class="kpi-grid">
-  <div class="kpi {% if not active_projects %}is-zero{% endif %}">
+  <div class="kpi {% if not active_project_count %}is-zero{% endif %}">
     <span class="label">Active projects</span>
-    <span class="value">{{ active_projects|length }}</span>
+    <span class="value">{{ active_project_count }}</span>
   </div>
   <div class="kpi {% if not draft_content %}is-zero{% endif %}">
     <span class="label">Draft content</span>
@@ -45,8 +45,8 @@
 <div class="two-col">
   <section>
     <div class="section-head">
-      <h2>Active projects</h2>
-      {% if active_projects %}<span class="count">{{ active_projects|length }}</span>{% endif %}
+      <h2>Recent active projects</h2>
+      {% if active_projects %}<span class="count">{{ active_projects|length }} of {{ active_project_count }}</span>{% endif %}
     </div>
     {% if active_projects %}
       <ul class="list-rows">
@@ -61,7 +61,7 @@
           </li>
         {% endfor %}
       </ul>
-      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
+      <p class="section-foot"><a href="{% url 'projects:list' %}?status=active">All active projects &rarr;</a></p>
     {% else %}
       <div class="empty">
         <p>No projects yet.</p>
