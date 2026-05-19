@@ -19,12 +19,10 @@ class ContentItem(TimestampedModel):
         PORTFOLIO_PAGE = "portfolio_page", "Portfolio page"
         SERVICE_PAGE = "service_page", "Service page"
         CASE_STUDY = "case_study", "Case study"
+        PAGE = "page", "Page"
 
     class Status(models.TextChoices):
-        IDEA = "idea", "Idea"
-        RESEARCHING = "researching", "Researching"
-        DRAFTING = "drafting", "Drafting"
-        EDITING = "editing", "Editing"
+        DRAFT = "draft", "Draft"
         PUBLISHED = "published", "Published"
         ARCHIVED = "archived", "Archived"
 
@@ -34,7 +32,7 @@ class ContentItem(TimestampedModel):
         max_length=24, choices=Type.choices, default=Type.ARTICLE
     )
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.IDEA
+        max_length=20, choices=Status.choices, default=Status.DRAFT
     )
     topic = models.CharField(max_length=160, blank=True)
     tags = models.CharField(
@@ -93,3 +91,7 @@ class ContentItem(TimestampedModel):
     @property
     def tag_list(self) -> list[str]:
         return [t.strip() for t in self.tags.split(",") if t.strip()]
+
+    @property
+    def is_published(self) -> bool:
+        return self.status == self.Status.PUBLISHED

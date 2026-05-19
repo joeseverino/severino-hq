@@ -69,6 +69,7 @@ CONTENT_TYPE_MAP = {
     "review": ContentItem.Type.REVIEW,
     "video": ContentItem.Type.VIDEO,
     "service_page": ContentItem.Type.SERVICE_PAGE,
+    "page": ContentItem.Type.PAGE,
 }
 
 
@@ -84,18 +85,27 @@ def _upsert_content_item(
     if a ContentItem with that slug already exists, its fields are refreshed.
     """
     doc_id = record.doc_id
-    article_slug = doc_id.removeprefix("article-") or doc_id
+    # Strip the prefix so the ContentItem slug matches the URL slug on
+    # jseverino.com (writeups) or the vault folder (pages, legacy articles).
+    article_slug = doc_id
+    for prefix in ("writeup-", "page-", "article-"):
+        if article_slug.startswith(prefix):
+            article_slug = article_slug.removeprefix(prefix)
+            break
 
     ct_raw = (entry.get("content_type") or "").strip().lower()
     content_type = CONTENT_TYPE_MAP.get(ct_raw, ContentItem.Type.PORTFOLIO_PAGE)
 
-    has_publish_marker = bool(
-        defaults.get("published_at") or defaults.get("external_url")
-    )
+    # `published` is the canonical gate. Older records without it fall back
+    # to legacy publish markers.
+    if "published" in entry:
+        is_published = bool(entry.get("published"))
+    else:
+        is_published = bool(
+            defaults.get("published_at") or defaults.get("external_url")
+        )
     item_status = (
-        ContentItem.Status.PUBLISHED
-        if has_publish_marker
-        else ContentItem.Status.DRAFTING
+        ContentItem.Status.PUBLISHED if is_published else ContentItem.Status.DRAFT
     )
 
     tags = entry.get("tags") or []
