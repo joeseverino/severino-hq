@@ -57,6 +57,14 @@ class DocsListView(LoginRequiredMixin, ListView):
         ]:
             if value:
                 qs = qs.filter(**{field: value})
+
+        # Writeups and pages live in the Content tab; hide them from the
+        # default Docs view unless the user explicitly filtered for that
+        # doc_type or searched for one.
+        if not doc_type and not q:
+            qs = qs.exclude(
+                doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+            )
         if needs_review:
             cutoff = timezone.localdate() - timedelta(days=180)
             qs = qs.filter(

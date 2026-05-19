@@ -153,6 +153,7 @@ def import_manifest_data(
     *,
     update_existing: bool = True,
     report_orphans: bool = False,
+    prune_orphans: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
@@ -266,10 +267,18 @@ def import_manifest_data(
         if defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
             _upsert_content_item(record, entry, defaults, stats)
 
-    if report_orphans:
+    if report_orphans or prune_orphans:
         db_doc_ids = set(
             DocumentationRecord.objects.values_list("doc_id", flat=True)
         )
-        stats["orphans"] = sorted(db_doc_ids - manifest_doc_ids)
+        orphan_ids = sorted(db_doc_ids - manifest_doc_ids)
+        stats["orphans"] = orphan_ids
+
+        if prune_orphans and orphan_ids:
+            deleted_count, _by_model = (
+                DocumentationRecord.objects.filter(doc_id__in=orphan_ids).delete()
+            )
+            stats["orphans_pruned"] = len(orphan_ids)
+            stats["orphans_pruned_records"] = deleted_count
 
     return stats
