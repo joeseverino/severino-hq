@@ -416,7 +416,7 @@ def year_summary_markdown(year: int) -> str:
 
     add("## Source of truth — quick map for future MCP")
     add("")
-    add("- Public website / WordPress posts → published_url + wordpress_post_id")
+    add("- Public website pages/writeups → ContentItem.published_url + related documentation")
     add("- Runbooks & infra detail → DocumentationRecord.obsidian_path (Obsidian vault)")
     add("- Source repos → Project.repository_url / DocumentationRecord.github_path")
     add("- Receipts → Severino HQ only (auth-protected, never exported)")
