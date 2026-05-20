@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Contact submissions · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Contact submissions</h1>
+</div>
+
+{% if error %}<div class="msg msg-error">{{ error }}</div>{% endif %}
+
+<form class="filter-bar" method="get">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+
+<p class="muted">{{ submissions|length }} submission{{ submissions|length|pluralize }}{% if selected_status %} · filtered by status{% endif %}.</p>
+
+<div class="table-scroll">
+<table class="data-table">
+  <thead>
+    <tr><th>#</th><th>Received</th><th>Name</th><th>Email</th><th>Status</th><th>Country</th></tr>
+  </thead>
+  <tbody>
+    {% for s in submissions %}
+      <tr>
+        <td><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a></td>
+        <td>{{ s.created_at }}</td>
+        <td>{{ s.name }}</td>
+        <td>{{ s.email }}</td>
+        <td>{{ s.status }}</td>
+        <td class="muted">{{ s.country|default:"—" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="muted">{% if error %}Could not load submissions.{% else %}No submissions{% if selected_status %} with that status{% endif %} yet.{% endif %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

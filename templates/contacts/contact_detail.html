@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Submission {{ submission.id }} · {{ submission.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Submission #{{ submission.id }}</h1>
+    <p class="muted">{{ submission.name }} · {{ submission.created_at }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="mailto:{{ submission.email }}">Reply via email</a>
+    <a class="btn" href="{% url 'contacts:list' %}">Back to submissions</a>
+  </div>
+</div>
+
+<h2>Message</h2>
+<dl class="kv">
+  <dt>Name</dt><dd>{{ submission.name }}</dd>
+  <dt>Email</dt><dd><a href="mailto:{{ submission.email }}">{{ submission.email }}</a></dd>
+</dl>
+<p>{{ submission.message|linebreaksbr }}</p>
+
+<h2>Submission info</h2>
+<dl class="kv">
+  <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
+  <dt>Status</dt><dd>{{ submission.status|default:"unread" }}</dd>
+  <dt>Turnstile</dt><dd>{{ submission.turnstile|default:"—" }}</dd>
+  <dt>Submitted</dt><dd>{{ submission.created_at }}</dd>
+  <dt>Updated</dt><dd>{{ submission.updated_at }}</dd>
+  <dt>IP address</dt><dd>{{ submission.ip_address|default:"—" }}</dd>
+  <dt>Browser</dt><dd>{{ submission.browser|default:"—" }}</dd>
+  <dt>Device</dt><dd>{{ submission.device|default:"—" }}</dd>
+  <dt>Country</dt><dd>{{ submission.country|default:"—" }}</dd>
+  {% if submission.source_url %}<dt>Source URL</dt><dd><a href="{{ submission.source_url }}">{{ submission.source_url }}</a></dd>{% endif %}
+  <dt>User agent</dt><dd class="muted">{{ submission.user_agent|default:"—" }}</dd>
+</dl>
+
+<h2>Review</h2>
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+  <div class="form-actions">
+    <button type="submit" class="primary">Save review</button>
+  </div>
+</form>
+{% endblock %}
