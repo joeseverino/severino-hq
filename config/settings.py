@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "expenses",
     "receipts",
     "reports",
+    "contacts",
 ]
 
 MIDDLEWARE = [
@@ -242,6 +243,13 @@ SEVERINO_FISCAL_YEAR_START_MONTH = int(
 SEVERINO_DOC_REVIEW_INTERVAL_DAYS = int(
     os.environ.get("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", "180")
 )
+
+# Cloudflare D1 — the jseverino.com contact-form submissions live in a
+# Cloudflare D1 database, not HQ's SQLite. The contacts app reads/writes it
+# over the D1 HTTP API.
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_D1_DATABASE_ID = os.environ.get("CLOUDFLARE_D1_DATABASE_ID", "")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 
 
 # Ensure the directories we depend on exist at startup.
