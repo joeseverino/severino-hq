@@ -29,7 +29,7 @@
       <tr>
         <td><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a></td>
         <td>{{ s.created_at }}</td>
-        <td>{{ s.name }}</td>
+        <td><a href="{% url 'contacts:detail' s.id %}">{{ s.name }}</a></td>
         <td>{{ s.email }}</td>
         <td>{{ s.status }}</td>
         <td class="muted">{{ s.country|default:"—" }}</td>
