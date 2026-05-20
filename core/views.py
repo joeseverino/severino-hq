@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.views.generic import ListView, TemplateView
 
 from assets.models import Asset
+from contacts.d1 import D1Error, query
 from content.models import ContentItem
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
@@ -61,7 +62,18 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             if env_counts.get(value)
         ]
 
+        # Contact submissions live in Cloudflare D1, not HQ's database.
+        # Fetch over the D1 HTTP API; degrade gracefully if it's unreachable.
+        try:
+            recent_contacts = query(
+                "SELECT id, created_at, name, email, status "
+                "FROM contact_submissions ORDER BY id DESC LIMIT 4"
+            )
+        except D1Error:
+            recent_contacts = []
+
         ctx.update(
+            recent_contacts=recent_contacts,
             active_project_count=Project.objects.filter(
                 status=Project.Status.ACTIVE
             ).count(),

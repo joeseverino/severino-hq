@@ -45,6 +45,29 @@
 <div class="two-col">
   <section>
     <div class="section-head">
+      <h2>Recent contact submissions</h2>
+      {% if recent_contacts %}<span class="count">{{ recent_contacts|length }}</span>{% endif %}
+    </div>
+    {% if recent_contacts %}
+      <ul class="list-rows">
+        {% for s in recent_contacts %}
+          <li>
+            <span class="row-main">
+              <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
+              <span class="muted">· {{ s.status }}</span>
+            </span>
+            <span class="row-meta">{{ s.created_at }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
+    {% else %}
+      <div class="empty"><p>No contact submissions yet.</p></div>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>Recent active projects</h2>
       {% if active_projects %}<span class="count">{{ active_projects|length }} of {{ active_project_count }}</span>{% endif %}
     </div>
