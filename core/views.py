@@ -76,6 +76,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         draft_content_qs = ContentItem.objects.filter(
             status=ContentItem.Status.DRAFT
         )
+        docs_needing_review_count = docs_needing_review.count()
+        draft_content_count = draft_content_qs.count()
+
+        # Relationship health — link/metadata completeness, shown as a static
+        # green/warn readout on the dashboard.
         receipts_unlinked_count = Receipt.objects.filter(
             related_expense__isnull=True,
             related_asset__isnull=True,
@@ -94,14 +99,20 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .count()
         )
 
-        action_queue = self._action_queue(
-            docs_needing_review_count=docs_needing_review.count(),
-            draft_content_count=draft_content_qs.count(),
-            receipts_unlinked_count=receipts_unlinked_count,
-            expenses_without_receipts_count=expenses_without_receipts_count,
-            assets_missing_purchase_info_count=assets_missing_purchase_info_count,
-            content_without_docs_count=content_without_docs_count,
-        )
+        # Needs-attention queue — workflow items, each linking to a filtered
+        # cleanup view.
+        action_queue = [
+            {
+                "label": "Docs need review",
+                "count": docs_needing_review_count,
+                "href": f"{reverse('docs_index:list')}?needs_review=1",
+            },
+            {
+                "label": "Draft content",
+                "count": draft_content_count,
+                "href": f"{reverse('content:list')}?status=draft",
+            },
+        ]
 
         ctx.update(
             recent_contacts=recent_contacts,
@@ -112,7 +123,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 status=Project.Status.ACTIVE
             ).order_by("-updated_at")[:4],
             draft_content=draft_content_qs.order_by("-updated_at")[:4],
-            draft_content_count=draft_content_qs.count(),
+            draft_content_count=draft_content_count,
             published_content_count=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED
             ).count(),
@@ -127,7 +138,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             deductible_ytd_total=expense_ytd_summary["deductible"] or ZERO_MONEY,
             recent_receipts=Receipt.objects.order_by("-uploaded_at")[:4],
             docs_needing_review=docs_needing_review.order_by("last_reviewed")[:4],
-            docs_needing_review_count=docs_needing_review.count(),
+            docs_needing_review_count=docs_needing_review_count,
             docs_by_system=docs_by_system,
             docs_by_environment=docs_by_environment,
             recent_audit=AuditLog.objects.select_related("user")[:15],
@@ -140,49 +151,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             this_year=today.year,
         )
         return ctx
-
-    def _action_queue(
-        self,
-        *,
-        docs_needing_review_count: int,
-        draft_content_count: int,
-        receipts_unlinked_count: int,
-        expenses_without_receipts_count: int,
-        assets_missing_purchase_info_count: int,
-        content_without_docs_count: int,
-    ) -> list[dict[str, object]]:
-        return [
-            {
-                "label": "Docs need review",
-                "count": docs_needing_review_count,
-                "href": f"{reverse('docs_index:list')}?needs_review=1",
-            },
-            {
-                "label": "Draft content",
-                "count": draft_content_count,
-                "href": f"{reverse('content:list')}?status=draft",
-            },
-            {
-                "label": "Unlinked receipts",
-                "count": receipts_unlinked_count,
-                "href": reverse("receipts:list"),
-            },
-            {
-                "label": "Expenses missing receipts",
-                "count": expenses_without_receipts_count,
-                "href": reverse("expenses:list"),
-            },
-            {
-                "label": "Active assets missing purchase info",
-                "count": assets_missing_purchase_info_count,
-                "href": f"{reverse('assets:list')}?status=active",
-            },
-            {
-                "label": "Content missing docs",
-                "count": content_without_docs_count,
-                "href": reverse("content:list"),
-            },
-        ]
 
 
 class SearchView(LoginRequiredMixin, TemplateView):

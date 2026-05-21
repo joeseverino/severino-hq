@@ -10,9 +10,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 - Global HQ search at `/search/`, covering projects, content, docs, assets,
   expenses, and receipts.
-- Dashboard needs-attention queue for common cleanup work: docs needing review,
-  draft content, unlinked receipts, expenses without receipts, active assets
-  missing purchase info, and content without docs.
+- Dashboard needs-attention queue linking to filtered cleanup views for docs
+  needing review and draft content.
 - Dashboard quick actions for common create/import flows.
 - Relationship health counts on the dashboard.
 - Active navigation state in the main header.
@@ -22,6 +21,11 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 - Header layout now uses a fixed desktop grid with a horizontally scrollable
   nav track, keeping the brand, nav, search, and user controls on one row
   instead of wrapping into stacked text.
+- Account actions (Admin, Sign out) moved into a dropdown menu under the
+  username, freeing space so the full nav row fits without clipping.
+- Dashboard "needs attention" and "relationship health" panels no longer
+  duplicate counts: needs-attention is the workflow queue, relationship-health
+  is the link/metadata readout.
 
 ## [0.1.0] — 2026-05-16
 

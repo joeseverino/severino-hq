@@ -47,11 +47,12 @@ available in the header.
 - The top navigation highlights the active section and stays on one row on
   desktop. If the viewport is narrow, the nav scrolls horizontally instead of
   wrapping into stacked links.
+- Account actions (Admin, Sign out) sit in a dropdown under your username,
+  keeping the header nav compact.
 - Header search goes to `/search/` and searches projects, content, docs,
   assets, expenses, and receipts.
-- The dashboard action queue links directly to cleanup views for docs needing
-  review, draft content, unlinked receipts, expenses without receipts, active
-  assets missing purchase info, and content without docs.
+- The dashboard "needs attention" queue links to filtered cleanup views for
+  docs needing review and draft content.
 - Dashboard quick actions link to the common create/import flows: new expense,
   upload receipt, new project, new content, and Docs manifest import.
 - Relationship health counts are status indicators, not blockers; non-zero
