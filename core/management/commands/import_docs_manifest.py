@@ -50,6 +50,11 @@ class Command(BaseCommand):
                 "pruned docs are removed with them."
             ),
         )
+        parser.add_argument(
+            "--json",
+            action="store_true",
+            help="Print raw import stats as JSON for wrapper CLIs.",
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
@@ -88,6 +93,10 @@ class Command(BaseCommand):
             message=f"CLI manifest import: {summary}",
             metadata=stats,
         )
+
+        if options["json"]:
+            self.stdout.write(json.dumps(stats, default=str))
+            return
 
         self.stdout.write(self.style.SUCCESS(f"Manifest imported: {summary}"))
 
