@@ -59,6 +59,7 @@ class _AuthedTestCase(TestCase):
 class NavigationSmokeTests(_AuthedTestCase):
     URLS = [
         "/",
+        "/search/",
         "/projects/",
         "/projects/new/",
         "/content/",

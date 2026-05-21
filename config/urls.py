@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from core.views import DashboardView
+from core.views import DashboardView, SearchView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -19,6 +19,7 @@ urlpatterns = [
         name="logout",
     ),
     path("", DashboardView.as_view(), name="dashboard"),
+    path("search/", SearchView.as_view(), name="search"),
     path("projects/", include("projects.urls")),
     path("content/", include("content.urls")),
     path("docs/", include("docs_index.urls")),
