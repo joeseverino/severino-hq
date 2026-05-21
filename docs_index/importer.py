@@ -27,6 +27,7 @@ from datetime import date, datetime
 from typing import Any, Iterable
 
 from django.db import transaction
+from django.db.models import Count, F, Q
 
 from assets.models import Asset
 from content.models import ContentItem
@@ -73,6 +74,34 @@ CONTENT_TYPE_MAP = {
 }
 
 
+def _legacy_content_slug_from_doc_id(doc_id: str) -> str:
+    """Return the pre-manifest-slug ContentItem slug for a doc_id."""
+    slug = doc_id
+    for prefix in ("writeup-", "page-", "article-"):
+        if slug.startswith(prefix):
+            return slug.removeprefix(prefix)
+    return slug
+
+
+def _prune_legacy_content_item_for_record(
+    record: "DocumentationRecord",
+    stats: dict,
+) -> None:
+    """Remove a stale mirrored ContentItem for records no longer in content."""
+    deleted_count, _by_model = (
+        ContentItem.objects.filter(
+            slug=_legacy_content_slug_from_doc_id(record.doc_id),
+            related_documentation=record,
+        )
+        .annotate(documentation_count=Count("related_documentation", distinct=True))
+        .filter(documentation_count=1)
+        .delete()
+    )
+    if deleted_count:
+        stats.setdefault("content_items_pruned", 0)
+        stats["content_items_pruned"] += deleted_count
+
+
 def _upsert_content_item(
     record: "DocumentationRecord",
     entry: dict,
@@ -88,13 +117,7 @@ def _upsert_content_item(
     doc_id = record.doc_id
     article_slug = (entry.get("slug") or "").strip()
     if not article_slug:
-        # Strip the prefix so the ContentItem slug matches the URL slug on
-        # jseverino.com (writeups) or the vault folder (pages, legacy articles).
-        article_slug = doc_id
-        for prefix in ("writeup-", "page-", "article-"):
-            if article_slug.startswith(prefix):
-                article_slug = article_slug.removeprefix(prefix)
-                break
+        article_slug = _legacy_content_slug_from_doc_id(doc_id)
 
     ct_raw = (entry.get("content_type") or "").strip().lower()
     content_type = CONTENT_TYPE_MAP.get(ct_raw, ContentItem.Type.PORTFOLIO_PAGE)
@@ -271,10 +294,16 @@ def import_manifest_data(
         else:
             stats["skipped"] += 1
 
-        # Mirror public-article docs into ContentItem so they show up in
-        # the publishing-pipeline KPIs and lists.
-        if defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
+        # Only explicit content entries mirror into ContentItem. Some reporting
+        # docs use public_article_draft as a writing state, but they are not
+        # part of the site CMS unless the manifest carries content_type.
+        if (
+            defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+            and entry.get("content_type")
+        ):
             _upsert_content_item(record, entry, defaults, stats)
+        elif defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
+            _prune_legacy_content_item_for_record(record, stats)
 
     if report_orphans or prune_orphans:
         db_doc_ids = set(
@@ -284,10 +313,27 @@ def import_manifest_data(
         stats["orphans"] = orphan_ids
 
         if prune_orphans and orphan_ids:
+            orphan_docs = DocumentationRecord.objects.filter(doc_id__in=orphan_ids)
+            content_items_to_prune = (
+                ContentItem.objects.filter(related_documentation__in=orphan_docs)
+                .annotate(
+                    documentation_count=Count("related_documentation", distinct=True),
+                    orphan_documentation_count=Count(
+                        "related_documentation",
+                        filter=Q(related_documentation__in=orphan_docs),
+                        distinct=True,
+                    ),
+                )
+                .filter(documentation_count=F("orphan_documentation_count"))
+            )
+            content_items_pruned = content_items_to_prune.count()
+            content_items_to_prune.delete()
+
             deleted_count, _by_model = (
-                DocumentationRecord.objects.filter(doc_id__in=orphan_ids).delete()
+                orphan_docs.delete()
             )
             stats["orphans_pruned"] = len(orphan_ids)
             stats["orphans_pruned_records"] = deleted_count
+            stats["content_items_pruned"] = content_items_pruned
 
     return stats

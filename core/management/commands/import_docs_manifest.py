@@ -46,8 +46,8 @@ class Command(BaseCommand):
             help=(
                 "Delete orphan DocumentationRecord rows (doc_ids in HQ but not in "
                 "the manifest). Implies --report-orphans. Use after a doc_id rename "
-                "or doc retirement. ContentItems are not touched — they re-key by "
-                "slug and get re-linked by the manifest's new record."
+                "or doc retirement. Mirrored ContentItems that are only linked to "
+                "pruned docs are removed with them."
             ),
         )
 
@@ -112,3 +112,7 @@ class Command(BaseCommand):
                     ))
             else:
                 self.stdout.write("No orphans.")
+        if stats.get("content_items_pruned"):
+            self.stdout.write(self.style.SUCCESS(
+                f"Pruned {stats['content_items_pruned']} stale mirrored ContentItem row(s)."
+            ))
