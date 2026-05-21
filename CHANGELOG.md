@@ -6,6 +6,23 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ## [Unreleased]
 
+### Added
+
+- Global HQ search at `/search/`, covering projects, content, docs, assets,
+  expenses, and receipts.
+- Dashboard needs-attention queue for common cleanup work: docs needing review,
+  draft content, unlinked receipts, expenses without receipts, active assets
+  missing purchase info, and content without docs.
+- Dashboard quick actions for common create/import flows.
+- Relationship health counts on the dashboard.
+- Active navigation state in the main header.
+
+### Changed
+
+- Header layout now uses a fixed desktop grid with a horizontally scrollable
+  nav track, keeping the brand, nav, search, and user controls on one row
+  instead of wrapping into stacked text.
+
 ## [0.1.0] — 2026-05-16
 
 Initial v1 cut: the private operating system for Severino LLC.
