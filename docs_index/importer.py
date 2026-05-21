@@ -88,18 +88,19 @@ def _prune_legacy_content_item_for_record(
     stats: dict,
 ) -> None:
     """Remove a stale mirrored ContentItem for records no longer in content."""
-    deleted_count, _by_model = (
+    content_items_to_prune = (
         ContentItem.objects.filter(
             slug=_legacy_content_slug_from_doc_id(record.doc_id),
             related_documentation=record,
         )
         .annotate(documentation_count=Count("related_documentation", distinct=True))
         .filter(documentation_count=1)
-        .delete()
     )
-    if deleted_count:
+    content_items_pruned = content_items_to_prune.count()
+    if content_items_pruned:
+        content_items_to_prune.delete()
         stats.setdefault("content_items_pruned", 0)
-        stats["content_items_pruned"] += deleted_count
+        stats["content_items_pruned"] += content_items_pruned
 
 
 def _upsert_content_item(
