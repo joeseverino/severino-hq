@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Search · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Search</h1>
+    <p class="page-lede">Search across projects, content, docs, assets, expenses, and receipts.</p>
+  </div>
+</div>
+
+<form class="filter-bar search-page-form" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search HQ…" autofocus>
+  <button type="submit">Search</button>
+</form>
+
+{% if q %}
+  <p class="muted">{{ total }} result{{ total|pluralize }} for <strong>{{ q }}</strong>.</p>
+  <div class="search-results">
+    {% for label, items in results.items %}
+      <section class="card">
+        <div class="section-head">
+          <h2>{{ label }}</h2>
+          {% if items %}<span class="count">{{ items|length }}</span>{% endif %}
+        </div>
+        {% if items %}
+          <ul class="list-rows">
+            {% for item in items %}
+              <li>
+                <span class="row-main">
+                  <a href="{{ item.get_absolute_url }}"><strong>{{ item }}</strong></a>
+                </span>
+                <span class="row-meta">
+                  {% if item.updated_at %}{{ item.updated_at|date:"Y-m-d" }}{% endif %}
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="empty compact"><p>No matches.</p></div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty"><p>Type a name, slug, vendor, doc ID, tag, or filename.</p></div>
+{% endif %}
+{% endblock %}

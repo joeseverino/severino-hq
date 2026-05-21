@@ -16,7 +16,7 @@
   </div>
   <div class="kpi {% if not draft_content %}is-zero{% endif %}">
     <span class="label">Draft content</span>
-    <span class="value">{{ draft_content|length }}</span>
+    <span class="value">{{ draft_content_count }}</span>
   </div>
   <div class="kpi {% if not published_content_count %}is-zero{% endif %}">
     <span class="label">Published</span>
@@ -39,6 +39,67 @@
   <div class="kpi {% if not docs_needing_review_count %}is-zero{% endif %}">
     <span class="label">Docs to review</span>
     <span class="value">{{ docs_needing_review_count }}</span>
+  </div>
+</section>
+
+<section class="ops-grid">
+  <div class="ops-panel">
+    <div class="section-head">
+      <h2>Needs attention</h2>
+      {% if action_queue_count %}<span class="count">{{ action_queue_count }}</span>{% endif %}
+    </div>
+    <ul class="action-list">
+      {% for item in action_queue %}
+        {% if item.count %}
+          <li>
+            <a href="{{ item.href }}">
+              <strong>{{ item.count }}</strong>
+              <span>{{ item.label }}</span>
+            </a>
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    {% if not action_queue_count %}
+      <div class="empty compact"><p>No cleanup items right now.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="ops-panel">
+    <div class="section-head">
+      <h2>Quick actions</h2>
+    </div>
+    <div class="quick-actions">
+      <a class="btn primary" href="{% url 'expenses:create' %}">New expense</a>
+      <a class="btn" href="{% url 'receipts:create' %}">Upload receipt</a>
+      <a class="btn" href="{% url 'projects:create' %}">New project</a>
+      <a class="btn" href="{% url 'content:create' %}">New content</a>
+      <a class="btn" href="{% url 'docs_index:import' %}">Import manifest</a>
+    </div>
+  </div>
+
+  <div class="ops-panel">
+    <div class="section-head">
+      <h2>Relationship health</h2>
+    </div>
+    <dl class="health-list">
+      <div>
+        <dt>Receipts without links</dt>
+        <dd class="{% if receipts_unlinked_count %}warn{% endif %}">{{ receipts_unlinked_count }}</dd>
+      </div>
+      <div>
+        <dt>Expenses without receipts</dt>
+        <dd class="{% if expenses_without_receipts_count %}warn{% endif %}">{{ expenses_without_receipts_count }}</dd>
+      </div>
+      <div>
+        <dt>Assets missing purchase info</dt>
+        <dd class="{% if assets_missing_purchase_info_count %}warn{% endif %}">{{ assets_missing_purchase_info_count }}</dd>
+      </div>
+      <div>
+        <dt>Content without docs</dt>
+        <dd class="{% if content_without_docs_count %}warn{% endif %}">{{ content_without_docs_count }}</dd>
+      </div>
+    </dl>
   </div>
 </section>
 

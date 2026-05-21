@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q, Sum
+from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import ListView, TemplateView
 
@@ -72,6 +73,36 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         except D1Error:
             recent_contacts = []
 
+        draft_content_qs = ContentItem.objects.filter(
+            status=ContentItem.Status.DRAFT
+        )
+        receipts_unlinked_count = Receipt.objects.filter(
+            related_expense__isnull=True,
+            related_asset__isnull=True,
+        ).count()
+        expenses_without_receipts_count = (
+            Expense.objects.annotate(receipt_count=Count("receipts"))
+            .filter(receipt_count=0)
+            .count()
+        )
+        assets_missing_purchase_info_count = Asset.objects.filter(
+            status=Asset.Status.ACTIVE
+        ).filter(Q(purchase_date__isnull=True) | Q(total_cost=0)).count()
+        content_without_docs_count = (
+            ContentItem.objects.annotate(doc_count=Count("related_documentation"))
+            .filter(doc_count=0)
+            .count()
+        )
+
+        action_queue = self._action_queue(
+            docs_needing_review_count=docs_needing_review.count(),
+            draft_content_count=draft_content_qs.count(),
+            receipts_unlinked_count=receipts_unlinked_count,
+            expenses_without_receipts_count=expenses_without_receipts_count,
+            assets_missing_purchase_info_count=assets_missing_purchase_info_count,
+            content_without_docs_count=content_without_docs_count,
+        )
+
         ctx.update(
             recent_contacts=recent_contacts,
             active_project_count=Project.objects.filter(
@@ -80,9 +111,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             active_projects=Project.objects.filter(
                 status=Project.Status.ACTIVE
             ).order_by("-updated_at")[:4],
-            draft_content=ContentItem.objects.filter(
-                status=ContentItem.Status.DRAFT
-            ).order_by("-updated_at")[:4],
+            draft_content=draft_content_qs.order_by("-updated_at")[:4],
+            draft_content_count=draft_content_qs.count(),
             published_content_count=ContentItem.objects.filter(
                 status=ContentItem.Status.PUBLISHED
             ).count(),
@@ -101,9 +131,115 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             docs_by_system=docs_by_system,
             docs_by_environment=docs_by_environment,
             recent_audit=AuditLog.objects.select_related("user")[:15],
+            action_queue=action_queue,
+            action_queue_count=sum(1 for item in action_queue if item["count"]),
+            receipts_unlinked_count=receipts_unlinked_count,
+            expenses_without_receipts_count=expenses_without_receipts_count,
+            assets_missing_purchase_info_count=assets_missing_purchase_info_count,
+            content_without_docs_count=content_without_docs_count,
             this_year=today.year,
         )
         return ctx
+
+    def _action_queue(
+        self,
+        *,
+        docs_needing_review_count: int,
+        draft_content_count: int,
+        receipts_unlinked_count: int,
+        expenses_without_receipts_count: int,
+        assets_missing_purchase_info_count: int,
+        content_without_docs_count: int,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "label": "Docs need review",
+                "count": docs_needing_review_count,
+                "href": f"{reverse('docs_index:list')}?needs_review=1",
+            },
+            {
+                "label": "Draft content",
+                "count": draft_content_count,
+                "href": f"{reverse('content:list')}?status=draft",
+            },
+            {
+                "label": "Unlinked receipts",
+                "count": receipts_unlinked_count,
+                "href": reverse("receipts:list"),
+            },
+            {
+                "label": "Expenses missing receipts",
+                "count": expenses_without_receipts_count,
+                "href": reverse("expenses:list"),
+            },
+            {
+                "label": "Active assets missing purchase info",
+                "count": assets_missing_purchase_info_count,
+                "href": f"{reverse('assets:list')}?status=active",
+            },
+            {
+                "label": "Content missing docs",
+                "count": content_without_docs_count,
+                "href": reverse("content:list"),
+            },
+        ]
+
+
+class SearchView(LoginRequiredMixin, TemplateView):
+    template_name = "search.html"
+    result_limit = 8
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        q = self.request.GET.get("q", "").strip()
+        results = self._search(q) if q else {}
+
+        ctx.update(
+            q=q,
+            search_query=q,
+            results=results,
+            total=sum(len(items) for items in results.values()),
+        )
+        return ctx
+
+    def _search(self, q: str) -> dict[str, object]:
+        return {
+            "Projects": Project.objects.filter(
+                Q(name__icontains=q)
+                | Q(slug__icontains=q)
+                | Q(description__icontains=q)
+                | Q(technologies_used__icontains=q)
+            )[: self.result_limit],
+            "Content": ContentItem.objects.filter(
+                Q(title__icontains=q)
+                | Q(slug__icontains=q)
+                | Q(topic__icontains=q)
+                | Q(tags__icontains=q)
+            )[: self.result_limit],
+            "Docs": DocumentationRecord.objects.filter(
+                Q(doc_id__icontains=q)
+                | Q(title__icontains=q)
+                | Q(system_service__icontains=q)
+                | Q(obsidian_path__icontains=q)
+            )[: self.result_limit],
+            "Assets": Asset.objects.filter(
+                Q(item_name__icontains=q)
+                | Q(slug__icontains=q)
+                | Q(vendor__icontains=q)
+                | Q(notes__icontains=q)
+            )[: self.result_limit],
+            "Expenses": Expense.objects.filter(
+                Q(vendor__icontains=q)
+                | Q(item__icontains=q)
+                | Q(business_purpose__icontains=q)
+                | Q(notes__icontains=q)
+            )[: self.result_limit],
+            "Receipts": Receipt.objects.filter(
+                Q(vendor__icontains=q)
+                | Q(original_filename__icontains=q)
+                | Q(notes__icontains=q)
+            )[: self.result_limit],
+        }
 
 
 class AuditLogListView(LoginRequiredMixin, ListView):

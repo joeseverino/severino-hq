@@ -15,17 +15,56 @@
     <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
     {% if user.is_authenticated %}
       <nav class="primary-nav">
-        <a href="{% url 'dashboard' %}">Dashboard</a>
-        <a href="{% url 'projects:list' %}">Projects</a>
-        <a href="{% url 'content:list' %}">Content</a>
-        <a href="{% url 'docs_index:list' %}">Docs</a>
-        <a href="{% url 'assets:list' %}">Assets</a>
-        <a href="{% url 'expenses:list' %}">Expenses</a>
-        <a href="{% url 'receipts:list' %}">Receipts</a>
-        <a href="{% url 'contacts:list' %}">Contacts</a>
-        <a href="{% url 'reports:dashboard' %}">Reports</a>
-        <a href="{% url 'core:audit_list' %}">Audit</a>
+        <a
+          href="{% url 'dashboard' %}"
+          {% if request.resolver_match.url_name == "dashboard" %}class="active"{% endif %}
+        >Dashboard</a>
+        <a
+          href="{% url 'projects:list' %}"
+          {% if request.resolver_match.namespace == "projects" %}class="active"{% endif %}
+        >Projects</a>
+        <a
+          href="{% url 'content:list' %}"
+          {% if request.resolver_match.namespace == "content" %}class="active"{% endif %}
+        >Content</a>
+        <a
+          href="{% url 'docs_index:list' %}"
+          {% if request.resolver_match.namespace == "docs_index" %}class="active"{% endif %}
+        >Docs</a>
+        <a
+          href="{% url 'assets:list' %}"
+          {% if request.resolver_match.namespace == "assets" %}class="active"{% endif %}
+        >Assets</a>
+        <a
+          href="{% url 'expenses:list' %}"
+          {% if request.resolver_match.namespace == "expenses" %}class="active"{% endif %}
+        >Expenses</a>
+        <a
+          href="{% url 'receipts:list' %}"
+          {% if request.resolver_match.namespace == "receipts" %}class="active"{% endif %}
+        >Receipts</a>
+        <a
+          href="{% url 'contacts:list' %}"
+          {% if request.resolver_match.namespace == "contacts" %}class="active"{% endif %}
+        >Contacts</a>
+        <a
+          href="{% url 'reports:dashboard' %}"
+          {% if request.resolver_match.namespace == "reports" %}class="active"{% endif %}
+        >Reports</a>
+        <a
+          href="{% url 'core:audit_list' %}"
+          {% if request.resolver_match.namespace == "core" %}class="active"{% endif %}
+        >Audit</a>
       </nav>
+      <form class="global-search" action="{% url 'search' %}" method="get">
+        <input
+          type="search"
+          name="q"
+          value="{{ search_query|default:'' }}"
+          placeholder="Search HQ"
+          aria-label="Search HQ"
+        >
+      </form>
       <div class="user-block">
         <span class="user">{{ user.get_username }}</span>
         <a href="{% url 'admin:index' %}" class="muted">Admin</a>
