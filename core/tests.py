@@ -177,6 +177,63 @@ class ManifestImportTests(TestCase):
         self.assertTrue(item.related_documentation.filter(pk=record.pk).exists())
         self.assertFalse(ContentItem.objects.filter(slug="custom-mcp-layer").exists())
 
+    def test_public_article_without_content_type_prunes_legacy_content_item(self):
+        record = DocumentationRecord.objects.create(
+            doc_id="report-platform-playbook-public",
+            title="Severino Labs Platform Playbook",
+            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+        )
+        stale_item = ContentItem.objects.create(
+            slug="report-platform-playbook-public",
+            title="Severino Labs Platform Playbook",
+            content_type=ContentItem.Type.PORTFOLIO_PAGE,
+            status=ContentItem.Status.DRAFT,
+        )
+        stale_item.related_documentation.add(record)
+
+        stats = import_manifest_data(
+            [
+                {
+                    "doc_id": "report-platform-playbook-public",
+                    "title": "Severino Labs Platform Playbook",
+                    "doc_type": DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+                    "system": "Severino Labs (cross-cutting)",
+                    "environment": DocumentationRecord.Environment.OTHER,
+                    "status": DocumentationRecord.Status.ACTIVE,
+                    "sensitivity": DocumentationRecord.Sensitivity.INTERNAL,
+                    "path": "02 Infrastructure/00 Reporting/Severino Labs Platform Playbook.md",
+                }
+            ]
+        )
+
+        self.assertEqual(stats["content_items_pruned"], 1)
+        self.assertFalse(
+            ContentItem.objects.filter(slug="report-platform-playbook-public").exists()
+        )
+
+    def test_prune_removes_content_item_only_linked_to_orphan_doc(self):
+        old_record = DocumentationRecord.objects.create(
+            doc_id="writeup-old-slug",
+            title="Old title",
+            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+        )
+        stale_item = ContentItem.objects.create(
+            slug="old-slug",
+            title="Old title",
+            content_type=ContentItem.Type.PORTFOLIO_PAGE,
+        )
+        stale_item.related_documentation.add(old_record)
+
+        stats = import_manifest_data(
+            [],
+            report_orphans=True,
+            prune_orphans=True,
+        )
+
+        self.assertEqual(stats["orphans_pruned"], 1)
+        self.assertEqual(stats["content_items_pruned"], 1)
+        self.assertFalse(ContentItem.objects.filter(slug="old-slug").exists())
+
 
 class DeductibleMathTests(TestCase):
     def test_expense_deductible_is_recomputed_on_save(self):
