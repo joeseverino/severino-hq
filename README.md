@@ -24,7 +24,8 @@ over Tailscale.
 
 ## Modules
 
-1. Dashboard — KPIs, recent activity, docs needing review.
+1. Dashboard — KPIs, needs-attention queue, quick actions, relationship
+   health, recent activity, docs needing review.
 2. Projects / Labs — CRUD with category/status, technologies, repo & public URLs.
 3. Content Pipeline — CRUD with type, status, WordPress IDs, related records.
 4. Documentation Index — metadata + relationships only; Obsidian stays the source of truth.
@@ -34,6 +35,27 @@ over Tailscale.
 8. Reports / Exports — KPI page + CSV exports + year-summary JSON & Markdown.
 9. Audit Log — every important create/update/delete/login/upload/export.
 10. MCP-ready — stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
+
+---
+
+## Operator UI
+
+The app is intentionally dense and practical: list pages stay table-first, the
+dashboard surfaces work that needs attention, and global search is always
+available in the header.
+
+- The top navigation highlights the active section and stays on one row on
+  desktop. If the viewport is narrow, the nav scrolls horizontally instead of
+  wrapping into stacked links.
+- Header search goes to `/search/` and searches projects, content, docs,
+  assets, expenses, and receipts.
+- The dashboard action queue links directly to cleanup views for docs needing
+  review, draft content, unlinked receipts, expenses without receipts, active
+  assets missing purchase info, and content without docs.
+- Dashboard quick actions link to the common create/import flows: new expense,
+  upload receipt, new project, new content, and Docs manifest import.
+- Relationship health counts are status indicators, not blockers; non-zero
+  values mean there is link or metadata cleanup worth doing.
 
 ---
 
