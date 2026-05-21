@@ -81,17 +81,20 @@ def _upsert_content_item(
 ) -> None:
     """Mirror a public-article DocumentationRecord into ContentItem.
 
-    Keyed by slug derived from `doc_id` (e.g. `article-foo` -> `foo`). Idempotent:
-    if a ContentItem with that slug already exists, its fields are refreshed.
+    Keyed by the manifest slug when provided, falling back to a slug derived
+    from `doc_id` for older manifests. Idempotent: if a ContentItem with that
+    slug already exists, its fields are refreshed.
     """
     doc_id = record.doc_id
-    # Strip the prefix so the ContentItem slug matches the URL slug on
-    # jseverino.com (writeups) or the vault folder (pages, legacy articles).
-    article_slug = doc_id
-    for prefix in ("writeup-", "page-", "article-"):
-        if article_slug.startswith(prefix):
-            article_slug = article_slug.removeprefix(prefix)
-            break
+    article_slug = (entry.get("slug") or "").strip()
+    if not article_slug:
+        # Strip the prefix so the ContentItem slug matches the URL slug on
+        # jseverino.com (writeups) or the vault folder (pages, legacy articles).
+        article_slug = doc_id
+        for prefix in ("writeup-", "page-", "article-"):
+            if article_slug.startswith(prefix):
+                article_slug = article_slug.removeprefix(prefix)
+                break
 
     ct_raw = (entry.get("content_type") or "").strip().lower()
     content_type = CONTENT_TYPE_MAP.get(ct_raw, ContentItem.Type.PORTFOLIO_PAGE)

@@ -20,6 +20,7 @@ from assets.models import Asset
 from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
+from docs_index.importer import import_manifest_data
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
@@ -148,6 +149,33 @@ class ExportSmokeTests(_AuthedTestCase):
         self.assertIn("# Severino HQ year summary", body)
         self.assertIn("Cloudflare", body)
         self.assertIn("Test runbook", body)
+
+
+class ManifestImportTests(TestCase):
+    def test_public_article_content_item_uses_manifest_slug(self):
+        import_manifest_data(
+            [
+                {
+                    "doc_id": "writeup-custom-mcp-layer",
+                    "slug": "building-a-custom-mcp-layer",
+                    "title": "Building a Custom MCP Layer",
+                    "doc_type": DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+                    "system": "jseverino.com",
+                    "environment": DocumentationRecord.Environment.CLOUDFLARE,
+                    "status": DocumentationRecord.Status.DRAFT,
+                    "sensitivity": DocumentationRecord.Sensitivity.INTERNAL,
+                    "content_type": "portfolio_article",
+                    "published": False,
+                    "path": "05 Writeups/building-a-custom-mcp-layer/index.md",
+                }
+            ]
+        )
+
+        record = DocumentationRecord.objects.get(doc_id="writeup-custom-mcp-layer")
+        item = ContentItem.objects.get(slug="building-a-custom-mcp-layer")
+
+        self.assertTrue(item.related_documentation.filter(pk=record.pk).exists())
+        self.assertFalse(ContentItem.objects.filter(slug="custom-mcp-layer").exists())
 
 
 class DeductibleMathTests(TestCase):
