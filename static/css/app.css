@@ -125,8 +125,15 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 .user-menu > summary::-webkit-details-marker { display: none; }
 .user-menu > summary:hover,
 .user-menu[open] > summary { background: var(--bg-tint); color: var(--ink); }
-.user-menu .caret { font-size: 9px; color: var(--muted); transition: transform .12s ease; }
-.user-menu[open] .caret { transform: rotate(180deg); }
+.user-menu .user-icon {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  transition: stroke .12s ease;
+}
+.user-menu > summary:hover .user-icon,
+.user-menu[open] > summary .user-icon { stroke: var(--ink); }
 .user-menu-panel {
   position: absolute;
   top: calc(100% + 6px);
@@ -305,7 +312,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 .ops-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.2fr) minmax(240px, .9fr) minmax(280px, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   margin: 0 0 24px;
 }

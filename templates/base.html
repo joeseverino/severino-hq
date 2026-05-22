@@ -31,7 +31,10 @@
       <details class="user-menu">
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
-          <span class="caret" aria-hidden="true">▾</span>
+          <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <circle cx="12" cy="8.2" r="3.6"/>
+            <path d="M5.4 19.4c0-3.7 3-5.9 6.6-5.9s6.6 2.2 6.6 5.9"/>
+          </svg>
         </summary>
         <div class="user-menu-panel">
           <a href="{% url 'admin:index' %}">Admin</a>
@@ -59,6 +62,21 @@
   <footer class="site-footer">
     <span>{{ SITE_NAME }} · Private internal app · Not connected to the public site.</span>
   </footer>
+
+  <script>
+    // User menu: <details> won't close on its own — close on outside
+    // click or Escape.
+    (function () {
+      var menu = document.querySelector("details.user-menu");
+      if (!menu) return;
+      document.addEventListener("click", function (e) {
+        if (menu.open && !menu.contains(e.target)) menu.removeAttribute("open");
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") menu.removeAttribute("open");
+      });
+    })();
+  </script>
 
   {% block scripts_extra %}{% endblock %}
 </body>
