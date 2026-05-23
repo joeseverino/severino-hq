@@ -9,6 +9,7 @@ urlpatterns = [
     path("new/", views.ReceiptCreateView.as_view(), name="create"),
     path("<int:pk>/", views.ReceiptDetailView.as_view(), name="detail"),
     path("<int:pk>/edit/", views.ReceiptUpdateView.as_view(), name="edit"),
+    path("<int:pk>/match/", views.ReceiptMatchView.as_view(), name="match"),
     path("<int:pk>/delete/", views.ReceiptDeleteView.as_view(), name="delete"),
     path("<int:pk>/file/", views.ReceiptFileView.as_view(), name="file"),
 ]
