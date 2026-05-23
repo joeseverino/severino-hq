@@ -21,11 +21,11 @@
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ project.slug }}</code></dd>
   {% if project.repository_url %}<dt>Repository</dt><dd><a href="{{ project.repository_url }}" rel="noopener noreferrer">{{ project.repository_url }}</a></dd>{% endif %}
-  {% if project.last_push_at %}<dt>Last push</dt><dd><strong>{{ project.last_push_at|date:"Y-m-d H:i" }}</strong></dd>{% endif %}
+  {% if project.last_push_at %}<dt>Last push</dt><dd><strong>{{ project.last_push_at }}</strong></dd>{% endif %}
   {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a></dd>{% endif %}
   {% if project.tech_list %}<dt>Technologies</dt><dd>{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
-  <dt>Created</dt><dd class="muted">{{ project.created_at|date:"Y-m-d H:i" }}</dd>
-  <dt>Updated</dt><dd class="muted">{{ project.updated_at|date:"Y-m-d H:i" }}</dd>
+  <dt>Created</dt><dd class="muted">{{ project.created_at }}</dd>
+  <dt>Updated</dt><dd class="muted">{{ project.updated_at }}</dd>
 </dl>
 
 {% if project.description %}<h2>Description</h2><p>{{ project.description|linebreaksbr }}</p>{% endif %}

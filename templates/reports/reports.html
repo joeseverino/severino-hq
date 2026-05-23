@@ -96,7 +96,8 @@
   {% if recent_audit %}
     <ul class="audit-list">
       {% for ev in recent_audit %}
-        <li><span class="muted">{{ ev.created_at|date:"Y-m-d H:i" }}</span> <strong>{{ ev.user.get_username|default:"system" }}</strong> {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.object_type }}</span>{% endif %}{% if ev.object_repr %} — {{ ev.object_repr }}{% endif %}</li>
+        <li><span class="muted">{{ ev.created_at }}</span> <strong>{{ ev.user.get_username|default:"system" }}</strong>
+ {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.object_type }}</span>{% endif %}{% if ev.object_repr %} — {{ ev.object_repr }}{% endif %}</li>
       {% endfor %}
     </ul>
   {% endif %}

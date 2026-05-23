@@ -38,7 +38,7 @@
                   {% if label == "Contacts" %}
                     {{ item.created_at }}
                   {% elif item.updated_at %}
-                    {{ item.updated_at|date:"Y-m-d" }}
+                    {{ item.updated_at }}
                   {% endif %}
                 </span>
               </li>

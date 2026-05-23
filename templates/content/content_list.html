@@ -42,7 +42,7 @@
         <td><span class="pill pill-{{ c.status }}">{{ c.get_status_display }}</span></td>
         <td class="muted">{{ c.topic|default:"—" }}</td>
         <td class="muted">{{ c.published_at|default:"—" }}</td>
-        <td class="muted">{{ c.updated_at|date:"Y-m-d" }}</td>
+        <td class="muted">{{ c.updated_at }}</td>
         <td class="actions-col">
           {% if c.published_url %}
             <a class="icon-link" href="{{ c.published_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>

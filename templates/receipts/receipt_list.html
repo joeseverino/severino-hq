@@ -21,7 +21,7 @@
   <tbody>
     {% for r in receipts_list %}
       <tr>
-        <td><a href="{{ r.get_absolute_url }}">{{ r.uploaded_at|date:"Y-m-d" }}</a></td>
+        <td><a href="{{ r.get_absolute_url }}">{{ r.uploaded_at }}</a></td>
         <td>{{ r.vendor|default:"—" }}</td>
         <td>{{ r.date|default:"—" }}</td>
         <td>${{ r.amount|floatformat:2|intcomma }}</td>
