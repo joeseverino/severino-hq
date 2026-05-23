@@ -141,7 +141,7 @@
               <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
               <span class="muted">· {{ p.get_category_display }}</span>
             </span>
-            <span class="row-meta">{{ p.updated_at|naturaltime }}</span>
+            <span class="row-meta">{{ p.updated_at }}</span>
           </li>
         {% endfor %}
       </ul>
@@ -168,7 +168,7 @@
               <span class="muted">· {{ c.get_content_type_display }}</span>
               <span class="pill pill-{{ c.status }}">{{ c.get_status_display }}</span>
             </span>
-            <span class="row-meta">{{ c.updated_at|naturaltime }}</span>
+            <span class="row-meta">{{ c.updated_at }}</span>
           </li>
         {% endfor %}
       </ul>
@@ -198,7 +198,7 @@
               {% endif %}
               <span class="muted">· {{ c.get_content_type_display }}</span>
             </span>
-            <span class="row-meta">{% if c.published_at %}{{ c.published_at|date:"M j, Y" }}{% else %}{{ c.updated_at|naturaltime }}{% endif %}</span>
+            <span class="row-meta">{% if c.published_at %}{{ c.published_at }}{% else %}{{ c.updated_at }}{% endif %}</span>
           </li>
         {% endfor %}
       </ul>
@@ -222,7 +222,7 @@
             <span class="row-main">
               <a href="{{ r.get_absolute_url }}"><strong>{{ r.vendor|default:r.original_filename|default:"Receipt" }}</strong></a>
             </span>
-            <span class="row-meta">{{ r.uploaded_at|naturaltime }}</span>
+            <span class="row-meta">{{ r.uploaded_at }}</span>
           </li>
         {% endfor %}
       </ul>
@@ -248,7 +248,7 @@
               <a href="{{ d.get_absolute_url }}"><strong>{{ d.title }}</strong></a>
               <span class="muted">· {{ d.doc_id }}</span>
             </span>
-            <span class="row-meta">{% if d.last_reviewed %}{{ d.last_reviewed|naturaltime }}{% else %}never{% endif %}</span>
+            <span class="row-meta">{% if d.last_reviewed %}{{ d.last_reviewed }}{% else %}never{% endif %}</span>
           </li>
         {% endfor %}
       </ul>
@@ -310,7 +310,7 @@
     <ul class="audit-list">
       {% for ev in recent_audit %}
         <li>
-          <span class="ts">{{ ev.created_at|date:"M j · H:i" }}</span>
+          <span class="ts">{{ ev.created_at }}</span>
           <strong>{{ ev.user.get_username|default:"system" }}</strong>
           <span class="muted">{{ ev.get_action_display|lower }}</span>
           {% if ev.object_type %}<span class="muted-2">{{ ev.object_type }}</span>{% endif %}

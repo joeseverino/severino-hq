@@ -172,9 +172,15 @@ LOGIN_EXEMPT_PATH_PREFIXES = ("/accounts/login", "/accounts/logout", "/static/")
 # ----- I18N --------------------------------------------------------------------
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "America/New_York")
+TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "America/Chicago")
 USE_I18N = True
 USE_TZ = True
+
+# Custom formatting to match operator preference: 5/23/26 5:49 PM
+DATE_FORMAT = "n/j/y"
+DATETIME_FORMAT = "n/j/y g:i A"
+SHORT_DATE_FORMAT = "n/j/y"
+SHORT_DATETIME_FORMAT = "n/j/y g:i A"
 
 
 # ----- Static & media ----------------------------------------------------------

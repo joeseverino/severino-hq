@@ -19,7 +19,7 @@
   <tbody>
     {% for ev in events %}
       <tr>
-        <td class="muted">{{ ev.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td class="muted">{{ ev.created_at }}</td>
         <td>{{ ev.user.get_username|default:"system" }}</td>
         <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
         <td>{% if ev.object_type %}<code>{{ ev.object_type }}</code>{% if ev.object_id %} #{{ ev.object_id }}{% endif %}{% endif %}<br><span class="muted">{{ ev.object_repr }}</span></td>

@@ -22,8 +22,8 @@
   {% if item.published_url %}<dt>Published URL</dt><dd><a href="{{ item.published_url }}" rel="noopener noreferrer">{{ item.published_url }}</a></dd>{% endif %}
   {% if item.wordpress_post_id %}<dt>WordPress</dt><dd>post #{{ item.wordpress_post_id }}{% if item.wordpress_slug %} (<code>{{ item.wordpress_slug }}</code>){% endif %}</dd>{% endif %}
   {% if item.published_at %}<dt>Published at</dt><dd>{{ item.published_at }}</dd>{% endif %}
-  <dt>Created</dt><dd class="muted">{{ item.created_at|date:"Y-m-d H:i" }}</dd>
-  <dt>Updated</dt><dd class="muted">{{ item.updated_at|date:"Y-m-d H:i" }}</dd>
+  <dt>Created</dt><dd class="muted">{{ item.created_at }}</dd>
+  <dt>Updated</dt><dd class="muted">{{ item.updated_at }}</dd>
 </dl>
 
 {% if item.notes %}<h2>Notes</h2><p>{{ item.notes|linebreaksbr }}</p>{% endif %}

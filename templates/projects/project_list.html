@@ -42,7 +42,7 @@
         <td>{{ p.get_category_display }}</td>
         <td><span class="pill pill-{{ p.status }}">{{ p.get_status_display }}</span></td>
         <td class="muted">{{ p.technologies_used|truncatechars:60 }}</td>
-        <td class="muted">{{ p.updated_at|date:"Y-m-d" }}</td>
+        <td class="muted">{{ p.updated_at }}</td>
         <td class="row-actions">
           <a href="{% url 'projects:edit' p.slug %}">Edit</a>
         </td>
