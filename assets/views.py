@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -45,6 +45,10 @@ class AssetListView(LoginRequiredMixin, ListView):
             "category", "-category",
         }:
             qs = qs.order_by(sort)
+        if self.request.GET.get("missing_purchase"):
+            qs = qs.filter(status=Asset.Status.ACTIVE).filter(
+                Q(purchase_date__isnull=True) | Q(total_cost=0)
+            )
         return qs
 
     def get_context_data(self, **kwargs):
@@ -56,6 +60,7 @@ class AssetListView(LoginRequiredMixin, ListView):
             sort=self.request.GET.get("sort", "-purchase_date"),
             status_choices=Asset.Status.choices,
             category_choices=ASSET_CATEGORY_CHOICES,
+            missing_purchase=self.request.GET.get("missing_purchase", ""),
         )
         return ctx
 

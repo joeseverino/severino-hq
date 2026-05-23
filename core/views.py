@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q, Sum
 from django.urls import reverse
@@ -12,7 +13,12 @@ from django.utils import timezone
 from django.views.generic import ListView, TemplateView
 
 from assets.models import Asset
-from contacts.d1 import D1Error, query
+from contacts.d1 import (
+    D1Error,
+    get_recent_submissions,
+    get_unread_count,
+    search_submissions,
+)
 from content.models import ContentItem
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
@@ -22,7 +28,6 @@ from receipts.models import Receipt
 from .models import AuditLog
 
 ZERO_MONEY = Decimal("0.00")
-REVIEW_WINDOW_DAYS = 180
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -39,7 +44,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             n=Count("id"),
         )
 
-        review_cutoff = today - timedelta(days=REVIEW_WINDOW_DAYS)
+        review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
+        review_cutoff = today - timedelta(days=review_days)
         docs_needing_review = DocumentationRecord.objects.filter(
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
             status=DocumentationRecord.Status.ACTIVE,
@@ -66,13 +72,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Contact submissions live in Cloudflare D1, not HQ's database.
         # Fetch over the D1 HTTP API; degrade gracefully if it's unreachable.
         try:
-            recent_contacts = query(
-                "SELECT id, created_at, name, email, status "
-                "FROM contact_submissions ORDER BY id DESC LIMIT 4"
-            )
+            recent_contacts = get_recent_submissions(limit=4)
+            unread_contacts_count = get_unread_count()
         except D1Error:
             recent_contacts = []
+            unread_contacts_count = 0
 
+        active_projects_qs = Project.objects.filter(status=Project.Status.ACTIVE)
+        published_content_qs = ContentItem.objects.filter(
+            status=ContentItem.Status.PUBLISHED
+        )
         draft_content_qs = ContentItem.objects.filter(
             status=ContentItem.Status.DRAFT
         )
@@ -112,24 +121,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "count": draft_content_count,
                 "href": f"{reverse('content:list')}?status=draft",
             },
+            {
+                "label": "Unread contacts",
+                "count": unread_contacts_count,
+                "href": f"{reverse('contacts:list')}?status=unread",
+            },
         ]
 
         ctx.update(
             recent_contacts=recent_contacts,
-            active_project_count=Project.objects.filter(
-                status=Project.Status.ACTIVE
-            ).count(),
-            active_projects=Project.objects.filter(
-                status=Project.Status.ACTIVE
-            ).order_by("-updated_at")[:4],
+            active_project_count=active_projects_qs.count(),
+            active_projects=active_projects_qs.order_by("-updated_at")[:4],
             draft_content=draft_content_qs.order_by("-updated_at")[:4],
             draft_content_count=draft_content_count,
-            published_content_count=ContentItem.objects.filter(
-                status=ContentItem.Status.PUBLISHED
-            ).count(),
-            recent_published=ContentItem.objects.filter(
-                status=ContentItem.Status.PUBLISHED
-            ).order_by("-published_at", "-updated_at")[:4],
+            published_content_count=published_content_qs.count(),
+            recent_published=published_content_qs.order_by(
+                "-published_at", "-updated_at"
+            )[:4],
             active_asset_count=Asset.objects.filter(
                 status=Asset.Status.ACTIVE
             ).count(),
@@ -171,6 +179,11 @@ class SearchView(LoginRequiredMixin, TemplateView):
         return ctx
 
     def _search(self, q: str) -> dict[str, object]:
+        try:
+            contacts = search_submissions(q, limit=self.result_limit)
+        except D1Error:
+            contacts = []
+
         return {
             "Projects": Project.objects.filter(
                 Q(name__icontains=q)
@@ -207,6 +220,7 @@ class SearchView(LoginRequiredMixin, TemplateView):
                 | Q(original_filename__icontains=q)
                 | Q(notes__icontains=q)
             )[: self.result_limit],
+            "Contacts": contacts,
         }
 
 
@@ -221,9 +235,7 @@ class AuditLogListView(LoginRequiredMixin, ListView):
         q = self.request.GET.get("q", "").strip()
         action = self.request.GET.get("action", "").strip()
         if q:
-            qs = qs.filter(object_repr__icontains=q) | qs.filter(
-                message__icontains=q
-            )
+            qs = qs.filter(Q(object_repr__icontains=q) | Q(message__icontains=q))
         if action:
             qs = qs.filter(action=action)
         return qs

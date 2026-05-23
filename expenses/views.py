@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -45,6 +45,8 @@ class ExpenseListView(LoginRequiredMixin, ListView):
             "estimated_deductible_amount", "-estimated_deductible_amount",
         }:
             qs = qs.order_by(sort)
+        if self.request.GET.get("no_receipts"):
+            qs = qs.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
         return qs
 
     def get_context_data(self, **kwargs):
@@ -62,6 +64,7 @@ class ExpenseListView(LoginRequiredMixin, ListView):
             total_filtered=totals["total"] or Decimal("0.00"),
             deductible_filtered=totals["deductible"] or Decimal("0.00"),
             available_years=Expense.objects.dates("date", "year"),
+            no_receipts=self.request.GET.get("no_receipts", ""),
         )
         return ctx
 
