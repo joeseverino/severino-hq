@@ -11,15 +11,16 @@ from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
     DetailView,
     ListView,
+    TemplateView,
     UpdateView,
     View,
 )
@@ -27,6 +28,7 @@ from django.views.generic import (
 from core.audit import record_event
 from core.models import AuditLog
 
+from expenses.models import Expense
 from .forms import ReceiptUploadForm
 from .models import Receipt
 
@@ -61,6 +63,60 @@ class ReceiptDetailView(LoginRequiredMixin, DetailView):
     model = Receipt
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
+
+
+class ReceiptMatchView(LoginRequiredMixin, TemplateView):
+    """Suggest potential Expense links for an unlinked receipt."""
+
+    template_name = "receipts/receipt_match.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
+
+        # Only suggest if it's currently unlinked.
+        if receipt.related_expense or receipt.related_asset:
+            ctx["already_linked"] = True
+            return ctx
+
+        # Find potential expenses with the same vendor or same amount.
+        potential_expenses = Expense.objects.annotate(
+            receipt_count=Count("receipts")
+        ).filter(receipt_count=0)
+
+        # Refine matches: same amount is a strong signal, same vendor is a decent signal.
+        matches = []
+        if receipt.amount > 0:
+            matches = list(potential_expenses.filter(total_cost=receipt.amount))
+
+        if not matches and receipt.vendor:
+            matches = list(potential_expenses.filter(vendor__icontains=receipt.vendor))
+
+        ctx.update(
+            receipt=receipt,
+            matches=matches[:10],
+        )
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
+        expense_id = request.POST.get("expense_id")
+
+        if expense_id:
+            expense = get_object_or_404(Expense, pk=expense_id)
+            receipt.related_expense = expense
+            receipt.save(update_fields=["related_expense"])
+
+            record_event(
+                action=AuditLog.Action.UPDATED,
+                obj=receipt,
+                type_label="Receipt",
+                message=f"Linked receipt to expense: {expense}",
+                metadata={"expense_id": expense.id},
+            )
+            messages.success(request, f"Receipt linked to expense: {expense}")
+
+        return redirect(receipt.get_absolute_url())
 
 
 class ReceiptCreateView(LoginRequiredMixin, CreateView):

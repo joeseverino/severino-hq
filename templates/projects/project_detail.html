@@ -7,6 +7,12 @@
     <p class="muted">{{ project.get_category_display }} · <span class="pill pill-{{ project.status }}">{{ project.get_status_display }}</span></p>
   </div>
   <div class="page-actions">
+    {% if project.repository_url and "github.com" in project.repository_url %}
+      <form action="{% url 'projects:refresh' project.slug %}" method="post" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn">Refresh GitHub</button>
+      </form>
+    {% endif %}
     <a class="btn" href="{% url 'projects:edit' project.slug %}">Edit</a>
     <a class="btn danger" href="{% url 'projects:delete' project.slug %}">Delete</a>
   </div>
@@ -15,6 +21,7 @@
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ project.slug }}</code></dd>
   {% if project.repository_url %}<dt>Repository</dt><dd><a href="{{ project.repository_url }}" rel="noopener noreferrer">{{ project.repository_url }}</a></dd>{% endif %}
+  {% if project.last_push_at %}<dt>Last push</dt><dd><strong>{{ project.last_push_at|date:"Y-m-d H:i" }}</strong></dd>{% endif %}
   {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a></dd>{% endif %}
   {% if project.tech_list %}<dt>Technologies</dt><dd>{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
   <dt>Created</dt><dd class="muted">{{ project.created_at|date:"Y-m-d H:i" }}</dd>

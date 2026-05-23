@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Link receipt · {{ receipt.vendor|default:"upload" }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Link receipt to expense</h1>
+    <p class="muted">Matching for <strong>{{ receipt.vendor|default:"(Unknown vendor)" }}</strong> · ${{ receipt.amount|floatformat:2|intcomma }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ receipt.get_absolute_url }}">Cancel</a>
+  </div>
+</div>
+
+{% if already_linked %}
+  <div class="msg msg-info">This receipt is already linked to an expense or asset.</div>
+{% else %}
+  {% if matches %}
+    <p class="page-lede">We found potential expenses without receipts that might match this upload:</p>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Vendor</th>
+            <th>Item</th>
+            <th>Cost</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for exp in matches %}
+            <tr>
+              <td>{{ exp.date }}</td>
+              <td><strong>{{ exp.vendor }}</strong></td>
+              <td>{{ exp.item }}</td>
+              <td>${{ exp.total_cost|floatformat:2|intcomma }}</td>
+              <td>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="expense_id" value="{{ exp.pk }}">
+                  <button type="submit" class="btn primary small">Link this</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">
+      <p>No matching expenses found without receipts.</p>
+      <p><a class="empty-cta" href="{% url 'expenses:create' %}?vendor={{ receipt.vendor|urlencode }}&cost={{ receipt.amount }}">Create new expense &rarr;</a></p>
+    </div>
+  {% endif %}
+{% endif %}
+
+<section class="card mt-2">
+  <div class="section-head">
+    <h2>Receipt details</h2>
+  </div>
+  <dl class="kv">
+    <dt>Vendor</dt><dd>{{ receipt.vendor|default:"—" }}</dd>
+    <dt>Date</dt><dd>{{ receipt.date|default:"—" }}</dd>
+    <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
+    <dt>Original file</dt><dd>{{ receipt.original_filename }}</dd>
+  </dl>
+</section>
+{% endblock %}

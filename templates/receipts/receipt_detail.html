@@ -8,7 +8,10 @@
     <p class="muted">{{ receipt.original_filename|default:"file" }} · uploaded {{ receipt.uploaded_at|naturaltime }}</p>
   </div>
   <div class="page-actions">
-    <a class="btn primary" href="{% url 'receipts:file' receipt.pk %}">Download file</a>
+    {% if not receipt.related_expense and not receipt.related_asset %}
+      <a class="btn primary" href="{% url 'receipts:match' receipt.pk %}">Link to expense</a>
+    {% endif %}
+    <a class="btn" href="{% url 'receipts:file' receipt.pk %}">Download file</a>
     <a class="btn" href="{% url 'receipts:edit' receipt.pk %}">Edit</a>
     <a class="btn danger" href="{% url 'receipts:delete' receipt.pk %}">Delete</a>
   </div>

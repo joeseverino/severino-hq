@@ -51,6 +51,7 @@ class Project(TimestampedModel):
         help_text="Comma-separated list of technologies.",
     )
     repository_url = models.URLField(blank=True)
+    last_push_at = models.DateTimeField(null=True, blank=True)
     public_url = models.URLField(blank=True)
     deployment_notes = models.TextField(blank=True)
     security_notes = models.TextField(blank=True)
