@@ -14,7 +14,7 @@
     <span class="label">Active projects</span>
     <span class="value">{{ active_project_count }}</span>
   </div>
-  <div class="kpi {% if not draft_content %}is-zero{% endif %}">
+  <div class="kpi {% if not draft_content_count %}is-zero{% endif %}">
     <span class="label">Draft content</span>
     <span class="value">{{ draft_content_count }}</span>
   </div>
@@ -84,19 +84,19 @@
     </div>
     <dl class="health-list">
       <div>
-        <dt>Receipts without links</dt>
+        <dt>{% if receipts_unlinked_count %}<a href="{% url 'receipts:list' %}?unlinked=1">Receipts without links</a>{% else %}Receipts without links{% endif %}</dt>
         <dd class="{% if receipts_unlinked_count %}warn{% endif %}">{{ receipts_unlinked_count }}</dd>
       </div>
       <div>
-        <dt>Expenses without receipts</dt>
+        <dt>{% if expenses_without_receipts_count %}<a href="{% url 'expenses:list' %}?no_receipts=1">Expenses without receipts</a>{% else %}Expenses without receipts{% endif %}</dt>
         <dd class="{% if expenses_without_receipts_count %}warn{% endif %}">{{ expenses_without_receipts_count }}</dd>
       </div>
       <div>
-        <dt>Assets missing purchase info</dt>
+        <dt>{% if assets_missing_purchase_info_count %}<a href="{% url 'assets:list' %}?missing_purchase=1">Assets missing purchase info</a>{% else %}Assets missing purchase info{% endif %}</dt>
         <dd class="{% if assets_missing_purchase_info_count %}warn{% endif %}">{{ assets_missing_purchase_info_count }}</dd>
       </div>
       <div>
-        <dt>Content without docs</dt>
+        <dt>{% if content_without_docs_count %}<a href="{% url 'content:list' %}?no_docs=1">Content without docs</a>{% else %}Content without docs{% endif %}</dt>
         <dd class="{% if content_without_docs_count %}warn{% endif %}">{{ content_without_docs_count }}</dd>
       </div>
     </dl>

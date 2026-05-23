@@ -7,7 +7,7 @@
   {% endif %}
   <span class="muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
   {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}">Next &rarr;</a>
+    <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next &rarr;</a>
   {% else %}
     <span class="muted">Next &rarr;</span>
   {% endif %}

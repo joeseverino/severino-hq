@@ -74,3 +74,63 @@ def query(sql: str, params: list | None = None) -> list[dict]:
     if not result:
         return []
     return result[0].get("results", []) or []
+
+
+def get_recent_submissions(limit: int = 4) -> list[dict]:
+    """Fetch the most recent contact submissions from D1."""
+    return query(
+        "SELECT id, created_at, name, email, status, country "
+        "FROM contact_submissions ORDER BY id DESC LIMIT ?",
+        [limit],
+    )
+
+
+def get_unread_count() -> int:
+    """Return the number of unread contact submissions."""
+    results = query(
+        "SELECT COUNT(*) as n FROM contact_submissions WHERE status = 'unread'"
+    )
+    if results:
+        return results[0].get("n", 0)
+    return 0
+
+
+def list_submissions(status: str = "", limit: int = 500) -> list[dict]:
+    """Fetch submissions, optionally filtered by status."""
+    cols = "id, created_at, name, email, status, country"
+    if status:
+        return query(
+            f"SELECT {cols} FROM contact_submissions WHERE status = ? "
+            f"ORDER BY id DESC LIMIT ?",
+            [status, limit],
+        )
+    return query(
+        f"SELECT {cols} FROM contact_submissions ORDER BY id DESC LIMIT ?",
+        [limit],
+    )
+
+
+def get_submission(pk: int) -> dict | None:
+    """Fetch a single submission by ID."""
+    rows = query("SELECT * FROM contact_submissions WHERE id = ?", [pk])
+    return rows[0] if rows else None
+
+
+def update_submission(pk: int, status: str, assigned_to: str, admin_notes: str) -> None:
+    """Update an existing submission's metadata."""
+    query(
+        "UPDATE contact_submissions SET status = ?, assigned_to = ?, "
+        "admin_notes = ?, updated_at = datetime('now') WHERE id = ?",
+        [status, assigned_to, admin_notes, pk],
+    )
+
+
+def search_submissions(q: str, limit: int = 10) -> list[dict]:
+    """Search submissions by name, email, or message."""
+    cols = "id, created_at, name, email, status, country"
+    return query(
+        f"SELECT {cols} FROM contact_submissions "
+        "WHERE name LIKE ? OR email LIKE ? OR message LIKE ? "
+        "ORDER BY id DESC LIMIT ?",
+        [f"%{q}%", f"%{q}%", f"%{q}%", limit],
+    )

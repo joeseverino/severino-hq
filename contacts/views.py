@@ -16,10 +16,8 @@ from django.shortcuts import redirect, render
 from core.audit import record_event
 from core.models import AuditLog
 
-from .d1 import D1Error, query
+from .d1 import D1Error, get_submission, list_submissions, update_submission
 from .forms import STATUS_CHOICES, ContactReviewForm
-
-LIST_COLUMNS = "id, created_at, name, email, status, country"
 
 
 @login_required
@@ -29,17 +27,7 @@ def contact_list(request):
     submissions: list[dict] = []
 
     try:
-        if selected_status:
-            submissions = query(
-                f"SELECT {LIST_COLUMNS} FROM contact_submissions "
-                f"WHERE status = ? ORDER BY id DESC LIMIT 500",
-                [selected_status],
-            )
-        else:
-            submissions = query(
-                f"SELECT {LIST_COLUMNS} FROM contact_submissions "
-                f"ORDER BY id DESC LIMIT 500"
-            )
+        submissions = list_submissions(status=selected_status)
     except D1Error as exc:
         error = str(exc)
 
@@ -58,30 +46,24 @@ def contact_list(request):
 @login_required
 def contact_detail(request, pk: int):
     try:
-        rows = query("SELECT * FROM contact_submissions WHERE id = ?", [pk])
+        submission = get_submission(pk)
     except D1Error as exc:
         messages.error(request, str(exc))
         return redirect("contacts:list")
 
-    if not rows:
+    if not submission:
         messages.error(request, f"Contact submission #{pk} was not found.")
         return redirect("contacts:list")
-
-    submission = rows[0]
 
     if request.method == "POST":
         form = ContactReviewForm(request.POST)
         if form.is_valid():
             try:
-                query(
-                    "UPDATE contact_submissions SET status = ?, assigned_to = ?, "
-                    "admin_notes = ?, updated_at = datetime('now') WHERE id = ?",
-                    [
-                        form.cleaned_data["status"],
-                        form.cleaned_data["assigned_to"],
-                        form.cleaned_data["admin_notes"],
-                        pk,
-                    ],
+                update_submission(
+                    pk,
+                    form.cleaned_data["status"],
+                    form.cleaned_data["assigned_to"],
+                    form.cleaned_data["admin_notes"],
                 )
             except D1Error as exc:
                 messages.error(request, str(exc))

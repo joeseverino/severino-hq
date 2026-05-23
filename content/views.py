@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -43,6 +43,10 @@ class ContentListView(LoginRequiredMixin, ListView):
             "published_at", "-published_at",
         }:
             qs = qs.order_by(sort)
+        if self.request.GET.get("no_docs"):
+            qs = qs.annotate(doc_count=Count("related_documentation")).filter(
+                doc_count=0
+            )
         return qs
 
     def get_context_data(self, **kwargs):
@@ -54,6 +58,7 @@ class ContentListView(LoginRequiredMixin, ListView):
             sort=self.request.GET.get("sort", "-updated_at"),
             status_choices=ContentItem.Status.choices,
             type_choices=ContentItem.Type.choices,
+            no_docs=self.request.GET.get("no_docs", ""),
         )
         return ctx
 

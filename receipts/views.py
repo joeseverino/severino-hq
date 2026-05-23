@@ -46,11 +46,14 @@ class ReceiptListView(LoginRequiredMixin, ListView):
                 | Q(notes__icontains=q)
                 | Q(original_filename__icontains=q)
             )
+        if self.request.GET.get("unlinked"):
+            qs = qs.filter(related_expense__isnull=True, related_asset__isnull=True)
         return qs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["q"] = self.request.GET.get("q", "")
+        ctx["unlinked"] = self.request.GET.get("unlinked", "")
         return ctx
 
 
