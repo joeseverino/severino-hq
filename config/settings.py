@@ -202,7 +202,7 @@ OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
 OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
-OIDC_USE_PKCE = False
+OIDC_USE_PKCE = True
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"

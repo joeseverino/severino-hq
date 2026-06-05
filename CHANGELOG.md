@@ -14,6 +14,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
   break-glass; OIDC users must match an allowed email or allowed group.
 - Pocket ID account linking now uses `preferred_username` first and does not
   require an email claim for users authorized through the `admins` group.
+- HQ keeps PKCE enabled alongside its OIDC client secret; PKCE requirements
+  are relying-party-specific and must not be inferred from Portainer.
 - Dashboard needs-attention queue linking to filtered cleanup views for docs
   needing review and draft content.
 - Dashboard quick actions for common create/import flows.

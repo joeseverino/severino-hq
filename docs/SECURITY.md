@@ -64,6 +64,8 @@
 - [ ] If SSO is enabled, `SEVERINO_OIDC_ALLOWED_GROUPS=admins` and
       `SEVERINO_OIDC_CLIENT_SECRET` is stored only in
       `/opt/apps/severino-hq/.env`.
+- [ ] The Pocket ID HQ client has PKCE enabled; HQ uses S256 in addition to
+      confidential-client authentication.
 - [ ] Documentation index records carrying secrets are flagged
       `sensitivity=sensitive` or `restricted` (these are excluded from
       AI-safe references).
