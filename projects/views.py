@@ -4,7 +4,7 @@ import urllib.error
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -35,6 +35,9 @@ class ProjectListView(LoginRequiredMixin, ListView):
         status = self.request.GET.get("status", "").strip()
         category = self.request.GET.get("category", "").strip()
         sort = self.request.GET.get("sort", "-updated_at")
+        needs_output = self.request.GET.get("needs_output", "").strip()
+        no_content = self.request.GET.get("no_content", "").strip()
+        no_docs = self.request.GET.get("no_docs", "").strip()
         if q:
             qs = qs.filter(
                 Q(name__icontains=q)
@@ -46,6 +49,19 @@ class ProjectListView(LoginRequiredMixin, ListView):
             qs = qs.filter(status=status)
         if category:
             qs = qs.filter(category=category)
+        if needs_output or no_content or no_docs:
+            qs = qs.annotate(
+                content_count=Count("content_items", distinct=True),
+                doc_count=Count("documentation_records", distinct=True),
+            )
+        if needs_output:
+            qs = qs.filter(status=Project.Status.ACTIVE).filter(
+                Q(content_count=0) | Q(doc_count=0)
+            )
+        if no_content:
+            qs = qs.filter(content_count=0)
+        if no_docs:
+            qs = qs.filter(doc_count=0)
         if sort in {
             "name", "-name", "updated_at", "-updated_at",
             "status", "-status", "category", "-category",
@@ -62,6 +78,9 @@ class ProjectListView(LoginRequiredMixin, ListView):
             sort=self.request.GET.get("sort", "-updated_at"),
             status_choices=Project.Status.choices,
             category_choices=PROJECT_CATEGORY_CHOICES,
+            needs_output=self.request.GET.get("needs_output", ""),
+            no_content=self.request.GET.get("no_content", ""),
+            no_docs=self.request.GET.get("no_docs", ""),
         )
         return ctx
 

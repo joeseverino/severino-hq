@@ -160,11 +160,45 @@
         <dt>{% if content_without_docs_count %}<a href="{% url 'content:list' %}?no_docs=1">Content without docs</a>{% else %}Content without docs{% endif %}</dt>
         <dd class="{% if content_without_docs_count %}warn{% endif %}">{{ content_without_docs_count }}</dd>
       </div>
+      <div>
+        <dt>{% if projects_without_content_count %}<a href="{% url 'projects:list' %}?no_content=1&amp;status=active">Active projects without content</a>{% else %}Active projects without content{% endif %}</dt>
+        <dd class="{% if projects_without_content_count %}warn{% endif %}">{{ projects_without_content_count }}</dd>
+      </div>
+      <div>
+        <dt>{% if projects_without_docs_count %}<a href="{% url 'projects:list' %}?no_docs=1&amp;status=active">Active projects without docs</a>{% else %}Active projects without docs{% endif %}</dt>
+        <dd class="{% if projects_without_docs_count %}warn{% endif %}">{{ projects_without_docs_count }}</dd>
+      </div>
     </dl>
   </div>
 </section>
 
 <div class="two-col">
+  <section>
+    <div class="section-head">
+      <h2>Project opportunities</h2>
+      {% if project_opportunities %}<span class="count">{{ project_opportunities_count }}</span>{% endif %}
+    </div>
+    {% if project_opportunities %}
+      <ul class="list-rows">
+        {% for p in project_opportunities %}
+          <li>
+            <span class="row-main">
+              <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
+              {% if not p.content_count %}<span class="pill">Needs content</span>{% endif %}
+              {% if not p.doc_count %}<span class="pill">Needs docs</span>{% endif %}
+            </span>
+            <span class="row-meta">{{ p.get_category_display }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="section-foot"><a href="{% url 'projects:list' %}?needs_output=1">All projects needing output &rarr;</a></p>
+    {% else %}
+      <div class="empty">
+        <p>Every active project has at least one content item and one doc pointer.</p>
+      </div>
+    {% endif %}
+  </section>
+
   <section>
     <div class="section-head">
       <h2>Draft content</h2>
