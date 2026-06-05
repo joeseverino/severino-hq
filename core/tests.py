@@ -89,17 +89,19 @@ class NavigationSmokeTests(_AuthedTestCase):
 
 
 class DashboardWorkflowTests(_AuthedTestCase):
-    def test_dashboard_surfaces_active_projects_missing_output(self):
+    def test_dashboard_surfaces_missing_project_output_once_in_queue(self):
         Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
 
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Project opportunities")
+        self.assertContains(response, "Needs attention")
+        self.assertContains(response, "Active projects need output")
         self.assertContains(response, "Documentable lab")
-        self.assertContains(response, "Needs content")
-        self.assertContains(response, "Needs docs")
         self.assertContains(response, "/projects/?needs_output=1")
+        self.assertNotContains(response, "Project opportunities")
+        self.assertNotContains(response, "Relationship health")
+        self.assertNotContains(response, "Docs by system")
 
     def test_projects_can_filter_for_missing_output(self):
         project = Project.objects.create(

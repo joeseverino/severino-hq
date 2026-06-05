@@ -350,11 +350,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
   color: var(--attn);
   font-variant-numeric: tabular-nums;
 }
-.quick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+.quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
 .health-list {
   display: grid;
   gap: 8px;
@@ -381,6 +378,23 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 /* ── Section cards / two-col ────────────────────────────────────── */
 
 .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.dashboard-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.command-main,
+.command-side {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
 .two-col > section, .two-col > div, .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
 
 .section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -401,6 +415,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .list-rows .row-meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
+.subtle-link {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
 
 .section-foot { margin-top: 12px; font-size: 13px; }
 .section-foot a { color: var(--muted); font-weight: 500; }
@@ -481,13 +500,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 .site-footer { text-align: center; padding: 28px 24px; color: var(--muted-2); font-size: 12px; }
 
-/* Dashboard tail card spacing (replaces inline style) */
-.two-col + .card { margin-top: 16px; }
-
-/* ── Dashboard: projects hero + external links ─────────────────── */
-.projects-hero { margin-bottom: 24px; }
-.projects-hero .table-scroll { margin-bottom: 0; }
-.projects-hero .section-foot { margin-top: 14px; }
+/* ── Dashboard: external links ─────────────────────────────────── */
 .proj-name { display: inline-flex; align-items: center; gap: 8px; }
 .proj-desc { margin-top: 2px; font-size: 12px; line-height: 1.35; max-width: 56ch; }
 .link-cell { white-space: nowrap; }
@@ -516,6 +529,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 @media (max-width: 900px) {
   .content { padding: 22px 18px; }
+  .dashboard-command { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 14px 16px; }
   .kv dt { margin-top: 8px; font-size: 12px; }
   .kv dt:first-of-type { margin-top: 0; }

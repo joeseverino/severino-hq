@@ -87,7 +87,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             Q(content_count=0) | Q(doc_count=0)
         )
         project_opportunities_count = project_opportunities_qs.count()
-        project_opportunities = project_opportunities_qs.order_by("category", "name")[:6]
+        project_opportunities = project_opportunities_qs.order_by(
+            "category", "name"
+        )[:6]
         projects_without_content_count = active_projects_with_counts.filter(
             content_count=0
         ).count()
@@ -146,6 +148,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "count": project_opportunities_count,
                 "href": f"{reverse('projects:list')}?needs_output=1",
             },
+            {
+                "label": "Receipts need links",
+                "count": receipts_unlinked_count,
+                "href": f"{reverse('receipts:list')}?unlinked=1",
+            },
+            {
+                "label": "Expenses need receipts",
+                "count": expenses_without_receipts_count,
+                "href": f"{reverse('expenses:list')}?no_receipts=1",
+            },
+            {
+                "label": "Assets missing purchase info",
+                "count": assets_missing_purchase_info_count,
+                "href": f"{reverse('assets:list')}?missing_purchase=1",
+            },
+            {
+                "label": "Content needs docs",
+                "count": content_without_docs_count,
+                "href": f"{reverse('content:list')}?no_docs=1",
+            },
         ]
 
         # Live infra status is NOT computed here — HQ links out to Uptime Kuma
@@ -165,7 +187,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             recent_contacts=recent_contacts,
             active_project_count=active_projects_qs.count(),
             active_projects=active_projects_qs.order_by("-updated_at")[:4],
-            active_projects_all=active_projects_qs.order_by("category", "name"),
             project_opportunities=project_opportunities,
             project_opportunities_count=project_opportunities_count,
             projects_without_content_count=projects_without_content_count,
