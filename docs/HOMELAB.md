@@ -29,6 +29,32 @@ is the NPM HTTPS frontend on `hq.jseverino.com` (LAN + Tailscale).
 
 ---
 
+## Pocket ID / SSO
+
+HQ can sign users in through Pocket ID at `https://sso.jseverino.com`.
+Password login at `/accounts/login/` remains the break-glass path.
+
+Pocket ID OIDC client:
+
+| Field | Value |
+|---|---|
+| Name | `Severino HQ` |
+| Callback URL | `https://hq.jseverino.com/oidc/callback/` |
+| Allowed group | `admins` |
+
+HQ env:
+
+```env
+SEVERINO_OIDC_ENABLED=1
+SEVERINO_OIDC_ISSUER=https://sso.jseverino.com
+SEVERINO_OIDC_CLIENT_ID=<from Pocket ID>
+SEVERINO_OIDC_CLIENT_SECRET=<from Pocket ID>
+SEVERINO_OIDC_ALLOWED_GROUPS=admins
+SEVERINO_OIDC_CREATE_USER=1
+```
+
+---
+
 ## SSH + deploy key on the server
 
 The VM has its own ed25519 deploy key registered as **read-only** on the
@@ -62,6 +88,12 @@ DJANGO_CSRF_COOKIE_SECURE=1
 DJANGO_HSTS_SECONDS=0
 DJANGO_TIME_ZONE=America/New_York
 SEVERINO_SITE_NAME=Severino HQ
+SEVERINO_OIDC_ENABLED=1
+SEVERINO_OIDC_ISSUER=https://sso.jseverino.com
+SEVERINO_OIDC_CLIENT_ID=<from Pocket ID>
+SEVERINO_OIDC_CLIENT_SECRET=<from Pocket ID>
+SEVERINO_OIDC_ALLOWED_GROUPS=admins
+SEVERINO_OIDC_CREATE_USER=1
 ```
 
 Storage paths inside the container come from the image

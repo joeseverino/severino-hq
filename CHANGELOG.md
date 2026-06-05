@@ -10,6 +10,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 - Global HQ search at `/search/`, covering projects, content, docs, assets,
   expenses, and receipts.
+- Optional Pocket ID / OIDC SSO for HQ. Password login remains available as
+  break-glass; OIDC users must match an allowed email or allowed group.
 - Dashboard needs-attention queue linking to filtered cleanup views for docs
   needing review and draft content.
 - Dashboard quick actions for common create/import flows.

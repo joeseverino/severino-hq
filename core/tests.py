@@ -14,10 +14,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from assets.models import Asset
+from core.oidc import HQOIDCAuthenticationBackend
 from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
@@ -39,6 +41,63 @@ class AuthGateTests(TestCase):
     def test_login_page_is_accessible(self):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
+
+    @override_settings(SEVERINO_OIDC_ENABLED=True)
+    def test_login_page_shows_sso_button_when_enabled(self):
+        response = self.client.get("/accounts/login/")
+        self.assertContains(response, "Sign in with SSO")
+
+
+class OIDCBackendTests(TestCase):
+    def test_allows_user_in_allowed_group(self):
+        backend = HQOIDCAuthenticationBackend()
+
+        with override_settings(
+            SEVERINO_OIDC_ALLOWED_EMAILS=set(),
+            SEVERINO_OIDC_ALLOWED_GROUPS={"admins"},
+        ):
+            self.assertTrue(
+                backend.verify_claims(
+                    {
+                        "email": "joe@example.com",
+                        "email_verified": True,
+                        "groups": ["admins"],
+                    }
+                )
+            )
+
+    def test_allows_user_by_allowed_email(self):
+        backend = HQOIDCAuthenticationBackend()
+
+        with override_settings(
+            SEVERINO_OIDC_ALLOWED_EMAILS={"joe@example.com"},
+            SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+        ):
+            self.assertTrue(
+                backend.verify_claims(
+                    {
+                        "email": "joe@example.com",
+                        "email_verified": True,
+                        "groups": [],
+                    }
+                )
+            )
+
+    def test_rejects_when_no_allow_rule_is_configured(self):
+        backend = HQOIDCAuthenticationBackend()
+
+        with override_settings(
+            SEVERINO_OIDC_ALLOWED_EMAILS=set(),
+            SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+        ):
+            with self.assertRaises(PermissionDenied):
+                backend.verify_claims(
+                    {
+                        "email": "joe@example.com",
+                        "email_verified": True,
+                        "groups": ["admins"],
+                    }
+                )
 
 
 class _AuthedTestCase(TestCase):

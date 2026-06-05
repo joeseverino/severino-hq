@@ -133,7 +133,9 @@ the WordPress bridge, Postgres migration — is in
 ## v1 quality bar
 
 - Clean relational design (everything linkable: asset ↔ expense ↔ receipt ↔ project ↔ content ↔ doc).
-- Authentication required on every URL except `/accounts/login/` and `/static/`.
+- Authentication required on every URL except `/accounts/login/`, `/oidc/`,
+  and `/static/`; optional Pocket ID / OIDC SSO gates users by allowed email
+  or group and leaves password login available as break-glass.
 - DEBUG off in production, SECRET_KEY from env, ALLOWED_HOSTS explicit, secure cookies.
 - Uploaded receipts stored outside app code and served only through an auth-protected view.
 - Audit logging on every CRUD action, login event, upload, and export.

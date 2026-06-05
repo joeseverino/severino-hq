@@ -5,6 +5,11 @@
   <h1>Sign in to {{ SITE_NAME }}</h1>
   <p class="muted">Private internal app. No public registration.</p>
 
+  {% if OIDC_ENABLED %}
+    <p><a class="btn primary" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with SSO</a></p>
+    <hr>
+  {% endif %}
+
   {% if form.non_field_errors %}
     <div class="msg msg-error">{{ form.non_field_errors }}</div>
   {% endif %}
