@@ -13,41 +13,34 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
     def verify_claims(self, claims):
-        if not super().verify_claims(claims):
-            return False
-
+        preferred_username = claims.get("preferred_username", "").strip()
         email = claims.get("email", "").strip().lower()
-        if not email:
+        if not preferred_username and not email:
             return False
-
-        # In homelab Pocket ID, email_verified might be False for passkey users.
-        # We rely on the SSO provider's own authentication.
-        if claims.get("email_verified") is False:
-            pass
 
         allowed_emails = settings.SEVERINO_OIDC_ALLOWED_EMAILS
         allowed_groups = settings.SEVERINO_OIDC_ALLOWED_GROUPS
         groups = set(claims.get("groups") or [])
 
         if allowed_emails or allowed_groups:
-            return email in allowed_emails or bool(groups & allowed_groups)
+            return bool(groups & allowed_groups) or (
+                bool(email) and email in allowed_emails
+            )
 
         raise PermissionDenied(
             "SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set."
         )
 
     def filter_users_by_claims(self, claims):
-        email = claims.get("email", "").strip().lower()
-        if not email:
-            return self.UserModel.objects.none()
-
-        users = self.UserModel.objects.filter(email__iexact=email)
-        if users.exists():
-            return users
-
         preferred_username = claims.get("preferred_username", "").strip()
         if preferred_username:
             users = self.UserModel.objects.filter(username__iexact=preferred_username)
+            if users.exists():
+                return users
+
+        email = claims.get("email", "").strip().lower()
+        if email:
+            users = self.UserModel.objects.filter(email__iexact=email)
             if users.exists():
                 return users
 

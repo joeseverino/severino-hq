@@ -195,14 +195,14 @@ SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com").rstrip("/")
 OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
-OIDC_RP_SCOPES = "openid email profile groups"
+OIDC_RP_SCOPES = "openid profile groups"
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
 OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
-OIDC_USE_PKCE = True
+OIDC_USE_PKCE = False
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"

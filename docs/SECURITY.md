@@ -37,10 +37,10 @@
   `transaction_mode=IMMEDIATE` for safer concurrent operation.
 - Password validators require min length 12 and reject common/numeric-only
   passwords.
-- Optional Pocket ID / OIDC SSO is supported. HQ accepts OIDC users only when
-  the user matches `SEVERINO_OIDC_ALLOWED_EMAILS` or a group in
-  `SEVERINO_OIDC_ALLOWED_GROUPS`; password login remains available as the
-  break-glass path.
+- Optional Pocket ID / OIDC SSO is supported. HQ authorizes membership in
+  `SEVERINO_OIDC_ALLOWED_GROUPS` and links the identity to a Django user by
+  `preferred_username`. Email matching remains an optional fallback; password
+  login remains available as the break-glass path.
 
 ## Production checklist
 
