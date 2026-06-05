@@ -37,3 +37,7 @@ def nav(request):
         for label, route, ns in NAV_ITEMS
     ]
     return {"nav_items": items}
+
+
+def auth_config(request):
+    return {"OIDC_ENABLED": getattr(settings, "SEVERINO_OIDC_ENABLED", False)}

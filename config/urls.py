@@ -18,6 +18,7 @@ urlpatterns = [
         auth_views.LogoutView.as_view(),
         name="logout",
     ),
+    path("oidc/", include("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
     path("search/", SearchView.as_view(), name="search"),
     path("projects/", include("projects.urls")),

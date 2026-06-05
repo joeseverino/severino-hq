@@ -4,7 +4,8 @@
 
 - Single-user / very-small internal app.
 - Tailscale-only network exposure. No path from the public internet.
-- Django authentication required on **every** URL except `/accounts/login/` and `/static/`.
+- Django authentication required on **every** URL except `/accounts/login/`,
+  `/accounts/logout/`, `/oidc/`, and `/static/`.
 - No public registration. New users are created via `manage.py createsuperuser`
   or Django admin only.
 
@@ -36,6 +37,10 @@
   `transaction_mode=IMMEDIATE` for safer concurrent operation.
 - Password validators require min length 12 and reject common/numeric-only
   passwords.
+- Optional Pocket ID / OIDC SSO is supported. HQ accepts OIDC users only when
+  the user matches `SEVERINO_OIDC_ALLOWED_EMAILS` or a group in
+  `SEVERINO_OIDC_ALLOWED_GROUPS`; password login remains available as the
+  break-glass path.
 
 ## Production checklist
 
@@ -54,6 +59,11 @@
 - [ ] Backups configured (`scripts/backup.sh` from cron / a systemd timer).
 - [ ] Restore drill done once, and documented locally.
 - [ ] Superuser created via `manage.py createsuperuser`; no shared accounts.
+- [ ] If SSO is enabled, Pocket ID has an `admins` group and the HQ OIDC
+      client callback is `https://hq.jseverino.com/oidc/callback/`.
+- [ ] If SSO is enabled, `SEVERINO_OIDC_ALLOWED_GROUPS=admins` and
+      `SEVERINO_OIDC_CLIENT_SECRET` is stored only in
+      `/opt/apps/severino-hq/.env`.
 - [ ] Documentation index records carrying secrets are flagged
       `sensitivity=sensitive` or `restricted` (these are excluded from
       AI-safe references).

@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "mozilla_django_oidc",
     # Severino HQ
     "core",
     "projects",
@@ -120,6 +121,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.site",
                 "core.context_processors.nav",
+                "core.context_processors.auth_config",
             ],
         },
     },
@@ -165,8 +167,45 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Paths that are public (everything else requires login).
-LOGIN_EXEMPT_URL_NAMES = {"login", "logout"}
-LOGIN_EXEMPT_PATH_PREFIXES = ("/accounts/login", "/accounts/logout", "/static/")
+LOGIN_EXEMPT_URL_NAMES = {
+    "login",
+    "logout",
+    "oidc_authentication_init",
+    "oidc_authentication_callback",
+}
+LOGIN_EXEMPT_PATH_PREFIXES = (
+    "/accounts/login",
+    "/accounts/logout",
+    "/oidc/",
+    "/static/",
+)
+
+AUTHENTICATION_BACKENDS = [
+    "core.oidc.HQOIDCAuthenticationBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+# Pocket ID / OIDC SSO. Password login remains available as a break-glass path.
+SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
+SEVERINO_OIDC_ALLOWED_EMAILS = {
+    email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")
+}
+SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
+
+OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com").rstrip("/")
+OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
+OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
+OIDC_RP_SCOPES = "openid email profile groups"
+OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
+OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
+OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
+OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
+OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
+OIDC_USE_PKCE = True
+OIDC_STORE_ACCESS_TOKEN = False
+OIDC_STORE_ID_TOKEN = False
+OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
 
 
 # ----- I18N --------------------------------------------------------------------
