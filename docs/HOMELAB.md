@@ -53,6 +53,9 @@ SEVERINO_OIDC_ALLOWED_GROUPS=admins
 SEVERINO_OIDC_CREATE_USER=1
 ```
 
+Pocket ID does not need an email field for HQ. The `admins` group authorizes
+access, and `preferred_username=joe` links to the existing Django user `joe`.
+
 ---
 
 ## SSH + deploy key on the server

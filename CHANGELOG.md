@@ -12,6 +12,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
   expenses, and receipts.
 - Optional Pocket ID / OIDC SSO for HQ. Password login remains available as
   break-glass; OIDC users must match an allowed email or allowed group.
+- Pocket ID account linking now uses `preferred_username` first and does not
+  require an email claim for users authorized through the `admins` group.
 - Dashboard needs-attention queue linking to filtered cleanup views for docs
   needing review and draft content.
 - Dashboard quick actions for common create/import flows.

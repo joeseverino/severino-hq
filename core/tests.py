@@ -59,12 +59,21 @@ class OIDCBackendTests(TestCase):
             self.assertTrue(
                 backend.verify_claims(
                     {
-                        "email": "joe@example.com",
-                        "email_verified": True,
+                        "preferred_username": "joe",
                         "groups": ["admins"],
                     }
                 )
             )
+
+    def test_matches_existing_user_by_preferred_username_without_email(self):
+        user = User.objects.create_user(username="joe")
+        backend = HQOIDCAuthenticationBackend()
+
+        users = backend.filter_users_by_claims(
+            {"preferred_username": "joe", "groups": ["admins"]}
+        )
+
+        self.assertEqual(list(users), [user])
 
     def test_allows_user_by_allowed_email(self):
         backend = HQOIDCAuthenticationBackend()
@@ -77,7 +86,6 @@ class OIDCBackendTests(TestCase):
                 backend.verify_claims(
                     {
                         "email": "joe@example.com",
-                        "email_verified": True,
                         "groups": [],
                     }
                 )
@@ -93,8 +101,7 @@ class OIDCBackendTests(TestCase):
             with self.assertRaises(PermissionDenied):
                 backend.verify_claims(
                     {
-                        "email": "joe@example.com",
-                        "email_verified": True,
+                        "preferred_username": "joe",
                         "groups": ["admins"],
                     }
                 )
