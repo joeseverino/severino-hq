@@ -13,14 +13,12 @@
   <div class="kpi {% if not active_project_count %}is-zero{% endif %}">
     <span class="label">Active projects</span>
     <span class="value">{{ active_project_count }}</span>
-  </div>
-  <div class="kpi {% if not draft_content_count %}is-zero{% endif %}">
-    <span class="label">Draft content</span>
-    <span class="value">{{ draft_content_count }}</span>
+    {% if archived_project_count %}<span class="muted">{{ archived_project_count }} archived</span>{% endif %}
   </div>
   <div class="kpi {% if not published_content_count %}is-zero{% endif %}">
     <span class="label">Published</span>
     <span class="value">{{ published_content_count }}</span>
+    {% if draft_content_count %}<span class="muted">{{ draft_content_count }} draft</span>{% endif %}
   </div>
   <div class="kpi {% if not active_asset_count %}is-zero{% endif %}">
     <span class="label">Assets</span>
@@ -40,6 +38,49 @@
     <span class="label">Docs to review</span>
     <span class="value">{{ docs_needing_review_count }}</span>
   </div>
+</section>
+
+<section class="card projects-hero">
+  <div class="section-head">
+    <h2>Projects</h2>
+    <span class="count">{{ active_project_count }} active{% if archived_project_count %} · {{ archived_project_count }} archived{% endif %}</span>
+  </div>
+  {% if active_projects_all %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr><th>Project</th><th>Category</th><th>Status</th><th>Links</th><th>Updated</th></tr>
+        </thead>
+        <tbody>
+          {% for p in active_projects_all %}
+            <tr>
+              <td>
+                <span class="proj-name">
+                  <span class="cat-dot cat-{{ p.category }}" title="{{ p.get_category_display }}"></span>
+                  <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
+                </span>
+                {% if p.description %}<div class="muted-2 proj-desc">{{ p.description|truncatechars:88 }}</div>{% endif %}
+              </td>
+              <td class="muted">{{ p.get_category_display }}</td>
+              <td><span class="pill pill-{{ p.status }}">{{ p.get_status_display }}</span></td>
+              <td class="link-cell">
+                {% if p.repository_url %}<a href="{{ p.repository_url }}" target="_blank" rel="noopener">code&nbsp;↗</a>{% endif %}
+                {% if p.public_url %}<a href="{{ p.public_url }}" target="_blank" rel="noopener">live&nbsp;↗</a>{% endif %}
+                {% if not p.repository_url and not p.public_url %}<span class="muted-2">—</span>{% endif %}
+              </td>
+              <td class="muted">{{ p.updated_at|date:"M j" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &amp; archive &rarr;</a></p>
+  {% else %}
+    <div class="empty">
+      <p>No active projects yet.</p>
+      <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
+    </div>
+  {% endif %}
 </section>
 
 <section class="ops-grid">
@@ -63,6 +104,26 @@
     {% if not action_queue_count %}
       <div class="empty compact"><p>No cleanup items right now.</p></div>
     {% endif %}
+  </div>
+
+  <div class="ops-panel">
+    <div class="section-head">
+      <h2>Live &amp; external</h2>
+    </div>
+    <ul class="ext-links">
+      {% for l in external_links %}
+        <li>
+          <a href="{{ l.href }}" target="_blank" rel="noopener">
+            <span class="ext-text">
+              <span class="ext-label">{{ l.label }}</span>
+              <span class="ext-sub">{{ l.sub }}</span>
+            </span>
+            <span class="ext-arrow" aria-hidden="true">↗</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="section-foot muted">Live status lives in Uptime Kuma on the VPS — HQ links out, it doesn't poll.</p>
   </div>
 
   <div class="ops-panel">
@@ -104,56 +165,6 @@
 </section>
 
 <div class="two-col">
-  <section>
-    <div class="section-head">
-      <h2>Recent contact submissions</h2>
-      {% if recent_contacts %}<span class="count">{{ recent_contacts|length }}</span>{% endif %}
-    </div>
-    {% if recent_contacts %}
-      <ul class="list-rows">
-        {% for s in recent_contacts %}
-          <li>
-            <span class="row-main">
-              <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
-              <span class="muted">· {{ s.status }}</span>
-            </span>
-            <span class="row-meta">{{ s.created_at }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-      <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
-    {% else %}
-      <div class="empty"><p>No contact submissions yet.</p></div>
-    {% endif %}
-  </section>
-
-  <section>
-    <div class="section-head">
-      <h2>Recent active projects</h2>
-      {% if active_projects %}<span class="count">{{ active_projects|length }} of {{ active_project_count }}</span>{% endif %}
-    </div>
-    {% if active_projects %}
-      <ul class="list-rows">
-        {% for p in active_projects %}
-          <li>
-            <span class="row-main">
-              <span class="cat-dot cat-{{ p.category }}" title="{{ p.get_category_display }}"></span>
-              <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
-              <span class="muted">· {{ p.get_category_display }}</span>
-            </span>
-            <span class="row-meta">{{ p.updated_at }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-      <p class="section-foot"><a href="{% url 'projects:list' %}?status=active">All active projects &rarr;</a></p>
-    {% else %}
-      <div class="empty">
-        <p>No projects yet.</p>
-        <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
-      </div>
-    {% endif %}
-  </section>
-
   <section>
     <div class="section-head">
       <h2>Draft content</h2>
@@ -262,6 +273,29 @@
 
   <section>
     <div class="section-head">
+      <h2>Recent contact submissions</h2>
+      {% if recent_contacts %}<span class="count">{{ recent_contacts|length }}</span>{% endif %}
+    </div>
+    {% if recent_contacts %}
+      <ul class="list-rows">
+        {% for s in recent_contacts %}
+          <li>
+            <span class="row-main">
+              <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
+              <span class="muted">· {{ s.status }}</span>
+            </span>
+            <span class="row-meta">{{ s.created_at }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
+    {% else %}
+      <div class="empty"><p>No contact submissions yet.</p></div>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>Docs by system</h2>
       {% if docs_by_system %}<span class="count">{{ docs_by_system|length }}</span>{% endif %}
     </div>
@@ -278,25 +312,6 @@
       </ul>
     {% else %}
       <div class="empty"><p>No system-tagged docs yet.</p></div>
-    {% endif %}
-  </section>
-
-  <section>
-    <div class="section-head">
-      <h2>Docs by environment</h2>
-      {% if docs_by_environment %}<span class="count">{{ docs_by_environment|length }}</span>{% endif %}
-    </div>
-    {% if docs_by_environment %}
-      <ul class="list-rows">
-        {% for label, n in docs_by_environment %}
-          <li>
-            <span class="row-main"><strong>{{ label }}</strong></span>
-            <span class="row-meta">{{ n }} doc{{ n|pluralize }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <div class="empty"><p>No docs indexed yet.</p></div>
     {% endif %}
   </section>
 </div>
