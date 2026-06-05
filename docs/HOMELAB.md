@@ -55,6 +55,7 @@ SEVERINO_OIDC_CREATE_USER=1
 
 Pocket ID does not need an email field for HQ. The `admins` group authorizes
 access, and `preferred_username=joe` links to the existing Django user `joe`.
+HQ uses authorization-code flow with both its client secret and PKCE enabled.
 
 ---
 
