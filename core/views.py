@@ -128,10 +128,28 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             },
         ]
 
+        # Live infra status is NOT computed here — HQ links out to Uptime Kuma
+        # on the VPS rather than duplicating a status checker.
+        external_links = [
+            {"label": "Live status", "sub": "Uptime Kuma · VPS",
+             "href": "https://status.jseverino.com"},
+            {"label": "Health endpoint", "sub": "liveness",
+             "href": "https://health.jseverino.com"},
+            {"label": "Portainer", "sub": "containers",
+             "href": "http://admin.homelab"},
+            {"label": "Public site", "sub": "jseverino.com",
+             "href": "https://jseverino.com"},
+        ]
+
         ctx.update(
             recent_contacts=recent_contacts,
             active_project_count=active_projects_qs.count(),
             active_projects=active_projects_qs.order_by("-updated_at")[:4],
+            active_projects_all=active_projects_qs.order_by("category", "name"),
+            archived_project_count=Project.objects.filter(
+                status=Project.Status.ARCHIVED
+            ).count(),
+            external_links=external_links,
             draft_content=draft_content_qs.order_by("-updated_at")[:4],
             draft_content_count=draft_content_count,
             published_content_count=published_content_qs.count(),
