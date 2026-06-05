@@ -79,6 +79,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             unread_contacts_count = 0
 
         active_projects_qs = Project.objects.filter(status=Project.Status.ACTIVE)
+        active_projects_with_counts = active_projects_qs.annotate(
+            content_count=Count("content_items", distinct=True),
+            doc_count=Count("documentation_records", distinct=True),
+        )
+        project_opportunities_qs = active_projects_with_counts.filter(
+            Q(content_count=0) | Q(doc_count=0)
+        )
+        project_opportunities_count = project_opportunities_qs.count()
+        project_opportunities = project_opportunities_qs.order_by("category", "name")[:6]
+        projects_without_content_count = active_projects_with_counts.filter(
+            content_count=0
+        ).count()
+        projects_without_docs_count = active_projects_with_counts.filter(
+            doc_count=0
+        ).count()
         published_content_qs = ContentItem.objects.filter(
             status=ContentItem.Status.PUBLISHED
         )
@@ -126,6 +141,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "count": unread_contacts_count,
                 "href": f"{reverse('contacts:list')}?status=unread",
             },
+            {
+                "label": "Active projects need output",
+                "count": project_opportunities_count,
+                "href": f"{reverse('projects:list')}?needs_output=1",
+            },
         ]
 
         # Live infra status is NOT computed here — HQ links out to Uptime Kuma
@@ -146,6 +166,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             active_project_count=active_projects_qs.count(),
             active_projects=active_projects_qs.order_by("-updated_at")[:4],
             active_projects_all=active_projects_qs.order_by("category", "name"),
+            project_opportunities=project_opportunities,
+            project_opportunities_count=project_opportunities_count,
+            projects_without_content_count=projects_without_content_count,
+            projects_without_docs_count=projects_without_docs_count,
             archived_project_count=Project.objects.filter(
                 status=Project.Status.ARCHIVED
             ).count(),

@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 
 from assets.models import Asset
 from content.models import ContentItem
@@ -85,6 +86,63 @@ class NavigationSmokeTests(_AuthedTestCase):
                     response.status_code, 200,
                     f"{url} returned {response.status_code}",
                 )
+
+
+class DashboardWorkflowTests(_AuthedTestCase):
+    def test_dashboard_surfaces_active_projects_missing_output(self):
+        Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Project opportunities")
+        self.assertContains(response, "Documentable lab")
+        self.assertContains(response, "Needs content")
+        self.assertContains(response, "Needs docs")
+        self.assertContains(response, "/projects/?needs_output=1")
+
+    def test_projects_can_filter_for_missing_output(self):
+        project = Project.objects.create(
+            name="No output yet", status=Project.Status.ACTIVE
+        )
+        documented = Project.objects.create(
+            name="Documented", status=Project.Status.ACTIVE
+        )
+        doc = DocumentationRecord.objects.create(
+            doc_id="rb-documented-001",
+            title="Documented runbook",
+            status=DocumentationRecord.Status.ACTIVE,
+        )
+        doc.related_projects.add(documented)
+        content = ContentItem.objects.create(title="Documented post")
+        content.related_projects.add(documented)
+
+        response = self.client.get("/projects/?needs_output=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, project.name)
+        self.assertNotContains(response, documented.name)
+
+    @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
+    def test_docs_review_filter_uses_configured_interval(self):
+        current = DocumentationRecord.objects.create(
+            doc_id="rb-current-001",
+            title="Current runbook",
+            status=DocumentationRecord.Status.ACTIVE,
+            last_reviewed=timezone.localdate() - timedelta(days=20),
+        )
+        stale = DocumentationRecord.objects.create(
+            doc_id="rb-stale-001",
+            title="Stale runbook",
+            status=DocumentationRecord.Status.ACTIVE,
+            last_reviewed=timezone.localdate() - timedelta(days=31),
+        )
+
+        response = self.client.get("/docs/?needs_review=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, stale.title)
+        self.assertNotContains(response, current.title)
 
 
 class ExportSmokeTests(_AuthedTestCase):

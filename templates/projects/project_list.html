@@ -27,6 +27,9 @@
     <option value="-name" {% if sort == "-name" %}selected{% endif %}>Name Z→A</option>
     <option value="status" {% if sort == "status" %}selected{% endif %}>Status</option>
   </select>
+  <label class="inline"><input type="checkbox" name="needs_output" value="1" {% if needs_output %}checked{% endif %}> Needs output</label>
+  <label class="inline"><input type="checkbox" name="no_content" value="1" {% if no_content %}checked{% endif %}> No content</label>
+  <label class="inline"><input type="checkbox" name="no_docs" value="1" {% if no_docs %}checked{% endif %}> No docs</label>
   <button type="submit">Apply</button>
 </form>
 
