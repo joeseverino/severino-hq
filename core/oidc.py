@@ -13,32 +13,24 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
     def verify_claims(self, claims):
-        print(f"DEBUG: OIDC Claims received: {claims}")
         if not super().verify_claims(claims):
-            print("DEBUG: super().verify_claims(claims) failed")
             return False
 
         email = claims.get("email", "").strip().lower()
         if not email:
-            print("DEBUG: No email in claims")
             return False
 
         # In homelab Pocket ID, email_verified might be False for passkey users.
         # We rely on the SSO provider's own authentication.
         if claims.get("email_verified") is False:
-            print("DEBUG: email_verified is False (ignored for homelab)")
+            pass
 
         allowed_emails = settings.SEVERINO_OIDC_ALLOWED_EMAILS
         allowed_groups = settings.SEVERINO_OIDC_ALLOWED_GROUPS
         groups = set(claims.get("groups") or [])
-        print(f"DEBUG: Allowed emails: {allowed_emails}")
-        print(f"DEBUG: Allowed groups: {allowed_groups}")
-        print(f"DEBUG: User groups: {groups}")
 
         if allowed_emails or allowed_groups:
-            result = email in allowed_emails or bool(groups & allowed_groups)
-            print(f"DEBUG: verify_claims result: {result}")
-            return result
+            return email in allowed_emails or bool(groups & allowed_groups)
 
         raise PermissionDenied(
             "SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set."
@@ -51,17 +43,14 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         users = self.UserModel.objects.filter(email__iexact=email)
         if users.exists():
-            print(f"DEBUG: Found user by email: {users[0]}")
             return users
 
         preferred_username = claims.get("preferred_username", "").strip()
         if preferred_username:
             users = self.UserModel.objects.filter(username__iexact=preferred_username)
             if users.exists():
-                print(f"DEBUG: Found user by username: {users[0]}")
                 return users
 
-        print("DEBUG: No matching user found")
         return self.UserModel.objects.none()
 
     def create_user(self, claims):
