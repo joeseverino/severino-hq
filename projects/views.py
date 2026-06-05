@@ -4,7 +4,7 @@ import urllib.error
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -66,7 +66,13 @@ class ProjectListView(LoginRequiredMixin, ListView):
             "name", "-name", "updated_at", "-updated_at",
             "status", "-status", "category", "-category",
         }:
-            qs = qs.order_by(sort)
+            qs = qs.annotate(
+                archive_rank=Case(
+                    When(status=Project.Status.ARCHIVED, then=Value(1)),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                )
+            ).order_by("archive_rank", sort)
         return qs
 
     def get_context_data(self, **kwargs):

@@ -49,25 +49,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         docs_needing_review = DocumentationRecord.objects.filter(
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
             status=DocumentationRecord.Status.ACTIVE,
-        )
-
-        docs_by_system = list(
-            DocumentationRecord.objects
-            .exclude(system_service="")
-            .values_list("system_service")
-            .annotate(n=Count("id"))
-            .order_by("-n", "system_service")[:10]
-        )
-        env_counts = dict(
-            DocumentationRecord.objects
-            .values_list("environment")
-            .annotate(n=Count("id"))
-        )
-        docs_by_environment = [
-            (label, env_counts[value])
-            for value, label in DocumentationRecord.Environment.choices
-            if env_counts.get(value)
-        ]
+        ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
 
         # Contact submissions live in Cloudflare D1, not HQ's database.
         # Fetch over the D1 HTTP API; degrade gracefully if it's unreachable.
@@ -139,7 +121,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "href": f"{reverse('content:list')}?status=draft",
             },
             {
-                "label": "Unread contacts",
+                "label": "Unread contact submissions",
                 "count": unread_contacts_count,
                 "href": f"{reverse('contacts:list')}?status=unread",
             },
@@ -185,6 +167,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         ctx.update(
             recent_contacts=recent_contacts,
+            unread_contacts_count=unread_contacts_count,
             active_project_count=active_projects_qs.count(),
             active_projects=active_projects_qs.order_by("-updated_at")[:4],
             project_opportunities=project_opportunities,
@@ -210,11 +193,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             recent_receipts=Receipt.objects.order_by("-uploaded_at")[:4],
             docs_needing_review=docs_needing_review.order_by("last_reviewed")[:4],
             docs_needing_review_count=docs_needing_review_count,
-            docs_by_system=docs_by_system,
-            docs_by_environment=docs_by_environment,
             recent_audit=AuditLog.objects.select_related("user")[:15],
             action_queue=action_queue,
-            action_queue_count=sum(1 for item in action_queue if item["count"]),
+            action_queue_count=sum(item["count"] for item in action_queue),
+            action_queue_group_count=sum(1 for item in action_queue if item["count"]),
             receipts_unlinked_count=receipts_unlinked_count,
             expenses_without_receipts_count=expenses_without_receipts_count,
             assets_missing_purchase_info_count=assets_missing_purchase_info_count,

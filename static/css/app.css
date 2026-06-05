@@ -394,6 +394,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
+  margin-bottom: 16px;
 }
 .two-col > section, .two-col > div, .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
 
@@ -420,6 +421,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
   font-size: 12px;
   font-weight: 500;
 }
+.activity-tail { margin-top: 0; }
 
 .section-foot { margin-top: 12px; font-size: 13px; }
 .section-foot a { color: var(--muted); font-weight: 500; }

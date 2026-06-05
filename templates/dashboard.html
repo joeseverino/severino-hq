@@ -11,9 +11,9 @@
 
 <section class="kpi-grid">
   <div class="kpi {% if not action_queue_count %}is-zero{% endif %}">
-    <span class="label">Needs attention</span>
+    <span class="label">Open items</span>
     <span class="value">{{ action_queue_count }}</span>
-    <span class="muted">Action area{{ action_queue_count|pluralize }}</span>
+    <span class="muted">{{ action_queue_group_count }} area{{ action_queue_group_count|pluralize }}</span>
   </div>
   <div class="kpi {% if not active_project_count %}is-zero{% endif %}">
     <span class="label">Active projects</span>
@@ -38,10 +38,33 @@
 
 <section class="dashboard-command">
   <div class="command-main">
+    <section class="card">
+      <div class="section-head">
+        <h2>Recent contacts</h2>
+        {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
+      </div>
+      {% if recent_contacts %}
+        <ul class="list-rows">
+          {% for s in recent_contacts %}
+            <li>
+              <span class="row-main">
+                <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
+                <span class="muted">· {{ s.status }}</span>
+              </span>
+              <span class="row-meta">{{ s.created_at }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
+      {% else %}
+        <div class="empty"><p>No contact submissions yet.</p></div>
+      {% endif %}
+    </section>
+
     <section class="card priority-card">
       <div class="section-head">
-        <h2>Needs attention</h2>
-        {% if action_queue_count %}<span class="count">{{ action_queue_count }}</span>{% endif %}
+        <h2>Priority queue</h2>
+        {% if action_queue_count %}<span class="count">{{ action_queue_count }} items</span>{% endif %}
       </div>
       {% if action_queue_count %}
         <ul class="action-list action-list-compact">
@@ -61,28 +84,6 @@
       {% endif %}
     </section>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>Recent activity</h2>
-        {% if recent_audit %}<span class="count">{{ recent_audit|length }}</span>{% endif %}
-      </div>
-      {% if recent_audit %}
-        <ul class="audit-list compact-audit">
-          {% for ev in recent_audit|slice:":8" %}
-            <li>
-              <span class="ts">{{ ev.created_at }}</span>
-              <strong>{{ ev.user.get_username|default:"system" }}</strong>
-              <span class="muted">{{ ev.get_action_display|lower }}</span>
-              {% if ev.object_type %}<span class="muted-2">{{ ev.object_type }}</span>{% endif %}
-              {% if ev.object_repr %}<span>{{ ev.object_repr|truncatechars:70 }}</span>{% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-        <p class="section-foot"><a href="{% url 'core:audit_list' %}">Full audit log &rarr;</a></p>
-      {% else %}
-        <div class="empty"><p>No activity yet.</p></div>
-      {% endif %}
-    </section>
   </div>
 
   <aside class="command-side">
@@ -214,27 +215,28 @@
     {% endif %}
   </section>
 
-  <section class="card">
-    <div class="section-head">
-      <h2>Recent contacts</h2>
-      {% if recent_contacts %}<span class="count">{{ recent_contacts|length }}</span>{% endif %}
-    </div>
-    {% if recent_contacts %}
-      <ul class="list-rows">
-        {% for s in recent_contacts %}
-          <li>
-            <span class="row-main">
-              <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
-              <span class="muted">· {{ s.status }}</span>
-            </span>
-            <span class="row-meta">{{ s.created_at }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-      <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
-    {% else %}
-      <div class="empty"><p>No contact submissions yet.</p></div>
-    {% endif %}
-  </section>
+</section>
+
+<section class="card activity-tail">
+  <div class="section-head">
+    <h2>Recent activity</h2>
+    {% if recent_audit %}<span class="count">{{ recent_audit|length }}</span>{% endif %}
+  </div>
+  {% if recent_audit %}
+    <ul class="audit-list compact-audit">
+      {% for ev in recent_audit|slice:":8" %}
+        <li>
+          <span class="ts">{{ ev.created_at }}</span>
+          <strong>{{ ev.user.get_username|default:"system" }}</strong>
+          <span class="muted">{{ ev.get_action_display|lower }}</span>
+          {% if ev.object_type %}<span class="muted-2">{{ ev.object_type }}</span>{% endif %}
+          {% if ev.object_repr %}<span>{{ ev.object_repr|truncatechars:70 }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="section-foot"><a href="{% url 'core:audit_list' %}">Full audit log &rarr;</a></p>
+  {% else %}
+    <div class="empty"><p>No activity yet.</p></div>
+  {% endif %}
 </section>
 {% endblock %}
