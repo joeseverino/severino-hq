@@ -180,6 +180,40 @@ def _upsert_content_item(
     stats["content_items_synced"] += 1
 
 
+def _tag_list(entry: dict) -> list[str]:
+    tags = entry.get("tags") or entry.get("technologies") or []
+    if isinstance(tags, list):
+        return [str(tag).strip() for tag in tags if str(tag).strip()]
+    if isinstance(tags, str):
+        return [tag.strip() for tag in tags.split(",") if tag.strip()]
+    return []
+
+
+def _backfill_project_technologies(projects, entry: dict, stats: dict) -> None:
+    """Hydrate empty Project.tech from linked manifest tags.
+
+    The vault already knows project technology tags on architecture/writeup
+    docs. Keep manually curated Project.tech values authoritative, but avoid
+    blank HQ project rows when the manifest has enough metadata to help.
+    """
+    tags = _tag_list(entry)
+    if not tags:
+        return
+
+    techs = ", ".join(tags)
+    changed = 0
+    for project in projects:
+        if project.technologies_used:
+            continue
+        project.technologies_used = techs
+        project.save(update_fields=["technologies_used", "updated_at"])
+        changed += 1
+
+    if changed:
+        stats.setdefault("projects_tech_backfilled", 0)
+        stats["projects_tech_backfilled"] += changed
+
+
 @transaction.atomic
 def import_manifest_data(
     items: Iterable[dict],
@@ -266,6 +300,7 @@ def import_manifest_data(
             if desired != current:
                 record.related_projects.set(qs)
                 changed = True
+            _backfill_project_technologies(qs, entry, stats)
             found_slugs = set(qs.values_list("slug", flat=True))
             for slug in project_slugs:
                 if slug not in found_slugs:

@@ -251,6 +251,55 @@ class ExportSmokeTests(_AuthedTestCase):
 
 
 class ManifestImportTests(TestCase):
+    def test_manifest_backfills_blank_project_technologies_from_tags(self):
+        project = Project.objects.create(
+            name="Techless project",
+            slug="techless-project",
+            status=Project.Status.ACTIVE,
+        )
+
+        stats = import_manifest_data(
+            [
+                {
+                    "doc_id": "project-techless-project",
+                    "title": "Techless project",
+                    "doc_type": DocumentationRecord.DocType.ARCHITECTURE_NOTE,
+                    "status": DocumentationRecord.Status.ACTIVE,
+                    "related_projects": [project.slug],
+                    "tags": ["django", "sqlite", "tailscale"],
+                }
+            ]
+        )
+
+        project.refresh_from_db()
+        self.assertEqual(project.technologies_used, "django, sqlite, tailscale")
+        self.assertEqual(stats["projects_tech_backfilled"], 1)
+
+    def test_manifest_does_not_overwrite_curated_project_technologies(self):
+        project = Project.objects.create(
+            name="Curated project",
+            slug="curated-project",
+            status=Project.Status.ACTIVE,
+            technologies_used="Django, PostgreSQL",
+        )
+
+        stats = import_manifest_data(
+            [
+                {
+                    "doc_id": "project-curated-project",
+                    "title": "Curated project",
+                    "doc_type": DocumentationRecord.DocType.ARCHITECTURE_NOTE,
+                    "status": DocumentationRecord.Status.ACTIVE,
+                    "related_projects": [project.slug],
+                    "tags": ["sqlite", "tailscale"],
+                }
+            ]
+        )
+
+        project.refresh_from_db()
+        self.assertEqual(project.technologies_used, "Django, PostgreSQL")
+        self.assertNotIn("projects_tech_backfilled", stats)
+
     def test_public_article_content_item_uses_manifest_slug(self):
         import_manifest_data(
             [
