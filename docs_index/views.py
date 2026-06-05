@@ -72,7 +72,7 @@ class DocsListView(LoginRequiredMixin, ListView):
             qs = qs.filter(
                 Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
                 status=DocumentationRecord.Status.ACTIVE,
-            )
+            ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
         if sort in {
             "doc_id", "-doc_id", "title", "-title",
             "updated_at", "-updated_at", "last_reviewed", "-last_reviewed",

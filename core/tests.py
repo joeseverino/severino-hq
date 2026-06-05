@@ -95,13 +95,29 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Needs attention")
+        self.assertContains(response, "Open items")
+        self.assertContains(response, "Priority queue")
         self.assertContains(response, "Active projects need output")
         self.assertContains(response, "Documentable lab")
         self.assertContains(response, "/projects/?needs_output=1")
+        self.assertNotContains(response, "Needs attention")
         self.assertNotContains(response, "Project opportunities")
         self.assertNotContains(response, "Relationship health")
         self.assertNotContains(response, "Docs by system")
+
+    def test_dashboard_excludes_site_pages_from_docs_review(self):
+        DocumentationRecord.objects.create(
+            doc_id="page-about",
+            title="About page",
+            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+            status=DocumentationRecord.Status.ACTIVE,
+        )
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "All active docs reviewed recently.")
+        self.assertNotContains(response, "Review queue")
 
     def test_projects_can_filter_for_missing_output(self):
         project = Project.objects.create(
@@ -125,6 +141,20 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(response, project.name)
         self.assertNotContains(response, documented.name)
 
+    def test_archived_projects_sort_last_by_default(self):
+        active = Project.objects.create(
+            name="ZZZ active project", status=Project.Status.ACTIVE
+        )
+        archived = Project.objects.create(
+            name="AAA archived project", status=Project.Status.ARCHIVED
+        )
+
+        response = self.client.get("/projects/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertLess(body.index(active.name), body.index(archived.name))
+
     @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
     def test_docs_review_filter_uses_configured_interval(self):
         current = DocumentationRecord.objects.create(
@@ -139,12 +169,20 @@ class DashboardWorkflowTests(_AuthedTestCase):
             status=DocumentationRecord.Status.ACTIVE,
             last_reviewed=timezone.localdate() - timedelta(days=31),
         )
+        site_page = DocumentationRecord.objects.create(
+            doc_id="page-stale-001",
+            title="Stale site page",
+            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
+            status=DocumentationRecord.Status.ACTIVE,
+            last_reviewed=timezone.localdate() - timedelta(days=31),
+        )
 
         response = self.client.get("/docs/?needs_review=1")
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, stale.title)
         self.assertNotContains(response, current.title)
+        self.assertNotContains(response, site_page.title)
 
 
 class ExportSmokeTests(_AuthedTestCase):
