@@ -499,6 +499,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .auth-card label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 13.5px; }
 .auth-card input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; font-size: 14px; }
 .auth-card button { margin-top: 16px; width: 100%; }
+.auth-sso { display: block; text-align: center; margin-top: 4px; }
+.auth-fallback { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.auth-fallback > summary { cursor: pointer; color: var(--muted-2); font-size: 12.5px; list-style: none; }
+.auth-fallback > summary::-webkit-details-marker { display: none; }
+.auth-fallback > summary:hover { color: var(--muted); }
 
 .site-footer { text-align: center; padding: 28px 24px; color: var(--muted-2); font-size: 12px; }
 

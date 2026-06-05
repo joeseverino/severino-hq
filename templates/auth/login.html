@@ -5,25 +5,31 @@
   <h1>Sign in to {{ SITE_NAME }}</h1>
   <p class="muted">Private internal app. No public registration.</p>
 
-  {% if OIDC_ENABLED %}
-    <p><a class="btn primary" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with SSO</a></p>
-    <hr>
-  {% endif %}
-
   {% if form.non_field_errors %}
     <div class="msg msg-error">{{ form.non_field_errors }}</div>
   {% endif %}
 
-  <form method="post" action="">
-    {% csrf_token %}
-    <label for="id_username">Username</label>
-    <input type="text" name="username" id="id_username" autocomplete="username" required autofocus>
+  {% if OIDC_ENABLED %}
+    <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with SSO</a></p>
 
-    <label for="id_password">Password</label>
-    <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+    <details class="auth-fallback"{% if form.non_field_errors %} open{% endif %}>
+      <summary>Use a password instead</summary>
+  {% endif %}
 
-    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-    <button type="submit" class="primary">Sign in</button>
-  </form>
+      <form method="post" action="">
+        {% csrf_token %}
+        <label for="id_username">Username</label>
+        <input type="text" name="username" id="id_username" autocomplete="username" required{% if not OIDC_ENABLED %} autofocus{% endif %}>
+
+        <label for="id_password">Password</label>
+        <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button type="submit" class="primary">Sign in</button>
+      </form>
+
+  {% if OIDC_ENABLED %}
+    </details>
+  {% endif %}
 </div>
 {% endblock %}
