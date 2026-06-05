@@ -23,9 +23,10 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             print("DEBUG: No email in claims")
             return False
 
+        # In homelab Pocket ID, email_verified might be False for passkey users.
+        # We rely on the SSO provider's own authentication.
         if claims.get("email_verified") is False:
-            print("DEBUG: email_verified is False")
-            return False
+            print("DEBUG: email_verified is False (ignored for homelab)")
 
         allowed_emails = settings.SEVERINO_OIDC_ALLOWED_EMAILS
         allowed_groups = settings.SEVERINO_OIDC_ALLOWED_GROUPS
