@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python manage.py check)"
+      "Bash(python manage.py check)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
