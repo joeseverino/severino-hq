@@ -78,6 +78,12 @@ Either pattern, the app itself never binds to a public interface.
 
 ### A.6 Updates
 
+The live homelab updates through the gated CI/CD pipeline (a push to `main`
+builds a Trivy-scanned GHCR image that a self-hosted runner pulls — see the
+README's *How changes reach HQ*). Migrations and `collectstatic` run on
+container boot via `entrypoint.sh`. The equivalent **manual** steps, for a
+standalone or first-time deploy, are:
+
 ```bash
 git pull
 docker compose build

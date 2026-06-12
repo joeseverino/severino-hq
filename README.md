@@ -1,6 +1,6 @@
 # Severino HQ
 
-The private internal operating system behind Severino LLC.
+The private internal operating system behind Severino Labs.
 
 Severino HQ connects projects/labs, content ideas, documentation index records,
 assets, expenses, receipts, basic reports, and AI-readable exports — so a
@@ -60,6 +60,46 @@ available in the header.
 
 ---
 
+## How changes reach HQ
+
+Every operator action lands through a *checked* path — content through a shared
+schema, code through a gated pipeline. The Obsidian vault stays the source of
+truth; only validated metadata and tested images ever reach HQ.
+
+```mermaid
+flowchart LR
+    joe([Joe])
+    vault[(Obsidian vault)]
+    mcp[severino-vault-mcp]
+    hq[Severino HQ]
+    ci["CI: lint, test, security, scan"]
+    ghcr[(GHCR image)]
+    runner["self-hosted runner (homelab)"]
+
+    joe -->|edit frontmatter| vault
+    joe -->|hq sync| mcp -->|JSON manifest| hq
+    joe -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq
+```
+
+**Content — `hq sync`.** Severino HQ never reads the vault directly. The `hq`
+CLI calls the local `severino-vault-mcp` server to walk the vault frontmatter
+and emit one JSON manifest, then pipes it into `manage.py import_docs_manifest`.
+The importer validates every record against
+[`docs_index/schema.json`](docs_index/schema.json) — the frontmatter enum
+contract single-sourced from the MCP and committed here — so HQ can never accept
+a value the MCP wouldn't emit, and vice-versa. Records upsert by `doc_id`;
+runbook bodies and secrets never enter HQ.
+
+**Code — `git push` / `hq ship`.** A push to `main` runs the gated pipeline in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml): lint, tests on Python
+3.12/3.13, a `check --deploy` posture gate plus `pip-audit`, then a GHCR image
+build that Trivy scans. Only on green does a **self-hosted runner on the
+homelab** pull the scanned image and restart the container — the runner dials
+out to GitHub, so nothing inbound is ever opened. A red commit physically cannot
+reach the box.
+
+---
+
 ## Local development
 
 ```bash
@@ -106,26 +146,21 @@ Or upload the file through the UI at **Docs → Import manifest**. See
 
 ## Production deployment
 
-Severino HQ is designed for **homelab / small VPS deployment, reachable only
-over Tailscale**. Three documents cover this:
+Severino HQ runs **homelab / small VPS, reachable only over Tailscale**: the app
+binds to localhost (or the Tailscale interface), a reverse proxy terminates TLS,
+and the public internet never sees it.
 
-- [`docs/HOMELAB.md`](docs/HOMELAB.md) — the **concrete homelab deployment**
-  running today (`/opt/apps/severino-hq` on `homelab-server`, NPM at
-  `hq.jseverino.com`, read-only deploy key, AdGuard DNS rewrite). Read this
-  first if you are redeploying our setup.
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — generic deploy recipes:
-  containerized (Docker Compose with named volumes for SQLite / receipts /
-  exports, optional Tailscale sidecar) and systemd + Caddy/Nginx on a VPS.
+Day to day it deploys through the gated pipeline in
+[How changes reach HQ](#how-changes-reach-hq) — a push to `main` ships a
+Trivy-scanned image that a self-hosted homelab runner pulls and restarts.
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) has the from-scratch recipes:
+containerized (Docker Compose with named volumes for SQLite / receipts /
+exports, optional Tailscale sidecar) and systemd + Caddy/Nginx on a VPS.
 
-Either way, the app binds to localhost (or the Tailscale interface), the
-reverse proxy terminates TLS, and the public internet never sees it.
-
-See [`docs/SECURITY.md`](docs/SECURITY.md) for the production security
-checklist, and [`docs/BACKUP.md`](docs/BACKUP.md) for SQLite-safe backup &
-restore with `VACUUM INTO` + `age` (or `restic`).
-
-The roadmap — clients, invoices, the local `severino-knowledge-router` MCP,
-the WordPress bridge, Postgres migration — is in
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the production security checklist
+and [`docs/BACKUP.md`](docs/BACKUP.md) for SQLite-safe backup & restore
+(`VACUUM INTO` + `age` / `restic`). The roadmap — clients, invoices, the
+WordPress bridge, Postgres migration — is in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
@@ -139,6 +174,6 @@ the WordPress bridge, Postgres migration — is in
 - DEBUG off in production, SECRET_KEY from env, ALLOWED_HOSTS explicit, secure cookies.
 - Uploaded receipts stored outside app code and served only through an auth-protected view.
 - Audit logging on every CRUD action, login event, upload, and export.
-- AI-readable Markdown export + relationship-aware JSON export, ready for the
-  future local `severino-knowledge-router` MCP.
+- AI-readable Markdown export + relationship-aware JSON export, consumed by the
+  local `severino-vault-mcp` server.
 - Boring, reliable architecture. No SaaS dependencies.

@@ -8,6 +8,13 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Added
 
+- Gated CI/CD pipeline (`.github/workflows/ci.yml`): lint (ruff), tests on
+  Python 3.12/3.13, a `check --deploy` posture gate, `pip-audit`, then a GHCR
+  image build that Trivy scans. On green, a self-hosted runner on the homelab
+  pulls the scanned image and restarts the container — `docker compose pull`
+  instead of an on-box build, so the artifact that deploys is the one that was
+  tested. All actions are SHA-pinned. `docker-compose.yml` takes a
+  `SEVERINO_IMAGE` override for the pull-by-tag deploy.
 - Global HQ search at `/search/`, covering projects, content, docs, assets,
   expenses, and receipts.
 - `docs_index/schema.json` + `docs_index/frontmatter_schema.py`: the frontmatter
@@ -55,7 +62,7 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ## [0.1.0] — 2026-05-16
 
-Initial v1 cut: the private operating system for Severino LLC.
+Initial v1 cut: the private operating system for Severino Labs.
 
 ### Added
 
@@ -76,8 +83,7 @@ Initial v1 cut: the private operating system for Severino LLC.
   metadata into the docs index without storing runbook bodies.
 - Reports page + CSV exports (expenses / assets / content / projects /
   documentation), plus relationship-aware JSON and AI-readable Markdown
-  year-summary exports (designed for the future severino-knowledge-router
-  MCP).
+  year-summary exports (designed for the severino-vault-mcp server).
 - Audit log via signals + middleware on every create / update / delete /
   login / logout / login-failed / upload / export / import.
 - Demo seeder (`manage.py seed_demo`) and manifest importer

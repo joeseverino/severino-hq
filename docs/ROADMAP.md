@@ -18,29 +18,17 @@ that everything later will sit on top of.
 
 Roughly in the order they're most likely to land.
 
-### Knowledge router (highest leverage)
+### Knowledge router — shipped as [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
 
-A local MCP server, `severino-knowledge-router`, running on the Mac. It would
-read:
-
-- `docs_manifest.json` exported from the Obsidian vault
-- Severino HQ JSON exports (`year-summary-<year>.json`) or, later, a private
-  Severino HQ read-only API
-- local Obsidian metadata (file list, frontmatter)
-
-…and answer questions like:
-
-- "What project relates to this topic?"
-- "What Obsidian runbook should I read for AdGuard issues?"
-- "What documentation record exists for system X?"
-- "What assets or expenses relate to project Y?"
-- "What content items came from this lab?"
-- "What is the source of truth for this topic?"
-
-v1 has the prerequisites: stable slugs and `doc_id`s, relationship-aware
-JSON exports, AI-readable Markdown exports, sensitivity labels so secret-
-adjacent runbooks are excluded. Git-crypt keys never go on the VPS; the MCP
-runs locally on the Mac.
+The highest-leverage v2 idea has since shipped as its own repo: a local stdio
+MCP server that reads the Obsidian vault frontmatter, the docs manifest, and
+HQ's relationship-aware JSON exports, and answers questions like "what runbook
+covers AdGuard?" or "what assets relate to project Y?" — behind a sensitivity
+gate that withholds secret-adjacent runbook bodies. HQ supplied the
+prerequisites that made it possible: stable `doc_id`s/slugs, AI-readable
+exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
+now both validate against. The MCP runs locally on the Mac; git-crypt keys
+never go on the server.
 
 ### Consulting & client side
 
