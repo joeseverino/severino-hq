@@ -29,3 +29,6 @@ Thumbs.db
 backups/
 *.tar.gz
 *.tar.gz.age
+
+# Operator-only homelab doc — real LAN/tailnet IPs & deploy paths; not for the public repo
+docs/HOMELAB.md
