@@ -32,3 +32,9 @@ backups/
 
 # Operator-only homelab doc — real LAN/tailnet IPs & deploy paths; not for the public repo
 docs/HOMELAB.md
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

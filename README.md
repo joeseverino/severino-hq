@@ -1,8 +1,12 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-72%25-brightgreen)
+&nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
 
 The private internal operating system behind Severino Labs.
+
+![Severino HQ dashboard — work queue, KPI snapshot, recent contacts, quick actions, and a live external-status panel](docs/images/dashboard.png)
 
 Severino HQ connects projects/labs, content ideas, documentation index records,
 assets, expenses, receipts, basic reports, and AI-readable exports — so a
@@ -59,6 +63,15 @@ available in the header.
   upload receipt, new project, new content, and Docs manifest import.
 - Relationship health counts are status indicators, not blockers; non-zero
   values mean there is link or metadata cleanup worth doing.
+
+Table-first list pages keep the relational data dense and scannable:
+
+![Projects & Labs list — status, category, technologies, and last-updated, filterable inline](docs/images/projects.png)
+
+Sign-in is OIDC SSO against a self-hosted **Pocket ID** (Tailscale-only,
+passkey-first); the Django password form stays as the break-glass path:
+
+![Pocket ID SSO consent screen for Severino HQ](docs/images/sso.png)
 
 ---
 
@@ -171,8 +184,9 @@ WordPress bridge, Postgres migration — is in
 
 - Clean relational design (everything linkable: asset ↔ expense ↔ receipt ↔ project ↔ content ↔ doc).
 - Authentication required on every URL except `/accounts/login/`, `/oidc/`,
-  and `/static/`; optional Pocket ID / OIDC SSO gates users by allowed email
-  or group and leaves password login available as break-glass.
+  and `/static/`. Sign-in is OIDC SSO against a self-hosted Pocket ID
+  (Tailscale-only), gated by allowed email or group, with Django password
+  login kept as the break-glass path.
 - DEBUG off in production, SECRET_KEY from env, ALLOWED_HOSTS explicit, secure cookies.
 - Uploaded receipts stored outside app code and served only through an auth-protected view.
 - Audit logging on every CRUD action, login event, upload, and export.

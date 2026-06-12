@@ -45,10 +45,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt coverage
       - run: python manage.py check
       - run: python manage.py makemigrations --check --dry-run
-      - run: python manage.py test --verbosity 2
+      - name: Tests with coverage gate
+        run: |
+          coverage run manage.py test --verbosity 2
+          coverage report --fail-under=70
+          pct="$(coverage report --format=total 2>/dev/null || echo '')"
+          if [ "${{ matrix.python-version }}" = "3.12" ] && [ -n "$pct" ]; then
+            echo "### Test coverage: ${pct}%" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   security:
     name: security
