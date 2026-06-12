@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   lint:
-    name: ruff
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -29,7 +29,7 @@ jobs:
       - run: ruff check .
 
   test:
-    name: django check + tests
+    name: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -51,7 +51,7 @@ jobs:
       - run: python manage.py test --verbosity 2
 
   security:
-    name: deploy-check + pip-audit
+    name: security
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -82,7 +82,7 @@ jobs:
           inputs: requirements.txt
 
   build:
-    name: build + push image (GHCR)
+    name: build
     needs: [lint, test, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -106,7 +106,7 @@ jobs:
           echo "image=$IMAGE:$TAG" >> "$GITHUB_OUTPUT"
 
   scan:
-    name: trivy image scan
+    name: scan
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -129,7 +129,7 @@ jobs:
           ignore-unfixed: true
 
   deploy:
-    name: deploy to homelab
+    name: deploy
     needs: [build, scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
