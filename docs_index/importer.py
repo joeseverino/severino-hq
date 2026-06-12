@@ -225,6 +225,18 @@ def import_manifest_data(
     report_orphans: bool = False,
     prune_orphans: bool = False,
 ) -> dict[str, Any]:
+    """Upsert the manifest and return a stats dict.
+
+    The returned ``stats`` is the contract `import_docs_manifest --json` emits
+    and the `hq sync` wrapper parses. Keys (treat as additive — do not rename):
+
+    - ``created`` / ``updated`` / ``skipped`` — DocumentationRecord counts.
+    - ``missing_relations`` (int) + ``missing_relations_detail`` (list of
+      ``{doc_id, kind, slug}``) — doc relations pointing at an absent registry slug.
+    - ``content_items_synced`` / ``content_items_pruned`` — mirrored ContentItem counts.
+    - ``orphans`` (list of doc_id) + ``orphans_pruned`` / ``orphans_pruned_records``
+      — present only when ``report_orphans``/``prune_orphans``.
+    """
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
 

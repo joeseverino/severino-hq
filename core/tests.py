@@ -11,10 +11,12 @@ import json
 import tempfile
 from datetime import date, timedelta
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
@@ -513,3 +515,39 @@ class ReceiptFileProtectionTests(_AuthedTestCase):
         r = self.client.get(f"/receipts/{receipt.pk}/file/")
         self.assertEqual(r.status_code, 302)
         self.assertIn("/accounts/login/", r["Location"])
+
+
+class AuditRegistryCommandTests(TestCase):
+    """`manage.py audit_registry` reports registry rows no doc references."""
+
+    def test_reports_orphans_and_clean_state(self):
+        referenced = Project.objects.create(slug="referenced", name="Referenced")
+        Project.objects.create(slug="orphan-proj", name="Orphan Project")
+        Asset.objects.create(slug="orphan-asset", item_name="Orphan Asset")
+        doc = DocumentationRecord.objects.create(doc_id="rb-x", title="X")
+        doc.related_projects.add(referenced)
+
+        out = StringIO()
+        call_command("audit_registry", "--json", stdout=out)
+        stats = json.loads(out.getvalue())
+
+        self.assertEqual(stats["orphan_projects"], ["orphan-proj"])
+        self.assertEqual(stats["orphan_assets"], ["orphan-asset"])
+        self.assertEqual(stats["projects_total"], 2)
+        self.assertEqual(stats["assets_total"], 1)
+
+        # Human output names the orphans and does not claim "ok".
+        human = StringIO()
+        call_command("audit_registry", stdout=human)
+        text = human.getvalue()
+        self.assertIn("orphan: orphan-proj", text)
+        self.assertNotIn("Registry  ok", text)
+
+    def test_clean_when_everything_referenced(self):
+        project = Project.objects.create(slug="p", name="P")
+        doc = DocumentationRecord.objects.create(doc_id="rb-y", title="Y")
+        doc.related_projects.add(project)
+
+        out = StringIO()
+        call_command("audit_registry", stdout=out)
+        self.assertIn("Registry  ok", out.getvalue())

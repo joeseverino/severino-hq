@@ -18,12 +18,18 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
   the committed JSON (vs the installed MCP) and the model `TextChoices` (vs the
   schema).
 
+- `audit_registry` management command (`--json`): the read-only Project/Asset
+  registry-orphan audit that `hq validate` used to run as an inline ORM script
+  piped into `manage.py shell` over SSH. Now a real, tested command.
+
 ### Changed
 
 - `import_docs_manifest` validation now derives allowed doc_type / environment /
   status / sensitivity from the shared schema rather than the model's
   `TextChoices`, closing the latent drift where the MCP accepted `environment:
   lab` / sensitivity aliases that HQ rejected.
+- Documented the `import_manifest_data` stats dict as the explicit contract the
+  `hq sync` wrapper parses (keys are additive, not to be renamed).
 - Optional Pocket ID / OIDC SSO for HQ. Password login remains available as
   break-glass; OIDC users must match an allowed email or allowed group.
 - Pocket ID account linking now uses `preferred_username` first and does not
