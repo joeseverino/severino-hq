@@ -67,6 +67,13 @@ SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS")
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 
+# SECURE_SSL_REDIRECT is deliberately left unset (Django would warn W008). The
+# TLS-terminating reverse proxy (NPM/Caddy) handles http->https; a Django-level
+# redirect would also break the container healthcheck, which probes
+# http://127.0.0.1:8000 inside the network namespace. The decision is encoded
+# here so `check --deploy --fail-level WARNING` can be a hard CI gate.
+SILENCED_SYSTEM_CHECKS = ["security.W008"]
+
 
 # ----- Apps --------------------------------------------------------------------
 

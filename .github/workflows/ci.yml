@@ -60,15 +60,21 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       # Production-posture check: DEBUG off, real host. --fail-level WARNING
-      # turns Django's security advisories into hard failures.
+      # turns Django's security advisories into hard failures. The env below
+      # mirrors a real prod config so the check validates how settings.py
+      # translates it — not CI artifacts. The key is a throwaway >50-char value
+      # only to satisfy the strength check (W009).
       - name: Django deployment check
         env:
           DJANGO_DEBUG: "0"
-          DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
+          DJANGO_SECRET_KEY: "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef"
           DJANGO_ALLOWED_HOSTS: "hq.example.com"
           DJANGO_BEHIND_TLS_PROXY: "1"
           DJANGO_SESSION_COOKIE_SECURE: "1"
           DJANGO_CSRF_COOKIE_SECURE: "1"
+          DJANGO_HSTS_SECONDS: "31536000"
+          DJANGO_HSTS_INCLUDE_SUBDOMAINS: "1"
+          DJANGO_HSTS_PRELOAD: "1"
         run: python manage.py check --deploy --fail-level WARNING
       - name: pip-audit
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
