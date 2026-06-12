@@ -1,5 +1,7 @@
 # Severino HQ
 
+[![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
+
 The private internal operating system behind Severino Labs.
 
 Severino HQ connects projects/labs, content ideas, documentation index records,
