@@ -21,7 +21,11 @@
 services:
   app:
     build: .
-    image: severino-hq:latest
+    # Local dev builds severino-hq:latest. CI/CD overrides this to the GHCR
+    # image (SEVERINO_IMAGE=ghcr.io/joeseverino/severino-hq:sha-…) so the
+    # homelab `docker compose pull && up -d --no-build` deploys the exact,
+    # already-tested-and-scanned artifact instead of rebuilding on the box.
+    image: ${SEVERINO_IMAGE:-severino-hq:latest}
     container_name: severino-hq
     restart: unless-stopped
     env_file: .env

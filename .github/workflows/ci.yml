@@ -1,5 +1,8 @@
-name: CI
+name: ci
 
+# Push to main is the deploy trigger. Every gate below must pass before the
+# self-hosted deploy job runs — a red commit physically cannot reach the box.
+# Pull requests run the checks only (no build, no deploy).
 on:
   push:
     branches: [main]
@@ -9,9 +12,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+
   test:
-    name: Django check + tests
+    name: django check + tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -22,34 +40,120 @@ jobs:
       DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
       DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python manage.py check
+      - run: python manage.py makemigrations --check --dry-run
+      - run: python manage.py test --verbosity 2
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Django system check
-        run: python manage.py check
-
-      - name: Verify no missing migrations
-        run: python manage.py makemigrations --check --dry-run
-
-      - name: Run tests
-        run: python manage.py test --verbosity 2
-
-  docker:
-    name: Docker build
+  security:
+    name: deploy-check + pip-audit
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t severino-hq:ci .
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      # Production-posture check: DEBUG off, real host. --fail-level WARNING
+      # turns Django's security advisories into hard failures.
+      - name: Django deployment check
+        env:
+          DJANGO_DEBUG: "0"
+          DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
+          DJANGO_ALLOWED_HOSTS: "hq.example.com"
+          DJANGO_BEHIND_TLS_PROXY: "1"
+          DJANGO_SESSION_COOKIE_SECURE: "1"
+          DJANGO_CSRF_COOKIE_SECURE: "1"
+        run: python manage.py check --deploy --fail-level WARNING
+      - name: pip-audit
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: requirements.txt
+
+  build:
+    name: build + push image (GHCR)
+    needs: [lint, test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push
+        id: build
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}"
+          TAG="sha-${GITHUB_SHA::12}"
+          docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$TAG" >> "$GITHUB_OUTPUT"
+
+  scan:
+    name: trivy image scan
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      # Scans the exact artifact about to ship, between build and deploy.
+      # Fails the pipeline on a fixable HIGH/CRITICAL in the image.
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ needs.build.outputs.image }}
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+  deploy:
+    name: deploy to homelab
+    needs: [build, scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
+    # connects in. NEVER trigger a self-hosted job from pull_request.
+    runs-on: [self-hosted, severino-hq]
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Pull image and restart container
+        env:
+          SEVERINO_IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          cd /opt/apps/severino-hq
+          docker compose pull app
+          docker compose up -d --no-build app
+      - name: Wait for healthy
+        run: |
+          for i in $(seq 1 12); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' severino-hq 2>/dev/null || echo missing)"
+            echo "health: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 5
+          done
+          echo "::error::container did not become healthy"
+          docker logs --tail 50 severino-hq || true
+          exit 1

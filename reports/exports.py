@@ -16,7 +16,7 @@ from decimal import Decimal
 from io import StringIO
 from typing import Iterable
 
-from django.db.models import Count, Sum
+from django.db.models import Sum
 from django.utils import timezone
 
 from assets.models import Asset
