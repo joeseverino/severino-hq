@@ -1,0 +1,12 @@
+flowchart LR
+    joe([Joe])
+    vault[(Obsidian vault)]
+    mcp[severino-vault-mcp]
+    hq[Severino HQ]
+    ci["CI: lint, test, security, scan"]
+    ghcr[(GHCR image)]
+    runner["self-hosted runner (homelab)"]
+
+    joe -->|edit frontmatter| vault
+    joe -->|hq sync| mcp -->|JSON manifest| hq
+    joe -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq

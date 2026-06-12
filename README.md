@@ -81,20 +81,11 @@ Every operator action lands through a *checked* path — content through a share
 schema, code through a gated pipeline. The Obsidian vault stays the source of
 truth; only validated metadata and tested images ever reach HQ.
 
-```mermaid
-flowchart LR
-    joe([Joe])
-    vault[(Obsidian vault)]
-    mcp[severino-vault-mcp]
-    hq[Severino HQ]
-    ci["CI: lint, test, security, scan"]
-    ghcr[(GHCR image)]
-    runner["self-hosted runner (homelab)"]
+![How changes reach HQ: Joe edits vault frontmatter; `hq sync` runs severino-vault-mcp to emit a JSON manifest into Severino HQ; a git push or `hq ship` runs the gated CI (lint, test, security, scan) that on green builds a GHCR image, which a self-hosted homelab runner pulls and restarts](docs/images/changes-reach-hq.png)
 
-    joe -->|edit frontmatter| vault
-    joe -->|hq sync| mcp -->|JSON manifest| hq
-    joe -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq
-```
+<sup>Diagram source: [`docs/diagrams/changes-reach-hq.mmd`](docs/diagrams/changes-reach-hq.mmd),
+pre-rendered with [`render.sh`](https://github.com/joeseverino/joeseverino/blob/main/diagrams/render.sh)
+so every browser sees the same pixels.</sup>
 
 **Content — `hq sync`.** Severino HQ never reads the vault directly. The `hq`
 CLI calls the local `severino-vault-mcp` server to walk the vault frontmatter
