@@ -170,3 +170,11 @@ jobs:
           echo "::error::container did not become healthy"
           docker logs --tail 50 severino-hq || true
           exit 1
+      - name: Reclaim disk (drop stale images + build cache)
+        if: always()
+        # Every release pulls a new sha-tagged image (~250MB). Without this the
+        # homelab disk fills and a later deploy wedges on ENOSPC. Prune unused
+        # images older than 24h (keeps a same-day rollback) plus build cache.
+        run: |
+          docker image prune -af --filter "until=24h" || true
+          docker builder prune -af || true
