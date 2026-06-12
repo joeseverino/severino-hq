@@ -1,0 +1,50 @@
+{
+  "doc_id_prefixes": [
+    "rb-",
+    "infra-",
+    "report-",
+    "project-",
+    "note-"
+  ],
+  "doc_types": [
+    "architecture_note",
+    "decision_record",
+    "deployment_guide",
+    "public_article_draft",
+    "recovery_procedure",
+    "runbook",
+    "troubleshooting_guide"
+  ],
+  "environments": [
+    "adguard",
+    "cloudflare",
+    "homelab",
+    "local_mac",
+    "other",
+    "tailscale",
+    "unifi",
+    "vps",
+    "wordpress"
+  ],
+  "required_fields": [
+    "doc_id",
+    "title",
+    "doc_type",
+    "system",
+    "environment",
+    "status",
+    "sensitivity"
+  ],
+  "sensitivities": [
+    "internal",
+    "public",
+    "restricted",
+    "sensitive"
+  ],
+  "statuses": [
+    "active",
+    "archived",
+    "deprecated",
+    "draft"
+  ]
+}

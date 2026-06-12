@@ -10,6 +10,20 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 - Global HQ search at `/search/`, covering projects, content, docs, assets,
   expenses, and receipts.
+- `docs_index/schema.json` + `docs_index/frontmatter_schema.py`: the frontmatter
+  enum contract is now single-sourced from the MCP's `schema.py` (emitted via
+  `severino-vault-mcp schema --json`, regenerated with `hq schema`). The
+  manifest importer validates against it instead of model `.choices`, so HQ can
+  no longer reject a value the MCP just wrote. `docs_index/tests.py` guards both
+  the committed JSON (vs the installed MCP) and the model `TextChoices` (vs the
+  schema).
+
+### Changed
+
+- `import_docs_manifest` validation now derives allowed doc_type / environment /
+  status / sensitivity from the shared schema rather than the model's
+  `TextChoices`, closing the latent drift where the MCP accepted `environment:
+  lab` / sensitivity aliases that HQ rejected.
 - Optional Pocket ID / OIDC SSO for HQ. Password login remains available as
   break-glass; OIDC users must match an allowed email or allowed group.
 - Pocket ID account linking now uses `preferred_username` first and does not

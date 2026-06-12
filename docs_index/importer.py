@@ -33,6 +33,7 @@ from assets.models import Asset
 from content.models import ContentItem
 from projects.models import Project
 
+from . import frontmatter_schema
 from .models import DocumentationRecord
 
 
@@ -51,8 +52,10 @@ def _coerce_date(value: Any) -> date | None:
         raise ManifestImportError(f"Invalid date {value!r}: {exc}") from exc
 
 
-def _validate_choice(value: str, choices, *, field: str) -> str:
-    allowed = {v for v, _ in choices}
+def _validate_choice(value: str, allowed, *, field: str) -> str:
+    # `allowed` is a canonical set from frontmatter_schema — the same definition
+    # the MCP validates writes against, so HQ never rejects a value the MCP just
+    # wrote. Do not pass model `.choices` here; that would reintroduce drift.
     if value in allowed:
         return value
     raise ManifestImportError(
@@ -248,23 +251,23 @@ def import_manifest_data(
             "title": entry.get("title") or doc_id,
             "doc_type": _validate_choice(
                 entry.get("doc_type") or "runbook",
-                DocumentationRecord.DocType.choices,
+                frontmatter_schema.DOC_TYPES,
                 field="doc_type",
             ),
             "system_service": entry.get("system") or entry.get("system_service") or "",
             "environment": _validate_choice(
                 entry.get("environment") or "other",
-                DocumentationRecord.Environment.choices,
+                frontmatter_schema.ENVIRONMENTS,
                 field="environment",
             ),
             "status": _validate_choice(
                 entry.get("status") or "draft",
-                DocumentationRecord.Status.choices,
+                frontmatter_schema.STATUSES,
                 field="status",
             ),
             "sensitivity": _validate_choice(
                 entry.get("sensitivity") or "internal",
-                DocumentationRecord.Sensitivity.choices,
+                frontmatter_schema.SENSITIVITIES,
                 field="sensitivity",
             ),
             "obsidian_path": entry.get("path") or entry.get("obsidian_path") or "",

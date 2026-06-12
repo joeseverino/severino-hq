@@ -34,6 +34,29 @@ reporting the change as deployed.
 [[Deploy Severino HQ]] (`rb-deploy-severino-hq`), reachable via the
 `severino-vault-mcp` MCP.
 
+## Frontmatter schema is shared with the MCP — don't hand-edit it
+
+The frontmatter enum contract (doc_type / environment / status / sensitivity
+values, doc_id prefixes) is defined **once**, in the MCP's `schema.py`. HQ
+consumes it as `docs_index/schema.json`, which is **generated, not authored**:
+
+```bash
+hq schema            # regenerate docs_index/schema.json from the installed MCP
+hq schema --check    # verify it's current (exit 1 on drift) — CI / pre-deploy
+```
+
+Rules so the single source can't drift:
+- Never hand-edit `docs_index/schema.json`. Change `schema.py` in the MCP,
+  reinstall (`site reinstall-mcp`), then `hq schema`, then commit + deploy.
+- The manifest importer (`docs_index/importer.py`) validates against
+  `docs_index/frontmatter_schema.py` (the committed JSON), **not** model
+  `.choices`. Keep it that way — model choices would reintroduce drift.
+- `DocumentationRecord`'s `TextChoices` stay (HQ's symbolic API + admin labels)
+  but are guarded: `docs_index/tests.py` fails if their values diverge from the
+  schema, or if the committed JSON lags the installed MCP. Run
+  `manage.py test docs_index` on the dev Mac (where the MCP CLI lives) to
+  enforce both.
+
 ## Operational questions
 
 For anything about TLS, certs, DNS, NPM, Docker, Tailscale, AdGuard, the
