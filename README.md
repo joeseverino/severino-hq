@@ -87,8 +87,10 @@ truth; only validated metadata and tested images ever reach HQ.
 pre-rendered with [`render.sh`](https://github.com/joeseverino/joeseverino/blob/main/diagrams/render.sh)
 so every browser sees the same pixels.</sup>
 
-**Content — `hq sync`.** Severino HQ never reads the vault directly. The `hq`
-CLI calls the local `severino-vault-mcp` server to walk the vault frontmatter
+**Content — `hq sync`.** Severino HQ never reads the vault directly. The
+[`hq`](https://github.com/joeseverino/tools) CLI calls the local
+[`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
+server to walk the vault frontmatter
 and emit one JSON manifest, then pipes it into `manage.py import_docs_manifest`.
 The importer validates every record against
 [`docs_index/schema.json`](docs_index/schema.json) — the frontmatter enum
@@ -96,7 +98,7 @@ contract single-sourced from the MCP and committed here — so HQ can never acce
 a value the MCP wouldn't emit, and vice-versa. Records upsert by `doc_id`;
 runbook bodies and secrets never enter HQ.
 
-**Code — `git push` / `hq ship`.** A push to `main` runs the gated pipeline in
+**Code — `git push` / [`hq ship`](https://github.com/joeseverino/tools).** A push to `main` runs the gated pipeline in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml): lint, tests on Python
 3.12/3.13, a `check --deploy` posture gate plus `pip-audit`, then a GHCR image
 build that Trivy scans. Only on green does a **self-hosted runner on the
