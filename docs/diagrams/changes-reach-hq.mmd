@@ -10,3 +10,7 @@ flowchart LR
     joe -->|edit frontmatter| vault
     joe -->|hq sync| mcp -->|JSON manifest| hq
     joe -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq
+
+    %% the destination every path converges on — styled by .anchor in the shared theme
+    classDef anchor stroke-width:2px;
+    class hq anchor;
