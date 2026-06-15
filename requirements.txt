@@ -1,4 +1,4 @@
 Django>=5.0,<5.3
-gunicorn>=22.0
-mozilla-django-oidc>=4.0,<5.0
-whitenoise>=6.6
+gunicorn>=26.0.0
+mozilla-django-oidc>=5.0.2,<6.0
+whitenoise>=6.12.0
