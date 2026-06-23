@@ -4,7 +4,8 @@
     "infra-",
     "report-",
     "project-",
-    "note-"
+    "note-",
+    "task-"
   ],
   "doc_types": [
     "architecture_note",
@@ -13,6 +14,7 @@
     "public_article_draft",
     "recovery_procedure",
     "runbook",
+    "task",
     "troubleshooting_guide"
   ],
   "environments": [
@@ -46,5 +48,18 @@
     "archived",
     "deprecated",
     "draft"
+  ],
+  "task_required_fields": [
+    "doc_id",
+    "title",
+    "doc_type",
+    "status"
+  ],
+  "task_statuses": [
+    "active",
+    "done",
+    "open",
+    "parked",
+    "wontfix"
   ]
 }
