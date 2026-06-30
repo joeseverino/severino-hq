@@ -17,6 +17,7 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
@@ -25,7 +26,11 @@ from core.oidc import HQOIDCAuthenticationBackend
 from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
-from docs_index.importer import ManifestImportError, import_manifest_data
+from docs_index.importer import (
+    ManifestImportError,
+    import_manifest_data,
+    validate_manifest_data,
+)
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
@@ -398,6 +403,39 @@ class ManifestImportTests(TestCase):
             import_manifest_data(
                 [{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "deprecated"}]
             )
+
+    def test_validate_manifest_data_flags_bad_enums_without_db(self):
+        # The read-only preflight catches the contract-drift class (an invalid
+        # status/doc_type/environment) before it reaches the deployed importer,
+        # and writes nothing.
+        problems = validate_manifest_data([
+            {"doc_id": "rb-ok", "title": "ok", "doc_type": "runbook", "status": "active"},
+            {"doc_id": "task-bad", "title": "bad", "doc_type": "task", "status": "deprecated"},
+            {"doc_id": "rb-bad-env", "doc_type": "runbook", "environment": "nope"},
+        ])
+        by = {p["doc_id"]: p for p in problems}
+        self.assertNotIn("rb-ok", by)
+        self.assertIn("task-bad", by)
+        self.assertIn("rb-bad-env", by)
+        self.assertEqual(DocumentationRecord.objects.count(), 0)
+
+    def test_check_only_command_gates_an_invalid_manifest(self):
+        bad = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "deprecated"}])
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(bad)
+            bad_path = f.name
+        ok = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}])
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(ok)
+            ok_path = f.name
+        try:
+            with self.assertRaises(CommandError):
+                call_command("import_docs_manifest", bad_path, "--check-only", stdout=StringIO())
+            call_command("import_docs_manifest", ok_path, "--check-only", stdout=StringIO())  # no raise
+            self.assertEqual(DocumentationRecord.objects.count(), 0)  # read-only either way
+        finally:
+            Path(bad_path).unlink()
+            Path(ok_path).unlink()
 
     def test_public_article_content_item_uses_manifest_slug(self):
         import_manifest_data(

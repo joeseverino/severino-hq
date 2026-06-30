@@ -10,7 +10,7 @@ Do not hand-edit ``schema.json`` — regenerate it:
 
     severino-vault-mcp schema --json > docs_index/schema.json
 
-Two guards keep it honest (see ``test_schema_contract.py``): one asserts the
+Two guards keep it honest (see ``docs_index/tests.py``): one asserts the
 committed JSON still matches the installed MCP, the other asserts the
 ``DocumentationRecord`` choice members still cover these sets.
 """
@@ -33,6 +33,9 @@ REQUIRED_FIELDS: tuple[str, ...] = tuple(_data["required_fields"])
 # Tasks carry their own lifecycle vocabulary, validated per-doc-type exactly as
 # the MCP does — a task can be "open"/"parked"/"done"/"wontfix", a runbook can't.
 TASK_STATUSES: frozenset[str] = frozenset(_data["task_statuses"])
+# The required fields for a task doc (slimmer than the standard set — a task has
+# no system/environment/sensitivity). Surfaced for per-doc-type validation.
+TASK_REQUIRED_FIELDS: tuple[str, ...] = tuple(_data["task_required_fields"])
 
 __all__ = [
     "DOC_ID_PREFIXES",
@@ -42,5 +45,6 @@ __all__ = [
     "SCHEMA_PATH",
     "SENSITIVITIES",
     "STATUSES",
+    "TASK_REQUIRED_FIELDS",
     "TASK_STATUSES",
 ]
