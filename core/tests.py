@@ -25,7 +25,7 @@ from core.oidc import HQOIDCAuthenticationBackend
 from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
-from docs_index.importer import import_manifest_data
+from docs_index.importer import ManifestImportError, import_manifest_data
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
@@ -367,6 +367,37 @@ class ManifestImportTests(TestCase):
         project.refresh_from_db()
         self.assertEqual(project.technologies_used, "Django, PostgreSQL")
         self.assertNotIn("projects_tech_backfilled", stats)
+
+    def test_task_doc_imports_with_its_own_status_lifecycle(self):
+        # A task carries open/active/parked/done/wontfix — the standard status
+        # set rejects these, so the importer must validate tasks per-doc-type
+        # (the bug that wedged `hq sync`: every open task failed validation).
+        stats = import_manifest_data(
+            [
+                {
+                    "doc_id": "task-ship-the-thing",
+                    "title": "Ship the thing",
+                    "doc_type": "task",
+                    "status": "open",
+                    "related_projects": [],
+                }
+            ]
+        )
+        self.assertEqual(stats["created"], 1)
+        record = DocumentationRecord.objects.get(doc_id="task-ship-the-thing")
+        self.assertEqual(record.status, "open")
+
+    def test_task_status_set_is_distinct_from_standard_docs(self):
+        # "parked" is a task status, never a standard-doc status; "deprecated" is
+        # the reverse. Each doc_type is held to its own vocabulary.
+        with self.assertRaises(ManifestImportError):
+            import_manifest_data(
+                [{"doc_id": "rb-x", "title": "x", "doc_type": "runbook", "status": "parked"}]
+            )
+        with self.assertRaises(ManifestImportError):
+            import_manifest_data(
+                [{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "deprecated"}]
+            )
 
     def test_public_article_content_item_uses_manifest_slug(self):
         import_manifest_data(

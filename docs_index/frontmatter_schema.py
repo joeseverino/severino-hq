@@ -30,6 +30,9 @@ STATUSES: frozenset[str] = frozenset(_data["statuses"])
 SENSITIVITIES: frozenset[str] = frozenset(_data["sensitivities"])
 DOC_ID_PREFIXES: tuple[str, ...] = tuple(_data["doc_id_prefixes"])
 REQUIRED_FIELDS: tuple[str, ...] = tuple(_data["required_fields"])
+# Tasks carry their own lifecycle vocabulary, validated per-doc-type exactly as
+# the MCP does — a task can be "open"/"parked"/"done"/"wontfix", a runbook can't.
+TASK_STATUSES: frozenset[str] = frozenset(_data["task_statuses"])
 
 __all__ = [
     "DOC_ID_PREFIXES",
@@ -39,4 +42,5 @@ __all__ = [
     "SCHEMA_PATH",
     "SENSITIVITIES",
     "STATUSES",
+    "TASK_STATUSES",
 ]
