@@ -259,13 +259,24 @@ def import_manifest_data(
             continue
         manifest_doc_ids.add(doc_id)
 
+        doc_type = _validate_choice(
+            entry.get("doc_type") or "runbook",
+            frontmatter_schema.DOC_TYPES,
+            field="doc_type",
+        )
+        # A task carries its own status lifecycle (open/active/parked/done/
+        # wontfix), validated per-doc-type exactly as the MCP write path does —
+        # so HQ never rejects a task status the MCP just wrote. Every other doc
+        # uses the standard status set.
+        is_task = doc_type == "task"
+        status_allowed = (
+            frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
+        )
+        status_default = "open" if is_task else "draft"
+
         defaults = {
             "title": entry.get("title") or doc_id,
-            "doc_type": _validate_choice(
-                entry.get("doc_type") or "runbook",
-                frontmatter_schema.DOC_TYPES,
-                field="doc_type",
-            ),
+            "doc_type": doc_type,
             "system_service": entry.get("system") or entry.get("system_service") or "",
             "environment": _validate_choice(
                 entry.get("environment") or "other",
@@ -273,8 +284,8 @@ def import_manifest_data(
                 field="environment",
             ),
             "status": _validate_choice(
-                entry.get("status") or "draft",
-                frontmatter_schema.STATUSES,
+                entry.get("status") or status_default,
+                status_allowed,
                 field="status",
             ),
             "sensitivity": _validate_choice(
