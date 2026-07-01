@@ -19,7 +19,11 @@ from django.core.management.base import BaseCommand, CommandError
 
 from core.audit import record_event
 from core.models import AuditLog
-from docs_index.importer import ManifestImportError, import_manifest_data
+from docs_index.importer import (
+    ManifestImportError,
+    import_manifest_data,
+    validate_manifest_data,
+)
 
 
 class Command(BaseCommand):
@@ -55,6 +59,17 @@ class Command(BaseCommand):
             action="store_true",
             help="Print raw import stats as JSON for wrapper CLIs.",
         )
+        parser.add_argument(
+            "--check-only",
+            action="store_true",
+            help=(
+                "Validate the manifest against the canonical schema and exit "
+                "without touching the database. Exit 1 if any entry has an "
+                "invalid enum (status/doc_type/environment/sensitivity). Run it "
+                "locally as an `hq sync` preflight so contract drift fails on the "
+                "dev machine, not as a prod round-trip."
+            ),
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
@@ -70,6 +85,25 @@ class Command(BaseCommand):
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise CommandError(f"Invalid JSON: {exc}") from exc
+
+        if options["check_only"]:
+            problems = validate_manifest_data(data)
+            if options["json"]:
+                self.stdout.write(json.dumps({"ok": not problems, "problems": problems}))
+            elif problems:
+                self.stdout.write(self.style.ERROR(
+                    f"{len(problems)} manifest entr(ies) would be rejected:"
+                ))
+                for p in problems:
+                    for err in p["errors"]:
+                        self.stdout.write(self.style.ERROR(f"  {p['doc_id'] or '(no doc_id)'}: {err}"))
+            else:
+                self.stdout.write(self.style.SUCCESS(
+                    f"Manifest valid: {len(data)} entr(ies) pass schema validation."
+                ))
+            if problems:
+                raise CommandError(f"{len(problems)} invalid manifest entr(ies) — not importable.")
+            return
 
         report_orphans = options["report_orphans"] or options["prune"]
 

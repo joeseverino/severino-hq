@@ -63,6 +63,101 @@ def _validate_choice(value: str, allowed, *, field: str) -> str:
     )
 
 
+def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
+    """Validate an entry's enums and build the DocumentationRecord field defaults.
+
+    Pure (no DB); raises ManifestImportError on an invalid choice. Shared by the
+    importer's write path and the read-only validate path so the two can never
+    disagree about what HQ accepts. A task carries its own status lifecycle
+    (open/active/parked/done/wontfix), validated per-doc-type exactly as the MCP
+    write path does; every other doc uses the standard status set.
+    """
+    doc_id = (entry.get("doc_id") or "").strip()
+    doc_type = _validate_choice(
+        entry.get("doc_type") or "runbook",
+        frontmatter_schema.DOC_TYPES,
+        field="doc_type",
+    )
+    is_task = doc_type == "task"
+    status_allowed = (
+        frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
+    )
+    status_default = "open" if is_task else "draft"
+    defaults = {
+        "title": entry.get("title") or doc_id,
+        "doc_type": doc_type,
+        "system_service": entry.get("system") or entry.get("system_service") or "",
+        "environment": _validate_choice(
+            entry.get("environment") or "other",
+            frontmatter_schema.ENVIRONMENTS,
+            field="environment",
+        ),
+        "status": _validate_choice(
+            entry.get("status") or status_default,
+            status_allowed,
+            field="status",
+        ),
+        "sensitivity": _validate_choice(
+            entry.get("sensitivity") or "internal",
+            frontmatter_schema.SENSITIVITIES,
+            field="sensitivity",
+        ),
+        "obsidian_path": entry.get("path") or entry.get("obsidian_path") or "",
+        "github_path": entry.get("github_path") or "",
+        "external_url": entry.get("external_url") or "",
+        "last_reviewed": _coerce_date(entry.get("last_reviewed")),
+        "published_at": _coerce_date(entry.get("published_at")),
+        "notes": entry.get("notes") or "",
+    }
+    return doc_id, defaults, is_task
+
+
+def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
+    """Read-only preflight: validate every entry's enums against the canonical
+    schema WITHOUT touching the database, so contract drift (an invalid status /
+    doc_type / environment / sensitivity — the class that wedged `hq sync`) is
+    caught locally before the deployed importer ever runs. Returns a list of
+    ``{doc_id, errors:[...]}`` for entries that fail; empty means the manifest is
+    importable. Validates the same enums the write path does, via the shared
+    ``_build_record_defaults``.
+    """
+    if not isinstance(items, list):
+        raise ManifestImportError("Manifest must be a JSON array of records.")
+    problems: list[dict] = []
+    for entry in items:
+        doc_id = (entry.get("doc_id") or "").strip()
+        if not doc_id:
+            problems.append({"doc_id": "", "errors": ["missing doc_id"]})
+            continue
+        try:
+            _build_record_defaults(entry)
+        except ManifestImportError as exc:
+            problems.append({"doc_id": doc_id, "errors": [str(exc)]})
+    return problems
+
+
+def _sync_relation(record, manager, slugs, *, kind: str, doc_id: str, stats: dict):
+    """Set a record's M2M relation to the registry rows matching ``slugs`` and
+    record any slug with no matching row as a missing relation. One implementation
+    for both projects and assets (was copy-pasted). Returns the resolved queryset
+    (so the caller can, e.g., backfill project tech) and whether it changed.
+    """
+    qs = manager.filter(slug__in=slugs)
+    desired = set(qs.values_list("pk", flat=True))
+    relation = getattr(record, f"related_{kind}s")
+    changed = desired != set(relation.values_list("pk", flat=True))
+    if changed:
+        relation.set(qs)
+    found = set(qs.values_list("slug", flat=True))
+    for slug in slugs:
+        if slug not in found:
+            stats["missing_relations"] += 1
+            stats["missing_relations_detail"].append(
+                {"doc_id": doc_id, "kind": kind, "slug": slug}
+            )
+    return qs, changed
+
+
 # Map vault `content_type` frontmatter values to ContentItem.Type.
 CONTENT_TYPE_MAP = {
     "portfolio_article": ContentItem.Type.PORTFOLIO_PAGE,
@@ -259,47 +354,7 @@ def import_manifest_data(
             continue
         manifest_doc_ids.add(doc_id)
 
-        doc_type = _validate_choice(
-            entry.get("doc_type") or "runbook",
-            frontmatter_schema.DOC_TYPES,
-            field="doc_type",
-        )
-        # A task carries its own status lifecycle (open/active/parked/done/
-        # wontfix), validated per-doc-type exactly as the MCP write path does —
-        # so HQ never rejects a task status the MCP just wrote. Every other doc
-        # uses the standard status set.
-        is_task = doc_type == "task"
-        status_allowed = (
-            frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
-        )
-        status_default = "open" if is_task else "draft"
-
-        defaults = {
-            "title": entry.get("title") or doc_id,
-            "doc_type": doc_type,
-            "system_service": entry.get("system") or entry.get("system_service") or "",
-            "environment": _validate_choice(
-                entry.get("environment") or "other",
-                frontmatter_schema.ENVIRONMENTS,
-                field="environment",
-            ),
-            "status": _validate_choice(
-                entry.get("status") or status_default,
-                status_allowed,
-                field="status",
-            ),
-            "sensitivity": _validate_choice(
-                entry.get("sensitivity") or "internal",
-                frontmatter_schema.SENSITIVITIES,
-                field="sensitivity",
-            ),
-            "obsidian_path": entry.get("path") or entry.get("obsidian_path") or "",
-            "github_path": entry.get("github_path") or "",
-            "external_url": entry.get("external_url") or "",
-            "last_reviewed": _coerce_date(entry.get("last_reviewed")),
-            "published_at": _coerce_date(entry.get("published_at")),
-            "notes": entry.get("notes") or "",
-        }
+        _, defaults, _ = _build_record_defaults(entry)
 
         record, created = DocumentationRecord.objects.get_or_create(
             doc_id=doc_id, defaults=defaults
@@ -320,34 +375,16 @@ def import_manifest_data(
         asset_slugs = entry.get("related_assets") or []
 
         if project_slugs:
-            qs = Project.objects.filter(slug__in=project_slugs)
-            desired = set(qs.values_list("pk", flat=True))
-            current = set(record.related_projects.values_list("pk", flat=True))
-            if desired != current:
-                record.related_projects.set(qs)
-                changed = True
+            qs, rel_changed = _sync_relation(
+                record, Project.objects, project_slugs, kind="project", doc_id=doc_id, stats=stats
+            )
+            changed = changed or rel_changed
             _backfill_project_technologies(qs, entry, stats)
-            found_slugs = set(qs.values_list("slug", flat=True))
-            for slug in project_slugs:
-                if slug not in found_slugs:
-                    stats["missing_relations"] += 1
-                    stats["missing_relations_detail"].append(
-                        {"doc_id": doc_id, "kind": "project", "slug": slug}
-                    )
         if asset_slugs:
-            qs = Asset.objects.filter(slug__in=asset_slugs)
-            desired = set(qs.values_list("pk", flat=True))
-            current = set(record.related_assets.values_list("pk", flat=True))
-            if desired != current:
-                record.related_assets.set(qs)
-                changed = True
-            found_slugs = set(qs.values_list("slug", flat=True))
-            for slug in asset_slugs:
-                if slug not in found_slugs:
-                    stats["missing_relations"] += 1
-                    stats["missing_relations_detail"].append(
-                        {"doc_id": doc_id, "kind": "asset", "slug": slug}
-                    )
+            _, rel_changed = _sync_relation(
+                record, Asset.objects, asset_slugs, kind="asset", doc_id=doc_id, stats=stats
+            )
+            changed = changed or rel_changed
 
         if created:
             stats["created"] += 1
