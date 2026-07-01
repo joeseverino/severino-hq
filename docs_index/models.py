@@ -44,6 +44,21 @@ class DocumentationRecord(TimestampedModel):
         DEPRECATED = "deprecated", "Deprecated"
         ARCHIVED = "archived", "Archived"
 
+    class TaskStatus(models.TextChoices):
+        # A task doc carries its own lifecycle (the importer writes these into the
+        # same status field). Mirrors the schema's task_statuses — guarded in tests.
+        OPEN = "open", "Open"
+        ACTIVE = "active", "Active"
+        PARKED = "parked", "Parked"
+        DONE = "done", "Done"
+        WONTFIX = "wontfix", "Won't fix"
+
+    # The status field holds a standard doc status OR a task lifecycle status.
+    # Union the two, deduped by value (both declare "active"), so admin/forms
+    # accept and label every value the importer writes instead of rejecting a
+    # task's "open"/"done". Guarded against the schema union in tests.
+    STATUS_CHOICES = list(dict.fromkeys([*Status.choices, *TaskStatus.choices]))
+
     class Sensitivity(models.TextChoices):
         PUBLIC = "public", "Public"
         INTERNAL = "internal", "Internal"
@@ -73,7 +88,7 @@ class DocumentationRecord(TimestampedModel):
         default=Environment.OTHER,
     )
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.DRAFT
+        max_length=20, choices=STATUS_CHOICES, default=Status.DRAFT
     )
     sensitivity = models.CharField(
         max_length=20,

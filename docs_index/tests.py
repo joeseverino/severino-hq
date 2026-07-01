@@ -57,6 +57,22 @@ class ModelChoicesMatchSchemaTests(SimpleTestCase):
                 f"docs_index/schema.json.",
             )
 
+    def test_status_field_covers_both_doc_and_task_statuses(self):
+        # The status field holds either a standard doc status or a task lifecycle
+        # status, so its choices must cover the union — otherwise admin/ModelForm
+        # rejects a task's "open"/"done" that the importer legitimately writes.
+        self.assertEqual(
+            _values(DocumentationRecord.TaskStatus.choices),
+            set(frontmatter_schema.TASK_STATUSES),
+            "TaskStatus choices drifted from the schema's task_statuses.",
+        )
+        field_values = {value for value, _label in DocumentationRecord._meta.get_field("status").choices}
+        self.assertEqual(
+            field_values,
+            set(frontmatter_schema.STATUSES) | set(frontmatter_schema.TASK_STATUSES),
+            "The status field choices must cover STATUSES | TASK_STATUSES.",
+        )
+
 
 class CommittedSchemaMatchesMcpTests(SimpleTestCase):
     def test_committed_schema_matches_mcp(self) -> None:
