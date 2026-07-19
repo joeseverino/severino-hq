@@ -44,6 +44,12 @@ SEVERINO_MCP_TOKEN_FILE_HOST=<root-only validator token file provisioned from 1P
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
+Production refreshes the validator token from the dedicated 1Password vault
+with `severino-hq-secrets.service`. Its service-account token is a host-bound
+encrypted systemd credential, not an environment-file value. The hourly timer
+keeps rotations current and retains the last-known-good validator if 1Password
+is temporarily unavailable.
+
 ### A.4 Build & run
 
 ```bash

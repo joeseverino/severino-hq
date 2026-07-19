@@ -79,6 +79,15 @@
 - [ ] The MCP token's source of truth is 1Password. Production mounts a
       validator copy through `SEVERINO_MCP_TOKEN_FILE_HOST`; the token is never
       placed in `.env` or the container environment.
+- [ ] The 1Password service account can read only the dedicated production
+      vault. Its auth token is stored as a host-bound encrypted systemd
+      credential; it is not readable by the service account from that vault.
+      This VM has no usable TPM and its host credential key lives on the same
+      unencrypted virtual disk, so offline disk/root compromise remains a
+      documented residual risk until vTPM-backed disk protection is enabled.
+- [ ] `severino-hq-secrets.timer` is enabled and its last service run
+      succeeded. Rotation refreshes the validator atomically and restarts HQ
+      only when the value changes.
 - [ ] `SEVERINO_MCP_ALLOWED_HOSTS` contains only the direct Tailscale IP and/or
       MagicDNS hostname used by the MCP client.
 - [ ] The MCP client connects directly to `http://<tailscale-host>:8000/mcp/`;
