@@ -12,9 +12,24 @@ Production guidance:
 from __future__ import annotations
 
 import os
+import shlex
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Production mounts the 1Password-rendered app env (shell-quoted KEY='value'
+# lines) at this path. Loading it here — not only in the entrypoint — means
+# every process in the container gets it, including `docker compose exec`
+# sessions (hq sync / shell / superuser), which never run the entrypoint.
+# setdefault: real environment variables always win.
+_APP_ENV_FILE = Path(
+    os.environ.get("SEVERINO_APP_ENV_PATH", "/run/secrets/severino_hq_env")
+)
+if _APP_ENV_FILE.is_file():
+    for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
+        _key, _sep, _value = _token.partition("=")
+        if _sep:
+            os.environ.setdefault(_key, _value)
 
 
 def env_bool(name: str, default: bool = False) -> bool:

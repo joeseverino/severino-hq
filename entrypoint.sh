@@ -9,15 +9,8 @@
 
 set -eu
 
-# Production bind-mounts the 1Password-rendered app env here; local dev has
-# no mount (the bind default is /dev/null, which -f rejects) and keeps using
-# whatever env the shell or compose provides.
-if [ -f /run/secrets/severino_hq_env ]; then
-    echo "[severino-hq] loading app env from mounted secret…"
-    set -a
-    . /run/secrets/severino_hq_env
-    set +a
-fi
+# The 1Password-rendered app env is loaded by config/settings.py (so exec'd
+# processes get it too) — nothing to source here.
 
 echo "[severino-hq] applying migrations…"
 python manage.py migrate --noinput
