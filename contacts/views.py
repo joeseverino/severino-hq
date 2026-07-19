@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from core.audit import record_event
@@ -120,9 +121,13 @@ def contact_detail(request, pk: int):
 
 
 def _safe_next(request) -> str:
-    """Only follow same-app redirect targets; anything else goes to the list."""
+    """Only follow same-host, same-app redirect targets; else back to the list."""
     target = request.POST.get("next", "")
-    if target.startswith(reverse("contacts:list")):
+    if target.startswith(reverse("contacts:list")) and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
         return target
     return reverse("contacts:list")
 
