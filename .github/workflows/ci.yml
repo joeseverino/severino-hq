@@ -152,6 +152,11 @@ jobs:
     steps:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Sync deploy checkout
+        # The compose file, secrets scripts, and systemd units deploy from
+        # /opt/apps/severino-hq — without this pull they'd silently go stale
+        # (the image deploys, the config doesn't).
+        run: git -C /opt/apps/severino-hq pull --ff-only
       - name: Pull image and restart container
         env:
           SEVERINO_IMAGE: ${{ needs.build.outputs.image }}

@@ -79,6 +79,10 @@
 - [ ] The MCP token's source of truth is 1Password. Production mounts a
       validator copy through `SEVERINO_MCP_TOKEN_FILE_HOST`; the token is never
       placed in `.env` or the container environment.
+- [ ] The app environment's source of truth is the 1Password `severino-hq env`
+      item. Production mounts the rendered file through
+      `SEVERINO_APP_ENV_FILE_HOST` and the entrypoint sources it; the on-host
+      `.env` contains no secrets (only the two `*_FILE_HOST` paths).
 - [ ] The 1Password service account can read only the dedicated production
       vault. Its auth token is stored as a host-bound encrypted systemd
       credential; it is not readable by the service account from that vault.

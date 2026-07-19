@@ -44,11 +44,17 @@ SEVERINO_MCP_TOKEN_FILE_HOST=<root-only validator token file provisioned from 1P
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
-Production refreshes the validator token from the dedicated 1Password vault
-with `severino-hq-secrets.service`. Its service-account token is a host-bound
+Production refreshes the validator token AND the full app environment from
+the dedicated 1Password vault with `severino-hq-secrets.service`
+(`scripts/refresh-secrets.sh`). The app env renders from the `severino-hq env`
+item into a root-owned file the entrypoint sources — compose has no
+`env_file`, and the on-host `.env` holds only the two non-secret
+`*_FILE_HOST` interpolation paths. The service-account token is a host-bound
 encrypted systemd credential, not an environment-file value. The hourly timer
-keeps rotations current and retains the last-known-good validator if 1Password
-is temporarily unavailable.
+keeps rotations current and retains the last-known-good values if 1Password
+is temporarily unavailable. To change a prod env var: edit the 1Password
+item, then `systemctl start severino-hq-secrets.service` (or wait for the
+timer; the container restarts only when something actually changed).
 
 ### A.4 Build & run
 
