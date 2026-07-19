@@ -4,12 +4,40 @@
 <div class="page-head">
   <div>
     <h1>Submission #{{ submission.id }}</h1>
-    <p class="muted">{{ submission.name }} · {{ submission.created_at }}</p>
+    <p class="muted">{{ submission.name }} · {{ submission.created_at }} · <span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread" }}</span></p>
   </div>
   <div class="page-actions">
     <a class="btn" href="mailto:{{ submission.email }}">Reply via email</a>
     <a class="btn" href="{% url 'contacts:list' %}">Back to submissions</a>
   </div>
+</div>
+
+<div class="quick-actions">
+  {% if submission.status != "read" %}
+    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
+      {% csrf_token %}<input type="hidden" name="status" value="read">
+      <button type="submit" class="btn">Mark read</button>
+    </form>
+  {% endif %}
+  {% if submission.status != "replied" %}
+    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
+      {% csrf_token %}<input type="hidden" name="status" value="replied">
+      <button type="submit" class="btn">Mark replied</button>
+    </form>
+  {% endif %}
+  {% if submission.status != "archived" %}
+    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
+      {% csrf_token %}<input type="hidden" name="status" value="archived">
+      <button type="submit" class="btn">Archive</button>
+    </form>
+  {% endif %}
+  {% if submission.status != "spam" %}
+    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
+      {% csrf_token %}<input type="hidden" name="status" value="spam">
+      <button type="submit" class="btn">Spam</button>
+    </form>
+  {% endif %}
+  <a class="btn danger" href="{% url 'contacts:delete' submission.id %}">Delete</a>
 </div>
 
 <h2>Message</h2>
@@ -22,7 +50,6 @@
 <h2>Submission info</h2>
 <dl class="kv">
   <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
-  <dt>Status</dt><dd>{{ submission.status|default:"unread" }}</dd>
   <dt>Turnstile</dt><dd>{{ submission.turnstile|default:"—" }}</dd>
   <dt>Submitted</dt><dd>{{ submission.created_at }}</dd>
   <dt>Updated</dt><dd>{{ submission.updated_at }}</dd>
