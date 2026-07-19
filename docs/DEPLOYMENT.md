@@ -40,6 +40,8 @@ SEVERINO_DATABASE_PATH=/data/severino.sqlite3
 SEVERINO_MEDIA_ROOT=/media
 SEVERINO_EXPORTS_ROOT=/exports
 DJANGO_STATIC_ROOT=/static
+SEVERINO_MCP_TOKEN_FILE_HOST=<root-only validator token file provisioned from 1Password>
+SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
 ### A.4 Build & run
@@ -51,9 +53,10 @@ docker compose run --rm app python manage.py createsuperuser
 docker compose up -d
 ```
 
-The container binds gunicorn to `127.0.0.1:8000` on the host (compose maps
-`"127.0.0.1:8000:8000"`). It is **not** reachable from the LAN until you put
-something in front of it.
+The container binds Uvicorn to port `8000`, published on the host so the
+bridge-networked reverse proxy can reach it. The browser UI remains protected
+by Django authentication; `/mcp/` independently requires a direct Tailscale
+peer, an allowed Host header, and the MCP bearer token.
 
 ### A.5 Tailscale-only exposure — pick one
 
@@ -147,8 +150,8 @@ User=severino
 Group=severino
 WorkingDirectory=/opt/severino-hq
 EnvironmentFile=/etc/severino-hq.env
-ExecStart=/opt/severino-hq/.venv/bin/gunicorn config.wsgi:application \
-  --bind 127.0.0.1:8000 --workers 3 --timeout 60
+ExecStart=/opt/severino-hq/.venv/bin/uvicorn config.asgi:application \
+  --host 127.0.0.1 --port 8000 --no-proxy-headers
 Restart=on-failure
 RestartSec=5
 

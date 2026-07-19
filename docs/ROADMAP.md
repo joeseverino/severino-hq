@@ -9,7 +9,6 @@ Severino HQ v1 deliberately does **not** include:
 - a customer portal, public registration, or multi-tenant behavior
 - payroll, inventory management
 - a WordPress plugin, public webhooks, public AI chat
-- a full MCP server
 
 The goal of v1 is to build the private operating system — the link graph —
 that everything later will sit on top of.
@@ -29,6 +28,18 @@ prerequisites that made it possible: stable `doc_id`s/slugs, AI-readable
 exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
 now both validate against. The MCP runs locally on the Mac; git-crypt keys
 never go on the server.
+
+### HQ typed control plane — read foundation shipped
+
+HQ now serves a stateless Streamable HTTP MCP endpoint directly over Tailscale.
+Its first tool surface is deliberately read-only: projects, assets, expenses,
+receipt metadata, documentation status, recent activity, and health. The
+endpoint is source-network restricted, Host checked, Origin checked, and
+bearer authenticated. It does not wrap SSH or management commands.
+
+Narrow mutation tools remain a later phase. They require a shared service
+layer, idempotency keys, validation previews, structured errors, and an
+explicit MCP audit event before they ship.
 
 ### Consulting & client side
 
@@ -54,7 +65,6 @@ never go on the server.
 - Optional Postgres migration. The ORM and migrations are already DB-agnostic;
   the v1 SQLite settings include explicit `init_command` PRAGMAs we'd drop on
   Postgres, and any SQLite-specific export paths would need a small refactor.
-- Private read-only API for the MCP (bearer-token over Tailscale).
 - HTMX for inline edits on list pages, especially expenses and receipts.
 - Bulk import for expenses (CSV).
 

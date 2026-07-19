@@ -2,8 +2,8 @@
 # Severino HQ container entrypoint.
 #
 # - Applies any pending migrations on boot.
-# - Collects static files (whitenoise serves them in front of gunicorn).
-# - Then exec's whatever CMD was passed (gunicorn by default).
+# - Collects static files (WhiteNoise serves them from the ASGI app).
+# - Then exec's whatever CMD was passed (Uvicorn by default).
 #
 # Intentionally minimal — we want boot failures to be loud and obvious.
 

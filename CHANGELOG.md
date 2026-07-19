@@ -8,6 +8,12 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Added
 
+- Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
+  The initial typed, read-only tools cover projects, assets, expenses, receipt
+  metadata, documentation status, recent activity, and system health.
+- A fail-closed MCP ASGI boundary: direct Tailscale peer enforcement, explicit
+  Host validation, Origin rejection by default, strong bearer authentication,
+  and no trust in forwarded client-address headers.
 - Gated CI/CD pipeline (`.github/workflows/ci.yml`): lint (ruff), tests on
   Python 3.12/3.13, a `check --deploy` posture gate, `pip-audit`, then a GHCR
   image build that Trivy scans. On green, a self-hosted runner on the homelab
@@ -31,6 +37,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Changed
 
+- Production serving moved from WSGI/Gunicorn to ASGI/Uvicorn so the Django UI
+  and Streamable HTTP MCP endpoint share one lifecycle.
 - `import_docs_manifest` validation now derives allowed doc_type / environment /
   status / sensitivity from the shared schema rather than the model's
   `TextChoices`, closing the latent drift where the MCP accepted `environment:

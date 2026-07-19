@@ -30,6 +30,21 @@ def env_list(name: str, default: list[str] | None = None) -> list[str]:
     return items or (default or [])
 
 
+def env_secret(name: str) -> str:
+    """Load a secret from NAME_FILE, falling back to NAME for local use."""
+
+    file_name = os.environ.get(f"{name}_FILE", "").strip()
+    value = os.environ.get(name, "")
+    if file_name and value:
+        raise RuntimeError(f"Set only one of {name} or {name}_FILE.")
+    if not file_name:
+        return value
+    try:
+        return Path(file_name).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"Could not read {name}_FILE.") from exc
+
+
 # ----- Core security -----------------------------------------------------------
 
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
@@ -213,6 +228,16 @@ OIDC_USE_PKCE = True
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
+
+# Private MCP endpoint. All three settings are enforced by the ASGI boundary;
+# empty hosts or a short/empty token disable MCP fail-closed.
+SEVERINO_MCP_TOKEN = env_secret("SEVERINO_MCP_TOKEN")
+SEVERINO_MCP_ALLOWED_HOSTS = env_list("SEVERINO_MCP_ALLOWED_HOSTS")
+SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
+    "SEVERINO_MCP_ALLOWED_NETWORKS",
+    default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
+)
+SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 
 
 # ----- I18N --------------------------------------------------------------------

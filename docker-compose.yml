@@ -1,6 +1,6 @@
 # Severino HQ — homelab Docker Compose.
 #
-# Publishes gunicorn on host port 8000 so a bridge-networked reverse proxy
+# Publishes the ASGI app on host port 8000 so a bridge-networked reverse proxy
 # (e.g. Nginx Proxy Manager in its own container) on the same host can reach
 # the app at <host-LAN-IP>:8000. Access control is the app's
 # authentication-required middleware, not the bind address.
@@ -36,6 +36,9 @@ services:
       SEVERINO_MEDIA_ROOT: /media
       SEVERINO_EXPORTS_ROOT: /exports
       DJANGO_STATIC_ROOT: /static
+      # Production mounts the validator token as a file. The /dev/null default
+      # keeps MCP disabled in development without putting a token in .env.
+      SEVERINO_MCP_TOKEN_FILE: /run/secrets/severino_mcp_token
     ports:
       # Exposed on the LAN-facing interface so a bridge-networked reverse proxy
       # (e.g. Nginx Proxy Manager in its own container) can reach the app at
@@ -48,6 +51,10 @@ services:
       - severino_media:/media
       - severino_exports:/exports
       - severino_static:/static
+      - type: bind
+        source: ${SEVERINO_MCP_TOKEN_FILE_HOST:-/dev/null}
+        target: /run/secrets/severino_mcp_token
+        read_only: true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/',timeout=3).status in (200,302) else 1)"]
       interval: 30s

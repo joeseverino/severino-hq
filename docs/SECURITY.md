@@ -41,6 +41,11 @@
   `SEVERINO_OIDC_ALLOWED_GROUPS` and links the identity to a Django user by
   `preferred_username`. Email matching remains an optional fallback; password
   login remains available as the break-glass path.
+- The `/mcp/` Streamable HTTP endpoint is a separate security boundary:
+  it accepts only a direct socket peer in Tailscale's IPv4/IPv6 ranges, checks
+  an explicit Host allowlist, rejects browser Origins unless allowlisted, and
+  requires a constant-time-checked bearer token of at least 32 characters.
+  Forwarded client-address headers are never trusted.
 
 ## Production checklist
 
@@ -69,6 +74,15 @@
 - [ ] Documentation index records carrying secrets are flagged
       `sensitivity=sensitive` or `restricted` (these are excluded from
       AI-safe references).
+- [ ] The MCP token's source of truth is 1Password. Production mounts a
+      validator copy through `SEVERINO_MCP_TOKEN_FILE_HOST`; the token is never
+      placed in `.env` or the container environment.
+- [ ] `SEVERINO_MCP_ALLOWED_HOSTS` contains only the direct Tailscale IP and/or
+      MagicDNS hostname used by the MCP client.
+- [ ] The MCP client connects directly to `http://<tailscale-host>:8000/mcp/`;
+      it does not use the LAN/NPM browser route.
+- [ ] The tailnet ACL permits the intended admin client to reach port 8000 and
+      no broader identity than required.
 
 ## What v1 deliberately does NOT do
 
@@ -77,5 +91,5 @@
 - Decrypt git-crypted Obsidian content. The vault stays separate.
 - Store credentials, API tokens, or secrets in models. The documentation
   index is metadata-only.
-- Run a full MCP server. JSON/Markdown exports are designed for a future local
-  MCP to consume.
+- Expose arbitrary commands, Django shell, raw SQL, SSH, deployments, receipt
+  file contents, or runbook bodies through MCP.
