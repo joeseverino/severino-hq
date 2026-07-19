@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Delete submission{% endblock %}
+{% block content %}
+<h1>Delete submission #{{ submission.id }}?</h1>
+<p>{{ submission.created_at }} · {{ submission.name }} ({{ submission.email }})</p>
+<p class="muted">{{ submission.message|truncatechars:200 }}</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-actions">
+    <button type="submit" class="danger">Delete</button>
+    <a class="btn" href="{% url 'contacts:detail' submission.id %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

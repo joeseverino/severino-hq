@@ -280,6 +280,31 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .pill-internal { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
 .pill-public { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
 .pill-imported, .pill-exported { background: #ebe0f0; color: #4a2a72; border-color: #d3c2e8; }
+.pill-unread { background: #dfe6f1; color: #1c3463; border-color: #c5d2e9; font-weight: 650; }
+.pill-read { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
+.pill-replied { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
+.pill-spam { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
+
+/* ── Contact submissions ────────────────────────────────────────── */
+
+.status-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.status-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 999px; font-size: 13px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+}
+.status-tab:hover { background: var(--surface-2); text-decoration: none; }
+.status-tab.is-current { background: var(--accent); border-color: var(--accent); color: #fff; }
+.status-tab .count { font-size: 11.5px; opacity: .75; font-variant-numeric: tabular-nums; }
+.row-unread td { background: var(--accent-tint); }
+.row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
+.msg-preview { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-actions { vertical-align: middle; }
+.row-actions form { display: inline-block; margin: 0; }
+.row-actions button.icon-link { cursor: pointer; font-size: 13px; }
+.icon-link.danger-link { color: var(--danger); }
+.quick-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.quick-actions form { margin: 0; }
 
 /* Category color dots — paired with project rows */
 .cat-dot {

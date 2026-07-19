@@ -7,35 +7,67 @@
 
 {% if error %}<div class="msg msg-error">{{ error }}</div>{% endif %}
 
+<div class="status-tabs">
+  <a class="status-tab {% if not selected_status %}is-current{% endif %}"
+     href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
+    All <span class="count">{{ total_count }}</span>
+  </a>
+  {% for tab in status_tabs %}
+    <a class="status-tab {% if tab.value == selected_status %}is-current{% endif %}"
+       href="?status={{ tab.value }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+      {{ tab.label }} <span class="count">{{ tab.count }}</span>
+    </a>
+  {% endfor %}
+</div>
+
 <form class="filter-bar" method="get">
-  <select name="status">
-    <option value="">All statuses</option>
-    {% for value, label in status_choices %}
-      <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit">Apply</button>
+  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…">
+  <button type="submit">Search</button>
+  {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear</a>{% endif %}
 </form>
 
-<p class="muted">{{ submissions|length }} submission{{ submissions|length|pluralize }}{% if selected_status %} · filtered by status{% endif %}.</p>
+<p class="muted">{{ submissions|length }} submission{{ submissions|length|pluralize }}{% if selected_status or q %} · filtered{% endif %}.</p>
 
 <div class="table-scroll">
 <table class="data-table">
   <thead>
-    <tr><th>#</th><th>Received</th><th>Name</th><th>Email</th><th>Status</th><th>Country</th></tr>
+    <tr><th>#</th><th>Received</th><th>From</th><th>Message</th><th>Status</th><th>Country</th><th class="actions-col">Actions</th></tr>
   </thead>
   <tbody>
     {% for s in submissions %}
-      <tr>
+      <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
         <td><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a></td>
-        <td>{{ s.created_at }}</td>
-        <td><a href="{% url 'contacts:detail' s.id %}">{{ s.name }}</a></td>
-        <td>{{ s.email }}</td>
-        <td>{{ s.status }}</td>
+        <td class="muted">{{ s.created_at }}</td>
+        <td>
+          <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
+          <div class="muted">{{ s.email }}</div>
+        </td>
+        <td class="msg-preview"><a class="subtle-link" href="{% url 'contacts:detail' s.id %}">{{ s.message_preview|truncatechars:120 }}</a></td>
+        <td><span class="pill pill-{{ s.status }}">{{ s.status }}</span></td>
         <td class="muted">{{ s.country|default:"—" }}</td>
+        <td class="actions-col row-actions">
+          {% if s.status == "unread" %}
+            <form method="post" action="{% url 'contacts:set_status' s.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="status" value="read">
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="icon-link" title="Mark read" aria-label="Mark read">✓</button>
+            </form>
+          {% endif %}
+          {% if s.status != "spam" %}
+            <form method="post" action="{% url 'contacts:set_status' s.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="status" value="spam">
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="icon-link" title="Mark spam" aria-label="Mark spam">🚫</button>
+            </form>
+          {% endif %}
+          <a class="icon-link danger-link" href="{% url 'contacts:delete' s.id %}" title="Delete" aria-label="Delete">✕</a>
+        </td>
       </tr>
     {% empty %}
-      <tr><td colspan="6" class="muted">{% if error %}Could not load submissions.{% else %}No submissions{% if selected_status %} with that status{% endif %} yet.{% endif %}</td></tr>
+      <tr><td colspan="7" class="muted">{% if error %}Could not load submissions.{% else %}No submissions{% if selected_status or q %} match{% endif %} yet.{% endif %}</td></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -95,19 +95,48 @@ def get_unread_count() -> int:
     return 0
 
 
-def list_submissions(status: str = "", limit: int = 500) -> list[dict]:
-    """Fetch submissions, optionally filtered by status."""
-    cols = "id, created_at, name, email, status, country"
-    if status:
-        return query(
-            f"SELECT {cols} FROM contact_submissions WHERE status = ? "
-            f"ORDER BY id DESC LIMIT ?",
-            [status, limit],
-        )
-    return query(
-        f"SELECT {cols} FROM contact_submissions ORDER BY id DESC LIMIT ?",
-        [limit],
+def list_submissions(status: str = "", q: str = "", limit: int = 500) -> list[dict]:
+    """Fetch submissions, optionally filtered by status and/or a search term."""
+    cols = (
+        "id, created_at, name, email, status, country, "
+        "substr(message, 1, 160) AS message_preview"
     )
+    where: list[str] = []
+    params: list = []
+    if status:
+        where.append("status = ?")
+        params.append(status)
+    if q:
+        where.append("(name LIKE ? OR email LIKE ? OR message LIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+    clause = f"WHERE {' AND '.join(where)} " if where else ""
+    return query(
+        f"SELECT {cols} FROM contact_submissions {clause}"
+        f"ORDER BY id DESC LIMIT ?",
+        [*params, limit],
+    )
+
+
+def status_counts() -> dict[str, int]:
+    """Return submission counts per status."""
+    rows = query(
+        "SELECT status, COUNT(*) AS n FROM contact_submissions GROUP BY status"
+    )
+    return {row["status"]: row["n"] for row in rows}
+
+
+def set_status(pk: int, status: str) -> None:
+    """Flip a submission's status without touching assignee or notes."""
+    query(
+        "UPDATE contact_submissions SET status = ?, "
+        "updated_at = datetime('now') WHERE id = ?",
+        [status, pk],
+    )
+
+
+def delete_submission(pk: int) -> None:
+    """Delete a submission permanently."""
+    query("DELETE FROM contact_submissions WHERE id = ?", [pk])
 
 
 def get_submission(pk: int) -> dict | None:
