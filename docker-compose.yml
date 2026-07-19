@@ -11,6 +11,10 @@
 #   exports/ Generated exports
 #   static/  Collected static files
 #
+# No env_file: production secrets come from the 1Password-rendered file the
+# entrypoint sources (see scripts/refresh-secrets.sh). The on-host .env holds
+# only non-secret compose interpolation values (the two *_FILE_HOST paths).
+#
 # The image runs as UID/GID 10001. `chown -R 10001:10001` the host bind
 # mounts before first boot (or use docker volumes, as below, and let the
 # container manage permissions).
@@ -26,7 +30,6 @@ services:
     container_name: severino-hq
     network_mode: host
     restart: unless-stopped
-    env_file: .env
     environment:
       # Inside the container we always use these paths; the .env file may
       # override them for non-container deploys.
@@ -45,6 +48,13 @@ services:
       - type: bind
         source: ${SEVERINO_MCP_TOKEN_FILE_HOST:-/dev/null}
         target: /run/secrets/severino_mcp_token
+        read_only: true
+      # Production app env, rendered from 1Password by refresh-secrets.sh.
+      # The entrypoint sources it when present; /dev/null keeps local dev on
+      # plain shell/compose env without a real secrets mount.
+      - type: bind
+        source: ${SEVERINO_APP_ENV_FILE_HOST:-/dev/null}
+        target: /run/secrets/severino_hq_env
         read_only: true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/',timeout=3).status in (200,302) else 1)"]
