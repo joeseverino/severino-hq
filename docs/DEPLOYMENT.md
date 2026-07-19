@@ -53,10 +53,12 @@ docker compose run --rm app python manage.py createsuperuser
 docker compose up -d
 ```
 
-The container binds Uvicorn to port `8000`, published on the host so the
-bridge-networked reverse proxy can reach it. The browser UI remains protected
-by Django authentication; `/mcp/` independently requires a direct Tailscale
-peer, an allowed Host header, and the MCP bearer token.
+The container uses host networking and binds Uvicorn to port `8000`. Host
+networking is required so `/mcp/` sees the real Tailscale peer address rather
+than Docker's bridge gateway. The bridge-networked reverse proxy reaches the
+browser UI through the host LAN address. The UI remains protected by Django
+authentication; `/mcp/` independently requires a direct Tailscale peer, an
+allowed Host header, and the MCP bearer token.
 
 ### A.5 Tailscale-only exposure — pick one
 

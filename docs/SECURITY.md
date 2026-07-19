@@ -45,7 +45,9 @@
   it accepts only a direct socket peer in Tailscale's IPv4/IPv6 ranges, checks
   an explicit Host allowlist, rejects browser Origins unless allowlisted, and
   requires a constant-time-checked bearer token of at least 32 characters.
-  Forwarded client-address headers are never trusted.
+  Forwarded client-address headers are never trusted. The container uses host
+  networking so the ASGI server receives the real peer address instead of a
+  Docker bridge address.
 
 ## Production checklist
 

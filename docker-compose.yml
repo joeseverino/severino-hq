@@ -1,12 +1,9 @@
 # Severino HQ — homelab Docker Compose.
 #
-# Publishes the ASGI app on host port 8000 so a bridge-networked reverse proxy
-# (e.g. Nginx Proxy Manager in its own container) on the same host can reach
-# the app at <host-LAN-IP>:8000. Access control is the app's
-# authentication-required middleware, not the bind address.
-#
-# If your reverse proxy uses host networking instead, you can tighten the
-# port mapping below to "127.0.0.1:8000:8000".
+# Uses host networking so the MCP boundary receives the real socket peer
+# instead of Docker's bridge gateway address. Nginx Proxy Manager reaches the
+# browser UI at <host-LAN-IP>:8000; MCP clients connect directly to the host's
+# Tailscale IP on the same port.
 #
 # Volumes:
 #   data/    SQLite DB
@@ -27,6 +24,7 @@ services:
     # already-tested-and-scanned artifact instead of rebuilding on the box.
     image: ${SEVERINO_IMAGE:-severino-hq:latest}
     container_name: severino-hq
+    network_mode: host
     restart: unless-stopped
     env_file: .env
     environment:
@@ -39,13 +37,6 @@ services:
       # Production mounts the validator token as a file. The /dev/null default
       # keeps MCP disabled in development without putting a token in .env.
       SEVERINO_MCP_TOKEN_FILE: /run/secrets/severino_mcp_token
-    ports:
-      # Exposed on the LAN-facing interface so a bridge-networked reverse proxy
-      # (e.g. Nginx Proxy Manager in its own container) can reach the app at
-      # <host-LAN-IP>:8000. The app's auth gate is the actual access control —
-      # not the bind address. If your reverse proxy is host-networked, you can
-      # tighten this to "127.0.0.1:8000:8000".
-      - "8000:8000"
     volumes:
       - severino_data:/data
       - severino_media:/media
