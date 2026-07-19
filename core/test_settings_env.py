@@ -37,7 +37,13 @@ class MountedAppEnvTests(SimpleTestCase):
         env = {
             key: value
             for key, value in os.environ.items()
-            if key not in {"DJANGO_SECRET_KEY", "DJANGO_DEBUG"}
+            if key
+            not in {
+                "DJANGO_SECRET_KEY",
+                "DJANGO_DEBUG",
+                "DJANGO_ALLOWED_HOSTS",
+                "SEVERINO_SITE_NAME",
+            }
         }
         env["SEVERINO_APP_ENV_PATH"] = env_path
 
