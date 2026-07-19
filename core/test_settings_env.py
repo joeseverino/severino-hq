@@ -47,15 +47,15 @@ class MountedAppEnvTests(SimpleTestCase):
         }
         env["SEVERINO_APP_ENV_PATH"] = env_path
 
-        result = subprocess.run(
+        script = "; ".join(
             [
-                sys.executable,
-                "-c",
-                "from config import settings;"
-                "print(settings.SECRET_KEY);"
-                "print(settings.SITE_NAME if hasattr(settings, 'SITE_NAME') else '');"
+                "from config import settings",
+                "print(settings.SECRET_KEY)",
                 "print(','.join(settings.ALLOWED_HOSTS))",
-            ],
+            ]
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
             capture_output=True,
             text=True,
             env=env,
