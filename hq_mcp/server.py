@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asgiref.sync import sync_to_async
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -24,12 +25,19 @@ mcp = FastMCP(
 )
 mcp.settings.streamable_http_path = "/"
 
-mcp.tool()(services.list_projects)
-mcp.tool()(services.get_project)
-mcp.tool()(services.list_assets)
-mcp.tool()(services.get_asset)
-mcp.tool()(services.list_expenses)
-mcp.tool()(services.list_receipts)
-mcp.tool()(services.documentation_status)
-mcp.tool()(services.recent_activity)
-mcp.tool()(services.system_health)
+
+def register_read_tool(function):
+    """Run synchronous Django ORM services on the thread-sensitive executor."""
+
+    return mcp.tool()(sync_to_async(function, thread_sensitive=True))
+
+
+register_read_tool(services.list_projects)
+register_read_tool(services.get_project)
+register_read_tool(services.list_assets)
+register_read_tool(services.get_asset)
+register_read_tool(services.list_expenses)
+register_read_tool(services.list_receipts)
+register_read_tool(services.documentation_status)
+register_read_tool(services.recent_activity)
+register_read_tool(services.system_health)

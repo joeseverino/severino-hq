@@ -12,6 +12,7 @@ from docs_index.models import DocumentationRecord
 from projects.models import Project
 
 from . import services
+from .server import mcp
 from .security import MCPBoundary
 
 TOKEN = "a" * 48
@@ -50,6 +51,15 @@ class SecretSettingsTests(SimpleTestCase):
 
 
 class ServiceTests(TestCase):
+    def test_registered_tools_are_async_safe(self):
+        async def call_health():
+            tool = mcp._tool_manager.get_tool("system_health")
+            return await tool.run({})
+
+        result = async_to_sync(call_health)()
+
+        self.assertEqual(result["status"], "ok")
+
     def test_project_detail_returns_safe_relationships_only(self):
         project = Project.objects.create(
             name="HQ MCP", technologies_used="Django, MCP"
