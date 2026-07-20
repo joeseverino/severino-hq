@@ -1,4 +1,4 @@
-Django>=6.0.6,<6.1
+Django>=6.0.7,<6.1
 mcp>=1.27,<2
 mozilla-django-oidc>=5.0.2,<6.0
 uvicorn>=0.35,<1
