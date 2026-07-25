@@ -91,6 +91,7 @@ def import_topology(payload: object) -> TopologySnapshot:
             .filter(id="topology")
             .first()
         )
+        previous_payload = snapshot.payload if snapshot is not None else None
         if snapshot is None:
             snapshot = TopologySnapshot.objects.create(
                 id="topology",
@@ -139,6 +140,12 @@ def import_topology(payload: object) -> TopologySnapshot:
                 resource.kind != declaration["kind"]
                 or resource.spec != declaration["spec"]
                 or resource.enabled != desired_enabled
+                or _resolved_dependency_changed(
+                    previous_payload,
+                    validated,
+                    declaration["kind"],
+                    declaration["spec"],
+                )
             )
             if not changed:
                 continue
@@ -165,12 +172,35 @@ def import_topology(payload: object) -> TopologySnapshot:
     return snapshot
 
 
+def _resolved_dependency_changed(
+    previous_payload: dict[str, Any] | None,
+    current_payload: dict[str, Any],
+    kind: str,
+    spec: dict[str, Any],
+) -> bool:
+    """Invalidate a reference-backed resource when its resolved input changes."""
+    if previous_payload is None or kind != "tls.certificate":
+        return False
+    topology_ref = spec.get("topology_ref")
+    if not topology_ref:
+        return False
+    return _resolve_certificate(previous_payload, topology_ref) != _resolve_certificate(
+        current_payload, topology_ref
+    )
+
+
 def resolve_certificate(topology_ref: str) -> dict[str, Any]:
     try:
         payload = TopologySnapshot.objects.get(pk="topology").payload
     except TopologySnapshot.DoesNotExist as exc:
         raise TopologyError("No trusted topology snapshot has been imported.") from exc
     validate_topology(payload)
+    return _resolve_certificate(payload, topology_ref)
+
+
+def _resolve_certificate(
+    payload: dict[str, Any], topology_ref: str
+) -> dict[str, Any]:
     if not topology_ref.startswith("pki:"):
         raise TopologyError("Certificate topology references must start with 'pki:'.")
     certificate_id = topology_ref.removeprefix("pki:")
