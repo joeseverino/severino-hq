@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    actor Caller as Web / MCP / CLI caller
+    participant Adapter as Thin adapter
+    participant Service as Application service
+    participant Model as Django model contract
+    participant DB as HQ database
+    participant Audit as Audit log
+
+    Caller->>Adapter: Typed request
+    Adapter->>Service: Command + authenticated actor
+    Service->>Model: Validate fields and relationships
+    Model-->>Service: Canonical validated values
+    Service->>DB: Begin atomic transaction
+    Service->>DB: Lock / compare version / write
+    Service->>Audit: Record interface, actor, operation
+    alt every step succeeds
+        Service->>DB: Commit
+        Service-->>Adapter: Canonical result object
+        Adapter-->>Caller: Render for its transport
+    else validation, conflict, or write fails
+        Service->>DB: Roll back
+        Service-->>Adapter: Structured failure
+        Adapter-->>Caller: No partial state
+    end

@@ -162,6 +162,36 @@ class NavigationSmokeTests(_AuthedTestCase):
 
 
 class DashboardWorkflowTests(_AuthedTestCase):
+    def test_dashboard_surfaces_degraded_infrastructure(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="jseverino-wildcard",
+            kind="tls.certificate",
+            spec={},
+            generation=2,
+            observed_generation=1,
+            conditions=[
+                {
+                    "type": "Degraded",
+                    "status": True,
+                    "reason": "ExpiringSoon",
+                    "message": "Certificate expires tomorrow.",
+                }
+            ],
+        )
+
+        response = self.client.get("/")
+
+        self.assertContains(
+            response,
+            "jseverino-wildcard: Certificate expires tomorrow.",
+        )
+        self.assertContains(
+            response,
+            "/infrastructure/jseverino-wildcard/",
+        )
+
     def test_dashboard_surfaces_missing_project_output_once_in_queue(self):
         Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
 

@@ -9,6 +9,9 @@ to the current request user (via CurrentUserMiddleware).
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Iterable
 
 from django.db.models.signals import post_delete, post_save
@@ -21,6 +24,31 @@ from .models import AuditLog
 logger = logging.getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
+_operation_context: ContextVar["OperationContext | None"] = ContextVar(
+    "hq_operation_context", default=None
+)
+
+
+@dataclass(frozen=True)
+class OperationContext:
+    """Stable attribution shared by web, MCP, and CLI adapters."""
+
+    interface: str
+    actor: str
+    operation: str
+
+
+@contextmanager
+def operation_context(*, interface: str, actor: str, operation: str):
+    """Attach adapter-neutral attribution to audit events in this operation."""
+
+    token = _operation_context.set(
+        OperationContext(interface=interface, actor=actor, operation=operation)
+    )
+    try:
+        yield
+    finally:
+        _operation_context.reset(token)
 
 
 def register_audit(model, type_label: str) -> None:
@@ -77,6 +105,16 @@ def record_event(
         except Exception:  # noqa: BLE001 - defensive
             object_repr = ""
 
+    context = _operation_context.get()
+    event_metadata = dict(metadata or {})
+    if context is not None:
+        event_metadata = {
+            "interface": context.interface,
+            "actor": context.actor,
+            "operation": context.operation,
+            **event_metadata,
+        }
+
     try:
         return AuditLog.objects.create(
             user=user,
@@ -85,7 +123,7 @@ def record_event(
             object_id=object_id,
             object_repr=object_repr,
             message=message,
-            metadata=metadata or {},
+            metadata=event_metadata,
         )
     except Exception:  # noqa: BLE001
         logger.exception("Failed to write AuditLog entry")

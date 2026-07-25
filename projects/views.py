@@ -17,6 +17,9 @@ from django.views.generic import (
     View,
 )
 
+from application.projects import project_command_from_cleaned_data, save_project
+from application.deletion import DeleteCommand, delete_project
+from application.security import web_principal
 from core.audit import record_event
 from core.models import AuditLog
 from .forms import ProjectForm
@@ -159,9 +162,13 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     template_name = "projects/project_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_project(
+            project_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+        )
+        self.object = Project.objects.get(slug=result["project"]["slug"])
         messages.success(self.request, f"Project “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ProjectUpdateView(LoginRequiredMixin, UpdateView):
@@ -172,9 +179,14 @@ class ProjectUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "slug"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_project(
+            project_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_slug=self.get_object().slug,
+        )
+        self.object = Project.objects.get(slug=result["project"]["slug"])
         messages.success(self.request, f"Project “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ProjectDeleteView(LoginRequiredMixin, DeleteView):
@@ -186,7 +198,11 @@ class ProjectDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "project"
 
     def form_valid(self, form):
-        name = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Project “{name}” deleted.")
-        return response
+        slug = self.get_object().slug
+        result = delete_project(
+            DeleteCommand(confirm=slug),
+            principal=web_principal(self.request.user),
+            current_slug=slug,
+        )
+        messages.success(self.request, f"Project “{result['deleted']['label']}” deleted.")
+        return redirect(self.success_url)

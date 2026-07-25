@@ -21,12 +21,20 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
-      - run: pip install ruff
+      - run: pip install ruff==0.15.18
       - run: ruff check .
+      - name: Shell safety
+        run: |
+          sh -n scripts/deploy-image.sh scripts/install-controller.sh \
+            scripts/refresh-secrets.sh scripts/render-controller-env.sh \
+            scripts/run-controller.sh
+          shellcheck scripts/deploy-image.sh scripts/install-controller.sh \
+            scripts/refresh-secrets.sh scripts/render-controller-env.sh \
+            scripts/run-controller.sh
 
   test:
     name: test
@@ -40,12 +48,13 @@ jobs:
       DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
       DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
-      - run: pip install -r requirements.txt coverage
+      - run: pip install --require-hashes -r requirements.txt
+      - run: pip install coverage
       - run: python manage.py check
       - run: python manage.py makemigrations --check --dry-run
       - name: Tests with coverage gate
@@ -61,11 +70,11 @@ jobs:
     name: security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+      - run: pip install --require-hashes -r requirements.txt
       # Production-posture check: DEBUG off, real host. --fail-level WARNING
       # turns Django's security advisories into hard failures. The env below
       # mirrors a real prod config so the check validates how settings.py
@@ -99,7 +108,7 @@ jobs:
     outputs:
       image: ${{ steps.build.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
@@ -157,24 +166,10 @@ jobs:
         # /opt/apps/severino-hq — without this pull they'd silently go stale
         # (the image deploys, the config doesn't).
         run: git -C /opt/apps/severino-hq pull --ff-only
-      - name: Pull image and restart container
+      - name: Deploy exact image with health rollback
         env:
           SEVERINO_IMAGE: ${{ needs.build.outputs.image }}
-        run: |
-          cd /opt/apps/severino-hq
-          docker compose pull app
-          docker compose up -d --no-build app
-      - name: Wait for healthy
-        run: |
-          for i in $(seq 1 12); do
-            status="$(docker inspect --format '{{.State.Health.Status}}' severino-hq 2>/dev/null || echo missing)"
-            echo "health: $status"
-            [ "$status" = "healthy" ] && exit 0
-            sleep 5
-          done
-          echo "::error::container did not become healthy"
-          docker logs --tail 50 severino-hq || true
-          exit 1
+        run: /opt/apps/severino-hq/scripts/deploy-image.sh "$SEVERINO_IMAGE"
       - name: Reclaim disk (drop stale images + build cache)
         if: always()
         # Every release pulls a new sha-tagged image (~250MB). Without this the

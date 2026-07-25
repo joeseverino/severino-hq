@@ -126,6 +126,7 @@ INSTALLED_APPS = [
     "receipts",
     "reports",
     "contacts",
+    "control_plane",
 ]
 
 MIDDLEWARE = [
@@ -253,6 +254,15 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
+SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
+SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
+SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
+SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool(
+    "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False
+)
+SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
+    "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
+)
 
 
 # ----- I18N --------------------------------------------------------------------

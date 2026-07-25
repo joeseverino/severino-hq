@@ -1,12 +1,19 @@
-"""Shared read services for MCP tools and future CLI consumers."""
+"""Thin MCP adapters over HQ's canonical application services and safe queries."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone
 
+from application import assets as asset_service
+from application.capabilities import (
+    describe_capabilities as describe_application_capabilities,
+)
+from application.capabilities import execute_capability as execute_application_capability
+from application import projects as project_service
+from application.security import mcp_principal
 from assets.models import Asset
 from content.models import ContentItem
 from core.models import AuditLog
@@ -26,6 +33,35 @@ class NotFoundError(ValueError):
     """A requested HQ object does not exist."""
 
 
+def _write(service, command, **kwargs):
+    """Invoke one application mutation as the authenticated MCP principal."""
+
+    return service(command, principal=mcp_principal(), **kwargs)
+
+
+def describe_capabilities() -> dict[str, Any]:
+    """Describe every JSON-executable HQ capability and its canonical schema."""
+
+    return describe_application_capabilities()
+
+
+def execute_capability(
+    name: str,
+    payload: dict[str, Any],
+    target: str | int | None = None,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Execute one allowlisted capability from a schema-validated JSON payload."""
+
+    return execute_application_capability(
+        name,
+        payload,
+        principal=mcp_principal(),
+        target=target,
+        expected_updated_at=expected_updated_at,
+    )
+
+
 def _page_size(limit: int) -> int:
     if limit < 1:
         raise ValueError("limit must be at least 1")
@@ -36,117 +72,34 @@ def _iso(value) -> str | None:
     return value.isoformat() if value else None
 
 
-def _project(project: Project) -> dict[str, Any]:
-    return {
-        "slug": project.slug,
-        "name": project.name,
-        "category": project.category,
-        "status": project.status,
-        "description": project.description,
-        "technologies": project.tech_list,
-        "repository_url": project.repository_url,
-        "public_url": project.public_url,
-        "last_push_at": _iso(project.last_push_at),
-        "updated_at": _iso(project.updated_at),
-    }
-
-
 def list_projects(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ projects, optionally filtered by exact status or text search."""
-    qs = Project.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(description__icontains=query)
-            | Q(technologies_used__icontains=query)
-        )
-    items = [_project(project) for project in qs.order_by("slug")[: _page_size(limit)]]
-    return {"items": items, "count": len(items)}
+    return project_service.list_projects(status=status, query=query, limit=limit)
 
 
 def get_project(slug: str) -> dict[str, Any]:
     """Get one project and its documentation, content, asset, and expense links."""
     try:
-        project = Project.objects.get(slug=slug)
-    except Project.DoesNotExist as exc:
-        raise NotFoundError(f"Project {slug!r} was not found.") from exc
-    result = _project(project)
-    result["relationships"] = {
-        "documentation": list(
-            project.documentation_records.filter(sensitivity__in=SAFE_SENSITIVITIES)
-            .order_by("doc_id")
-            .values_list("doc_id", flat=True)
-        ),
-        "content": list(
-            project.content_items.order_by("slug").values_list("slug", flat=True)
-        ),
-        "assets": list(project.assets.order_by("slug").values_list("slug", flat=True)),
-        "expense_ids": list(
-            project.expenses.order_by("-date", "-id").values_list("id", flat=True)
-        ),
-    }
-    return result
-
-
-def _asset(asset: Asset) -> dict[str, Any]:
-    return {
-        "slug": asset.slug,
-        "item_name": asset.item_name,
-        "vendor": asset.vendor,
-        "category": asset.category,
-        "status": asset.status,
-        "purchase_date": _iso(asset.purchase_date),
-        "warranty_date": _iso(asset.warranty_date),
-        "updated_at": _iso(asset.updated_at),
-    }
+        return project_service.get_project(slug)
+    except project_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
 
 
 def list_assets(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ assets, optionally filtered by exact status or text search."""
-    qs = Asset.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(item_name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(vendor__icontains=query)
-        )
-    items = [_asset(asset) for asset in qs.order_by("slug")[: _page_size(limit)]]
-    return {"items": items, "count": len(items)}
+    return asset_service.list_assets(status=status, query=query, limit=limit)
 
 
 def get_asset(slug: str) -> dict[str, Any]:
     """Get one asset and its project, documentation, content, and expense links."""
     try:
-        asset = Asset.objects.get(slug=slug)
-    except Asset.DoesNotExist as exc:
-        raise NotFoundError(f"Asset {slug!r} was not found.") from exc
-    result = _asset(asset)
-    result["relationships"] = {
-        "projects": list(
-            asset.related_projects.order_by("slug").values_list("slug", flat=True)
-        ),
-        "documentation": list(
-            asset.documentation_records.filter(sensitivity__in=SAFE_SENSITIVITIES)
-            .order_by("doc_id")
-            .values_list("doc_id", flat=True)
-        ),
-        "content": list(
-            asset.content_items.order_by("slug").values_list("slug", flat=True)
-        ),
-        "expense_ids": list(
-            asset.expenses.order_by("-date", "-id").values_list("id", flat=True)
-        ),
-    }
-    return result
+        return asset_service.get_asset(slug)
+    except asset_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
 
 
 def list_expenses(

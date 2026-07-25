@@ -212,6 +212,21 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn.danger, button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn:disabled, button:disabled { cursor: not-allowed; opacity: .52; }
+.control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0 24px; }
+.control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
+.control-metric { display: flex; flex-direction: column; gap: 5px; }
+.control-metric strong { font-size: 18px; }
+.control-metric > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.control-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.control-good, .control-healthy { color: #1f7250; }
+.control-warn, .control-degraded, .control-drifted { color: #9a5a12; }
+.control-unknown { color: var(--muted); }
+.kv.compact { margin-bottom: 0; }
+.compact-table { box-shadow: none; }
+.control-diagnostics { margin: 22px 0; }
+.control-diagnostics > summary { color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; }
+.control-diagnostics[open] > summary { margin-bottom: 12px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 

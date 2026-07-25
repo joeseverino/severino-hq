@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Severino HQ infrastructure controller
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=20s
+Persistent=true
+Unit=severino-hq-controller.service
+
+[Install]
+WantedBy=timers.target

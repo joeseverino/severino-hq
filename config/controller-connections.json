@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "projections": {
+    "login": {
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "URL": {
+        "source": "url",
+        "index": 0
+      },
+      "USERNAME": {
+        "source": "field",
+        "id": "username"
+      },
+      "PASSWORD": {
+        "source": "field",
+        "id": "password"
+      }
+    }
+  },
+  "connections": {
+    "homelab-adguard": {
+      "provider": "adguard",
+      "projection": "login",
+      "env_prefix": "ADGUARD"
+    },
+    "homelab-npm": {
+      "provider": "npm",
+      "projection": "login",
+      "env_prefix": "NPM"
+    }
+  }
+}

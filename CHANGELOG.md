@@ -8,6 +8,35 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Added
 
+- A schema-driven infrastructure control plane shared by the web UI, CLI, and
+  MCP: trusted topology snapshots, typed desired resources, leased operations,
+  provider-safe status, certificate drift/expiry priority signals, and public
+  certificate downloads.
+- A homelab-server controller with declarative capability and connection
+  registries. AdGuard rewrites, Nginx Proxy Manager hosts, and TLS consumer
+  observation are active; certificate renewal and public DNS remain visibly
+  fail-closed until their least-privilege credentials and deployment identities
+  are provisioned.
+- Gated controller deployment from the exact scanned HQ image, including
+  provider preflight, root-only secret projection, systemd scheduling,
+  action-filtered claims, health rollback, and architecture diagrams.
+- Canonical `application/` services shared by web, MCP, and CLI, with project
+  create/update for Projects, Assets, Content, and Expenses plus documentation
+  sync as reference vertical slices.
+- MCP project mutations and fail-closed documentation synchronization, backed
+  by adapter-parity, rollback, concurrency, idempotency, and pruning tests.
+- Typed application principals and capabilities. MCP mutations are disabled by
+  default, with destructive pruning gated separately from ordinary writes.
+- An allowlisted JSON capability registry that derives deterministic JSON
+  Schemas, validation, effects, MCP execution, CLI execution, and parity tests
+  from the typed command declarations.
+- Receipt metadata updates now use the same schema-derived capability system;
+  binary upload remains an authenticated web-only ingress with one shared file
+  size/type policy and no MCP file or path exposure.
+- Documentation metadata CRUD and explicit confirmed deletes now route through
+  the same application services and capability registry. Delete schemas,
+  permissions, effects, validation, MCP execution, and CLI execution derive
+  from one declaration; MCP deletes remain separately fail-closed.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
   The initial typed, read-only tools cover projects, assets, expenses, receipt
   metadata, documentation status, recent activity, and system health.
@@ -37,6 +66,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Changed
 
+- Project and documentation writes now use shared transactional use cases with
+  interface-aware audit metadata.
 - Production serving moved from WSGI/Gunicorn to ASGI/Uvicorn so the Django UI
   and Streamable HTTP MCP endpoint share one lifecycle.
 - `import_docs_manifest` validation now derives allowed doc_type / environment /

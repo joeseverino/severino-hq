@@ -19,11 +19,16 @@ from django.views.generic import (
     View,
 )
 
-from core.audit import record_event
-from core.models import AuditLog
+from application.documentation import (
+    documentation_command_from_cleaned_data,
+    save_documentation,
+    sync_documentation,
+)
+from application.deletion import DeleteCommand, delete_documentation
+from application.security import web_principal
 
 from .forms import DocumentationRecordForm, ManifestImportForm
-from .importer import ManifestImportError, import_manifest_data
+from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 
@@ -119,9 +124,15 @@ class DocsCreateView(LoginRequiredMixin, CreateView):
     template_name = "docs_index/docs_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_documentation(
+            documentation_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+        )
+        self.object = DocumentationRecord.objects.get(
+            doc_id=result["documentation"]["doc_id"]
+        )
         messages.success(self.request, f"Doc record “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class DocsUpdateView(LoginRequiredMixin, UpdateView):
@@ -132,9 +143,16 @@ class DocsUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "doc_id"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_documentation(
+            documentation_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_doc_id=self.get_object().doc_id,
+        )
+        self.object = DocumentationRecord.objects.get(
+            doc_id=result["documentation"]["doc_id"]
+        )
         messages.success(self.request, f"Doc record “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class DocsDeleteView(LoginRequiredMixin, DeleteView):
@@ -146,10 +164,16 @@ class DocsDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "record"
 
     def form_valid(self, form):
-        title = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Doc record “{title}” deleted.")
-        return response
+        doc_id = self.get_object().doc_id
+        result = delete_documentation(
+            DeleteCommand(confirm=doc_id),
+            principal=web_principal(self.request.user),
+            current_doc_id=doc_id,
+        )
+        messages.success(
+            self.request, f"Doc record “{result['deleted']['label']}” deleted."
+        )
+        return redirect(self.success_url)
 
 
 class ManifestImportView(LoginRequiredMixin, View):
@@ -169,22 +193,18 @@ class ManifestImportView(LoginRequiredMixin, View):
             messages.error(request, f"Invalid JSON: {exc}")
             return render(request, self.template_name, {"form": form})
         try:
-            stats = import_manifest_data(
+            result = sync_documentation(
                 data,
+                principal=web_principal(request.user),
                 update_existing=form.cleaned_data["update_existing"],
             )
         except ManifestImportError as exc:
             messages.error(request, f"Import failed: {exc}")
             return render(request, self.template_name, {"form": form})
-        record_event(
-            action=AuditLog.Action.IMPORTED,
-            type_label="DocumentationRecord",
-            message=(
-                f"Imported docs manifest: created={stats['created']}, "
-                f"updated={stats['updated']}, skipped={stats['skipped']}"
-            ),
-            metadata=stats,
-        )
+        if not result["ok"]:
+            messages.error(request, f"Import failed validation: {result['problems']}")
+            return render(request, self.template_name, {"form": form})
+        stats = result["stats"]
         messages.success(
             request,
             (

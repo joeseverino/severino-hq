@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Infrastructure · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Infrastructure</h1>
+    <p class="muted">Desired state, drift, and verified operations. Provider credentials never enter HQ.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:providers' %}">Provider schemas</a>
+  </div>
+</div>
+
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr><th>Resource</th><th>Kind</th><th>Sync</th><th>Health</th><th>Observed</th></tr>
+    </thead>
+    <tbody>
+      {% for resource in resources %}
+        <tr>
+          <td><a href="{% url 'control_plane:detail' resource.key %}"><strong>{{ resource.key }}</strong></a></td>
+          <td><code>{{ resource.kind }}</code></td>
+          <td>
+            {% if not resource.enabled %}
+              <span class="pill">Disabled</span>
+            {% elif resource.observed_generation == resource.generation %}
+              <span class="pill pill-active">In sync</span>
+            {% else %}
+              <span class="pill pill-paused">Pending</span>
+            {% endif %}
+          </td>
+          <td><span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span></td>
+          <td class="muted">{{ resource.last_observed_at|default:"Never" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="muted">No managed resources declared yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Recent operations</h2>
+<div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th>Resource</th><th>Action</th><th>State</th><th>Requested by</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for operation in operations %}
+        <tr>
+          <td><a href="{% url 'control_plane:detail' operation.resource.key %}">{{ operation.resource.key }}</a></td>
+          <td>{{ operation.get_action_display }}</td>
+          <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
+          <td>{{ operation.requested_actor }} <span class="muted">via {{ operation.requested_interface }}</span></td>
+          <td class="muted">{{ operation.created_at }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="muted">No operations yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

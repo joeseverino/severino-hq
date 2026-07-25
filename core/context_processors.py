@@ -12,6 +12,7 @@ NAV_ITEMS = (
     ("Expenses", "expenses:list", "expenses"),
     ("Receipts", "receipts:list", "receipts"),
     ("Contacts", "contacts:list", "contacts"),
+    ("Infrastructure", "control_plane:list", "control_plane"),
     ("Reports", "reports:dashboard", "reports"),
     ("Audit", "core:audit_list", "core"),
 )

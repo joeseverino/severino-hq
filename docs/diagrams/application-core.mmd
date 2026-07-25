@@ -1,0 +1,36 @@
+flowchart LR
+    operator["Joe<br/>browser or shell"]
+    agent["AI client<br/>MCP"]
+
+    subgraph adapters["Delivery adapters — intentionally thin"]
+        web["Web UI<br/>Django views"]
+        mcp["HQ MCP<br/>typed tools"]
+        cli["HQ CLI<br/>management commands"]
+    end
+
+    subgraph core["One application core"]
+        contract["Typed command<br/>canonical result"]
+        policy["Validation · authorization<br/>idempotency · concurrency"]
+        transaction["Atomic transaction<br/>audit attribution"]
+    end
+
+    db[("HQ database<br/>operational SSOT")]
+    vault[("Obsidian vault<br/>documentation SSOT")]
+    secrets[("1Password<br/>secrets SSOT")]
+
+    operator --> web
+    operator --> cli
+    agent --> mcp
+
+    web --> contract
+    mcp --> contract
+    cli --> contract
+    contract --> policy --> transaction --> db
+
+    vault -->|"validated manifest"| contract
+    secrets -.->|"credentials only"| web
+    secrets -.->|"credentials only"| mcp
+    secrets -.->|"credentials only"| cli
+
+    classDef anchor stroke-width:2px;
+    class contract,policy,transaction anchor;

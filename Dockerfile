@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
-RUN pip install --prefix=/install -r requirements.txt
+RUN pip install --require-hashes --prefix=/install -r requirements.txt
 
 
 FROM python:${PYTHON_VERSION} AS runtime

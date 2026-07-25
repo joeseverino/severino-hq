@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -10,6 +11,9 @@ from django.views.generic import (
     UpdateView,
 )
 
+from application.assets import asset_command_from_cleaned_data, save_asset
+from application.deletion import DeleteCommand, delete_asset
+from application.security import web_principal
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
@@ -86,9 +90,13 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
     template_name = "assets/asset_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_asset(
+            asset_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+        )
+        self.object = Asset.objects.get(slug=result["asset"]["slug"])
         messages.success(self.request, f"Asset “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class AssetUpdateView(LoginRequiredMixin, UpdateView):
@@ -99,9 +107,14 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "slug"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_asset(
+            asset_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_slug=self.get_object().slug,
+        )
+        self.object = Asset.objects.get(slug=result["asset"]["slug"])
         messages.success(self.request, f"Asset “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class AssetDeleteView(LoginRequiredMixin, DeleteView):
@@ -113,7 +126,11 @@ class AssetDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "asset"
 
     def form_valid(self, form):
-        name = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Asset “{name}” deleted.")
-        return response
+        slug = self.get_object().slug
+        result = delete_asset(
+            DeleteCommand(confirm=slug),
+            principal=web_principal(self.request.user),
+            current_slug=slug,
+        )
+        messages.success(self.request, f"Asset “{result['deleted']['label']}” deleted.")
+        return redirect(self.success_url)
