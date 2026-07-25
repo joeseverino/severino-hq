@@ -78,7 +78,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
             uncovered = [
                 domain
                 for domain in consumer.install_domains
-                if domain.lower().rstrip(".") not in covered
+                if not _certificate_covers(domain, covered)
             ]
             if uncovered:
                 raise ValueError(
@@ -86,6 +86,14 @@ class ResolvedTLSCertificateSpec(ProviderModel):
                     + ", ".join(uncovered)
                 )
         return self
+
+
+def _certificate_covers(domain: str, names: set[str]) -> bool:
+    normalized = domain.lower().rstrip(".")
+    if normalized in names:
+        return True
+    _, separator, parent = normalized.partition(".")
+    return bool(separator and f"*.{parent}" in names)
 
 
 class NPMProxyHostSpec(ProviderModel):
