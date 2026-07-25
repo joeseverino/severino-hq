@@ -315,7 +315,7 @@ class ProviderAdapterTests(TestCase):
         {"NPM_URL": "https://npm.example.test"},
         clear=True,
     )
-    def test_npm_certificate_is_resolved_by_identity_and_bound_to_hosts(
+    def test_npm_certificate_is_resolved_and_reloads_already_bound_hosts(
         self, _token, multipart, request
     ):
         leaf = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n"
@@ -323,7 +323,7 @@ class ProviderAdapterTests(TestCase):
         request.side_effect = [
             [],
             {"id": 22, "provider": "other"},
-            [{"id": 7, "domain_names": ["dev.example.test"], "certificate_id": 11}],
+            [{"id": 7, "domain_names": ["dev.example.test"], "certificate_id": 22}],
             {},
         ]
 
@@ -349,10 +349,11 @@ class ProviderAdapterTests(TestCase):
     @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate")
     @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
     @mock.patch("controller_runtime.providers._validate_certificate")
     @mock.patch("controller_runtime.providers._ssh")
     def test_renewal_deploys_and_verifies_every_consumer(
-        self, ssh, validate, issue, deploy, reconcile
+        self, ssh, validate, _resume, issue, deploy, reconcile
     ):
         previous = providers._certificate_bundle(b"old-cert", b"old-key")
         ssh.return_value = previous
@@ -384,12 +385,46 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(result.conditions[0]["reason"], "Renewed")
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.providers._deploy_certificate", return_value={})
+    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch(
+        "controller_runtime.providers._resumable_lineage",
+        return_value=(b"pending-cert", b"pending-key"),
+    )
+    @mock.patch("controller_runtime.providers._validate_certificate")
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_renewal_resumes_existing_lineage_without_acme_request(
+        self, ssh, validate, _resume, issue, deploy, reconcile
+    ):
+        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        validate.side_effect = ["old", "pending"]
+        reconcile.return_value = providers.ProviderResult(
+            changed=False,
+            status={"consumers": [{"fingerprint_sha256": "pending"}]},
+            conditions=[],
+            message="observed",
+        )
+        spec = {
+            "certificate_name": "example",
+            "domains": ["example.test"],
+            "renewal_window_days": 30,
+            "consumers": [{"kind": "caddy", "connection_ref": "edge"}],
+        }
+
+        result = providers.renew_tls(spec)
+
+        issue.assert_not_called()
+        deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key")
+        self.assertEqual(result.status["artifact_source"], "existing_lineage")
+
+    @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate")
     @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.providers._resumable_lineage", return_value=None)
     @mock.patch("controller_runtime.providers._validate_certificate")
     @mock.patch("controller_runtime.providers._ssh")
     def test_renewal_rolls_back_previous_artifact_on_deploy_failure(
-        self, ssh, validate, issue, deploy, _reconcile
+        self, ssh, validate, _resume, issue, deploy, _reconcile
     ):
         ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
         validate.side_effect = ["old", "new"]
@@ -403,7 +438,7 @@ class ProviderAdapterTests(TestCase):
         }
 
         with self.assertRaisesRegex(
-            providers.ProviderError, "failed.*rollback succeeded"
+            providers.ProviderError, "failed.*[Rr]ollback succeeded"
         ):
             providers.renew_tls(spec)
 

@@ -160,7 +160,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
             operation["id"],
             generation=generation,
             success=False,
-            status={},
+            status=exc.status,
             conditions=[
                 {
                     "type": "Degraded",

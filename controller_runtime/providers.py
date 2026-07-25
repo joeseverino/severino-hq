@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -25,6 +25,10 @@ from typing import Any
 
 class ProviderError(RuntimeError):
     """A provider operation failed without exposing credential material."""
+
+    def __init__(self, message: str, *, status: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.status = status or {}
 
 
 @dataclass(frozen=True)
@@ -678,6 +682,44 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         raise ProviderError("Certbot did not produce a complete lineage.") from exc
 
 
+def _resumable_lineage(
+    spec: dict[str, Any], deployed_fingerprint: str
+) -> tuple[bytes, bytes] | None:
+    """Reuse a newer failed-transaction artifact instead of issuing again."""
+    lineage = (
+        Path(_required("HQ", "ACME_DIR"))
+        / "config"
+        / "live"
+        / spec["certificate_name"]
+    )
+    try:
+        fullchain = lineage.joinpath("fullchain.pem").read_bytes()
+        private_key = lineage.joinpath("privkey.pem").read_bytes()
+    except OSError:
+        return None
+    fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
+    if fingerprint == deployed_fingerprint:
+        return None
+    with tempfile.TemporaryDirectory() as directory:
+        cert_path = Path(directory) / "fullchain.pem"
+        cert_path.write_bytes(fullchain)
+        raw_expiry = _run(
+            ["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"]
+        ).decode().strip()
+    try:
+        expiry = datetime.strptime(
+            raw_expiry.removeprefix("notAfter="), "%b %d %H:%M:%S %Y %Z"
+        ).replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise ProviderError("Certbot lineage expiry is invalid.") from exc
+    minimum_expiry = datetime.now(timezone.utc) + timedelta(
+        days=spec["renewal_window_days"]
+    )
+    if expiry <= minimum_expiry:
+        return None
+    return fullchain, private_key
+
+
 def _npm_managed_certificate(
     consumer: dict[str, Any], fullchain: bytes, private_key: bytes
 ) -> tuple[int, dict[str, str]]:
@@ -746,8 +788,8 @@ def _npm_managed_certificate(
             + "."
         )
     for host in matching_hosts:
-        if host.get("certificate_id") == certificate_id:
-            continue
+        # Uploading replaces NPM's certificate files but does not reload the
+        # nginx workers. Re-applying every referencing host activates them.
         _request(
             f"{base_url}/nginx/proxy-hosts/{host['id']}",
             method="PUT",
@@ -800,6 +842,24 @@ def _deploy_certificate(
     return deployment_status
 
 
+def _renew_verification_policy() -> tuple[int, int]:
+    registry = _certificate_registry("controller-capabilities.json")
+    policy = (
+        registry.get("capabilities", {})
+        .get("tls.certificate", {})
+        .get("actions", {})
+        .get("renew", {})
+        .get("verification", {})
+    )
+    timeout = policy.get("timeout_seconds")
+    interval = policy.get("interval_seconds")
+    if not isinstance(timeout, int) or not isinstance(interval, int):
+        raise ProviderError("TLS renewal verification policy is invalid.")
+    if not 30 <= timeout <= 600 or not 1 <= interval <= 30 or interval > timeout:
+        raise ProviderError("TLS renewal verification policy is out of bounds.")
+    return timeout, interval
+
+
 def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     caddy = next(
         (item for item in spec["consumers"] if item["kind"] == "caddy"), None
@@ -809,13 +869,23 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     previous_fullchain, previous_key = _read_bundle(
         _ssh(caddy["connection_ref"], "snapshot")
     )
-    _validate_certificate(previous_fullchain, previous_key, spec["domains"])
-    fullchain, private_key = _issue_certificate(spec)
+    previous_fingerprint = _validate_certificate(
+        previous_fullchain, previous_key, spec["domains"]
+    )
+    resumed = _resumable_lineage(spec, previous_fingerprint)
+    if resumed is None:
+        fullchain, private_key = _issue_certificate(spec)
+        artifact_source = "new_issuance"
+    else:
+        fullchain, private_key = resumed
+        artifact_source = "existing_lineage"
     expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
     try:
         deployment_status = _deploy_certificate(spec, fullchain, private_key)
         last_result = None
-        for _ in range(12):
+        timeout, interval = _renew_verification_policy()
+        deadline = time.monotonic() + timeout
+        while True:
             last_result = reconcile_tls(spec)
             fingerprints = {
                 item["fingerprint_sha256"]
@@ -823,17 +893,33 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
             }
             if fingerprints == {expected_fingerprint}:
                 break
-            time.sleep(5)
-        else:
-            served = ", ".join(
-                f"{item['consumer']}:{item['domain']}="
-                f"{item['fingerprint_sha256']}"
-                for item in last_result.status["consumers"]
-            )
-            raise ProviderError(
-                "TLS verification did not converge on "
-                f"{expected_fingerprint}; observed {served}."
-            )
+            if time.monotonic() >= deadline:
+                evidence = [
+                    {
+                        "consumer": item["consumer"],
+                        "kind": item["consumer_kind"],
+                        "domain": item["domain"],
+                        "fingerprint_sha256": item["fingerprint_sha256"],
+                        "matches_expected": (
+                            item["fingerprint_sha256"] == expected_fingerprint
+                        ),
+                    }
+                    for item in last_result.status["consumers"]
+                ]
+                failed = {
+                    item["consumer"]
+                    for item in evidence
+                    if not item["matches_expected"]
+                }
+                raise ProviderError(
+                    f"{len(failed)} of {len(spec['consumers'])} TLS consumers "
+                    "did not activate the renewed certificate in time.",
+                    status={
+                        "expected_fingerprint_sha256": expected_fingerprint,
+                        "consumers": evidence,
+                    },
+                )
+            time.sleep(interval)
     except ProviderError as exc:
         try:
             _deploy_certificate(spec, previous_fullchain, previous_key)
@@ -843,12 +929,14 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
                 f"({rollback_exc})."
             ) from rollback_exc
         raise ProviderError(
-            f"Certificate deployment failed ({exc}); rollback succeeded."
+            f"Certificate deployment failed: {exc} Rollback succeeded.",
+            status=exc.status,
         ) from exc
     assert last_result is not None
     status = {
         **last_result.status,
         **deployment_status,
+        "artifact_source": artifact_source,
         "renewed_fingerprint_sha256": expected_fingerprint,
     }
     return ProviderResult(
