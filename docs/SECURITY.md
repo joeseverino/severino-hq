@@ -105,9 +105,10 @@
       `connection_ref=cloudflare-dns-jseverino`; it has only Zone Read and DNS
       Edit on the four declared Severino zones and is not the D1 application
       token.
-- [ ] No personal SSH private key is rendered for the controller. Edge access
-      is authorized by the homelab-server Tailscale node identity, and cPanel
-      uses a dedicated HTTPS API token.
+- [ ] No personal SSH private key is rendered for the controller. Dedicated
+      Ed25519 identities are generated on `homelab-server`, remote host keys
+      are pinned in the connection registry, and each public key is authorized
+      only for its declared target and deployment role.
 
 ## What v1 deliberately does NOT do
 

@@ -30,9 +30,11 @@ jobs:
       - name: Shell safety
         run: |
           sh -n scripts/deploy-image.sh scripts/install-controller.sh \
+            scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
             scripts/refresh-secrets.sh scripts/render-controller-env.sh \
             scripts/run-controller.sh
           shellcheck scripts/deploy-image.sh scripts/install-controller.sh \
+            scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
             scripts/refresh-secrets.sh scripts/render-controller-env.sh \
             scripts/run-controller.sh
 

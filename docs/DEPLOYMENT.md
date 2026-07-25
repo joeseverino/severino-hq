@@ -103,12 +103,16 @@ DNS Edit for `jseverino.com`, `jseverino.net`, `jseverino.org`, and
 `joeseverino.com`. Controller activation verifies the token and proves all four
 zones are readable without performing a DNS mutation.
 
-Deployment identities must be machine-specific. Do not copy Joe's personal SSH
-keys into HQ or 1Password items for the controller. Edge delivery will use the
-homelab-server Tailscale node identity under an explicit tailnet SSH policy;
-cPanel delivery will use a dedicated, revocable API token over HTTPS. Renewal
-stays locked until both deployment paths have non-mutating preflights and
-verified rollback.
+Deployment identities are machine-specific SSH keys generated on
+`homelab-server` by `scripts/provision-controller-ssh.sh`. They never enter
+1Password, the repository, the web container, or Joe's Mac keychain. The same
+connection registry emits each target's host, port, remote user, and pinned
+Ed25519 host key; `scripts/controller-ssh.sh` derives strict, batch-only,
+operation-allowlisted SSH invocations from it. It does not accept arbitrary
+remote commands. Authorize each generated `.pub` key with the narrowest
+remote account or forced command available. Renewal stays locked until both
+deployment paths pass non-mutating preflight, deployment, live-certificate
+verification, and rollback tests.
 
 Pull requests run checks only; a push to `main` runs the image build, scan,
 homelab deployment, health verification, and controller activation.

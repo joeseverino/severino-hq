@@ -1,9 +1,36 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest import TestCase, mock
 
 from . import providers, worker
+
+
+class ControllerConnectionRegistryTests(TestCase):
+    def setUp(self):
+        registry_path = (
+            Path(__file__).resolve().parent.parent
+            / "config"
+            / "controller-connections.json"
+        )
+        self.registry = json.loads(registry_path.read_text())
+
+    def test_api_token_uses_api_credential_website_field(self):
+        self.assertEqual(
+            self.registry["projections"]["api_token"]["URL"],
+            {"source": "field", "id": "website"},
+        )
+
+    def test_ssh_transports_are_pinned_and_have_distinct_identities(self):
+        transports = self.registry["ssh_transports"]
+
+        self.assertEqual(set(transports), {"edge", "namecheap-cpanel"})
+        for connection_ref, transport in transports.items():
+            with self.subTest(connection_ref=connection_ref):
+                self.assertGreater(transport["port"], 0)
+                self.assertTrue(transport["user"])
+                self.assertRegex(transport["host_key"], r"^ssh-ed25519 ")
 
 
 class ProviderAdapterTests(TestCase):

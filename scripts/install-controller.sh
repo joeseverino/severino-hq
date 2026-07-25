@@ -14,6 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 systemctl start severino-hq-secrets.service
+"${app_dir}/scripts/provision-controller-ssh.sh"
 if [ ! -s "${env_file}" ]; then
     echo "Controller environment was not rendered." >&2
     exit 1
