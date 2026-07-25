@@ -9,7 +9,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 ### Added
 
 - Canonical `application/` services shared by web, MCP, and CLI, with project
-  create/update and documentation sync as the reference vertical slices.
+  create/update, asset create/update, and documentation sync as reference
+  vertical slices.
 - MCP project mutations and fail-closed documentation synchronization, backed
   by adapter-parity, rollback, concurrency, idempotency, and pruning tests.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.

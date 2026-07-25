@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from io import StringIO
+from decimal import Decimal
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -10,11 +11,13 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
+from assets.models import Asset
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
 
 from .documentation import sync_documentation
+from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
 from .projects import ConflictError, ProjectCommand, save_project
 
 
@@ -136,6 +139,109 @@ class AdapterParityTests(TestCase):
         )
         self.assertEqual(
             AuditLog.objects.get(object_repr="CLI Project").metadata["interface"],
+            "cli",
+        )
+
+
+class AssetApplicationServiceTests(TestCase):
+    def setUp(self):
+        self.project = Project.objects.create(name="Homelab", slug="homelab")
+
+    def test_asset_service_owns_relationships_money_and_audit(self):
+        result = save_asset(
+            AssetCommand(
+                item_name="Lab Server",
+                slug="lab-server",
+                total_cost=Decimal("999.99"),
+                business_use_percentage=80,
+                related_projects=("homelab",),
+            ),
+            interface="mcp",
+            actor="test-agent",
+        )
+
+        self.assertEqual(result["asset"]["estimated_deductible_amount"], "799.99")
+        self.assertEqual(result["asset"]["relationships"]["projects"], ["homelab"])
+        event = AuditLog.objects.get(object_repr="Lab Server")
+        self.assertEqual(event.metadata["operation"], "asset.create")
+        self.assertEqual(event.metadata["interface"], "mcp")
+
+    def test_missing_relationship_rolls_back_the_asset(self):
+        with self.assertRaisesRegex(AssetNotFoundError, "missing-project"):
+            save_asset(
+                AssetCommand(
+                    item_name="Invalid",
+                    slug="invalid",
+                    related_projects=("missing-project",),
+                ),
+                interface="mcp",
+                actor="test-agent",
+            )
+
+        self.assertFalse(Asset.objects.filter(slug="invalid").exists())
+
+    def test_web_mcp_and_cli_emit_the_same_asset_shape(self):
+        user = get_user_model().objects.create_user(
+            username="asset-operator", password="test-password"
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("assets:create"),
+            {
+                "item_name": "Web Asset",
+                "slug": "web-asset",
+                "vendor": "",
+                "category": "other",
+                "purchase_date": "",
+                "total_cost": "10.00",
+                "business_use_percentage": "100",
+                "payment_method": "",
+                "serial_number": "",
+                "warranty_date": "",
+                "status": "active",
+                "notes": "",
+                "related_projects": [self.project.pk],
+            },
+        )
+        self.assertRedirects(response, reverse("assets:detail", args=["web-asset"]))
+
+        async def call_mcp():
+            tool = mcp._tool_manager.get_tool("create_asset")
+            return await tool.run(
+                {
+                    "item_name": "MCP Asset",
+                    "slug": "mcp-asset",
+                    "total_cost": "20.00",
+                    "related_projects": ["homelab"],
+                }
+            )
+
+        mcp_result = async_to_sync(call_mcp)()
+
+        output = StringIO()
+        call_command(
+            "create_asset",
+            "cli-asset",
+            item_name="CLI Asset",
+            total_cost="30.00",
+            json=True,
+            stdout=output,
+        )
+        cli_result = json.loads(output.getvalue())
+
+        self.assertEqual(set(mcp_result), {"ok", "created", "asset"})
+        self.assertEqual(set(cli_result), {"ok", "created", "asset"})
+        self.assertEqual(set(mcp_result["asset"]), set(cli_result["asset"]))
+        self.assertEqual(
+            AuditLog.objects.get(object_repr="Web Asset").metadata["interface"],
+            "web",
+        )
+        self.assertEqual(
+            AuditLog.objects.get(object_repr="MCP Asset").metadata["interface"],
+            "mcp",
+        )
+        self.assertEqual(
+            AuditLog.objects.get(object_repr="CLI Asset").metadata["interface"],
             "cli",
         )
 

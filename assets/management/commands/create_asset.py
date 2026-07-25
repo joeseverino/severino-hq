@@ -5,11 +5,13 @@ Idempotent — re-running with the same slug updates the existing record.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
 
+from application.assets import AssetCommand, save_asset
 from assets.models import (
     ASSET_CATEGORY_CHOICES,
     PAYMENT_METHOD_CHOICES,
@@ -86,28 +88,48 @@ class Command(BaseCommand):
             help="ISO date YYYY-MM-DD.",
         )
         parser.add_argument("--notes", default="")
+        parser.add_argument(
+            "--json",
+            action="store_true",
+            help="Print the canonical service result as JSON.",
+        )
 
     def handle(self, *args, **opts):
         slug = opts["slug"]
-        defaults = {
-            "item_name": opts["item_name"],
-            "vendor": opts["vendor"],
-            "category": opts["category"],
-            "status": opts["status"],
-            "business_use_percentage": opts["business_use_percentage"],
-            "payment_method": opts["payment_method"],
-            "serial_number": opts["serial_number"],
-            "notes": opts["notes"],
-        }
-        if opts["purchase_date"]:
-            defaults["purchase_date"] = _parse_date(opts["purchase_date"])
-        if opts["warranty_date"]:
-            defaults["warranty_date"] = _parse_date(opts["warranty_date"])
-        if opts["total_cost"] is not None:
-            defaults["total_cost"] = _parse_money(opts["total_cost"])
-
-        obj, created = Asset.objects.update_or_create(
-            slug=slug, defaults=defaults
+        exists = Asset.objects.filter(slug=slug).exists()
+        result = save_asset(
+            AssetCommand(
+                item_name=opts["item_name"],
+                slug=slug,
+                vendor=opts["vendor"],
+                category=opts["category"],
+                purchase_date=(
+                    _parse_date(opts["purchase_date"])
+                    if opts["purchase_date"]
+                    else None
+                ),
+                total_cost=(
+                    _parse_money(opts["total_cost"])
+                    if opts["total_cost"] is not None
+                    else Decimal("0.00")
+                ),
+                business_use_percentage=opts["business_use_percentage"],
+                payment_method=opts["payment_method"],
+                serial_number=opts["serial_number"],
+                warranty_date=(
+                    _parse_date(opts["warranty_date"])
+                    if opts["warranty_date"]
+                    else None
+                ),
+                status=opts["status"],
+                notes=opts["notes"],
+            ),
+            interface="cli",
+            actor="local-operator",
+            current_slug=slug if exists else None,
         )
-        verb = "created" if created else "updated"
-        self.stdout.write(f"Asset {obj.slug}: {verb}")
+        if opts["json"]:
+            self.stdout.write(json.dumps(result))
+            return
+        verb = "created" if result["created"] else "updated"
+        self.stdout.write(f"Asset {result['asset']['slug']}: {verb}")

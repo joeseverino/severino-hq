@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -10,6 +11,7 @@ from django.views.generic import (
     UpdateView,
 )
 
+from application.assets import asset_command_from_cleaned_data, save_asset
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
@@ -86,9 +88,14 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
     template_name = "assets/asset_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_asset(
+            asset_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+        )
+        self.object = Asset.objects.get(slug=result["asset"]["slug"])
         messages.success(self.request, f"Asset “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class AssetUpdateView(LoginRequiredMixin, UpdateView):
@@ -99,9 +106,15 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "slug"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_asset(
+            asset_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+            current_slug=self.get_object().slug,
+        )
+        self.object = Asset.objects.get(slug=result["asset"]["slug"])
         messages.success(self.request, f"Asset “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class AssetDeleteView(LoginRequiredMixin, DeleteView):

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from typing import Any
 
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone
 
+from application import assets as asset_service
 from application import documentation as documentation_service
 from application import projects as project_service
 from assets.models import Asset
@@ -142,60 +145,97 @@ def sync_documentation(
     )
 
 
-def _asset(asset: Asset) -> dict[str, Any]:
-    return {
-        "slug": asset.slug,
-        "item_name": asset.item_name,
-        "vendor": asset.vendor,
-        "category": asset.category,
-        "status": asset.status,
-        "purchase_date": _iso(asset.purchase_date),
-        "warranty_date": _iso(asset.warranty_date),
-        "updated_at": _iso(asset.updated_at),
-    }
-
-
 def list_assets(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ assets, optionally filtered by exact status or text search."""
-    qs = Asset.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(item_name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(vendor__icontains=query)
-        )
-    items = [_asset(asset) for asset in qs.order_by("slug")[: _page_size(limit)]]
-    return {"items": items, "count": len(items)}
+    return asset_service.list_assets(status=status, query=query, limit=limit)
 
 
 def get_asset(slug: str) -> dict[str, Any]:
     """Get one asset and its project, documentation, content, and expense links."""
     try:
-        asset = Asset.objects.get(slug=slug)
-    except Asset.DoesNotExist as exc:
-        raise NotFoundError(f"Asset {slug!r} was not found.") from exc
-    result = _asset(asset)
-    result["relationships"] = {
-        "projects": list(
-            asset.related_projects.order_by("slug").values_list("slug", flat=True)
+        return asset_service.get_asset(slug)
+    except asset_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
+
+
+def create_asset(
+    item_name: str,
+    slug: str = "",
+    vendor: str = "",
+    category: str = "other",
+    purchase_date: date | None = None,
+    total_cost: Decimal = Decimal("0.00"),
+    business_use_percentage: int = 100,
+    payment_method: str = "",
+    serial_number: str = "",
+    warranty_date: date | None = None,
+    status: str = "active",
+    notes: str = "",
+    related_projects: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create an HQ asset through the canonical validated service."""
+    return asset_service.save_asset(
+        asset_service.AssetCommand(
+            item_name=item_name,
+            slug=slug,
+            vendor=vendor,
+            category=category,
+            purchase_date=purchase_date,
+            total_cost=total_cost,
+            business_use_percentage=business_use_percentage,
+            payment_method=payment_method,
+            serial_number=serial_number,
+            warranty_date=warranty_date,
+            status=status,
+            notes=notes,
+            related_projects=tuple(related_projects or ()),
         ),
-        "documentation": list(
-            asset.documentation_records.filter(sensitivity__in=SAFE_SENSITIVITIES)
-            .order_by("doc_id")
-            .values_list("doc_id", flat=True)
+        interface="mcp",
+        actor="mcp-service-account",
+    )
+
+
+def update_asset(
+    slug: str,
+    item_name: str,
+    new_slug: str = "",
+    vendor: str = "",
+    category: str = "other",
+    purchase_date: date | None = None,
+    total_cost: Decimal = Decimal("0.00"),
+    business_use_percentage: int = 100,
+    payment_method: str = "",
+    serial_number: str = "",
+    warranty_date: date | None = None,
+    status: str = "active",
+    notes: str = "",
+    related_projects: list[str] | None = None,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Update an HQ asset with optional optimistic concurrency protection."""
+    return asset_service.save_asset(
+        asset_service.AssetCommand(
+            item_name=item_name,
+            slug=new_slug or slug,
+            vendor=vendor,
+            category=category,
+            purchase_date=purchase_date,
+            total_cost=total_cost,
+            business_use_percentage=business_use_percentage,
+            payment_method=payment_method,
+            serial_number=serial_number,
+            warranty_date=warranty_date,
+            status=status,
+            notes=notes,
+            related_projects=tuple(related_projects or ()),
         ),
-        "content": list(
-            asset.content_items.order_by("slug").values_list("slug", flat=True)
-        ),
-        "expense_ids": list(
-            asset.expenses.order_by("-date", "-id").values_list("id", flat=True)
-        ),
-    }
-    return result
+        interface="mcp",
+        actor="mcp-service-account",
+        current_slug=slug,
+        expected_updated_at=expected_updated_at,
+    )
 
 
 def list_expenses(

@@ -97,6 +97,15 @@ The sync is:
 - fail-closed for deletion: pruning requires `prune_orphans=true` and the
   separate `confirm_prune=true`.
 
+### Assets
+
+`application.assets.save_asset()` extends the same contract to equipment and
+financial metadata. Web create/edit, MCP `create_asset` / `update_asset`, and
+the `create_asset` management command share one transaction and result shape.
+The service resolves project relationships before writing, rolls back on any
+missing slug, normalizes deductible values through the model contract, and
+supports the same optional stale-write protection as Projects.
+
 ## Security model
 
 The service boundary complements the existing network boundary:
