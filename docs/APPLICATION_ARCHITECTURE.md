@@ -239,12 +239,17 @@ the web container. The disposable container runs as the same unprivileged UID
 as the application data owner; the root-owned systemd launcher projects
 short-lived, owner-scoped copies of its environment and SSH identities. Plan
 mode authenticates and peeks without leasing work.
-Apply mode claims only explicitly supported kind/action pairs. AdGuard and NPM
-reconcile in apply mode. TLS reconciliation observes served certificates; TLS
-renewal issues through DNS-01, snapshots the rollback artifact, deploys to all
-declared consumers, and verifies one fingerprint everywhere before reporting
-success. Public DNS remains locked. Short-lived NPM tokens stay in memory and
-reports are rejected if they contain secret-bearing keys.
+Apply mode first schedules due work, then claims only explicitly supported
+kind/action pairs. The persistent timer schedules renewal when verified expiry
+enters policy and reconciliation when desired generation or consumer health
+drifts. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
+existing lineage without contacting ACME. For NPM, one managed certificate is
+uploaded once and every enabled proxy host covered by its SANs is discovered,
+rebound, reloaded, and live-verified. TLS renewal issues through DNS-01 only
+when necessary, snapshots the rollback artifact, deploys to all consumers, and
+verifies one fingerprint everywhere before reporting success. Public DNS
+remains locked. Short-lived NPM tokens stay in memory and reports are rejected
+if they contain secret-bearing keys.
 
 HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
 D1-backed contact form. It is never projected into the controller or reused for

@@ -12,7 +12,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from application.capabilities import execute_capability
-from application.controller import ControllerReport, report_operation
+from application.controller import (
+    ControllerReport,
+    report_operation,
+    schedule_automatic_operations,
+)
 from application.connections import preflight_connections
 from application.infrastructure import (
     ManagedResourceCommand,
@@ -470,7 +474,8 @@ class InfrastructureWebTests(TestCase):
         )
 
         self.assertContains(response, "Observe: Apply")
-        self.assertContains(response, "Renew: Apply")
+        self.assertContains(response, "Automatic renewal")
+        self.assertContains(response, "survives restarts")
         self.assertContains(response, "Renewal policy")
         self.assertContains(response, "Eligible now")
 
@@ -514,6 +519,40 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
+
+    def test_controller_automatically_queues_due_certificate_renewal(self):
+        self.resource.status = {
+            "not_after": (timezone.now() + timedelta(days=29)).isoformat()
+        }
+        self.resource.conditions = [
+            {"type": "Ready", "status": True, "reason": "Verified"}
+        ]
+        self.resource.observed_generation = self.resource.generation
+        self.resource.save()
+
+        result = schedule_automatic_operations("homelab-server")
+
+        operation = OperationRequest.objects.get()
+        self.assertEqual(result["scheduled"], [str(operation.id)])
+        self.assertEqual(operation.action, OperationRequest.Action.RENEW)
+        self.assertEqual(operation.requested_interface, "controller")
+
+    def test_controller_automatically_reconciles_new_topology_generation(self):
+        self.resource.status = {
+            "not_after": (timezone.now() + timedelta(days=89)).isoformat()
+        }
+        self.resource.conditions = [
+            {"type": "Ready", "status": True, "reason": "Verified"}
+        ]
+        self.resource.observed_generation = self.resource.generation - 1
+        self.resource.save()
+
+        schedule_automatic_operations("homelab-server")
+
+        self.assertEqual(
+            OperationRequest.objects.get().action,
+            OperationRequest.Action.RECONCILE,
+        )
 
     def test_active_controller_capability_queues_renewal_work(self):
         result = request_certificate_renewal(

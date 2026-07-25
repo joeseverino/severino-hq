@@ -30,6 +30,7 @@ class CaddyTLSConsumer(TLSConsumerBase):
 class NPMTLSConsumer(TLSConsumerBase):
     kind: Literal["npm"]
     connection_ref: str = Field(min_length=1, max_length=160)
+    discover_covered_hosts: bool = False
 
 
 class CPanelTLSConsumer(TLSConsumerBase):
@@ -78,7 +79,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
             uncovered = [
                 domain
                 for domain in consumer.install_domains
-                if not _certificate_covers(domain, covered)
+                if not certificate_covers(domain, covered)
             ]
             if uncovered:
                 raise ValueError(
@@ -88,7 +89,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
         return self
 
 
-def _certificate_covers(domain: str, names: set[str]) -> bool:
+def certificate_covers(domain: str, names: set[str]) -> bool:
     normalized = domain.lower().rstrip(".")
     if normalized in names:
         return True

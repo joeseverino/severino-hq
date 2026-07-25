@@ -17,6 +17,7 @@
         "reconcile": {"mode": "apply"},
         "renew": {
           "mode": "apply",
+          "automatic": true,
           "verification": {
             "timeout_seconds": 180,
             "interval_seconds": 5

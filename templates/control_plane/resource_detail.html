@@ -43,7 +43,7 @@
     <span class="control-label">Automation</span>
     {% if resource.kind == "tls.certificate" %}
       <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Observe: {{ controller_capability.reconcile.mode|title }}</strong>
-      <span>Renew: {{ controller_capability.renew.mode|title }}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
+      <span>{% if controller_capability.renew.automatic %}Automatic renewal{% if renewal_at %} begins {{ renewal_at }}{% endif %}. The persistent homelab controller checks every minute and survives restarts.{% else %}Renew: {{ controller_capability.renew.mode|title }}{% endif %}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
     {% else %}
       <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Reconcile: {{ controller_capability.reconcile.mode|title }}</strong>
       <span>{% if controller_capability.reconcile.mode == "apply" %}Controller actions are enabled.{% else %}{{ controller_capability.reconcile.reason }}{% endif %}</span>

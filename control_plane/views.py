@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -89,6 +89,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             else "pending"
         )
         context["days_left"] = None
+        context["renewal_at"] = None
         not_after = self.object.status.get("not_after")
         if not_after:
             try:
@@ -97,6 +98,9 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 context["days_left"] = int(
                     (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
+                )
+                context["renewal_at"] = expiry - timedelta(
+                    days=self.object.spec.get("renewal_window_days", 30)
                 )
             except (TypeError, ValueError):
                 # A malformed provider timestamp must not break the resource page.
