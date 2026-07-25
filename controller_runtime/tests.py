@@ -196,8 +196,17 @@ class ProviderAdapterTests(TestCase):
                 {"kind": "cloudflare.dns_record", "spec": {}}, "reconcile"
             )
 
+    @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
-    def test_tls_observer_reports_consumer_drift_and_public_artifact(self, observe):
+    @mock.patch.dict(
+        "os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True
+    )
+    def test_tls_observer_reports_consumer_drift_and_public_artifact(
+        self, observe, registry
+    ):
+        registry.return_value = {
+            "ssh_transports": {"edge": {"host": "192.0.2.20"}}
+        }
         observe.side_effect = [
             {
                 "domain": "hq.example",
@@ -229,6 +238,7 @@ class ProviderAdapterTests(TestCase):
                     {
                         "kind": "caddy",
                         "name": "caddy",
+                        "connection_ref": "edge",
                         "verify_domains": ["health.example"],
                     },
                 ],
@@ -240,6 +250,13 @@ class ProviderAdapterTests(TestCase):
         )
         self.assertIn("BEGIN CERTIFICATE", result.status["certificate_pem"])
         self.assertNotIn("PRIVATE KEY", json.dumps(result.status))
+        self.assertEqual(
+            observe.call_args_list,
+            [
+                mock.call("hq.example", connect_host="npm-origin.example"),
+                mock.call("health.example", connect_host="192.0.2.20"),
+            ],
+        )
 
     @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
@@ -272,6 +289,13 @@ class ProviderAdapterTests(TestCase):
 
         observe.assert_called_once_with(
             "quiz.example.test", connect_host="192.0.2.10"
+        )
+
+    @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.homelab"}, clear=True)
+    def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
+        self.assertEqual(
+            providers._consumer_tls_endpoint({"kind": "npm"}, {}),
+            "proxy.homelab",
         )
 
     @mock.patch("controller_runtime.providers.renew_tls")
@@ -378,7 +402,9 @@ class ProviderAdapterTests(TestCase):
             ],
         }
 
-        with self.assertRaisesRegex(providers.ProviderError, "rolled back"):
+        with self.assertRaisesRegex(
+            providers.ProviderError, "failed.*rollback succeeded"
+        ):
             providers.renew_tls(spec)
 
         self.assertEqual(deploy.call_count, 2)
