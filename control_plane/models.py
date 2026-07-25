@@ -25,6 +25,7 @@ class ManagedResource(TimestampedModel):
         choices=DeclarationSource.choices,
         default=DeclarationSource.MANUAL,
     )
+    desired_fingerprint = models.CharField(max_length=64, blank=True, default="")
     generation = models.PositiveIntegerField(default=1)
     observed_generation = models.PositiveIntegerField(default=0)
     status = models.JSONField(default=dict, blank=True)

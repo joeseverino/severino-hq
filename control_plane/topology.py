@@ -91,7 +91,6 @@ def import_topology(payload: object) -> TopologySnapshot:
             .filter(id="topology")
             .first()
         )
-        previous_payload = snapshot.payload if snapshot is not None else None
         if snapshot is None:
             snapshot = TopologySnapshot.objects.create(
                 id="topology",
@@ -125,12 +124,14 @@ def import_topology(payload: object) -> TopologySnapshot:
                     f"Topology cannot take ownership of manual resource {key!r}."
                 )
             desired_enabled = declaration.get("enabled", True)
+            desired_fingerprint = _desired_fingerprint(validated, declaration)
             if resource is None:
                 resource = ManagedResource(
                     key=key,
                     kind=declaration["kind"],
                     spec=declaration["spec"],
                     enabled=desired_enabled,
+                    desired_fingerprint=desired_fingerprint,
                     declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
                 )
                 resource.full_clean()
@@ -140,18 +141,14 @@ def import_topology(payload: object) -> TopologySnapshot:
                 resource.kind != declaration["kind"]
                 or resource.spec != declaration["spec"]
                 or resource.enabled != desired_enabled
-                or _resolved_dependency_changed(
-                    previous_payload,
-                    validated,
-                    declaration["kind"],
-                    declaration["spec"],
-                )
+                or resource.desired_fingerprint != desired_fingerprint
             )
             if not changed:
                 continue
             resource.kind = declaration["kind"]
             resource.spec = declaration["spec"]
             resource.enabled = desired_enabled
+            resource.desired_fingerprint = desired_fingerprint
             resource.generation += 1
             resource.full_clean()
             resource.save()
@@ -172,21 +169,19 @@ def import_topology(payload: object) -> TopologySnapshot:
     return snapshot
 
 
-def _resolved_dependency_changed(
-    previous_payload: dict[str, Any] | None,
-    current_payload: dict[str, Any],
-    kind: str,
-    spec: dict[str, Any],
-) -> bool:
-    """Invalidate a reference-backed resource when its resolved input changes."""
-    if previous_payload is None or kind != "tls.certificate":
-        return False
-    topology_ref = spec.get("topology_ref")
-    if not topology_ref:
-        return False
-    return _resolve_certificate(previous_payload, topology_ref) != _resolve_certificate(
-        current_payload, topology_ref
-    )
+def _desired_fingerprint(
+    payload: dict[str, Any], declaration: dict[str, Any]
+) -> str:
+    """Fingerprint the complete desired input, including resolved references."""
+    desired: dict[str, Any] = {
+        "kind": declaration["kind"],
+        "spec": declaration["spec"],
+        "enabled": declaration.get("enabled", True),
+    }
+    topology_ref = declaration["spec"].get("topology_ref")
+    if declaration["kind"] == "tls.certificate" and topology_ref:
+        desired["resolved"] = _resolve_certificate(payload, topology_ref)
+    return hashlib.sha256(_canonical(desired)).hexdigest()
 
 
 def resolve_certificate(topology_ref: str) -> dict[str, Any]:
