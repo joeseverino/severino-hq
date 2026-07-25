@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>{{ resource.key }}</h1>
-    <p class="muted"><code>{{ resource.kind }}</code></p>
+    <p class="muted"><code>{{ resource.kind }}</code> · Declared by {{ resource.get_declaration_source_display }}</p>
   </div>
   <div class="page-actions">
     <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>

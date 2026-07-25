@@ -8,6 +8,8 @@ from typing import Any
 
 from django.db import transaction
 
+from core.audit import operation_context
+
 from .models import ManagedResource, TopologySnapshot
 from .providers import validate_spec
 
@@ -78,47 +80,88 @@ def validate_topology(payload: object) -> dict[str, Any]:
 def import_topology(payload: object) -> TopologySnapshot:
     validated = validate_topology(payload)
     canonical = _canonical(validated)
-    snapshot, _ = TopologySnapshot.objects.update_or_create(
-        id="topology",
-        defaults={
-            "schema_version": validated["version"],
-            "checksum": hashlib.sha256(canonical).hexdigest(),
-            "payload": validated,
-        },
-    )
-    declared_keys: set[str] = set()
-    for declaration in validated["managed_resources"]:
-        key = declaration["key"]
-        declared_keys.add(key)
-        resource = ManagedResource.objects.select_for_update().filter(key=key).first()
-        if resource and resource.declaration_source != ManagedResource.DeclarationSource.TOPOLOGY:
-            raise TopologyError(
-                f"Topology cannot take ownership of manual resource {key!r}."
-            )
-        if resource is None:
-            ManagedResource.objects.create(
-                key=key,
-                kind=declaration["kind"],
-                spec=declaration["spec"],
-                enabled=declaration.get("enabled", True),
-                declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
-            )
-            continue
-        changed = (
-            resource.kind != declaration["kind"]
-            or resource.spec != declaration["spec"]
-            or resource.enabled != declaration.get("enabled", True)
+    checksum = hashlib.sha256(canonical).hexdigest()
+    with operation_context(
+        interface="sync",
+        actor="topology-sync",
+        operation="infrastructure.topology.import",
+    ):
+        snapshot = (
+            TopologySnapshot.objects.select_for_update()
+            .filter(id="topology")
+            .first()
         )
-        resource.kind = declaration["kind"]
-        resource.spec = declaration["spec"]
-        resource.enabled = declaration.get("enabled", True)
-        if changed:
+        if snapshot is None:
+            snapshot = TopologySnapshot.objects.create(
+                id="topology",
+                schema_version=validated["version"],
+                checksum=checksum,
+                payload=validated,
+            )
+        elif (
+            snapshot.schema_version != validated["version"]
+            or snapshot.checksum != checksum
+            or snapshot.payload != validated
+        ):
+            snapshot.schema_version = validated["version"]
+            snapshot.checksum = checksum
+            snapshot.payload = validated
+            snapshot.save()
+
+        declared_keys: set[str] = set()
+        for declaration in validated["managed_resources"]:
+            key = declaration["key"]
+            declared_keys.add(key)
+            resource = (
+                ManagedResource.objects.select_for_update().filter(key=key).first()
+            )
+            if (
+                resource
+                and resource.declaration_source
+                != ManagedResource.DeclarationSource.TOPOLOGY
+            ):
+                raise TopologyError(
+                    f"Topology cannot take ownership of manual resource {key!r}."
+                )
+            desired_enabled = declaration.get("enabled", True)
+            if resource is None:
+                resource = ManagedResource(
+                    key=key,
+                    kind=declaration["kind"],
+                    spec=declaration["spec"],
+                    enabled=desired_enabled,
+                    declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
+                )
+                resource.full_clean()
+                resource.save()
+                continue
+            changed = (
+                resource.kind != declaration["kind"]
+                or resource.spec != declaration["spec"]
+                or resource.enabled != desired_enabled
+            )
+            if not changed:
+                continue
+            resource.kind = declaration["kind"]
+            resource.spec = declaration["spec"]
+            resource.enabled = desired_enabled
             resource.generation += 1
-        resource.full_clean()
-        resource.save()
-    ManagedResource.objects.filter(
-        declaration_source=ManagedResource.DeclarationSource.TOPOLOGY
-    ).exclude(key__in=declared_keys).update(enabled=False)
+            resource.full_clean()
+            resource.save()
+
+        stale_resources = (
+            ManagedResource.objects.select_for_update()
+            .filter(
+                declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
+                enabled=True,
+            )
+            .exclude(key__in=declared_keys)
+        )
+        for resource in stale_resources:
+            resource.enabled = False
+            resource.generation += 1
+            resource.full_clean()
+            resource.save()
     return snapshot
 
 

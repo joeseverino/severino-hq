@@ -24,12 +24,14 @@ from application.infrastructure import (
 )
 from application.security import cli_principal, mcp_principal
 
-from .models import ManagedResource, OperationRequest
+from core.models import AuditLog
+
+from .models import ManagedResource, OperationRequest, TopologySnapshot
 from .providers import (
     describe_providers,
     validate_resolved_certificate,
 )
-from .topology import import_topology
+from .topology import TopologyError, import_topology
 
 
 def certificate_spec():
@@ -166,6 +168,114 @@ class TopologyMaterializationTests(TestCase):
         resource.refresh_from_db()
         self.assertEqual(resource.spec["answer"], "192.168.1.234")
         self.assertEqual(resource.generation, 2)
+
+    def test_reimport_is_idempotent_and_preserves_timestamps(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "hq-dns",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "hq.jseverino.com",
+                    "answer": "192.168.1.233",
+                },
+            }
+        ]
+        first_snapshot = import_topology(payload)
+        first_resource = ManagedResource.objects.get(key="hq-dns")
+
+        import_topology(payload)
+        snapshot = TopologySnapshot.objects.get(pk="topology")
+        resource = ManagedResource.objects.get(key="hq-dns")
+
+        self.assertEqual(resource.generation, 1)
+        self.assertEqual(resource.updated_at, first_resource.updated_at)
+        self.assertEqual(snapshot.updated_at, first_snapshot.updated_at)
+
+    def test_removal_disables_resource_and_advances_generation(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "hq-dns",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "hq.jseverino.com",
+                    "answer": "192.168.1.233",
+                },
+            }
+        ]
+        import_topology(payload)
+        payload["managed_resources"] = []
+
+        import_topology(payload)
+        resource = ManagedResource.objects.get(key="hq-dns")
+
+        self.assertFalse(resource.enabled)
+        self.assertEqual(resource.generation, 2)
+
+    def test_manual_ownership_collision_rolls_back_entire_import(self):
+        ManagedResource.objects.create(
+            key="manual-resource",
+            kind="adguard.rewrite",
+            spec={
+                "domain": "manual.jseverino.com",
+                "answer": "192.168.1.10",
+            },
+        )
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "created-before-collision",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "new.jseverino.com",
+                    "answer": "192.168.1.11",
+                },
+            },
+            {
+                "key": "manual-resource",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "manual.jseverino.com",
+                    "answer": "192.168.1.12",
+                },
+            },
+        ]
+
+        with self.assertRaisesRegex(TopologyError, "cannot take ownership"):
+            import_topology(payload)
+
+        self.assertFalse(
+            ManagedResource.objects.filter(key="created-before-collision").exists()
+        )
+        self.assertFalse(TopologySnapshot.objects.exists())
+        manual = ManagedResource.objects.get(key="manual-resource")
+        self.assertEqual(manual.spec["answer"], "192.168.1.10")
+
+    def test_materialization_records_sync_provenance(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "hq-dns",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "hq.jseverino.com",
+                    "answer": "192.168.1.233",
+                },
+            }
+        ]
+
+        import_topology(payload)
+
+        event = AuditLog.objects.filter(
+            object_type="Managed resource",
+            object_repr="hq-dns",
+        ).latest("created_at")
+        self.assertEqual(event.metadata["interface"], "sync")
+        self.assertEqual(event.metadata["actor"], "topology-sync")
+        self.assertEqual(
+            event.metadata["operation"], "infrastructure.topology.import"
+        )
 
 
 class ProviderContractTests(TestCase):

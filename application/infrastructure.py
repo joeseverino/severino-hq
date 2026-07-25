@@ -49,6 +49,7 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "id": str(resource.id),
         "key": resource.key,
         "kind": resource.kind,
+        "declaration_source": resource.declaration_source,
         "enabled": resource.enabled,
         "generation": resource.generation,
         "observed_generation": resource.observed_generation,
