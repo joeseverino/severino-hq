@@ -417,25 +417,41 @@ def _observe_tls_domain(domain: str, *, connect_host: str | None = None) -> dict
     }
 
 
+def _consumer_tls_endpoint(
+    consumer: dict[str, Any], registry: dict[str, Any]
+) -> str | None:
+    """Resolve a managed consumer's origin without changing TLS SNI."""
+    kind = consumer["kind"]
+    if kind == "npm":
+        hostname = urllib.parse.urlsplit(_required("NPM", "URL")).hostname
+        if not hostname:
+            raise ProviderError("NPM origin verification endpoint is missing.")
+        return hostname
+    if kind in {"caddy", "cpanel"}:
+        transport = registry.get("ssh_transports", {}).get(
+            consumer["connection_ref"], {}
+        )
+        hostname = transport.get("host")
+        if not hostname:
+            raise ProviderError(
+                f"{kind} origin verification endpoint is missing."
+            )
+        return hostname
+    return None
+
+
 def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
     consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
+    registry = _certificate_registry("controller-connections.json")
     for consumer in spec["consumers"]:
         domains = consumer.get("verify_domains", [])
         if not domains:
             unverified_consumers.append(consumer["name"])
             continue
+        connect_host = _consumer_tls_endpoint(consumer, registry)
         for domain in domains:
-            connect_host = None
-            if consumer["kind"] == "cpanel":
-                registry = _certificate_registry("controller-connections.json")
-                transport = registry.get("ssh_transports", {}).get(
-                    consumer["connection_ref"], {}
-                )
-                connect_host = transport.get("host")
-                if not connect_host:
-                    raise ProviderError("cPanel origin verification endpoint is missing.")
             observed = _observe_tls_domain(domain, connect_host=connect_host)
             observed["consumer"] = consumer["name"]
             observed["consumer_kind"] = consumer["kind"]
@@ -753,28 +769,34 @@ def _deploy_certificate(
     leaf = leaf_body + marker + b"\n"
     chain = chain_body.lstrip()
     for consumer in spec["consumers"]:
-        if consumer["kind"] == "npm":
-            certificate_id, identity = _npm_managed_certificate(
-                consumer, fullchain, private_key
-            )
-            deployment_status.update(
-                npm_certificate_id=certificate_id,
-                npm_certificate_identity=identity,
-            )
-        elif consumer["kind"] == "caddy":
-            _ssh(consumer["connection_ref"], "deploy", bundle)
-        elif consumer["kind"] == "cpanel":
-            for domain in consumer["install_domains"]:
-                payload = json.dumps(
-                    {
-                        "domain": domain,
-                        "cert": leaf.decode(),
-                        "key": private_key.decode(),
-                        "cabundle": chain.decode(),
-                    },
-                    separators=(",", ":"),
-                ).encode()
-                _ssh(consumer["connection_ref"], f"deploy:{domain}", payload)
+        try:
+            if consumer["kind"] == "npm":
+                certificate_id, identity = _npm_managed_certificate(
+                    consumer, fullchain, private_key
+                )
+                deployment_status.update(
+                    npm_certificate_id=certificate_id,
+                    npm_certificate_identity=identity,
+                )
+            elif consumer["kind"] == "caddy":
+                _ssh(consumer["connection_ref"], "deploy", bundle)
+            elif consumer["kind"] == "cpanel":
+                for domain in consumer["install_domains"]:
+                    payload = json.dumps(
+                        {
+                            "domain": domain,
+                            "cert": leaf.decode(),
+                            "key": private_key.decode(),
+                            "cabundle": chain.decode(),
+                        },
+                        separators=(",", ":"),
+                    ).encode()
+                    _ssh(consumer["connection_ref"], f"deploy:{domain}", payload)
+        except ProviderError as exc:
+            raise ProviderError(
+                f"TLS deployment failed for {consumer['name']} "
+                f"({consumer['kind']}): {exc}"
+            ) from exc
     return deployment_status
 
 
@@ -803,13 +825,26 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
                 break
             time.sleep(5)
         else:
-            raise ProviderError("Consumers did not serve the renewed certificate.")
+            served = ", ".join(
+                f"{item['consumer']}:{item['domain']}="
+                f"{item['fingerprint_sha256']}"
+                for item in last_result.status["consumers"]
+            )
+            raise ProviderError(
+                "TLS verification did not converge on "
+                f"{expected_fingerprint}; observed {served}."
+            )
     except ProviderError as exc:
         try:
             _deploy_certificate(spec, previous_fullchain, previous_key)
         except ProviderError as rollback_exc:
-            raise ProviderError("Certificate deployment and rollback both failed.") from rollback_exc
-        raise ProviderError("Certificate deployment failed and was rolled back.") from exc
+            raise ProviderError(
+                f"Certificate deployment failed ({exc}); rollback also failed "
+                f"({rollback_exc})."
+            ) from rollback_exc
+        raise ProviderError(
+            f"Certificate deployment failed ({exc}); rollback succeeded."
+        ) from exc
     assert last_result is not None
     status = {
         **last_result.status,
