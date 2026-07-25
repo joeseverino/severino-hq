@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -10,6 +11,7 @@ from django.views.generic import (
     UpdateView,
 )
 
+from application.content import content_command_from_cleaned_data, save_content
 from .forms import ContentItemForm
 from .models import ContentItem
 
@@ -83,9 +85,14 @@ class ContentCreateView(LoginRequiredMixin, CreateView):
     template_name = "content/content_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_content(
+            content_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+        )
+        self.object = ContentItem.objects.get(slug=result["content"]["slug"])
         messages.success(self.request, f"Content item “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ContentUpdateView(LoginRequiredMixin, UpdateView):
@@ -96,9 +103,15 @@ class ContentUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "slug"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_content(
+            content_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+            current_slug=self.get_object().slug,
+        )
+        self.object = ContentItem.objects.get(slug=result["content"]["slug"])
         messages.success(self.request, f"Content item “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ContentDeleteView(LoginRequiredMixin, DeleteView):

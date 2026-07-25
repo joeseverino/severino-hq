@@ -106,6 +106,15 @@ The service resolves project relationships before writing, rolls back on any
 missing slug, normalizes deductible values through the model contract, and
 supports the same optional stale-write protection as Projects.
 
+### Content
+
+`application.content.save_content()` owns the publishing pipeline record and
+its Project, Asset, Expense, and Documentation relationships. All relationship
+identifiers resolve before persistence, so one missing reference rolls the
+entire operation back. MCP results omit sensitive and restricted documentation
+identifiers while the authenticated web UI can still manage the underlying
+relationship through the same service.
+
 ## Security model
 
 The service boundary complements the existing network boundary:

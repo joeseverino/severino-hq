@@ -10,6 +10,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from application import assets as asset_service
+from application import content as content_service
 from application import documentation as documentation_service
 from application import projects as project_service
 from assets.models import Asset
@@ -230,6 +231,92 @@ def update_asset(
             status=status,
             notes=notes,
             related_projects=tuple(related_projects or ()),
+        ),
+        interface="mcp",
+        actor="mcp-service-account",
+        current_slug=slug,
+        expected_updated_at=expected_updated_at,
+    )
+
+
+def create_content(
+    title: str,
+    slug: str = "",
+    content_type: str = "article",
+    status: str = "draft",
+    topic: str = "",
+    tags: str = "",
+    published_url: str = "",
+    wordpress_post_id: int | None = None,
+    wordpress_slug: str = "",
+    published_at: date | None = None,
+    notes: str = "",
+    related_projects: list[str] | None = None,
+    related_assets: list[str] | None = None,
+    related_expenses: list[int] | None = None,
+    related_documentation: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create an HQ content item through the canonical service."""
+    return content_service.save_content(
+        content_service.ContentCommand(
+            title=title,
+            slug=slug,
+            content_type=content_type,
+            status=status,
+            topic=topic,
+            tags=tags,
+            published_url=published_url,
+            wordpress_post_id=wordpress_post_id,
+            wordpress_slug=wordpress_slug,
+            published_at=published_at,
+            notes=notes,
+            related_projects=tuple(related_projects or ()),
+            related_assets=tuple(related_assets or ()),
+            related_expenses=tuple(related_expenses or ()),
+            related_documentation=tuple(related_documentation or ()),
+        ),
+        interface="mcp",
+        actor="mcp-service-account",
+    )
+
+
+def update_content(
+    slug: str,
+    title: str,
+    new_slug: str = "",
+    content_type: str = "article",
+    status: str = "draft",
+    topic: str = "",
+    tags: str = "",
+    published_url: str = "",
+    wordpress_post_id: int | None = None,
+    wordpress_slug: str = "",
+    published_at: date | None = None,
+    notes: str = "",
+    related_projects: list[str] | None = None,
+    related_assets: list[str] | None = None,
+    related_expenses: list[int] | None = None,
+    related_documentation: list[str] | None = None,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Update content with optional optimistic concurrency protection."""
+    return content_service.save_content(
+        content_service.ContentCommand(
+            title=title,
+            slug=new_slug or slug,
+            content_type=content_type,
+            status=status,
+            topic=topic,
+            tags=tags,
+            published_url=published_url,
+            wordpress_post_id=wordpress_post_id,
+            wordpress_slug=wordpress_slug,
+            published_at=published_at,
+            notes=notes,
+            related_projects=tuple(related_projects or ()),
+            related_assets=tuple(related_assets or ()),
+            related_expenses=tuple(related_expenses or ()),
+            related_documentation=tuple(related_documentation or ()),
         ),
         interface="mcp",
         actor="mcp-service-account",

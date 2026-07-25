@@ -12,12 +12,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from assets.models import Asset
+from content.models import ContentItem
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
 
 from .documentation import sync_documentation
 from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
+from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from .projects import ConflictError, ProjectCommand, save_project
 
 
@@ -284,3 +286,81 @@ class DocumentationSyncTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["stats"]["created"], 1)
+
+
+class ContentApplicationServiceTests(TestCase):
+    def setUp(self):
+        self.project = Project.objects.create(name="Site", slug="site")
+
+    def test_relationship_failure_rolls_back(self):
+        with self.assertRaisesRegex(ContentNotFoundError, "missing"):
+            save_content(
+                ContentCommand(
+                    title="Invalid",
+                    slug="invalid",
+                    related_assets=("missing",),
+                ),
+                interface="mcp",
+                actor="agent",
+            )
+        self.assertFalse(ContentItem.objects.filter(slug="invalid").exists())
+
+    def test_web_mcp_and_cli_share_content_shape_and_audit(self):
+        user = get_user_model().objects.create_user(username="content-operator")
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("content:create"),
+            {
+                "title": "Web Content",
+                "slug": "web-content",
+                "content_type": "article",
+                "status": "draft",
+                "topic": "",
+                "tags": "django, mcp",
+                "published_url": "",
+                "wordpress_post_id": "",
+                "wordpress_slug": "",
+                "published_at": "",
+                "notes": "",
+                "related_projects": [self.project.pk],
+                "related_assets": [],
+                "related_expenses": [],
+                "related_documentation": [],
+            },
+        )
+        self.assertRedirects(
+            response, reverse("content:detail", args=["web-content"])
+        )
+
+        async def call_mcp():
+            tool = mcp._tool_manager.get_tool("create_content")
+            return await tool.run(
+                {
+                    "title": "MCP Content",
+                    "slug": "mcp-content",
+                    "related_projects": ["site"],
+                }
+            )
+
+        mcp_result = async_to_sync(call_mcp)()
+        output = StringIO()
+        call_command(
+            "create_content",
+            "cli-content",
+            title="CLI Content",
+            project=["site"],
+            json=True,
+            stdout=output,
+        )
+        cli_result = json.loads(output.getvalue())
+
+        self.assertEqual(set(mcp_result["content"]), set(cli_result["content"]))
+        for title, interface in (
+            ("Web Content", "web"),
+            ("MCP Content", "mcp"),
+            ("CLI Content", "cli"),
+        ):
+            self.assertEqual(
+                AuditLog.objects.get(object_repr=title).metadata["interface"],
+                interface,
+            )
