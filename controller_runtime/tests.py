@@ -55,6 +55,73 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict(
         "os.environ",
         {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_adguard_update_uses_the_provider_contract(self, request):
+        request.side_effect = [
+            [{"domain": "hq.example", "answer": "192.0.2.9", "enabled": True}],
+            None,
+        ]
+
+        result = providers.reconcile_adguard(
+            {"domain": "hq.example", "answer": "192.0.2.10"}
+        )
+
+        self.assertTrue(result.changed)
+        self.assertEqual(
+            request.call_args_list[1].kwargs["payload"],
+            {
+                "target": {"domain": "hq.example", "answer": "192.0.2.9"},
+                "update": {"domain": "hq.example", "answer": "192.0.2.10"},
+            },
+        )
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret-a",
+            "ADGUARD_CONNECTION_REF": "homelab-adguard",
+            "NPM_URL": "https://npm.example",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret-b",
+            "NPM_CONNECTION_REF": "homelab-npm",
+            "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
+            "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
+            "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_preflight_proves_cloudflare_token_and_zone_scope(self, request):
+        request.side_effect = [
+            {"dns_addresses": ["0.0.0.0"]},
+            {"token": "short-lived"},
+            {"success": True},
+            {
+                "result": [
+                    {"name": "jseverino.com"},
+                    {"name": "jseverino.net"},
+                    {"name": "jseverino.org"},
+                    {"name": "joeseverino.com"},
+                ]
+            },
+        ]
+
+        result = providers.preflight()
+
+        self.assertEqual(result[-1]["connection_ref"], "cloudflare-dns-jseverino")
+        self.assertNotIn("secret-c", json.dumps(result))
+
+    @mock.patch.dict(
+        "os.environ",
+        {
             "NPM_URL": "https://npm.example/api",
             "NPM_USERNAME": "controller@example.com",
             "NPM_PASSWORD": "secret",

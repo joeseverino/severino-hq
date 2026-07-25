@@ -325,6 +325,8 @@ class ProviderContractTests(TestCase):
             self.assertIsNotNone(context)
             if request.full_url.endswith("/control/status"):
                 return Response({"dns_addresses": ["0.0.0.0"]})
+            if request.full_url.endswith("/user/tokens/verify"):
+                return Response({"success": True})
             return Response({"token": "not-returned-by-probe"})
 
         env = {
@@ -336,12 +338,16 @@ class ProviderContractTests(TestCase):
             "NPM_URL": "https://proxy.homelab",
             "NPM_USERNAME": "controller@example.com",
             "NPM_PASSWORD": "secret-b",
+            "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
+            "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
+            "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
         }
         probes = preflight_connections(env, open_url=open_url)
         rendered = repr(probes)
         self.assertTrue(all(probe.ok for probe in probes))
         self.assertNotIn("secret-a", rendered)
         self.assertNotIn("secret-b", rendered)
+        self.assertNotIn("secret-c", rendered)
 
     def test_provider_catalog_is_stable_strict_and_marks_public_effects(self):
         self.assertEqual(describe_providers(), describe_providers())

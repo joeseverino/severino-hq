@@ -81,6 +81,28 @@ def _adguard_probe(env: dict[str, str], open_url: Callable) -> ConnectionProbe:
     )
 
 
+def _cloudflare_dns_probe(env: dict[str, str], open_url: Callable) -> ConnectionProbe:
+    connection_ref = _required(env, "CLOUDFLARE_DNS_CONNECTION_REF")
+    endpoint = _required(env, "CLOUDFLARE_DNS_URL").rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {_required(env, 'CLOUDFLARE_DNS_API_TOKEN')}"
+    }
+    request = Request(
+        f"{endpoint}/user/tokens/verify",
+        method="GET",
+        headers=headers,
+    )
+    with open_url(
+        request, timeout=10, context=_controller_ssl_context()
+    ) as response:
+        payload = json.load(response)
+    if not payload.get("success"):
+        raise ValueError("Cloudflare DNS token verification failed.")
+    return ConnectionProbe(
+        connection_ref, "cloudflare_dns", True, "Authentication succeeded."
+    )
+
+
 def preflight_connections(
     env: dict[str, str] | None = None,
     *,
@@ -88,7 +110,11 @@ def preflight_connections(
 ) -> list[ConnectionProbe]:
     source = dict(os.environ if env is None else env)
     probes = []
-    for provider, probe in (("adguard", _adguard_probe), ("npm", _npm_probe)):
+    for provider, probe in (
+        ("adguard", _adguard_probe),
+        ("npm", _npm_probe),
+        ("cloudflare_dns", _cloudflare_dns_probe),
+    ):
         try:
             probes.append(probe(source, open_url))
         except (ValueError, HTTPError, URLError, TimeoutError) as exc:

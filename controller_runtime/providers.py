@@ -103,7 +103,9 @@ def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderRe
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
     if len(matches) > 1:
         raise ProviderError("AdGuard contains duplicate rewrites for the domain.")
-    if matches == [desired]:
+    if len(matches) == 1 and all(
+        matches[0].get(key) == value for key, value in desired.items()
+    ):
         changed = False
     elif matches:
         if apply:
@@ -112,10 +114,11 @@ def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderRe
                 method="PUT",
                 headers=headers,
                 payload={
-                    "target": matches[0]["domain"],
-                    "answer": matches[0]["answer"],
-                    "domain": desired["domain"],
-                    "new_answer": desired["answer"],
+                    "target": {
+                        "domain": matches[0]["domain"],
+                        "answer": matches[0]["answer"],
+                    },
+                    "update": desired,
                 },
             )
         changed = True
@@ -171,6 +174,38 @@ def preflight() -> list[dict[str, Any]]:
     )
     npm_url = _npm_api_url(_required("NPM", "URL"))
     _npm_token(npm_url)
+    cloudflare_url = _required("CLOUDFLARE_DNS", "URL").rstrip("/")
+    cloudflare_headers = {
+        "Authorization": f"Bearer {_required('CLOUDFLARE_DNS', 'API_TOKEN')}"
+    }
+    verification = _request(
+        f"{cloudflare_url}/user/tokens/verify",
+        headers=cloudflare_headers,
+    )
+    if not isinstance(verification, dict) or not verification.get("success"):
+        raise ProviderError("Cloudflare DNS token verification failed.")
+    zones = _request(
+        f"{cloudflare_url}/zones?per_page=50",
+        headers=cloudflare_headers,
+    )
+    available_zones = {
+        zone.get("name")
+        for zone in zones.get("result", [])
+        if isinstance(zone, dict)
+    }
+    required_zones = {
+        "jseverino.com",
+        "jseverino.net",
+        "jseverino.org",
+        "joeseverino.com",
+    }
+    missing_zones = sorted(required_zones - available_zones)
+    if missing_zones:
+        raise ProviderError(
+            "Cloudflare DNS token cannot read required zones: "
+            + ", ".join(missing_zones)
+            + "."
+        )
     return [
         {
             "connection_ref": _required("ADGUARD", "CONNECTION_REF"),
@@ -180,6 +215,11 @@ def preflight() -> list[dict[str, Any]]:
         {
             "connection_ref": _required("NPM", "CONNECTION_REF"),
             "provider": "npm",
+            "ok": True,
+        },
+        {
+            "connection_ref": _required("CLOUDFLARE_DNS", "CONNECTION_REF"),
+            "provider": "cloudflare_dns",
             "ok": True,
         },
     ]
