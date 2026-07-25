@@ -7,6 +7,21 @@ from . import providers, worker
 
 
 class ProviderAdapterTests(TestCase):
+    @mock.patch.dict(
+        "os.environ", {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"}, clear=True
+    )
+    @mock.patch("controller_runtime.providers.ssl.create_default_context")
+    def test_tls_context_adds_controller_ca_without_replacing_public_roots(
+        self, create_default_context
+    ):
+        context = create_default_context.return_value
+
+        self.assertIs(providers._tls_context(), context)
+
+        context.load_verify_locations.assert_called_once_with(
+            cafile="/run/secrets/homelab-ca.pem"
+        )
+
     def test_npm_ui_url_derives_api_base_once(self):
         self.assertEqual(
             providers._npm_api_url("https://npm.example"),

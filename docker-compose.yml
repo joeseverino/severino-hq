@@ -37,6 +37,8 @@ services:
       SEVERINO_MEDIA_ROOT: /media
       SEVERINO_EXPORTS_ROOT: /exports
       DJANGO_STATIC_ROOT: /static
+      # Provider HTTPS keeps normal public roots and adds the homelab CA.
+      HQ_CONTROLLER_CA_FILE: /run/secrets/severino_controller_ca.pem
       # Production mounts the validator token as a file. The /dev/null default
       # keeps MCP disabled in development without putting a token in .env.
       SEVERINO_MCP_TOKEN_FILE: /run/secrets/severino_mcp_token
@@ -55,6 +57,10 @@ services:
       - type: bind
         source: ${SEVERINO_APP_ENV_FILE_HOST:-/dev/null}
         target: /run/secrets/severino_hq_env
+        read_only: true
+      - type: bind
+        source: ${SEVERINO_CONTROLLER_CA_FILE_HOST:-/dev/null}
+        target: /run/secrets/severino_controller_ca.pem
         read_only: true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/',timeout=3).status in (200,302) else 1)"]

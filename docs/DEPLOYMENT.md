@@ -294,6 +294,11 @@ server {
 
 ## Verifying the deployment
 
+For internal provider HTTPS, set `SEVERINO_CONTROLLER_CA_FILE_HOST` to the
+host's public homelab root certificate. Compose mounts it read-only; provider
+requests retain normal public trust and add this CA instead of disabling TLS
+verification.
+
 ```bash
 # From the VPS / homelab host (NOT the public internet)
 curl -I http://127.0.0.1:8000/accounts/login/
