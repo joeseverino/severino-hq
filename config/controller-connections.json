@@ -23,8 +23,8 @@
         "source": "connection_ref"
       },
       "URL": {
-        "source": "url",
-        "index": 0
+        "source": "field",
+        "id": "website"
       },
       "API_TOKEN": {
         "source": "field",
@@ -47,6 +47,20 @@
       "provider": "cloudflare_dns",
       "projection": "api_token",
       "env_prefix": "CLOUDFLARE_DNS"
+    }
+  },
+  "ssh_transports": {
+    "edge": {
+      "host": "100.85.1.19",
+      "port": 7722,
+      "user": "hq-controller",
+      "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPACQdOoik854h6jq2Qmwh+sOrAvKOurHKwoqlT4ADhM"
+    },
+    "namecheap-cpanel": {
+      "host": "162.213.251.72",
+      "port": 21098,
+      "user": "jsevphha",
+      "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOAwA3q6b0DtuLdPSvh0P5zEc4Dt20gqEsRekbngYmO0"
     }
   }
 }
