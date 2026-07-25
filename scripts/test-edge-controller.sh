@@ -12,6 +12,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=old.example.test \
     -keyout "${cert_dir}/privkey.pem" -out "${cert_dir}/fullchain.pem" >/dev/null 2>&1
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=new.example.test \
     -keyout "${new_dir}/privkey.pem" -out "${new_dir}/fullchain.pem" >/dev/null 2>&1
+expected_fingerprint="$(openssl x509 -in "${new_dir}/fullchain.pem" -noout -fingerprint -sha256)"
 cat >"${bin_dir}/docker" <<'EOF'
 #!/bin/sh
 exit 0
@@ -23,5 +24,5 @@ tar -C "${new_dir}" -cf - fullchain.pem privkey.pem | \
     SEVERINO_HQ_CERT_OWNER="$(id -un)" SEVERINO_HQ_CERT_GROUP="$(id -gn)" \
     deploy/targets/severino-hq-edge-controller deploy
 
-test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -subject)" = \
-    "subject=CN=new.example.test"
+test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256)" = \
+    "${expected_fingerprint}"
