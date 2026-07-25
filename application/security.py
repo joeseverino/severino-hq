@@ -16,7 +16,14 @@ class Capability(StrEnum):
     WRITE_EXPENSES = "write_expenses"
     WRITE_RECEIPTS = "write_receipts"
     SYNC_DOCUMENTATION = "sync_documentation"
+    WRITE_DOCUMENTATION = "write_documentation"
     PRUNE_DOCUMENTATION = "prune_documentation"
+    DELETE_PROJECTS = "delete_projects"
+    DELETE_ASSETS = "delete_assets"
+    DELETE_CONTENT = "delete_content"
+    DELETE_EXPENSES = "delete_expenses"
+    DELETE_DOCUMENTATION = "delete_documentation"
+    DELETE_RECEIPTS = "delete_receipts"
 
 
 class AuthorizationError(PermissionError):
@@ -61,8 +68,22 @@ def mcp_principal() -> Principal:
                 Capability.WRITE_EXPENSES,
                 Capability.WRITE_RECEIPTS,
                 Capability.SYNC_DOCUMENTATION,
+                Capability.WRITE_DOCUMENTATION,
             }
         )
     if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
         capabilities.add(Capability.PRUNE_DOCUMENTATION)
+    if getattr(
+        settings, "SEVERINO_MCP_ENABLE_WRITES", False
+    ) and getattr(settings, "SEVERINO_MCP_ENABLE_DELETES", False):
+        capabilities.update(
+            {
+                Capability.DELETE_PROJECTS,
+                Capability.DELETE_ASSETS,
+                Capability.DELETE_CONTENT,
+                Capability.DELETE_EXPENSES,
+                Capability.DELETE_DOCUMENTATION,
+                Capability.DELETE_RECEIPTS,
+            }
+        )
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))

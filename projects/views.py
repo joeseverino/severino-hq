@@ -18,6 +18,7 @@ from django.views.generic import (
 )
 
 from application.projects import project_command_from_cleaned_data, save_project
+from application.deletion import DeleteCommand, delete_project
 from application.security import web_principal
 from core.audit import record_event
 from core.models import AuditLog
@@ -197,7 +198,11 @@ class ProjectDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "project"
 
     def form_valid(self, form):
-        name = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Project “{name}” deleted.")
-        return response
+        slug = self.get_object().slug
+        result = delete_project(
+            DeleteCommand(confirm=slug),
+            principal=web_principal(self.request.user),
+            current_slug=slug,
+        )
+        messages.success(self.request, f"Project “{result['deleted']['label']}” deleted.")
+        return redirect(self.success_url)

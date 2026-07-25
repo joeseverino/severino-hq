@@ -73,6 +73,71 @@ class CapabilityTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertTrue(Project.objects.filter(slug="json-project").exists())
 
+    def test_delete_requires_exact_confirmation(self):
+        project = Project.objects.create(name="Keep Me", slug="keep-me")
+
+        result = execute_capability(
+            "project.delete",
+            {"confirm": "wrong-target"},
+            principal=cli_principal(),
+            target=project.slug,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "operation_failed")
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+
+    def test_delete_honors_optimistic_concurrency_and_audits_success(self):
+        project = Project.objects.create(name="Delete Me", slug="delete-me")
+        stale_timestamp = project.updated_at.isoformat()
+        project.name = "Changed elsewhere"
+        project.save()
+
+        stale = execute_capability(
+            "project.delete",
+            {"confirm": project.slug},
+            principal=cli_principal(),
+            target=project.slug,
+            expected_updated_at=stale_timestamp,
+        )
+        self.assertFalse(stale["ok"])
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+
+        deleted = execute_capability(
+            "project.delete",
+            {"confirm": project.slug},
+            principal=cli_principal(),
+            target=project.slug,
+            expected_updated_at=project.updated_at.isoformat(),
+        )
+        self.assertTrue(deleted["ok"])
+        self.assertFalse(Project.objects.filter(pk=project.pk).exists())
+        event = AuditLog.objects.get(
+            action=AuditLog.Action.DELETED,
+            object_type="Project",
+            object_id=str(project.pk),
+        )
+        self.assertEqual(event.metadata["operation"], "project.delete")
+        self.assertEqual(event.metadata["interface"], "cli")
+
+    @override_settings(
+        SEVERINO_MCP_ENABLE_WRITES=True,
+        SEVERINO_MCP_ENABLE_DELETES=False,
+    )
+    def test_mcp_deletes_are_gated_separately_from_writes(self):
+        project = Project.objects.create(name="Protected", slug="protected")
+
+        result = execute_capability(
+            "project.delete",
+            {"confirm": project.slug},
+            principal=mcp_principal(),
+            target=project.slug,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+
     def test_cli_describe_and_run_use_the_same_registry(self):
         described = StringIO()
         call_command("hq_capability", "describe", stdout=described)
@@ -394,6 +459,55 @@ class DocumentationSyncTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["stats"]["created"], 1)
+
+    def test_json_documentation_capability_redacts_restricted_fields(self):
+        result = execute_capability(
+            "documentation.create",
+            {
+                "doc_id": "rb-private",
+                "title": "Private",
+                "sensitivity": "restricted",
+                "obsidian_path": "Secret/Private.md",
+                "notes": "never return this",
+            },
+            principal=cli_principal(),
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["documentation"]["obsidian_path"], "")
+        self.assertEqual(result["documentation"]["notes"], "")
+
+    def test_web_documentation_create_uses_application_service(self):
+        user = get_user_model().objects.create_user(username="docs-operator")
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("docs_index:create"),
+            {
+                "doc_id": "rb-web-doc",
+                "title": "Web Doc",
+                "doc_type": "runbook",
+                "system_service": "",
+                "environment": "other",
+                "status": "active",
+                "sensitivity": "internal",
+                "obsidian_path": "",
+                "github_path": "",
+                "external_url": "",
+                "last_reviewed": "",
+                "notes": "",
+                "related_projects": [],
+                "related_assets": [],
+                "related_expenses": [],
+            },
+        )
+        self.assertRedirects(
+            response, reverse("docs_index:detail", args=["rb-web-doc"])
+        )
+        self.assertEqual(
+            AuditLog.objects.get(object_repr="rb-web-doc — Web Doc").metadata[
+                "operation"
+            ],
+            "documentation.create",
+        )
 
 
 @override_settings(SEVERINO_MCP_ENABLE_WRITES=True)

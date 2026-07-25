@@ -33,6 +33,7 @@ from application.receipts import (
     update_receipt,
     upload_receipt,
 )
+from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
 
 from expenses.models import Expense
@@ -171,21 +172,14 @@ class ReceiptDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "receipt"
 
     def form_valid(self, form):
-        receipt: Receipt = self.get_object()
-        stored_path = None
-        if receipt.file:
-            try:
-                stored_path = Path(receipt.file.path)
-            except (ValueError, NotImplementedError):
-                stored_path = None
-        response = super().form_valid(form)
-        if stored_path and stored_path.is_file():
-            try:
-                stored_path.unlink()
-            except OSError:
-                pass
+        receipt_id = self.get_object().pk
+        delete_receipt(
+            DeleteCommand(confirm=str(receipt_id)),
+            principal=web_principal(self.request.user),
+            current_id=receipt_id,
+        )
         messages.success(self.request, "Receipt deleted.")
-        return response
+        return redirect(self.success_url)
 
 
 class ReceiptFileView(LoginRequiredMixin, View):

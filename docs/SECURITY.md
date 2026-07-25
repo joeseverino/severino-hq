@@ -98,6 +98,9 @@
       it does not use the LAN/NPM browser route.
 - [ ] The tailnet ACL permits the intended admin client to reach port 8000 and
       no broader identity than required.
+- [ ] `SEVERINO_MCP_ENABLE_WRITES`, `SEVERINO_MCP_ENABLE_PRUNE`, and
+      `SEVERINO_MCP_ENABLE_DELETES` are enabled only for the capabilities the
+      MCP service account actually needs.
 
 ## What v1 deliberately does NOT do
 

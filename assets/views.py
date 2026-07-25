@@ -12,6 +12,7 @@ from django.views.generic import (
 )
 
 from application.assets import asset_command_from_cleaned_data, save_asset
+from application.deletion import DeleteCommand, delete_asset
 from application.security import web_principal
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
@@ -125,7 +126,11 @@ class AssetDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "asset"
 
     def form_valid(self, form):
-        name = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Asset “{name}” deleted.")
-        return response
+        slug = self.get_object().slug
+        result = delete_asset(
+            DeleteCommand(confirm=slug),
+            principal=web_principal(self.request.user),
+            current_slug=slug,
+        )
+        messages.success(self.request, f"Asset “{result['deleted']['label']}” deleted.")
+        return redirect(self.success_url)

@@ -14,6 +14,7 @@ from django.views.generic import (
 )
 
 from application.expenses import expense_command_from_cleaned_data, save_expense
+from application.deletion import DeleteCommand, delete_expense
 from application.security import web_principal
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
@@ -122,7 +123,11 @@ class ExpenseDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "expense"
 
     def form_valid(self, form):
-        label = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Expense deleted: {label}.")
-        return response
+        expense_id = self.get_object().pk
+        result = delete_expense(
+            DeleteCommand(confirm=str(expense_id)),
+            principal=web_principal(self.request.user),
+            current_id=expense_id,
+        )
+        messages.success(self.request, f"Expense deleted: {result['deleted']['label']}.")
+        return redirect(self.success_url)

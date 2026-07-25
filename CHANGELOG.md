@@ -21,6 +21,10 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 - Receipt metadata updates now use the same schema-derived capability system;
   binary upload remains an authenticated web-only ingress with one shared file
   size/type policy and no MCP file or path exposure.
+- Documentation metadata CRUD and explicit confirmed deletes now route through
+  the same application services and capability registry. Delete schemas,
+  permissions, effects, validation, MCP execution, and CLI execution derive
+  from one declaration; MCP deletes remain separately fail-closed.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
   The initial typed, read-only tools cover projects, assets, expenses, receipt
   metadata, documentation status, recent activity, and system health.

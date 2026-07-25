@@ -155,6 +155,25 @@ can never read, upload, replace, or return file bytes or a storage path. The
 schema-derived capability therefore stays plug-and-play without turning the
 MCP into a file-exfiltration surface.
 
+### Documentation records
+
+`application.documentation.save_documentation()` owns manual documentation
+metadata creation and updates. It resolves all Project, Asset, and Expense
+relationships before persistence and returns a sensitivity-aware canonical
+representation. Restricted records remain manageable in the authenticated web
+UI, while MCP and CLI results redact their vault, repository, URL, and notes
+pointers.
+
+### Deletes
+
+`application.deletion` owns deletion for all six mutable HQ record families.
+Every delete is an explicit registry capability with a `destructive` effect,
+requires an exact target confirmation, locks the current row, optionally checks
+`expected_updated_at`, and emits the normal attributed audit event. Receipt
+storage cleanup runs only after the database transaction commits. MCP deletion
+requires both ordinary writes and the separate delete switch; the CLI remains
+an in-process recovery path.
+
 ## Security model
 
 The service boundary complements the existing network boundary:
@@ -167,8 +186,9 @@ The service boundary complements the existing network boundary:
 4. A typed `Principal` carries explicit capabilities into the application
    service; the service—not the adapter—authorizes the operation.
 5. MCP starts read-only. `SEVERINO_MCP_ENABLE_WRITES` enables ordinary mutation
-   capabilities, while destructive documentation pruning requires the separate
-   `SEVERINO_MCP_ENABLE_PRUNE` switch as well.
+   capabilities. Destructive documentation pruning additionally requires
+   `SEVERINO_MCP_ENABLE_PRUNE`; record deletion additionally requires
+   `SEVERINO_MCP_ENABLE_DELETES`.
 6. Application services revalidate all data and own transactional writes.
 7. Restricted documentation is removed from AI-facing relationship results.
 8. Every successful mutation leaves an attributed audit event.

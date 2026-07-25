@@ -19,7 +19,12 @@ from django.views.generic import (
     View,
 )
 
-from application.documentation import sync_documentation
+from application.documentation import (
+    documentation_command_from_cleaned_data,
+    save_documentation,
+    sync_documentation,
+)
+from application.deletion import DeleteCommand, delete_documentation
 from application.security import web_principal
 
 from .forms import DocumentationRecordForm, ManifestImportForm
@@ -119,9 +124,15 @@ class DocsCreateView(LoginRequiredMixin, CreateView):
     template_name = "docs_index/docs_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_documentation(
+            documentation_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+        )
+        self.object = DocumentationRecord.objects.get(
+            doc_id=result["documentation"]["doc_id"]
+        )
         messages.success(self.request, f"Doc record “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class DocsUpdateView(LoginRequiredMixin, UpdateView):
@@ -132,9 +143,16 @@ class DocsUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "doc_id"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_documentation(
+            documentation_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_doc_id=self.get_object().doc_id,
+        )
+        self.object = DocumentationRecord.objects.get(
+            doc_id=result["documentation"]["doc_id"]
+        )
         messages.success(self.request, f"Doc record “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class DocsDeleteView(LoginRequiredMixin, DeleteView):
@@ -146,10 +164,16 @@ class DocsDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "record"
 
     def form_valid(self, form):
-        title = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Doc record “{title}” deleted.")
-        return response
+        doc_id = self.get_object().doc_id
+        result = delete_documentation(
+            DeleteCommand(confirm=doc_id),
+            principal=web_principal(self.request.user),
+            current_doc_id=doc_id,
+        )
+        messages.success(
+            self.request, f"Doc record “{result['deleted']['label']}” deleted."
+        )
+        return redirect(self.success_url)
 
 
 class ManifestImportView(LoginRequiredMixin, View):

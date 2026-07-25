@@ -12,6 +12,7 @@ from django.views.generic import (
 )
 
 from application.content import content_command_from_cleaned_data, save_content
+from application.deletion import DeleteCommand, delete_content
 from application.security import web_principal
 from .forms import ContentItemForm
 from .models import ContentItem
@@ -122,7 +123,11 @@ class ContentDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "item"
 
     def form_valid(self, form):
-        title = str(self.get_object())
-        response = super().form_valid(form)
-        messages.success(self.request, f"Content item “{title}” deleted.")
-        return response
+        slug = self.get_object().slug
+        result = delete_content(
+            DeleteCommand(confirm=slug),
+            principal=web_principal(self.request.user),
+            current_slug=slug,
+        )
+        messages.success(self.request, f"Content item “{result['deleted']['label']}” deleted.")
+        return redirect(self.success_url)

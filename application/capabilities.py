@@ -10,7 +10,21 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from .assets import AssetCommand, save_asset
 from .content import ContentCommand, save_content
-from .documentation import DocumentationSyncCommand, execute_documentation_sync
+from .deletion import (
+    DeleteCommand,
+    delete_asset,
+    delete_content,
+    delete_documentation,
+    delete_expense,
+    delete_project,
+    delete_receipt,
+)
+from .documentation import (
+    DocumentationCommand,
+    DocumentationSyncCommand,
+    execute_documentation_sync,
+    save_documentation,
+)
 from .expenses import ExpenseCommand, save_expense
 from .projects import ProjectCommand, save_project
 from .receipts import ReceiptMetadataCommand, update_receipt
@@ -98,6 +112,23 @@ _SPECS = (
         "integer",
     ),
     CapabilitySpec(
+        "documentation.create",
+        "Create an HQ documentation metadata record.",
+        "remote_write",
+        Capability.WRITE_DOCUMENTATION,
+        DocumentationCommand,
+        save_documentation,
+    ),
+    CapabilitySpec(
+        "documentation.update",
+        "Update an HQ documentation metadata record.",
+        "remote_write",
+        Capability.WRITE_DOCUMENTATION,
+        DocumentationCommand,
+        save_documentation,
+        "doc_id",
+    ),
+    CapabilitySpec(
         "documentation.sync",
         "Synchronize a validated vault manifest into HQ.",
         "remote_write",
@@ -112,6 +143,60 @@ _SPECS = (
         Capability.WRITE_RECEIPTS,
         ReceiptMetadataCommand,
         update_receipt,
+        "integer",
+    ),
+    CapabilitySpec(
+        "project.delete",
+        "Delete a confirmed project.",
+        "destructive",
+        Capability.DELETE_PROJECTS,
+        DeleteCommand,
+        delete_project,
+        "slug",
+    ),
+    CapabilitySpec(
+        "asset.delete",
+        "Delete a confirmed asset.",
+        "destructive",
+        Capability.DELETE_ASSETS,
+        DeleteCommand,
+        delete_asset,
+        "slug",
+    ),
+    CapabilitySpec(
+        "content.delete",
+        "Delete confirmed content.",
+        "destructive",
+        Capability.DELETE_CONTENT,
+        DeleteCommand,
+        delete_content,
+        "slug",
+    ),
+    CapabilitySpec(
+        "expense.delete",
+        "Delete a confirmed expense.",
+        "destructive",
+        Capability.DELETE_EXPENSES,
+        DeleteCommand,
+        delete_expense,
+        "integer",
+    ),
+    CapabilitySpec(
+        "documentation.delete",
+        "Delete confirmed documentation metadata.",
+        "destructive",
+        Capability.DELETE_DOCUMENTATION,
+        DeleteCommand,
+        delete_documentation,
+        "doc_id",
+    ),
+    CapabilitySpec(
+        "receipt.delete",
+        "Delete a confirmed receipt and its private file.",
+        "destructive",
+        Capability.DELETE_RECEIPTS,
+        DeleteCommand,
+        delete_receipt,
         "integer",
     ),
 )
@@ -165,6 +250,8 @@ def execute_capability(
         }
         if spec.target_kind == "slug":
             kwargs["current_slug"] = str(target)
+        elif spec.target_kind == "doc_id":
+            kwargs["current_doc_id"] = str(target)
         elif spec.target_kind == "integer":
             kwargs["current_id"] = int(target)
         return spec.handler(command, **kwargs)
