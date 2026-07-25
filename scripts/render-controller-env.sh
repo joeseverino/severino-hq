@@ -26,6 +26,14 @@ jq -e '
             to_entries[];
             (.key | test("^[A-Z][A-Z0-9_]*$"))
             and (.value.source | IN("connection_ref", "url", "field"))
+            and (
+                if .value.source == "field" then
+                    ([.value.id, .value.label]
+                     | map(select(type == "string" and length > 0))
+                     | length) == 1
+                else true
+                end
+            )
         )
     )
     and (
@@ -89,14 +97,31 @@ for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
                 )"
                 ;;
             field)
-                field_id="$(
+                selector_type="$(
                     jq -r --arg projection "${projection}" --arg name "${env_name}" \
-                        '.projections[$projection][$name].id' "${registry}"
+                        '.projections[$projection][$name]
+                         | if has("id") then "id" else "label" end' \
+                        "${registry}"
                 )"
+                selector="$(
+                    jq -r --arg projection "${projection}" --arg name "${env_name}" \
+                        '.projections[$projection][$name]
+                         | if has("id") then .id else .label end' \
+                        "${registry}"
+                )"
+                field_count="$(
+                    printf %s "${match}" \
+                        | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
+                            '[.fields[] | select(.[$selector_type] == $selector)] | length'
+                )"
+                if [ "${field_count}" -ne 1 ]; then
+                    echo "Connection ${connection_ref} must contain exactly one field ${selector_type}=${selector}; found ${field_count}." >&2
+                    exit 1
+                fi
                 value="$(
                     printf %s "${match}" \
-                        | jq -r --arg id "${field_id}" \
-                            '[.fields[] | select(.id == $id)][0].value // empty | @json'
+                        | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
+                            '[.fields[] | select(.[$selector_type] == $selector)][0].value // empty | @json'
                 )"
                 ;;
             *)

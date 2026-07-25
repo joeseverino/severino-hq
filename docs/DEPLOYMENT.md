@@ -70,6 +70,9 @@ Connection projections are declared once in
 `config/controller-connections.json`. Both secret rendering and runtime
 forwarding derive their variable names from that registry; a new credential
 shape is added as a projection profile instead of duplicated shell logic.
+Built-in 1Password fields may be selected by stable ID. Custom fields must be
+selected by their stable, unique label because 1Password assigns an opaque ID
+per item; the renderer rejects missing or duplicate matches.
 
 The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate

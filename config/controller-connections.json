@@ -24,7 +24,7 @@
       },
       "URL": {
         "source": "field",
-        "id": "website"
+        "label": "website"
       },
       "API_TOKEN": {
         "source": "field",
