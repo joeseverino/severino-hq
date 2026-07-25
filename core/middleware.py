@@ -67,5 +67,6 @@ class LoginRequiredMiddleware:
             if match.url_name in settings.LOGIN_EXEMPT_URL_NAMES:
                 return True
         except Resolver404:
+            # Unresolvable paths are non-exempt and continue to authentication.
             pass
         return False
