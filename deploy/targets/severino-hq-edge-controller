@@ -2,7 +2,9 @@
 set -eu
 
 readonly operation="${1:-}"
-readonly cert_dir="/opt/apps/caddy/certs"
+readonly cert_dir="${SEVERINO_HQ_CADDY_CERT_DIR:-/opt/apps/caddy/certs}"
+readonly cert_owner="${SEVERINO_HQ_CERT_OWNER:-root}"
+readonly cert_group="${SEVERINO_HQ_CERT_GROUP:-root}"
 
 case "${operation}" in
     preflight)
@@ -15,13 +17,13 @@ case "${operation}" in
         ;;
     deploy)
         work="$(mktemp -d /tmp/severino-hq-cert.XXXXXX)"
-        trap 'rm -rf "${work}"' EXIT HUP INT TERM
-        archive="${work}/certificate.tar"
+        archive="$(mktemp /tmp/severino-hq-certificate.XXXXXX.tar)"
+        trap 'rm -rf "${work}"; rm -f "${archive}"' EXIT HUP INT TERM
         cat >"${archive}"
         test "$(tar -tf "${archive}" | sort)" = "fullchain.pem
 privkey.pem"
         tar -C "${work}" -xf "${archive}"
-        test "$(find "${work}" -maxdepth 1 -type f -printf '%f\n' | sort)" = "fullchain.pem
+        test "$(find "${work}" -type f -maxdepth 1 -exec basename {} \; | sort)" = "fullchain.pem
 privkey.pem"
         cert_key="$(openssl x509 -in "${work}/fullchain.pem" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256)"
         private_key="$(openssl pkey -in "${work}/privkey.pem" -pubout -outform DER | openssl dgst -sha256)"
@@ -29,11 +31,11 @@ privkey.pem"
         test "${cert_key}" = "${private_key}"
         install -m 0600 "${cert_dir}/fullchain.pem" "${work}/previous-fullchain.pem"
         install -m 0600 "${cert_dir}/privkey.pem" "${work}/previous-privkey.pem"
-        install -o root -g root -m 0644 "${work}/fullchain.pem" "${cert_dir}/fullchain.pem"
-        install -o root -g root -m 0600 "${work}/privkey.pem" "${cert_dir}/privkey.pem"
+        install -o "${cert_owner}" -g "${cert_group}" -m 0644 "${work}/fullchain.pem" "${cert_dir}/fullchain.pem"
+        install -o "${cert_owner}" -g "${cert_group}" -m 0600 "${work}/privkey.pem" "${cert_dir}/privkey.pem"
         if ! docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force; then
-            install -o root -g root -m 0644 "${work}/previous-fullchain.pem" "${cert_dir}/fullchain.pem"
-            install -o root -g root -m 0600 "${work}/previous-privkey.pem" "${cert_dir}/privkey.pem"
+            install -o "${cert_owner}" -g "${cert_group}" -m 0644 "${work}/previous-fullchain.pem" "${cert_dir}/fullchain.pem"
+            install -o "${cert_owner}" -g "${cert_group}" -m 0600 "${work}/previous-privkey.pem" "${cert_dir}/privkey.pem"
             docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force
             exit 1
         fi

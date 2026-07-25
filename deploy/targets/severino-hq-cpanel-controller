@@ -16,7 +16,7 @@ result = json.load(sys.stdin).get("result", {})
 sys.exit(0 if result.get("status") == 1 and not result.get("errors") else 1)
 '
         ;;
-    deploy:jseverino.net)
+    deploy:quiz.jseverino.net)
         result="$(uapi --input=json --output=json SSL install_ssl)"
         printf '%s' "${result}" | python3 -c '
 import json

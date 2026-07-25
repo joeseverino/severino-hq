@@ -375,10 +375,10 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
     )
 
 
-def _observe_tls_domain(domain: str) -> dict[str, Any]:
+def _observe_tls_domain(domain: str, *, connect_host: str | None = None) -> dict[str, Any]:
     try:
         tls_context = _tls_context()
-        with socket.create_connection((domain, 443), timeout=15) as raw_socket:
+        with socket.create_connection((connect_host or domain, 443), timeout=15) as raw_socket:
             with tls_context.wrap_socket(
                 raw_socket, server_hostname=domain
             ) as tls_socket:
@@ -427,7 +427,16 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
             unverified_consumers.append(consumer["name"])
             continue
         for domain in domains:
-            observed = _observe_tls_domain(domain)
+            connect_host = None
+            if consumer["kind"] == "cpanel":
+                registry = _certificate_registry("controller-connections.json")
+                transport = registry.get("ssh_transports", {}).get(
+                    consumer["connection_ref"], {}
+                )
+                connect_host = transport.get("host")
+                if not connect_host:
+                    raise ProviderError("cPanel origin verification endpoint is missing.")
+            observed = _observe_tls_domain(domain, connect_host=connect_host)
             observed["consumer"] = consumer["name"]
             observed["consumer_kind"] = consumer["kind"]
             observations.append(observed)

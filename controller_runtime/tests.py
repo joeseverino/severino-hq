@@ -241,6 +241,39 @@ class ProviderAdapterTests(TestCase):
         self.assertIn("BEGIN CERTIFICATE", result.status["certificate_pem"])
         self.assertNotIn("PRIVATE KEY", json.dumps(result.status))
 
+    @mock.patch("controller_runtime.providers._certificate_registry")
+    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    def test_cpanel_tls_observation_bypasses_public_proxy(self, observe, registry):
+        registry.return_value = {
+            "ssh_transports": {"cpanel": {"host": "192.0.2.10"}}
+        }
+        observe.return_value = {
+            "domain": "quiz.example.test",
+            "not_after": "2026-10-23T00:00:00+00:00",
+            "fingerprint_sha256": "current",
+            "issuer": "Example CA",
+            "sans": ["*.example.test"],
+            "certificate_pem": "-----BEGIN CERTIFICATE-----\ncurrent\n",
+        }
+
+        providers.reconcile_tls(
+            {
+                "renewal_window_days": 30,
+                "consumers": [
+                    {
+                        "kind": "cpanel",
+                        "name": "cpanel",
+                        "connection_ref": "cpanel",
+                        "verify_domains": ["quiz.example.test"],
+                    }
+                ],
+            }
+        )
+
+        observe.assert_called_once_with(
+            "quiz.example.test", connect_host="192.0.2.10"
+        )
+
     @mock.patch("controller_runtime.providers.renew_tls")
     def test_renew_plan_never_mutates(self, renew):
         result = providers.execute(
