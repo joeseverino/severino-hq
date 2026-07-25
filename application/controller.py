@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import timedelta, timezone as datetime_timezone
 from typing import Any
 
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from control_plane.models import OperationRequest
+from control_plane.models import ManagedResource, OperationRequest
 
 from .infrastructure import controller_contract, serialize_operation, serialize_resource
 
@@ -65,6 +65,71 @@ def peek_next_operation(
     result = {"ok": True, "operation": serialize_operation(operation)}
     result.update(controller_contract(operation.resource))
     return result
+
+
+@transaction.atomic
+def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
+    """Queue due TLS work from verified state; never issue directly here."""
+    scheduled: list[str] = []
+    resources = ManagedResource.objects.select_for_update().filter(
+        enabled=True, kind="tls.certificate"
+    )
+    now = timezone.now()
+    for resource in resources:
+        action = None
+        reason = ""
+        not_after = resource.status.get("not_after")
+        if not_after:
+            try:
+                expiry = timezone.datetime.fromisoformat(
+                    not_after.replace("Z", "+00:00")
+                )
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=datetime_timezone.utc)
+                renewal_at = expiry - timedelta(
+                    days=resource.spec.get("renewal_window_days", 30)
+                )
+                if now >= renewal_at:
+                    action = OperationRequest.Action.RENEW
+                    reason = "Automatic renewal window reached."
+            except (TypeError, ValueError):
+                action = OperationRequest.Action.RECONCILE
+                reason = "Automatic repair of invalid certificate observation."
+        if action is None and resource.generation != resource.observed_generation:
+            action = OperationRequest.Action.RECONCILE
+            reason = "Automatic reconciliation of a new desired generation."
+        if action is None and any(
+            item.get("status") is True
+            and item.get("type") in {"Drifted", "Degraded"}
+            for item in resource.conditions
+        ):
+            action = OperationRequest.Action.RECONCILE
+            reason = "Automatic reconciliation of TLS consumer drift."
+        if action is None:
+            continue
+        identity = not_after or "unobserved"
+        idempotency_key = (
+            f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}"
+        )[:200]
+        if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
+            continue
+        if OperationRequest.objects.filter(
+            resource=resource,
+            action=action,
+            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
+        ).exists():
+            continue
+        operation = OperationRequest.objects.create(
+            resource=resource,
+            action=action,
+            requested_actor=controller_id,
+            requested_interface="controller",
+            reason=reason,
+            idempotency_key=idempotency_key,
+            input={"generation": resource.generation},
+        )
+        scheduled.append(str(operation.id))
+    return {"ok": True, "scheduled": scheduled}
 
 
 @transaction.atomic

@@ -332,6 +332,7 @@ class ProviderAdapterTests(TestCase):
                 "name": "example-wildcard",
                 "verify_domains": ["dev.example.test"],
             },
+            ["example.test", "*.example.test"],
             leaf + chain,
             b"private-key",
         )
@@ -345,6 +346,54 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(certificate_id, 22)
         self.assertEqual(identity["nice_name"], "Severino HQ - example-wildcard")
         self.assertEqual(request.call_args.kwargs["payload"], {"certificate_id": 22})
+
+    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.providers._multipart_request")
+    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch.dict(
+        "os.environ",
+        {"NPM_URL": "https://npm.example.test"},
+        clear=True,
+    )
+    def test_npm_certificate_rebinds_every_covered_host_only(
+        self, _token, multipart, request
+    ):
+        certificate = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n"
+        request.side_effect = [
+            [],
+            {"id": 22, "provider": "other"},
+            [
+                {"id": 1, "domain_names": ["hq.example.test"], "certificate_id": 11},
+                {"id": 2, "domain_names": ["sso.example.test"], "certificate_id": 11},
+                {"id": 3, "domain_names": ["proxy.homelab"], "certificate_id": 7},
+                {"id": 4, "domain_names": ["off.example.test"], "enabled": False},
+            ],
+            {},
+            {},
+        ]
+
+        providers._npm_managed_certificate(
+            {
+                "name": "example-wildcard",
+                "verify_domains": [],
+                "discover_covered_hosts": True,
+            },
+            ["example.test", "*.example.test"],
+            certificate,
+            b"private-key",
+        )
+
+        self.assertEqual(multipart.call_count, 2)
+        rebound_urls = [call.args[0] for call in request.call_args_list[-2:]]
+        self.assertEqual(
+            rebound_urls,
+            [
+                "https://npm.example.test/api/nginx/proxy-hosts/1",
+                "https://npm.example.test/api/nginx/proxy-hosts/2",
+            ],
+        )
+        for call in request.call_args_list[-2:]:
+            self.assertEqual(call.kwargs["payload"]["certificate_id"], 22)
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate")
@@ -481,6 +530,10 @@ class WorkerTests(TestCase):
 
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
+        self.assertEqual(
+            manage.call_args_list[0].args,
+            ("schedule", "--controller-id", "test"),
+        )
         self.assertIn("adguard.rewrite:reconcile", arguments)
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
@@ -502,6 +555,7 @@ class WorkerTests(TestCase):
     @mock.patch("controller_runtime.worker._manage")
     def test_provider_failure_is_reported_without_secret(self, manage, execute, _):
         manage.side_effect = [
+            {"ok": True, "scheduled": []},
             {
                 "operation": {"id": "operation-1", "action": "reconcile"},
                 "resource": {
@@ -517,6 +571,6 @@ class WorkerTests(TestCase):
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = json.loads(manage.call_args_list[1].args[-1])
+        report_payload = json.loads(manage.call_args_list[2].args[-1])
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())

@@ -22,6 +22,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from control_plane.providers import certificate_covers
+
 
 class ProviderError(RuntimeError):
     """A provider operation failed without exposing credential material."""
@@ -444,13 +446,40 @@ def _consumer_tls_endpoint(
     return None
 
 
+def _npm_covered_hosts(certificate_domains: list[str]) -> list[dict[str, Any]]:
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    names = set(certificate_domains)
+    return [
+        host
+        for host in hosts
+        if host.get("enabled") is not False
+        and any(
+            certificate_covers(domain, names)
+            for domain in host.get("domain_names", [])
+        )
+    ]
+
+
 def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
     consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
     registry = _certificate_registry("controller-connections.json")
     for consumer in spec["consumers"]:
-        domains = consumer.get("verify_domains", [])
+        domains = list(consumer.get("verify_domains", []))
+        if consumer["kind"] == "npm" and consumer.get("discover_covered_hosts"):
+            domains = sorted(
+                {
+                    *domains,
+                    *(
+                        domain
+                        for host in _npm_covered_hosts(spec["domains"])
+                        for domain in host.get("domain_names", [])
+                    ),
+                }
+            )
         if not domains:
             unverified_consumers.append(consumer["name"])
             continue
@@ -721,7 +750,10 @@ def _resumable_lineage(
 
 
 def _npm_managed_certificate(
-    consumer: dict[str, Any], fullchain: bytes, private_key: bytes
+    consumer: dict[str, Any],
+    certificate_domains: list[str],
+    fullchain: bytes,
+    private_key: bytes,
 ) -> tuple[int, dict[str, str]]:
     base_url = _npm_api_url(_required("NPM", "URL"))
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
@@ -769,11 +801,16 @@ def _npm_managed_certificate(
     )
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     verify_domains = set(consumer["verify_domains"])
-    matching_hosts = [
-        host
-        for host in hosts
-        if verify_domains.intersection(host.get("domain_names", []))
-    ]
+    certificate_names = set(certificate_domains)
+    matching_hosts = []
+    for host in hosts:
+        host_domains = host.get("domain_names", [])
+        explicitly_selected = bool(verify_domains.intersection(host_domains))
+        discovered = consumer.get("discover_covered_hosts") and any(
+            certificate_covers(domain, certificate_names) for domain in host_domains
+        )
+        if host.get("enabled") is not False and (explicitly_selected or discovered):
+            matching_hosts.append(host)
     covered = {
         domain
         for host in matching_hosts
@@ -814,7 +851,7 @@ def _deploy_certificate(
         try:
             if consumer["kind"] == "npm":
                 certificate_id, identity = _npm_managed_certificate(
-                    consumer, fullchain, private_key
+                    consumer, spec["domains"], fullchain, private_key
                 )
                 deployment_status.update(
                     npm_certificate_id=certificate_id,
@@ -842,7 +879,7 @@ def _deploy_certificate(
     return deployment_status
 
 
-def _renew_verification_policy() -> tuple[int, int]:
+def _tls_verification_policy() -> tuple[int, int]:
     registry = _certificate_registry("controller-capabilities.json")
     policy = (
         registry.get("capabilities", {})
@@ -858,6 +895,143 @@ def _renew_verification_policy() -> tuple[int, int]:
     if not 30 <= timeout <= 600 or not 1 <= interval <= 30 or interval > timeout:
         raise ProviderError("TLS renewal verification policy is out of bounds.")
     return timeout, interval
+
+
+def _verify_tls_deployment(
+    spec: dict[str, Any], expected_fingerprint: str
+) -> ProviderResult:
+    timeout, interval = _tls_verification_policy()
+    deadline = time.monotonic() + timeout
+    while True:
+        result = reconcile_tls(spec)
+        fingerprints = {
+            item["fingerprint_sha256"] for item in result.status["consumers"]
+        }
+        if fingerprints == {expected_fingerprint}:
+            return result
+        if time.monotonic() >= deadline:
+            evidence = [
+                {
+                    "consumer": item["consumer"],
+                    "kind": item["consumer_kind"],
+                    "domain": item["domain"],
+                    "fingerprint_sha256": item["fingerprint_sha256"],
+                    "matches_expected": (
+                        item["fingerprint_sha256"] == expected_fingerprint
+                    ),
+                }
+                for item in result.status["consumers"]
+            ]
+            failed = {
+                item["consumer"]
+                for item in evidence
+                if not item["matches_expected"]
+            }
+            raise ProviderError(
+                f"{len(failed)} of {len(spec['consumers'])} TLS consumers "
+                "did not activate the certificate in time.",
+                status={
+                    "expected_fingerprint_sha256": expected_fingerprint,
+                    "consumers": evidence,
+                },
+            )
+        time.sleep(interval)
+
+
+def _deploy_tls_transaction(
+    spec: dict[str, Any],
+    fullchain: bytes,
+    private_key: bytes,
+    previous_fullchain: bytes,
+    previous_key: bytes,
+    *,
+    artifact_source: str,
+    reason: str,
+    message: str,
+) -> ProviderResult:
+    expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
+    try:
+        deployment_status = _deploy_certificate(spec, fullchain, private_key)
+        observed = _verify_tls_deployment(spec, expected_fingerprint)
+    except ProviderError as exc:
+        try:
+            _deploy_certificate(spec, previous_fullchain, previous_key)
+        except ProviderError as rollback_exc:
+            raise ProviderError(
+                f"Certificate deployment failed ({exc}); rollback also failed "
+                f"({rollback_exc})."
+            ) from rollback_exc
+        raise ProviderError(
+            f"Certificate deployment failed: {exc} Rollback succeeded.",
+            status=exc.status,
+        ) from exc
+    status = {
+        **observed.status,
+        **deployment_status,
+        "artifact_source": artifact_source,
+        "renewed_fingerprint_sha256": expected_fingerprint,
+    }
+    return ProviderResult(
+        changed=True,
+        status=status,
+        conditions=[
+            _condition(
+                "Ready", True, reason, "All TLS consumers serve the certificate."
+            )
+        ],
+        message=message,
+    )
+
+
+def _lineage(spec: dict[str, Any]) -> tuple[bytes, bytes]:
+    lineage = (
+        Path(_required("HQ", "ACME_DIR"))
+        / "config"
+        / "live"
+        / spec["certificate_name"]
+    )
+    try:
+        return lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath(
+            "privkey.pem"
+        ).read_bytes()
+    except OSError as exc:
+        raise ProviderError("Certbot lineage is unavailable for reconciliation.") from exc
+
+
+def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
+    fullchain, private_key = _lineage(spec)
+    expected = _validate_certificate(fullchain, private_key, spec["domains"])
+    observed = reconcile_tls(spec)
+    fingerprints = {
+        item["fingerprint_sha256"] for item in observed.status["consumers"]
+    }
+    if fingerprints == {expected}:
+        return ProviderResult(
+            changed=False,
+            status={**observed.status, "artifact_source": "existing_lineage"},
+            conditions=[
+                _condition("Ready", True, "Verified", "All TLS consumers match.")
+            ],
+            message="Certificate consumers already match the managed lineage.",
+        )
+    caddy = next(
+        (item for item in spec["consumers"] if item["kind"] == "caddy"), None
+    )
+    if caddy is None:
+        raise ProviderError("Certificate reconciliation requires a rollback source.")
+    previous_fullchain, previous_key = _read_bundle(
+        _ssh(caddy["connection_ref"], "snapshot")
+    )
+    return _deploy_tls_transaction(
+        spec,
+        fullchain,
+        private_key,
+        previous_fullchain,
+        previous_key,
+        artifact_source="existing_lineage",
+        reason="Reconciled",
+        message="Certificate redistributed and verified without issuance.",
+    )
 
 
 def renew_tls(spec: dict[str, Any]) -> ProviderResult:
@@ -879,70 +1053,14 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     else:
         fullchain, private_key = resumed
         artifact_source = "existing_lineage"
-    expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
-    try:
-        deployment_status = _deploy_certificate(spec, fullchain, private_key)
-        last_result = None
-        timeout, interval = _renew_verification_policy()
-        deadline = time.monotonic() + timeout
-        while True:
-            last_result = reconcile_tls(spec)
-            fingerprints = {
-                item["fingerprint_sha256"]
-                for item in last_result.status["consumers"]
-            }
-            if fingerprints == {expected_fingerprint}:
-                break
-            if time.monotonic() >= deadline:
-                evidence = [
-                    {
-                        "consumer": item["consumer"],
-                        "kind": item["consumer_kind"],
-                        "domain": item["domain"],
-                        "fingerprint_sha256": item["fingerprint_sha256"],
-                        "matches_expected": (
-                            item["fingerprint_sha256"] == expected_fingerprint
-                        ),
-                    }
-                    for item in last_result.status["consumers"]
-                ]
-                failed = {
-                    item["consumer"]
-                    for item in evidence
-                    if not item["matches_expected"]
-                }
-                raise ProviderError(
-                    f"{len(failed)} of {len(spec['consumers'])} TLS consumers "
-                    "did not activate the renewed certificate in time.",
-                    status={
-                        "expected_fingerprint_sha256": expected_fingerprint,
-                        "consumers": evidence,
-                    },
-                )
-            time.sleep(interval)
-    except ProviderError as exc:
-        try:
-            _deploy_certificate(spec, previous_fullchain, previous_key)
-        except ProviderError as rollback_exc:
-            raise ProviderError(
-                f"Certificate deployment failed ({exc}); rollback also failed "
-                f"({rollback_exc})."
-            ) from rollback_exc
-        raise ProviderError(
-            f"Certificate deployment failed: {exc} Rollback succeeded.",
-            status=exc.status,
-        ) from exc
-    assert last_result is not None
-    status = {
-        **last_result.status,
-        **deployment_status,
-        "artifact_source": artifact_source,
-        "renewed_fingerprint_sha256": expected_fingerprint,
-    }
-    return ProviderResult(
-        changed=True,
-        status=status,
-        conditions=[_condition("Ready", True, "Renewed", "All TLS consumers serve the renewed certificate.")],
+    return _deploy_tls_transaction(
+        spec,
+        fullchain,
+        private_key,
+        previous_fullchain,
+        previous_key,
+        artifact_source=artifact_source,
+        reason="Renewed",
         message="Certificate renewed, deployed, and verified.",
     )
 
@@ -958,7 +1076,9 @@ def execute(
     if kind == "cloudflare.dns_record":
         raise ProviderError("Public DNS mutation is not enabled in this controller.")
     if kind == "tls.certificate" and action == "reconcile":
-        return reconcile_tls(resource["spec"])
+        if not apply:
+            return reconcile_tls(resource["spec"])
+        return apply_tls_reconcile(resource["spec"])
     if kind == "tls.certificate" and action == "renew":
         if not apply:
             return ProviderResult(

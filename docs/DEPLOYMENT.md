@@ -93,8 +93,14 @@ credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
 The controller claims only kind/action pairs marked `apply` in
-`config/controller-capabilities.json`. TLS observation and transactional
-renewal are active; public-DNS reconciliation remains locked.
+`config/controller-capabilities.json`. Its persistent systemd timer runs after
+boot and every minute. Each run derives work from HQ's verified state: it queues
+renewal inside the configured window and reconciliation for new topology
+generations or drift. TLS reconciliation redistributes the existing lineage;
+it does not issue. The NPM adapter discovers every enabled proxy host whose
+name is covered by the certificate, replaces their single managed certificate
+binding, reloads them, and live-verifies the shared fingerprint. Transactional
+renewal is active; public-DNS reconciliation remains locked.
 
 Do not use the web application's `CLOUDFLARE_API_TOKEN` for DNS-01. That token
 belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate

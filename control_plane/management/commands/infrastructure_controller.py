@@ -12,6 +12,7 @@ from application.controller import (
     claim_next_operation,
     peek_next_operation,
     report_operation,
+    schedule_automatic_operations,
 )
 from application.connections import preflight_connections
 from application.infrastructure import controller_contract
@@ -33,6 +34,8 @@ class Command(BaseCommand):
         export = subparsers.add_parser("export")
         export.add_argument("--resource", required=True)
         subparsers.add_parser("preflight")
+        schedule = subparsers.add_parser("schedule")
+        schedule.add_argument("--controller-id", required=True)
 
         report = subparsers.add_parser("report")
         report.add_argument("--controller-id", required=True)
@@ -76,6 +79,8 @@ class Command(BaseCommand):
                 }
                 if not result["ok"]:
                     raise ValueError(json.dumps(result, sort_keys=True))
+            elif options["action"] == "schedule":
+                result = schedule_automatic_operations(options["controller_id"])
             else:
                 payload = json.loads(options["payload"])
                 parsed = TypeAdapter(ControllerReport).validate_python(payload)

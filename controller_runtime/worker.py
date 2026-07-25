@@ -140,6 +140,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         )
         return 0
 
+    _manage("schedule", "--controller-id", controller_id)
     claim_args = ["claim", "--controller-id", controller_id]
     for kind, action in supported_capabilities():
         claim_args.extend(("--capability", f"{kind}:{action}"))
