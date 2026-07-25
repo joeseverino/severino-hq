@@ -305,6 +305,15 @@ class TopologyMaterializationTests(TestCase):
 
 
 class ProviderContractTests(TestCase):
+    def test_resolved_certificate_accepts_wildcard_covered_cpanel_vhost(self):
+        spec = resolved_certificate_spec()
+        cpanel = next(
+            item for item in spec["consumers"] if item["kind"] == "cpanel"
+        )
+        cpanel["install_domains"] = ["quiz.jseverino.net"]
+
+        validate_resolved_certificate(spec)
+
     def test_provider_preflight_authenticates_without_returning_secrets(self):
         class Response:
             def __init__(self, payload):
