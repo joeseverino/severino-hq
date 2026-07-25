@@ -15,10 +15,7 @@
     "tls.certificate": {
       "actions": {
         "reconcile": {"mode": "apply"},
-        "renew": {
-          "mode": "locked",
-          "reason": "Certbot lineage and deployment identities are not provisioned on homelab-server."
-        }
+        "renew": {"mode": "apply"}
       }
     },
     "cloudflare.dns_record": {

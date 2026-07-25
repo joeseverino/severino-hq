@@ -14,4 +14,4 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/run
+ReadWritePaths=/run /opt/apps/severino-hq/secrets/acme

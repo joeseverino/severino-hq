@@ -24,10 +24,10 @@ user="$(jq -r --arg ref "${connection_ref}" '.ssh_transports[$ref].user' "${regi
 
 case "${connection_ref}:${operation}" in
     edge:preflight)
-        remote_command='test -d /opt/apps/caddy/certs && sudo -n docker inspect caddy >/dev/null'
+        remote_command='preflight'
         ;;
     namecheap-cpanel:preflight)
-        remote_command='command -v uapi >/dev/null && uapi --output=json SSL list_certs >/dev/null'
+        remote_command='preflight'
         ;;
     *)
         echo "SSH operation ${operation} is not allowed for ${connection_ref}." >&2
