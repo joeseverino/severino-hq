@@ -7,15 +7,24 @@ unset SSH_ORIGINAL_COMMAND
 case "${operation}" in
     preflight)
         command -v uapi >/dev/null
-        command -v jq >/dev/null
-        uapi --output=json SSL list_certs >/dev/null
+        command -v python3 >/dev/null
+        uapi --output=json SSL list_certs | python3 -c '
+import json
+import sys
+
+result = json.load(sys.stdin).get("result", {})
+sys.exit(0 if result.get("status") == 1 and not result.get("errors") else 1)
+'
         ;;
-    deploy:jseverino.com|deploy:jseverino.net)
+    deploy:jseverino.net)
         result="$(uapi --input=json --output=json SSL install_ssl)"
-        printf '%s' "${result}" | jq -e '
-            .result.status == 1
-            and ((.result.errors // []) | length == 0)
-        ' >/dev/null
+        printf '%s' "${result}" | python3 -c '
+import json
+import sys
+
+result = json.load(sys.stdin).get("result", {})
+sys.exit(0 if result.get("status") == 1 and not result.get("errors") else 1)
+'
         ;;
     *)
         echo "Severino HQ cPanel operation denied." >&2

@@ -116,9 +116,11 @@ remote commands. Authorize each generated `.pub` key with the narrowest
 remote account or forced command available. Renewal stays locked until both
 deployment paths pass non-mutating preflight, deployment, live-certificate
 verification, and rollback tests. Renewal runs in a disposable container from
-the exact deployed image. It alone receives the root-owned ACME lineage,
+the exact deployed image. It alone receives the controller-only ACME lineage,
 controller credentials, and deployment keys; none are mounted into the web
-container. Before issuance it snapshots the known-good Caddy artifact. Any
+container. It runs without Linux capabilities as the application-data UID;
+the systemd launcher removes its short-lived secret projections on exit.
+Before issuance it snapshots the known-good Caddy artifact. Any
 consumer failure triggers compensating deployment of that artifact to every
 consumer, and success is reported only after all live verification names serve
 the new SHA-256 fingerprint.

@@ -9,6 +9,18 @@ previous_image="$(
     docker inspect --format '{{.Config.Image}}' severino-hq 2>/dev/null || true
 )"
 
+# Reclaim before pulling. The currently running image is referenced and cannot
+# be pruned, so it remains the rollback target while stale releases are removed.
+# Doing this only after deployment is too late when the filesystem is already
+# too full for Docker or the runner to make progress.
+docker image prune -af
+docker builder prune -af
+available_kb="$(df -Pk / | awk 'NR == 2 {print $4}')"
+if [ "${available_kb}" -lt 524288 ]; then
+    echo "Deployment requires at least 512 MiB of free root-disk space." >&2
+    exit 1
+fi
+
 sudo systemctl stop severino-hq-controller.timer 2>/dev/null || true
 
 rollback() {
