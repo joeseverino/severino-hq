@@ -257,8 +257,10 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
 
 def _observe_tls_domain(domain: str) -> dict[str, Any]:
     try:
+        tls_context = ssl.create_default_context()
+        tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
         with socket.create_connection((domain, 443), timeout=15) as raw_socket:
-            with ssl.create_default_context().wrap_socket(
+            with tls_context.wrap_socket(
                 raw_socket, server_hostname=domain
             ) as tls_socket:
                 der = tls_socket.getpeercert(binary_form=True)
@@ -323,9 +325,7 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     ]
     soonest = min(expiries)
     newest = max(managed_observations, key=lambda item: item["not_after"])
-    days_remaining = int(
-        (soonest - datetime.now(timezone.utc)).total_seconds() / 86400
-    )
+    days_remaining = int((soonest - datetime.now(timezone.utc)).total_seconds() / 86400)
     conditions: list[dict[str, Any]] = []
     if len(direct_fingerprints) > 1:
         conditions.append(

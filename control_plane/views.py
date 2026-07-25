@@ -99,6 +99,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
                 )
             except (TypeError, ValueError):
+                # A malformed provider timestamp must not break the resource page.
                 pass
         context["operations"] = self.object.operations.all()[:20]
         context["resolved_spec"] = self.object.spec
@@ -107,9 +108,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                 context["resolved_spec"] = validate_resolved_certificate(
                     {
                         **resolve_certificate(self.object.spec["topology_ref"]),
-                        "renewal_window_days": self.object.spec[
-                            "renewal_window_days"
-                        ],
+                        "renewal_window_days": self.object.spec["renewal_window_days"],
                     }
                 )
                 context["topology_error"] = ""
@@ -191,6 +190,4 @@ class ResourceReportDownloadView(LoginRequiredMixin, View):
 
 class ProviderSchemaView(LoginRequiredMixin, View):
     def get(self, request):
-        return JsonResponse(
-            describe_providers(), json_dumps_params={"indent": 2}
-        )
+        return JsonResponse(describe_providers(), json_dumps_params={"indent": 2})
