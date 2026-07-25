@@ -94,9 +94,21 @@ The controller claims only kind/action pairs marked `apply` in
 and public-DNS reconciliation remain locked and cannot be queued.
 
 Do not use the web application's `CLOUDFLARE_API_TOKEN` for DNS-01. That token
-belongs exclusively to the D1 contact-submission path. Provision any future DNS
-controller credential as a separate 1Password item with its own stable
-`connection_ref` and minimum zone/DNS permissions.
+belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate
+`Cloudflare DNS - HQ Controller` API Credential item in the `Severino HQ
+Production` vault. Its stable `connection_ref` is
+`cloudflare-dns-jseverino`; the controller resolves that reference through
+`config/controller-connections.json`. The token is restricted to Zone Read and
+DNS Edit for `jseverino.com`, `jseverino.net`, `jseverino.org`, and
+`joeseverino.com`. Controller activation verifies the token and proves all four
+zones are readable without performing a DNS mutation.
+
+Deployment identities must be machine-specific. Do not copy Joe's personal SSH
+keys into HQ or 1Password items for the controller. Edge delivery will use the
+homelab-server Tailscale node identity under an explicit tailnet SSH policy;
+cPanel delivery will use a dedicated, revocable API token over HTTPS. Renewal
+stays locked until both deployment paths have non-mutating preflights and
+verified rollback.
 
 Pull requests run checks only; a push to `main` runs the image build, scan,
 homelab deployment, health verification, and controller activation.

@@ -17,6 +17,19 @@
         "source": "field",
         "id": "password"
       }
+    },
+    "api_token": {
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "URL": {
+        "source": "url",
+        "index": 0
+      },
+      "API_TOKEN": {
+        "source": "field",
+        "id": "credential"
+      }
     }
   },
   "connections": {
@@ -29,6 +42,11 @@
       "provider": "npm",
       "projection": "login",
       "env_prefix": "NPM"
+    },
+    "cloudflare-dns-jseverino": {
+      "provider": "cloudflare_dns",
+      "projection": "api_token",
+      "env_prefix": "CLOUDFLARE_DNS"
     }
   }
 }
