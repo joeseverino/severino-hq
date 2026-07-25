@@ -13,6 +13,7 @@ from .content import ContentCommand, save_content
 from .documentation import DocumentationSyncCommand, execute_documentation_sync
 from .expenses import ExpenseCommand, save_expense
 from .projects import ProjectCommand, save_project
+from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
 
 
@@ -103,6 +104,15 @@ _SPECS = (
         Capability.SYNC_DOCUMENTATION,
         DocumentationSyncCommand,
         execute_documentation_sync,
+    ),
+    CapabilitySpec(
+        "receipt.update",
+        "Update receipt metadata and relationships (never file bytes).",
+        "remote_write",
+        Capability.WRITE_RECEIPTS,
+        ReceiptMetadataCommand,
+        update_receipt,
+        "integer",
     ),
 )
 

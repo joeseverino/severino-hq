@@ -27,6 +27,13 @@ from django.views.generic import (
 
 from core.audit import record_event
 from core.models import AuditLog
+from application.receipts import (
+    ReceiptMetadataCommand,
+    receipt_command_from_cleaned_data,
+    update_receipt,
+    upload_receipt,
+)
+from application.security import web_principal
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm
@@ -104,15 +111,19 @@ class ReceiptMatchView(LoginRequiredMixin, TemplateView):
 
         if expense_id:
             expense = get_object_or_404(Expense, pk=expense_id)
-            receipt.related_expense = expense
-            receipt.save(update_fields=["related_expense"])
-
-            record_event(
-                action=AuditLog.Action.UPDATED,
-                obj=receipt,
-                type_label="Receipt",
-                message=f"Linked receipt to expense: {expense}",
-                metadata={"expense_id": expense.id},
+            update_receipt(
+                ReceiptMetadataCommand(
+                    vendor=receipt.vendor,
+                    date=receipt.date,
+                    amount=receipt.amount,
+                    notes=receipt.notes,
+                    related_expense=expense.id,
+                    related_asset=(
+                        receipt.related_asset.slug if receipt.related_asset else None
+                    ),
+                ),
+                principal=web_principal(request.user),
+                current_id=receipt.id,
             )
             messages.success(request, f"Receipt linked to expense: {expense}")
 
@@ -125,25 +136,15 @@ class ReceiptCreateView(LoginRequiredMixin, CreateView):
     template_name = "receipts/receipt_form.html"
 
     def form_valid(self, form):
-        receipt: Receipt = form.save(commit=False)
         upload = form.cleaned_data["file"]
-        receipt.original_filename = upload.name[:255]
-        receipt.content_type = getattr(upload, "content_type", "") or ""
-        receipt.size_bytes = upload.size or 0
-        receipt.save()
-        record_event(
-            action=AuditLog.Action.UPLOADED,
-            obj=receipt,
-            type_label="Receipt",
-            message=f"Receipt uploaded: {receipt.original_filename}",
-            metadata={
-                "size_bytes": receipt.size_bytes,
-                "content_type": receipt.content_type,
-            },
+        result = upload_receipt(
+            receipt_command_from_cleaned_data(form.cleaned_data),
+            upload,
+            principal=web_principal(self.request.user),
         )
-        self.object = receipt
+        self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt uploaded.")
-        return super().form_valid(form)
+        return redirect(self.object.get_absolute_url())
 
 
 class ReceiptUpdateView(LoginRequiredMixin, UpdateView):
@@ -152,9 +153,15 @@ class ReceiptUpdateView(LoginRequiredMixin, UpdateView):
     template_name = "receipts/receipt_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = update_receipt(
+            receipt_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_id=self.get_object().pk,
+            upload=form.cleaned_data.get("file"),
+        )
+        self.object = Receipt.objects.get(pk=result["receipt"]["id"])
         messages.success(self.request, "Receipt updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ReceiptDeleteView(LoginRequiredMixin, DeleteView):

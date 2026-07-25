@@ -15,6 +15,7 @@ from django.urls import reverse
 from assets.models import Asset
 from content.models import ContentItem
 from expenses.models import Expense
+from receipts.models import Receipt
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
@@ -86,6 +87,23 @@ class CapabilityTests(TestCase):
             stdout=executed,
         )
         self.assertTrue(json.loads(executed.getvalue())["ok"])
+
+    def test_receipt_json_capability_updates_metadata_without_file_access(self):
+        receipt = Receipt.objects.create(
+            file="receipts/fixture.pdf",
+            original_filename="fixture.pdf",
+        )
+        result = execute_capability(
+            "receipt.update",
+            {"vendor": "Updated Vendor", "amount": "42.50"},
+            principal=cli_principal(),
+            target=receipt.id,
+        )
+
+        self.assertTrue(result["ok"])
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.vendor, "Updated Vendor")
+        self.assertEqual(receipt.original_filename, "fixture.pdf")
 
     @override_settings(
         SEVERINO_MCP_ENABLE_WRITES=True,

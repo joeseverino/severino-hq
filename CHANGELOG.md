@@ -18,6 +18,9 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 - An allowlisted JSON capability registry that derives deterministic JSON
   Schemas, validation, effects, MCP execution, CLI execution, and parity tests
   from the typed command declarations.
+- Receipt metadata updates now use the same schema-derived capability system;
+  binary upload remains an authenticated web-only ingress with one shared file
+  size/type policy and no MCP file or path exposure.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
   The initial typed, read-only tools cover projects, assets, expenses, receipt
   metadata, documentation status, recent activity, and system health.

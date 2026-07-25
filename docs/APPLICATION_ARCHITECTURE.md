@@ -145,6 +145,16 @@ Documentation links. Related identifiers resolve before persistence, updates
 lock the row, and MCP/CLI results share the same money-as-string representation
 without disclosing sensitive documentation identifiers.
 
+### Receipts
+
+Receipt files and receipt metadata deliberately have different ingress paths.
+Authenticated web upload calls `application.receipts.upload_receipt()` and the
+shared file policy before private storage. JSON/MCP exposes only
+`receipt.update`, which can change metadata and stable Expense/Asset links but
+can never read, upload, replace, or return file bytes or a storage path. The
+schema-derived capability therefore stays plug-and-play without turning the
+MCP into a file-exfiltration surface.
+
 ## Security model
 
 The service boundary complements the existing network boundary:
