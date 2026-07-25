@@ -8,6 +8,10 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Added
 
+- Canonical `application/` services shared by web, MCP, and CLI, with project
+  create/update and documentation sync as the reference vertical slices.
+- MCP project mutations and fail-closed documentation synchronization, backed
+  by adapter-parity, rollback, concurrency, idempotency, and pruning tests.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
   The initial typed, read-only tools cover projects, assets, expenses, receipt
   metadata, documentation status, recent activity, and system health.
@@ -37,6 +41,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Changed
 
+- Project and documentation writes now use shared transactional use cases with
+  interface-aware audit metadata.
 - Production serving moved from WSGI/Gunicorn to ASGI/Uvicorn so the Django UI
   and Streamable HTTP MCP endpoint share one lifecycle.
 - `import_docs_manifest` validation now derives allowed doc_type / environment /

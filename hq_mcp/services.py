@@ -1,4 +1,4 @@
-"""Shared read services for MCP tools and future CLI consumers."""
+"""Thin MCP adapters over HQ's canonical application services and safe queries."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import Any
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from application import documentation as documentation_service
+from application import projects as project_service
 from assets.models import Asset
 from content.models import ContentItem
 from core.models import AuditLog
@@ -36,61 +38,108 @@ def _iso(value) -> str | None:
     return value.isoformat() if value else None
 
 
-def _project(project: Project) -> dict[str, Any]:
-    return {
-        "slug": project.slug,
-        "name": project.name,
-        "category": project.category,
-        "status": project.status,
-        "description": project.description,
-        "technologies": project.tech_list,
-        "repository_url": project.repository_url,
-        "public_url": project.public_url,
-        "last_push_at": _iso(project.last_push_at),
-        "updated_at": _iso(project.updated_at),
-    }
-
-
 def list_projects(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ projects, optionally filtered by exact status or text search."""
-    qs = Project.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(description__icontains=query)
-            | Q(technologies_used__icontains=query)
-        )
-    items = [_project(project) for project in qs.order_by("slug")[: _page_size(limit)]]
-    return {"items": items, "count": len(items)}
+    return project_service.list_projects(status=status, query=query, limit=limit)
 
 
 def get_project(slug: str) -> dict[str, Any]:
     """Get one project and its documentation, content, asset, and expense links."""
     try:
-        project = Project.objects.get(slug=slug)
-    except Project.DoesNotExist as exc:
-        raise NotFoundError(f"Project {slug!r} was not found.") from exc
-    result = _project(project)
-    result["relationships"] = {
-        "documentation": list(
-            project.documentation_records.filter(sensitivity__in=SAFE_SENSITIVITIES)
-            .order_by("doc_id")
-            .values_list("doc_id", flat=True)
+        return project_service.get_project(slug)
+    except project_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
+
+
+def create_project(
+    name: str,
+    slug: str = "",
+    category: str = "other",
+    status: str = "idea",
+    description: str = "",
+    technologies: str = "",
+    repository_url: str = "",
+    public_url: str = "",
+    deployment_notes: str = "",
+    security_notes: str = "",
+    notes: str = "",
+) -> dict[str, Any]:
+    """Create an HQ project through the canonical validated service."""
+    return project_service.save_project(
+        project_service.ProjectCommand(
+            name=name,
+            slug=slug,
+            category=category,
+            status=status,
+            description=description,
+            technologies_used=technologies,
+            repository_url=repository_url,
+            public_url=public_url,
+            deployment_notes=deployment_notes,
+            security_notes=security_notes,
+            notes=notes,
         ),
-        "content": list(
-            project.content_items.order_by("slug").values_list("slug", flat=True)
+        interface="mcp",
+        actor="mcp-service-account",
+    )
+
+
+def update_project(
+    slug: str,
+    name: str,
+    new_slug: str = "",
+    category: str = "other",
+    status: str = "idea",
+    description: str = "",
+    technologies: str = "",
+    repository_url: str = "",
+    public_url: str = "",
+    deployment_notes: str = "",
+    security_notes: str = "",
+    notes: str = "",
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Update an HQ project with optional optimistic concurrency protection."""
+    return project_service.save_project(
+        project_service.ProjectCommand(
+            name=name,
+            slug=new_slug or slug,
+            category=category,
+            status=status,
+            description=description,
+            technologies_used=technologies,
+            repository_url=repository_url,
+            public_url=public_url,
+            deployment_notes=deployment_notes,
+            security_notes=security_notes,
+            notes=notes,
         ),
-        "assets": list(project.assets.order_by("slug").values_list("slug", flat=True)),
-        "expense_ids": list(
-            project.expenses.order_by("-date", "-id").values_list("id", flat=True)
-        ),
-    }
-    return result
+        interface="mcp",
+        actor="mcp-service-account",
+        current_slug=slug,
+        expected_updated_at=expected_updated_at,
+    )
+
+
+def sync_documentation(
+    manifest: list[dict[str, Any]],
+    update_existing: bool = True,
+    report_orphans: bool = False,
+    prune_orphans: bool = False,
+    confirm_prune: bool = False,
+) -> dict[str, Any]:
+    """Synchronize a vault manifest into HQ; pruning requires explicit confirmation."""
+    return documentation_service.sync_documentation(
+        manifest,
+        interface="mcp",
+        actor="mcp-service-account",
+        update_existing=update_existing,
+        report_orphans=report_orphans,
+        prune_orphans=prune_orphans,
+        confirm_prune=confirm_prune,
+    )
 
 
 def _asset(asset: Asset) -> dict[str, Any]:

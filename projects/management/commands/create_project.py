@@ -5,8 +5,11 @@ Idempotent — re-running with the same slug updates the existing record.
 
 from __future__ import annotations
 
+import json
+
 from django.core.management.base import BaseCommand
 
+from application.projects import ProjectCommand, save_project
 from projects.models import PROJECT_CATEGORY_CHOICES, Project
 
 
@@ -39,21 +42,33 @@ class Command(BaseCommand):
         parser.add_argument("--repo", dest="repository_url", default="")
         parser.add_argument("--url", dest="public_url", default="")
         parser.add_argument("--notes", default="")
+        parser.add_argument(
+            "--json",
+            action="store_true",
+            help="Print the canonical service result as JSON.",
+        )
 
     def handle(self, *args, **opts):
         slug = opts["slug"]
-        defaults = {
-            "name": opts["name"],
-            "category": opts["category"],
-            "status": opts["status"],
-            "description": opts["description"],
-            "technologies_used": opts["technologies"],
-            "repository_url": opts["repository_url"],
-            "public_url": opts["public_url"],
-            "notes": opts["notes"],
-        }
-        obj, created = Project.objects.update_or_create(
-            slug=slug, defaults=defaults
+        exists = Project.objects.filter(slug=slug).exists()
+        result = save_project(
+            ProjectCommand(
+                name=opts["name"],
+                slug=slug,
+                category=opts["category"],
+                status=opts["status"],
+                description=opts["description"],
+                technologies_used=opts["technologies"],
+                repository_url=opts["repository_url"],
+                public_url=opts["public_url"],
+                notes=opts["notes"],
+            ),
+            interface="cli",
+            actor="local-operator",
+            current_slug=slug if exists else None,
         )
-        verb = "created" if created else "updated"
-        self.stdout.write(f"Project {obj.slug}: {verb}")
+        if opts["json"]:
+            self.stdout.write(json.dumps(result))
+            return
+        verb = "created" if result["created"] else "updated"
+        self.stdout.write(f"Project {result['project']['slug']}: {verb}")

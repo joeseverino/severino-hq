@@ -26,18 +26,21 @@ mcp = FastMCP(
 mcp.settings.streamable_http_path = "/"
 
 
-def register_read_tool(function):
+def register_tool(function):
     """Run synchronous Django ORM services on the thread-sensitive executor."""
 
     return mcp.tool()(sync_to_async(function, thread_sensitive=True))
 
 
-register_read_tool(services.list_projects)
-register_read_tool(services.get_project)
-register_read_tool(services.list_assets)
-register_read_tool(services.get_asset)
-register_read_tool(services.list_expenses)
-register_read_tool(services.list_receipts)
-register_read_tool(services.documentation_status)
-register_read_tool(services.recent_activity)
-register_read_tool(services.system_health)
+register_tool(services.list_projects)
+register_tool(services.get_project)
+register_tool(services.create_project)
+register_tool(services.update_project)
+register_tool(services.list_assets)
+register_tool(services.get_asset)
+register_tool(services.list_expenses)
+register_tool(services.list_receipts)
+register_tool(services.documentation_status)
+register_tool(services.sync_documentation)
+register_tool(services.recent_activity)
+register_tool(services.system_health)

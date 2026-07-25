@@ -17,6 +17,7 @@ from django.views.generic import (
     View,
 )
 
+from application.projects import project_command_from_cleaned_data, save_project
 from core.audit import record_event
 from core.models import AuditLog
 from .forms import ProjectForm
@@ -159,9 +160,14 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     template_name = "projects/project_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_project(
+            project_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+        )
+        self.object = Project.objects.get(slug=result["project"]["slug"])
         messages.success(self.request, f"Project “{self.object}” created.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ProjectUpdateView(LoginRequiredMixin, UpdateView):
@@ -172,9 +178,15 @@ class ProjectUpdateView(LoginRequiredMixin, UpdateView):
     slug_url_kwarg = "slug"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_project(
+            project_command_from_cleaned_data(form.cleaned_data),
+            interface="web",
+            actor=self.request.user.get_username(),
+            current_slug=self.get_object().slug,
+        )
+        self.object = Project.objects.get(slug=result["project"]["slug"])
         messages.success(self.request, f"Project “{self.object}” updated.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ProjectDeleteView(LoginRequiredMixin, DeleteView):

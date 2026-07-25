@@ -17,11 +17,9 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from core.audit import record_event
-from core.models import AuditLog
+from application.documentation import sync_documentation
 from docs_index.importer import (
     ManifestImportError,
-    import_manifest_data,
     validate_manifest_data,
 )
 
@@ -108,26 +106,25 @@ class Command(BaseCommand):
         report_orphans = options["report_orphans"] or options["prune"]
 
         try:
-            stats = import_manifest_data(
+            result = sync_documentation(
                 data,
+                interface="cli",
+                actor="local-operator",
                 update_existing=not options["no_update"],
                 report_orphans=report_orphans,
                 prune_orphans=options["prune"],
+                confirm_prune=options["prune"],
             )
         except ManifestImportError as exc:
             raise CommandError(str(exc)) from exc
+        if not result["ok"]:
+            raise CommandError(f"Manifest validation failed: {result['problems']}")
+        stats = result["stats"]
 
         summary = {
             k: v for k, v in stats.items()
             if k not in {"missing_relations_detail", "orphans"}
         }
-        record_event(
-            action=AuditLog.Action.IMPORTED,
-            type_label="DocumentationRecord",
-            message=f"CLI manifest import: {summary}",
-            metadata=stats,
-        )
-
         if options["json"]:
             self.stdout.write(json.dumps(stats, default=str))
             return

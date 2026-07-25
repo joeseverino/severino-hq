@@ -28,6 +28,14 @@ over Tailscale.
 - Django auth, Django admin, Django ORM and migrations
 - Environment variables for secrets
 
+## One application core, three interfaces
+
+The web UI, MCP, and management CLI share the same application services.
+Adapters parse and render; `application/` owns validation, transactions,
+persistence, audit attribution, and canonical results. The reference project
+slice and documentation sync mutation are described in
+[`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md).
+
 ## Modules
 
 1. Dashboard — KPIs, needs-attention queue, quick actions, relationship

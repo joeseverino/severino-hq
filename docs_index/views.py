@@ -19,11 +19,10 @@ from django.views.generic import (
     View,
 )
 
-from core.audit import record_event
-from core.models import AuditLog
+from application.documentation import sync_documentation
 
 from .forms import DocumentationRecordForm, ManifestImportForm
-from .importer import ManifestImportError, import_manifest_data
+from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 
@@ -169,22 +168,19 @@ class ManifestImportView(LoginRequiredMixin, View):
             messages.error(request, f"Invalid JSON: {exc}")
             return render(request, self.template_name, {"form": form})
         try:
-            stats = import_manifest_data(
+            result = sync_documentation(
                 data,
+                interface="web",
+                actor=request.user.get_username(),
                 update_existing=form.cleaned_data["update_existing"],
             )
         except ManifestImportError as exc:
             messages.error(request, f"Import failed: {exc}")
             return render(request, self.template_name, {"form": form})
-        record_event(
-            action=AuditLog.Action.IMPORTED,
-            type_label="DocumentationRecord",
-            message=(
-                f"Imported docs manifest: created={stats['created']}, "
-                f"updated={stats['updated']}, skipped={stats['skipped']}"
-            ),
-            metadata=stats,
-        )
+        if not result["ok"]:
+            messages.error(request, f"Import failed validation: {result['problems']}")
+            return render(request, self.template_name, {"form": form})
+        stats = result["stats"]
         messages.success(
             request,
             (
