@@ -196,6 +196,24 @@ class TopologyMaterializationTests(TestCase):
         self.assertEqual(resource.updated_at, first_resource.updated_at)
         self.assertEqual(snapshot.updated_at, first_snapshot.updated_at)
 
+    def test_dependency_change_advances_reference_backed_resource_generation(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "jseverino-wildcard",
+                "kind": "tls.certificate",
+                "spec": certificate_spec(),
+            }
+        ]
+        import_topology(payload)
+
+        payload["dependencies"][0]["attributes"]["discover_covered_hosts"] = True
+        payload["dependencies"][0]["attributes"]["verify_domains"] = []
+        import_topology(payload)
+
+        resource = ManagedResource.objects.get(key="jseverino-wildcard")
+        self.assertEqual(resource.generation, 2)
+
     def test_removal_disables_resource_and_advances_generation(self):
         payload = topology_payload()
         payload["managed_resources"] = [
