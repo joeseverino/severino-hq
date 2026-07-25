@@ -8,7 +8,9 @@ import sys
 
 from django.core.management.base import BaseCommand, CommandError
 
-from control_plane.topology import TopologyError, import_topology
+from application.security import cli_principal
+from application.topology import sync_topology
+from control_plane.topology import TopologyError
 
 
 class Command(BaseCommand):
@@ -31,16 +33,7 @@ class Command(BaseCommand):
                 else Path(source).read_text(encoding="utf-8")
             )
             payload = json.loads(text)
-            snapshot = import_topology(payload)
+            result = sync_topology(payload, principal=cli_principal())
         except (OSError, json.JSONDecodeError, TopologyError) as exc:
             raise CommandError(str(exc)) from exc
-        self.stdout.write(
-            json.dumps(
-                {
-                    "ok": True,
-                    "schema_version": snapshot.schema_version,
-                    "checksum": snapshot.checksum,
-                },
-                sort_keys=True,
-            )
-        )
+        self.stdout.write(json.dumps(result, sort_keys=True))

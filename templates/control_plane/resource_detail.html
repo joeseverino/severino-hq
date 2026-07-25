@@ -8,8 +8,12 @@
   </div>
   <div class="page-actions">
     <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
-    {% if resource.kind == "tls.certificate" and resource.status.certificate_pem %}
-      <a class="btn" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+    {% if resource.kind == "tls.certificate" %}
+      {% if resource.status.certificate_pem %}
+        <a class="btn" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+      {% else %}
+        <button type="button" disabled title="Available after the controller verifies a deployed certificate.">Public certificate pending verification</button>
+      {% endif %}
     {% endif %}
     <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
       {% csrf_token %}

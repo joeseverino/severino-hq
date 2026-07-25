@@ -23,6 +23,7 @@ from application.infrastructure import (
     save_managed_resource,
 )
 from application.security import cli_principal, mcp_principal
+from application.topology import sync_topology
 
 from core.models import AuditLog
 
@@ -276,6 +277,32 @@ class TopologyMaterializationTests(TestCase):
         self.assertEqual(
             event.metadata["operation"], "infrastructure.topology.import"
         )
+
+    def test_sync_schedules_each_pending_generation_once(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "hq-dns",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "hq.jseverino.com",
+                    "answer": "192.168.1.233",
+                },
+            }
+        ]
+
+        first = sync_topology(payload, principal=cli_principal())
+        second = sync_topology(payload, principal=cli_principal())
+
+        self.assertTrue(first["scheduled"][0]["queued"])
+        self.assertFalse(second["scheduled"][0]["queued"])
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
+        resource = ManagedResource.objects.get(key="hq-dns")
+        resource.observed_generation = resource.generation
+        resource.save(update_fields=("observed_generation", "updated_at"))
+        converged = sync_topology(payload, principal=cli_principal())
+        self.assertEqual(converged["scheduled"], [])
 
 
 class ProviderContractTests(TestCase):
