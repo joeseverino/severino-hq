@@ -28,6 +28,18 @@ class ProviderResult:
     message: str
 
 
+def _tls_context() -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    ca_file = os.environ.get("HQ_CONTROLLER_CA_FILE", "").strip()
+    if ca_file:
+        try:
+            context.load_verify_locations(cafile=ca_file)
+        except (OSError, ssl.SSLError) as exc:
+            raise ProviderError("Controller CA bundle could not be loaded.") from exc
+    return context
+
+
 def _condition(
     condition_type: str, status: bool, reason: str, message: str
 ) -> dict[str, Any]:
@@ -56,7 +68,7 @@ def _request(
     )
     try:
         with urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
-            request, timeout=15, context=ssl.create_default_context()
+            request, timeout=15, context=_tls_context()
         ) as response:
             raw = response.read()
     except (urllib.error.URLError, TimeoutError) as exc:
@@ -257,8 +269,7 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
 
 def _observe_tls_domain(domain: str) -> dict[str, Any]:
     try:
-        tls_context = ssl.create_default_context()
-        tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        tls_context = _tls_context()
         with socket.create_connection((domain, 443), timeout=15) as raw_socket:
             with tls_context.wrap_socket(
                 raw_socket, server_hostname=domain
