@@ -19,7 +19,7 @@ class ControllerConnectionRegistryTests(TestCase):
     def test_api_token_uses_api_credential_website_field(self):
         self.assertEqual(
             self.registry["projections"]["api_token"]["URL"],
-            {"source": "field", "id": "website"},
+            {"source": "field", "label": "website"},
         )
 
     def test_ssh_transports_are_pinned_and_have_distinct_identities(self):
