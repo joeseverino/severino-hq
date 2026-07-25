@@ -235,7 +235,10 @@ process. It starts a disposable, capability-dropped container from the exact
 scanned HQ image, so the host needs no parallel Python environment and cannot
 drift from the deployed application. Provider variables, the ACME lineage, and
 deployment identities enter only that short-lived container; they never enter
-the web container. Plan mode authenticates and peeks without leasing work.
+the web container. The disposable container runs as the same unprivileged UID
+as the application data owner; the root-owned systemd launcher projects
+short-lived, owner-scoped copies of its environment and SSH identities. Plan
+mode authenticates and peeks without leasing work.
 Apply mode claims only explicitly supported kind/action pairs. AdGuard and NPM
 reconcile in apply mode. TLS reconciliation observes served certificates; TLS
 renewal issues through DNS-01, snapshots the rollback artifact, deploys to all

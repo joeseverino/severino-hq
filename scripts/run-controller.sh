@@ -29,6 +29,14 @@ if [ ! -s "${app_env}" ] || [ ! -s "${ca_file}" ]; then
 fi
 
 install -d -o root -g root -m 0700 "${acme_dir}"
+chown 10001:10001 "${acme_dir}"
+runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
+runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
+trap 'rm -f "${runtime_app_env}"; rm -rf "${runtime_ssh_dir}"' EXIT HUP INT TERM
+install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
+chown 10001:10001 "${runtime_app_env}"
+cp -a "${ssh_dir}/." "${runtime_ssh_dir}/"
+chown -R 10001:10001 "${runtime_ssh_dir}"
 image="$(docker inspect --format '{{.Config.Image}}' "${container}")"
 data_volume="$(
     docker inspect --format \
@@ -46,13 +54,13 @@ set -a
 . "${env_file}"
 set +a
 
-set -- run --rm --network host --user 0 --cap-drop ALL \
+set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --security-opt no-new-privileges:true \
     --entrypoint python \
     --mount "type=volume,source=${data_volume},target=/data" \
-    --mount "type=bind,source=${app_env},target=/run/secrets/severino_hq_env,readonly" \
+    --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
     --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \
-    --mount "type=bind,source=${ssh_dir},target=/run/secrets/controller-ssh,readonly" \
+    --mount "type=bind,source=${runtime_ssh_dir},target=/run/secrets/controller-ssh,readonly" \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
     --env HQ_IN_PROCESS=1 \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
@@ -79,4 +87,4 @@ if [ "${mode}" = "--apply" ]; then
     set -- "$@" --apply
 fi
 
-exec docker "$@"
+docker "$@"
