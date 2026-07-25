@@ -211,3 +211,42 @@ Every new write follows one mechanical path:
 
 Business logic in a view, MCP registration function, or management command is
 an architecture regression and should fail review.
+## Infrastructure control plane
+
+Severino Labs topology owns stable infrastructure identities and dependency
+edges. HQ imports the complete sensitive topology into a trusted, checksummed
+server-side snapshot. Managed resources reference topology identities; they do
+not duplicate hosts, certificate SANs, or consumer topology.
+
+HQ stores typed operational intent, resource generations, public observations,
+and audited operation requests. A resolver composes permission-safe read models
+from the trusted topology snapshot for each UI/API/MCP capability. HQ does not
+store provider credentials or private keys. Every interface invokes the same
+application capabilities.
+
+Controllers claim operations with an expiring lease and receive a minimal,
+versioned, desired-only JSON contract. A controller resolves runtime connection
+references, executes provider adapters, verifies each declared consumer, and
+reports only public status and conditions. Expired claims return to the queue;
+only one queued or claimed operation may exist for a resource/action pair.
+
+The homelab controller is a separate root-owned systemd oneshot, not a web
+process. It uses `docker exec` to run from the exact scanned HQ image, so the
+host needs no parallel Python environment and cannot drift from the deployed
+application. Provider variables are forwarded only to that short-lived exec
+process; they do not enter the long-running web process or container
+configuration. Plan mode authenticates and peeks without leasing work. Apply
+mode claims only explicitly supported kind/action pairs. AdGuard and NPM
+reconcile in apply mode. TLS reconciliation is an observation adapter that
+compares served public certificates and publishes a safe PEM artifact; TLS
+renewal remains locked until Certbot and deployment identities are provisioned
+on the server. Public DNS remains locked. Short-lived NPM tokens stay in memory
+and reports are rejected if they contain secret-bearing keys.
+
+HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
+D1-backed contact form. It is never projected into the controller or reused for
+DNS automation. A future Cloudflare DNS provider must use a separate,
+least-privilege credential and connection reference scoped only to the required
+zones and record operations.
+
+![Infrastructure control plane](diagrams/infrastructure-control-plane.png)

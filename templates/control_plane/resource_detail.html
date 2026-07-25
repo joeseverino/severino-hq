@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ resource.key }} · Infrastructure{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ resource.key }}</h1>
+    <p class="muted"><code>{{ resource.kind }}</code></p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
+    {% if resource.kind == "tls.certificate" and resource.status.certificate_pem %}
+      <a class="btn" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+    {% endif %}
+    <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
+      {% csrf_token %}
+      <button type="submit" {% if not reconcile_allowed %}disabled title="{{ reconcile_explanation }}"{% endif %}>Reconcile</button>
+    </form>
+    {% if resource.kind == "tls.certificate" %}
+      <form action="{% url 'control_plane:renew' resource.key %}" method="post">
+        {% csrf_token %}
+        <button type="submit" class="primary" {% if not renewal_allowed %}disabled title="{{ renewal_explanation }}"{% endif %}>Request renewal</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="control-summary">
+  <div class="control-metric">
+    <span class="control-label">Configuration</span>
+    {% if sync_state == "in_sync" %}
+      <strong class="control-good">In sync</strong>
+      <span>Observed generation {{ resource.observed_generation }} matches desired generation {{ resource.generation }}.</span>
+    {% else %}
+      <strong class="control-warn">Pending</strong>
+      <span>Desired generation {{ resource.generation }} has not been observed.</span>
+    {% endif %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Automation</span>
+    {% if resource.kind == "tls.certificate" %}
+      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Observe: {{ controller_capability.reconcile.mode|title }}</strong>
+      <span>Renew: {{ controller_capability.renew.mode|title }}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
+    {% else %}
+      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Reconcile: {{ controller_capability.reconcile.mode|title }}</strong>
+      <span>{% if controller_capability.reconcile.mode == "apply" %}Controller actions are enabled.{% else %}{{ controller_capability.reconcile.reason }}{% endif %}</span>
+    {% endif %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Runtime health</span>
+    <strong class="control-{{ control_health.state }}">{{ control_health.label }}</strong>
+    <span>{{ control_health.message }}</span>
+  </div>
+  {% if resource.kind == "tls.certificate" %}
+    <div class="control-metric">
+      <span class="control-label">Renewal policy</span>
+      {% if controller_capability.renew.mode == "locked" %}
+        <strong class="control-warn">Locked</strong>
+      {% else %}
+        <strong class="{% if renewal_allowed %}control-warn{% else %}control-good{% endif %}">{% if renewal_allowed %}Eligible now{% else %}Not due{% endif %}</strong>
+      {% endif %}
+      <span>{{ renewal_explanation }}</span>
+    </div>
+  {% endif %}
+</div>
+
+{% if resource.kind == "tls.certificate" %}
+  {% if topology_error %}<p class="message error">{{ topology_error }}</p>{% endif %}
+  <div class="two-col">
+    <section class="control-card">
+      <h2>Certificate</h2>
+      <dl class="kv compact">
+        <dt>Topology identity</dt><dd><code>{{ resource.spec.topology_ref }}</code></dd>
+        <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
+        <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
+        <dt>Expires</dt><dd>{{ resource.status.not_after|default:"Not observed" }}</dd>
+        <dt>Days remaining</dt><dd>{% if days_left != None %}{{ days_left }}{% else %}—{% endif %}</dd>
+        <dt>Renewal window</dt><dd>{{ resolved_spec.renewal_window_days }} days</dd>
+      </dl>
+      <h3>Names</h3>
+      <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</p>
+    </section>
+    <section class="control-card">
+      <h2>Consumers</h2>
+      <table class="data-table compact-table">
+        <thead><tr><th>Consumer</th><th>Verification names</th></tr></thead>
+        <tbody>
+          {% for consumer in resolved_spec.consumers %}
+            <tr>
+              <td><strong>{{ consumer.name }}</strong><br><code>{{ consumer.kind }}</code><br><span class="muted">{{ consumer.topology_ref }}</span></td>
+              <td>{% for domain in consumer.verify_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+{% elif resource.kind == "npm.proxy_host" %}
+  <section class="control-card">
+    <h2>Nginx Proxy Host</h2>
+    <dl class="kv compact">
+      <dt>Domains</dt><dd>{% for domain in resource.spec.domain_names %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
+      <dt>Upstream</dt><dd><code>{{ resource.spec.forward_scheme }}://{{ resource.spec.forward_host }}:{{ resource.spec.forward_port }}</code></dd>
+      <dt>Certificate</dt><dd>{{ resource.spec.certificate_resource|default:"None" }}</dd>
+      <dt>Live status</dt><dd>{{ resource.status.https_status|default:"Not observed" }}</dd>
+    </dl>
+  </section>
+{% elif resource.kind == "adguard.rewrite" %}
+  <section class="control-card">
+    <h2>AdGuard DNS Rewrite</h2>
+    <dl class="kv compact">
+      <dt>Domain</dt><dd><code>{{ resource.spec.domain }}</code></dd>
+      <dt>Desired answer</dt><dd><code>{{ resource.spec.answer }}</code></dd>
+      <dt>Observed answer</dt><dd><code>{{ resource.status.answer|default:"Not observed" }}</code></dd>
+    </dl>
+  </section>
+{% endif %}
+
+<details class="control-diagnostics">
+  <summary>Raw desired and observed JSON</summary>
+  <div class="two-col">
+    <section><h2>Desired specification</h2><pre>{{ resource.spec|pprint }}</pre></section>
+    <section><h2>Observed status</h2><pre>{{ resource.status|pprint }}</pre></section>
+  </div>
+</details>
+
+<h2>Controller conditions</h2>
+{% if resource.conditions %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Type</th><th>Status</th><th>Reason</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for condition in resource.conditions %}
+          <tr><td>{{ condition.type }}</td><td>{{ condition.status }}</td><td>{{ condition.reason }}</td><td>{{ condition.message }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="muted">No controller conditions reported yet.</p>
+{% endif %}
+
+<h2>Operations</h2>
+<div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th>Action</th><th>State</th><th>Requested</th><th>Completed</th><th>Result</th></tr></thead>
+    <tbody>
+      {% for operation in operations %}
+        <tr>
+          <td>{{ operation.get_action_display }}</td>
+          <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
+          <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span></td>
+          <td>{{ operation.completed_at|default:"—" }}</td>
+          <td class="muted">{{ operation.result.message|default:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="muted">No operations yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

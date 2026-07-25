@@ -8,6 +8,18 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 
 ### Added
 
+- A schema-driven infrastructure control plane shared by the web UI, CLI, and
+  MCP: trusted topology snapshots, typed desired resources, leased operations,
+  provider-safe status, certificate drift/expiry priority signals, and public
+  certificate downloads.
+- A homelab-server controller with declarative capability and connection
+  registries. AdGuard rewrites, Nginx Proxy Manager hosts, and TLS consumer
+  observation are active; certificate renewal and public DNS remain visibly
+  fail-closed until their least-privilege credentials and deployment identities
+  are provisioned.
+- Gated controller deployment from the exact scanned HQ image, including
+  provider preflight, root-only secret projection, systemd scheduling,
+  action-filtered claims, health rollback, and architecture diagrams.
 - Canonical `application/` services shared by web, MCP, and CLI, with project
   create/update for Projects, Assets, Content, and Expenses plus documentation
   sync as reference vertical slices.

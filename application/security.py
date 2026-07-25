@@ -24,6 +24,8 @@ class Capability(StrEnum):
     DELETE_EXPENSES = "delete_expenses"
     DELETE_DOCUMENTATION = "delete_documentation"
     DELETE_RECEIPTS = "delete_receipts"
+    MANAGE_INFRASTRUCTURE = "manage_infrastructure"
+    REQUEST_CERTIFICATE_RENEWAL = "request_certificate_renewal"
 
 
 class AuthorizationError(PermissionError):
@@ -84,6 +86,13 @@ def mcp_principal() -> Principal:
                 Capability.DELETE_EXPENSES,
                 Capability.DELETE_DOCUMENTATION,
                 Capability.DELETE_RECEIPTS,
+            }
+        )
+    if getattr(settings, "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False):
+        capabilities.update(
+            {
+                Capability.MANAGE_INFRASTRUCTURE,
+                Capability.REQUEST_CERTIFICATE_RENEWAL,
             }
         )
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))

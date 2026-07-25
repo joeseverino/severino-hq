@@ -26,6 +26,13 @@ from .documentation import (
     save_documentation,
 )
 from .expenses import ExpenseCommand, save_expense
+from .infrastructure import (
+    ManagedResourceCommand,
+    OperationCommand,
+    request_certificate_renewal,
+    request_reconcile,
+    save_managed_resource,
+)
 from .projects import ProjectCommand, save_project
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
@@ -199,6 +206,41 @@ _SPECS = (
         delete_receipt,
         "integer",
     ),
+    CapabilitySpec(
+        "infrastructure.resource.create",
+        "Declare a typed managed infrastructure resource.",
+        "remote_write",
+        Capability.MANAGE_INFRASTRUCTURE,
+        ManagedResourceCommand,
+        save_managed_resource,
+    ),
+    CapabilitySpec(
+        "infrastructure.resource.update",
+        "Update a typed managed infrastructure resource.",
+        "remote_write",
+        Capability.MANAGE_INFRASTRUCTURE,
+        ManagedResourceCommand,
+        save_managed_resource,
+        "key",
+    ),
+    CapabilitySpec(
+        "infrastructure.reconcile",
+        "Queue reconciliation of one managed infrastructure resource.",
+        "infrastructure_change",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        request_reconcile,
+        "key",
+    ),
+    CapabilitySpec(
+        "certificate.renew",
+        "Request certificate renewal when policy allows it.",
+        "infrastructure_change",
+        Capability.REQUEST_CERTIFICATE_RENEWAL,
+        OperationCommand,
+        request_certificate_renewal,
+        "key",
+    ),
 )
 
 REGISTRY = {spec.name: spec for spec in _SPECS}
@@ -254,6 +296,8 @@ def execute_capability(
             kwargs["current_doc_id"] = str(target)
         elif spec.target_kind == "integer":
             kwargs["current_id"] = int(target)
+        elif spec.target_kind == "key":
+            kwargs["current_key"] = str(target)
         return spec.handler(command, **kwargs)
     except AuthorizationError as exc:
         return _error(exc.code, str(exc))

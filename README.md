@@ -36,6 +36,14 @@ persistence, audit attribution, and canonical results. The reference project
 slice and documentation sync mutation are described in
 [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md).
 
+Infrastructure follows the same rule: Severino Labs emits one validated
+topology inventory, HQ derives desired resources and dependency-aware status,
+and the homelab controller reconciles only explicitly enabled capabilities.
+Provider credentials and private keys never enter HQ persistence or the web
+process.
+
+![Infrastructure control plane — topology flows into HQ desired state and a capability-filtered homelab controller reconciles providers](docs/diagrams/infrastructure-control-plane.png)
+
 ## Modules
 
 1. Dashboard — KPIs, needs-attention queue, quick actions, relationship
@@ -48,7 +56,9 @@ slice and documentation sync mutation are described in
 7. Receipts — uploaded outside app code, served only via auth-protected view.
 8. Reports / Exports — KPI page + CSV exports + year-summary JSON & Markdown.
 9. Audit Log — every important create/update/delete/login/upload/export.
-10. MCP-ready — stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
+10. Infrastructure — desired state, topology-derived dependencies, drift,
+    certificate health/downloads, and audited reconciliation.
+11. MCP-ready — stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
 
 ---
 

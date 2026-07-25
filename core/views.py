@@ -24,6 +24,8 @@ from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
+from application.infrastructure import resource_health
+from control_plane.models import ManagedResource
 
 from .models import AuditLog
 
@@ -110,6 +112,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Needs-attention queue — workflow items, each linking to a filtered
         # cleanup view.
         action_queue = [
+            *[
+                {
+                    "label": (
+                        f"{resource.key}: {health['message']}"
+                        if health["message"]
+                        else f"{resource.key} needs infrastructure attention"
+                    ),
+                    "count": 1,
+                    "href": reverse(
+                        "control_plane:detail", kwargs={"key": resource.key}
+                    ),
+                }
+                for resource in ManagedResource.objects.filter(enabled=True)
+                if (
+                    (health := resource_health(resource))["state"]
+                    in {"degraded", "pending", "unknown"}
+                )
+            ],
             {
                 "label": "Docs need review",
                 "count": docs_needing_review_count,

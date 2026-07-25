@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "controller_id": "homelab-server",
+  "capabilities": {
+    "adguard.rewrite": {
+      "actions": {
+        "reconcile": {"mode": "apply"}
+      }
+    },
+    "npm.proxy_host": {
+      "actions": {
+        "reconcile": {"mode": "apply"}
+      }
+    },
+    "tls.certificate": {
+      "actions": {
+        "reconcile": {"mode": "apply"},
+        "renew": {
+          "mode": "locked",
+          "reason": "Certbot lineage and deployment identities are not provisioned on homelab-server."
+        }
+      }
+    },
+    "cloudflare.dns_record": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "Public DNS reconciliation is not enabled."
+        }
+      }
+    }
+  }
+}

@@ -56,6 +56,55 @@ is temporarily unavailable. To change a prod env var: edit the 1Password
 item, then `systemctl start severino-hq-secrets.service` (or wait for the
 timer; the container restarts only when something actually changed).
 
+Provider credentials are separate from the app environment. Login items in the
+same vault declare a stable `connection_ref`; `scripts/render-controller-env.sh`
+discovers them through that field and renders
+`secrets/severino_controller_env`. The controller service reads that root-owned
+file directly. `scripts/run-controller.sh` forwards the derived variables only
+to a short-lived `docker exec` process running from the exact deployed HQ image.
+The file is never mounted into the HQ web container, provider variables do not
+enter the long-running web process or container configuration, and provider
+passwords are never copied into the `severino-hq env` item.
+
+Connection projections are declared once in
+`config/controller-connections.json`. Both secret rendering and runtime
+forwarding derive their variable names from that registry; a new credential
+shape is added as a projection profile instead of duplicated shell logic.
+
+The controller trusts internal provider TLS through the host trust store or a
+deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate
+is not stored in this public repository. Never disable TLS verification.
+
+The topology inventory is also absent from this public repository. `hq sync`
+asks the Vault MCP for its complete validated inventory projection and streams
+it directly over SSH into `infrastructure_topology` on the trusted HQ
+container. HQ validates it again, checksums it, and replaces the singleton
+snapshot transactionally. No intermediate payload is written on
+homelab-server.
+
+The gated `main` deployment runs `scripts/install-controller.sh` after the new
+application image is healthy. The installer refreshes controller-only
+credentials, validates the systemd units, authenticates read-only to every
+declared provider in plan mode, and only then enables the apply timer. Missing
+credentials, untrusted TLS, and API failures stop activation. The HQ web
+container never receives the provider environment.
+
+The controller claims only kind/action pairs marked `apply` in
+`config/controller-capabilities.json`. TLS observation is active; TLS renewal
+and public-DNS reconciliation remain locked and cannot be queued.
+
+Do not use the web application's `CLOUDFLARE_API_TOKEN` for DNS-01. That token
+belongs exclusively to the D1 contact-submission path. Provision any future DNS
+controller credential as a separate 1Password item with its own stable
+`connection_ref` and minimum zone/DNS permissions.
+
+Pull requests run checks only; a push to `main` runs the image build, scan,
+homelab deployment, health verification, and controller activation.
+`scripts/deploy-image.sh` stops reconciliation, records the currently running
+image, and restores it automatically if the exact SHA-tagged replacement does
+not become healthy or its controller cannot pass activation. After rollback,
+the controller remains stopped for explicit operator review.
+
 ### A.4 Build & run
 
 ```bash
