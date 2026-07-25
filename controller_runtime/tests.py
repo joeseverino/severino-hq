@@ -250,6 +250,7 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(result.changed)
         renew.assert_not_called()
 
+    @mock.patch("controller_runtime.providers._request")
     @mock.patch("controller_runtime.providers._multipart_request")
     @mock.patch("controller_runtime.providers._npm_token", return_value="token")
     @mock.patch.dict(
@@ -257,18 +258,36 @@ class ProviderAdapterTests(TestCase):
         {"NPM_URL": "https://npm.example.test"},
         clear=True,
     )
-    def test_npm_upload_uses_current_multipart_contract(self, _token, multipart):
+    def test_npm_certificate_is_resolved_by_identity_and_bound_to_hosts(
+        self, _token, multipart, request
+    ):
         leaf = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n"
         chain = b"-----BEGIN CERTIFICATE-----\nchain\n-----END CERTIFICATE-----\n"
+        request.side_effect = [
+            [],
+            {"id": 22, "provider": "other"},
+            [{"id": 7, "domain_names": ["dev.example.test"], "certificate_id": 11}],
+            {},
+        ]
 
-        providers._npm_upload(11, leaf + chain, b"private-key")
+        certificate_id, identity = providers._npm_managed_certificate(
+            {
+                "name": "example-wildcard",
+                "verify_domains": ["dev.example.test"],
+            },
+            leaf + chain,
+            b"private-key",
+        )
 
         self.assertEqual(multipart.call_count, 2)
         files = multipart.call_args.kwargs["files"]
         self.assertEqual(files["certificate"][1], leaf)
         self.assertEqual(files["certificate_key"][1], b"private-key")
         self.assertEqual(files["intermediate_certificate"][1], chain)
-        self.assertTrue(multipart.call_args.args[0].endswith("/11/upload"))
+        self.assertTrue(multipart.call_args.args[0].endswith("/22/upload"))
+        self.assertEqual(certificate_id, 22)
+        self.assertEqual(identity["nice_name"], "Severino HQ - example-wildcard")
+        self.assertEqual(request.call_args.kwargs["payload"], {"certificate_id": 22})
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate")
@@ -282,6 +301,7 @@ class ProviderAdapterTests(TestCase):
         ssh.return_value = previous
         validate.side_effect = ["old", "new"]
         issue.return_value = (b"new-cert", b"new-key")
+        deploy.return_value = {}
         reconcile.return_value = providers.ProviderResult(
             changed=False,
             status={

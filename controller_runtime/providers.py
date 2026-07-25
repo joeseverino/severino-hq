@@ -653,9 +653,31 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         raise ProviderError("Certbot did not produce a complete lineage.") from exc
 
 
-def _npm_upload(certificate_id: int, fullchain: bytes, private_key: bytes) -> None:
+def _npm_managed_certificate(
+    consumer: dict[str, Any], fullchain: bytes, private_key: bytes
+) -> tuple[int, dict[str, str]]:
     base_url = _npm_api_url(_required("NPM", "URL"))
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    nice_name = f"Severino HQ - {consumer['name']}"
+    certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
+    matches = [item for item in certificates if item.get("nice_name") == nice_name]
+    if len(matches) > 1:
+        raise ProviderError("NPM contains duplicate HQ-managed certificates.")
+    if matches:
+        certificate = matches[0]
+        if certificate.get("provider") != "other":
+            raise ProviderError("The HQ-managed NPM certificate is not a custom certificate.")
+    else:
+        certificate = _request(
+            f"{base_url}/nginx/certificates",
+            method="POST",
+            headers=headers,
+            payload={"provider": "other", "nice_name": nice_name},
+        )
+    certificate_id = certificate.get("id") if isinstance(certificate, dict) else None
+    if not isinstance(certificate_id, int):
+        raise ProviderError("NPM did not return a managed certificate ID.")
+
     marker = b"-----END CERTIFICATE-----"
     leaf_body, separator, chain_body = fullchain.partition(marker)
     if not separator:
@@ -678,11 +700,42 @@ def _npm_upload(certificate_id: int, fullchain: bytes, private_key: bytes) -> No
         headers=headers,
         files=files,
     )
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    verify_domains = set(consumer["verify_domains"])
+    matching_hosts = [
+        host
+        for host in hosts
+        if verify_domains.intersection(host.get("domain_names", []))
+    ]
+    covered = {
+        domain
+        for host in matching_hosts
+        for domain in host.get("domain_names", [])
+        if domain in verify_domains
+    }
+    missing = sorted(verify_domains - covered)
+    if missing:
+        raise ProviderError(
+            "NPM has no proxy host for managed verification names: "
+            + ", ".join(missing)
+            + "."
+        )
+    for host in matching_hosts:
+        if host.get("certificate_id") == certificate_id:
+            continue
+        _request(
+            f"{base_url}/nginx/proxy-hosts/{host['id']}",
+            method="PUT",
+            headers=headers,
+            payload={"certificate_id": certificate_id},
+        )
+    return certificate_id, {"nice_name": nice_name}
 
 
 def _deploy_certificate(
     spec: dict[str, Any], fullchain: bytes, private_key: bytes
-) -> None:
+) -> dict[str, Any]:
+    deployment_status: dict[str, Any] = {}
     bundle = _certificate_bundle(fullchain, private_key)
     marker = b"-----END CERTIFICATE-----"
     leaf_body, separator, chain_body = fullchain.partition(marker)
@@ -692,7 +745,13 @@ def _deploy_certificate(
     chain = chain_body.lstrip()
     for consumer in spec["consumers"]:
         if consumer["kind"] == "npm":
-            _npm_upload(consumer["certificate_id"], fullchain, private_key)
+            certificate_id, identity = _npm_managed_certificate(
+                consumer, fullchain, private_key
+            )
+            deployment_status.update(
+                npm_certificate_id=certificate_id,
+                npm_certificate_identity=identity,
+            )
         elif consumer["kind"] == "caddy":
             _ssh(consumer["connection_ref"], "deploy", bundle)
         elif consumer["kind"] == "cpanel":
@@ -707,6 +766,7 @@ def _deploy_certificate(
                     separators=(",", ":"),
                 ).encode()
                 _ssh(consumer["connection_ref"], f"deploy:{domain}", payload)
+    return deployment_status
 
 
 def renew_tls(spec: dict[str, Any]) -> ProviderResult:
@@ -722,7 +782,7 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     fullchain, private_key = _issue_certificate(spec)
     expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
     try:
-        _deploy_certificate(spec, fullchain, private_key)
+        deployment_status = _deploy_certificate(spec, fullchain, private_key)
         last_result = None
         for _ in range(12):
             last_result = reconcile_tls(spec)
@@ -742,7 +802,11 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
             raise ProviderError("Certificate deployment and rollback both failed.") from rollback_exc
         raise ProviderError("Certificate deployment failed and was rolled back.") from exc
     assert last_result is not None
-    status = {**last_result.status, "renewed_fingerprint_sha256": expected_fingerprint}
+    status = {
+        **last_result.status,
+        **deployment_status,
+        "renewed_fingerprint_sha256": expected_fingerprint,
+    }
     return ProviderResult(
         changed=True,
         status=status,

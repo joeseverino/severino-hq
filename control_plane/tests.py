@@ -61,7 +61,6 @@ def resolved_certificate_spec():
                 "topology_ref": "container:homelab-server/npm",
                 "name": "jseverino-wildcard",
                 "connection_ref": "homelab-npm",
-                "certificate_id": 11,
                 "verify_domains": ["dev.jseverino.com"],
             },
             {
