@@ -172,20 +172,21 @@ def report_operation(
         )
     )
 
-    resource.status = report.status
     resource.conditions = report.conditions
-    resource.last_observed_at = timezone.now()
     if report.success:
+        resource.status = report.status
+        resource.last_observed_at = timezone.now()
         resource.observed_generation = report.observed_generation
-    resource.save(
-        update_fields=(
+        resource_fields = (
             "status",
             "conditions",
             "last_observed_at",
             "observed_generation",
             "updated_at",
         )
-    )
+    else:
+        resource_fields = ("conditions", "updated_at")
+    resource.save(update_fields=resource_fields)
     return {
         "ok": True,
         "operation": serialize_operation(operation),

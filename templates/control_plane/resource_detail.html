@@ -154,7 +154,19 @@
           <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
           <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span></td>
           <td>{{ operation.completed_at|default:"—" }}</td>
-          <td class="muted">{{ operation.result.message|default:"—" }}</td>
+          <td class="muted operation-result">
+            {{ operation.result.message|default:"—" }}
+            {% if operation.result.status.consumers %}
+              <details class="operation-evidence">
+                <summary>Consumer evidence</summary>
+                <ul>
+                  {% for item in operation.result.status.consumers %}
+                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected %}matched{% else %}did not match{% endif %}</li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
         <tr><td colspan="5" class="muted">No operations yet.</td></tr>

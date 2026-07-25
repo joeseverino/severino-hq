@@ -724,3 +724,48 @@ class InfrastructureViewsTests(TestCase):
                 ),
                 controller_id="controller",
             )
+
+    def test_failed_controller_report_preserves_last_verified_status(self):
+        verified = {
+            "not_after": "2026-10-23T00:00:00+00:00",
+            "certificate_pem": "-----BEGIN CERTIFICATE-----\npublic\n",
+        }
+        self.resource.status = verified
+        self.resource.save(update_fields=("status",))
+        operation = OperationRequest.objects.create(
+            resource=self.resource,
+            action=OperationRequest.Action.RENEW,
+            state=OperationRequest.State.CLAIMED,
+            requested_actor="operator",
+            requested_interface="cli",
+            idempotency_key="preserve-verified-status",
+            input={"generation": self.resource.generation},
+            claimed_by="controller",
+            claimed_at=timezone.now(),
+        )
+
+        report_operation(
+            str(operation.id),
+            ControllerReport(
+                success=False,
+                observed_generation=self.resource.generation,
+                status={"expected_fingerprint_sha256": "new"},
+                conditions=[
+                    {
+                        "type": "Degraded",
+                        "status": True,
+                        "reason": "ProviderError",
+                        "message": "One consumer did not converge.",
+                    }
+                ],
+                message="One consumer did not converge.",
+            ),
+            controller_id="controller",
+        )
+
+        self.resource.refresh_from_db()
+        operation.refresh_from_db()
+        self.assertEqual(self.resource.status, verified)
+        self.assertEqual(
+            operation.result["status"]["expected_fingerprint_sha256"], "new"
+        )

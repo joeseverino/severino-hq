@@ -15,7 +15,13 @@
     "tls.certificate": {
       "actions": {
         "reconcile": {"mode": "apply"},
-        "renew": {"mode": "apply"}
+        "renew": {
+          "mode": "apply",
+          "verification": {
+            "timeout_seconds": 180,
+            "interval_seconds": 5
+          }
+        }
       }
     },
     "cloudflare.dns_record": {
