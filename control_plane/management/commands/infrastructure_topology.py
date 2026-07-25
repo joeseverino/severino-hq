@@ -12,7 +12,7 @@ from control_plane.topology import TopologyError, import_topology
 
 
 class Command(BaseCommand):
-    help = "Import a validated topology v2 JSON document into HQ."
+    help = "Import topology v3 and materialize its managed resource declarations."
 
     def add_arguments(self, parser):
         parser.add_argument(

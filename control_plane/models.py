@@ -11,11 +11,20 @@ from core.models import TimestampedModel
 
 
 class ManagedResource(TimestampedModel):
+    class DeclarationSource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        TOPOLOGY = "topology", "Topology"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.SlugField(max_length=180, unique=True)
     kind = models.CharField(max_length=64)
     spec = models.JSONField(default=dict)
     enabled = models.BooleanField(default=True)
+    declaration_source = models.CharField(
+        max_length=20,
+        choices=DeclarationSource.choices,
+        default=DeclarationSource.MANUAL,
+    )
     generation = models.PositiveIntegerField(default=1)
     observed_generation = models.PositiveIntegerField(default=0)
     status = models.JSONField(default=dict, blank=True)

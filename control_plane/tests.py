@@ -86,7 +86,7 @@ def topology_payload():
     spec = resolved_certificate_spec()
     consumers = spec.pop("consumers")
     return {
-        "version": 2,
+        "version": 3,
         "hosts": [
             {
                 "id": "homelab-server",
@@ -137,7 +137,35 @@ def topology_payload():
                 },
             },
         ],
+        "managed_resources": [],
     }
+
+
+class TopologyMaterializationTests(TestCase):
+    def test_import_materializes_and_updates_declared_resources(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {
+                "key": "hq-dns",
+                "kind": "adguard.rewrite",
+                "spec": {
+                    "domain": "hq.jseverino.com",
+                    "answer": "192.168.1.233",
+                },
+                "enabled": True,
+            }
+        ]
+
+        import_topology(payload)
+        resource = ManagedResource.objects.get(key="hq-dns")
+        self.assertEqual(resource.declaration_source, "topology")
+        self.assertEqual(resource.generation, 1)
+
+        payload["managed_resources"][0]["spec"]["answer"] = "192.168.1.234"
+        import_topology(payload)
+        resource.refresh_from_db()
+        self.assertEqual(resource.spec["answer"], "192.168.1.234")
+        self.assertEqual(resource.generation, 2)
 
 
 class ProviderContractTests(TestCase):

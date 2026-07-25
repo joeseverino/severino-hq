@@ -8,7 +8,8 @@ from typing import Any
 
 from django.db import transaction
 
-from .models import TopologySnapshot
+from .models import ManagedResource, TopologySnapshot
+from .providers import validate_spec
 
 
 class TopologyError(ValueError):
@@ -24,9 +25,9 @@ def _canonical(payload: dict[str, Any]) -> bytes:
 def validate_topology(payload: object) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise TopologyError("Topology must be a JSON object.")
-    if payload.get("version") != 2:
-        raise TopologyError("HQ requires topology schema version 2.")
-    for field in ("hosts", "pki", "externals", "dependencies"):
+    if payload.get("version") != 3:
+        raise TopologyError("HQ requires topology schema version 3.")
+    for field in ("hosts", "pki", "externals", "dependencies", "managed_resources"):
         if not isinstance(payload.get(field), list):
             raise TopologyError(f"Topology field {field!r} must be a list.")
 
@@ -47,6 +48,29 @@ def validate_topology(payload: object) -> dict[str, Any]:
                     f"Dependency has dangling {endpoint} reference "
                     f"{dependency.get(endpoint)!r}."
                 )
+    resource_keys: set[str] = set()
+    for declaration in payload["managed_resources"]:
+        if not isinstance(declaration, dict):
+            raise TopologyError("Managed resource declarations must be objects.")
+        try:
+            key = declaration["key"]
+            kind = declaration["kind"]
+            spec = declaration["spec"]
+        except KeyError as exc:
+            raise TopologyError(
+                f"Managed resource is missing field {exc.args[0]!r}."
+            ) from exc
+        if not isinstance(key, str) or not key:
+            raise TopologyError("Managed resource keys must be non-empty strings.")
+        if key in resource_keys:
+            raise TopologyError(f"Duplicate managed resource key {key!r}.")
+        resource_keys.add(key)
+        try:
+            declaration["spec"] = validate_spec(kind, spec)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TopologyError(
+                f"Managed resource {key!r} is invalid: {exc}"
+            ) from exc
     return payload
 
 
@@ -62,6 +86,39 @@ def import_topology(payload: object) -> TopologySnapshot:
             "payload": validated,
         },
     )
+    declared_keys: set[str] = set()
+    for declaration in validated["managed_resources"]:
+        key = declaration["key"]
+        declared_keys.add(key)
+        resource = ManagedResource.objects.select_for_update().filter(key=key).first()
+        if resource and resource.declaration_source != ManagedResource.DeclarationSource.TOPOLOGY:
+            raise TopologyError(
+                f"Topology cannot take ownership of manual resource {key!r}."
+            )
+        if resource is None:
+            ManagedResource.objects.create(
+                key=key,
+                kind=declaration["kind"],
+                spec=declaration["spec"],
+                enabled=declaration.get("enabled", True),
+                declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
+            )
+            continue
+        changed = (
+            resource.kind != declaration["kind"]
+            or resource.spec != declaration["spec"]
+            or resource.enabled != declaration.get("enabled", True)
+        )
+        resource.kind = declaration["kind"]
+        resource.spec = declaration["spec"]
+        resource.enabled = declaration.get("enabled", True)
+        if changed:
+            resource.generation += 1
+        resource.full_clean()
+        resource.save()
+    ManagedResource.objects.filter(
+        declaration_source=ManagedResource.DeclarationSource.TOPOLOGY
+    ).exclude(key__in=declared_keys).update(enabled=False)
     return snapshot
 
 
