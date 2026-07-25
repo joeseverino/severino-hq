@@ -487,15 +487,34 @@ class InfrastructureWebTests(TestCase):
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
 
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
+        self.resource.status = {
+            "not_after": (timezone.now() + timedelta(days=89, hours=23)).isoformat(),
+            "certificate_pem": "-----BEGIN CERTIFICATE-----\npublic\n",
+            "consumers": [
+                {
+                    "consumer": "jseverino-wildcard",
+                    "domain": "hq.jseverino.com",
+                },
+                {
+                    "consumer": "jseverino-wildcard",
+                    "domain": "sso.jseverino.com",
+                },
+            ],
+        }
+        self.resource.save(update_fields=("status",))
         response = self.client.get(
             reverse("control_plane:detail", kwargs={"key": self.resource.key})
         )
 
-        self.assertContains(response, "Observe: Apply")
-        self.assertContains(response, "Automatic renewal")
-        self.assertContains(response, "survives restarts")
+        self.assertContains(response, "Automatic")
+        self.assertContains(response, "resumes automatically after restarts")
         self.assertContains(response, "Renewal policy")
-        self.assertContains(response, "Eligible now")
+        self.assertContains(response, "90 days remaining")
+        self.assertContains(response, "hq.jseverino.com")
+        self.assertContains(response, "sso.jseverino.com")
+        self.assertNotContains(response, "BEGIN CERTIFICATE")
+        self.assertContains(response, "certificate_available")
+        self.assertContains(response, "True")
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {
@@ -571,6 +590,27 @@ class OperationPolicyTests(TestCase):
             OperationRequest.objects.get().action,
             OperationRequest.Action.RECONCILE,
         )
+
+    @patch("application.controller._scheduler_now")
+    def test_failed_automatic_renewal_retries_once_on_the_next_day(self, now):
+        current = timezone.now()
+        now.return_value = current
+        self.resource.status = {
+            "not_after": (current + timedelta(days=29)).isoformat()
+        }
+        self.resource.observed_generation = self.resource.generation
+        self.resource.save()
+
+        schedule_automatic_operations("homelab-server")
+        operation = OperationRequest.objects.get()
+        operation.state = OperationRequest.State.FAILED
+        operation.save(update_fields=("state", "updated_at"))
+        schedule_automatic_operations("homelab-server")
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
+        now.return_value = current + timedelta(days=1)
+        schedule_automatic_operations("homelab-server")
+        self.assertEqual(OperationRequest.objects.count(), 2)
 
     def test_active_controller_capability_queues_renewal_work(self):
         result = request_certificate_renewal(

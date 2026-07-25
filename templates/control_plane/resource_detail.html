@@ -42,8 +42,8 @@
   <div class="control-metric">
     <span class="control-label">Automation</span>
     {% if resource.kind == "tls.certificate" %}
-      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Observe: {{ controller_capability.reconcile.mode|title }}</strong>
-      <span>{% if controller_capability.renew.automatic %}Automatic renewal{% if renewal_at %} begins {{ renewal_at }}{% endif %}. The persistent homelab controller checks every minute and survives restarts.{% else %}Renew: {{ controller_capability.renew.mode|title }}{% endif %}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
+      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">{% if controller_capability.renew.automatic %}Automatic{% else %}Observe: {{ controller_capability.reconcile.mode|title }}{% endif %}</strong>
+      <span>{% if controller_capability.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The homelab controller resumes automatically after restarts.{% else %}Renew: {{ controller_capability.renew.mode|title }}{% endif %}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
     {% else %}
       <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Reconcile: {{ controller_capability.reconcile.mode|title }}</strong>
       <span>{% if controller_capability.reconcile.mode == "apply" %}Controller actions are enabled.{% else %}{{ controller_capability.reconcile.reason }}{% endif %}</span>
@@ -88,10 +88,10 @@
       <table class="data-table compact-table">
         <thead><tr><th>Consumer</th><th>Verification names</th></tr></thead>
         <tbody>
-          {% for consumer in resolved_spec.consumers %}
+          {% for consumer in display_consumers %}
             <tr>
               <td><strong>{{ consumer.name }}</strong><br><code>{{ consumer.kind }}</code><br><span class="muted">{{ consumer.topology_ref }}</span></td>
-              <td>{% for domain in consumer.verify_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
+              <td>{% for domain in consumer.display_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -123,7 +123,7 @@
   <summary>Raw desired and observed JSON</summary>
   <div class="two-col">
     <section><h2>Desired specification</h2><pre>{{ resource.spec|pprint }}</pre></section>
-    <section><h2>Observed status</h2><pre>{{ resource.status|pprint }}</pre></section>
+    <section><h2>Observed status</h2><pre>{{ diagnostic_status|pprint }}</pre></section>
   </div>
 </details>
 

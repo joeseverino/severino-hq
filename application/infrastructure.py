@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from typing import Any
 
 from django.conf import settings
@@ -57,7 +58,7 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "health": health,
         "public_effect": provider.public_effect if provider else False,
         "spec": resource.spec,
-        "status": resource.status,
+        "status": serialize_public_status(resource.status),
         "conditions": resource.conditions,
         "last_observed_at": (
             resource.last_observed_at.isoformat()
@@ -66,6 +67,14 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         ),
         "updated_at": resource.updated_at.isoformat(),
     }
+
+
+def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
+    """Return public observations without embedding downloadable artifacts."""
+    public_status = {key: value for key, value in status.items() if key != "certificate_pem"}
+    if status.get("certificate_pem"):
+        public_status["certificate_available"] = True
+    return public_status
 
 
 def resource_health(resource: ManagedResource) -> dict[str, str]:
@@ -331,13 +340,14 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
     if expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
     days_left = (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
+    whole_days_left = max(0, math.ceil(days_left))
     renewal_window = resource.spec.get("renewal_window_days", 30)
     if days_left <= renewal_window:
-        return True, f"Certificate has {days_left:.1f} days remaining."
+        return True, f"Certificate has {whole_days_left} days remaining."
     return (
         False,
         f"Renewal opens at {renewal_window} days; "
-        f"certificate has {days_left:.1f} days remaining.",
+        f"certificate has {whole_days_left} days remaining.",
     )
 
 

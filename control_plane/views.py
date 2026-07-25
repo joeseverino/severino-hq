@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import math
 from datetime import datetime, timedelta, timezone
 
 from django.contrib import messages
@@ -18,6 +19,7 @@ from application.infrastructure import (
     request_reconcile,
     resource_health,
     serialize_resource,
+    serialize_public_status,
 )
 from application.security import web_principal
 
@@ -96,8 +98,11 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                 expiry = datetime.fromisoformat(not_after.replace("Z", "+00:00"))
                 if expiry.tzinfo is None:
                     expiry = expiry.replace(tzinfo=timezone.utc)
-                context["days_left"] = int(
-                    (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
+                context["days_left"] = max(
+                    0,
+                    math.ceil(
+                        (expiry - datetime.now(timezone.utc)).total_seconds() / 86400
+                    ),
                 )
                 context["renewal_at"] = expiry - timedelta(
                     days=self.object.spec.get("renewal_window_days", 30)
@@ -116,8 +121,26 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     }
                 )
                 context["topology_error"] = ""
+                observed_names: dict[str, set[str]] = {}
+                for observation in self.object.status.get("consumers", []):
+                    observed_names.setdefault(observation.get("consumer", ""), set()).add(
+                        observation.get("domain", "")
+                    )
+                context["display_consumers"] = [
+                    {
+                        **consumer,
+                        "display_domains": sorted(
+                            domain
+                            for domain in observed_names.get(consumer["name"], set())
+                            if domain
+                        )
+                        or consumer.get("verify_domains", []),
+                    }
+                    for consumer in context["resolved_spec"]["consumers"]
+                ]
             except (KeyError, TopologyError, ValueError) as exc:
                 context["topology_error"] = str(exc)
+        context["diagnostic_status"] = serialize_public_status(self.object.status)
         return context
 
 

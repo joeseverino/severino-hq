@@ -94,7 +94,8 @@ container never receives the provider environment.
 
 The controller claims only kind/action pairs marked `apply` in
 `config/controller-capabilities.json`. Its persistent systemd timer runs after
-boot and every minute. Each run derives work from HQ's verified state: it queues
+boot and every five minutes. Each run drains infrastructure work and derives
+new work from HQ's verified state: it queues
 renewal inside the configured window and reconciliation for new topology
 generations or drift. TLS reconciliation redistributes the existing lineage;
 it does not issue. The NPM adapter discovers every enabled proxy host whose

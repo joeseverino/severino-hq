@@ -67,6 +67,10 @@ def peek_next_operation(
     return result
 
 
+def _scheduler_now():
+    return timezone.now()
+
+
 @transaction.atomic
 def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     """Queue due TLS work from verified state; never issue directly here."""
@@ -74,7 +78,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     resources = ManagedResource.objects.select_for_update().filter(
         enabled=True, kind="tls.certificate"
     )
-    now = timezone.now()
+    now = _scheduler_now()
     for resource in resources:
         action = None
         reason = ""
@@ -109,7 +113,8 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             continue
         identity = not_after or "unobserved"
         idempotency_key = (
-            f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}"
+            f"controller:{action}:{resource.pk}:g{resource.generation}:"
+            f"{identity}:{now.date().isoformat()}"
         )[:200]
         if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
             continue
