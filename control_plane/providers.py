@@ -30,7 +30,6 @@ class CaddyTLSConsumer(TLSConsumerBase):
 class NPMTLSConsumer(TLSConsumerBase):
     kind: Literal["npm"]
     connection_ref: str = Field(min_length=1, max_length=160)
-    certificate_id: int = Field(ge=1)
 
 
 class CPanelTLSConsumer(TLSConsumerBase):
