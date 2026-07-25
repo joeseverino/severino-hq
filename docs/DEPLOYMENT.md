@@ -93,8 +93,8 @@ credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
 The controller claims only kind/action pairs marked `apply` in
-`config/controller-capabilities.json`. TLS observation is active; TLS renewal
-and public-DNS reconciliation remain locked and cannot be queued.
+`config/controller-capabilities.json`. TLS observation and transactional
+renewal are active; public-DNS reconciliation remains locked.
 
 Do not use the web application's `CLOUDFLARE_API_TOKEN` for DNS-01. That token
 belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate
@@ -115,7 +115,21 @@ operation-allowlisted SSH invocations from it. It does not accept arbitrary
 remote commands. Authorize each generated `.pub` key with the narrowest
 remote account or forced command available. Renewal stays locked until both
 deployment paths pass non-mutating preflight, deployment, live-certificate
-verification, and rollback tests.
+verification, and rollback tests. Renewal runs in a disposable container from
+the exact deployed image. It alone receives the root-owned ACME lineage,
+controller credentials, and deployment keys; none are mounted into the web
+container. Before issuance it snapshots the known-good Caddy artifact. Any
+consumer failure triggers compensating deployment of that artifact to every
+consumer, and success is reported only after all live verification names serve
+the new SHA-256 fingerprint.
+
+The reviewed receivers are versioned in `deploy/targets/`. Install the edge
+controller and dispatcher root-owned, force the edge key to the dispatcher,
+and allow that account to sudo only the controller. Install the cPanel
+controller as the cPanel account and force its key directly to that script.
+Both scripts reject every operation outside their explicit allowlist. This is
+an administrator bootstrap boundary; application deployment cannot rewrite its
+own remote authorization policy.
 
 Pull requests run checks only; a push to `main` runs the image build, scan,
 homelab deployment, health verification, and controller activation.

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+# Root-owned forced-command bridge. The controller itself allowlists every
+# operation; quoting keeps the client command a single opaque argument.
+exec sudo -n /usr/local/sbin/severino-hq-edge-controller "${SSH_ORIGINAL_COMMAND:-}"

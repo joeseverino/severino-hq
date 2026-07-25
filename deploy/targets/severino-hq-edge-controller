@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+readonly operation="${1:-}"
+readonly cert_dir="/opt/apps/caddy/certs"
+
+case "${operation}" in
+    preflight)
+        test -s "${cert_dir}/fullchain.pem"
+        test -s "${cert_dir}/privkey.pem"
+        docker inspect caddy >/dev/null
+        ;;
+    snapshot)
+        exec tar -C "${cert_dir}" -cf - fullchain.pem privkey.pem
+        ;;
+    deploy)
+        work="$(mktemp -d /tmp/severino-hq-cert.XXXXXX)"
+        trap 'rm -rf "${work}"' EXIT HUP INT TERM
+        archive="${work}/certificate.tar"
+        cat >"${archive}"
+        test "$(tar -tf "${archive}" | sort)" = "fullchain.pem
+privkey.pem"
+        tar -C "${work}" -xf "${archive}"
+        test "$(find "${work}" -maxdepth 1 -type f -printf '%f\n' | sort)" = "fullchain.pem
+privkey.pem"
+        cert_key="$(openssl x509 -in "${work}/fullchain.pem" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256)"
+        private_key="$(openssl pkey -in "${work}/privkey.pem" -pubout -outform DER | openssl dgst -sha256)"
+        test -n "${cert_key}"
+        test "${cert_key}" = "${private_key}"
+        install -m 0600 "${cert_dir}/fullchain.pem" "${work}/previous-fullchain.pem"
+        install -m 0600 "${cert_dir}/privkey.pem" "${work}/previous-privkey.pem"
+        install -o root -g root -m 0644 "${work}/fullchain.pem" "${cert_dir}/fullchain.pem"
+        install -o root -g root -m 0600 "${work}/privkey.pem" "${cert_dir}/privkey.pem"
+        if ! docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force; then
+            install -o root -g root -m 0644 "${work}/previous-fullchain.pem" "${cert_dir}/fullchain.pem"
+            install -o root -g root -m 0600 "${work}/previous-privkey.pem" "${cert_dir}/privkey.pem"
+            docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Severino HQ edge operation denied." >&2
+        exit 126
+        ;;
+esac

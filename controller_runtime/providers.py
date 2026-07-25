@@ -5,10 +5,16 @@ from __future__ import annotations
 import base64
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
+from pathlib import Path
 import socket
 import ssl
+import subprocess
+import tarfile
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -167,6 +173,10 @@ def _npm_api_url(configured_url: str) -> str:
 
 
 def preflight() -> list[dict[str, Any]]:
+    acme_dir = Path(_required("HQ", "ACME_DIR"))
+    if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
+        raise ProviderError("ACME state directory is not writable.")
+    _run(["certbot", "--version"])
     adguard_url = _required("ADGUARD", "URL").rstrip("/")
     _request(
         f"{adguard_url}/control/status",
@@ -206,6 +216,8 @@ def preflight() -> list[dict[str, Any]]:
             + ", ".join(missing_zones)
             + "."
         )
+    _ssh("edge", "preflight")
+    _ssh("namecheap-cpanel", "preflight")
     return [
         {
             "connection_ref": _required("ADGUARD", "CONNECTION_REF"),
@@ -220,6 +232,12 @@ def preflight() -> list[dict[str, Any]]:
         {
             "connection_ref": _required("CLOUDFLARE_DNS", "CONNECTION_REF"),
             "provider": "cloudflare_dns",
+            "ok": True,
+        },
+        {"connection_ref": "edge", "provider": "ssh", "ok": True},
+        {
+            "connection_ref": "namecheap-cpanel",
+            "provider": "ssh",
             "ok": True,
         },
     ]
@@ -351,8 +369,7 @@ def _observe_tls_domain(domain: str) -> dict[str, Any]:
 
 def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
-    direct_observations: list[dict[str, Any]] = []
-    direct_fingerprints: set[str] = set()
+    consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
     for consumer in spec["consumers"]:
         domains = consumer.get("verify_domains", [])
@@ -364,27 +381,22 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
             observed["consumer"] = consumer["name"]
             observed["consumer_kind"] = consumer["kind"]
             observations.append(observed)
-            if consumer["kind"] in {"npm", "caddy"}:
-                direct_fingerprints.add(observed["fingerprint_sha256"])
-                direct_observations.append(observed)
+            consumer_fingerprints.add(observed["fingerprint_sha256"])
 
     if not observations:
         raise ProviderError("No TLS verification domains were declared.")
-    managed_observations = direct_observations or observations
-    expiries = [
-        datetime.fromisoformat(item["not_after"]) for item in managed_observations
-    ]
+    expiries = [datetime.fromisoformat(item["not_after"]) for item in observations]
     soonest = min(expiries)
-    newest = max(managed_observations, key=lambda item: item["not_after"])
+    newest = max(observations, key=lambda item: item["not_after"])
     days_remaining = int((soonest - datetime.now(timezone.utc)).total_seconds() / 86400)
     conditions: list[dict[str, Any]] = []
-    if len(direct_fingerprints) > 1:
+    if len(consumer_fingerprints) > 1:
         conditions.append(
             _condition(
                 "Drifted",
                 True,
                 "ConsumerMismatch",
-                "Direct TLS consumers are serving different certificates.",
+                "TLS consumers are serving different certificates.",
             )
         )
     if days_remaining <= spec["renewal_window_days"]:
@@ -429,6 +441,260 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
+def _certificate_registry(name: str) -> dict[str, Any]:
+    path = Path(__file__).resolve().parents[1] / "config" / name
+    try:
+        registry = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProviderError("Certificate controller registry is invalid.") from exc
+    if registry.get("schema_version") != 1:
+        raise ProviderError("Certificate controller registry version is unsupported.")
+    return registry
+
+
+def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
+    try:
+        result = subprocess.run(
+            command,
+            input=input_bytes,
+            capture_output=True,
+            check=False,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ProviderError("Certificate controller command could not complete.") from exc
+    if result.returncode:
+        raise ProviderError("Certificate controller command failed.")
+    return result.stdout
+
+
+def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
+    registry = _certificate_registry("controller-connections.json")
+    transport = registry.get("ssh_transports", {}).get(connection_ref)
+    if not isinstance(transport, dict):
+        raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
+    ssh_dir = Path(_required("HQ_CONTROLLER", "SSH_DIR"))
+    command = [
+        "ssh",
+        "-F",
+        "/dev/null",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        f"UserKnownHostsFile={ssh_dir / 'known_hosts'}",
+        "-o",
+        "GlobalKnownHostsFile=/dev/null",
+        "-o",
+        "ConnectTimeout=10",
+        "-i",
+        str(ssh_dir / connection_ref),
+        "-p",
+        str(transport["port"]),
+        f'{transport["user"]}@{transport["host"]}',
+        operation,
+    ]
+    return _run(command, input_bytes=payload)
+
+
+def _certificate_bundle(fullchain: bytes, private_key: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        for name, value in (("fullchain.pem", fullchain), ("privkey.pem", private_key)):
+            info = tarfile.TarInfo(name)
+            info.size = len(value)
+            info.mode = 0o600
+            archive.addfile(info, io.BytesIO(value))
+    return buffer.getvalue()
+
+
+def _read_bundle(payload: bytes) -> tuple[bytes, bytes]:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+            names = set(archive.getnames())
+            if names != {"fullchain.pem", "privkey.pem"}:
+                raise ProviderError("Certificate snapshot contained unexpected files.")
+            fullchain_file = archive.extractfile("fullchain.pem")
+            private_key_file = archive.extractfile("privkey.pem")
+            if fullchain_file is None or private_key_file is None:
+                raise ProviderError("Certificate snapshot was incomplete.")
+            return fullchain_file.read(), private_key_file.read()
+    except (tarfile.TarError, OSError) as exc:
+        raise ProviderError("Certificate snapshot was invalid.") from exc
+
+
+def _validate_certificate(
+    fullchain: bytes, private_key: bytes, domains: list[str]
+) -> str:
+    with tempfile.TemporaryDirectory() as directory:
+        cert_path = Path(directory) / "fullchain.pem"
+        key_path = Path(directory) / "privkey.pem"
+        cert_path.write_bytes(fullchain)
+        key_path.write_bytes(private_key)
+        cert_pub = _run(["openssl", "x509", "-in", str(cert_path), "-pubkey", "-noout"])
+        key_pub = _run(["openssl", "pkey", "-in", str(key_path), "-pubout"])
+        if cert_pub != key_pub:
+            raise ProviderError("Certificate and private key do not match.")
+        fingerprint = _run(
+            ["openssl", "x509", "-in", str(cert_path), "-noout", "-fingerprint", "-sha256"]
+        ).decode().strip().split("=", 1)[-1].replace(":", "").lower()
+        san_output = _run(
+            ["openssl", "x509", "-in", str(cert_path), "-noout", "-ext", "subjectAltName"]
+        ).decode()
+        sans = {
+            chunk.split(",", 1)[0].strip()
+            for chunk in san_output.replace("\n", " ").split("DNS:")[1:]
+        }
+        missing = sorted(set(domains) - sans)
+        if missing:
+            raise ProviderError(
+                "Issued certificate is missing names: " + ", ".join(missing) + "."
+            )
+        return fingerprint
+
+
+def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
+    registry = _certificate_registry("controller-certificates.json")["acme"]
+    acme_dir = Path(_required("HQ", "ACME_DIR"))
+    credentials = acme_dir / "cloudflare.ini"
+    credentials.write_text(
+        "dns_cloudflare_api_token = "
+        + _required("CLOUDFLARE_DNS", "API_TOKEN")
+        + "\n"
+    )
+    credentials.chmod(0o600)
+    command = [
+        "certbot",
+        "certonly",
+        "--non-interactive",
+        "--agree-tos",
+        "--email",
+        registry["email"],
+        "--server",
+        registry["directory_url"],
+        "--dns-cloudflare",
+        "--dns-cloudflare-credentials",
+        str(credentials),
+        "--dns-cloudflare-propagation-seconds",
+        str(registry["dns_propagation_seconds"]),
+        "--config-dir",
+        str(acme_dir / "config"),
+        "--work-dir",
+        str(acme_dir / "work"),
+        "--logs-dir",
+        str(acme_dir / "logs"),
+        "--cert-name",
+        spec["certificate_name"],
+        "--force-renewal",
+    ]
+    for domain in spec["domains"]:
+        command.extend(("-d", domain))
+    try:
+        _run(command)
+    finally:
+        credentials.unlink(missing_ok=True)
+    lineage = acme_dir / "config" / "live" / spec["certificate_name"]
+    try:
+        return (lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath("privkey.pem").read_bytes())
+    except OSError as exc:
+        raise ProviderError("Certbot did not produce a complete lineage.") from exc
+
+
+def _npm_upload(certificate_id: int, fullchain: bytes, private_key: bytes) -> None:
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    payload = {
+        "certificate": fullchain.decode(),
+        "certificate_key": private_key.decode(),
+    }
+    _request(
+        f"{base_url}/nginx/certificates/validate",
+        method="POST",
+        headers=headers,
+        payload=payload,
+    )
+    _request(
+        f"{base_url}/nginx/certificates/{certificate_id}/upload",
+        method="POST",
+        headers=headers,
+        payload=payload,
+    )
+
+
+def _deploy_certificate(
+    spec: dict[str, Any], fullchain: bytes, private_key: bytes
+) -> None:
+    bundle = _certificate_bundle(fullchain, private_key)
+    marker = b"-----END CERTIFICATE-----"
+    leaf_body, separator, chain_body = fullchain.partition(marker)
+    if not separator:
+        raise ProviderError("Certificate chain does not contain a leaf certificate.")
+    leaf = leaf_body + marker + b"\n"
+    chain = chain_body.lstrip()
+    for consumer in spec["consumers"]:
+        if consumer["kind"] == "npm":
+            _npm_upload(consumer["certificate_id"], fullchain, private_key)
+        elif consumer["kind"] == "caddy":
+            _ssh(consumer["connection_ref"], "deploy", bundle)
+        elif consumer["kind"] == "cpanel":
+            for domain in consumer["install_domains"]:
+                payload = json.dumps(
+                    {
+                        "domain": domain,
+                        "cert": leaf.decode(),
+                        "key": private_key.decode(),
+                        "cabundle": chain.decode(),
+                    },
+                    separators=(",", ":"),
+                ).encode()
+                _ssh(consumer["connection_ref"], f"deploy:{domain}", payload)
+
+
+def renew_tls(spec: dict[str, Any]) -> ProviderResult:
+    caddy = next(
+        (item for item in spec["consumers"] if item["kind"] == "caddy"), None
+    )
+    if caddy is None:
+        raise ProviderError("Certificate renewal requires a rollback source.")
+    previous_fullchain, previous_key = _read_bundle(
+        _ssh(caddy["connection_ref"], "snapshot")
+    )
+    _validate_certificate(previous_fullchain, previous_key, spec["domains"])
+    fullchain, private_key = _issue_certificate(spec)
+    expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
+    try:
+        _deploy_certificate(spec, fullchain, private_key)
+        last_result = None
+        for _ in range(12):
+            last_result = reconcile_tls(spec)
+            fingerprints = {
+                item["fingerprint_sha256"]
+                for item in last_result.status["consumers"]
+            }
+            if fingerprints == {expected_fingerprint}:
+                break
+            time.sleep(5)
+        else:
+            raise ProviderError("Consumers did not serve the renewed certificate.")
+    except ProviderError as exc:
+        try:
+            _deploy_certificate(spec, previous_fullchain, previous_key)
+        except ProviderError as rollback_exc:
+            raise ProviderError("Certificate deployment and rollback both failed.") from rollback_exc
+        raise ProviderError("Certificate deployment failed and was rolled back.") from exc
+    assert last_result is not None
+    status = {**last_result.status, "renewed_fingerprint_sha256": expected_fingerprint}
+    return ProviderResult(
+        changed=True,
+        status=status,
+        conditions=[_condition("Ready", True, "Renewed", "All TLS consumers serve the renewed certificate.")],
+        message="Certificate renewed, deployed, and verified.",
+    )
+
+
 def execute(
     resource: dict[str, Any], action: str, *, apply: bool = True
 ) -> ProviderResult:
@@ -441,6 +707,13 @@ def execute(
         raise ProviderError("Public DNS mutation is not enabled in this controller.")
     if kind == "tls.certificate" and action == "reconcile":
         return reconcile_tls(resource["spec"])
-    if kind == "tls.certificate":
-        raise ProviderError("TLS renewal is not enabled.")
+    if kind == "tls.certificate" and action == "renew":
+        if not apply:
+            return ProviderResult(
+                changed=True,
+                status={},
+                conditions=[],
+                message="Certificate would be issued, deployed, verified, and rolled back on failure.",
+            )
+        return renew_tls(resource["spec"])
     raise ProviderError(f"Unsupported provider/action: {kind}/{action}.")

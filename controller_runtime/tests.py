@@ -122,11 +122,17 @@ class ProviderAdapterTests(TestCase):
             "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
             "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
             "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
+            "HQ_ACME_DIR": "/tmp",
+            "HQ_CONTROLLER_SSH_DIR": "/tmp",
         },
         clear=True,
     )
+    @mock.patch("controller_runtime.providers._run")
+    @mock.patch("controller_runtime.providers._ssh")
     @mock.patch("controller_runtime.providers._request")
-    def test_preflight_proves_cloudflare_token_and_zone_scope(self, request):
+    def test_preflight_proves_cloudflare_token_and_zone_scope(
+        self, request, ssh, _run
+    ):
         request.side_effect = [
             {"dns_addresses": ["0.0.0.0"]},
             {"token": "short-lived"},
@@ -143,7 +149,13 @@ class ProviderAdapterTests(TestCase):
 
         result = providers.preflight()
 
-        self.assertEqual(result[-1]["connection_ref"], "cloudflare-dns-jseverino")
+        self.assertTrue(
+            any(
+                item["connection_ref"] == "cloudflare-dns-jseverino"
+                for item in result
+            )
+        )
+        self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
 
     @mock.patch.dict(
@@ -229,6 +241,76 @@ class ProviderAdapterTests(TestCase):
         self.assertIn("BEGIN CERTIFICATE", result.status["certificate_pem"])
         self.assertNotIn("PRIVATE KEY", json.dumps(result.status))
 
+    @mock.patch("controller_runtime.providers.renew_tls")
+    def test_renew_plan_never_mutates(self, renew):
+        result = providers.execute(
+            {"kind": "tls.certificate", "spec": {}}, "renew", apply=False
+        )
+
+        self.assertTrue(result.changed)
+        renew.assert_not_called()
+
+    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.providers._deploy_certificate")
+    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.providers._validate_certificate")
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_renewal_deploys_and_verifies_every_consumer(
+        self, ssh, validate, issue, deploy, reconcile
+    ):
+        previous = providers._certificate_bundle(b"old-cert", b"old-key")
+        ssh.return_value = previous
+        validate.side_effect = ["old", "new"]
+        issue.return_value = (b"new-cert", b"new-key")
+        reconcile.return_value = providers.ProviderResult(
+            changed=False,
+            status={
+                "consumers": [
+                    {"fingerprint_sha256": "new", "consumer_kind": "npm"},
+                    {"fingerprint_sha256": "new", "consumer_kind": "caddy"},
+                ]
+            },
+            conditions=[],
+            message="observed",
+        )
+        spec = {
+            "domains": ["example.test"],
+            "consumers": [
+                {"kind": "caddy", "connection_ref": "edge"},
+            ],
+        }
+
+        result = providers.renew_tls(spec)
+
+        self.assertTrue(result.changed)
+        deploy.assert_called_once_with(spec, b"new-cert", b"new-key")
+        self.assertEqual(result.conditions[0]["reason"], "Renewed")
+
+    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.providers._deploy_certificate")
+    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.providers._validate_certificate")
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_renewal_rolls_back_previous_artifact_on_deploy_failure(
+        self, ssh, validate, issue, deploy, _reconcile
+    ):
+        ssh.return_value = providers._certificate_bundle(b"old-cert", b"old-key")
+        validate.side_effect = ["old", "new"]
+        issue.return_value = (b"new-cert", b"new-key")
+        deploy.side_effect = [providers.ProviderError("failed"), None]
+        spec = {
+            "domains": ["example.test"],
+            "consumers": [
+                {"kind": "caddy", "connection_ref": "edge"},
+            ],
+        }
+
+        with self.assertRaisesRegex(providers.ProviderError, "rolled back"):
+            providers.renew_tls(spec)
+
+        self.assertEqual(deploy.call_count, 2)
+        deploy.assert_called_with(spec, b"old-cert", b"old-key")
+
 
 class WorkerTests(TestCase):
     @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
@@ -268,7 +350,7 @@ class WorkerTests(TestCase):
         self.assertIn("adguard.rewrite:reconcile", arguments)
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
-        self.assertNotIn("tls.certificate:renew", arguments)
+        self.assertIn("tls.certificate:renew", arguments)
 
     def test_capability_registry_drives_supported_kinds(self):
         self.assertEqual(
@@ -277,6 +359,7 @@ class WorkerTests(TestCase):
                 ("adguard.rewrite", "reconcile"),
                 ("npm.proxy_host", "reconcile"),
                 ("tls.certificate", "reconcile"),
+                ("tls.certificate", "renew"),
             ),
         )
 

@@ -22,7 +22,8 @@ RUN groupadd --system --gid 10001 severino \
     && useradd  --system --uid 10001 --gid severino \
                 --home /app --shell /usr/sbin/nologin severino \
     && apt-get update && apt-get install -y --no-install-recommends \
-        sqlite3 ca-certificates \
+        sqlite3 ca-certificates openssh-client openssl \
+        certbot python3-certbot-dns-cloudflare \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

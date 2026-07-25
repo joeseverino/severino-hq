@@ -364,7 +364,7 @@ class ProviderContractTests(TestCase):
         )
         self.assertEqual(
             providers["tls.certificate"]["controller"]["actions"]["renew"]["mode"],
-            "locked",
+            "apply",
         )
         self.assertFalse(
             providers["tls.certificate"]["spec_schema"]["additionalProperties"]
@@ -456,15 +456,15 @@ class InfrastructureWebTests(TestCase):
         )
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
 
-    def test_detail_distinguishes_observation_from_locked_renewal(self):
+    def test_detail_shows_active_observation_and_policy_gated_renewal(self):
         response = self.client.get(
             reverse("control_plane:detail", kwargs={"key": self.resource.key})
         )
 
         self.assertContains(response, "Observe: Apply")
-        self.assertContains(response, "Renew: Locked")
+        self.assertContains(response, "Renew: Apply")
         self.assertContains(response, "Renewal policy")
-        self.assertContains(response, ">Locked<", html=False)
+        self.assertContains(response, "Eligible now")
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {
@@ -507,13 +507,15 @@ class OperationPolicyTests(TestCase):
         )
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
 
-    def test_locked_controller_capability_cannot_queue_work(self):
-        with self.assertRaisesRegex(PolicyError, "not provisioned"):
-            request_certificate_renewal(
-                OperationCommand(idempotency_key="renew-locked"),
-                principal=cli_principal(),
-                current_key=self.resource.key,
-            )
+    def test_active_controller_capability_queues_renewal_work(self):
+        result = request_certificate_renewal(
+            OperationCommand(idempotency_key="renew-active"),
+            principal=cli_principal(),
+            current_key=self.resource.key,
+        )
+
+        self.assertTrue(result["queued"])
+        self.assertEqual(result["operation"]["action"], "renew")
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_locked_reconcile_capability_cannot_queue_work(self):

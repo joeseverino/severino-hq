@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+readonly operation="${SSH_ORIGINAL_COMMAND:-}"
+unset SSH_ORIGINAL_COMMAND
+
+case "${operation}" in
+    preflight)
+        command -v uapi >/dev/null
+        command -v jq >/dev/null
+        uapi --output=json SSL list_certs >/dev/null
+        ;;
+    deploy:jseverino.com|deploy:jseverino.net)
+        result="$(uapi --input=json --output=json SSL install_ssl)"
+        printf '%s' "${result}" | jq -e '
+            .result.status == 1
+            and ((.result.errors // []) | length == 0)
+        ' >/dev/null
+        ;;
+    *)
+        echo "Severino HQ cPanel operation denied." >&2
+        exit 126
+        ;;
+esac
