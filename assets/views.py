@@ -12,6 +12,7 @@ from django.views.generic import (
 )
 
 from application.assets import asset_command_from_cleaned_data, save_asset
+from application.security import web_principal
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
@@ -90,8 +91,7 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         result = save_asset(
             asset_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
         )
         self.object = Asset.objects.get(slug=result["asset"]["slug"])
         messages.success(self.request, f"Asset “{self.object}” created.")
@@ -108,8 +108,7 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         result = save_asset(
             asset_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
             current_slug=self.get_object().slug,
         )
         self.object = Asset.objects.get(slug=result["asset"]["slug"])

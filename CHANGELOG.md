@@ -13,6 +13,8 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
   reference vertical slices.
 - MCP project mutations and fail-closed documentation synchronization, backed
   by adapter-parity, rollback, concurrency, idempotency, and pruning tests.
+- Typed application principals and capabilities. MCP mutations are disabled by
+  default, with destructive pruning gated separately from ordinary writes.
 - Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
   The initial typed, read-only tools cover projects, assets, expenses, receipt
   metadata, documentation status, recent activity, and system health.

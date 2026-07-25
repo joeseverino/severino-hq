@@ -8,6 +8,7 @@ from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 
 from application.content import ContentCommand, save_content
+from application.security import cli_principal
 from content.models import ContentItem
 
 
@@ -67,8 +68,7 @@ class Command(BaseCommand):
                 related_expenses=tuple(options["expense"]),
                 related_documentation=tuple(options["doc"]),
             ),
-            interface="cli",
-            actor="local-operator",
+            principal=cli_principal(),
             current_slug=slug if exists else None,
         )
         if options["json"]:

@@ -10,6 +10,7 @@ import json
 from django.core.management.base import BaseCommand
 
 from application.projects import ProjectCommand, save_project
+from application.security import cli_principal
 from projects.models import PROJECT_CATEGORY_CHOICES, Project
 
 
@@ -63,8 +64,7 @@ class Command(BaseCommand):
                 public_url=opts["public_url"],
                 notes=opts["notes"],
             ),
-            interface="cli",
-            actor="local-operator",
+            principal=cli_principal(),
             current_slug=slug if exists else None,
         )
         if opts["json"]:

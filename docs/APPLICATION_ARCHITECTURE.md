@@ -124,9 +124,14 @@ The service boundary complements the existing network boundary:
    token before tool dispatch.
 3. Tools expose task-shaped capabilities, never generic SQL or arbitrary model
    mutation.
-4. Application services revalidate all data and own transactional writes.
-5. Restricted documentation is removed from AI-facing relationship results.
-6. Every successful mutation leaves an attributed audit event.
+4. A typed `Principal` carries explicit capabilities into the application
+   service; the service—not the adapter—authorizes the operation.
+5. MCP starts read-only. `SEVERINO_MCP_ENABLE_WRITES` enables ordinary mutation
+   capabilities, while destructive documentation pruning requires the separate
+   `SEVERINO_MCP_ENABLE_PRUNE` switch as well.
+6. Application services revalidate all data and own transactional writes.
+7. Restricted documentation is removed from AI-facing relationship results.
+8. Every successful mutation leaves an attributed audit event.
 
 Recovery remains deliberately in-process. The CLI may call the same application
 service on the server, so an MCP transport outage cannot prevent bootstrap or

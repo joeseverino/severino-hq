@@ -18,6 +18,7 @@ from django.views.generic import (
 )
 
 from application.projects import project_command_from_cleaned_data, save_project
+from application.security import web_principal
 from core.audit import record_event
 from core.models import AuditLog
 from .forms import ProjectForm
@@ -162,8 +163,7 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         result = save_project(
             project_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
         )
         self.object = Project.objects.get(slug=result["project"]["slug"])
         messages.success(self.request, f"Project “{self.object}” created.")
@@ -180,8 +180,7 @@ class ProjectUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         result = save_project(
             project_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
             current_slug=self.get_object().slug,
         )
         self.object = Project.objects.get(slug=result["project"]["slug"])

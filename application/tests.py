@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from assets.models import Asset
@@ -21,14 +21,42 @@ from .documentation import sync_documentation
 from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
 from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from .projects import ConflictError, ProjectCommand, save_project
+from .security import (
+    OPERATOR_CAPABILITIES,
+    AuthorizationError,
+    Principal,
+    mcp_principal,
+)
+
+
+class CapabilityTests(TestCase):
+    def test_mcp_writes_fail_closed_by_default(self):
+        with self.assertRaisesRegex(AuthorizationError, "write_projects"):
+            save_project(
+                ProjectCommand(name="Denied", slug="denied"),
+                principal=mcp_principal(),
+            )
+        self.assertFalse(Project.objects.filter(slug="denied").exists())
+
+    @override_settings(
+        SEVERINO_MCP_ENABLE_WRITES=True,
+        SEVERINO_MCP_ENABLE_PRUNE=False,
+    )
+    def test_mcp_prune_is_a_separate_capability(self):
+        with self.assertRaisesRegex(AuthorizationError, "prune_documentation"):
+            sync_documentation(
+                [],
+                principal=mcp_principal(),
+                prune_orphans=True,
+                confirm_prune=True,
+            )
 
 
 class ProjectApplicationServiceTests(TestCase):
     def test_service_owns_validation_transaction_and_audit_context(self):
         result = save_project(
             ProjectCommand(name="Shared HQ", slug="shared-hq", status="active"),
-            interface="mcp",
-            actor="test-agent",
+            principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
         )
 
         self.assertTrue(result["ok"])
@@ -52,16 +80,14 @@ class ProjectApplicationServiceTests(TestCase):
                     slug="invalid",
                     status="not-a-status",
                 ),
-                interface="mcp",
-                actor="test-agent",
+                principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
             )
         self.assertFalse(Project.objects.filter(slug="invalid").exists())
 
     def test_update_supports_optimistic_concurrency(self):
         created = save_project(
             ProjectCommand(name="HQ", slug="hq"),
-            interface="cli",
-            actor="operator",
+            principal=Principal("operator", "cli", OPERATOR_CAPABILITIES),
         )
         project = Project.objects.get(slug="hq")
         project.name = "Changed elsewhere"
@@ -70,13 +96,13 @@ class ProjectApplicationServiceTests(TestCase):
         with self.assertRaises(ConflictError):
             save_project(
                 ProjectCommand(name="Stale write", slug="hq"),
-                interface="mcp",
-                actor="agent",
+                principal=Principal("agent", "mcp", OPERATOR_CAPABILITIES),
                 current_slug="hq",
                 expected_updated_at=created["project"]["updated_at"],
             )
 
 
+@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
 class AdapterParityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -145,6 +171,7 @@ class AdapterParityTests(TestCase):
         )
 
 
+@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
 class AssetApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Homelab", slug="homelab")
@@ -158,8 +185,7 @@ class AssetApplicationServiceTests(TestCase):
                 business_use_percentage=80,
                 related_projects=("homelab",),
             ),
-            interface="mcp",
-            actor="test-agent",
+            principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
         )
 
         self.assertEqual(result["asset"]["estimated_deductible_amount"], "799.99")
@@ -176,8 +202,7 @@ class AssetApplicationServiceTests(TestCase):
                     slug="invalid",
                     related_projects=("missing-project",),
                 ),
-                interface="mcp",
-                actor="test-agent",
+                principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
             )
 
         self.assertFalse(Asset.objects.filter(slug="invalid").exists())
@@ -248,6 +273,10 @@ class AssetApplicationServiceTests(TestCase):
         )
 
 
+@override_settings(
+    SEVERINO_MCP_ENABLE_WRITES=True,
+    SEVERINO_MCP_ENABLE_PRUNE=True,
+)
 class DocumentationSyncTests(TestCase):
     manifest = [
         {
@@ -260,10 +289,12 @@ class DocumentationSyncTests(TestCase):
 
     def test_sync_is_idempotent_and_prune_fails_closed(self):
         first = sync_documentation(
-            self.manifest, interface="mcp", actor="test-agent"
+            self.manifest,
+            principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
         )
         second = sync_documentation(
-            self.manifest, interface="mcp", actor="test-agent"
+            self.manifest,
+            principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
         )
 
         self.assertTrue(first["ok"])
@@ -272,8 +303,7 @@ class DocumentationSyncTests(TestCase):
         with self.assertRaisesRegex(ValueError, "confirm_prune"):
             sync_documentation(
                 [],
-                interface="mcp",
-                actor="test-agent",
+                principal=Principal("test-agent", "mcp", OPERATOR_CAPABILITIES),
                 prune_orphans=True,
             )
 
@@ -288,6 +318,7 @@ class DocumentationSyncTests(TestCase):
         self.assertEqual(result["stats"]["created"], 1)
 
 
+@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
 class ContentApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Site", slug="site")
@@ -300,8 +331,7 @@ class ContentApplicationServiceTests(TestCase):
                     slug="invalid",
                     related_assets=("missing",),
                 ),
-                interface="mcp",
-                actor="agent",
+                principal=Principal("agent", "mcp", OPERATOR_CAPABILITIES),
             )
         self.assertFalse(ContentItem.objects.filter(slug="invalid").exists())
 

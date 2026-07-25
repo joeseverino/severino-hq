@@ -11,6 +11,7 @@ from docs_index.importer import (
     import_manifest_data,
     validate_manifest_data,
 )
+from .security import Capability, Principal
 
 MAX_MANIFEST_ITEMS = 2000
 
@@ -18,8 +19,7 @@ MAX_MANIFEST_ITEMS = 2000
 def sync_documentation(
     manifest: list[dict[str, Any]],
     *,
-    interface: str,
-    actor: str,
+    principal: Principal,
     update_existing: bool = True,
     report_orphans: bool = False,
     prune_orphans: bool = False,
@@ -27,6 +27,9 @@ def sync_documentation(
 ) -> dict[str, Any]:
     """Validate and atomically synchronize vault metadata into HQ."""
 
+    principal.require(Capability.SYNC_DOCUMENTATION)
+    if prune_orphans:
+        principal.require(Capability.PRUNE_DOCUMENTATION)
     if len(manifest) > MAX_MANIFEST_ITEMS:
         raise ManifestImportError(
             f"Manifest exceeds the {MAX_MANIFEST_ITEMS}-record safety limit."
@@ -42,7 +45,9 @@ def sync_documentation(
         )
 
     with operation_context(
-        interface=interface, actor=actor, operation="documentation.sync"
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="documentation.sync",
     ):
         stats = import_manifest_data(
             manifest,

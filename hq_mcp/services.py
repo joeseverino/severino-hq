@@ -13,6 +13,7 @@ from application import assets as asset_service
 from application import content as content_service
 from application import documentation as documentation_service
 from application import projects as project_service
+from application.security import mcp_principal
 from assets.models import Asset
 from content.models import ContentItem
 from core.models import AuditLog
@@ -30,6 +31,12 @@ MAX_PAGE_SIZE = 100
 
 class NotFoundError(ValueError):
     """A requested HQ object does not exist."""
+
+
+def _write(service, command, **kwargs):
+    """Invoke one application mutation as the authenticated MCP principal."""
+
+    return service(command, principal=mcp_principal(), **kwargs)
 
 
 def _page_size(limit: int) -> int:
@@ -71,7 +78,8 @@ def create_project(
     notes: str = "",
 ) -> dict[str, Any]:
     """Create an HQ project through the canonical validated service."""
-    return project_service.save_project(
+    return _write(
+        project_service.save_project,
         project_service.ProjectCommand(
             name=name,
             slug=slug,
@@ -85,8 +93,6 @@ def create_project(
             security_notes=security_notes,
             notes=notes,
         ),
-        interface="mcp",
-        actor="mcp-service-account",
     )
 
 
@@ -106,7 +112,8 @@ def update_project(
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Update an HQ project with optional optimistic concurrency protection."""
-    return project_service.save_project(
+    return _write(
+        project_service.save_project,
         project_service.ProjectCommand(
             name=name,
             slug=new_slug or slug,
@@ -120,8 +127,6 @@ def update_project(
             security_notes=security_notes,
             notes=notes,
         ),
-        interface="mcp",
-        actor="mcp-service-account",
         current_slug=slug,
         expected_updated_at=expected_updated_at,
     )
@@ -135,10 +140,9 @@ def sync_documentation(
     confirm_prune: bool = False,
 ) -> dict[str, Any]:
     """Synchronize a vault manifest into HQ; pruning requires explicit confirmation."""
-    return documentation_service.sync_documentation(
+    return _write(
+        documentation_service.sync_documentation,
         manifest,
-        interface="mcp",
-        actor="mcp-service-account",
         update_existing=update_existing,
         report_orphans=report_orphans,
         prune_orphans=prune_orphans,
@@ -177,7 +181,8 @@ def create_asset(
     related_projects: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create an HQ asset through the canonical validated service."""
-    return asset_service.save_asset(
+    return _write(
+        asset_service.save_asset,
         asset_service.AssetCommand(
             item_name=item_name,
             slug=slug,
@@ -193,8 +198,6 @@ def create_asset(
             notes=notes,
             related_projects=tuple(related_projects or ()),
         ),
-        interface="mcp",
-        actor="mcp-service-account",
     )
 
 
@@ -216,7 +219,8 @@ def update_asset(
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Update an HQ asset with optional optimistic concurrency protection."""
-    return asset_service.save_asset(
+    return _write(
+        asset_service.save_asset,
         asset_service.AssetCommand(
             item_name=item_name,
             slug=new_slug or slug,
@@ -232,8 +236,6 @@ def update_asset(
             notes=notes,
             related_projects=tuple(related_projects or ()),
         ),
-        interface="mcp",
-        actor="mcp-service-account",
         current_slug=slug,
         expected_updated_at=expected_updated_at,
     )
@@ -257,7 +259,8 @@ def create_content(
     related_documentation: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create an HQ content item through the canonical service."""
-    return content_service.save_content(
+    return _write(
+        content_service.save_content,
         content_service.ContentCommand(
             title=title,
             slug=slug,
@@ -275,8 +278,6 @@ def create_content(
             related_expenses=tuple(related_expenses or ()),
             related_documentation=tuple(related_documentation or ()),
         ),
-        interface="mcp",
-        actor="mcp-service-account",
     )
 
 
@@ -300,7 +301,8 @@ def update_content(
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Update content with optional optimistic concurrency protection."""
-    return content_service.save_content(
+    return _write(
+        content_service.save_content,
         content_service.ContentCommand(
             title=title,
             slug=new_slug or slug,
@@ -318,8 +320,6 @@ def update_content(
             related_expenses=tuple(related_expenses or ()),
             related_documentation=tuple(related_documentation or ()),
         ),
-        interface="mcp",
-        actor="mcp-service-account",
         current_slug=slug,
         expected_updated_at=expected_updated_at,
     )

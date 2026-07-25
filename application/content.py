@@ -14,6 +14,7 @@ from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
+from .security import Capability, Principal
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -100,13 +101,15 @@ def _resolve(model, field: str, values: tuple, label: str):
 def save_content(
     command: ContentCommand,
     *,
-    interface: str,
-    actor: str,
+    principal: Principal,
     current_slug: str | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
+    principal.require(Capability.WRITE_CONTENT)
     operation = "content.create" if current_slug is None else "content.update"
-    with operation_context(interface=interface, actor=actor, operation=operation):
+    with operation_context(
+        interface=principal.interface, actor=principal.actor, operation=operation
+    ):
         if current_slug is None:
             item = ContentItem()
             created = True

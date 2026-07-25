@@ -18,6 +18,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from application.documentation import sync_documentation
+from application.security import cli_principal
 from docs_index.importer import (
     ManifestImportError,
     validate_manifest_data,
@@ -108,8 +109,7 @@ class Command(BaseCommand):
         try:
             result = sync_documentation(
                 data,
-                interface="cli",
-                actor="local-operator",
+                principal=cli_principal(),
                 update_existing=not options["no_update"],
                 report_orphans=report_orphans,
                 prune_orphans=options["prune"],

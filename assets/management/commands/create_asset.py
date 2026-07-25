@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.management.base import BaseCommand, CommandError
 
 from application.assets import AssetCommand, save_asset
+from application.security import cli_principal
 from assets.models import (
     ASSET_CATEGORY_CHOICES,
     PAYMENT_METHOD_CHOICES,
@@ -124,8 +125,7 @@ class Command(BaseCommand):
                 status=opts["status"],
                 notes=opts["notes"],
             ),
-            interface="cli",
-            actor="local-operator",
+            principal=cli_principal(),
             current_slug=slug if exists else None,
         )
         if opts["json"]:

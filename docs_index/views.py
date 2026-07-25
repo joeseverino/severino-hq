@@ -20,6 +20,7 @@ from django.views.generic import (
 )
 
 from application.documentation import sync_documentation
+from application.security import web_principal
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
@@ -170,8 +171,7 @@ class ManifestImportView(LoginRequiredMixin, View):
         try:
             result = sync_documentation(
                 data,
-                interface="web",
-                actor=request.user.get_username(),
+                principal=web_principal(request.user),
                 update_existing=form.cleaned_data["update_existing"],
             )
         except ManifestImportError as exc:

@@ -12,6 +12,7 @@ from django.views.generic import (
 )
 
 from application.content import content_command_from_cleaned_data, save_content
+from application.security import web_principal
 from .forms import ContentItemForm
 from .models import ContentItem
 
@@ -87,8 +88,7 @@ class ContentCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         result = save_content(
             content_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
         )
         self.object = ContentItem.objects.get(slug=result["content"]["slug"])
         messages.success(self.request, f"Content item “{self.object}” created.")
@@ -105,8 +105,7 @@ class ContentUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         result = save_content(
             content_command_from_cleaned_data(form.cleaned_data),
-            interface="web",
-            actor=self.request.user.get_username(),
+            principal=web_principal(self.request.user),
             current_slug=self.get_object().slug,
         )
         self.object = ContentItem.objects.get(slug=result["content"]["slug"])

@@ -14,6 +14,7 @@ from assets.models import Asset
 from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from projects.models import Project
+from .security import Capability, Principal
 
 MAX_PAGE_SIZE = 100
 SAFE_SENSITIVITIES = (
@@ -126,13 +127,15 @@ def get_asset(slug: str) -> dict[str, Any]:
 def save_asset(
     command: AssetCommand,
     *,
-    interface: str,
-    actor: str,
+    principal: Principal,
     current_slug: str | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
+    principal.require(Capability.WRITE_ASSETS)
     operation = "asset.create" if current_slug is None else "asset.update"
-    with operation_context(interface=interface, actor=actor, operation=operation):
+    with operation_context(
+        interface=principal.interface, actor=principal.actor, operation=operation
+    ):
         if current_slug is None:
             asset = Asset()
             created = True

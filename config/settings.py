@@ -253,6 +253,8 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
+SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
+SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
 
 
 # ----- I18N --------------------------------------------------------------------
