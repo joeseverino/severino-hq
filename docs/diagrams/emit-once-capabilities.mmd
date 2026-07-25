@@ -1,0 +1,19 @@
+flowchart LR
+    command["Typed command<br/>one authored declaration"]
+    registry["Allowlisted capability registry<br/>name · effect · permission · handler"]
+
+    schema["JSON Schema"]
+    validate["Runtime validation"]
+    mcp["MCP discovery + execution"]
+    cli["CLI JSON describe + run"]
+    tests["Parity fixtures + tests"]
+
+    command --> registry
+    registry --> schema
+    registry --> validate
+    registry --> mcp
+    registry --> cli
+    registry --> tests
+
+    classDef anchor stroke-width:2px;
+    class command,registry anchor;

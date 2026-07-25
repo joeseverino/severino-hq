@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from core.audit import operation_context, record_event
@@ -14,6 +15,15 @@ from docs_index.importer import (
 from .security import Capability, Principal
 
 MAX_MANIFEST_ITEMS = 2000
+
+
+@dataclass(frozen=True)
+class DocumentationSyncCommand:
+    manifest: list[dict[str, Any]]
+    update_existing: bool = True
+    report_orphans: bool = False
+    prune_orphans: bool = False
+    confirm_prune: bool = False
 
 
 def sync_documentation(
@@ -62,3 +72,20 @@ def sync_documentation(
             metadata={"stats": stats},
         )
     return {"ok": True, "stats": stats}
+
+
+def execute_documentation_sync(
+    command: DocumentationSyncCommand,
+    *,
+    principal: Principal,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    del expected_updated_at
+    return sync_documentation(
+        command.manifest,
+        principal=principal,
+        update_existing=command.update_existing,
+        report_orphans=command.report_orphans,
+        prune_orphans=command.prune_orphans,
+        confirm_prune=command.confirm_prune,
+    )

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
 from typing import Any
 
 from django.db.models import Count
 from django.utils import timezone
 
 from application import assets as asset_service
-from application import content as content_service
-from application import documentation as documentation_service
+from application.capabilities import (
+    describe_capabilities as describe_application_capabilities,
+)
+from application.capabilities import execute_capability as execute_application_capability
 from application import projects as project_service
 from application.security import mcp_principal
 from assets.models import Asset
@@ -39,6 +39,29 @@ def _write(service, command, **kwargs):
     return service(command, principal=mcp_principal(), **kwargs)
 
 
+def describe_capabilities() -> dict[str, Any]:
+    """Describe every JSON-executable HQ capability and its canonical schema."""
+
+    return describe_application_capabilities()
+
+
+def execute_capability(
+    name: str,
+    payload: dict[str, Any],
+    target: str | int | None = None,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Execute one allowlisted capability from a schema-validated JSON payload."""
+
+    return execute_application_capability(
+        name,
+        payload,
+        principal=mcp_principal(),
+        target=target,
+        expected_updated_at=expected_updated_at,
+    )
+
+
 def _page_size(limit: int) -> int:
     if limit < 1:
         raise ValueError("limit must be at least 1")
@@ -64,92 +87,6 @@ def get_project(slug: str) -> dict[str, Any]:
         raise NotFoundError(str(exc)) from exc
 
 
-def create_project(
-    name: str,
-    slug: str = "",
-    category: str = "other",
-    status: str = "idea",
-    description: str = "",
-    technologies: str = "",
-    repository_url: str = "",
-    public_url: str = "",
-    deployment_notes: str = "",
-    security_notes: str = "",
-    notes: str = "",
-) -> dict[str, Any]:
-    """Create an HQ project through the canonical validated service."""
-    return _write(
-        project_service.save_project,
-        project_service.ProjectCommand(
-            name=name,
-            slug=slug,
-            category=category,
-            status=status,
-            description=description,
-            technologies_used=technologies,
-            repository_url=repository_url,
-            public_url=public_url,
-            deployment_notes=deployment_notes,
-            security_notes=security_notes,
-            notes=notes,
-        ),
-    )
-
-
-def update_project(
-    slug: str,
-    name: str,
-    new_slug: str = "",
-    category: str = "other",
-    status: str = "idea",
-    description: str = "",
-    technologies: str = "",
-    repository_url: str = "",
-    public_url: str = "",
-    deployment_notes: str = "",
-    security_notes: str = "",
-    notes: str = "",
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    """Update an HQ project with optional optimistic concurrency protection."""
-    return _write(
-        project_service.save_project,
-        project_service.ProjectCommand(
-            name=name,
-            slug=new_slug or slug,
-            category=category,
-            status=status,
-            description=description,
-            technologies_used=technologies,
-            repository_url=repository_url,
-            public_url=public_url,
-            deployment_notes=deployment_notes,
-            security_notes=security_notes,
-            notes=notes,
-        ),
-        current_slug=slug,
-        expected_updated_at=expected_updated_at,
-    )
-
-
-def sync_documentation(
-    manifest: list[dict[str, Any]],
-    update_existing: bool = True,
-    report_orphans: bool = False,
-    prune_orphans: bool = False,
-    confirm_prune: bool = False,
-) -> dict[str, Any]:
-    """Synchronize a vault manifest into HQ; pruning requires explicit confirmation."""
-    return _write(
-        documentation_service.sync_documentation,
-        manifest,
-        update_existing=update_existing,
-        report_orphans=report_orphans,
-        prune_orphans=prune_orphans,
-        confirm_prune=confirm_prune,
-    )
-
-
 def list_assets(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
@@ -163,166 +100,6 @@ def get_asset(slug: str) -> dict[str, Any]:
         return asset_service.get_asset(slug)
     except asset_service.NotFoundError as exc:
         raise NotFoundError(str(exc)) from exc
-
-
-def create_asset(
-    item_name: str,
-    slug: str = "",
-    vendor: str = "",
-    category: str = "other",
-    purchase_date: date | None = None,
-    total_cost: Decimal = Decimal("0.00"),
-    business_use_percentage: int = 100,
-    payment_method: str = "",
-    serial_number: str = "",
-    warranty_date: date | None = None,
-    status: str = "active",
-    notes: str = "",
-    related_projects: list[str] | None = None,
-) -> dict[str, Any]:
-    """Create an HQ asset through the canonical validated service."""
-    return _write(
-        asset_service.save_asset,
-        asset_service.AssetCommand(
-            item_name=item_name,
-            slug=slug,
-            vendor=vendor,
-            category=category,
-            purchase_date=purchase_date,
-            total_cost=total_cost,
-            business_use_percentage=business_use_percentage,
-            payment_method=payment_method,
-            serial_number=serial_number,
-            warranty_date=warranty_date,
-            status=status,
-            notes=notes,
-            related_projects=tuple(related_projects or ()),
-        ),
-    )
-
-
-def update_asset(
-    slug: str,
-    item_name: str,
-    new_slug: str = "",
-    vendor: str = "",
-    category: str = "other",
-    purchase_date: date | None = None,
-    total_cost: Decimal = Decimal("0.00"),
-    business_use_percentage: int = 100,
-    payment_method: str = "",
-    serial_number: str = "",
-    warranty_date: date | None = None,
-    status: str = "active",
-    notes: str = "",
-    related_projects: list[str] | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    """Update an HQ asset with optional optimistic concurrency protection."""
-    return _write(
-        asset_service.save_asset,
-        asset_service.AssetCommand(
-            item_name=item_name,
-            slug=new_slug or slug,
-            vendor=vendor,
-            category=category,
-            purchase_date=purchase_date,
-            total_cost=total_cost,
-            business_use_percentage=business_use_percentage,
-            payment_method=payment_method,
-            serial_number=serial_number,
-            warranty_date=warranty_date,
-            status=status,
-            notes=notes,
-            related_projects=tuple(related_projects or ()),
-        ),
-        current_slug=slug,
-        expected_updated_at=expected_updated_at,
-    )
-
-
-def create_content(
-    title: str,
-    slug: str = "",
-    content_type: str = "article",
-    status: str = "draft",
-    topic: str = "",
-    tags: str = "",
-    published_url: str = "",
-    wordpress_post_id: int | None = None,
-    wordpress_slug: str = "",
-    published_at: date | None = None,
-    notes: str = "",
-    related_projects: list[str] | None = None,
-    related_assets: list[str] | None = None,
-    related_expenses: list[int] | None = None,
-    related_documentation: list[str] | None = None,
-) -> dict[str, Any]:
-    """Create an HQ content item through the canonical service."""
-    return _write(
-        content_service.save_content,
-        content_service.ContentCommand(
-            title=title,
-            slug=slug,
-            content_type=content_type,
-            status=status,
-            topic=topic,
-            tags=tags,
-            published_url=published_url,
-            wordpress_post_id=wordpress_post_id,
-            wordpress_slug=wordpress_slug,
-            published_at=published_at,
-            notes=notes,
-            related_projects=tuple(related_projects or ()),
-            related_assets=tuple(related_assets or ()),
-            related_expenses=tuple(related_expenses or ()),
-            related_documentation=tuple(related_documentation or ()),
-        ),
-    )
-
-
-def update_content(
-    slug: str,
-    title: str,
-    new_slug: str = "",
-    content_type: str = "article",
-    status: str = "draft",
-    topic: str = "",
-    tags: str = "",
-    published_url: str = "",
-    wordpress_post_id: int | None = None,
-    wordpress_slug: str = "",
-    published_at: date | None = None,
-    notes: str = "",
-    related_projects: list[str] | None = None,
-    related_assets: list[str] | None = None,
-    related_expenses: list[int] | None = None,
-    related_documentation: list[str] | None = None,
-    expected_updated_at: str | None = None,
-) -> dict[str, Any]:
-    """Update content with optional optimistic concurrency protection."""
-    return _write(
-        content_service.save_content,
-        content_service.ContentCommand(
-            title=title,
-            slug=new_slug or slug,
-            content_type=content_type,
-            status=status,
-            topic=topic,
-            tags=tags,
-            published_url=published_url,
-            wordpress_post_id=wordpress_post_id,
-            wordpress_slug=wordpress_slug,
-            published_at=published_at,
-            notes=notes,
-            related_projects=tuple(related_projects or ()),
-            related_assets=tuple(related_assets or ()),
-            related_expenses=tuple(related_expenses or ()),
-            related_documentation=tuple(related_documentation or ()),
-        ),
-        current_slug=slug,
-        expected_updated_at=expected_updated_at,
-    )
 
 
 def list_expenses(

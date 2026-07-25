@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from io import StringIO
 from decimal import Decimal
+from datetime import date
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ from django.urls import reverse
 
 from assets.models import Asset
 from content.models import ContentItem
+from expenses.models import Expense
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
@@ -20,16 +22,30 @@ from projects.models import Project
 from .documentation import sync_documentation
 from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
 from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
+from .capabilities import describe_capabilities, execute_capability
+from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from .projects import ConflictError, ProjectCommand, save_project
 from .security import (
     OPERATOR_CAPABILITIES,
     AuthorizationError,
     Principal,
+    cli_principal,
     mcp_principal,
 )
 
 
 class CapabilityTests(TestCase):
+    def test_registry_emits_stable_json_schemas_and_effects(self):
+        first = describe_capabilities()
+        second = describe_capabilities()
+
+        self.assertEqual(first, second)
+        project = next(
+            item for item in first["capabilities"] if item["name"] == "project.create"
+        )
+        self.assertEqual(project["effect"], "remote_write")
+        self.assertIn("name", project["input_schema"]["properties"])
+
     def test_mcp_writes_fail_closed_by_default(self):
         with self.assertRaisesRegex(AuthorizationError, "write_projects"):
             save_project(
@@ -37,6 +53,39 @@ class CapabilityTests(TestCase):
                 principal=mcp_principal(),
             )
         self.assertFalse(Project.objects.filter(slug="denied").exists())
+
+    def test_json_executor_returns_canonical_error_envelope(self):
+        result = execute_capability(
+            "project.create",
+            {"slug": "missing-name"},
+            principal=cli_principal(),
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_input")
+
+    def test_json_executor_creates_through_same_service(self):
+        result = execute_capability(
+            "project.create",
+            {"name": "JSON Project", "slug": "json-project"},
+            principal=cli_principal(),
+        )
+        self.assertTrue(result["ok"])
+        self.assertTrue(Project.objects.filter(slug="json-project").exists())
+
+    def test_cli_describe_and_run_use_the_same_registry(self):
+        described = StringIO()
+        call_command("hq_capability", "describe", stdout=described)
+        self.assertEqual(json.loads(described.getvalue()), describe_capabilities())
+
+        executed = StringIO()
+        call_command(
+            "hq_capability",
+            "run",
+            "project.create",
+            payload='{"name":"CLI JSON","slug":"cli-json"}',
+            stdout=executed,
+        )
+        self.assertTrue(json.loads(executed.getvalue())["ok"])
 
     @override_settings(
         SEVERINO_MCP_ENABLE_WRITES=True,
@@ -132,12 +181,15 @@ class AdapterParityTests(TestCase):
         )
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("create_project")
+            tool = mcp._tool_manager.get_tool("execute_capability")
             return await tool.run(
                 {
-                    "name": "MCP Project",
-                    "slug": "mcp-project",
-                    "status": "active",
+                    "name": "project.create",
+                    "payload": {
+                        "name": "MCP Project",
+                        "slug": "mcp-project",
+                        "status": "active",
+                    },
                 }
             )
 
@@ -233,13 +285,16 @@ class AssetApplicationServiceTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", args=["web-asset"]))
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("create_asset")
+            tool = mcp._tool_manager.get_tool("execute_capability")
             return await tool.run(
                 {
-                    "item_name": "MCP Asset",
-                    "slug": "mcp-asset",
-                    "total_cost": "20.00",
-                    "related_projects": ["homelab"],
+                    "name": "asset.create",
+                    "payload": {
+                        "item_name": "MCP Asset",
+                        "slug": "mcp-asset",
+                        "total_cost": "20.00",
+                        "related_projects": ["homelab"],
+                    },
                 }
             )
 
@@ -309,8 +364,13 @@ class DocumentationSyncTests(TestCase):
 
     def test_mcp_exposes_sync_through_the_same_service(self):
         async def call_sync():
-            tool = mcp._tool_manager.get_tool("sync_documentation")
-            return await tool.run({"manifest": self.manifest})
+            tool = mcp._tool_manager.get_tool("execute_capability")
+            return await tool.run(
+                {
+                    "name": "documentation.sync",
+                    "payload": {"manifest": self.manifest},
+                }
+            )
 
         result = async_to_sync(call_sync)()
 
@@ -363,12 +423,15 @@ class ContentApplicationServiceTests(TestCase):
         )
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("create_content")
+            tool = mcp._tool_manager.get_tool("execute_capability")
             return await tool.run(
                 {
-                    "title": "MCP Content",
-                    "slug": "mcp-content",
-                    "related_projects": ["site"],
+                    "name": "content.create",
+                    "payload": {
+                        "title": "MCP Content",
+                        "slug": "mcp-content",
+                        "related_projects": ["site"],
+                    },
                 }
             )
 
@@ -394,3 +457,76 @@ class ContentApplicationServiceTests(TestCase):
                 AuditLog.objects.get(object_repr=title).metadata["interface"],
                 interface,
             )
+
+
+@override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
+class ExpenseApplicationServiceTests(TestCase):
+    def setUp(self):
+        self.project = Project.objects.create(name="Ops", slug="ops")
+
+    def test_relationship_failure_rolls_back(self):
+        with self.assertRaisesRegex(ExpenseNotFoundError, "missing"):
+            save_expense(
+                ExpenseCommand(
+                    date=date(2026, 7, 25),
+                    vendor="Vendor",
+                    item="Invalid",
+                    related_project="missing",
+                ),
+                principal=cli_principal(),
+            )
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_web_mcp_and_cli_share_expense_shape(self):
+        user = get_user_model().objects.create_user(username="expense-operator")
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("expenses:create"),
+            {
+                "date": "2026-07-25",
+                "vendor": "Web Vendor",
+                "item": "Web Expense",
+                "category": "software",
+                "total_cost": "100.00",
+                "business_use_percentage": "75",
+                "payment_method": "credit",
+                "business_purpose": "",
+                "notes": "",
+                "related_project": self.project.pk,
+                "related_asset": "",
+                "related_content": "",
+                "related_documentation": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        async def call_mcp():
+            tool = mcp._tool_manager.get_tool("execute_capability")
+            return await tool.run(
+                {
+                    "name": "expense.create",
+                    "payload": {
+                        "date": "2026-07-25",
+                        "vendor": "MCP Vendor",
+                        "item": "MCP Expense",
+                        "total_cost": "20.00",
+                        "related_project": "ops",
+                    },
+                }
+            )
+
+        mcp_result = async_to_sync(call_mcp)()
+        output = StringIO()
+        call_command(
+            "create_expense",
+            date="2026-07-25",
+            vendor="CLI Vendor",
+            item="CLI Expense",
+            cost="30.00",
+            project="ops",
+            json=True,
+            stdout=output,
+        )
+        cli_result = json.loads(output.getvalue())
+        self.assertEqual(set(mcp_result["expense"]), set(cli_result["expense"]))
+        self.assertEqual(mcp_result["expense"]["related_project"], "ops")

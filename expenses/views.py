@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q, Sum
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -12,6 +13,8 @@ from django.views.generic import (
     UpdateView,
 )
 
+from application.expenses import expense_command_from_cleaned_data, save_expense
+from application.security import web_principal
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
@@ -87,9 +90,13 @@ class ExpenseCreateView(LoginRequiredMixin, CreateView):
     template_name = "expenses/expense_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_expense(
+            expense_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+        )
+        self.object = Expense.objects.get(pk=result["expense"]["id"])
         messages.success(self.request, f"Expense logged: {self.object}.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ExpenseUpdateView(LoginRequiredMixin, UpdateView):
@@ -98,9 +105,14 @@ class ExpenseUpdateView(LoginRequiredMixin, UpdateView):
     template_name = "expenses/expense_form.html"
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        result = save_expense(
+            expense_command_from_cleaned_data(form.cleaned_data),
+            principal=web_principal(self.request.user),
+            current_id=self.get_object().pk,
+        )
+        self.object = Expense.objects.get(pk=result["expense"]["id"])
         messages.success(self.request, f"Expense updated: {self.object}.")
-        return response
+        return redirect(self.object.get_absolute_url())
 
 
 class ExpenseDeleteView(LoginRequiredMixin, DeleteView):

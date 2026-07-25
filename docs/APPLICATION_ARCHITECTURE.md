@@ -47,6 +47,28 @@ and returns one stable result. The adapter only chooses how that result looks.
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 
+## Emit once, derive everywhere
+
+![One typed command declaration deriving JSON Schema, validation, MCP and CLI surfaces, and parity tests](diagrams/emit-once-capabilities.png)
+
+<sup>Diagram source:
+[`emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd).</sup>
+
+HQ's allowlisted capability registry binds each typed command to one operation
+name, effect, required permission, and application handler. From that registry:
+
+- `describe_capabilities` emits deterministic JSON Schemas for MCP clients;
+- `execute_capability` validates a JSON object and returns one canonical
+  success/error envelope;
+- `python manage.py hq_capability describe` emits the identical catalog;
+- `python manage.py hq_capability run <name> --payload -` executes JSON from
+  stdin through the identical validator and service; and
+- tests derive their contract assertions from the emitted schemas.
+
+The generic executor is not generic database access. It can invoke only
+allowlisted operations in the registry, and every operation still crosses the
+typed principal, capability check, and application transaction.
+
 ## Source-of-truth map
 
 "Single source of truth" is scoped by domain. Pretending one database owns
@@ -114,6 +136,14 @@ identifiers resolve before persistence, so one missing reference rolls the
 entire operation back. MCP results omit sensitive and restricted documentation
 identifiers while the authenticated web UI can still manage the underlying
 relationship through the same service.
+
+### Expenses
+
+`application.expenses.save_expense()` owns financial record creation and
+updates, deductible calculation, and its optional Project, Asset, Content, and
+Documentation links. Related identifiers resolve before persistence, updates
+lock the row, and MCP/CLI results share the same money-as-string representation
+without disclosing sensitive documentation identifiers.
 
 ## Security model
 

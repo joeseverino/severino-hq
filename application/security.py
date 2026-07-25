@@ -13,6 +13,7 @@ class Capability(StrEnum):
     WRITE_PROJECTS = "write_projects"
     WRITE_ASSETS = "write_assets"
     WRITE_CONTENT = "write_content"
+    WRITE_EXPENSES = "write_expenses"
     SYNC_DOCUMENTATION = "sync_documentation"
     PRUNE_DOCUMENTATION = "prune_documentation"
 
@@ -56,6 +57,7 @@ def mcp_principal() -> Principal:
                 Capability.WRITE_PROJECTS,
                 Capability.WRITE_ASSETS,
                 Capability.WRITE_CONTENT,
+                Capability.WRITE_EXPENSES,
                 Capability.SYNC_DOCUMENTATION,
             }
         )
