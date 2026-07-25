@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import secrets
 import socket
 import ssl
 import subprocess
@@ -79,6 +80,55 @@ def _request(
             raw = response.read()
     except (urllib.error.URLError, TimeoutError) as exc:
         raise ProviderError(f"Provider request failed: {type(exc).__name__}.") from exc
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProviderError("Provider returned invalid JSON.") from exc
+
+
+def _multipart_request(
+    url: str,
+    *,
+    headers: dict[str, str],
+    files: dict[str, tuple[str, bytes]],
+) -> Any:
+    boundary = f"----severino-hq-{secrets.token_hex(16)}"
+    chunks: list[bytes] = []
+    for field, (filename, content) in files.items():
+        chunks.extend(
+            (
+                f"--{boundary}\r\n".encode(),
+                (
+                    f'Content-Disposition: form-data; name="{field}"; '
+                    f'filename="{filename}"\r\n'
+                ).encode(),
+                b"Content-Type: application/x-pem-file\r\n\r\n",
+                content,
+                b"\r\n",
+            )
+        )
+    chunks.append(f"--{boundary}--\r\n".encode())
+    request = urllib.request.Request(
+        url,
+        data=b"".join(chunks),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            **headers,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - URL is deployment config.
+            request, timeout=30, context=_tls_context()
+        ) as response:
+            raw = response.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ProviderError(
+            f"Provider multipart request failed: {type(exc).__name__}."
+        ) from exc
     if not raw:
         return None
     try:
@@ -606,21 +656,27 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
 def _npm_upload(certificate_id: int, fullchain: bytes, private_key: bytes) -> None:
     base_url = _npm_api_url(_required("NPM", "URL"))
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    payload = {
-        "certificate": fullchain.decode(),
-        "certificate_key": private_key.decode(),
+    marker = b"-----END CERTIFICATE-----"
+    leaf_body, separator, chain_body = fullchain.partition(marker)
+    if not separator:
+        raise ProviderError("Certificate chain does not contain a leaf certificate.")
+    files = {
+        "certificate": ("certificate.pem", leaf_body + marker + b"\n"),
+        "certificate_key": ("certificate_key.pem", private_key),
+        "intermediate_certificate": (
+            "intermediate_certificate.pem",
+            chain_body.lstrip(),
+        ),
     }
-    _request(
+    _multipart_request(
         f"{base_url}/nginx/certificates/validate",
-        method="POST",
         headers=headers,
-        payload=payload,
+        files=files,
     )
-    _request(
+    _multipart_request(
         f"{base_url}/nginx/certificates/{certificate_id}/upload",
-        method="POST",
         headers=headers,
-        payload=payload,
+        files=files,
     )
 
 

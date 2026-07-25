@@ -250,6 +250,26 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(result.changed)
         renew.assert_not_called()
 
+    @mock.patch("controller_runtime.providers._multipart_request")
+    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch.dict(
+        "os.environ",
+        {"NPM_URL": "https://npm.example.test"},
+        clear=True,
+    )
+    def test_npm_upload_uses_current_multipart_contract(self, _token, multipart):
+        leaf = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n"
+        chain = b"-----BEGIN CERTIFICATE-----\nchain\n-----END CERTIFICATE-----\n"
+
+        providers._npm_upload(11, leaf + chain, b"private-key")
+
+        self.assertEqual(multipart.call_count, 2)
+        files = multipart.call_args.kwargs["files"]
+        self.assertEqual(files["certificate"][1], leaf)
+        self.assertEqual(files["certificate_key"][1], b"private-key")
+        self.assertEqual(files["intermediate_certificate"][1], chain)
+        self.assertTrue(multipart.call_args.args[0].endswith("/11/upload"))
+
     @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate")
     @mock.patch("controller_runtime.providers._issue_certificate")
