@@ -15,6 +15,7 @@ from application.infrastructure import (
     OperationCommand,
     PolicyError,
     certificate_renewal_allowed,
+    controller_contract,
     request_certificate_renewal,
     request_reconcile,
     resource_health,
@@ -27,9 +28,7 @@ from .models import ManagedResource, OperationRequest
 from .providers import (
     controller_action_policy,
     describe_providers,
-    validate_resolved_certificate,
 )
-from .topology import TopologyError, resolve_certificate
 
 
 def _web_operation(request, resource, action):
@@ -114,12 +113,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         context["resolved_spec"] = self.object.spec
         if self.object.kind == "tls.certificate":
             try:
-                context["resolved_spec"] = validate_resolved_certificate(
-                    {
-                        **resolve_certificate(self.object.spec["topology_ref"]),
-                        "renewal_window_days": self.object.spec["renewal_window_days"],
-                    }
-                )
+                context["resolved_spec"] = controller_contract(self.object)["resource"]["spec"]
                 context["topology_error"] = ""
                 observed_names: dict[str, set[str]] = {}
                 for observation in self.object.status.get("consumers", []):
@@ -138,7 +132,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     }
                     for consumer in context["resolved_spec"]["consumers"]
                 ]
-            except (KeyError, TopologyError, ValueError) as exc:
+            except (KeyError, ValueError) as exc:
                 context["topology_error"] = str(exc)
         context["diagnostic_status"] = serialize_public_status(self.object.status)
         return context

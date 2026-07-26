@@ -19,6 +19,7 @@ from receipts.models import Receipt
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
+from docs_index.models import DocumentationRecord
 
 from .documentation import sync_documentation
 from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
@@ -72,6 +73,51 @@ class CapabilityTests(TestCase):
         )
         self.assertTrue(result["ok"])
         self.assertTrue(Project.objects.filter(slug="json-project").exists())
+
+    def test_upsert_capability_is_idempotent_and_server_owned(self):
+        created = execute_capability(
+            "project.upsert",
+            {"name": "First", "slug": "same-project"},
+            principal=cli_principal(),
+        )
+        updated = execute_capability(
+            "project.upsert",
+            {"name": "Second", "slug": "same-project"},
+            principal=cli_principal(),
+        )
+
+        self.assertTrue(created["created"])
+        self.assertFalse(updated["created"])
+        self.assertEqual(Project.objects.get().name, "Second")
+
+    def test_hq_sync_rolls_back_documentation_when_topology_fails(self):
+        result = execute_capability(
+            "hq.sync",
+            {
+                "manifest": [
+                    {
+                        "doc_id": "rb-atomic-sync",
+                        "title": "Atomic sync",
+                        "doc_type": "runbook",
+                        "status": "active",
+                    }
+                ],
+                "topology": {
+                    "version": 2,
+                    "hosts": [],
+                    "pki": [],
+                    "externals": [],
+                    "dependencies": [],
+                    "managed_resources": [],
+                },
+            },
+            principal=cli_principal(),
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(
+            DocumentationRecord.objects.filter(doc_id="rb-atomic-sync").exists()
+        )
 
     def test_delete_requires_exact_confirmation(self):
         project = Project.objects.create(name="Keep Me", slug="keep-me")

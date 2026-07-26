@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from django.db import models, transaction
@@ -11,6 +12,11 @@ from control_plane.topology import import_topology
 
 from .infrastructure import OperationCommand, request_reconcile
 from .security import Principal
+
+
+@dataclass(frozen=True)
+class TopologySyncCommand:
+    topology: dict[str, Any]
 
 
 @transaction.atomic
@@ -48,3 +54,13 @@ def sync_topology(payload: object, *, principal: Principal) -> dict[str, Any]:
         "checksum": snapshot.checksum,
         "scheduled": scheduled,
     }
+
+
+def execute_topology_sync(
+    command: TopologySyncCommand,
+    *,
+    principal: Principal,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    del expected_updated_at
+    return sync_topology(command.topology, principal=principal)

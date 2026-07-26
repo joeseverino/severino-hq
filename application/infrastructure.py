@@ -130,25 +130,27 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
-    spec = validate_spec(resource.kind, resource.spec)
-    if resource.kind == "tls.certificate":
-        from control_plane.providers import validate_resolved_certificate
-        from control_plane.topology import resolve_certificate
+    from control_plane.models import TopologySnapshot
+    from control_plane.providers import ProviderResolutionContext, resolve_provider_spec
 
-        spec = validate_resolved_certificate(
-            {
-                **resolve_certificate(resource.spec["topology_ref"]),
-                "renewal_window_days": resource.spec["renewal_window_days"],
-            }
-        )
-    elif resource.kind == "npm.proxy_host" and spec["certificate_resource"]:
+    topology = TopologySnapshot.objects.filter(pk="topology").values_list(
+        "payload", flat=True
+    ).first()
+
+    def resource_status(key: str, kind: str) -> dict[str, Any] | None:
         certificate = ManagedResource.objects.filter(
-            key=spec["certificate_resource"], kind="tls.certificate"
-        ).first()
-        certificate_id = (
-            certificate.status.get("npm_certificate_id") if certificate else None
-        )
-        spec["certificate_id"] = certificate_id
+            key=key, kind=kind
+        ).values_list("status", flat=True).first()
+        return certificate
+
+    spec = resolve_provider_spec(
+        resource.kind,
+        resource.spec,
+        context=ProviderResolutionContext(
+            topology=topology,
+            resource_status=resource_status,
+        ),
+    )
     return {
         "schema_version": 1,
         "resource": {

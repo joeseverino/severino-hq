@@ -1,32 +1,37 @@
-flowchart LR
-    operator["Operator<br/>Web · CLI · MCP"] --> services["HQ application services"]
-    topology["Severino Labs topology<br/>authored identities + dependency edges"] --> snapshot[("Trusted topology snapshot<br/>validated + checksummed")]
-    snapshot --> resolver["Topology projection resolver"]
+flowchart TB
+    subgraph inputs["Declared inputs"]
+        direction LR
+        operator["Operator<br/>Web · hq · MCP"]
+        topology["Severino Labs topology<br/>identities + dependencies"]
+        secrets["Severino HQ Production<br/>runtime credentials"]
+    end
+
+    topology --> snapshot[("Trusted topology snapshot<br/>validated + checksummed")]
+    snapshot --> resolver["Provider-owned resolution<br/>authored → runtime schema"]
+    operator --> services["HQ application services"]
     resolver --> services
-    services --> desired[("ManagedResource<br/>desired state + generation")]
-    services --> queue[("OperationRequest<br/>idempotency + lease")]
 
-    controller["Privileged homelab controller<br/>systemd · exact-image exec · filtered apply"] -->|peek or lease desired-only JSON| queue
-    queue -->|resolved resource contract| controller
-    controller -->|active| adguard["AdGuard rewrite adapter"]
-    controller -->|active| npm["Nginx Proxy Manager adapter"]
-    controller -->|observe active| tlsobserve["TLS consumer observer"]
-    controller -.->|renew locked| tls["TLS renewal automation"]
-    controller -.->|capability locked| publicdns["Public DNS adapter"]
-    tls --> cf["Cloudflare DNS-01"]
-    tlsobserve --> npm
-    tlsobserve --> caddy
-    tls --> npm
-    tls --> caddy["Caddy"]
-    tls --> cpanel["Namecheap cPanel"]
+    services --> desired[("Managed resources<br/>desired generation + health")]
+    services --> queue[("Operation queue<br/>idempotency + lease")]
 
-    controller -->|public status + conditions| desired
-    desired --> ui["HQ health, drift, downloads, audit"]
+    queue <-->|"minimal resolved contract<br/>public result"| controller["Privileged homelab controller<br/>systemd · exact scanned image"]
+    secrets -. "short-lived runtime projection" .-> controller
 
-    secrets["Severino HQ Production<br/>runtime projections"] -.-> controller
-    secrets -. "web-only projection" .-> services
+    subgraph outcomes["Capability-declared provider actions"]
+        direction LR
+        internal["Automatic reconcile<br/>AdGuard · NPM"]
+        tls["Automatic certificate policy<br/>observe · renew · rollback"]
+        publicdns["Public DNS<br/>locked until enabled"]
+    end
 
-    classDef store fill:#e8f2f3,stroke:#1f5d63,color:#153d41
-    classDef boundary fill:#f6f1e7,stroke:#8a6d3b,color:#4b3b20
-    class desired,queue store
-    class secrets boundary
+    controller --> internal
+    controller --> tls
+    controller -.-> publicdns
+    tls --> consumers["Verified consumers<br/>NPM · Caddy · cPanel"]
+    tls --> dns01["Cloudflare DNS-01"]
+
+    controller -->|"status + conditions"| desired
+    desired --> ui["HQ<br/>health · drift · downloads · audit"]
+
+    classDef anchor stroke-width:2px;
+    class services,controller,ui anchor;

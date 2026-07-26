@@ -5,7 +5,7 @@ flowchart LR
     subgraph adapters["Delivery adapters — intentionally thin"]
         web["Web UI<br/>Django views"]
         mcp["HQ MCP<br/>typed tools"]
-        cli["HQ CLI<br/>management commands"]
+        cli["hq wrapper<br/>schema-driven MCP client"]
     end
 
     subgraph core["One application core"]
@@ -24,13 +24,13 @@ flowchart LR
 
     web --> contract
     mcp --> contract
-    cli --> contract
+    cli --> mcp
     contract --> policy --> transaction --> db
 
-    vault -->|"validated manifest"| contract
+    vault -->|"manifest + topology"| cli
     secrets -.->|"credentials only"| web
     secrets -.->|"credentials only"| mcp
-    secrets -.->|"credentials only"| cli
+    secrets -.->|"runtime bearer only"| cli
 
     classDef anchor stroke-width:2px;
     class contract,policy,transaction anchor;
