@@ -92,6 +92,14 @@ declared provider in plan mode, and only then enables the apply timer. Missing
 credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
+The same activation gate performs an authenticated pull of the live
+`jseverino.com` content index before installing and enabling its persistent
+daily timer. Cloudflare Access credentials come from uppercase fields on the
+existing `severino-hq env` item through the normal app-environment projection;
+there is no second credential registry. A restart cannot lose the schedule:
+systemd owns it, catches up missed runs, and the deployment revalidates the
+pull before declaring the release healthy.
+
 The controller claims only kind/action pairs marked `apply` in
 `config/controller-capabilities.json`. Its persistent systemd timer runs after
 boot and every five minutes. Each run drains infrastructure work and derives
