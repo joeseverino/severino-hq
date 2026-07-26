@@ -22,9 +22,12 @@ fi
 
 systemd-analyze verify \
     "${unit_dir}/severino-hq-controller.service" \
-    "${unit_dir}/severino-hq-controller.timer"
+    "${unit_dir}/severino-hq-controller.timer" \
+    "${unit_dir}/severino-hq-content-sync.service" \
+    "${unit_dir}/severino-hq-content-sync.timer"
 
 "${app_dir}/scripts/run-controller.sh"
+docker exec severino-hq python manage.py sync_content_index --json
 
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.service" \
@@ -32,7 +35,15 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.timer" \
     "${systemd_dir}/severino-hq-controller.timer"
+install -o root -g root -m 0644 \
+    "${unit_dir}/severino-hq-content-sync.service" \
+    "${systemd_dir}/severino-hq-content-sync.service"
+install -o root -g root -m 0644 \
+    "${unit_dir}/severino-hq-content-sync.timer" \
+    "${systemd_dir}/severino-hq-content-sync.timer"
 systemctl daemon-reload
-systemctl enable --now severino-hq-controller.timer
+systemctl enable --now \
+    severino-hq-controller.timer \
+    severino-hq-content-sync.timer
 
-echo "Severino HQ controller installed and enabled."
+echo "Severino HQ controllers installed, preflighted, and enabled."

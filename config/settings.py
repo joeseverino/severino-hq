@@ -368,3 +368,16 @@ for _d in (
         # Don't crash at import time on a read-only filesystem; the user will see
         # a clear error from Django when the resource is actually accessed.
         pass
+
+# ----- Content index (jseverino.com published-writeups pull) -------------------
+# HQ reflects what is live on the public site, mirroring the GitHub refresh:
+# fetch an already-public JSON index over HTTP, gated by a Cloudflare Access
+# service token. See content/content_sync.py.
+CONTENT_INDEX_URL = os.environ.get(
+    "CONTENT_INDEX_URL", "https://jseverino.com/content-index.json"
+)
+CONTENT_INDEX_PROJECT_SLUG = os.environ.get(
+    "CONTENT_INDEX_PROJECT_SLUG", "jseverino-site"
+)
+CF_ACCESS_CLIENT_ID = env_secret("CF_ACCESS_CLIENT_ID")
+CF_ACCESS_CLIENT_SECRET = env_secret("CF_ACCESS_CLIENT_SECRET")

@@ -1,0 +1,19 @@
+[Unit]
+Description=Pull the jseverino.com content index into Severino HQ
+Documentation=file:///opt/apps/severino-hq/content/content_sync.py
+Wants=network-online.target
+After=network-online.target docker.service severino-hq.service
+
+[Service]
+Type=oneshot
+# Runs the management command inside the running app container. The container
+# already holds the Cloudflare Access service-token env (rendered from 1Password
+# by refresh-secrets), so no credential handling is needed here.
+ExecStart=/usr/bin/docker exec severino-hq python manage.py sync_content_index
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

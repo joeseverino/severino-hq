@@ -21,7 +21,9 @@ if [ "${available_kb}" -lt 524288 ]; then
     exit 1
 fi
 
-sudo systemctl stop severino-hq-controller.timer 2>/dev/null || true
+sudo systemctl stop \
+    severino-hq-controller.timer \
+    severino-hq-content-sync.timer 2>/dev/null || true
 
 rollback() {
     if [ -z "${previous_image}" ]; then
@@ -52,7 +54,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
             exit 0
         fi
         echo "Controller activation failed; rolling back application image." >&2
-        sudo systemctl stop severino-hq-controller.timer 2>/dev/null || true
+        sudo systemctl stop \
+            severino-hq-controller.timer \
+            severino-hq-content-sync.timer 2>/dev/null || true
         rollback
         exit 1
     fi
