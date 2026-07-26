@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily pull of the jseverino.com content index into Severino HQ
+
+[Timer]
+OnBootSec=5min
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=yes
+Unit=severino-hq-content-sync.service
+
+[Install]
+WantedBy=timers.target

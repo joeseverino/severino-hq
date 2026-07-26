@@ -22,6 +22,7 @@ from application.deletion import DeleteCommand, delete_project
 from application.security import web_principal
 from core.audit import record_event
 from core.models import AuditLog
+from content.content_sync import ContentSyncError, sync_content_index
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
@@ -99,8 +100,32 @@ class ProjectRefreshView(LoginRequiredMixin, View):
 
     def post(self, request, slug: str):
         project = get_object_or_404(Project, slug=slug)
+
+        # Unified refresh: for the public-site project, also pull the live
+        # published content index (mirrors what is actually on jseverino.com).
+        if project.slug == getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
+            try:
+                stats = sync_content_index()
+                messages.success(
+                    request,
+                    f"Synced {stats['total']} content item(s) "
+                    f"({stats['created']} new, {stats['updated']} updated).",
+                )
+                record_event(
+                    action=AuditLog.Action.UPDATED,
+                    obj=project,
+                    type_label="Project",
+                    message=(
+                        f"Synced content index: {stats['total']} items "
+                        f"({stats['created']} new, {stats['updated']} updated)"
+                    ),
+                )
+            except ContentSyncError as exc:
+                messages.error(request, f"Content sync failed: {exc}")
+
         if not project.repository_url or "github.com" not in project.repository_url:
-            messages.warning(request, "Project has no GitHub repository URL.")
+            if project.slug != getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
+                messages.warning(request, "Project has no GitHub repository URL.")
             return redirect(project.get_absolute_url())
 
         # Extract owner/repo from URL: https://github.com/owner/repo
