@@ -3,8 +3,8 @@ Description=Run Severino HQ infrastructure controller
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
-RandomizedDelaySec=20s
+OnUnitInactiveSec=1min
+RandomizedDelaySec=5s
 Persistent=true
 Unit=severino-hq-controller.service
 

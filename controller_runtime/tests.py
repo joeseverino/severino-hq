@@ -545,19 +545,20 @@ class WorkerTests(TestCase):
         self.assertTrue(command[1].endswith("/manage.py"))
         self.assertNotIn("docker", command)
 
-    @mock.patch("controller_runtime.worker.preflight", return_value=[])
+    @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker._manage")
-    def test_plan_peeks_but_never_claims(self, manage, _preflight):
+    def test_idle_plan_peeks_without_provider_preflight(self, manage, preflight):
         manage.return_value = {"ok": True, "operation": None}
 
         self.assertEqual(worker.run_once("test", apply=False), 0)
 
         self.assertEqual(manage.call_args.args[0], "peek")
         self.assertNotIn("claim", manage.call_args.args)
+        preflight.assert_not_called()
 
-    @mock.patch("controller_runtime.worker.preflight", return_value=[])
+    @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker._manage")
-    def test_apply_claims_only_supported_kinds(self, manage, _preflight):
+    def test_idle_apply_claims_without_provider_preflight(self, manage, preflight):
         manage.return_value = {"ok": True, "operation": None}
 
         self.assertEqual(worker.run_once("test", apply=True), 0)
@@ -572,6 +573,7 @@ class WorkerTests(TestCase):
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
         self.assertIn("tls.certificate:renew", arguments)
+        preflight.assert_not_called()
 
     def test_capability_registry_drives_supported_kinds(self):
         self.assertEqual(
@@ -619,3 +621,34 @@ class WorkerTests(TestCase):
         report_payload = json.loads(manage.call_args_list[2].args[-1])
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
+
+    @mock.patch("controller_runtime.worker.preflight")
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_claimed_operation_preflights_before_provider_execution(
+        self, manage, execute, preflight
+    ):
+        manage.side_effect = [
+            {"ok": True, "scheduled": []},
+            {
+                "operation": {"id": "operation-1", "action": "reconcile"},
+                "resource": {
+                    "key": "dns",
+                    "kind": "adguard.rewrite",
+                    "generation": 2,
+                    "spec": {},
+                },
+            },
+            {"ok": True},
+        ]
+        execute.return_value = providers.ProviderResult(
+            changed=False,
+            status={},
+            conditions=[],
+            message="Current.",
+        )
+
+        self.assertEqual(worker.run_once("test", apply=True), 0)
+
+        preflight.assert_called_once_with()
+        execute.assert_called_once()
