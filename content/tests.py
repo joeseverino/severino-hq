@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import datetime
+import json
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from content.content_sync import ContentSyncError, sync_content_index
+from content.content_sync import (
+    ContentSyncError,
+    fetch_content_index,
+    sync_content_index,
+)
 from content.models import ContentItem
 from projects.models import Project
 
@@ -83,3 +89,31 @@ class ContentSyncTests(TestCase):
     def test_missing_items_list_raises(self):
         with self.assertRaises(ContentSyncError):
             sync_content_index(payload={"nope": True})
+
+    @override_settings(
+        CF_ACCESS_CLIENT_ID="client-id",
+        CF_ACCESS_CLIENT_SECRET="client-secret",
+    )
+    def test_fetch_identifies_hq_and_sends_access_credentials(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(_payload()).encode()
+
+        with patch("urllib.request.urlopen", return_value=Response()) as open_url:
+            payload = fetch_content_index("https://example.test/content-index.json")
+
+        request = open_url.call_args.args[0]
+        self.assertEqual(request.get_header("Accept"), "application/json")
+        self.assertEqual(
+            request.get_header("User-agent"),
+            "Severino-HQ/1.0 (+https://github.com/joeseverino/severino-hq)",
+        )
+        self.assertEqual(request.get_header("Cf-access-client-id"), "client-id")
+        self.assertEqual(request.get_header("Cf-access-client-secret"), "client-secret")
+        self.assertEqual(payload["count"], 2)

@@ -38,7 +38,13 @@ def _parse_date(value):
 def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
     """GET the content index with the Cloudflare Access service-token headers."""
     url = url or settings.CONTENT_INDEX_URL
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        # Cloudflare's browser-integrity check rejects urllib's default
+        # Python-urllib signature with Error 1010. Identify this machine client
+        # explicitly, as every well-behaved HTTP adapter should.
+        "User-Agent": "Severino-HQ/1.0 (+https://github.com/joeseverino/severino-hq)",
+    }
     client_id = getattr(settings, "CF_ACCESS_CLIENT_ID", "")
     client_secret = getattr(settings, "CF_ACCESS_CLIENT_SECRET", "")
     if client_id and client_secret:
