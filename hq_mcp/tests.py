@@ -7,6 +7,7 @@ from pathlib import Path
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase
 
+from application import read_models
 from assets.models import Asset
 from docs_index.models import DocumentationRecord
 from projects.models import Project
@@ -117,7 +118,7 @@ class ServiceTests(TestCase):
 
         result = services.list_projects(limit=500)
 
-        self.assertEqual(result["count"], services.MAX_PAGE_SIZE)
+        self.assertEqual(result["count"], read_models.MAX_PAGE_SIZE)
 
     def test_missing_object_uses_structured_service_error(self):
         with self.assertRaisesRegex(services.NotFoundError, "was not found"):
