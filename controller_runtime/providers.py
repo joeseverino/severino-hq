@@ -1065,27 +1065,43 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
+def _tls_reconcile(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+    return apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
+
+
+def _tls_renew(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+    if apply:
+        return renew_tls(spec)
+    return ProviderResult(
+        changed=True,
+        status={},
+        conditions=[],
+        message="Certificate would be issued, deployed, verified, and rolled back on failure.",
+    )
+
+
+def _public_dns_locked(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+    del spec, apply
+    raise ProviderError("Public DNS mutation is not enabled in this controller.")
+
+
+PROVIDER_ACTIONS = {
+    ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("npm.proxy_host", "reconcile"): reconcile_npm,
+    ("cloudflare.dns_record", "reconcile"): _public_dns_locked,
+    ("tls.certificate", "reconcile"): _tls_reconcile,
+    ("tls.certificate", "renew"): _tls_renew,
+}
+
+
 def execute(
     resource: dict[str, Any], action: str, *, apply: bool = True
 ) -> ProviderResult:
-    kind = resource["kind"]
-    if kind == "adguard.rewrite" and action == "reconcile":
-        return reconcile_adguard(resource["spec"], apply=apply)
-    if kind == "npm.proxy_host" and action == "reconcile":
-        return reconcile_npm(resource["spec"], apply=apply)
-    if kind == "cloudflare.dns_record":
-        raise ProviderError("Public DNS mutation is not enabled in this controller.")
-    if kind == "tls.certificate" and action == "reconcile":
-        if not apply:
-            return reconcile_tls(resource["spec"])
-        return apply_tls_reconcile(resource["spec"])
-    if kind == "tls.certificate" and action == "renew":
-        if not apply:
-            return ProviderResult(
-                changed=True,
-                status={},
-                conditions=[],
-                message="Certificate would be issued, deployed, verified, and rolled back on failure.",
-            )
-        return renew_tls(resource["spec"])
-    raise ProviderError(f"Unsupported provider/action: {kind}/{action}.")
+    identity = (resource["kind"], action)
+    try:
+        handler = PROVIDER_ACTIONS[identity]
+    except KeyError as exc:
+        raise ProviderError(
+            f"Unsupported provider/action: {identity[0]}/{identity[1]}."
+        ) from exc
+    return handler(resource["spec"], apply=apply)

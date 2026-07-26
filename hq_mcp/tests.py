@@ -123,6 +123,15 @@ class ServiceTests(TestCase):
         with self.assertRaisesRegex(services.NotFoundError, "was not found"):
             services.get_asset("missing")
 
+    def test_registry_audit_is_a_registered_read_tool(self):
+        Project.objects.create(name="Unreferenced", slug="unreferenced")
+
+        result = services.audit_registry()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["orphan_projects"], ["unreferenced"])
+        self.assertIsNotNone(mcp._tool_manager.get_tool("audit_registry"))
+
 
 class MCPBoundaryTests(TestCase):
     @staticmethod

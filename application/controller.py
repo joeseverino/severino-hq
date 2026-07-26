@@ -11,6 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
+from control_plane.providers import enabled_controller_actions
 
 from .infrastructure import controller_contract, serialize_operation, serialize_resource
 
@@ -71,47 +72,75 @@ def _scheduler_now():
     return timezone.now()
 
 
-@transaction.atomic
-def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
-    """Queue due TLS work from verified state; never issue directly here."""
-    scheduled: list[str] = []
-    resources = ManagedResource.objects.select_for_update().filter(
-        enabled=True, kind="tls.certificate"
-    )
-    now = _scheduler_now()
-    for resource in resources:
-        action = None
-        reason = ""
-        not_after = resource.status.get("not_after")
-        if not_after:
+def _automatic_action(
+    resource: ManagedResource,
+    action: str,
+    now,
+) -> tuple[bool, str, str]:
+    """Evaluate one declared automatic action without executing it."""
+
+    if action == OperationRequest.Action.RECONCILE:
+        if resource.kind == "tls.certificate" and resource.status.get("not_after"):
             try:
-                expiry = timezone.datetime.fromisoformat(
-                    not_after.replace("Z", "+00:00")
+                timezone.datetime.fromisoformat(
+                    resource.status["not_after"].replace("Z", "+00:00")
                 )
-                if expiry.tzinfo is None:
-                    expiry = expiry.replace(tzinfo=datetime_timezone.utc)
-                renewal_at = expiry - timedelta(
-                    days=resource.spec.get("renewal_window_days", 30)
-                )
-                if now >= renewal_at:
-                    action = OperationRequest.Action.RENEW
-                    reason = "Automatic renewal window reached."
-            except (TypeError, ValueError):
-                action = OperationRequest.Action.RECONCILE
-                reason = "Automatic repair of invalid certificate observation."
-        if action is None and resource.generation != resource.observed_generation:
-            action = OperationRequest.Action.RECONCILE
-            reason = "Automatic reconciliation of a new desired generation."
-        if action is None and any(
+            except (AttributeError, TypeError, ValueError):
+                return True, "Automatic repair of invalid certificate observation.", "invalid-expiry"
+        if resource.generation != resource.observed_generation:
+            return True, "Automatic reconciliation of a new desired generation.", "generation"
+        if any(
             item.get("status") is True
             and item.get("type") in {"Drifted", "Degraded"}
             for item in resource.conditions
         ):
-            action = OperationRequest.Action.RECONCILE
-            reason = "Automatic reconciliation of TLS consumer drift."
-        if action is None:
+            return True, "Automatic reconciliation of provider drift.", "drift"
+        return False, "", ""
+    if resource.kind == "tls.certificate" and action == OperationRequest.Action.RENEW:
+        not_after = resource.status.get("not_after")
+        if not not_after:
+            return False, "", ""
+        try:
+            expiry = timezone.datetime.fromisoformat(not_after.replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=datetime_timezone.utc)
+        except (TypeError, ValueError):
+            return False, "", ""
+        renewal_at = expiry - timedelta(
+            days=resource.spec.get("renewal_window_days", 30)
+        )
+        if now >= renewal_at:
+            return True, "Automatic renewal window reached.", not_after
+    return False, "", ""
+
+
+@transaction.atomic
+def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
+    """Queue work declared automatic by the validated controller contract."""
+    scheduled: list[str] = []
+    now = _scheduler_now()
+    automatic = enabled_controller_actions(automatic_only=True)
+    by_kind: dict[str, list[str]] = {}
+    for kind, action in automatic:
+        by_kind.setdefault(kind, []).append(action)
+    for actions in by_kind.values():
+        actions.sort(key=lambda action: action != OperationRequest.Action.RENEW)
+    resources = ManagedResource.objects.select_for_update().filter(
+        enabled=True, kind__in=by_kind
+    )
+    for resource in resources:
+        selected = next(
+            (
+                (action, reason, identity)
+                for action in by_kind[resource.kind]
+                for due, reason, identity in [_automatic_action(resource, action, now)]
+                if due
+            ),
+            None,
+        )
+        if selected is None:
             continue
-        identity = not_after or "unobserved"
+        action, reason, identity = selected
         idempotency_key = (
             f"controller:{action}:{resource.pk}:g{resource.generation}:"
             f"{identity}:{now.date().isoformat()}"

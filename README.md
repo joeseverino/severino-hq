@@ -44,6 +44,9 @@ process.
 
 ![Infrastructure control plane — topology flows into HQ desired state and a capability-filtered homelab controller reconciles providers](docs/diagrams/infrastructure-control-plane.png)
 
+<sup>Diagram source: [`docs/diagrams/infrastructure-control-plane.mmd`](docs/diagrams/infrastructure-control-plane.mmd),
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
+
 ## Modules
 
 1. Dashboard — KPIs, needs-attention queue, quick actions, relationship
@@ -99,7 +102,7 @@ Every operator action lands through a *checked* path — content through a share
 schema, code through a gated pipeline. The Obsidian vault stays the source of
 truth; only validated metadata and tested images ever reach HQ.
 
-![How changes reach HQ: Joe edits vault frontmatter; `hq sync` runs severino-vault-mcp to emit a JSON manifest into Severino HQ; a git push or `hq ship` runs the gated CI (lint, test, security, scan) that on green builds a GHCR image, which a self-hosted homelab runner pulls and restarts](docs/diagrams/changes-reach-hq.png)
+![How changes reach HQ: the Vault MCP emits manifest and topology through one atomic HQ MCP sync; code reaches production only through gated CI, a scanned GHCR image, and the self-hosted homelab runner](docs/diagrams/changes-reach-hq.png)
 
 <sup>Diagram source: [`docs/diagrams/changes-reach-hq.mmd`](docs/diagrams/changes-reach-hq.mmd),
 pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
@@ -107,9 +110,10 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 **Content — `hq sync`.** Severino HQ never reads the vault directly. The
 [`hq`](https://github.com/joeseverino/tools) CLI calls the local
 [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
-server to walk the vault frontmatter
-and emit one JSON manifest, then pipes it into `manage.py import_docs_manifest`.
-The importer validates every record against
+server to emit one JSON manifest and one topology projection, then sends both
+to HQ through one authenticated `hq.sync` MCP capability call. HQ validates and
+commits them atomically—no SSH, temporary server payload, or partial sync. The
+importer validates every record against
 [`docs_index/schema.json`](docs_index/schema.json) — the frontmatter enum
 contract single-sourced from the MCP and committed here — so HQ can never accept
 a value the MCP wouldn't emit, and vice-versa. Records upsert by `doc_id`;

@@ -35,6 +35,8 @@ def register_tool(function):
 register_tool(services.list_projects)
 register_tool(services.describe_capabilities)
 register_tool(services.execute_capability)
+register_tool(services.audit_registry)
+register_tool(services.export_year_summary)
 register_tool(services.get_project)
 register_tool(services.list_assets)
 register_tool(services.get_asset)

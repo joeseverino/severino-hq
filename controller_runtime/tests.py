@@ -550,6 +550,17 @@ class WorkerTests(TestCase):
             ),
         )
 
+    def test_every_declared_controller_action_has_exactly_one_dispatch(self):
+        from control_plane.providers import controller_capability_registry
+
+        declared = {
+            (kind, action)
+            for kind, capability in controller_capability_registry().capabilities.items()
+            for action in capability.actions
+        }
+
+        self.assertEqual(set(providers.PROVIDER_ACTIONS), declared)
+
     @mock.patch("controller_runtime.worker.preflight", return_value=[])
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
