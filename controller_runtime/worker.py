@@ -93,7 +93,6 @@ def _report(
 
 
 def run_once(controller_id: str, *, apply: bool) -> int:
-    connections = preflight()
     if not apply:
         peek_args = ["peek"]
         for kind, action in supported_capabilities():
@@ -101,7 +100,9 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         pending = _manage(*peek_args)
         operation = pending.get("operation")
         plan = None
+        connections: list[dict[str, Any]] = []
         if operation is not None:
+            connections = preflight()
             resource = pending["resource"]
             result = execute(resource, operation["action"], apply=False)
             plan = {
@@ -137,6 +138,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
     resource = claim["resource"]
     generation = resource["generation"]
     try:
+        preflight()
         result = execute(resource, operation["action"])
     except ProviderError as exc:
         message = str(exc)

@@ -33,7 +33,7 @@ jobs:
             scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
             scripts/refresh-secrets.sh scripts/render-controller-env.sh \
             scripts/run-controller.sh scripts/test-render-controller-env.sh \
-            scripts/test-edge-controller.sh \
+            scripts/test-edge-controller.sh scripts/test-deploy-image.sh \
             deploy/targets/severino-hq-edge-controller \
             deploy/targets/severino-hq-edge-dispatch \
             deploy/targets/severino-hq-cpanel-controller
@@ -41,12 +41,13 @@ jobs:
             scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
             scripts/refresh-secrets.sh scripts/render-controller-env.sh \
             scripts/run-controller.sh scripts/test-render-controller-env.sh \
-            scripts/test-edge-controller.sh \
+            scripts/test-edge-controller.sh scripts/test-deploy-image.sh \
             deploy/targets/severino-hq-edge-controller \
             deploy/targets/severino-hq-edge-dispatch \
             deploy/targets/severino-hq-cpanel-controller
           scripts/test-render-controller-env.sh
           scripts/test-edge-controller.sh
+          scripts/test-deploy-image.sh
 
   test:
     name: test
