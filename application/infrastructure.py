@@ -43,6 +43,31 @@ class OperationCommand:
     reason: str = ""
 
 
+def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
+    """List canonical public infrastructure state without provider credentials."""
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    items = [
+        serialize_resource(resource)
+        for resource in ManagedResource.objects.all()[: min(limit, 100)]
+    ]
+    return {"items": items, "count": len(items)}
+
+
+def get_managed_resource(key: str) -> dict[str, Any]:
+    """Return resource state and structured operation history as one contract."""
+    try:
+        resource = ManagedResource.objects.get(key=key)
+    except ManagedResource.DoesNotExist as exc:
+        raise NotFoundError(f"Managed resource {key!r} was not found.") from exc
+    return {
+        "resource": serialize_resource(resource),
+        "operations": [
+            operation_summary(operation) for operation in resource.operations.all()[:20]
+        ],
+    }
+
+
 def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
     provider = PROVIDERS.get(resource.kind)
     health = resource_health(resource)
@@ -125,6 +150,59 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
         ),
         "attempt_count": operation.attempt_count,
         "result": operation.result,
+    }
+
+
+def operation_summary(operation: OperationRequest) -> dict[str, Any]:
+    """Project one operation into concise operator guidance and structured evidence."""
+    result = operation.result or {}
+    status = result.get("status") or {}
+    conditions = result.get("conditions") or []
+    evidence = status.get("consumers") or []
+    affected = [item for item in evidence if item.get("matches_expected") is False]
+    condition = next(
+        (item for item in conditions if item.get("status") is True), None
+    )
+    message = result.get("message") or operation.reason
+
+    if operation.state == OperationRequest.State.QUEUED:
+        headline = "Waiting for the controller"
+        guidance = "HQ will claim this automatically; no manual server action is needed."
+    elif operation.state == OperationRequest.State.CLAIMED:
+        headline = "Controller is applying and verifying the change"
+        guidance = "The operation is leased; wait for verification before retrying."
+    elif operation.state == OperationRequest.State.FAILED:
+        headline = (condition or {}).get("message") or message or "Provider operation failed"
+        guidance = (
+            "Review the affected targets and provider reason, correct the canonical "
+            "desired state or provider access, then reconcile again."
+        )
+    else:
+        headline = message or "Operation completed successfully"
+        guidance = "No action is required."
+
+    return {
+        "id": str(operation.id),
+        "action": operation.action,
+        "action_label": operation.get_action_display(),
+        "state": operation.state,
+        "state_label": operation.get_state_display(),
+        "headline": headline,
+        "guidance": guidance,
+        "automatic": operation.requested_interface == "controller",
+        "requested_actor": operation.requested_actor,
+        "requested_interface": operation.requested_interface,
+        "created_at": operation.created_at.isoformat(),
+        "completed_at": (
+            operation.completed_at.isoformat() if operation.completed_at else None
+        ),
+        "attempt_count": operation.attempt_count,
+        "reason": operation.reason,
+        "condition": condition,
+        "affected": affected,
+        "evidence": evidence,
+        "expected_fingerprint_sha256": status.get("expected_fingerprint_sha256", ""),
+        "raw_result": result,
     }
 
 

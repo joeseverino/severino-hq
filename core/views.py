@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
-from decimal import Decimal
+from datetime import date, datetime
 
-from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q, Sum
+from django.db.models import Q
 from django.urls import reverse
-from django.utils import timezone
 from django.views.generic import ListView, TemplateView
 
+from application.dashboard import operating_snapshot
 from assets.models import Asset
 from contacts.d1 import (
     D1Error,
     get_recent_submissions,
-    get_unread_count,
     search_submissions,
 )
 from content.models import ContentItem
@@ -24,12 +21,7 @@ from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
-from application.infrastructure import resource_health
-from control_plane.models import ManagedResource
-
 from .models import AuditLog
-
-ZERO_MONEY = Decimal("0.00")
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -37,140 +29,50 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        today = timezone.localdate()
-        year_start = today.replace(month=1, day=1)
-
-        expense_ytd_summary = Expense.objects.filter(date__gte=year_start).aggregate(
-            total=Sum("total_cost"),
-            deductible=Sum("estimated_deductible_amount"),
-            n=Count("id"),
-        )
-
-        review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-        review_cutoff = today - timedelta(days=review_days)
-        docs_needing_review = DocumentationRecord.objects.filter(
-            Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
-            status=DocumentationRecord.Status.ACTIVE,
-        ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
-
-        # Contact submissions live in Cloudflare D1, not HQ's database.
-        # Fetch over the D1 HTTP API; degrade gracefully if it's unreachable.
         try:
             recent_contacts = get_recent_submissions(limit=4)
-            unread_contacts_count = get_unread_count()
         except D1Error:
             recent_contacts = []
-            unread_contacts_count = 0
-
-        active_projects_qs = Project.objects.filter(status=Project.Status.ACTIVE)
-        active_projects_with_counts = active_projects_qs.annotate(
-            content_count=Count("content_items", distinct=True),
-            doc_count=Count("documentation_records", distinct=True),
+        snapshot = operating_snapshot()
+        unread_contacts_count = next(
+            item["count"]
+            for item in snapshot["priority"]
+            if item["code"] == "unread_contacts"
         )
-        project_opportunities_qs = active_projects_with_counts.filter(
-            Q(content_count=0) | Q(doc_count=0)
-        )
-        project_opportunities_count = project_opportunities_qs.count()
-        project_opportunities = project_opportunities_qs.order_by(
-            "category", "name"
-        )[:6]
-        projects_without_content_count = active_projects_with_counts.filter(
-            content_count=0
-        ).count()
-        projects_without_docs_count = active_projects_with_counts.filter(
-            doc_count=0
-        ).count()
-        published_content_qs = ContentItem.objects.filter(
-            status=ContentItem.Status.PUBLISHED
-        )
-        draft_content_qs = ContentItem.objects.filter(
-            status=ContentItem.Status.DRAFT
-        )
-        docs_needing_review_count = docs_needing_review.count()
-        draft_content_count = draft_content_qs.count()
-
-        # Relationship health — link/metadata completeness, shown as a static
-        # green/warn readout on the dashboard.
-        receipts_unlinked_count = Receipt.objects.filter(
-            related_expense__isnull=True,
-            related_asset__isnull=True,
-        ).count()
-        expenses_without_receipts_count = (
-            Expense.objects.annotate(receipt_count=Count("receipts"))
-            .filter(receipt_count=0)
-            .count()
-        )
-        assets_missing_purchase_info_count = Asset.objects.filter(
-            status=Asset.Status.ACTIVE
-        ).filter(Q(purchase_date__isnull=True) | Q(total_cost=0)).count()
-        content_without_docs_count = (
-            ContentItem.objects.annotate(doc_count=Count("related_documentation"))
-            .filter(doc_count=0)
-            .count()
-        )
-
-        # Needs-attention queue — workflow items, each linking to a filtered
-        # cleanup view.
-        action_queue = [
-            *[
-                {
-                    "label": (
-                        f"{resource.key}: {health['message']}"
-                        if health["message"]
-                        else f"{resource.key} needs infrastructure attention"
-                    ),
-                    "count": 1,
-                    "href": reverse(
-                        "control_plane:detail", kwargs={"key": resource.key}
-                    ),
-                }
-                for resource in ManagedResource.objects.filter(enabled=True)
-                if (
-                    (health := resource_health(resource))["state"]
-                    in {"degraded", "pending", "unknown"}
+        for project in snapshot["active_projects"]:
+            project["updated_at"] = datetime.fromisoformat(project["updated_at"])
+        for collection in (snapshot["draft_content"], snapshot["recent_published"]):
+            for item in collection:
+                item["updated_at"] = datetime.fromisoformat(item["updated_at"])
+                if item["published_at"]:
+                    item["published_at"] = date.fromisoformat(item["published_at"])
+        for record in snapshot["docs_needing_review"]:
+            if record["last_reviewed"]:
+                record["last_reviewed"] = date.fromisoformat(record["last_reviewed"])
+        for event in snapshot["recent_activity"]:
+            event["created_at"] = datetime.fromisoformat(event["created_at"])
+        routes = {
+            "docs_review": f"{reverse('docs_index:list')}?needs_review=1",
+            "draft_content": f"{reverse('content:list')}?status=draft",
+            "unread_contacts": f"{reverse('contacts:list')}?status=unread",
+            "projects_output": f"{reverse('projects:list')}?needs_output=1",
+            "receipts_unlinked": f"{reverse('receipts:list')}?unlinked=1",
+            "expenses_receipts": f"{reverse('expenses:list')}?no_receipts=1",
+            "assets_purchase": f"{reverse('assets:list')}?missing_purchase=1",
+            "content_docs": f"{reverse('content:list')}?no_docs=1",
+        }
+        action_queue = []
+        for item in snapshot["priority"]:
+            rendered = dict(item)
+            rendered["href"] = (
+                reverse(
+                    "control_plane:detail",
+                    kwargs={"key": item["resource_key"]},
                 )
-            ],
-            {
-                "label": "Docs need review",
-                "count": docs_needing_review_count,
-                "href": f"{reverse('docs_index:list')}?needs_review=1",
-            },
-            {
-                "label": "Draft content",
-                "count": draft_content_count,
-                "href": f"{reverse('content:list')}?status=draft",
-            },
-            {
-                "label": "Unread contact submissions",
-                "count": unread_contacts_count,
-                "href": f"{reverse('contacts:list')}?status=unread",
-            },
-            {
-                "label": "Active projects need output",
-                "count": project_opportunities_count,
-                "href": f"{reverse('projects:list')}?needs_output=1",
-            },
-            {
-                "label": "Receipts need links",
-                "count": receipts_unlinked_count,
-                "href": f"{reverse('receipts:list')}?unlinked=1",
-            },
-            {
-                "label": "Expenses need receipts",
-                "count": expenses_without_receipts_count,
-                "href": f"{reverse('expenses:list')}?no_receipts=1",
-            },
-            {
-                "label": "Assets missing purchase info",
-                "count": assets_missing_purchase_info_count,
-                "href": f"{reverse('assets:list')}?missing_purchase=1",
-            },
-            {
-                "label": "Content needs docs",
-                "count": content_without_docs_count,
-                "href": f"{reverse('content:list')}?no_docs=1",
-            },
-        ]
+                if item["code"] == "infrastructure"
+                else routes[item["code"]]
+            )
+            action_queue.append(rendered)
 
         # Live infra status is NOT computed here — HQ links out to Uptime Kuma
         # on the VPS rather than duplicating a status checker.
@@ -188,40 +90,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ctx.update(
             recent_contacts=recent_contacts,
             unread_contacts_count=unread_contacts_count,
-            active_project_count=active_projects_qs.count(),
-            active_projects=active_projects_qs.order_by("-updated_at")[:4],
-            project_opportunities=project_opportunities,
-            project_opportunities_count=project_opportunities_count,
-            projects_without_content_count=projects_without_content_count,
-            projects_without_docs_count=projects_without_docs_count,
-            archived_project_count=Project.objects.filter(
-                status=Project.Status.ARCHIVED
-            ).count(),
+            active_project_count=snapshot["kpis"]["active_projects"],
+            active_projects=snapshot["active_projects"],
+            project_opportunities_count=snapshot["kpis"]["projects_needing_output"],
             external_links=external_links,
-            draft_content=draft_content_qs.order_by("-updated_at")[:4],
-            draft_content_count=draft_content_count,
-            published_content_count=published_content_qs.count(),
-            recent_published=published_content_qs.order_by(
-                "-published_at", "-updated_at"
-            )[:4],
-            active_asset_count=Asset.objects.filter(
-                status=Asset.Status.ACTIVE
-            ).count(),
-            expenses_ytd_total=expense_ytd_summary["total"] or ZERO_MONEY,
-            expenses_ytd_count=expense_ytd_summary["n"] or 0,
-            deductible_ytd_total=expense_ytd_summary["deductible"] or ZERO_MONEY,
-            recent_receipts=Receipt.objects.order_by("-uploaded_at")[:4],
-            docs_needing_review=docs_needing_review.order_by("last_reviewed")[:4],
-            docs_needing_review_count=docs_needing_review_count,
-            recent_audit=AuditLog.objects.select_related("user")[:15],
+            draft_content=snapshot["draft_content"],
+            draft_content_count=snapshot["kpis"]["draft_content"],
+            published_content_count=snapshot["kpis"]["published_content"],
+            recent_published=snapshot["recent_published"],
+            expenses_ytd_total=snapshot["kpis"]["expenses_total"],
+            expenses_ytd_count=snapshot["kpis"]["expenses_count"],
+            deductible_ytd_total=snapshot["kpis"]["deductible_total"],
+            docs_needing_review=snapshot["docs_needing_review"],
+            docs_needing_review_count=snapshot["kpis"]["docs_needing_review"],
+            recent_audit=snapshot["recent_activity"],
             action_queue=action_queue,
-            action_queue_count=sum(item["count"] for item in action_queue),
-            action_queue_group_count=sum(1 for item in action_queue if item["count"]),
-            receipts_unlinked_count=receipts_unlinked_count,
-            expenses_without_receipts_count=expenses_without_receipts_count,
-            assets_missing_purchase_info_count=assets_missing_purchase_info_count,
-            content_without_docs_count=content_without_docs_count,
-            this_year=today.year,
+            action_queue_count=snapshot["priority_count"],
+            action_queue_group_count=snapshot["priority_group_count"],
+            this_year=snapshot["year"],
         )
         return ctx
 

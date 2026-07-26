@@ -16,6 +16,7 @@ from application.infrastructure import (
     PolicyError,
     certificate_renewal_allowed,
     controller_contract,
+    operation_summary,
     request_certificate_renewal,
     request_reconcile,
     resource_health,
@@ -109,7 +110,15 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             except (TypeError, ValueError):
                 # A malformed provider timestamp must not break the resource page.
                 pass
-        context["operations"] = self.object.operations.all()[:20]
+        context["operations"] = [
+            operation_summary(operation) for operation in self.object.operations.all()[:20]
+        ]
+        for operation in context["operations"]:
+            operation["created_at"] = datetime.fromisoformat(operation["created_at"])
+            if operation["completed_at"]:
+                operation["completed_at"] = datetime.fromisoformat(
+                    operation["completed_at"]
+                )
         context["resolved_spec"] = self.object.spec
         if self.object.kind == "tls.certificate":
             try:

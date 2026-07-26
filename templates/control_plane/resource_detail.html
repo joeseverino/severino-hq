@@ -150,20 +150,37 @@
     <tbody>
       {% for operation in operations %}
         <tr>
-          <td>{{ operation.get_action_display }}</td>
-          <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
-          <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span></td>
+          <td>{{ operation.action_label }}{% if operation.automatic %}<br><span class="tag">automatic</span>{% endif %}</td>
+          <td><span class="pill pill-{{ operation.state }}">{{ operation.state_label }}</span></td>
+          <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span>{% if operation.attempt_count %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
           <td>{{ operation.completed_at|default:"—" }}</td>
-          <td class="muted operation-result">
-            {{ operation.result.message|default:"—" }}
-            {% if operation.result.status.consumers %}
-              <details class="operation-evidence">
-                <summary>Consumer evidence</summary>
+          <td class="operation-result">
+            <strong>{{ operation.headline }}</strong>
+            <p class="operation-guidance">{{ operation.guidance }}</p>
+            {% if operation.condition.reason %}<p class="muted">Provider reason: <code>{{ operation.condition.reason }}</code></p>{% endif %}
+            {% if operation.affected %}
+              <details class="operation-evidence" open>
+                <summary>{{ operation.affected|length }} affected target{{ operation.affected|length|pluralize }}</summary>
                 <ul>
-                  {% for item in operation.result.status.consumers %}
+                  {% for item in operation.affected %}
+                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>; observed <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% elif operation.evidence %}
+              <details class="operation-evidence">
+                <summary>Verification evidence</summary>
+                <ul>
+                  {% for item in operation.evidence %}
                     <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected == True %}matched{% elif item.matches_expected == False %}did not match{% else %}observed (legacy result){% endif %}</li>
                   {% endfor %}
                 </ul>
+              </details>
+            {% endif %}
+            {% if operation.raw_result %}
+              <details class="operation-evidence">
+                <summary>Raw controller result</summary>
+                <pre>{{ operation.raw_result|pprint }}</pre>
               </details>
             {% endif %}
           </td>

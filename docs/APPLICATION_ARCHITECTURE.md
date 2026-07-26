@@ -44,6 +44,21 @@ The adapter disappears after parsing. The application service validates,
 authorizes, opens the transaction, protects against stale state, writes, audits,
 and returns one stable result. The adapter only chooses how that result looks.
 
+That boundary includes reads. Canonical query projections live in
+`application/read_models.py`; web, MCP, and CLI adapters may filter or render
+those results, but they do not import Django models or rebuild result shapes.
+An architecture fitness test rejects direct model access from the MCP service
+adapter so this separation cannot silently regress.
+
+The dashboard follows the same contract. `application/dashboard.py` emits one
+JSON-safe operating snapshot for KPIs, priority work, recent records, upstream
+state, and activity. The web dashboard renders it, while the authenticated MCP
+exposes it as `dashboard_snapshot`. Infrastructure reads are likewise shared:
+`list_managed_resources` and `get_managed_resource` return public desired state,
+health, and structured operation evidence without provider credentials. A
+future REST/OpenAPI adapter can publish these same use cases without moving or
+reimplementing their behavior.
+
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 
