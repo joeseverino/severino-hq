@@ -938,6 +938,25 @@ def _verify_tls_deployment(
         time.sleep(interval)
 
 
+def _tls_match_evidence(
+    status: dict[str, Any], expected_fingerprint: str
+) -> dict[str, Any]:
+    """Attach the canonical expected fingerprint and verdict to every observation."""
+    return {
+        **status,
+        "expected_fingerprint_sha256": expected_fingerprint,
+        "consumers": [
+            {
+                **item,
+                "matches_expected": (
+                    item["fingerprint_sha256"] == expected_fingerprint
+                ),
+            }
+            for item in status["consumers"]
+        ],
+    }
+
+
 def _deploy_tls_transaction(
     spec: dict[str, Any],
     fullchain: bytes,
@@ -966,7 +985,7 @@ def _deploy_tls_transaction(
             status=exc.status,
         ) from exc
     status = {
-        **observed.status,
+        **_tls_match_evidence(observed.status, expected_fingerprint),
         **deployment_status,
         "artifact_source": artifact_source,
         "renewed_fingerprint_sha256": expected_fingerprint,
@@ -1008,7 +1027,10 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
     if fingerprints == {expected}:
         return ProviderResult(
             changed=False,
-            status={**observed.status, "artifact_source": "existing_lineage"},
+            status={
+                **_tls_match_evidence(observed.status, expected),
+                "artifact_source": "existing_lineage",
+            },
             conditions=[
                 _condition("Ready", True, "Verified", "All TLS consumers match.")
             ],

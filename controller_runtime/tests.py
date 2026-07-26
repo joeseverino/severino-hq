@@ -432,6 +432,40 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(result.changed)
         deploy.assert_called_once_with(spec, b"new-cert", b"new-key")
         self.assertEqual(result.conditions[0]["reason"], "Renewed")
+        self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
+        self.assertTrue(
+            all(item["matches_expected"] for item in result.status["consumers"])
+        )
+
+    @mock.patch("controller_runtime.providers.reconcile_tls")
+    @mock.patch("controller_runtime.providers._validate_certificate", return_value="new")
+    @mock.patch("controller_runtime.providers._lineage")
+    def test_reconcile_success_records_explicit_consumer_match_evidence(
+        self, lineage, _validate, reconcile
+    ):
+        lineage.return_value = (b"new-cert", b"new-key")
+        reconcile.return_value = providers.ProviderResult(
+            changed=False,
+            status={
+                "consumers": [
+                    {
+                        "consumer": "npm",
+                        "domain": "hq.example.test",
+                        "fingerprint_sha256": "new",
+                    }
+                ]
+            },
+            conditions=[],
+            message="observed",
+        )
+
+        result = providers.apply_tls_reconcile(
+            {"domains": ["example.test"], "consumers": []}
+        )
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
+        self.assertTrue(result.status["consumers"][0]["matches_expected"])
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
     @mock.patch("controller_runtime.providers._deploy_certificate", return_value={})

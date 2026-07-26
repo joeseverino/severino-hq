@@ -787,6 +787,36 @@ class InfrastructureViewsTests(TestCase):
         self.assertEqual(report.status_code, 200)
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
+    def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
+        OperationRequest.objects.create(
+            resource=self.resource,
+            action=OperationRequest.Action.RECONCILE,
+            state=OperationRequest.State.SUCCEEDED,
+            requested_actor="joe",
+            requested_interface="web",
+            idempotency_key="legacy-success",
+            input={"generation": self.resource.generation},
+            result={
+                "message": "Certificate consumers already match the managed lineage.",
+                "status": {
+                    "consumers": [
+                        {
+                            "consumer": "npm",
+                            "domain": "hq.example.test",
+                            "fingerprint_sha256": "legacy",
+                        }
+                    ]
+                },
+            },
+        )
+
+        detail = self.client.get(
+            reverse("control_plane:detail", args=[self.resource.key])
+        )
+
+        self.assertContains(detail, "observed (legacy result)")
+        self.assertNotContains(detail, "did not match")
+
     def test_controller_rejects_secret_material_in_status(self):
         operation = OperationRequest.objects.create(
             resource=self.resource,

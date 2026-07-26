@@ -161,7 +161,7 @@
                 <summary>Consumer evidence</summary>
                 <ul>
                   {% for item in operation.result.status.consumers %}
-                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected %}matched{% else %}did not match{% endif %}</li>
+                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected == True %}matched{% elif item.matches_expected == False %}did not match{% else %}observed (legacy result){% endif %}</li>
                   {% endfor %}
                 </ul>
               </details>
