@@ -817,6 +817,50 @@ class InfrastructureViewsTests(TestCase):
         self.assertContains(detail, "observed (legacy result)")
         self.assertNotContains(detail, "did not match")
 
+    def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
+        OperationRequest.objects.create(
+            resource=self.resource,
+            action=OperationRequest.Action.RECONCILE,
+            state=OperationRequest.State.FAILED,
+            requested_actor="homelab-controller",
+            requested_interface="controller",
+            idempotency_key="structured-failure",
+            result={
+                "message": "Verification did not converge.",
+                "conditions": [
+                    {
+                        "type": "Degraded",
+                        "status": True,
+                        "reason": "VerificationFailed",
+                        "message": "One consumer serves the previous certificate.",
+                    }
+                ],
+                "status": {
+                    "expected_fingerprint_sha256": "expected-fingerprint",
+                    "consumers": [
+                        {
+                            "consumer": "npm",
+                            "domain": "hq.example.test",
+                            "fingerprint_sha256": "observed-fingerprint",
+                            "matches_expected": False,
+                        }
+                    ],
+                },
+            },
+        )
+
+        detail = self.client.get(
+            reverse("control_plane:detail", args=[self.resource.key])
+        )
+
+        self.assertContains(detail, "One consumer serves the previous certificate.")
+        self.assertContains(detail, "Provider reason:")
+        self.assertContains(detail, "VerificationFailed")
+        self.assertContains(detail, "1 affected target")
+        self.assertContains(detail, "Expected")
+        self.assertContains(detail, "observed")
+        self.assertContains(detail, "Raw controller result")
+
     def test_controller_rejects_secret_material_in_status(self):
         operation = OperationRequest.objects.create(
             resource=self.resource,

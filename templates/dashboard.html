@@ -133,7 +133,7 @@
           <li>
             <span class="row-main">
               <span class="cat-dot cat-{{ p.category }}" title="{{ p.get_category_display }}"></span>
-              <a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a>
+              <a href="{% url 'projects:detail' p.slug %}"><strong>{{ p.name }}</strong></a>
               {% if p.repository_url %}<a class="subtle-link" href="{{ p.repository_url }}" target="_blank" rel="noopener">code</a>{% endif %}
               {% if p.public_url %}<a class="subtle-link" href="{{ p.public_url }}" target="_blank" rel="noopener">live</a>{% endif %}
             </span>
@@ -160,8 +160,8 @@
         {% for c in draft_content %}
           <li>
             <span class="row-main">
-              <a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a>
-              <span class="muted">· {{ c.get_content_type_display }}</span>
+              <a href="{% url 'content:detail' c.slug %}"><strong>{{ c.title }}</strong></a>
+              <span class="muted">· {{ c.content_type_label }}</span>
             </span>
             <span class="row-meta">{{ c.updated_at|date:"M j" }}</span>
           </li>
@@ -176,7 +176,7 @@
               {% if c.published_url %}
                 <a href="{{ c.published_url }}" target="_blank" rel="noopener"><strong>{{ c.title }}</strong></a>
               {% else %}
-                <a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a>
+                <a href="{% url 'content:detail' c.slug %}"><strong>{{ c.title }}</strong></a>
               {% endif %}
             </span>
             <span class="row-meta">{% if c.published_at %}{{ c.published_at|date:"M j" }}{% else %}{{ c.updated_at|date:"M j" }}{% endif %}</span>
@@ -202,7 +202,7 @@
         {% for d in docs_needing_review %}
           <li>
             <span class="row-main">
-              <a href="{{ d.get_absolute_url }}"><strong>{{ d.title }}</strong></a>
+              <a href="{% url 'docs_index:detail' d.doc_id %}"><strong>{{ d.title }}</strong></a>
               <span class="muted">· {{ d.doc_id }}</span>
             </span>
             <span class="row-meta">{% if d.last_reviewed %}{{ d.last_reviewed|date:"M j" }}{% else %}never{% endif %}</span>
@@ -227,8 +227,8 @@
       {% for ev in recent_audit|slice:":8" %}
         <li>
           <span class="ts">{{ ev.created_at }}</span>
-          <strong>{{ ev.user.get_username|default:"system" }}</strong>
-          <span class="muted">{{ ev.get_action_display|lower }}</span>
+          <strong>{{ ev.actor }}</strong>
+          <span class="muted">{{ ev.action_label|lower }}</span>
           {% if ev.object_type %}<span class="muted-2">{{ ev.object_type }}</span>{% endif %}
           {% if ev.object_repr %}<span>{{ ev.object_repr|truncatechars:70 }}</span>{% endif %}
         </li>

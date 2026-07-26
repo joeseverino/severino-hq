@@ -150,9 +150,13 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
             "object_id": event.object_id,
             "object_repr": event.object_repr,
             "message": event.message,
+            "actor": event.user.get_username() if event.user_id else "system",
+            "action_label": event.get_action_display(),
             "created_at": event.created_at.isoformat(),
         }
-        for event in AuditLog.objects.order_by("-created_at")[: _page_size(limit)]
+        for event in AuditLog.objects.select_related("user").order_by("-created_at")[
+            : _page_size(limit)
+        ]
     ]
     return {"items": items, "count": len(items)}
 

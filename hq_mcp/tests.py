@@ -133,6 +133,11 @@ class ServiceTests(TestCase):
         self.assertEqual(result["orphan_projects"], ["unreferenced"])
         self.assertIsNotNone(mcp._tool_manager.get_tool("audit_registry"))
 
+    def test_operating_snapshot_and_infrastructure_are_registered_read_tools(self):
+        self.assertIsNotNone(mcp._tool_manager.get_tool("dashboard_snapshot"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("list_managed_resources"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_managed_resource"))
+
 
 class MCPBoundaryTests(TestCase):
     @staticmethod

@@ -229,9 +229,12 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .control-diagnostics > summary { color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; }
 .control-diagnostics[open] > summary { margin-bottom: 12px; }
 .operation-result { max-width: 34rem; overflow-wrap: anywhere; }
+.operation-result > strong { display: block; line-height: 1.35; }
+.operation-guidance { margin: 5px 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .operation-evidence { margin-top: 6px; color: var(--ink); }
 .operation-evidence ul { margin: 6px 0 0; padding-left: 18px; }
 .operation-evidence li { margin: 3px 0; }
+.operation-evidence pre { max-height: 18rem; margin-top: 8px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 

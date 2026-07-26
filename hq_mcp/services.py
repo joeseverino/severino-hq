@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from application import assets as asset_service
+from application.dashboard import operating_snapshot
 from application.capabilities import (
     describe_capabilities as describe_application_capabilities,
 )
@@ -12,6 +13,7 @@ from application.capabilities import (
     execute_capability as execute_application_capability,
 )
 from application import projects as project_service
+from application import infrastructure as infrastructure_service
 from application.security import mcp_principal
 from application.registry import audit_registry as audit_application_registry
 from application import read_models
@@ -93,6 +95,19 @@ def get_asset(slug: str) -> dict[str, Any]:
         raise NotFoundError(str(exc)) from exc
 
 
+def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
+    """List canonical desired and observed infrastructure state."""
+    return infrastructure_service.list_managed_resources(limit=limit)
+
+
+def get_managed_resource(key: str) -> dict[str, Any]:
+    """Get one managed resource with structured operation evidence."""
+    try:
+        return infrastructure_service.get_managed_resource(key)
+    except infrastructure_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
+
+
 def list_expenses(
     *, year: int | None = None, category: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
@@ -118,3 +133,8 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
 def system_health() -> dict[str, Any]:
     """Check database access and return non-sensitive record counts."""
     return read_models.system_health()
+
+
+def dashboard_snapshot() -> dict[str, Any]:
+    """Return HQ's canonical KPI, priority queue, and recent activity snapshot."""
+    return operating_snapshot()
