@@ -79,11 +79,11 @@ deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate
 is not stored in this public repository. Never disable TLS verification.
 
 The topology inventory is also absent from this public repository. `hq sync`
-asks the Vault MCP for its complete validated inventory projection and streams
-it directly over SSH into `infrastructure_topology` on the trusted HQ
-container. HQ validates it again, checksums it, and replaces the singleton
-snapshot transactionally. No intermediate payload is written on
-homelab-server.
+asks the Vault MCP for its complete validated manifest and topology projections,
+then submits both in one authenticated `hq.sync` Streamable HTTP MCP call over
+Tailscale. HQ validates both and commits documentation plus the checksummed
+topology snapshot in one transaction. No intermediate payload is written on
+homelab-server, and routine synchronization requires no SSH access.
 
 The gated `main` deployment runs `scripts/install-controller.sh` after the new
 application image is healthy. The installer refreshes controller-only
@@ -92,9 +92,10 @@ declared provider in plan mode, and only then enables the apply timer. Missing
 credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
-The controller claims only kind/action pairs marked `apply` in
-`config/controller-capabilities.json`. Its persistent systemd timer runs after
-boot and every five minutes. Each run drains infrastructure work and derives
+The controller claims only kind/action pairs marked `apply` in the strictly
+validated `config/controller-capabilities.json`. The same document declares
+automatic actions and drives worker dispatch parity. Its persistent systemd
+timer runs after boot and every five minutes. Each run drains infrastructure work and derives
 new work from HQ's verified state: it queues
 renewal inside the configured window and reconciliation for new topology
 generations or drift. TLS reconciliation redistributes the existing lineage;

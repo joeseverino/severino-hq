@@ -171,6 +171,28 @@ def save_asset(
     }
 
 
+@transaction.atomic
+def upsert_asset(
+    command: AssetCommand,
+    *,
+    principal: Principal,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Idempotently create or update an asset by its command slug."""
+
+    current_slug = (
+        command.slug
+        if Asset.objects.select_for_update().filter(slug=command.slug).exists()
+        else None
+    )
+    return save_asset(
+        command,
+        principal=principal,
+        current_slug=current_slug,
+        expected_updated_at=expected_updated_at,
+    )
+
+
 def asset_command_from_cleaned_data(data: dict[str, Any]) -> AssetCommand:
     related = data.get("related_projects") or ()
     values = {

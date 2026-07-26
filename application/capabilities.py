@@ -8,7 +8,7 @@ from typing import Any, Callable
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
-from .assets import AssetCommand, save_asset
+from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
 from .deletion import (
     DeleteCommand,
@@ -33,9 +33,11 @@ from .infrastructure import (
     request_reconcile,
     save_managed_resource,
 )
-from .projects import ProjectCommand, save_project
+from .projects import ProjectCommand, save_project, upsert_project
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
+from .sync import HQSyncCommand, execute_hq_sync
+from .topology import TopologySyncCommand, execute_topology_sync
 
 
 @dataclass(frozen=True)
@@ -43,13 +45,27 @@ class CapabilitySpec:
     name: str
     summary: str
     effect: str
-    required_capability: Capability
+    required_capability: Capability | tuple[Capability, ...]
     command_type: type
     handler: Callable
     target_kind: str | None = None
 
+    @property
+    def required_capabilities(self) -> tuple[Capability, ...]:
+        if isinstance(self.required_capability, tuple):
+            return self.required_capability
+        return (self.required_capability,)
+
 
 _SPECS = (
+    CapabilitySpec(
+        "hq.sync",
+        "Atomically synchronize the vault manifest and topology into HQ.",
+        "remote_write",
+        (Capability.SYNC_DOCUMENTATION, Capability.MANAGE_INFRASTRUCTURE),
+        HQSyncCommand,
+        execute_hq_sync,
+    ),
     CapabilitySpec(
         "project.create",
         "Create an HQ project.",
@@ -57,6 +73,14 @@ _SPECS = (
         Capability.WRITE_PROJECTS,
         ProjectCommand,
         save_project,
+    ),
+    CapabilitySpec(
+        "project.upsert",
+        "Idempotently create or update an HQ project by slug.",
+        "remote_write",
+        Capability.WRITE_PROJECTS,
+        ProjectCommand,
+        upsert_project,
     ),
     CapabilitySpec(
         "project.update",
@@ -74,6 +98,14 @@ _SPECS = (
         Capability.WRITE_ASSETS,
         AssetCommand,
         save_asset,
+    ),
+    CapabilitySpec(
+        "asset.upsert",
+        "Idempotently create or update an HQ asset by slug.",
+        "remote_write",
+        Capability.WRITE_ASSETS,
+        AssetCommand,
+        upsert_asset,
     ),
     CapabilitySpec(
         "asset.update",
@@ -142,6 +174,14 @@ _SPECS = (
         Capability.SYNC_DOCUMENTATION,
         DocumentationSyncCommand,
         execute_documentation_sync,
+    ),
+    CapabilitySpec(
+        "infrastructure.topology.sync",
+        "Synchronize the validated infrastructure topology into HQ.",
+        "remote_write",
+        Capability.MANAGE_INFRASTRUCTURE,
+        TopologySyncCommand,
+        execute_topology_sync,
     ),
     CapabilitySpec(
         "receipt.update",
@@ -251,13 +291,15 @@ def describe_capabilities() -> dict[str, Any]:
 
     return {
         "ok": True,
-        "schema_version": 1,
+        "schema_version": 2,
         "capabilities": [
             {
                 "name": spec.name,
                 "summary": spec.summary,
                 "effect": spec.effect,
-                "required_capability": spec.required_capability.value,
+                "required_capabilities": [
+                    capability.value for capability in spec.required_capabilities
+                ],
                 "target": spec.target_kind,
                 "input_schema": TypeAdapter(spec.command_type).json_schema(),
             }
@@ -285,6 +327,8 @@ def execute_capability(
         return _error("target_not_allowed", f"{name} does not accept a target.")
 
     try:
+        for capability in spec.required_capabilities:
+            principal.require(capability)
         command = TypeAdapter(spec.command_type).validate_python(payload)
         kwargs: dict[str, Any] = {
             "principal": principal,

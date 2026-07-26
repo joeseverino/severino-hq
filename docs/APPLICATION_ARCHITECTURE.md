@@ -29,8 +29,8 @@ must remain identical no matter who initiated an operation:
 | HTML, MCP JSON, terminal prose | Delivery adapter only |
 
 A Django view may translate a form. An MCP tool may translate typed arguments.
-A management command may translate flags. None may decide what a valid HQ
-mutation means or write around the service.
+The `hq` wrapper may translate ergonomic flags into the advertised JSON Schema.
+None may decide what a valid HQ mutation means or write around the service.
 
 ## One operation, end to end
 
@@ -55,14 +55,15 @@ fourth implementation.
 [`emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd).</sup>
 
 HQ's allowlisted capability registry binds each typed command to one operation
-name, effect, required permission, and application handler. From that registry:
+name, effect, required permissions, and application handler. From that registry:
 
 - `describe_capabilities` emits deterministic JSON Schemas for MCP clients;
 - `execute_capability` validates a JSON object and returns one canonical
   success/error envelope;
-- `python manage.py hq_capability describe` emits the identical catalog;
-- `python manage.py hq_capability run <name> --payload -` executes JSON from
-  stdin through the identical validator and service; and
+- the authenticated Streamable HTTP MCP endpoint exposes that catalog and
+  executor to the web-independent CLI and agents;
+- management commands remain an in-process break-glass adapter over the same
+  registry; and
 - tests derive their contract assertions from the emitted schemas.
 
 The generic executor is not generic database access. It can invoke only
@@ -80,7 +81,10 @@ everything would make the system less honest, not more unified.
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret; only runtime access |
 | Mutation behavior | `application/` | The one executable business contract |
-| Interface presentation | Web / MCP / CLI adapter | No business state |
+| Interface presentation | Web / MCP / `hq` wrapper | No business state |
+| Infrastructure identities and dependencies | Severino Labs topology | Trusted checksummed snapshot + stable references |
+| Provider authored/resolved contracts | Provider definition registry | No parallel resolver schema |
+| Controller actions and automation | Validated controller capability document | Queued operations and observations |
 
 The vault emits a validated manifest; HQ never walks the vault and never stores
 Markdown bodies. The MCP does not become a database or a second rules engine.
@@ -106,9 +110,11 @@ Project writes provide:
 
 ### Documentation synchronization
 
-`application.documentation.sync_documentation()` is the sole manifest import
-path. Web upload, MCP `sync_documentation`, and `import_docs_manifest` all call
-it.
+`application.sync.execute_hq_sync()` is the external synchronization boundary.
+The local Vault MCP emits the manifest and topology once; `hq sync` sends both
+in one `hq.sync` MCP capability call. HQ applies both inside one database
+transaction, so invalid topology cannot leave newly imported documentation
+behind. Lower-level documentation/topology services remain reusable in-process.
 
 The sync is:
 
@@ -193,10 +199,11 @@ The service boundary complements the existing network boundary:
 7. Restricted documentation is removed from AI-facing relationship results.
 8. Every successful mutation leaves an attributed audit event.
 
-Recovery remains deliberately in-process. The CLI may call the same application
-service on the server, so an MCP transport outage cannot prevent bootstrap or
-repair. Sharing the service—not forcing a loopback network request—is what
-prevents logic drift.
+Routine CLI domain operations use the authenticated MCP endpoint: synchronization,
+registry validation, project/asset upsert, and report export. SSH is reserved
+for host administration—deployment, logs, restart, shell, superuser, and secret
+refresh. In-process management commands remain break-glass recovery paths, but
+the normal CLI cannot silently become a second transport or rules engine.
 
 ## Adding the next capability
 
@@ -219,8 +226,10 @@ server-side snapshot. Managed resources reference topology identities; they do
 not duplicate hosts, certificate SANs, or consumer topology.
 
 HQ stores typed operational intent, resource generations, public observations,
-and audited operation requests. A resolver composes permission-safe read models
-from the trusted topology snapshot for each UI/API/MCP capability. HQ does not
+and audited operation requests. Each provider definition owns its authored
+schema, reference resolver, and resolved runtime schema. Topology supplies the
+trusted graph; it contains no TLS-specific resolver logic. Web, MCP, scheduler,
+and controller contracts consume the same resolved provider output. HQ does not
 store provider credentials or private keys. Every interface invokes the same
 application capabilities.
 
@@ -240,9 +249,11 @@ as the application data owner; the root-owned systemd launcher projects
 short-lived, owner-scoped copies of its environment and SSH identities. Plan
 mode authenticates and peeks without leasing work.
 Apply mode first schedules due work, then claims only explicitly supported
-kind/action pairs. The persistent timer schedules renewal when verified expiry
-enters policy and reconciliation when desired generation or consumer health
-drifts. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
+kind/action pairs. The validated capability document declares which actions are
+automatic; a generic scheduler derives reconciliation for generation/health
+drift, while the TLS provider adds expiry-window renewal policy. The worker
+imports the same validated registry and dispatches every declared action through
+one provider/action map. AdGuard and NPM reconcile in apply mode. TLS reconciliation reuses the
 existing lineage without contacting ACME. For NPM, one managed certificate is
 uploaded once and every enabled proxy host covered by its SANs is discovered,
 rebound, reloaded, and live-verified. TLS renewal issues through DNS-01 only

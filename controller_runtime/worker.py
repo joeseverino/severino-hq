@@ -12,34 +12,18 @@ import sys
 from typing import Any
 
 from .providers import ProviderError, execute, preflight
+from control_plane.providers import (
+    controller_capability_registry,
+    enabled_controller_actions,
+)
 
 
 class BridgeError(RuntimeError):
     pass
 
 
-def _registry() -> dict[str, Any]:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "config"
-        / "controller-capabilities.json"
-    )
-    registry = json.loads(path.read_text())
-    if registry.get("schema_version") != 1:
-        raise BridgeError("Unsupported controller capability registry version.")
-    return registry
-
-
 def supported_capabilities() -> tuple[tuple[str, str], ...]:
-    capabilities = _registry().get("capabilities", {})
-    return tuple(
-        sorted(
-            (kind, action)
-            for kind, capability in capabilities.items()
-            for action, policy in capability.get("actions", {}).items()
-            if policy.get("mode") == "apply"
-        )
-    )
+    return enabled_controller_actions()
 
 
 def _manage(*args: str) -> dict[str, Any]:
@@ -210,7 +194,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--controller-id",
-        default=_registry().get("controller_id") or os.uname().nodename,
+        default=controller_capability_registry().controller_id or os.uname().nodename,
     )
     parser.add_argument(
         "--apply",

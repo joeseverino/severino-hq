@@ -11,7 +11,7 @@ from django.db import transaction
 from core.audit import operation_context
 
 from .models import ManagedResource, TopologySnapshot
-from .providers import validate_spec
+from .providers import ProviderResolutionContext, resolve_provider_spec, validate_spec
 
 
 class TopologyError(ValueError):
@@ -178,9 +178,13 @@ def _desired_fingerprint(
         "spec": declaration["spec"],
         "enabled": declaration.get("enabled", True),
     }
-    topology_ref = declaration["spec"].get("topology_ref")
-    if declaration["kind"] == "tls.certificate" and topology_ref:
-        desired["resolved"] = _resolve_certificate(payload, topology_ref)
+    provider = resolve_provider_spec(
+        declaration["kind"],
+        declaration["spec"],
+        context=ProviderResolutionContext(topology=payload),
+    )
+    if provider != declaration["spec"]:
+        desired["resolved"] = provider
     return hashlib.sha256(_canonical(desired)).hexdigest()
 
 
@@ -190,34 +194,8 @@ def resolve_certificate(topology_ref: str) -> dict[str, Any]:
     except TopologySnapshot.DoesNotExist as exc:
         raise TopologyError("No trusted topology snapshot has been imported.") from exc
     validate_topology(payload)
-    return _resolve_certificate(payload, topology_ref)
-
-
-def _resolve_certificate(
-    payload: dict[str, Any], topology_ref: str
-) -> dict[str, Any]:
-    if not topology_ref.startswith("pki:"):
-        raise TopologyError("Certificate topology references must start with 'pki:'.")
-    certificate_id = topology_ref.removeprefix("pki:")
-    certificate = next(
-        (entry for entry in payload["pki"] if entry["id"] == certificate_id),
-        None,
+    return resolve_provider_spec(
+        "tls.certificate",
+        {"topology_ref": topology_ref},
+        context=ProviderResolutionContext(topology=payload),
     )
-    if certificate is None:
-        raise TopologyError(f"Topology certificate {topology_ref!r} was not found.")
-    consumers = [
-        {
-            "topology_ref": dependency["from"],
-            **dependency.get("attributes", {}),
-        }
-        for dependency in payload["dependencies"]
-        if dependency.get("relation") == "consumes"
-        and dependency.get("to") == topology_ref
-    ]
-    if not consumers:
-        raise TopologyError(f"Topology certificate {topology_ref!r} has no consumers.")
-    return {
-        "certificate_name": certificate.get("certificate_name", certificate_id),
-        "domains": certificate.get("domains", []),
-        "consumers": consumers,
-    }

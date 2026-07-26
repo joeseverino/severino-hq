@@ -167,6 +167,28 @@ def save_project(
     }
 
 
+@transaction.atomic
+def upsert_project(
+    command: ProjectCommand,
+    *,
+    principal: Principal,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Idempotently create or update a project by its command slug."""
+
+    current_slug = (
+        command.slug
+        if Project.objects.select_for_update().filter(slug=command.slug).exists()
+        else None
+    )
+    return save_project(
+        command,
+        principal=principal,
+        current_slug=current_slug,
+        expected_updated_at=expected_updated_at,
+    )
+
+
 def project_command_from_cleaned_data(data: dict[str, Any]) -> ProjectCommand:
     """Translate the shared ModelForm's validated fields into the use-case DTO."""
 

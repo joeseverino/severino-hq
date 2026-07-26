@@ -14,6 +14,8 @@ from application.capabilities import (
 from application.capabilities import execute_capability as execute_application_capability
 from application import projects as project_service
 from application.security import mcp_principal
+from application.registry import audit_registry as audit_application_registry
+from application.reports import export_year_summary as export_application_year_summary
 from assets.models import Asset
 from content.models import ContentItem
 from core.models import AuditLog
@@ -60,6 +62,18 @@ def execute_capability(
         target=target,
         expected_updated_at=expected_updated_at,
     )
+
+
+def audit_registry() -> dict[str, Any]:
+    """Report Project and Asset rows with no documentation references."""
+
+    return audit_application_registry()
+
+
+def export_year_summary(year: int, format: str = "md") -> dict[str, Any]:
+    """Export one safe year summary as Markdown or JSON."""
+
+    return export_application_year_summary(year, format, principal=mcp_principal())
 
 
 def _page_size(limit: int) -> int:
