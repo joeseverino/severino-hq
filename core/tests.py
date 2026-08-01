@@ -161,6 +161,25 @@ class NavigationSmokeTests(_AuthedTestCase):
                 )
 
 
+class SearchPageTests(_AuthedTestCase):
+    def test_results_highlight_matches_and_skip_empty_scopes(self):
+        from unittest import mock
+
+        Project.objects.create(
+            name="Highlight target",
+            description="global search rendering check",
+        )
+        with mock.patch("core.views.search_submissions", return_value=[]):
+            response = self.client.get("/search/", {"q": "highlight"})
+
+        content = response.content.decode()
+        self.assertIn("<mark>", content)
+        self.assertIn("Highlight target", content)
+        # Empty scopes are omitted entirely, not rendered as empty cards.
+        self.assertNotIn("No matches.", content)
+        self.assertNotIn("Expenses</h2>", content)
+
+
 class DashboardWorkflowTests(_AuthedTestCase):
     def test_dashboard_surfaces_degraded_infrastructure(self):
         from control_plane.models import ManagedResource

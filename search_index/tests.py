@@ -6,11 +6,12 @@ from django.core.management import call_command
 from django.db import connection, transaction
 from django.test import TestCase
 
-from application.search import apply_search, search_ids, search_records
+from application.search import apply_search, global_search, search_ids, search_records
 from application.security import AuthorizationError, cli_principal, mcp_principal
 from core.models import AuditLog
 from projects.models import Project
 
+from .backends import snippet_parts
 from .models import SearchDocument
 from .services import rebuild_search_index
 
@@ -72,7 +73,10 @@ class IndexedSearchTests(TestCase):
         stdout = StringIO()
         call_command("search_hq", "projects", "search", stdout=stdout)
 
-        self.assertEqual(result["items"], [{"id": project.slug, "label": str(project)}])
+        (item,) = result["items"]
+        self.assertEqual(item["id"], project.slug)
+        self.assertEqual(item["label"], str(project))
+        self.assertIn("Searchable", item["snippet"])
         self.assertIn('"scope": "projects"', stdout.getvalue())
 
     def test_relevance_window_keeps_tail_ordering_deterministic(self):
@@ -107,6 +111,76 @@ class IndexedSearchTests(TestCase):
             plan = " ".join(str(column) for row in cursor.fetchall() for column in row)
 
         self.assertIn("VIRTUAL TABLE INDEX", plan)
+
+
+class GlobalSearchTests(TestCase):
+    def test_snippet_parts_split_markers(self):
+        self.assertEqual(
+            snippet_parts("plain \x02hit\x03 tail"),
+            [("plain ", False), ("hit", True), (" tail", False)],
+        )
+
+    def test_groups_rank_snippet_and_metadata(self):
+        project = Project.objects.create(
+            name="Vault engine",
+            description="Frontmatter indexing for the operational vault",
+        )
+
+        outcome = global_search("vault", principal=OPERATOR)
+
+        # The create is itself audited, so the query hits two scopes: the
+        # project and its audit event. Cross-scope coverage is the point.
+        scopes_with_hits = {g["scope"] for g in outcome["groups"] if g["count"]}
+        self.assertEqual(scopes_with_hits, {"projects", "audit"})
+        group = next(g for g in outcome["groups"] if g["scope"] == "projects")
+        (item,) = group["items"]
+        self.assertEqual(item["title"], "Vault engine")
+        self.assertEqual(item["url"], project.get_absolute_url())
+        self.assertIsNotNone(item["timestamp"])
+        # Matched terms are flagged so the template can highlight safely.
+        self.assertIn(True, [hit for _, hit in item["snippet"]])
+        matched = "".join(t for t, hit in item["snippet"] if hit).lower()
+        self.assertIn("vault", matched)
+
+    def test_docs_use_title_not_str_and_carry_doc_id_badge(self):
+        from docs_index.models import DocumentationRecord
+
+        record = DocumentationRecord.objects.create(
+            doc_id="rb-generate-homelab-cert",
+            title="Generate a homelab certificate",
+            doc_type="runbook",
+        )
+
+        outcome = global_search("homelab", principal=OPERATOR)
+
+        group = next(g for g in outcome["groups"] if g["scope"] == "documentation")
+        (item,) = group["items"]
+        self.assertEqual(item["title"], record.title)
+        self.assertEqual(item["badge"], record.doc_id)
+        self.assertNotIn("—", item["title"])
+
+    def test_scopes_the_principal_lacks_are_omitted_not_empty(self):
+        AuditLog.objects.create(action="login", object_type="user", message="hq login")
+
+        operator_scopes = {g["scope"] for g in global_search("hq", principal=OPERATOR)["groups"]}
+        limited_scopes = {g["scope"] for g in global_search("hq", principal=mcp_principal())["groups"]}
+
+        self.assertIn("audit", operator_scopes)
+        self.assertNotIn("audit", limited_scopes)
+
+    def test_fallback_backend_still_produces_marked_snippets(self):
+        Project.objects.create(
+            name="Fallback target",
+            description="Portable snippet extraction without FTS",
+        )
+
+        with mock.patch("application.search._fts5_available", return_value=False):
+            outcome = global_search("portable", principal=OPERATOR)
+
+        group = next(g for g in outcome["groups"] if g["scope"] == "projects")
+        (item,) = group["items"]
+        marked = [t for t, hit in item["snippet"] if hit]
+        self.assertEqual([m.lower() for m in marked], ["portable"])
 
 
 class SearchAuthorizationTests(TestCase):

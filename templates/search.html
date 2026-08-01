@@ -4,53 +4,90 @@
 <div class="page-head">
   <div>
     <h1>Search</h1>
-    <p class="page-lede">Search across projects, content, docs, assets, expenses, receipts, and contacts.</p>
+    <p class="page-lede">One query across every HQ record — ranked by relevance, matches highlighted.</p>
   </div>
 </div>
 
-<form class="filter-bar search-page-form" method="get">
+<form class="filter-bar search-page-form" method="get" data-table-toolbar>
   <input type="search" name="q" value="{{ q }}" placeholder="Search HQ…" autofocus>
   <button type="submit">Search</button>
 </form>
 
+<div data-search-results>
 {% if q %}
-  <p class="muted">{{ total }} result{{ total|pluralize }} for <strong>{{ q }}</strong>.</p>
-  <div class="search-results">
-    {% for label, items in results.items %}
-      <section class="card">
-        <div class="section-head">
-          <h2>{{ label }}</h2>
-          {% if items %}<span class="count">{{ items|length }}</span>{% endif %}
-        </div>
-        {% if items %}
-          <ul class="list-rows">
-            {% for item in items %}
-              <li>
-                <span class="row-main">
-                  {% if label == "Contacts" %}
-                    <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name }}</strong></a>
-                    <span class="muted">· {{ item.email }}</span>
-                  {% else %}
-                    <a href="{{ item.get_absolute_url }}"><strong>{{ item }}</strong></a>
-                  {% endif %}
-                </span>
-                <span class="row-meta">
-                  {% if label == "Contacts" %}
-                    {{ item.created_at }}
-                  {% elif item.updated_at %}
-                    {{ item.updated_at }}
-                  {% endif %}
-                </span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <div class="empty compact"><p>No matches.</p></div>
-        {% endif %}
-      </section>
-    {% endfor %}
+  <div class="search-summary">
+    <p class="muted">{{ total }} result{{ total|pluralize }} for <strong>{{ q }}</strong></p>
+    {% if total %}
+    <nav class="search-scopes" aria-label="Result groups">
+      {% for group in groups %}{% if group.count %}
+      <a class="scope-chip" href="#scope-{{ group.scope }}">{{ group.label }} <span class="count">{{ group.count }}</span></a>
+      {% endif %}{% endfor %}
+      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Contacts <span class="count">{{ contacts|length }}</span></a>{% endif %}
+    </nav>
+    {% endif %}
   </div>
+
+  {% for group in groups %}{% if group.count %}
+  <section class="card search-group" id="scope-{{ group.scope }}">
+    <div class="section-head">
+      <h2>{{ group.label }}</h2>
+      <span class="count">{{ group.count }}</span>
+    </div>
+    <ul class="search-hits">
+      {% for item in group.items %}
+      <li class="search-hit">
+        <div class="search-hit-main">
+          <p class="search-hit-title">
+            {% if item.url %}
+            <a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>
+            {% else %}
+            <a href="{% url 'core:audit_list' %}?q={{ q|urlencode }}"><strong>{{ item.title }}</strong></a>
+            {% endif %}
+            {% if item.badge %}<code class="search-badge">{{ item.badge }}</code>{% endif %}
+          </p>
+          {% if item.snippet %}
+          <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
+          {% endif %}
+        </div>
+        {% if item.timestamp %}<span class="row-meta">{{ item.timestamp }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}{% endfor %}
+
+  {% if contacts %}
+  <section class="card search-group" id="scope-contacts">
+    <div class="section-head">
+      <h2>Contacts</h2>
+      <span class="count">{{ contacts|length }}</span>
+    </div>
+    <ul class="search-hits">
+      {% for item in contacts %}
+      <li class="search-hit">
+        <div class="search-hit-main">
+          <p class="search-hit-title">
+            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name }}</strong></a>
+            <span class="muted">· {{ item.email }}</span>
+          </p>
+        </div>
+        <span class="row-meta">{{ item.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if not total %}
+  <div class="empty">
+    <p>No results for <strong>{{ q }}</strong>. Prefix matching starts at two characters — try fewer or shorter terms.</p>
+  </div>
+  {% endif %}
 {% else %}
-  <div class="empty"><p>Type a name, slug, vendor, doc ID, tag, or filename.</p></div>
+  <div class="empty">
+    <p>Search projects, content, docs, assets, expenses, receipts, contacts, and the audit log.</p>
+    <p class="muted">Results are ranked by relevance with matched terms highlighted.</p>
+  </div>
 {% endif %}
+</div>
 {% endblock %}

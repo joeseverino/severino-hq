@@ -74,6 +74,16 @@ least-privilege adapter principals (MCP) do not hold — free-text search over
 the security log is an operator-only capability. A new adapter therefore
 cannot expose search without deciding whose authority it acts under.
 
+`global_search` is the cross-scope use case behind the `/search/` page:
+relevance-ranked hits per scope with FTS5 `snippet()` match extracts,
+returned as structured `(text, is_match)` parts so each renderer escapes
+content and applies markup independently. Presentation metadata (group
+label, title field, badge, timestamp) lives on each `SearchDefinition`, so
+every surface labels a hit the same way. Scopes a principal cannot search
+are omitted from the result, not rendered empty. Contact submissions live
+in Cloudflare D1, not the local database, so the web view merges them as an
+eighth group beside the registry scopes.
+
 `search_index.SearchDocument` is a derived relational projection. On SQLite,
 an FTS5 external-content table indexes that projection with Unicode tokenization
 and 2/3/4-character prefix indexes. Database triggers keep the FTS structure
