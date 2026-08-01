@@ -52,6 +52,13 @@ class DashboardProjectionTests(TestCase):
             category="hosting",
             total_cost=Decimal("7.00"),
         )
+        Expense.objects.create(
+            date=today + timedelta(days=1),
+            vendor="Future",
+            item="Not year-to-date yet",
+            category="hosting",
+            total_cost=Decimal("99.00"),
+        )
 
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
@@ -62,7 +69,8 @@ class DashboardProjectionTests(TestCase):
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
         self.assertEqual(Decimal(snapshot["kpis"]["expenses_total"]), Decimal("10.00"))
 
-        # Fiscal year starting next month began ~11 months ago: both fall inside.
+        # Fiscal year starting next month began ~11 months ago: both past
+        # expenses fall inside, while the future expense remains excluded.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
             patch("application.dashboard.get_unread_count", return_value=0),

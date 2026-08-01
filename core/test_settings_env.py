@@ -87,3 +87,41 @@ class MountedAppEnvTests(SimpleTestCase):
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(result.stdout.strip(), "from-real-environment")
+
+    def test_fiscal_start_month_must_be_valid(self):
+        env = dict(os.environ)
+        env["DJANGO_SECRET_KEY"] = "test-secret"
+        env["SEVERINO_FISCAL_YEAR_START_MONTH"] = "13"
+
+        result = subprocess.run(
+            [sys.executable, "-c", "from config import settings"],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=REPO_ROOT,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "SEVERINO_FISCAL_YEAR_START_MONTH must be between 1 and 12",
+            result.stderr,
+        )
+
+    def test_doc_review_interval_must_be_positive(self):
+        env = dict(os.environ)
+        env["DJANGO_SECRET_KEY"] = "test-secret"
+        env["SEVERINO_DOC_REVIEW_INTERVAL_DAYS"] = "0"
+
+        result = subprocess.run(
+            [sys.executable, "-c", "from config import settings"],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=REPO_ROOT,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "SEVERINO_DOC_REVIEW_INTERVAL_DAYS must be at least 1",
+            result.stderr,
+        )

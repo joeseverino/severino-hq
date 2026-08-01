@@ -343,9 +343,14 @@ SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
 SEVERINO_FISCAL_YEAR_START_MONTH = int(
     os.environ.get("SEVERINO_FISCAL_YEAR_START_MONTH", "1")
 )
+if not 1 <= SEVERINO_FISCAL_YEAR_START_MONTH <= 12:
+    raise RuntimeError("SEVERINO_FISCAL_YEAR_START_MONTH must be between 1 and 12.")
+
 SEVERINO_DOC_REVIEW_INTERVAL_DAYS = int(
     os.environ.get("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", "180")
 )
+if SEVERINO_DOC_REVIEW_INTERVAL_DAYS < 1:
+    raise RuntimeError("SEVERINO_DOC_REVIEW_INTERVAL_DAYS must be at least 1.")
 
 # Cloudflare D1 — the jseverino.com contact-form submissions live in a
 # Cloudflare D1 database, not HQ's SQLite. The contacts app reads/writes it

@@ -288,7 +288,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertNotContains(response, site_page.title)
 
     @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
-    def test_reports_docs_review_matches_dashboard_definition(self):
+    def test_reports_docs_review_uses_shared_definition(self):
         stale = DocumentationRecord.objects.create(
             doc_id="rb-stale-002",
             title="Stale runbook",
