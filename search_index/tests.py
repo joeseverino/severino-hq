@@ -52,10 +52,13 @@ class IndexedSearchTests(TestCase):
         )
 
     def test_projection_and_fts_roll_back_with_domain_write(self):
-        with self.assertRaises(RuntimeError):
+        def create_then_fail():
             with transaction.atomic():
                 Project.objects.create(name="Rolled back project")
                 raise RuntimeError("force rollback")
+
+        with self.assertRaises(RuntimeError):
+            create_then_fail()
 
         self.assertEqual(search_ids("projects", "rolled", principal=OPERATOR), [])
         self.assertFalse(

@@ -9,11 +9,13 @@ from django.db import connection
 
 
 class SearchBackend(Protocol):
-    def search(self, *, scope: str, query: str, limit: int) -> list[str]: ...
+    def search(self, *, scope: str, query: str, limit: int) -> list[str]:
+        """Return relevance-ordered stable object ids for one scope."""
 
     def search_sql(
         self, *, scope: str, query: str, limit: int
-    ) -> tuple[str, list] | None: ...
+    ) -> tuple[str, list] | None:
+        """Return a parameterized id subquery, or None for an empty query."""
 
 
 def _fts_query(query: str) -> str:
