@@ -72,7 +72,7 @@ Do not generate a generic tutorial when a runbook exists. See the user-global
 
 ## Stack quick map
 
-- Django 5 + SQLite, server-rendered templates, plain CSS (no build step).
+- Django 6 + SQLite, server-rendered templates, plain CSS (no build step).
 - App config: `config/settings.py`, `config/urls.py`.
 - Domain apps: `core/`, `projects/`, `content/`, `docs_index/`, `assets/`,
   `expenses/`, `receipts/`, `reports/`.
