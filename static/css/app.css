@@ -258,6 +258,9 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
 .table-scroll .data-table { margin-bottom: 0; }
+/* Refreshes pin column widths (fixed layout); long unbroken tokens must
+   wrap inside their cell instead of bleeding across the pinned columns. */
+.table-scroll td { overflow-wrap: break-word; }
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .data-table th, .data-table td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
 .data-table thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
