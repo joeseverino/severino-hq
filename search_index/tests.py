@@ -1,10 +1,11 @@
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.db import connection, transaction
 from django.test import TestCase
 
-from application.search import search_ids, search_records
+from application.search import apply_search, search_ids, search_records
 from projects.models import Project
 
 from .models import SearchDocument
@@ -59,6 +60,25 @@ class IndexedSearchTests(TestCase):
 
         self.assertEqual(result["items"], [{"id": project.slug, "label": str(project)}])
         self.assertIn('"scope": "projects"', stdout.getvalue())
+
+    def test_relevance_window_keeps_tail_ordering_deterministic(self):
+        projects = [
+            Project.objects.create(name=f"Shared term {index}") for index in range(3)
+        ]
+
+        with mock.patch("application.search.RELEVANCE_WINDOW", 1):
+            queryset = apply_search(
+                Project.objects.all(), scope="projects", query="shared"
+            ).order_by("_search_rank", "pk")
+            results = list(queryset)
+
+        # Head of the window is ranked exactly; the tail shares one bucket
+        # and must fall back to pk order, not drift between pages.
+        self.assertEqual(len(results), 3)
+        self.assertEqual(
+            [project.pk for project in results[1:]],
+            sorted(project.pk for project in projects if project != results[0]),
+        )
 
     def test_query_plan_uses_the_fts_virtual_table(self):
         with connection.cursor() as cursor:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from django.db import connection
 from django.db.models import Case, IntegerField, Q, QuerySet, When
 
@@ -11,18 +9,34 @@ from search_index.backends import search_backend
 from search_index.registry import BY_SCOPE
 
 MAX_SEARCH_RESULTS = 5000
+# Precise relevance ordering only matters for results a human will actually
+# scan. Ranking every match would compile one CASE branch per id — thousands
+# of bound parameters per query for ordering nobody sees past the first pages.
+RELEVANCE_WINDOW = 500
 
 
 class UnknownSearchScope(ValueError):
     pass
 
 
-@lru_cache(maxsize=1)
+_fts5_ready = False
+
+
 def _fts5_available() -> bool:
-    return (
-        connection.vendor == "sqlite"
-        and "search_index_fts" in connection.introspection.table_names()
-    )
+    """Cache only a positive probe.
+
+    A negative result must be re-checked: if the first call in a process ever
+    lands before the FTS table exists (fresh database, mid-migrate), a cached
+    False would silently pin that process to the icontains fallback until
+    restart.
+    """
+    global _fts5_ready
+    if not _fts5_ready:
+        _fts5_ready = (
+            connection.vendor == "sqlite"
+            and "search_index_fts" in connection.introspection.table_names()
+        )
+    return _fts5_ready
 
 
 def search_ids(scope: str, query: str, *, limit: int = 100) -> list[str]:
@@ -59,11 +73,15 @@ def apply_search(queryset: QuerySet, *, scope: str, query: str) -> QuerySet:
         return queryset.none()
     definition = BY_SCOPE[scope]
     identifier_field = definition.identifier_field
+    # Rank the head of the result set exactly; everything past the window
+    # shares one bucket and falls back to the pk tiebreak the table layer
+    # appends, so pagination stays deterministic without a giant CASE.
     relevance = Case(
         *[
             When(**{identifier_field: object_id, "then": position})
-            for position, object_id in enumerate(object_ids)
+            for position, object_id in enumerate(object_ids[:RELEVANCE_WINDOW])
         ],
+        default=RELEVANCE_WINDOW,
         output_field=IntegerField(),
     )
     return queryset.filter(
