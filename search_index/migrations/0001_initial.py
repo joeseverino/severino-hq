@@ -1,3 +1,5 @@
+import sqlite3
+
 from django.db import migrations, models
 
 
@@ -42,6 +44,15 @@ def create_fts5(schema_editor):
         "CREATE TRIGGER search_document_ad AFTER DELETE ON search_index_searchdocument BEGIN INSERT INTO search_index_fts(search_index_fts, rowid, body) VALUES ('delete', old.id, old.body); END",
         "CREATE TRIGGER search_document_au AFTER UPDATE ON search_index_searchdocument BEGIN INSERT INTO search_index_fts(search_index_fts, rowid, body) VALUES ('delete', old.id, old.body); INSERT INTO search_index_fts(rowid, body) VALUES (new.id, new.body); END",
     )
+    # Without secure-delete, FTS5 only marks deleted rows; their text lingers
+    # in index segments until a merge. The audit/expense scopes make that a
+    # data-retention leak, so scrub on delete where the runtime supports it
+    # (SQLite >= 3.42). The flag persists in the table's FTS config, so
+    # setting it once at creation covers the table's lifetime.
+    if sqlite3.sqlite_version_info >= (3, 42, 0):
+        statements += (
+            "INSERT INTO search_index_fts(search_index_fts, rank) VALUES ('secure-delete', 1)",
+        )
     with schema_editor.connection.cursor() as cursor:
         for statement in statements:
             cursor.execute(statement)

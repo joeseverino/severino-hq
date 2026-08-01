@@ -59,11 +59,13 @@ class TableListMixin:
         query = self.request.GET.get("q", "").strip()
         if query and self.table_search_scope:
             from application.search import apply_search
+            from application.security import web_principal
 
             queryset = apply_search(
                 queryset,
                 scope=self.table_search_scope,
                 query=query,
+                principal=web_principal(self.request.user),
             )
         elif query and self.table_search_fields:
             try:

@@ -10,6 +10,10 @@ from django.conf import settings
 
 class Capability(StrEnum):
     READ = "read"
+    # The audit trail is a security log. Free-text search over it is gated
+    # separately from baseline reads so a least-privilege adapter principal
+    # (e.g. MCP) never gets it implicitly.
+    READ_AUDIT_LOG = "read_audit_log"
     WRITE_PROJECTS = "write_projects"
     WRITE_ASSETS = "write_assets"
     WRITE_CONTENT = "write_content"

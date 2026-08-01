@@ -4,15 +4,25 @@ from __future__ import annotations
 
 from django.db import connection
 from django.db.models import Case, IntegerField, Q, QuerySet, When
+from django.db.models.expressions import RawSQL
 
 from search_index.backends import search_backend
 from search_index.registry import BY_SCOPE
+
+from .security import Capability, Principal
 
 MAX_SEARCH_RESULTS = 5000
 # Precise relevance ordering only matters for results a human will actually
 # scan. Ranking every match would compile one CASE branch per id — thousands
 # of bound parameters per query for ordering nobody sees past the first pages.
 RELEVANCE_WINDOW = 500
+
+# Every scope is readable with the baseline READ capability except the audit
+# trail: it is a security log, and free-text search over it is strictly more
+# revealing than the bounded recent_activity projection MCP already gets.
+SCOPE_CAPABILITIES = {
+    scope: Capability.READ for scope in BY_SCOPE
+} | {"audit": Capability.READ_AUDIT_LOG}
 
 
 class UnknownSearchScope(ValueError):
@@ -39,10 +49,17 @@ def _fts5_available() -> bool:
     return _fts5_ready
 
 
-def search_ids(scope: str, query: str, *, limit: int = 100) -> list[str]:
-    """Return relevance-ordered stable identifiers from the configured backend."""
+def _authorize(scope: str, principal: Principal) -> None:
     if scope not in BY_SCOPE:
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
+    principal.require(SCOPE_CAPABILITIES[scope])
+
+
+def search_ids(
+    scope: str, query: str, *, principal: Principal, limit: int = 100
+) -> list[str]:
+    """Return relevance-ordered stable identifiers from the configured backend."""
+    _authorize(scope, principal)
     if limit < 1:
         raise ValueError("limit must be at least 1")
     capped_limit = min(limit, MAX_SEARCH_RESULTS)
@@ -66,10 +83,12 @@ def search_ids(scope: str, query: str, *, limit: int = 100) -> list[str]:
     ]
 
 
-def apply_search(queryset: QuerySet, *, scope: str, query: str) -> QuerySet:
+def apply_search(
+    queryset: QuerySet, *, scope: str, query: str, principal: Principal
+) -> QuerySet:
     """Filter a domain queryset while retaining relevance as its default order."""
-    object_ids = search_ids(scope, query, limit=MAX_SEARCH_RESULTS)
-    if not object_ids:
+    head_ids = search_ids(scope, query, principal=principal, limit=RELEVANCE_WINDOW)
+    if not head_ids:
         return queryset.none()
     definition = BY_SCOPE[scope]
     identifier_field = definition.identifier_field
@@ -79,22 +98,33 @@ def apply_search(queryset: QuerySet, *, scope: str, query: str) -> QuerySet:
     relevance = Case(
         *[
             When(**{identifier_field: object_id, "then": position})
-            for position, object_id in enumerate(object_ids[:RELEVANCE_WINDOW])
+            for position, object_id in enumerate(head_ids)
         ],
         default=RELEVANCE_WINDOW,
         output_field=IntegerField(),
     )
+    if _fts5_available():
+        # Membership via an FTS subquery: three bound parameters regardless of
+        # match count, instead of one parameter per id in a giant IN list.
+        sql, params = search_backend.search_sql(
+            scope=scope, query=query, limit=MAX_SEARCH_RESULTS
+        )
+        membership = RawSQL(sql, params)
+    else:
+        membership = search_ids(
+            scope, query, principal=principal, limit=MAX_SEARCH_RESULTS
+        )
     return queryset.filter(
-        **{f"{identifier_field}__in": object_ids}
+        **{f"{identifier_field}__in": membership}
     ).annotate(_search_rank=relevance)
 
 
-def search_records(scope: str, query: str, *, limit: int = 50) -> dict:
+def search_records(
+    scope: str, query: str, *, principal: Principal, limit: int = 50
+) -> dict:
     """Adapter-neutral JSON result for CLI, TUI, and remote delivery surfaces."""
-    definition = BY_SCOPE.get(scope)
-    if definition is None:
-        raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
-    object_ids = search_ids(scope, query, limit=limit)
+    object_ids = search_ids(scope, query, principal=principal, limit=limit)
+    definition = BY_SCOPE[scope]
     model_field = (
         definition.model._meta.pk
         if definition.identifier_field == "pk"

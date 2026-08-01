@@ -68,6 +68,12 @@ fourth implementation.
 and future MCP tools. It accepts a named scope and query and returns stable
 domain identifiers; adapters do not know how text is indexed.
 
+Every entry point requires a `Principal`. Ordinary scopes need the baseline
+`READ` capability; the `audit` scope needs `READ_AUDIT_LOG`, which
+least-privilege adapter principals (MCP) do not hold — free-text search over
+the security log is an operator-only capability. A new adapter therefore
+cannot expose search without deciding whose authority it acts under.
+
 `search_index.SearchDocument` is a derived relational projection. On SQLite,
 an FTS5 external-content table indexes that projection with Unicode tokenization
 and 2/3/4-character prefix indexes. Database triggers keep the FTS structure

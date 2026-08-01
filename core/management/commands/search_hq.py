@@ -3,6 +3,7 @@ import json
 from django.core.management.base import BaseCommand
 
 from application.search import search_records
+from application.security import cli_principal
 from search_index.registry import BY_SCOPE
 
 
@@ -20,6 +21,7 @@ class Command(BaseCommand):
                 search_records(
                     options["scope"],
                     options["query"],
+                    principal=cli_principal(),
                     limit=options["limit"],
                 ),
                 indent=2,
