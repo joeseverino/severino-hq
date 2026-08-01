@@ -14,60 +14,39 @@ from django.views.generic import (
 from application.assets import asset_command_from_cleaned_data, save_asset
 from application.deletion import DeleteCommand, delete_asset
 from application.security import web_principal
+from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
 
-class AssetListView(LoginRequiredMixin, ListView):
+class AssetListView(TableListMixin, LoginRequiredMixin, ListView):
     model = Asset
     template_name = "assets/asset_list.html"
     context_object_name = "assets_list"
     paginate_by = 25
+    table_search_fields = ("item_name", "vendor", "serial_number", "notes")
+    table_filters = (
+        TableFilter("status", "Status", "status", Asset.Status.choices),
+        TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
+    )
+    table_sorts = (
+        TableSort("-purchase_date", "Newest purchase", "-purchase_date"),
+        TableSort("purchase_date", "Oldest purchase", "purchase_date"),
+        TableSort("item_name", "Name A–Z", "item_name"),
+        TableSort("-total_cost", "Highest cost", "-total_cost"),
+        TableSort("status", "Status", "status"),
+    )
+    table_toggles = (TableToggle("missing_purchase", "Missing purchase info"),)
+    table_default_sort = "-purchase_date"
+    table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
     def get_queryset(self):
         qs = Asset.objects.all()
-        q = self.request.GET.get("q", "").strip()
-        status = self.request.GET.get("status", "").strip()
-        category = self.request.GET.get("category", "").strip()
-        sort = self.request.GET.get("sort", "-purchase_date")
-        if q:
-            qs = qs.filter(
-                Q(item_name__icontains=q)
-                | Q(vendor__icontains=q)
-                | Q(serial_number__icontains=q)
-                | Q(notes__icontains=q)
-            )
-        if status:
-            qs = qs.filter(status=status)
-        if category:
-            qs = qs.filter(category=category)
-        if sort in {
-            "item_name", "-item_name",
-            "purchase_date", "-purchase_date",
-            "total_cost", "-total_cost",
-            "status", "-status",
-            "category", "-category",
-        }:
-            qs = qs.order_by(sort)
         if self.request.GET.get("missing_purchase"):
             qs = qs.filter(status=Asset.Status.ACTIVE).filter(
                 Q(purchase_date__isnull=True) | Q(total_cost=0)
             )
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx.update(
-            q=self.request.GET.get("q", ""),
-            selected_status=self.request.GET.get("status", ""),
-            selected_category=self.request.GET.get("category", ""),
-            sort=self.request.GET.get("sort", "-purchase_date"),
-            status_choices=Asset.Status.choices,
-            category_choices=ASSET_CATEGORY_CHOICES,
-            missing_purchase=self.request.GET.get("missing_purchase", ""),
-        )
-        return ctx
-
+        return self.apply_table_query(qs)
 
 class AssetDetailView(LoginRequiredMixin, DetailView):
     model = Asset

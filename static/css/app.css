@@ -263,6 +263,25 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .data-table thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table tbody tr:hover { background: var(--surface-2); }
+.data-table .select-column { width: 38px; text-align: center; padding-inline: 8px; }
+.data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
+
+.table-toolbar { display: grid; gap: 8px; margin: 0 0 12px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.table-search { display: flex; gap: 8px; }
+.table-search input { flex: 1; min-width: 180px; }
+.table-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.table-filter-menu { position: relative; }
+.table-filter-menu summary, .table-toggle, .table-sort { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink-2); font-size: 13px; cursor: pointer; }
+.table-filter-menu summary { list-style: none; }
+.table-filter-menu summary::-webkit-details-marker { display: none; }
+.table-filter-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 220px; max-width: calc(100vw - 32px); max-height: 280px; overflow: auto; display: grid; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.table-filter-options label { display: flex; gap: 8px; align-items: center; padding: 6px; border-radius: 4px; font-size: 13px; }
+.table-filter-options label:hover { background: var(--surface-2); }
+.filter-count { min-width: 18px; padding: 1px 5px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; text-align: center; }
+.table-sort select { border: 0; padding: 0; background: transparent; color: inherit; }
+.table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; background: var(--ink); color: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.table-selection[hidden] { display: none; }
+.table-selection strong { margin-right: auto; font-size: 13px; }
 .row-actions a { font-size: 13px; }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 .icon-link {

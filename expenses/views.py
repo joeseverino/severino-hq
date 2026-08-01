@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
@@ -16,42 +16,40 @@ from django.views.generic import (
 from application.expenses import expense_command_from_cleaned_data, save_expense
 from application.deletion import DeleteCommand, delete_expense
 from application.security import web_principal
+from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
 
-class ExpenseListView(LoginRequiredMixin, ListView):
+class ExpenseListView(TableListMixin, LoginRequiredMixin, ListView):
     model = Expense
     template_name = "expenses/expense_list.html"
     context_object_name = "expenses_list"
     paginate_by = 50
+    table_search_fields = ("vendor", "item", "business_purpose", "notes")
+    table_sorts = (
+        TableSort("-date", "Newest expense", "-date"),
+        TableSort("date", "Oldest expense", "date"),
+        TableSort("vendor", "Vendor A–Z", "vendor"),
+        TableSort("-total_cost", "Highest cost", "-total_cost"),
+        TableSort("category", "Category", "category"),
+    )
+    table_toggles = (TableToggle("no_receipts", "Missing receipt"),)
+    table_default_sort = "-date"
+    table_search_placeholder = "Search vendors, items, purpose, and notes…"
+
+    def get_table_filters(self):
+        years = [(date.year, str(date.year)) for date in Expense.objects.dates("date", "year")]
+        return (
+            TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES),
+            TableFilter("year", "Year", "date__year", years),
+        )
 
     def get_queryset(self):
         qs = Expense.objects.all()
-        q = self.request.GET.get("q", "").strip()
-        category = self.request.GET.get("category", "").strip()
-        year = self.request.GET.get("year", "").strip()
-        sort = self.request.GET.get("sort", "-date")
-        if q:
-            qs = qs.filter(
-                Q(vendor__icontains=q)
-                | Q(item__icontains=q)
-                | Q(business_purpose__icontains=q)
-                | Q(notes__icontains=q)
-            )
-        if category:
-            qs = qs.filter(category=category)
-        if year and year.isdigit():
-            qs = qs.filter(date__year=int(year))
-        if sort in {
-            "date", "-date", "vendor", "-vendor",
-            "total_cost", "-total_cost", "category", "-category",
-            "estimated_deductible_amount", "-estimated_deductible_amount",
-        }:
-            qs = qs.order_by(sort)
         if self.request.GET.get("no_receipts"):
             qs = qs.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
-        return qs
+        return self.apply_table_query(qs)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -60,15 +58,8 @@ class ExpenseListView(LoginRequiredMixin, ListView):
             deductible=Sum("estimated_deductible_amount"),
         )
         ctx.update(
-            q=self.request.GET.get("q", ""),
-            selected_category=self.request.GET.get("category", ""),
-            selected_year=self.request.GET.get("year", ""),
-            sort=self.request.GET.get("sort", "-date"),
-            category_choices=EXPENSE_CATEGORY_CHOICES,
             total_filtered=totals["total"] or Decimal("0.00"),
             deductible_filtered=totals["deductible"] or Decimal("0.00"),
-            available_years=Expense.objects.dates("date", "year"),
-            no_receipts=self.request.GET.get("no_receipts", ""),
         )
         return ctx
 

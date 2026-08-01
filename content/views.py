@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
@@ -14,58 +14,38 @@ from django.views.generic import (
 from application.content import content_command_from_cleaned_data, save_content
 from application.deletion import DeleteCommand, delete_content
 from application.security import web_principal
+from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
 from .forms import ContentItemForm
 from .models import ContentItem
 
 
-class ContentListView(LoginRequiredMixin, ListView):
+class ContentListView(TableListMixin, LoginRequiredMixin, ListView):
     model = ContentItem
     template_name = "content/content_list.html"
     context_object_name = "items"
     paginate_by = 25
+    table_search_fields = ("title", "topic", "tags", "notes")
+    table_filters = (
+        TableFilter("status", "Status", "status", ContentItem.Status.choices),
+        TableFilter("content_type", "Type", "content_type", ContentItem.Type.choices),
+    )
+    table_sorts = (
+        TableSort("-updated_at", "Recently updated", "-updated_at"),
+        TableSort("title", "Title A–Z", "title"),
+        TableSort("-published_at", "Recently published", "-published_at"),
+        TableSort("status", "Status", "status"),
+    )
+    table_toggles = (TableToggle("no_docs", "Missing documentation"),)
+    table_default_sort = "-updated_at"
+    table_search_placeholder = "Search titles, topics, tags, and notes…"
 
     def get_queryset(self):
         qs = ContentItem.objects.all()
-        q = self.request.GET.get("q", "").strip()
-        status = self.request.GET.get("status", "").strip()
-        ctype = self.request.GET.get("content_type", "").strip()
-        sort = self.request.GET.get("sort", "-updated_at")
-        if q:
-            qs = qs.filter(
-                Q(title__icontains=q)
-                | Q(topic__icontains=q)
-                | Q(tags__icontains=q)
-                | Q(notes__icontains=q)
-            )
-        if status:
-            qs = qs.filter(status=status)
-        if ctype:
-            qs = qs.filter(content_type=ctype)
-        if sort in {
-            "title", "-title", "updated_at", "-updated_at",
-            "status", "-status", "content_type", "-content_type",
-            "published_at", "-published_at",
-        }:
-            qs = qs.order_by(sort)
         if self.request.GET.get("no_docs"):
             qs = qs.annotate(doc_count=Count("related_documentation")).filter(
                 doc_count=0
             )
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx.update(
-            q=self.request.GET.get("q", ""),
-            selected_status=self.request.GET.get("status", ""),
-            selected_type=self.request.GET.get("content_type", ""),
-            sort=self.request.GET.get("sort", "-updated_at"),
-            status_choices=ContentItem.Status.choices,
-            type_choices=ContentItem.Type.choices,
-            no_docs=self.request.GET.get("no_docs", ""),
-        )
-        return ctx
-
+        return self.apply_table_query(qs)
 
 class ContentDetailView(LoginRequiredMixin, DetailView):
     model = ContentItem

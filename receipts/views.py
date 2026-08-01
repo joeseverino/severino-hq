@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -35,37 +35,34 @@ from application.receipts import (
 )
 from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
+from application.tables import TableListMixin, TableSort, TableToggle
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm
 from .models import Receipt
 
 
-class ReceiptListView(LoginRequiredMixin, ListView):
+class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
     model = Receipt
     template_name = "receipts/receipt_list.html"
     context_object_name = "receipts_list"
     paginate_by = 25
+    table_search_fields = ("vendor", "notes", "original_filename")
+    table_sorts = (
+        TableSort("-uploaded_at", "Recently uploaded", "-uploaded_at"),
+        TableSort("-date", "Newest receipt date", "-date"),
+        TableSort("vendor", "Vendor A–Z", "vendor"),
+        TableSort("-amount", "Highest amount", "-amount"),
+    )
+    table_toggles = (TableToggle("unlinked", "Unlinked only"),)
+    table_default_sort = "-uploaded_at"
+    table_search_placeholder = "Search vendors, filenames, and notes…"
 
     def get_queryset(self):
         qs = Receipt.objects.select_related("related_expense", "related_asset")
-        q = self.request.GET.get("q", "").strip()
-        if q:
-            qs = qs.filter(
-                Q(vendor__icontains=q)
-                | Q(notes__icontains=q)
-                | Q(original_filename__icontains=q)
-            )
         if self.request.GET.get("unlinked"):
             qs = qs.filter(related_expense__isnull=True, related_asset__isnull=True)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["q"] = self.request.GET.get("q", "")
-        ctx["unlinked"] = self.request.GET.get("unlinked", "")
-        return ctx
-
+        return self.apply_table_query(qs)
 
 class ReceiptDetailView(LoginRequiredMixin, DetailView):
     model = Receipt

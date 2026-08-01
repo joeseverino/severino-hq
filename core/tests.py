@@ -258,6 +258,60 @@ class DashboardWorkflowTests(_AuthedTestCase):
         body = response.content.decode("utf-8")
         self.assertLess(body.index(active.name), body.index(archived.name))
 
+    def test_table_filters_accept_multiple_values_and_compose(self):
+        active_lab = Project.objects.create(
+            name="Active lab",
+            status=Project.Status.ACTIVE,
+            category="homelab",
+        )
+        idea_lab = Project.objects.create(
+            name="Idea lab",
+            status=Project.Status.IDEA,
+            category="homelab",
+        )
+        Project.objects.create(
+            name="Archived lab",
+            status=Project.Status.ARCHIVED,
+            category="homelab",
+        )
+        Project.objects.create(
+            name="Active consulting",
+            status=Project.Status.ACTIVE,
+            category="other",
+        )
+
+        response = self.client.get(
+            "/projects/",
+            {"status": ["active", "idea"], "category": ["homelab"]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(response.context["projects"], [active_lab, idea_lab])
+        status_filter = next(
+            item for item in response.context["table"]["filters"]
+            if item["name"] == "status"
+        )
+        self.assertEqual(status_filter["selected_count"], 2)
+
+    def test_table_sort_is_allowlisted(self):
+        Project.objects.create(name="Safe sort")
+
+        response = self.client.get("/projects/", {"sort": "not_a_model_field"})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_table_search_combines_terms_across_searchable_fields(self):
+        matching = Project.objects.create(
+            name="Operations console",
+            technologies_used="Django SQLite",
+        )
+        Project.objects.create(name="Operations notes", technologies_used="Markdown")
+
+        response = self.client.get("/projects/", {"q": "operations django"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["projects"]), [matching])
+
     @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
     def test_docs_review_filter_uses_configured_interval(self):
         current = DocumentationRecord.objects.create(

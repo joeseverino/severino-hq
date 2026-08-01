@@ -58,3 +58,27 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
                     violations.append(f"{source_path.relative_to(root)}:{node.lineno}")
 
         self.assertEqual(violations, [])
+
+    def test_paginated_list_views_use_the_shared_table_engine(self):
+        root = Path(__file__).resolve().parents[1]
+        violations = []
+        for source_path in sorted(root.glob("*/views.py")):
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                is_paginated = any(
+                    isinstance(item, ast.Assign)
+                    and any(
+                        isinstance(target, ast.Name) and target.id == "paginate_by"
+                        for target in item.targets
+                    )
+                    for item in node.body
+                )
+                bases = {
+                    base.id for base in node.bases if isinstance(base, ast.Name)
+                }
+                if is_paginated and "TableListMixin" not in bases:
+                    violations.append(f"{source_path.relative_to(root)}:{node.name}")
+
+        self.assertEqual(violations, [])

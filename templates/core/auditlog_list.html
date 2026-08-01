@@ -4,21 +4,15 @@
 <h1>Audit log</h1>
 <p class="muted">Every important action — create / update / delete / login / export — is recorded here.</p>
 
-<form class="filter-bar" method="get">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search by object or message…">
-  <select name="action">
-    <option value="">All actions</option>
-    {% for value, label in actions %}<option value="{{ value }}" {% if value == selected_action %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
-  <button type="submit">Apply</button>
-</form>
+{% include "partials/_table_toolbar.html" %}
 
 <div class="table-scroll">
-<table class="data-table">
-  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
+<table class="data-table" data-selectable-table>
+  <thead><tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>When</th><th>Who</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
   <tbody>
     {% for ev in events %}
       <tr>
+        <td class="select-column"><input type="checkbox" data-row-select value="{{ ev.pk }}" aria-label="Select audit event {{ ev.pk }}"></td>
         <td class="muted">{{ ev.created_at }}</td>
         <td>{{ ev.user.get_username|default:"system" }}</td>
         <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
@@ -26,7 +20,7 @@
         <td class="muted">{{ ev.message }}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="muted">No audit events.</td></tr>
+      <tr><td colspan="6" class="muted">No audit events.</td></tr>
     {% endfor %}
   </tbody>
 </table>

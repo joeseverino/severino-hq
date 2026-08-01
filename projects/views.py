@@ -21,36 +21,40 @@ from application.projects import (
 )
 from application.deletion import DeleteCommand, delete_project
 from application.security import web_principal
+from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
 
-class ProjectListView(LoginRequiredMixin, ListView):
+class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
     model = Project
     template_name = "projects/project_list.html"
     context_object_name = "projects"
     paginate_by = 25
+    table_search_fields = ("name", "description", "technologies_used", "notes")
+    table_filters = (
+        TableFilter("status", "Status", "status", Project.Status.choices),
+        TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
+    )
+    table_sorts = (
+        TableSort("-updated_at", "Recently updated", ("archive_rank", "-updated_at")),
+        TableSort("name", "Name A–Z", ("archive_rank", "name")),
+        TableSort("status", "Status", ("archive_rank", "status")),
+        TableSort("category", "Category", ("archive_rank", "category")),
+    )
+    table_toggles = (
+        TableToggle("needs_output", "Needs output"),
+        TableToggle("no_content", "Missing content"),
+        TableToggle("no_docs", "Missing docs"),
+    )
+    table_default_sort = "-updated_at"
+    table_search_placeholder = "Search projects, technology, and notes…"
 
     def get_queryset(self):
         qs = Project.objects.all()
-        q = self.request.GET.get("q", "").strip()
-        status = self.request.GET.get("status", "").strip()
-        category = self.request.GET.get("category", "").strip()
-        sort = self.request.GET.get("sort", "-updated_at")
         needs_output = self.request.GET.get("needs_output", "").strip()
         no_content = self.request.GET.get("no_content", "").strip()
         no_docs = self.request.GET.get("no_docs", "").strip()
-        if q:
-            qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(description__icontains=q)
-                | Q(technologies_used__icontains=q)
-                | Q(notes__icontains=q)
-            )
-        if status:
-            qs = qs.filter(status=status)
-        if category:
-            qs = qs.filter(category=category)
         if needs_output or no_content or no_docs:
             qs = qs.annotate(
                 content_count=Count("content_items", distinct=True),
@@ -64,34 +68,14 @@ class ProjectListView(LoginRequiredMixin, ListView):
             qs = qs.filter(content_count=0)
         if no_docs:
             qs = qs.filter(doc_count=0)
-        if sort in {
-            "name", "-name", "updated_at", "-updated_at",
-            "status", "-status", "category", "-category",
-        }:
-            qs = qs.annotate(
-                archive_rank=Case(
-                    When(status=Project.Status.ARCHIVED, then=Value(1)),
-                    default=Value(0),
-                    output_field=IntegerField(),
-                )
-            ).order_by("archive_rank", sort)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx.update(
-            q=self.request.GET.get("q", ""),
-            selected_status=self.request.GET.get("status", ""),
-            selected_category=self.request.GET.get("category", ""),
-            sort=self.request.GET.get("sort", "-updated_at"),
-            status_choices=Project.Status.choices,
-            category_choices=PROJECT_CATEGORY_CHOICES,
-            needs_output=self.request.GET.get("needs_output", ""),
-            no_content=self.request.GET.get("no_content", ""),
-            no_docs=self.request.GET.get("no_docs", ""),
+        qs = qs.annotate(
+            archive_rank=Case(
+                When(status=Project.Status.ARCHIVED, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
         )
-        return ctx
-
+        return self.apply_table_query(qs)
 
 class ProjectRefreshView(LoginRequiredMixin, View):
     """Fetch metadata (like last push) from GitHub for a project."""
