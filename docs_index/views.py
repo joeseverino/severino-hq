@@ -38,12 +38,18 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
     table_filters = (
         TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
         TableFilter(
-            "environment", "Environment", "environment",
+            "environment",
+            "Environment",
+            "environment",
             DocumentationRecord.Environment.choices,
         ),
-        TableFilter("doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices),
         TableFilter(
-            "sensitivity", "Sensitivity", "sensitivity",
+            "doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices
+        ),
+        TableFilter(
+            "sensitivity",
+            "Sensitivity",
+            "sensitivity",
             DocumentationRecord.Sensitivity.choices,
         ),
     )
@@ -53,10 +59,16 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("-doc_id", "Document ID reverse", "-doc_id"),
         TableSort("title", "Title A–Z", "title"),
         TableSort("-title", "Title Z–A", "-title"),
+        TableSort("doc_type", "Type", "doc_type"),
+        TableSort("-doc_type", "Type reverse", "-doc_type"),
+        TableSort("environment", "Environment", "environment"),
+        TableSort("-environment", "Environment reverse", "-environment"),
         TableSort("last_reviewed", "Oldest review", "last_reviewed"),
         TableSort("-last_reviewed", "Newest review", "-last_reviewed"),
         TableSort("status", "Status", "status"),
         TableSort("-status", "Status reverse", "-status"),
+        TableSort("sensitivity", "Sensitivity", "sensitivity"),
+        TableSort("-sensitivity", "Sensitivity reverse", "-sensitivity"),
         TableSort("updated_at", "Least recently updated", "updated_at"),
     )
     table_toggles = (TableToggle("needs_review", "Needs review"),)
@@ -73,12 +85,11 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
         # default Docs view unless the user explicitly filtered for that
         # doc_type or searched for one.
         if not doc_types and not q:
-            qs = qs.exclude(
-                doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
-            )
+            qs = qs.exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
         if needs_review:
             qs = qs.needing_review()
         return self.apply_table_query(qs)
+
 
 class DocsDetailView(LoginRequiredMixin, DetailView):
     model = DocumentationRecord

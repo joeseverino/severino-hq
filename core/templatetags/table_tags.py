@@ -9,7 +9,7 @@ def table_sort_header(context, label, ascending, descending=""):
     table = context["table"]
     current = table["selected_sort"]
     descending = descending or f"-{ascending}"
-    next_sort = ascending if current == descending else descending
+    next_sort = descending if current == ascending else ascending
     params = context["request"].GET.copy()
     params["sort"] = next_sort
     params.pop("page", None)
@@ -24,4 +24,5 @@ def table_sort_header(context, label, ascending, descending=""):
         "label": label,
         "url": f"?{params.urlencode()}",
         "direction": direction,
+        "next_direction": "descending" if next_sort == descending else "ascending",
     }

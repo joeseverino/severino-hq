@@ -12,7 +12,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Item" "item_name" "-item_name" %}<th>Vendor</th>{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Purchased" "purchase_date" "-purchase_date" %}{% table_sort_header "Cost" "total_cost" "-total_cost" %}<th>% biz</th><th>Est. deduct.</th>{% table_sort_header "Status" "status" "-status" %}</tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Item" "item_name" "-item_name" %}{% table_sort_header "Vendor" "vendor" "-vendor" %}{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Purchased" "purchase_date" "-purchase_date" %}{% table_sort_header "Cost" "total_cost" "-total_cost" %}{% table_sort_header "% biz" "business_use_percentage" "-business_use_percentage" %}{% table_sort_header "Est. deduct." "estimated_deductible_amount" "-estimated_deductible_amount" %}{% table_sort_header "Status" "status" "-status" %}</tr>
   </thead>
   <tbody>
     {% for a in assets_list %}

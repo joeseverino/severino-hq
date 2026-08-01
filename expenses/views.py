@@ -32,19 +32,40 @@ class ExpenseListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("date", "Oldest expense", "date"),
         TableSort("vendor", "Vendor A–Z", "vendor"),
         TableSort("-vendor", "Vendor Z–A", "-vendor"),
+        TableSort("item", "Item A–Z", "item"),
+        TableSort("-item", "Item Z–A", "-item"),
         TableSort("-total_cost", "Highest cost", "-total_cost"),
         TableSort("total_cost", "Lowest cost", "total_cost"),
         TableSort("category", "Category", "category"),
         TableSort("-category", "Category reverse", "-category"),
-        TableSort("-estimated_deductible_amount", "Highest deductible", "-estimated_deductible_amount"),
-        TableSort("estimated_deductible_amount", "Lowest deductible", "estimated_deductible_amount"),
+        TableSort(
+            "-estimated_deductible_amount",
+            "Highest deductible",
+            "-estimated_deductible_amount",
+        ),
+        TableSort(
+            "estimated_deductible_amount",
+            "Lowest deductible",
+            "estimated_deductible_amount",
+        ),
+        TableSort(
+            "business_use_percentage", "Lowest business use", "business_use_percentage"
+        ),
+        TableSort(
+            "-business_use_percentage",
+            "Highest business use",
+            "-business_use_percentage",
+        ),
     )
     table_toggles = (TableToggle("no_receipts", "Missing receipt"),)
     table_default_sort = "-date"
     table_search_placeholder = "Search vendors, items, purpose, and notes…"
 
     def get_table_filters(self):
-        years = [(date.year, str(date.year)) for date in Expense.objects.dates("date", "year")]
+        years = [
+            (date.year, str(date.year))
+            for date in Expense.objects.dates("date", "year")
+        ]
         return (
             TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES),
             TableFilter("year", "Year", "date__year", years),
@@ -125,5 +146,7 @@ class ExpenseDeleteView(LoginRequiredMixin, DeleteView):
             principal=web_principal(self.request.user),
             current_id=expense_id,
         )
-        messages.success(self.request, f"Expense deleted: {result['deleted']['label']}.")
+        messages.success(
+            self.request, f"Expense deleted: {result['deleted']['label']}."
+        )
         return redirect(self.success_url)

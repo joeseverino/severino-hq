@@ -78,14 +78,22 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Live infra status is NOT computed here — HQ links out to Uptime Kuma
         # on the VPS rather than duplicating a status checker.
         external_links = [
-            {"label": "Live status", "sub": "Uptime Kuma · VPS",
-             "href": "https://status.jseverino.com"},
-            {"label": "Health endpoint", "sub": "liveness",
-             "href": "https://health.jseverino.com"},
-            {"label": "Portainer", "sub": "containers",
-             "href": "http://admin.homelab"},
-            {"label": "Public site", "sub": "jseverino.com",
-             "href": "https://jseverino.com"},
+            {
+                "label": "Live status",
+                "sub": "Uptime Kuma · VPS",
+                "href": "https://status.jseverino.com",
+            },
+            {
+                "label": "Health endpoint",
+                "sub": "liveness",
+                "href": "https://health.jseverino.com",
+            },
+            {"label": "Portainer", "sub": "containers", "href": "http://admin.homelab"},
+            {
+                "label": "Public site",
+                "sub": "jseverino.com",
+                "href": "https://jseverino.com",
+            },
         ]
 
         ctx.update(
@@ -181,7 +189,7 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "core/auditlog_list.html"
     context_object_name = "events"
     paginate_by = 50
-    table_search_fields = ("object_repr", "message", "object_type", "object_id")
+    table_search_scope = "audit"
     table_filters = (
         TableFilter("action", "Action", "action", AuditLog.Action.choices),
     )
@@ -189,7 +197,13 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("-created_at", "Newest event", "-created_at"),
         TableSort("created_at", "Oldest event", "created_at"),
         TableSort("action", "Action", "action"),
+        TableSort("-action", "Action reverse", "-action"),
         TableSort("object_type", "Object type", "object_type"),
+        TableSort("-object_type", "Object type reverse", "-object_type"),
+        TableSort("user__username", "User A–Z", "user__username"),
+        TableSort("-user__username", "User Z–A", "-user__username"),
+        TableSort("message", "Message A–Z", "message"),
+        TableSort("-message", "Message Z–A", "-message"),
     )
     table_default_sort = "-created_at"
     table_search_placeholder = "Search objects, IDs, and messages…"

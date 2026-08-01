@@ -1,3 +1,3 @@
 <th aria-sort="{{ direction }}">
-  <a class="table-sort-link" href="{{ url }}">{{ label }}<span aria-hidden="true" class="sort-indicator">{% if direction == "ascending" %}↑{% elif direction == "descending" %}↓{% else %}↕{% endif %}</span></a>
+  <a class="table-sort-link" href="{{ url }}" aria-label="Sort by {{ label }}, {{ next_direction }}">{{ label }}<span aria-hidden="true" class="sort-indicator">{% if direction == "ascending" %}↑{% elif direction == "descending" %}↓{% else %}↕{% endif %}</span></a>
 </th>

@@ -34,12 +34,32 @@ class AssetListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("purchase_date", "Oldest purchase", "purchase_date"),
         TableSort("item_name", "Name A–Z", "item_name"),
         TableSort("-item_name", "Name Z–A", "-item_name"),
+        TableSort("vendor", "Vendor A–Z", "vendor"),
+        TableSort("-vendor", "Vendor Z–A", "-vendor"),
         TableSort("-total_cost", "Highest cost", "-total_cost"),
         TableSort("total_cost", "Lowest cost", "total_cost"),
         TableSort("status", "Status", "status"),
         TableSort("-status", "Status reverse", "-status"),
         TableSort("category", "Category", "category"),
         TableSort("-category", "Category reverse", "-category"),
+        TableSort(
+            "business_use_percentage", "Lowest business use", "business_use_percentage"
+        ),
+        TableSort(
+            "-business_use_percentage",
+            "Highest business use",
+            "-business_use_percentage",
+        ),
+        TableSort(
+            "estimated_deductible_amount",
+            "Lowest deductible",
+            "estimated_deductible_amount",
+        ),
+        TableSort(
+            "-estimated_deductible_amount",
+            "Highest deductible",
+            "-estimated_deductible_amount",
+        ),
     )
     table_toggles = (TableToggle("missing_purchase", "Missing purchase info"),)
     table_default_sort = "-purchase_date"
@@ -52,6 +72,7 @@ class AssetListView(TableListMixin, LoginRequiredMixin, ListView):
                 Q(purchase_date__isnull=True) | Q(total_cost=0)
             )
         return self.apply_table_query(qs)
+
 
 class AssetDetailView(LoginRequiredMixin, DetailView):
     model = Asset

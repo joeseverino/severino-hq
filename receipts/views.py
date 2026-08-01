@@ -56,6 +56,8 @@ class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("-vendor", "Vendor Z–A", "-vendor"),
         TableSort("-amount", "Highest amount", "-amount"),
         TableSort("amount", "Lowest amount", "amount"),
+        TableSort("original_filename", "Filename A–Z", "original_filename"),
+        TableSort("-original_filename", "Filename Z–A", "-original_filename"),
         TableSort("uploaded_at", "Least recently uploaded", "uploaded_at"),
     )
     table_toggles = (TableToggle("unlinked", "Unlinked only"),)
@@ -67,6 +69,7 @@ class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
         if self.request.GET.get("unlinked"):
             qs = qs.filter(related_expense__isnull=True, related_asset__isnull=True)
         return self.apply_table_query(qs)
+
 
 class ReceiptDetailView(LoginRequiredMixin, DetailView):
     model = Receipt

@@ -83,12 +83,8 @@ class TableListMixin:
 
         requested_sort = self.request.GET.get("sort")
         selected_sort = requested_sort or self.table_default_sort
-        if (
-            query
-            and self.table_search_scope
-            and requested_sort in (None, "_relevance")
-        ):
-            queryset = queryset.order_by("_search_rank")
+        if query and self.table_search_scope and requested_sort in (None, "_relevance"):
+            queryset = queryset.order_by("_search_rank", "pk")
             return queryset
         sort = next(
             (spec for spec in self.get_table_sorts() if spec.value == selected_sort),
@@ -98,6 +94,9 @@ class TableListMixin:
             ordering = (
                 sort.ordering if isinstance(sort.ordering, tuple) else (sort.ordering,)
             )
+            # Stable pagination: equal values must not drift between pages.
+            if not any(field.lstrip("-") == "pk" for field in ordering):
+                ordering = (*ordering, "pk")
             queryset = queryset.order_by(*ordering)
         return queryset
 

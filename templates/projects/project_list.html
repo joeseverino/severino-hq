@@ -11,7 +11,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Name" "name" "-name" %}{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Status" "status" "-status" %}<th>Tech</th>{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th></th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Name" "name" "-name" %}{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Status" "status" "-status" %}{% table_sort_header "Tech" "technologies_used" "-technologies_used" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th></th></tr>
   </thead>
   <tbody>
     {% for p in projects %}
