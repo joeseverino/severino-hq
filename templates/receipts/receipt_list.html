@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize table_tags %}
 {% block title %}Receipts · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -13,7 +13,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Uploaded</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Filename</th><th>Links</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Uploaded" "uploaded_at" "-uploaded_at" %}{% table_sort_header "Vendor" "vendor" "-vendor" %}{% table_sort_header "Date" "date" "-date" %}{% table_sort_header "Amount" "amount" "-amount" %}{% table_sort_header "Filename" "original_filename" "-original_filename" %}<th>Links</th></tr>
   </thead>
   <tbody>
     {% for r in receipts_list %}

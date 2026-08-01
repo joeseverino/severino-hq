@@ -24,7 +24,7 @@ class ContentListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "content/content_list.html"
     context_object_name = "items"
     paginate_by = 25
-    table_search_fields = ("title", "topic", "tags", "notes")
+    table_search_scope = "content"
     table_filters = (
         TableFilter("status", "Status", "status", ContentItem.Status.choices),
         TableFilter("content_type", "Type", "content_type", ContentItem.Type.choices),
@@ -32,8 +32,14 @@ class ContentListView(TableListMixin, LoginRequiredMixin, ListView):
     table_sorts = (
         TableSort("-updated_at", "Recently updated", "-updated_at"),
         TableSort("title", "Title A–Z", "title"),
+        TableSort("-title", "Title Z–A", "-title"),
         TableSort("-published_at", "Recently published", "-published_at"),
+        TableSort("published_at", "Oldest published", "published_at"),
         TableSort("status", "Status", "status"),
+        TableSort("-status", "Status reverse", "-status"),
+        TableSort("content_type", "Type", "content_type"),
+        TableSort("-content_type", "Type reverse", "-content_type"),
+        TableSort("updated_at", "Least recently updated", "updated_at"),
     )
     table_toggles = (TableToggle("no_docs", "Missing documentation"),)
     table_default_sort = "-updated_at"

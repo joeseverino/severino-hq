@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load table_tags %}
 {% block title %}Content · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -11,7 +11,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Title</th><th>Type</th><th>Status</th><th>Description</th><th>Published</th><th>Updated</th><th class="actions-col">Open</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "content_type" "-content_type" %}{% table_sort_header "Status" "status" "-status" %}<th>Description</th>{% table_sort_header "Published" "published_at" "-published_at" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th class="actions-col">Open</th></tr>
   </thead>
   <tbody>
     {% for c in items %}

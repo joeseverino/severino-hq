@@ -31,16 +31,30 @@ class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "projects/project_list.html"
     context_object_name = "projects"
     paginate_by = 25
-    table_search_fields = ("name", "description", "technologies_used", "notes")
+    table_search_scope = "projects"
     table_filters = (
         TableFilter("status", "Status", "status", Project.Status.choices),
         TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
     )
     table_sorts = (
         TableSort("-updated_at", "Recently updated", ("archive_rank", "-updated_at")),
+        TableSort(
+            "updated_at", "Least recently updated", ("archive_rank", "updated_at")
+        ),
         TableSort("name", "Name A–Z", ("archive_rank", "name")),
+        TableSort("-name", "Name Z–A", ("archive_rank", "-name")),
         TableSort("status", "Status", ("archive_rank", "status")),
+        TableSort("-status", "Status reverse", ("archive_rank", "-status")),
         TableSort("category", "Category", ("archive_rank", "category")),
+        TableSort("-category", "Category reverse", ("archive_rank", "-category")),
+        TableSort(
+            "technologies_used", "Technology A–Z", ("archive_rank", "technologies_used")
+        ),
+        TableSort(
+            "-technologies_used",
+            "Technology Z–A",
+            ("archive_rank", "-technologies_used"),
+        ),
     )
     table_toggles = (
         TableToggle("needs_output", "Needs output"),
@@ -76,6 +90,7 @@ class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
             )
         )
         return self.apply_table_query(qs)
+
 
 class ProjectRefreshView(LoginRequiredMixin, View):
     """Fetch metadata (like last push) from GitHub for a project."""
@@ -162,5 +177,7 @@ class ProjectDeleteView(LoginRequiredMixin, DeleteView):
             principal=web_principal(self.request.user),
             current_slug=slug,
         )
-        messages.success(self.request, f"Project “{result['deleted']['label']}” deleted.")
+        messages.success(
+            self.request, f"Project “{result['deleted']['label']}” deleted."
+        )
         return redirect(self.success_url)

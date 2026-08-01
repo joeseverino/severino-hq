@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load table_tags %}
 {% block title %}Audit log · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <h1>Audit log</h1>
@@ -8,7 +8,7 @@
 
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
-  <thead><tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>When</th><th>Who</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
+  <thead><tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "When" "created_at" "-created_at" %}{% table_sort_header "Who" "user__username" "-user__username" %}{% table_sort_header "Action" "action" "-action" %}{% table_sort_header "Object" "object_type" "-object_type" %}{% table_sort_header "Message" "message" "-message" %}</tr></thead>
   <tbody>
     {% for ev in events %}
       <tr>

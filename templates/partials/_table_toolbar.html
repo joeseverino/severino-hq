@@ -20,6 +20,7 @@
     {% if table.sorts %}
       <label class="table-sort">Sort
         <select name="sort">
+          {% if table.query %}<option value="_relevance"{% if table.selected_sort == "_relevance" %} selected{% endif %}>Relevance</option>{% endif %}
           {% for sort in table.sorts %}<option value="{{ sort.value }}"{% if sort.value == table.selected_sort %} selected{% endif %}>{{ sort.label }}</option>{% endfor %}
         </select>
       </label>

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load table_tags %}
 {% block title %}Documentation index · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -15,7 +15,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Doc ID</th><th>Title</th><th>Type</th><th>Environment</th><th>Status</th><th>Sensitivity</th><th>Last reviewed</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Doc ID" "doc_id" "-doc_id" %}{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "doc_type" "-doc_type" %}{% table_sort_header "Environment" "environment" "-environment" %}{% table_sort_header "Status" "status" "-status" %}{% table_sort_header "Sensitivity" "sensitivity" "-sensitivity" %}{% table_sort_header "Last reviewed" "last_reviewed" "-last_reviewed" %}</tr>
   </thead>
   <tbody>
     {% for d in records %}

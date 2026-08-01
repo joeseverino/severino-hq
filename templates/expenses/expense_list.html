@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize table_tags %}
 {% block title %}Expenses · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -14,7 +14,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Date</th><th>Vendor</th><th>Item</th><th>Category</th><th>Cost</th><th>% biz</th><th>Est. deduct.</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Date" "date" "-date" %}{% table_sort_header "Vendor" "vendor" "-vendor" %}{% table_sort_header "Item" "item" "-item" %}{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Cost" "total_cost" "-total_cost" %}{% table_sort_header "% biz" "business_use_percentage" "-business_use_percentage" %}{% table_sort_header "Est. deduct." "estimated_deductible_amount" "-estimated_deductible_amount" %}</tr>
   </thead>
   <tbody>
     {% for e in expenses_list %}

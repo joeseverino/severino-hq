@@ -127,6 +127,7 @@ INSTALLED_APPS = [
     "reports",
     "contacts",
     "control_plane",
+    "search_index",
 ]
 
 MIDDLEWARE = [
