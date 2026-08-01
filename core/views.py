@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.views.generic import ListView, TemplateView
 
 from application.dashboard import operating_snapshot
+from application.tables import TableFilter, TableListMixin, TableSort
 from assets.models import Asset
 from contacts.d1 import (
     D1Error,
@@ -175,25 +176,24 @@ class SearchView(LoginRequiredMixin, TemplateView):
         }
 
 
-class AuditLogListView(LoginRequiredMixin, ListView):
+class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
     model = AuditLog
     template_name = "core/auditlog_list.html"
     context_object_name = "events"
     paginate_by = 50
+    table_search_fields = ("object_repr", "message", "object_type", "object_id")
+    table_filters = (
+        TableFilter("action", "Action", "action", AuditLog.Action.choices),
+    )
+    table_sorts = (
+        TableSort("-created_at", "Newest event", "-created_at"),
+        TableSort("created_at", "Oldest event", "created_at"),
+        TableSort("action", "Action", "action"),
+        TableSort("object_type", "Object type", "object_type"),
+    )
+    table_default_sort = "-created_at"
+    table_search_placeholder = "Search objects, IDs, and messages…"
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user")
-        q = self.request.GET.get("q", "").strip()
-        action = self.request.GET.get("action", "").strip()
-        if q:
-            qs = qs.filter(Q(object_repr__icontains=q) | Q(message__icontains=q))
-        if action:
-            qs = qs.filter(action=action)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["actions"] = AuditLog.Action.choices
-        ctx["q"] = self.request.GET.get("q", "")
-        ctx["selected_action"] = self.request.GET.get("action", "")
-        return ctx
+        return self.apply_table_query(qs)

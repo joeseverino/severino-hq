@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
@@ -43,11 +42,7 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         )
         asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
 
-        review_cutoff = timezone.localdate() - timedelta(days=180)
-        docs_needing_review = DocumentationRecord.objects.filter(
-            Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
-            status=DocumentationRecord.Status.ACTIVE,
-        )
+        docs_needing_review = DocumentationRecord.objects.needing_review()
 
         ctx.update(
             year=year,

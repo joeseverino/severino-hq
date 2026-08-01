@@ -22,7 +22,7 @@ over Tailscale.
 
 ## Stack
 
-- Django 5 + SQLite (PostgreSQL is a future option)
+- Django 6 + SQLite (PostgreSQL is a future option)
 - Django templates (HTMX hook left in `base.html` for future use)
 - Plain CSS (no build step, no CDN runtime dependencies)
 - Django auth, Django admin, Django ORM and migrations

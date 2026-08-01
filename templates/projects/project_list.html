@@ -6,41 +6,17 @@
   <a class="btn primary" href="{% url 'projects:create' %}">New project</a>
 </div>
 
-<form class="filter-bar" method="get">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search projects…">
-  <select name="status">
-    <option value="">All statuses</option>
-    {% for value, label in status_choices %}
-      <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <select name="category">
-    <option value="">All categories</option>
-    {% for value, label in category_choices %}
-      <option value="{{ value }}" {% if value == selected_category %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  <select name="sort">
-    <option value="-updated_at" {% if sort == "-updated_at" %}selected{% endif %}>Updated (newest)</option>
-    <option value="updated_at" {% if sort == "updated_at" %}selected{% endif %}>Updated (oldest)</option>
-    <option value="name" {% if sort == "name" %}selected{% endif %}>Name A→Z</option>
-    <option value="-name" {% if sort == "-name" %}selected{% endif %}>Name Z→A</option>
-    <option value="status" {% if sort == "status" %}selected{% endif %}>Status</option>
-  </select>
-  <label class="inline"><input type="checkbox" name="needs_output" value="1" {% if needs_output %}checked{% endif %}> Needs output</label>
-  <label class="inline"><input type="checkbox" name="no_content" value="1" {% if no_content %}checked{% endif %}> No content</label>
-  <label class="inline"><input type="checkbox" name="no_docs" value="1" {% if no_docs %}checked{% endif %}> No docs</label>
-  <button type="submit">Apply</button>
-</form>
+{% include "partials/_table_toolbar.html" %}
 
 <div class="table-scroll">
-<table class="data-table">
+<table class="data-table" data-selectable-table>
   <thead>
-    <tr><th>Name</th><th>Category</th><th>Status</th><th>Tech</th><th>Updated</th><th></th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Name</th><th>Category</th><th>Status</th><th>Tech</th><th>Updated</th><th></th></tr>
   </thead>
   <tbody>
     {% for p in projects %}
       <tr>
+        <td class="select-column"><input type="checkbox" data-row-select value="{{ p.slug }}" aria-label="Select {{ p.name }}"></td>
         <td><a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a><br><span class="muted">{{ p.slug }}</span></td>
         <td>{{ p.get_category_display }}</td>
         <td><span class="pill pill-{{ p.status }}">{{ p.get_status_display }}</span></td>
@@ -51,7 +27,7 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="6" class="muted">No projects yet. <a href="{% url 'projects:create' %}">Create one</a>.</td></tr>
+      <tr><td colspan="7" class="muted">No projects yet. <a href="{% url 'projects:create' %}">Create one</a>.</td></tr>
     {% endfor %}
   </tbody>
 </table>

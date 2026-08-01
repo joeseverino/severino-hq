@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
+from expenses.models import Expense
 from projects.models import Project
 
 from .dashboard import operating_snapshot
@@ -31,6 +35,48 @@ class DashboardProjectionTests(TestCase):
             snapshot["priority_count"],
             sum(item["count"] for item in snapshot["priority"]),
         )
+
+    def test_expense_kpis_respect_fiscal_year_start(self):
+        today = timezone.localdate()
+        Expense.objects.create(
+            date=today,
+            vendor="Now",
+            item="This fiscal year",
+            category="hosting",
+            total_cost=Decimal("10.00"),
+        )
+        Expense.objects.create(
+            date=today - timedelta(days=45),
+            vendor="Then",
+            item="Before the fiscal year started",
+            category="hosting",
+            total_cost=Decimal("7.00"),
+        )
+        Expense.objects.create(
+            date=today + timedelta(days=1),
+            vendor="Future",
+            item="Not year-to-date yet",
+            category="hosting",
+            total_cost=Decimal("99.00"),
+        )
+
+        # Fiscal year starting this month: the 45-day-old expense falls outside.
+        with (
+            override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
+            patch("application.dashboard.get_unread_count", return_value=0),
+        ):
+            snapshot = operating_snapshot()
+        self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
+        self.assertEqual(Decimal(snapshot["kpis"]["expenses_total"]), Decimal("10.00"))
+
+        # Fiscal year starting next month began ~11 months ago: both past
+        # expenses fall inside, while the future expense remains excluded.
+        with (
+            override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
+            patch("application.dashboard.get_unread_count", return_value=0),
+        ):
+            snapshot = operating_snapshot()
+        self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
 
 
 class OperationProjectionTests(TestCase):

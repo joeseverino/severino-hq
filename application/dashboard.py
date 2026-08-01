@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -65,19 +64,17 @@ def operating_snapshot() -> dict[str, Any]:
         unread_contacts_count = 0
         contacts_status = "unavailable"
     today = timezone.localdate()
-    year_start = today.replace(month=1, day=1)
-    expenses = Expense.objects.filter(date__gte=year_start).aggregate(
+    fiscal_start_month = getattr(settings, "SEVERINO_FISCAL_YEAR_START_MONTH", 1)
+    year_start = today.replace(month=fiscal_start_month, day=1)
+    if year_start > today:
+        year_start = year_start.replace(year=today.year - 1)
+    expenses = Expense.objects.filter(date__range=(year_start, today)).aggregate(
         total=Sum("total_cost"),
         deductible=Sum("estimated_deductible_amount"),
         count=Count("id"),
     )
 
-    review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-    review_cutoff = today - timedelta(days=review_days)
-    docs_needing_review = DocumentationRecord.objects.filter(
-        Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
-        status=DocumentationRecord.Status.ACTIVE,
-    ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
+    docs_needing_review = DocumentationRecord.objects.needing_review()
 
     active_projects = Project.objects.filter(status=Project.Status.ACTIVE)
     project_health = active_projects.annotate(
@@ -91,6 +88,10 @@ def operating_snapshot() -> dict[str, Any]:
         status=ContentItem.Status.PUBLISHED
     )
     draft_content = ContentItem.objects.filter(status=ContentItem.Status.DRAFT)
+
+    docs_needing_review_count = docs_needing_review.count()
+    projects_needing_output_count = projects_needing_output.count()
+    draft_content_count = draft_content.count()
 
     receipts_unlinked = Receipt.objects.filter(
         related_expense__isnull=True,
@@ -129,10 +130,10 @@ def operating_snapshot() -> dict[str, Any]:
             if (health := resource_health(resource))["state"]
             in {"degraded", "pending", "unknown"}
         ],
-        {"code": "docs_review", "label": "Docs need review", "count": docs_needing_review.count()},
-        {"code": "draft_content", "label": "Draft content", "count": draft_content.count()},
+        {"code": "docs_review", "label": "Docs need review", "count": docs_needing_review_count},
+        {"code": "draft_content", "label": "Draft content", "count": draft_content_count},
         {"code": "unread_contacts", "label": "Unread contact submissions", "count": unread_contacts_count},
-        {"code": "projects_output", "label": "Active projects need output", "count": projects_needing_output.count()},
+        {"code": "projects_output", "label": "Active projects need output", "count": projects_needing_output_count},
         {"code": "receipts_unlinked", "label": "Receipts need links", "count": receipts_unlinked},
         {"code": "expenses_receipts", "label": "Expenses need receipts", "count": expenses_without_receipts},
         {"code": "assets_purchase", "label": "Assets missing purchase info", "count": assets_missing_purchase},
@@ -145,10 +146,10 @@ def operating_snapshot() -> dict[str, Any]:
         "year": today.year,
         "kpis": {
             "active_projects": active_projects.count(),
-            "projects_needing_output": projects_needing_output.count(),
-            "draft_content": draft_content.count(),
+            "projects_needing_output": projects_needing_output_count,
+            "draft_content": draft_content_count,
             "published_content": published_content.count(),
-            "docs_needing_review": docs_needing_review.count(),
+            "docs_needing_review": docs_needing_review_count,
             "expenses_total": str(expenses["total"] or ZERO_MONEY),
             "expenses_count": expenses["count"] or 0,
             "deductible_total": str(expenses["deductible"] or ZERO_MONEY),

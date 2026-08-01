@@ -8,7 +8,7 @@
   </div>
   <div class="page-actions">
     {% if project.repository_url and "github.com" in project.repository_url %}
-      <form action="{% url 'projects:refresh' project.slug %}" method="post" style="display:inline">
+      <form action="{% url 'projects:refresh' project.slug %}" method="post" class="inline">
         {% csrf_token %}
         <button type="submit" class="btn">Refresh</button>
       </form>

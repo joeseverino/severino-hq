@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.utils import timezone
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -26,83 +22,60 @@ from application.documentation import (
 )
 from application.deletion import DeleteCommand, delete_documentation
 from application.security import web_principal
+from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 
-class DocsListView(LoginRequiredMixin, ListView):
+class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
     model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
     context_object_name = "records"
     paginate_by = 25
+    table_search_fields = (
+        "doc_id", "title", "system_service", "obsidian_path", "notes",
+    )
+    table_filters = (
+        TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
+        TableFilter(
+            "environment", "Environment", "environment",
+            DocumentationRecord.Environment.choices,
+        ),
+        TableFilter("doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices),
+        TableFilter(
+            "sensitivity", "Sensitivity", "sensitivity",
+            DocumentationRecord.Sensitivity.choices,
+        ),
+    )
+    table_sorts = (
+        TableSort("-updated_at", "Recently updated", "-updated_at"),
+        TableSort("doc_id", "Document ID", "doc_id"),
+        TableSort("title", "Title A–Z", "title"),
+        TableSort("last_reviewed", "Oldest review", "last_reviewed"),
+        TableSort("status", "Status", "status"),
+    )
+    table_toggles = (TableToggle("needs_review", "Needs review"),)
+    table_default_sort = "-updated_at"
+    table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
     def get_queryset(self):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
-        status = self.request.GET.get("status", "").strip()
-        env = self.request.GET.get("environment", "").strip()
-        doc_type = self.request.GET.get("doc_type", "").strip()
-        sensitivity = self.request.GET.get("sensitivity", "").strip()
+        doc_types = self.table_values("doc_type")
         needs_review = self.request.GET.get("needs_review", "").strip()
-        sort = self.request.GET.get("sort", "-updated_at")
-        if q:
-            qs = qs.filter(
-                Q(doc_id__icontains=q)
-                | Q(title__icontains=q)
-                | Q(system_service__icontains=q)
-                | Q(obsidian_path__icontains=q)
-                | Q(notes__icontains=q)
-            )
-        for field, value in [
-            ("status", status),
-            ("environment", env),
-            ("doc_type", doc_type),
-            ("sensitivity", sensitivity),
-        ]:
-            if value:
-                qs = qs.filter(**{field: value})
 
         # Writeups and pages live in the Content tab; hide them from the
         # default Docs view unless the user explicitly filtered for that
         # doc_type or searched for one.
-        if not doc_type and not q:
+        if not doc_types and not q:
             qs = qs.exclude(
                 doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
             )
         if needs_review:
-            review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-            cutoff = timezone.localdate() - timedelta(days=review_days)
-            qs = qs.filter(
-                Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
-                status=DocumentationRecord.Status.ACTIVE,
-            ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
-        if sort in {
-            "doc_id", "-doc_id", "title", "-title",
-            "updated_at", "-updated_at", "last_reviewed", "-last_reviewed",
-            "status", "-status",
-        }:
-            qs = qs.order_by(sort)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx.update(
-            q=self.request.GET.get("q", ""),
-            selected_status=self.request.GET.get("status", ""),
-            selected_env=self.request.GET.get("environment", ""),
-            selected_type=self.request.GET.get("doc_type", ""),
-            selected_sensitivity=self.request.GET.get("sensitivity", ""),
-            needs_review=self.request.GET.get("needs_review", ""),
-            sort=self.request.GET.get("sort", "-updated_at"),
-            status_choices=DocumentationRecord.Status.choices,
-            env_choices=DocumentationRecord.Environment.choices,
-            type_choices=DocumentationRecord.DocType.choices,
-            sensitivity_choices=DocumentationRecord.Sensitivity.choices,
-        )
-        return ctx
-
+            qs = qs.needing_review()
+        return self.apply_table_query(qs)
 
 class DocsDetailView(LoginRequiredMixin, DetailView):
     model = DocumentationRecord

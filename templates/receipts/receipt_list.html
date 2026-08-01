@@ -8,19 +8,17 @@
 </div>
 <p class="muted">Receipt files are stored privately on disk. They are never publicly accessible — only signed-in users can fetch them through this app.</p>
 
-<form class="filter-bar" method="get">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search vendor / filename / notes…">
-  <button type="submit">Apply</button>
-</form>
+{% include "partials/_table_toolbar.html" %}
 
 <div class="table-scroll">
-<table class="data-table">
+<table class="data-table" data-selectable-table>
   <thead>
-    <tr><th>Uploaded</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Filename</th><th>Links</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th><th>Uploaded</th><th>Vendor</th><th>Date</th><th>Amount</th><th>Filename</th><th>Links</th></tr>
   </thead>
   <tbody>
     {% for r in receipts_list %}
       <tr>
+        <td class="select-column"><input type="checkbox" data-row-select value="{{ r.pk }}" aria-label="Select receipt {{ r.pk }}"></td>
         <td><a href="{{ r.get_absolute_url }}">{{ r.uploaded_at }}</a></td>
         <td>{{ r.vendor|default:"—" }}</td>
         <td>{{ r.date|default:"—" }}</td>
@@ -32,7 +30,7 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="6" class="muted">No receipts yet.</td></tr>
+      <tr><td colspan="7" class="muted">No receipts yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
