@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -72,12 +71,7 @@ def operating_snapshot() -> dict[str, Any]:
         count=Count("id"),
     )
 
-    review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-    review_cutoff = today - timedelta(days=review_days)
-    docs_needing_review = DocumentationRecord.objects.filter(
-        Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=review_cutoff),
-        status=DocumentationRecord.Status.ACTIVE,
-    ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
+    docs_needing_review = DocumentationRecord.objects.needing_review()
 
     active_projects = Project.objects.filter(status=Project.Status.ACTIVE)
     project_health = active_projects.annotate(

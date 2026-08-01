@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.utils import timezone
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -72,12 +69,7 @@ class DocsListView(LoginRequiredMixin, ListView):
                 doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
             )
         if needs_review:
-            review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-            cutoff = timezone.localdate() - timedelta(days=review_days)
-            qs = qs.filter(
-                Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
-                status=DocumentationRecord.Status.ACTIVE,
-            ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
+            qs = qs.needing_review()
         if sort in {
             "doc_id", "-doc_id", "title", "-title",
             "updated_at", "-updated_at", "last_reviewed", "-last_reviewed",

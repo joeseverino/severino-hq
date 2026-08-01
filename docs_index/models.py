@@ -10,10 +10,31 @@ No secrets should be stored here.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import TimestampedModel
+
+
+class DocumentationQuerySet(models.QuerySet):
+    def needing_review(self):
+        """Active docs past the configured review interval (or never reviewed).
+
+        The one shared definition used by the dashboard, the docs list filter,
+        and the reports page. Public article drafts are excluded — they live in
+        the Content pipeline, not the review cycle.
+        """
+        review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
+        cutoff = timezone.localdate() - timedelta(days=review_days)
+        return self.filter(
+            Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
+            status=DocumentationRecord.Status.ACTIVE,
+        ).exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
 
 
 class DocumentationRecord(TimestampedModel):
@@ -132,6 +153,8 @@ class DocumentationRecord(TimestampedModel):
     related_expenses = models.ManyToManyField(
         "expenses.Expense", blank=True, related_name="documentation_records"
     )
+
+    objects = DocumentationQuerySet.as_manager()
 
     class Meta:
         ordering = ("-updated_at",)
