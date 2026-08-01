@@ -46,10 +46,14 @@
     const main = document.querySelector("main");
     main.setAttribute("aria-busy", "true");
     try {
-      const response = await fetch(url, {
-        headers: { "X-HQ-Table-Request": "1" },
-        signal: controller.signal,
-      });
+      const response = await fetch(url, { signal: controller.signal });
+      // An expired session 302s to the login page; fetch follows it and would
+      // otherwise splice login-page fragments into the table. Hand the whole
+      // navigation to the browser instead.
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
       if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
       const next = new DOMParser().parseFromString(await response.text(), "text/html");
       const selectors = [
@@ -58,11 +62,15 @@
         ".table-scroll",
         ".pagination",
       ];
+      // Replace every match pairwise so pages with more than one table
+      // (e.g. control_plane resource list) swap all of them, not just the first.
       selectors.forEach((selector) => {
-        const currentNode = document.querySelector(selector);
-        const nextNode = next.querySelector(selector);
-        if (currentNode && nextNode) currentNode.replaceWith(nextNode);
-        else if (currentNode && !nextNode) currentNode.remove();
+        const nextNodes = next.querySelectorAll(selector);
+        document.querySelectorAll(selector).forEach((currentNode, index) => {
+          const nextNode = nextNodes[index];
+          if (nextNode) currentNode.replaceWith(nextNode);
+          else currentNode.remove();
+        });
       });
       document.title = next.title;
       if (history === "push") window.history.pushState({}, "", url);
@@ -100,6 +108,9 @@
   });
 
   document.addEventListener("click", (event) => {
+    // Leave modified clicks (new tab, window, download) to the browser.
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest(".table-sort-link, .pagination a");
     if (!link) return;
     event.preventDefault();
