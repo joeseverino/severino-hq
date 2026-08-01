@@ -146,6 +146,7 @@
         "[data-table-selection]",
         ".table-scroll",
         ".pagination",
+        "[data-search-results]",
       ];
       // Replace every match pairwise so pages with more than one table
       // (e.g. control_plane resource list) swap all of them, not just the first.

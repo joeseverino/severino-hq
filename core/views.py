@@ -5,23 +5,18 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
 from django.urls import reverse
 from django.views.generic import ListView, TemplateView
 
 from application.dashboard import operating_snapshot
+from application.search import global_search
+from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
-from assets.models import Asset
 from contacts.d1 import (
     D1Error,
     get_recent_submissions,
     search_submissions,
 )
-from content.models import ContentItem
-from docs_index.models import DocumentationRecord
-from expenses.models import Expense
-from projects.models import Project
-from receipts.models import Receipt
 from .models import AuditLog
 
 
@@ -128,60 +123,30 @@ class SearchView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         q = self.request.GET.get("q", "").strip()
-        results = self._search(q) if q else {}
-
+        groups: list[dict] = []
+        contacts: list = []
+        total = 0
+        if q:
+            outcome = global_search(
+                q,
+                principal=web_principal(self.request.user),
+                limit_per_scope=self.result_limit,
+            )
+            groups = outcome["groups"]
+            total = outcome["total"]
+            try:
+                contacts = search_submissions(q, limit=self.result_limit)
+            except D1Error:
+                contacts = []
+            total += len(contacts)
         ctx.update(
             q=q,
             search_query=q,
-            results=results,
-            total=sum(len(items) for items in results.values()),
+            groups=groups,
+            contacts=contacts,
+            total=total,
         )
         return ctx
-
-    def _search(self, q: str) -> dict[str, object]:
-        try:
-            contacts = search_submissions(q, limit=self.result_limit)
-        except D1Error:
-            contacts = []
-
-        return {
-            "Projects": Project.objects.filter(
-                Q(name__icontains=q)
-                | Q(slug__icontains=q)
-                | Q(description__icontains=q)
-                | Q(technologies_used__icontains=q)
-            )[: self.result_limit],
-            "Content": ContentItem.objects.filter(
-                Q(title__icontains=q)
-                | Q(slug__icontains=q)
-                | Q(topic__icontains=q)
-                | Q(tags__icontains=q)
-            )[: self.result_limit],
-            "Docs": DocumentationRecord.objects.filter(
-                Q(doc_id__icontains=q)
-                | Q(title__icontains=q)
-                | Q(system_service__icontains=q)
-                | Q(obsidian_path__icontains=q)
-            )[: self.result_limit],
-            "Assets": Asset.objects.filter(
-                Q(item_name__icontains=q)
-                | Q(slug__icontains=q)
-                | Q(vendor__icontains=q)
-                | Q(notes__icontains=q)
-            )[: self.result_limit],
-            "Expenses": Expense.objects.filter(
-                Q(vendor__icontains=q)
-                | Q(item__icontains=q)
-                | Q(business_purpose__icontains=q)
-                | Q(notes__icontains=q)
-            )[: self.result_limit],
-            "Receipts": Receipt.objects.filter(
-                Q(vendor__icontains=q)
-                | Q(original_filename__icontains=q)
-                | Q(notes__icontains=q)
-            )[: self.result_limit],
-            "Contacts": contacts,
-        }
 
 
 class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
