@@ -31,16 +31,20 @@ class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "projects/project_list.html"
     context_object_name = "projects"
     paginate_by = 25
-    table_search_fields = ("name", "description", "technologies_used", "notes")
+    table_search_scope = "projects"
     table_filters = (
         TableFilter("status", "Status", "status", Project.Status.choices),
         TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
     )
     table_sorts = (
         TableSort("-updated_at", "Recently updated", ("archive_rank", "-updated_at")),
+        TableSort("updated_at", "Least recently updated", ("archive_rank", "updated_at")),
         TableSort("name", "Name A–Z", ("archive_rank", "name")),
+        TableSort("-name", "Name Z–A", ("archive_rank", "-name")),
         TableSort("status", "Status", ("archive_rank", "status")),
+        TableSort("-status", "Status reverse", ("archive_rank", "-status")),
         TableSort("category", "Category", ("archive_rank", "category")),
+        TableSort("-category", "Category reverse", ("archive_rank", "-category")),
     )
     table_toggles = (
         TableToggle("needs_output", "Needs output"),

@@ -47,12 +47,16 @@ class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "receipts/receipt_list.html"
     context_object_name = "receipts_list"
     paginate_by = 25
-    table_search_fields = ("vendor", "notes", "original_filename")
+    table_search_scope = "receipts"
     table_sorts = (
         TableSort("-uploaded_at", "Recently uploaded", "-uploaded_at"),
         TableSort("-date", "Newest receipt date", "-date"),
+        TableSort("date", "Oldest receipt date", "date"),
         TableSort("vendor", "Vendor A–Z", "vendor"),
+        TableSort("-vendor", "Vendor Z–A", "-vendor"),
         TableSort("-amount", "Highest amount", "-amount"),
+        TableSort("amount", "Lowest amount", "amount"),
+        TableSort("uploaded_at", "Least recently uploaded", "uploaded_at"),
     )
     table_toggles = (TableToggle("unlinked", "Unlinked only"),)
     table_default_sort = "-uploaded_at"

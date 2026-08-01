@@ -62,6 +62,36 @@ reimplementing their behavior.
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 
+## Search and table reads
+
+`application.search` is the search boundary for web tables, CLI/TUI clients,
+and future MCP tools. It accepts a named scope and query and returns stable
+domain identifiers; adapters do not know how text is indexed.
+
+`search_index.SearchDocument` is a derived relational projection. On SQLite,
+an FTS5 external-content table indexes that projection with Unicode tokenization
+and 2/3/4-character prefix indexes. Database triggers keep the FTS structure
+atomic with projection writes, while domain-model signals keep the projection
+atomic with the authoritative record. A rollback therefore removes all three
+changes together.
+
+The backend is replaceable. A future PostgreSQL deployment can supply a native
+search backend without changing table views, query parameters, CLI output, or
+domain models. When an indexed backend is unavailable, the application service
+retains a bounded ORM fallback.
+
+Operational interfaces use the same contract:
+
+```bash
+python manage.py search_hq projects "certificate automation"
+python manage.py rebuild_search_index
+```
+
+`application.tables.TableListMixin` composes indexed search with multi-value
+filters, workflow toggles, allowlisted ordering, and database pagination. The
+browser progressively enhances that GET contract with debounced, cancelable
+requests; plain links and forms remain the complete fallback.
+
 ## Emit once, derive everywhere
 
 ![One typed command declaration deriving JSON Schema, validation, MCP and CLI surfaces, and parity tests](diagrams/emit-once-capabilities.png)

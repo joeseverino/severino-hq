@@ -24,7 +24,7 @@ class AssetListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "assets/asset_list.html"
     context_object_name = "assets_list"
     paginate_by = 25
-    table_search_fields = ("item_name", "vendor", "serial_number", "notes")
+    table_search_scope = "assets"
     table_filters = (
         TableFilter("status", "Status", "status", Asset.Status.choices),
         TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
@@ -33,8 +33,13 @@ class AssetListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("-purchase_date", "Newest purchase", "-purchase_date"),
         TableSort("purchase_date", "Oldest purchase", "purchase_date"),
         TableSort("item_name", "Name A–Z", "item_name"),
+        TableSort("-item_name", "Name Z–A", "-item_name"),
         TableSort("-total_cost", "Highest cost", "-total_cost"),
+        TableSort("total_cost", "Lowest cost", "total_cost"),
         TableSort("status", "Status", "status"),
+        TableSort("-status", "Status reverse", "-status"),
+        TableSort("category", "Category", "category"),
+        TableSort("-category", "Category reverse", "-category"),
     )
     table_toggles = (TableToggle("missing_purchase", "Missing purchase info"),)
     table_default_sort = "-purchase_date"

@@ -26,13 +26,18 @@ class ExpenseListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "expenses/expense_list.html"
     context_object_name = "expenses_list"
     paginate_by = 50
-    table_search_fields = ("vendor", "item", "business_purpose", "notes")
+    table_search_scope = "expenses"
     table_sorts = (
         TableSort("-date", "Newest expense", "-date"),
         TableSort("date", "Oldest expense", "date"),
         TableSort("vendor", "Vendor A–Z", "vendor"),
+        TableSort("-vendor", "Vendor Z–A", "-vendor"),
         TableSort("-total_cost", "Highest cost", "-total_cost"),
+        TableSort("total_cost", "Lowest cost", "total_cost"),
         TableSort("category", "Category", "category"),
+        TableSort("-category", "Category reverse", "-category"),
+        TableSort("-estimated_deductible_amount", "Highest deductible", "-estimated_deductible_amount"),
+        TableSort("estimated_deductible_amount", "Lowest deductible", "estimated_deductible_amount"),
     )
     table_toggles = (TableToggle("no_receipts", "Missing receipt"),)
     table_default_sort = "-date"

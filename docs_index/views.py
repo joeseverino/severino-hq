@@ -34,9 +34,7 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
     template_name = "docs_index/docs_list.html"
     context_object_name = "records"
     paginate_by = 25
-    table_search_fields = (
-        "doc_id", "title", "system_service", "obsidian_path", "notes",
-    )
+    table_search_scope = "documentation"
     table_filters = (
         TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
         TableFilter(
@@ -52,9 +50,14 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
     table_sorts = (
         TableSort("-updated_at", "Recently updated", "-updated_at"),
         TableSort("doc_id", "Document ID", "doc_id"),
+        TableSort("-doc_id", "Document ID reverse", "-doc_id"),
         TableSort("title", "Title A–Z", "title"),
+        TableSort("-title", "Title Z–A", "-title"),
         TableSort("last_reviewed", "Oldest review", "last_reviewed"),
+        TableSort("-last_reviewed", "Newest review", "-last_reviewed"),
         TableSort("status", "Status", "status"),
+        TableSort("-status", "Status reverse", "-status"),
+        TableSort("updated_at", "Least recently updated", "updated_at"),
     )
     table_toggles = (TableToggle("needs_review", "Needs review"),)
     table_default_sort = "-updated_at"
