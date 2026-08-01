@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from io import StringIO
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -19,6 +19,7 @@ from receipts.models import Receipt
 from core.models import AuditLog
 from hq_mcp.server import mcp
 from projects.models import Project
+from projects.github import GitHubMetadataError, fetch_last_push
 from docs_index.models import DocumentationRecord
 
 from .documentation import sync_documentation
@@ -26,7 +27,7 @@ from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asse
 from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from .capabilities import describe_capabilities, execute_capability
 from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
-from .projects import ConflictError, ProjectCommand, save_project
+from .projects import ConflictError, ProjectCommand, refresh_project, save_project
 from .security import (
     OPERATOR_CAPABILITIES,
     AuthorizationError,
@@ -231,6 +232,10 @@ class CapabilityTests(TestCase):
 
 
 class ProjectApplicationServiceTests(TestCase):
+    def test_github_gateway_rejects_non_repository_urls_before_network_access(self):
+        with self.assertRaises(GitHubMetadataError):
+            fetch_last_push("https://example.com/joeseverino/severino-hq")
+
     def test_service_owns_validation_transaction_and_audit_context(self):
         result = save_project(
             ProjectCommand(name="Shared HQ", slug="shared-hq", status="active"),
@@ -278,6 +283,29 @@ class ProjectApplicationServiceTests(TestCase):
                 current_slug="hq",
                 expected_updated_at=created["project"]["updated_at"],
             )
+
+    def test_refresh_owns_external_metadata_persistence_and_audit(self):
+        project = Project.objects.create(
+            name="HQ",
+            slug="hq",
+            repository_url="https://github.com/joeseverino/severino-hq",
+        )
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+
+        result = refresh_project(
+            project.slug,
+            principal=Principal("operator", "web", OPERATOR_CAPABILITIES),
+            github_fetcher=lambda repository_url, **kwargs: pushed_at,
+        )
+
+        self.assertTrue(result["github"]["ok"])
+        project.refresh_from_db()
+        self.assertEqual(project.last_push_at, pushed_at)
+        event = AuditLog.objects.filter(
+            object_type="Project", object_id=str(project.pk)
+        ).latest("created_at")
+        self.assertEqual(event.metadata["operation"], "project.refresh")
+        self.assertEqual(event.metadata["interface"], "web")
 
 
 @override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
