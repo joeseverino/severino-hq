@@ -64,7 +64,10 @@ def operating_snapshot() -> dict[str, Any]:
         unread_contacts_count = 0
         contacts_status = "unavailable"
     today = timezone.localdate()
-    year_start = today.replace(month=1, day=1)
+    fiscal_start_month = getattr(settings, "SEVERINO_FISCAL_YEAR_START_MONTH", 1)
+    year_start = today.replace(month=fiscal_start_month, day=1)
+    if year_start > today:
+        year_start = year_start.replace(year=today.year - 1)
     expenses = Expense.objects.filter(date__gte=year_start).aggregate(
         total=Sum("total_cost"),
         deductible=Sum("estimated_deductible_amount"),
