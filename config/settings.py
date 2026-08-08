@@ -149,12 +149,13 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "core.middleware.RequestContextMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
     # after SecurityMiddleware so it can short-circuit static-file requests
     # before sessions / auth do any work.
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -233,6 +234,7 @@ LOGIN_EXEMPT_URL_NAMES = {
     "oidc_authentication_callback",
 }
 LOGIN_EXEMPT_PATH_PREFIXES = (
+    "/health/",
     "/accounts/login",
     "/accounts/logout",
     "/oidc/",
@@ -339,20 +341,18 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "verbose": {
-            "format": "{asctime} {levelname} {name} {message}",
-            "style": "{",
-        },
+        "json": {"()": "core.logging.JsonFormatter"},
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose",
+            "formatter": "json",
         },
     },
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
         "django.request": {"level": "WARNING", "propagate": True},
+        "severino.request": {"level": "INFO", "propagate": True},
         "severino": {"level": "INFO", "propagate": True},
     },
 }

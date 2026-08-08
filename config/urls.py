@@ -4,9 +4,11 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from core.views import DashboardView, SearchView
+from core.views import DashboardView, SearchView, health_live, health_ready
 
 urlpatterns = [
+    path("health/live/", health_live, name="health_live"),
+    path("health/ready/", health_ready, name="health_ready"),
     path("admin/", admin.site.urls),
     path(
         "accounts/login/",

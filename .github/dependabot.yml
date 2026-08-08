@@ -9,17 +9,27 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     groups:
       django:
         patterns:
           - "Django"
           - "django-*"
+        update-types:
+          - "minor"
+          - "patch"
       runtime:
         patterns:
           - "*"
         exclude-patterns:
           - "Django"
           - "django-*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -30,6 +40,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -39,3 +53,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"

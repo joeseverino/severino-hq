@@ -12,6 +12,8 @@
 #   SEVERINO_EXPORTS_ROOT       /srv/severino-hq/exports
 #   SEVERINO_BACKUP_DIR         /srv/severino-hq/backups
 #   SEVERINO_BACKUP_AGE_RECIPIENTS   (optional; e.g. "age1abc...,age1def...")
+#   SEVERINO_BACKUP_REQUIRE_ENCRYPTION  0 (production unit sets 1)
+#   SEVERINO_BACKUP_RETENTION_DAYS     30
 #
 # Exit nonzero on any failure.
 
@@ -22,6 +24,17 @@ MEDIA_ROOT="${SEVERINO_MEDIA_ROOT:-/srv/severino-hq/media}"
 EXPORTS_ROOT="${SEVERINO_EXPORTS_ROOT:-/srv/severino-hq/exports}"
 BACKUP_DIR="${SEVERINO_BACKUP_DIR:-/srv/severino-hq/backups}"
 AGE_RECIPIENTS="${SEVERINO_BACKUP_AGE_RECIPIENTS:-}"
+REQUIRE_ENCRYPTION="${SEVERINO_BACKUP_REQUIRE_ENCRYPTION:-0}"
+RETENTION_DAYS="${SEVERINO_BACKUP_RETENTION_DAYS:-30}"
+
+if [[ "${REQUIRE_ENCRYPTION}" == "1" && -z "${AGE_RECIPIENTS}" ]]; then
+  echo "Backup encryption is required but no age recipients are configured." >&2
+  exit 1
+fi
+if [[ ! "${RETENTION_DAYS}" =~ ^[0-9]+$ ]]; then
+  echo "SEVERINO_BACKUP_RETENTION_DAYS must be a non-negative integer." >&2
+  exit 1
+fi
 
 if [[ ! -f "${DB_PATH}" ]]; then
   echo "Database not found at ${DB_PATH}" >&2
@@ -54,10 +67,14 @@ fi
 echo "[2/3] Assembling tarball…"
 ARCHIVE="${BACKUP_DIR}/severino-hq-${STAMP}.tar.gz"
 # Use -C to put each piece at a predictable top-level path inside the tar.
-tar -czf "${ARCHIVE}" \
-  -C "${STAGE}" "severino.sqlite3" \
-  $( [[ -d "${MEDIA_ROOT}" ]]   && echo "-C $(dirname "${MEDIA_ROOT}") $(basename "${MEDIA_ROOT}")" ) \
-  $( [[ -d "${EXPORTS_ROOT}" ]] && echo "-C $(dirname "${EXPORTS_ROOT}") $(basename "${EXPORTS_ROOT}")" )
+TAR_ARGS=(-C "${STAGE}" "severino.sqlite3")
+if [[ -d "${MEDIA_ROOT}" ]]; then
+  TAR_ARGS+=(-C "$(dirname "${MEDIA_ROOT}")" "$(basename "${MEDIA_ROOT}")")
+fi
+if [[ -d "${EXPORTS_ROOT}" ]]; then
+  TAR_ARGS+=(-C "$(dirname "${EXPORTS_ROOT}")" "$(basename "${EXPORTS_ROOT}")")
+fi
+tar -czf "${ARCHIVE}" "${TAR_ARGS[@]}"
 
 chmod 600 "${ARCHIVE}"
 
@@ -80,3 +97,8 @@ else
   echo "[3/3] Encryption skipped (SEVERINO_BACKUP_AGE_RECIPIENTS not set)."
   echo "Wrote ${ARCHIVE}"
 fi
+
+# Bound local disk use. Off-host retention belongs to the replication system.
+find "${BACKUP_DIR}" -maxdepth 1 -type f \
+  \( -name 'severino-hq-*.tar.gz' -o -name 'severino-hq-*.tar.gz.age' \) \
+  -mtime "+${RETENTION_DAYS}" -delete

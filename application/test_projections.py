@@ -5,7 +5,9 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
@@ -17,6 +19,26 @@ from .infrastructure import get_managed_resource, operation_summary
 
 
 class DashboardProjectionTests(TestCase):
+    def test_snapshot_stays_within_its_query_budget(self):
+        Project.objects.create(
+            name="Query budget",
+            slug="query-budget",
+            status=Project.Status.ACTIVE,
+        )
+
+        with (
+            patch("application.dashboard.get_unread_count", return_value=0),
+            CaptureQueriesContext(connection) as queries,
+        ):
+            operating_snapshot()
+
+        self.assertLessEqual(
+            len(queries),
+            20,
+            "Dashboard query budget exceeded:\n"
+            + "\n".join(query["sql"] for query in queries),
+        )
+
     def test_snapshot_is_json_safe_and_owns_priority_counts(self):
         Project.objects.create(
             name="Needs output",

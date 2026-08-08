@@ -10,13 +10,49 @@ Middleware for Severino HQ.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import logging
+from time import monotonic
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
+from .logging import reset_request_id, set_request_id
+
 
 _current_user = ContextVar("severino_current_user", default=None)
+_request_logger = logging.getLogger("severino.request")
+
+
+class RequestContextMiddleware:
+    """Attach a server-generated correlation ID and one bounded access log."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        request_id = uuid4().hex
+        request.request_id = request_id
+        token = set_request_id(request_id)
+        started = monotonic()
+        try:
+            response = self.get_response(request)
+            response["X-Request-ID"] = request_id
+            if not request.path.startswith("/health/") or response.status_code >= 500:
+                _request_logger.info(
+                    "request completed",
+                    extra={
+                        "event": "http.request",
+                        "method": request.method,
+                        "path": request.path,
+                        "status": response.status_code,
+                        "duration_ms": round((monotonic() - started) * 1000, 2),
+                    },
+                )
+            return response
+        finally:
+            reset_request_id(token)
 
 
 def get_current_user():

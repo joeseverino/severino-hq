@@ -150,8 +150,10 @@ Both scripts reject every operation outside their explicit allowlist. This is
 an administrator bootstrap boundary; application deployment cannot rewrite its
 own remote authorization policy.
 
-Pull requests run checks only; a push to `main` runs the image build, scan,
-homelab deployment, health verification, and controller activation.
+Pull requests run application checks, build the production image, boot it to
+readiness, and scan it with Trivy. A push to `main` publishes the image and
+runs the same scan before homelab deployment, health verification, and
+controller activation.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running
 image, and restores it automatically if the exact SHA-tagged replacement does
 not become healthy or its controller cannot pass activation. After rollback,
@@ -212,8 +214,9 @@ docker compose up -d
 
 ### A.7 Backups
 
-See `docs/BACKUP.md`. Run `scripts/backup.sh` on the host (it works against the
-mounted `/srv/severino-hq/...` directories).
+See `docs/BACKUP.md`. The deployment installer enables the committed nightly
+backup timer, and CI proves the produced archive can restore the database,
+media, and exports. Off-host replication remains an explicit operator duty.
 
 ---
 

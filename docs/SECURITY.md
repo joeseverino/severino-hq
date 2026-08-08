@@ -41,6 +41,10 @@
   failed login, logout, upload, export, and import events.
 - Request-user attribution uses an ASGI-safe context variable, preventing one
   concurrent request's identity from leaking into another request's audit row.
+- Server-generated request IDs connect response headers to structured JSON
+  access logs without recording query strings or request bodies.
+- Anonymous liveness and readiness probes disclose only component state;
+  readiness fails on database, migration, or writable-storage problems.
 - SQLite is opened with `journal_mode=WAL`, `foreign_keys=ON`, and
   `transaction_mode=IMMEDIATE` for safer concurrent operation.
 - Password validators require min length 12 and reject common/numeric-only
@@ -71,7 +75,8 @@
 - [ ] `SEVERINO_DATABASE_PATH`, `SEVERINO_MEDIA_ROOT`, `SEVERINO_EXPORTS_ROOT`
       live outside the app code directory and are writable only by the service
       user (`chmod 750`).
-- [ ] Backups configured (`scripts/backup.sh` from cron / a systemd timer).
+- [ ] The committed `severino-hq-backup.timer` is active, its archives are age
+      encrypted, and off-host replication is monitored.
 - [ ] Restore drill done once, and documented locally.
 - [ ] Superuser created via `manage.py createsuperuser`; no shared accounts.
 - [ ] If SSO is enabled, Pocket ID has an `admins` group and the HQ OIDC
