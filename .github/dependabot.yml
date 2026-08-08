@@ -57,3 +57,10 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
