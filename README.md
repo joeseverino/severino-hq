@@ -1,8 +1,8 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-72%25-brightgreen)
-&nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)
+&nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 The private internal operating system behind Severino Labs.
 
@@ -22,7 +22,7 @@ over Tailscale.
 
 ## Stack
 
-- Django 6 + SQLite (PostgreSQL is a future option)
+- Django 6.1 + SQLite (PostgreSQL is a future option)
 - Django templates (HTMX hook left in `base.html` for future use)
 - Plain CSS (no build step, no CDN runtime dependencies)
 - Django auth, Django admin, Django ORM and migrations

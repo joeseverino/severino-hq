@@ -47,6 +47,9 @@ and returns one stable result. The adapter only chooses how that result looks.
 That boundary includes reads. Canonical query projections live in
 `application/read_models.py`; web, MCP, and CLI adapters may filter or render
 those results, but they do not import Django models or rebuild result shapes.
+The projections opt into Django 6.1's `FETCH_RAISE` mode after declaring their
+`select_related()` plans. An omitted relationship therefore fails at the
+projection boundary instead of silently becoming an N+1 query in production.
 An architecture fitness test rejects direct model access from the MCP service
 adapter so this separation cannot silently regress.
 

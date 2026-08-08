@@ -18,6 +18,12 @@
 - `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
   DENY`, `Referrer-Policy: same-origin` enabled.
 - `SECURE_PROXY_SSL_HEADER` is wired up when `DJANGO_BEHIND_TLS_PROXY=1`.
+- Django's native Content Security Policy middleware enforces same-origin
+  assets, nonce-authorized scripts, no object embedding, and no framing.
+  Application JavaScript is external; a regression test rejects inline scripts
+  and event handlers before they can weaken the policy.
+- Django 6.1's secure default rejects legacy cookies using the ambiguous
+  pre-6.0.6 signing-salt derivation.
 - HSTS off by default; turn it on (`DJANGO_HSTS_SECONDS=31536000`) only after
   verifying TLS works end-to-end.
 - `LoginRequiredMiddleware` redirects anonymous users to login for every URL
@@ -33,6 +39,8 @@
   (15 MB by default).
 - Audit log on every create / update / delete (via signals), plus login,
   failed login, logout, upload, export, and import events.
+- Request-user attribution uses an ASGI-safe context variable, preventing one
+  concurrent request's identity from leaking into another request's audit row.
 - SQLite is opened with `journal_mode=WAL`, `foreign_keys=ON`, and
   `transaction_mode=IMMEDIATE` for safer concurrent operation.
 - Password validators require min length 12 and reject common/numeric-only

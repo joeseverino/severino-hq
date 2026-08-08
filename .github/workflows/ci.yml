@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     env:
       DJANGO_DEBUG: "1"
       DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production

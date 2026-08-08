@@ -6,7 +6,7 @@
   <h1>Reports &amp; exports</h1>
   <form method="get" class="inline">
     <label for="year">Year:</label>
-    <select name="year" id="year" onchange="this.form.submit()">
+    <select name="year" id="year" data-submit-on-change>
       {% for y in available_years %}
         <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
       {% endfor %}
