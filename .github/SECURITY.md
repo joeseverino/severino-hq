@@ -8,7 +8,7 @@ project's security model is documented in [`docs/SECURITY.md`](../docs/SECURITY.
 
 If you find a security issue, please **do not** open a public GitHub issue.
 
-- Email: `security@<this-domain>` (replace with the operator's address).
+- Email: `security@jseverino.com`.
 - Or, if you have GitHub private-vulnerability-reporting access on this repo,
   use **Security → Advisories → Report a vulnerability**.
 
@@ -22,11 +22,14 @@ reproduce and, where applicable, a suggested mitigation.
 - CSRF / XSS / injection in the admin or app UI.
 - Exposure of restricted documentation records via exports.
 - Container escape / privilege escalation in the shipped Docker image.
+- Privilege escalation or destructive-action bypass by an authenticated user.
+- Authentication throttling or session weaknesses with a reproducible impact.
 
 ## What's out of scope
 
-- Reports about missing rate limiting (the app is meant to be reachable only
-  over Tailscale).
+- Volumetric public-internet denial of service; HQ is reachable only through
+  the private tailnet.
 - Reports about DEBUG mode behaviour (production requires `DEBUG=0` at
   startup).
-- Anything that requires already-authenticated admin access.
+- Reports that assume root access to the host or control of the private
+  tailnet without demonstrating an additional boundary failure.

@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 The private internal operating system behind Severino Labs.
@@ -121,8 +121,9 @@ runbook bodies and secrets never enter HQ.
 
 **Code — `git push` / [`hq ship`](https://github.com/joeseverino/tools).** A push to `main` runs the gated pipeline in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml): lint, tests on Python
-3.12/3.13, a `check --deploy` posture gate plus `pip-audit`, then a GHCR image
-build that Trivy scans. Only on green does a **self-hosted runner on the
+3.12/3.13/3.14, a `check --deploy` posture gate plus `pip-audit`, and a booted
+production-image readiness check that Trivy scans. On `main`, the same gated
+image is published to GHCR. Only on green does a **self-hosted runner on the
 homelab** pull the scanned image and restart the container — the runner dials
 out to GitHub, so nothing inbound is ever opened. A red commit physically cannot
 reach the box.

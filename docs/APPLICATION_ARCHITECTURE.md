@@ -62,6 +62,10 @@ health, and structured operation evidence without provider credentials. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
+The dashboard projection has an executable query budget. Growth that adds an
+unbounded query or N+1 relationship fetch fails CI before it becomes an
+operator-visible latency regression.
+
 This is the important scaling property: a fourth interface does not create a
 fourth implementation.
 
@@ -262,6 +266,13 @@ The service boundary complements the existing network boundary:
 6. Application services revalidate all data and own transactional writes.
 7. Restricted documentation is removed from AI-facing relationship results.
 8. Every successful mutation leaves an attributed audit event.
+
+The operational boundary is observable without a hosted telemetry dependency.
+Each HTTP response carries a server-generated request ID, and the same ID is
+emitted with method, path, status, and duration in structured container logs.
+Liveness proves only that the process responds; readiness separately proves
+database access, migration parity, and writable runtime storage. Deployment
+rollback trusts readiness rather than an authenticated page redirect.
 
 Routine CLI domain operations use the authenticated MCP endpoint: synchronization,
 registry validation, project/asset upsert, and report export. SSH is reserved

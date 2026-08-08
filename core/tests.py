@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import tempfile
 from datetime import date, timedelta
@@ -29,6 +30,7 @@ from django.utils import timezone
 from assets.models import Asset
 from content.models import ContentItem
 from core.middleware import get_current_user, set_current_user
+from core.logging import JsonFormatter, reset_request_id, set_request_id
 from core.models import AuditLog
 from core.oidc import HQOIDCAuthenticationBackend
 from docs_index.models import DocumentationRecord
@@ -46,6 +48,33 @@ User = get_user_model()
 
 
 class AuthGateTests(TestCase):
+    def test_health_probes_are_anonymous_and_operational(self):
+        live = self.client.get("/health/live/")
+        ready = self.client.get("/health/ready/")
+
+        self.assertEqual(live.status_code, 200)
+        self.assertEqual(live.json(), {"status": "ok"})
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(
+            ready.json(),
+            {
+                "status": "ok",
+                "checks": {
+                    "database": True,
+                    "migrations": True,
+                    "storage": True,
+                },
+            },
+        )
+
+    @override_settings(MEDIA_ROOT=Path("/path/that/does/not/exist"))
+    def test_readiness_fails_closed_when_required_storage_is_missing(self):
+        response = self.client.get("/health/ready/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["status"], "unavailable")
+        self.assertFalse(response.json()["checks"]["storage"])
+
     def test_anonymous_dashboard_redirects_to_login(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 302)
@@ -60,6 +89,7 @@ class AuthGateTests(TestCase):
     def test_login_page_is_accessible(self):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
+        self.assertRegex(response["X-Request-ID"], r"^[0-9a-f]{32}$")
 
     def test_login_page_enforces_native_content_security_policy(self):
         response = self.client.get("/accounts/login/")
@@ -78,6 +108,31 @@ class AuthGateTests(TestCase):
 
 
 class SecurityBoundaryTests(TestCase):
+    def test_json_logs_carry_request_correlation_without_query_strings(self):
+        token = set_request_id("request-123")
+        try:
+            record = logging.LogRecord(
+                "severino.request",
+                logging.INFO,
+                __file__,
+                1,
+                "request completed",
+                (),
+                None,
+            )
+            record.event = "http.request"
+            record.method = "GET"
+            record.path = "/search/"
+            record.status = 200
+            record.duration_ms = 4.2
+            payload = json.loads(JsonFormatter().format(record))
+        finally:
+            reset_request_id(token)
+
+        self.assertEqual(payload["request_id"], "request-123")
+        self.assertEqual(payload["path"], "/search/")
+        self.assertEqual(payload["duration_ms"], 4.2)
+
     def test_request_user_attribution_is_isolated_between_async_tasks(self):
         async def exercise():
             ready = [asyncio.Event(), asyncio.Event()]

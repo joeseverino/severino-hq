@@ -63,7 +63,7 @@ services:
         target: /run/secrets/severino_controller_ca.pem
         read_only: true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/accounts/login/',timeout=3).status in (200,302) else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/ready/',timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3

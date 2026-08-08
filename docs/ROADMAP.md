@@ -62,9 +62,12 @@ explicit MCP audit event before they ship.
 
 ### Infrastructure
 
-- Optional Postgres migration. The ORM and migrations are already DB-agnostic;
-  the v1 SQLite settings include explicit `init_command` PRAGMAs we'd drop on
-  Postgres, and any SQLite-specific export paths would need a small refactor.
+- Optional Postgres migration, triggered by evidence rather than fashion: more
+  than one application replica or web worker needs to write, WAL still produces
+  observable lock failures under normal use, backup/maintenance pauses become
+  operationally significant, or a required query depends on Postgres features.
+  The ORM and migrations are already DB-agnostic; SQLite-specific PRAGMAs and
+  FTS/export paths are isolated behind replaceable boundaries.
 - HTMX for inline edits on list pages, especially expenses and receipts.
 - Bulk import for expenses (CSV).
 

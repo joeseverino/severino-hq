@@ -30,37 +30,25 @@ sudo SEVERINO_BACKUP_AGE_RECIPIENTS="age1abc...,age1def..." \
 A timestamped archive (`severino-hq-<UTC timestamp>.tar.gz` or
 `.tar.gz.age`) is dropped in `${SEVERINO_BACKUP_DIR:-/srv/severino-hq/backups}`.
 
-### Schedule it
+### Schedule and prove it
 
-`/etc/systemd/system/severino-hq-backup.service`:
+Reviewed, hardened units live at
+`deploy/systemd/severino-hq-backup.{service,timer}`. The deployment installer
+verifies and installs them with the controller units, then enables the nightly
+timer. Optional age recipients belong in `/etc/severino-hq/backup.env` as
+`SEVERINO_BACKUP_AGE_RECIPIENTS=age1...`; the file must be root-owned mode
+`0600`. The production unit fails closed when recipients are absent and keeps
+30 days of local archives by default. Override retention in the same file with
+`SEVERINO_BACKUP_RETENTION_DAYS`; off-host retention is managed separately.
 
-```ini
-[Unit]
-Description=Severino HQ backup
-After=severino-hq.service
+`scripts/test-backup.sh` performs a complete local restore drill: it creates a
+source database plus media/export fixtures, executes the real backup script,
+extracts the archive, runs a query against the restored database, and compares
+the restored files. CI runs this drill for every pull request.
 
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/severino-hq.env
-Environment=SEVERINO_BACKUP_AGE_RECIPIENTS=age1abc...
-ExecStart=/opt/severino-hq/scripts/backup.sh
-```
-
-`/etc/systemd/system/severino-hq-backup.timer`:
-
-```ini
-[Unit]
-Description=Severino HQ nightly backup
-
-[Timer]
-OnCalendar=daily
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Then `sudo systemctl enable --now severino-hq-backup.timer`.
+The local archive is not an off-host backup. Replicate the backup directory to
+separate storage with restic or another reviewed mechanism and monitor the
+nightly unit's result.
 
 ## Restore
 

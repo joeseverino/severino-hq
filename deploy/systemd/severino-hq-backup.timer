@@ -1,0 +1,11 @@
+[Unit]
+Description=Create a nightly verified Severino HQ backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=30min
+Persistent=yes
+Unit=severino-hq-backup.service
+
+[Install]
+WantedBy=timers.target
