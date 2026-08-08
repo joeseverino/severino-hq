@@ -18,7 +18,7 @@ from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
-from .logging import reset_request_id, set_request_id
+import core.logging as request_logging
 
 
 _current_user = ContextVar("severino_current_user", default=None)
@@ -34,7 +34,7 @@ class RequestContextMiddleware:
     def __call__(self, request):
         request_id = uuid4().hex
         request.request_id = request_id
-        token = set_request_id(request_id)
+        token = request_logging.set_request_id(request_id)
         started = monotonic()
         try:
             response = self.get_response(request)
@@ -52,7 +52,7 @@ class RequestContextMiddleware:
                 )
             return response
         finally:
-            reset_request_id(token)
+            request_logging.reset_request_id(token)
 
 
 def get_current_user():
