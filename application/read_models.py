@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Count
+from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
 from assets.models import Asset
@@ -38,7 +38,7 @@ def list_expenses(
     """List expense records with stable, sensitivity-safe relationships."""
     queryset = Expense.objects.select_related(
         "related_project", "related_asset", "related_content", "related_documentation"
-    )
+    ).fetch_mode(FETCH_RAISE)
     if year is not None:
         queryset = queryset.filter(date__year=year)
     if category:
@@ -77,7 +77,7 @@ def list_expenses(
 
 def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
     """List receipt metadata without file contents, storage paths, or URLs."""
-    queryset = Receipt.objects.all()
+    queryset = Receipt.objects.fetch_mode(FETCH_RAISE)
     if unmatched_only:
         queryset = queryset.filter(
             related_expense__isnull=True, related_asset__isnull=True
@@ -106,7 +106,9 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
 
 def documentation_status() -> dict[str, Any]:
     """Summarize AI-safe documentation pointers; sensitive records stay excluded."""
-    safe = DocumentationRecord.objects.filter(sensitivity__in=SAFE_SENSITIVITIES)
+    safe = DocumentationRecord.objects.filter(
+        sensitivity__in=SAFE_SENSITIVITIES
+    ).fetch_mode(FETCH_RAISE)
     return {
         "total": safe.count(),
         "by_status": {
@@ -154,9 +156,9 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
             "action_label": event.get_action_display(),
             "created_at": event.created_at.isoformat(),
         }
-        for event in AuditLog.objects.select_related("user").order_by("-created_at")[
-            : _page_size(limit)
-        ]
+        for event in AuditLog.objects.select_related("user")
+        .fetch_mode(FETCH_RAISE)
+        .order_by("-created_at")[: _page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 

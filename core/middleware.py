@@ -3,28 +3,28 @@ Middleware for Severino HQ.
 
 - LoginRequiredMiddleware: this is a single-user / internal app; every URL
   requires authentication unless explicitly exempted.
-- CurrentUserMiddleware: stashes the request user on a threadlocal so that
-  ORM signals can attribute audit events.
+- CurrentUserMiddleware: scopes the request user to the active ASGI context so
+  ORM signals can attribute audit events without leaking across requests.
 """
 
 from __future__ import annotations
 
-import threading
+from contextvars import ContextVar
 
 from django.conf import settings
-from django.shortcuts import redirect
+from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
 
-_thread_locals = threading.local()
+_current_user = ContextVar("severino_current_user", default=None)
 
 
 def get_current_user():
-    return getattr(_thread_locals, "user", None)
+    return _current_user.get()
 
 
 def set_current_user(user) -> None:
-    _thread_locals.user = user
+    _current_user.set(user)
 
 
 class CurrentUserMiddleware:
@@ -32,11 +32,11 @@ class CurrentUserMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        set_current_user(getattr(request, "user", None))
+        token = _current_user.set(getattr(request, "user", None))
         try:
             return self.get_response(request)
         finally:
-            set_current_user(None)
+            _current_user.reset(token)
 
 
 class LoginRequiredMiddleware:
@@ -50,9 +50,7 @@ class LoginRequiredMiddleware:
             return self.get_response(request)
 
         if not request.user.is_authenticated:
-            login_url = settings.LOGIN_URL
-            next_url = request.get_full_path()
-            return redirect(f"{login_url}?next={next_url}")
+            return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
 
         return self.get_response(request)
 

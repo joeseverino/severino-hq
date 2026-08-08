@@ -15,6 +15,8 @@ import os
 import shlex
 from pathlib import Path
 
+from django.utils.csp import CSP
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Production mounts the 1Password-rendered app env (shell-quoted KEY='value'
@@ -104,6 +106,22 @@ SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 # here so `check --deploy --fail-level WARNING` can be a hard CI gate.
 SILENCED_SYSTEM_CHECKS = ["security.W008"]
 
+# Django owns the browser security boundary. Scripts are limited to same-origin
+# assets or per-response nonces; objects and framing are disabled outright.
+# Inline styles remain allowed for Django admin compatibility, while application
+# templates keep styles in the static bundle.
+SECURE_CSP = {
+    "default-src": [CSP.SELF],
+    "script-src": [CSP.SELF, CSP.NONCE],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "img-src": [CSP.SELF, "data:"],
+    "font-src": [CSP.SELF],
+    "connect-src": [CSP.SELF],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.SELF],
+    "form-action": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+}
 
 # ----- Apps --------------------------------------------------------------------
 
@@ -132,6 +150,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
     # after SecurityMiddleware so it can short-circuit static-file requests
     # before sessions / auth do any work.
@@ -156,6 +175,7 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                "django.template.context_processors.csp",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.site",

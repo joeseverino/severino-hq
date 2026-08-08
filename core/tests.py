@@ -7,13 +7,18 @@ and every page in the main nav (including reports + exports) renders without a
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import tempfile
 from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
@@ -22,9 +27,10 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from assets.models import Asset
-from core.oidc import HQOIDCAuthenticationBackend
 from content.models import ContentItem
+from core.middleware import get_current_user, set_current_user
 from core.models import AuditLog
+from core.oidc import HQOIDCAuthenticationBackend
 from docs_index.models import DocumentationRecord
 from docs_index.importer import (
     ManifestImportError,
@@ -45,14 +51,68 @@ class AuthGateTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])
 
+    def test_auth_redirect_encodes_the_complete_destination(self):
+        response = self.client.get("/?filter=open&next=https://example.com")
+        query = parse_qs(urlsplit(response["Location"]).query)
+
+        self.assertEqual(query["next"], ["/?filter=open&next=https://example.com"])
+
     def test_login_page_is_accessible(self):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
+
+    def test_login_page_enforces_native_content_security_policy(self):
+        response = self.client.get("/accounts/login/")
+        policy = response.headers["Content-Security-Policy"]
+
+        self.assertIn("default-src 'self'", policy)
+        self.assertIn("script-src 'self'", policy)
+        self.assertNotIn("script-src 'self' 'unsafe-inline'", policy)
+        self.assertIn("object-src 'none'", policy)
+        self.assertIn("frame-ancestors 'none'", policy)
 
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
         response = self.client.get("/accounts/login/")
         self.assertContains(response, "Sign in with SSO")
+
+
+class SecurityBoundaryTests(TestCase):
+    def test_request_user_attribution_is_isolated_between_async_tasks(self):
+        async def exercise():
+            ready = [asyncio.Event(), asyncio.Event()]
+            release = asyncio.Event()
+
+            async def worker(index, user):
+                set_current_user(user)
+                ready[index].set()
+                await release.wait()
+                try:
+                    return get_current_user()
+                finally:
+                    set_current_user(None)
+
+            tasks = [
+                asyncio.create_task(worker(0, "first-user")),
+                asyncio.create_task(worker(1, "second-user")),
+            ]
+            await asyncio.gather(*(event.wait() for event in ready))
+            release.set()
+            return await asyncio.gather(*tasks)
+
+        self.assertEqual(async_to_sync(exercise)(), ["first-user", "second-user"])
+        self.assertIsNone(get_current_user())
+
+    def test_application_templates_do_not_bypass_csp(self):
+        violations = []
+        for template in (settings.BASE_DIR / "templates").rglob("*.html"):
+            source = template.read_text(encoding="utf-8")
+            if re.search(r"<script(?![^>]*\bsrc=)", source, re.IGNORECASE):
+                violations.append(f"{template}: inline script")
+            if re.search(r"\son[a-z]+\s*=", source, re.IGNORECASE):
+                violations.append(f"{template}: inline event handler")
+
+        self.assertEqual(violations, [])
 
 
 class OIDCBackendTests(TestCase):
