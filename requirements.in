@@ -1,5 +1,5 @@
 Django>=6.1,<6.2
-mcp>=1.28.1,<2
+mcp>=2.0.0,<3
 mozilla-django-oidc>=5.0.2,<6.0
-uvicorn>=0.51.0,<1
+uvicorn>=0.52.1,<1
 whitenoise>=6.12.0
