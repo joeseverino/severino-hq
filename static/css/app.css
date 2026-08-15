@@ -85,12 +85,14 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 .brand:hover { text-decoration: none; }
 .primary-nav {
   display: flex;
-  flex-wrap: wrap;
+  /* Single row, deliberately. Wrapping put controls on a second row directly
+     beneath an open dropdown, where the panel covered them and swallowed the
+     clicks. Grouping keeps the bar short enough that one row is enough. */
+  flex-wrap: nowrap;
   gap: 2px;
   min-width: 0;
   /* Must stay visible: an overflow scroll container clips absolutely
-     positioned descendants, which silently swallowed the group dropdowns.
-     Grouping bounds the control count, so the scroller is no longer needed. */
+     positioned descendants, which silently swallowed the group dropdowns. */
   overflow: visible;
 }
 .primary-nav a {

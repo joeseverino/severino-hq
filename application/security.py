@@ -80,6 +80,13 @@ def mcp_principal() -> Principal:
 
     capabilities = {Capability.READ}
     capabilities.update(plugin_capabilities("mcp_read"))
+    # Mirroring the vault's documentation index is gated on its own, because it
+    # is the one write an operator wants routinely and in isolation. Bundled
+    # with the rest it could only be granted by also handing the service
+    # account write access to expenses, receipts, projects, assets and content
+    # -- so in practice it stayed off and the index silently fell behind.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_DOC_SYNC", False):
+        capabilities.add(Capability.SYNC_DOCUMENTATION)
     if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
         capabilities.update(
             {
@@ -88,6 +95,8 @@ def mcp_principal() -> Principal:
                 Capability.WRITE_CONTENT,
                 Capability.WRITE_EXPENSES,
                 Capability.WRITE_RECEIPTS,
+                # Broad writes still imply doc sync; the narrow flag exists to
+                # grant it *without* them, not to withhold it from them.
                 Capability.SYNC_DOCUMENTATION,
                 Capability.WRITE_DOCUMENTATION,
             }
