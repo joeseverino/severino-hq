@@ -52,6 +52,23 @@ jobs:
           repository: ${{ env.HOST_REPOSITORY }}
           ref: ${{ inputs.hq-ref }}
           path: host
+      - name: Report whether the host pin is current
+        # A stale pin does not fail here -- pinning behind the host is a
+        # legitimate state. It surfaces as an ImportError for a name the pinned
+        # contract has not got yet, which reads like a bug in the extension and
+        # sends you debugging the wrong repository. Saying so up front turns
+        # that into one line.
+        run: |
+          set -euo pipefail
+          pinned="$(git -C host rev-parse HEAD)"
+          current="$(git -C host ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$pinned" != "$current" ]; then
+            behind="$(git -C host rev-list --count "$pinned..$current" 2>/dev/null || echo '?')"
+            echo "::notice title=Host pin is behind::Testing against ${pinned:0:7}; \
+          main is ${current:0:7} ($behind commits ahead). If a name is missing \
+          from the host contract, bump HQ_COMMIT before debugging this repo: \
+          hq pin --rerun"
+          fi
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
