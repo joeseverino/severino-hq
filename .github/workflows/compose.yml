@@ -9,6 +9,8 @@ name: Compose and deploy extensions
 # rebuild the current set (for example after a host release).
 
 on:
+  push:
+    branches: [main]
   repository_dispatch:
     types: [extension-admitted]
   workflow_dispatch:
@@ -43,13 +45,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Read the composition set
-        id: set
-        # The declared set lives in the host, so what production runs is
-        # reviewable here rather than implied by whichever extension deployed
-        # last.
+        # The set is supplied by the COMPOSITION_EXTENSIONS repository variable,
+        # not committed. This host repository is public and the extensions are
+        # not, so their names must not appear in it. composition-set.json
+        # documents the shape only.
         run: |
-          echo "repositories=$(jq -c '.extensions[].repository' composition/extensions.json | jq -sc .)" >> "$GITHUB_OUTPUT"
-          jq -r '.extensions[] | "  \(.id) <- \(.repository)"' composition/extensions.json
+          set -euo pipefail
+          printf '%s' '${{ vars.COMPOSITION_EXTENSIONS }}' > composition-set.json
+          if ! jq -e '.extensions | length > 0' composition-set.json >/dev/null 2>&1; then
+            echo "::error::COMPOSITION_EXTENSIONS must list at least one extension"; exit 1
+          fi
+          jq -r '.extensions | length as $n | "composing \($n) extension(s)"' composition-set.json
 
       - name: Download admitted artifacts
         env:
@@ -60,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          for repo in $(jq -r '.extensions[].repository' composition/extensions.json); do
+          for repo in $(jq -r '.extensions[].repository' composition-set.json); do
             run=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
                     --branch main --status success --limit 1 \
                     --json databaseId -q '.[0].databaseId')
@@ -87,16 +93,16 @@ jobs:
         id: collect
         # The host verifies each signature itself rather than trusting an entry
         # an extension produced. The identity checked is the one declared in
-        # composition/extensions.json, so an extension cannot widen who is
+        # composition-set.json, so an extension cannot widen who is
         # allowed to sign for it by editing its own repository.
         run: |
           set -euo pipefail
           policy_sha=$(openssl dgst -sha256 policy/plugin-admission-v1.json | awk '{print $NF}')
           args=""
-          count=$(jq '.extensions | length' composition/extensions.json)
+          count=$(jq '.extensions | length' composition-set.json)
           for index in $(seq 0 $((count - 1))); do
-            repo=$(jq -r ".extensions[$index].repository" composition/extensions.json)
-            workflow=$(jq -r ".extensions[$index].workflow" composition/extensions.json)
+            repo=$(jq -r ".extensions[$index].repository" composition-set.json)
+            workflow=$(jq -r ".extensions[$index].workflow" composition-set.json)
             dir="artifacts/$(basename "$repo")"
             statement=$(find "$dir" -name admission.json -print -quit)
             bundle=$(find "$dir" -name admission.sigstore.json -print -quit)
@@ -126,11 +132,29 @@ jobs:
           CORDON_LOCK: ./cordon/admission/lock.mjs
         run: python scripts/compose-plugins.py ${{ steps.collect.outputs.args }} --out build/composition
 
+      - name: Authenticate to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the host image
+        id: host
+        # Derived from the commit being composed, so there is no pin to bump by
+        # hand and no way for the composition to be built on a stale host.
+        run: |
+          set -euo pipefail
+          ref="${{ github.event.client_payload.host_sha || github.sha }}"
+          image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
+          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "host image: ${image%:*}@$digest"
+
       - name: Build composed image
         env:
-          HQ_IMAGE: ${{ vars.HQ_IMAGE }}
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
-          test -n "$HQ_IMAGE" || { echo "::error::HQ_IMAGE must be pinned by digest"; exit 1; }
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
             --build-arg PLUGIN_WHEEL_DIGESTS="${{ steps.compose.outputs.digests }}" \

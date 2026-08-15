@@ -215,37 +215,3 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
-  deploy:
-    name: deploy
-    needs: [build, scan]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
-    # connects in. NEVER trigger a self-hosted job from pull_request.
-    runs-on: [self-hosted, severino-hq]
-    environment: production
-    permissions:
-      contents: read
-      packages: read
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
-    steps:
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Sync deploy checkout
-        # The compose file, secrets scripts, and systemd units deploy from
-        # /opt/apps/severino-hq — without this pull they'd silently go stale
-        # (the image deploys, the config doesn't).
-        run: git -C /opt/apps/severino-hq pull --ff-only
-      - name: Deploy exact image with health rollback
-        env:
-          SEVERINO_IMAGE: ${{ needs.build.outputs.image }}
-        run: /opt/apps/severino-hq/scripts/deploy-image.sh "$SEVERINO_IMAGE"
-      - name: Reclaim disk (drop stale images + build cache)
-        if: always()
-        # Every release pulls a new sha-tagged image (~250MB). Without this the
-        # homelab disk fills and a later deploy wedges on ENOSPC. Prune unused
-        # images older than 24h (keeps a same-day rollback) plus build cache.
-        run: |
-          docker image prune -af --filter "until=24h" || true
-          docker builder prune -af || true
