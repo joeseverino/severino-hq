@@ -711,7 +711,12 @@ a.kpi:hover { background: var(--surface-2); }
    just produces a tall empty box, which reads worse than a short card that is
    honestly short. */
 .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
-.split > * { margin: 0; }
+/* min-width:0 so a child that scrolls its own overflow -- a wide table in its
+   scroll wrapper -- cannot instead force the column open and push the page
+   sideways. A grid item defaults to min-width:auto, which means "as wide as my
+   content", and the scroll wrapper never gets the chance to do its job. */
+.split > * { margin: 0; min-width: 0; }
+.two-col > * { min-width: 0; }
 .dashboard-command {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
@@ -950,7 +955,7 @@ a.kpi:hover { background: var(--surface-2); }
    field. Give the nav its own row here rather than at the phone breakpoint --
    overlapping labels are worse than a second row. */
 @media (max-width: 860px) {
-  .split { grid-template-columns: 1fr; }
+  .split { grid-template-columns: minmax(0, 1fr); }
   .site-header {
     display: flex;
     flex-wrap: wrap;
@@ -958,17 +963,40 @@ a.kpi:hover { background: var(--surface-2); }
     padding: 10px 14px;
   }
   .brand { font-size: 14px; }
+  /* Wraps rather than scrolls. A horizontal scroller here is an overflow
+     container, and an overflow container clips absolutely positioned
+     descendants -- which put every dropdown panel off-screen to the right and
+     made the sections unreachable by touch. Wrapping keeps the whole bar on
+     screen and leaves nothing to clip. */
   .primary-nav {
     order: 3;
     width: 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    margin: 2px -14px 0;
-    padding: 2px 14px 4px;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 2px 4px;
+    margin: 2px 0 0;
+    padding: 0;
   }
-  .primary-nav::-webkit-scrollbar { display: none; }
   .primary-nav a { white-space: nowrap; padding: 7px 10px; font-size: 13.5px; }
+
+  /* The panel joins the flow instead of floating over it. On a phone there is
+     no room to overlay, and a panel that pushes the page down cannot end up
+     covering the controls beneath it and swallowing their taps. */
+  .nav-group { position: static; }
+  .nav-group[open] { width: 100%; }
+  /* Absolute positioning previously took a closed panel out of flow, so nothing
+     ever had to hide it. In flow it keeps its box: every closed section stacked
+     invisibly on top of the open one, and a tap landed on whichever panel
+     happened to be uppermost -- usually the wrong section's link. */
+  .nav-group:not([open]) .nav-group-panel { display: none; }
+  .nav-group-panel {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    margin-top: 4px;
+    box-shadow: none;
+    border-radius: var(--radius-sm);
+  }
   .global-search { order: 2; margin-left: 0; flex: 1 1 180px; }
   .user-menu { margin-left: auto; justify-self: auto; }
 }
@@ -994,7 +1022,7 @@ a.kpi:hover { background: var(--surface-2); }
   .plugin-kpi-grid .kpi { flex-basis: calc(50% - 1px); }
 
   .ops-grid { grid-template-columns: 1fr; gap: 12px; }
-  .two-col { grid-template-columns: 1fr; gap: 12px; }
+  .two-col { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .two-col > section, .two-col > div, .card { padding: 14px 16px; }
 
   .list-rows li { gap: 6px 10px; padding: 10px 0; }

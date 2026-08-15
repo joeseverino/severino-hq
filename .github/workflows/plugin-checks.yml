@@ -1,0 +1,82 @@
+name: plugin checks
+
+# The reusable pre-admission gate. Every extension repository calls this instead
+# of copying it, so the pinned action SHAs, the Python matrix and the secret
+# scan live in exactly one place -- this one, where Dependabot already keeps
+# them current.
+#
+# This workflow deliberately does NOT sign anything. A job that runs from a
+# reusable workflow is issued a Sigstore identity naming *this* file, not the
+# caller's, so the signing job has to stay in the calling repository. See
+# .github/actions/admit-plugin/action.yml for the half that does.
+
+on:
+  workflow_call:
+    inputs:
+      hq-ref:
+        description: >-
+          Host ref the contract check runs against. Callers normally pass their
+          HQ_COMMIT variable falling back to main.
+        required: false
+        type: string
+        default: main
+      python-versions:
+        description: >-
+          JSON array of Python versions to test against. Overridable so an
+          extension that cannot support the newest interpreter narrows one
+          input instead of forking this file.
+        required: false
+        type: string
+        default: '["3.12", "3.13", "3.14"]'
+
+env:
+  HOST_REPOSITORY: joeseverino/severino-hq
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ${{ fromJSON(inputs.python-versions) }}
+    steps:
+      - name: Check out the plugin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out HQ contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ env.HOST_REPOSITORY }}
+          ref: ${{ inputs.hq-ref }}
+          path: host
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          enable-cache: true
+      - name: Verify package and host contract
+        # scripts/check.sh absorbs everything package-specific, which is why no
+        # package name appears in this file.
+        env:
+          HQ_ROOT: host
+        run: ./scripts/check.sh
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

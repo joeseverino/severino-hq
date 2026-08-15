@@ -138,6 +138,12 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
 // long enough that reading a chart stops feeling like reading. This shows the
 // same text immediately, tracking the cursor.
 (() => {
+  // Pointer devices only, for the same reason the nav menus are. A touch drag
+  // across a chart fires pointermove but never pointerleave, so a tooltip
+  // raised by a scroll gesture stayed on screen with nothing to dismiss it.
+  // Touch already has the chart's data table, which is always rendered.
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
   const charts = document.querySelectorAll("[data-chart]");
   if (!charts.length) return;
 

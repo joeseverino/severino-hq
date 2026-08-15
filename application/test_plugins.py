@@ -20,7 +20,7 @@ from .plugins import (
     plugin_capabilities,
     plugin_navigation,
 )
-from .ui import Kpi
+from .ui import Insight, Kpi
 
 
 VALID = PluginManifest(
@@ -296,3 +296,72 @@ class AttentionContractTests(TestCase):
     def test_extension_without_a_provider_is_skipped(self):
         gathered = self._gather((self._manifest(attention_provider=""),), {})
         self.assertEqual(gathered, ())
+
+
+class ComposedPluginTestKitTests(TestCase):
+    """The kit itself: a plugin must be able to see a sibling in its own suite.
+
+    Per-repo CI loads one extension. Anything that composes across them is
+    therefore only tested alone, which is how an assertion that nothing else is
+    installed passes locally and is wrong in production.
+    """
+
+    def tearDown(self):
+        installed_plugins.cache_clear()
+
+    def case(self, **attributes):
+        from .plugin_testing import ComposedPluginTestCase
+
+        namespace = {"siblings": (), **attributes}
+        case = type("Case", (ComposedPluginTestCase, TestCase), namespace)("run")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_a_sibling_appears_in_the_registry(self):
+        from .plugin_testing import sibling
+
+        self.case(siblings=(sibling(),))
+        self.assertIn("example.alpha", [item.id for item in installed_plugins()])
+
+    def test_a_sibling_contributes_dashboard_cards(self):
+        from .plugin_testing import sibling
+        from .plugins import plugin_dashboard_sections
+
+        card = {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"}
+        self.case(siblings=(sibling(cards=(card,)),))
+
+        sections = {section["id"]: section for section in plugin_dashboard_sections()}
+        self.assertEqual(sections["example.alpha"]["cards"], (card,))
+
+    def test_a_sibling_contributes_to_the_attention_queue(self):
+        from .plugin_testing import sibling
+        from .plugins import plugin_attention_items
+
+        item = Insight(
+            status="serious",
+            eyebrow="Alpha",
+            title="Something is wrong",
+            value="1",
+            body="Body.",
+        )
+        self.case(siblings=(sibling(attention=(item,)),))
+
+        entries = plugin_attention_items()
+        self.assertEqual([entry["source"] for entry in entries], ["Alpha"])
+        self.assertEqual(entries[0]["item"].title, "Something is wrong")
+
+    def test_the_registry_is_restored_afterwards(self):
+        from .plugin_testing import sibling
+
+        case = self.case(siblings=(sibling(),))
+        case.doCleanups()
+        self.assertNotIn("example.alpha", [item.id for item in installed_plugins()])
+
+    def test_a_synthetic_id_cannot_displace_a_real_extension(self):
+        from .plugin_testing import sibling
+
+        # A synthetic sibling that took a real id would quietly replace the
+        # extension under test with a stub, and the suite would still pass.
+        with self.assertRaises(ValueError):
+            sibling(identifier="acme.records")
