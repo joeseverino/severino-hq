@@ -139,6 +139,35 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
+class SharedPrimitiveStyleTests(SimpleTestCase):
+    """Shared partials may only use classes the style bundle actually defines.
+
+    An extension once invented a class name for a card it rendered; nothing
+    errored and nothing was styled. The partials are the host's published UI
+    contract, so anything they name has to exist here -- otherwise the first
+    surface to adopt a primitive is the one that discovers it is unstyled.
+    """
+
+    def test_partial_classes_are_defined_in_the_stylesheet(self):
+        import re
+
+        root = Path(__file__).resolve().parents[1]
+        css = (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", css))
+        offenders = []
+        for template in sorted((root / "templates" / "partials").rglob("*.html")):
+            text = template.read_text(encoding="utf-8")
+            for attribute in re.findall(r'class="([^"]*)"', text):
+                # Interpolated values are decided at render time; the pieces
+                # that make them up are checked where they are defined instead.
+                if "{{" in attribute or "{%" in attribute:
+                    continue
+                for name in attribute.split():
+                    if name not in defined:
+                        offenders.append(f"{template.name}: .{name}")
+        self.assertEqual(sorted(set(offenders)), [])
+
+
 class TemplateCommentTests(SimpleTestCase):
     """Django's {# #} comment is single-line only.
 

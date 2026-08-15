@@ -1,0 +1,20 @@
+{% comment %}
+Dropzone — a file field that also accepts a drop.
+
+  {% include "partials/_dropzone.html" with field=form.files title="Drop exports here"
+     hint="CSV or JSON · several at once" %}
+
+The real <input type="file"> covers the zone, so clicking anywhere opens the
+picker and a browser drop lands on the input natively. JavaScript only adds the
+drag highlight and the list of chosen files -- with it unavailable the field
+still selects, validates, and submits.
+{% endcomment %}
+<div class="field{% if field.errors %} has-errors{% endif %}">
+  <label class="dropzone" data-dropzone>
+    {{ field }}
+    <span class="dropzone-title">{{ title|default:field.label }}</span>
+    <span class="dropzone-hint">{{ hint|default:field.help_text }}</span>
+    <ul class="dropzone-files" data-dropzone-files hidden></ul>
+  </label>
+  {% if field.errors %}<ul class="errors">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+</div>

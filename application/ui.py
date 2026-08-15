@@ -46,6 +46,45 @@ class Insight:
 
 
 @dataclass(frozen=True)
+class ListRow:
+    """One line of a compact record list: what it is, and when.
+
+    The shape ``partials/_record_list.html`` renders. Surfaces that list recent
+    records -- history panels, queues, "latest N with a way to see the rest" --
+    emit this instead of restating the row markup, so rows align and read the
+    same wherever they appear and a change to the row lands everywhere at once.
+
+    Use ``_insight_grid.html`` instead when each entry needs interpreting; a row
+    is for records that speak for themselves.
+    """
+
+    title: str
+    # Inline after the title, muted: the one fact that distinguishes this row.
+    detail: str = ""
+    # Trailing, right-aligned: usually a date. Kept short -- it is scanned.
+    meta: str = ""
+    url: str = ""
+    # Leaves HQ. Rendered so the operator knows before they click, and so a
+    # linked page cannot reach back through window.opener.
+    external: bool = False
+    # Optional state. `badge` carries the text, so state is never colour alone.
+    status: str = ""
+    badge: str = ""
+
+    def __post_init__(self) -> None:
+        if self.status and self.status not in STATUS_VALUES:
+            raise ValueError(
+                f"ListRow status must be one of {', '.join(sorted(STATUS_VALUES))} "
+                f"or empty; got {self.status!r}."
+            )
+        if self.status and not self.badge:
+            raise ValueError(
+                "ListRow status needs a badge: state is never carried by colour "
+                "alone."
+            )
+
+
+@dataclass(frozen=True)
 class ChartSeries:
     label: str
     values: tuple[float, ...]
@@ -61,6 +100,11 @@ class ChartBar:
     value: float
     label: str
     slot: int
+    # Rendered by the host's own tooltip rather than an SVG <title>. The native
+    # one waits a second or two before appearing, which is long enough that
+    # reading a chart stops feeling like reading and starts feeling like
+    # querying.
+    tooltip: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,8 +147,13 @@ def stacked_bar_chart(
     series: tuple[ChartSeries, ...],
     *,
     unit: str,
+    maximum: float | None = None,
 ) -> StackedBarChart:
-    """Project raw series into one accessible, dependency-free SVG contract."""
+    """Project raw series into one accessible, dependency-free SVG contract.
+
+    ``maximum`` fixes the axis top instead of deriving a round ceiling from the
+    data, for scales that are known rather than observed.
+    """
     if any(item.slot not in range(1, 6) for item in series):
         raise ValueError("Chart series slots must be between 1 and 5.")
     if any(len(item.values) != len(labels) for item in series):
@@ -120,8 +169,10 @@ def stacked_bar_chart(
     totals = tuple(
         sum(item.values[index] for item in series) for index in range(len(labels))
     )
-    maximum = max(totals, default=0.0)
-    scale_max = _nice_ceiling(maximum)
+    # A caller that knows the scale says so. Shares of a whole always run to
+    # 100, and letting the axis round up to 150 leaves a third of the plot
+    # permanently empty and makes a full bar look like a partial one.
+    scale_max = maximum or _nice_ceiling(max(totals, default=0.0))
     column = plot_width / max(len(labels), 1)
     bar_width = min(34.0, column * 0.62)
     bars: list[ChartBar] = []
@@ -143,6 +194,10 @@ def stacked_bar_chart(
                     value=value,
                     label=item.label,
                     slot=item.slot,
+                    tooltip=(
+                        f"{label} · {item.label}: "
+                        f"{_format_tooltip_value(value)} {unit}"
+                    ),
                 )
             )
     ticks = tuple(
@@ -183,6 +238,17 @@ def _nice_ceiling(value: float) -> float:
     normalized = value / magnitude
     step = next(candidate for candidate in _AXIS_STEPS if normalized <= candidate)
     return step * magnitude
+
+
+def _format_tooltip_value(value: float) -> str:
+    """The exact reading, not the axis abbreviation.
+
+    An axis tick is glanced at and can be rounded; a tooltip is the reason
+    someone pointed at the bar, so it keeps the precision the axis dropped.
+    """
+    if value >= 1000:
+        return f"{value:,.0f}"
+    return f"{value:.0f}" if float(value).is_integer() else f"{value:.1f}"
 
 
 def _format_chart_value(value: float) -> str:

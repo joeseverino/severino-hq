@@ -5,7 +5,11 @@
   </div>
   {% if action_url and action_label %}
     <div class="page-actions">
-      <a class="btn{% if action_primary %} primary{% endif %}" href="{{ action_url }}">{{ action_label }}</a>
+      {% comment %}
+      action_modal names a dialog on this page. The link still points at a page
+      that does the same job, so the action works whether or not the dialog does.
+      {% endcomment %}
+      <a class="btn{% if action_primary %} primary{% endif %}" href="{{ action_url }}"{% if action_modal %} data-modal-open="{{ action_modal }}"{% endif %}>{{ action_label }}</a>
     </div>
   {% endif %}
 </header>

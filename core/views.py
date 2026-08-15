@@ -12,6 +12,7 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.http import JsonResponse
 from django.urls import reverse
+from django.utils import formats
 from django.views.generic import ListView, TemplateView
 
 from application.dashboard import operating_snapshot
@@ -19,6 +20,7 @@ from application.plugins import plugin_dashboard_cards, plugin_health
 from application.search import global_search
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
+from application.ui import ListRow
 from contacts.d1 import (
     D1Error,
     get_recent_submissions,
@@ -137,8 +139,57 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             },
         ]
 
+        # Projected here, not in operating_snapshot(): that snapshot is also the
+        # MCP payload, and a transport contract must not carry a UI shape.
+        contact_rows = [
+            ListRow(
+                title=submission["name"],
+                detail=submission["status"],
+                meta=submission["created_at"],
+                url=reverse("contacts:detail", args=[submission["id"]]),
+            )
+            for submission in recent_contacts
+        ]
+        content_rows = [
+            ListRow(
+                title=item["title"],
+                detail=item["content_type_label"],
+                meta=formats.date_format(item["updated_at"], "M j"),
+                url=reverse("content:detail", args=[item["slug"]]),
+            )
+            for item in snapshot["draft_content"]
+        ]
+        published_rows = [
+            ListRow(
+                title=item["title"],
+                meta=formats.date_format(
+                    item["published_at"] or item["updated_at"], "M j"
+                ),
+                url=item["published_url"]
+                or reverse("content:detail", args=[item["slug"]]),
+                external=bool(item["published_url"]),
+            )
+            for item in snapshot["recent_published"]
+        ]
+        docs_rows = [
+            ListRow(
+                title=record["title"],
+                detail=record["doc_id"],
+                meta=(
+                    formats.date_format(record["last_reviewed"], "M j")
+                    if record["last_reviewed"]
+                    else "never"
+                ),
+                url=reverse("docs_index:detail", args=[record["doc_id"]]),
+            )
+            for record in snapshot["docs_needing_review"]
+        ]
+
         ctx.update(
-            recent_contacts=recent_contacts,
+            recent_contacts=contact_rows,
+            content_rows=content_rows,
+            published_rows=published_rows,
+            docs_rows=docs_rows,
             unread_contacts_count=unread_contacts_count,
             active_project_count=snapshot["kpis"]["active_projects"],
             active_projects=snapshot["active_projects"],

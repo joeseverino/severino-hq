@@ -65,3 +65,114 @@ document.addEventListener("change", (event) => {
   const control = event.target.closest("[data-submit-on-change]");
   if (control?.form) control.form.requestSubmit();
 });
+
+// Modals. A trigger is always a real link to a page that does the same job, so
+// this only intercepts when there is in fact a dialog here to open -- otherwise
+// the link is followed and the operator lands on the full page instead.
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest("[data-modal-open]");
+  if (opener) {
+    const dialog = document.getElementById(`modal-${opener.dataset.modalOpen}`);
+    if (typeof dialog?.showModal === "function") {
+      event.preventDefault();
+      dialog.showModal();
+    }
+    return;
+  }
+  if (event.target.closest("[data-modal-close]")) {
+    event.target.closest("dialog")?.close();
+  }
+});
+
+document.querySelectorAll("dialog.modal").forEach((dialog) => {
+  // The dialog element is the backdrop's hit target; its content sits in an
+  // inner panel, so a click landing on the dialog itself was outside the panel.
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+});
+
+// Dropzones. The file input already is the click and drop target, so this adds
+// only what the browser will not: the drag highlight, and telling the operator
+// which files are staged before they commit to importing them.
+document.querySelectorAll("[data-dropzone]").forEach((zone) => {
+  const input = zone.querySelector("input[type=file]");
+  const chosen = zone.querySelector("[data-dropzone-files]");
+  if (!input) return;
+
+  const highlight = (on) => zone.classList.toggle("is-dragging", on);
+  ["dragenter", "dragover"].forEach((type) =>
+    zone.addEventListener(type, (event) => {
+      event.preventDefault();
+      highlight(true);
+    }),
+  );
+  zone.addEventListener("dragleave", (event) => {
+    // Crossing between the zone and its own children fires dragleave; only a
+    // pointer that has actually left should drop the highlight.
+    if (!zone.contains(event.relatedTarget)) highlight(false);
+  });
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    highlight(false);
+    input.files = event.dataTransfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  if (!chosen) return;
+  input.addEventListener("change", () => {
+    const files = Array.from(input.files || []);
+    chosen.replaceChildren(
+      ...files.map((file) => {
+        const row = document.createElement("li");
+        row.textContent = `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} KB`;
+        return row;
+      }),
+    );
+    chosen.hidden = files.length === 0;
+  });
+});
+
+// Chart tooltips. The SVG <title> element is the browser's own tooltip: it
+// waits a second or two, cannot be styled, and does not follow the pointer --
+// long enough that reading a chart stops feeling like reading. This shows the
+// same text immediately, tracking the cursor.
+(() => {
+  const charts = document.querySelectorAll("[data-chart]");
+  if (!charts.length) return;
+
+  const tip = document.createElement("div");
+  tip.className = "chart-tip";
+  tip.hidden = true;
+  document.body.append(tip);
+
+  const place = (event) => {
+    // Measured after the text is set, so a tooltip near an edge flips to the
+    // side with room instead of being clipped by the viewport.
+    const { width, height } = tip.getBoundingClientRect();
+    const gap = 14;
+    const left = Math.min(
+      Math.max(gap, event.clientX + gap),
+      window.innerWidth - width - gap,
+    );
+    const above = event.clientY - height - gap;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${above < gap ? event.clientY + gap : above}px`;
+  };
+
+  charts.forEach((chart) => {
+    chart.addEventListener("pointermove", (event) => {
+      const mark = event.target.closest("[data-tip]");
+      if (!mark) {
+        tip.hidden = true;
+        return;
+      }
+      if (tip.textContent !== mark.dataset.tip) tip.textContent = mark.dataset.tip;
+      tip.hidden = false;
+      place(event);
+    });
+    chart.addEventListener("pointerleave", () => {
+      tip.hidden = true;
+    });
+  });
+})();

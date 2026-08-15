@@ -26,11 +26,11 @@
       </label>
     {% endif %}
     <button class="btn" type="submit">Apply</button>
-    {% if table.active_count %}<a class="btn btn-secondary" href="?">Clear {{ table.active_count }}</a>{% endif %}
+    {% if table.active_count %}<a class="btn ghost" href="?">Clear {{ table.active_count }}</a>{% endif %}
   </div>
 </form>
 <div class="table-selection" data-table-selection aria-live="polite" hidden>
   <strong><span data-selection-count>0</span> selected</strong>
-  <button class="btn btn-secondary" type="button" data-copy-selected>Copy IDs</button>
-  <button class="btn btn-secondary" type="button" data-clear-selected>Clear</button>
+  <button class="btn ghost" type="button" data-copy-selected>Copy IDs</button>
+  <button class="btn ghost" type="button" data-clear-selected>Clear</button>
 </div>

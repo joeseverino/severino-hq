@@ -56,17 +56,7 @@
         {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
       </div>
       {% if recent_contacts %}
-        <ul class="list-rows">
-          {% for s in recent_contacts %}
-            <li>
-              <span class="row-main">
-                <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
-                <span class="muted">· {{ s.status }}</span>
-              </span>
-              <span class="row-meta">{{ s.created_at }}</span>
-            </li>
-          {% endfor %}
-        </ul>
+        {% include "partials/_record_list.html" with rows=recent_contacts %}
         <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
       {% else %}
         <div class="empty"><p>No contact submissions yet.</p></div>
@@ -167,34 +157,11 @@
       <h2>Publishing</h2>
       {% if draft_content_count %}<span class="count">{{ draft_content_count }} draft</span>{% endif %}
     </div>
-    {% if draft_content %}
-      <ul class="list-rows">
-        {% for c in draft_content %}
-          <li>
-            <span class="row-main">
-              <a href="{% url 'content:detail' c.slug %}"><strong>{{ c.title }}</strong></a>
-              <span class="muted">· {{ c.content_type_label }}</span>
-            </span>
-            <span class="row-meta">{{ c.updated_at|date:"M j" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
+    {% if content_rows %}
+      {% include "partials/_record_list.html" with rows=content_rows %}
       <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Draft queue &rarr;</a></p>
-    {% elif recent_published %}
-      <ul class="list-rows">
-        {% for c in recent_published %}
-          <li>
-            <span class="row-main">
-              {% if c.published_url %}
-                <a href="{{ c.published_url }}" target="_blank" rel="noopener"><strong>{{ c.title }}</strong></a>
-              {% else %}
-                <a href="{% url 'content:detail' c.slug %}"><strong>{{ c.title }}</strong></a>
-              {% endif %}
-            </span>
-            <span class="row-meta">{% if c.published_at %}{{ c.published_at|date:"M j" }}{% else %}{{ c.updated_at|date:"M j" }}{% endif %}</span>
-          </li>
-        {% endfor %}
-      </ul>
+    {% elif published_rows %}
+      {% include "partials/_record_list.html" with rows=published_rows %}
       <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
     {% else %}
       <div class="empty">
@@ -209,18 +176,8 @@
       <h2>Docs review</h2>
       {% if docs_needing_review_count %}<span class="count">{{ docs_needing_review_count }}</span>{% endif %}
     </div>
-    {% if docs_needing_review %}
-      <ul class="list-rows">
-        {% for d in docs_needing_review %}
-          <li>
-            <span class="row-main">
-              <a href="{% url 'docs_index:detail' d.doc_id %}"><strong>{{ d.title }}</strong></a>
-              <span class="muted">· {{ d.doc_id }}</span>
-            </span>
-            <span class="row-meta">{% if d.last_reviewed %}{{ d.last_reviewed|date:"M j" }}{% else %}never{% endif %}</span>
-          </li>
-        {% endfor %}
-      </ul>
+    {% if docs_rows %}
+      {% include "partials/_record_list.html" with rows=docs_rows %}
       <p class="section-foot"><a href="{% url 'docs_index:list' %}?needs_review=1">Review queue &rarr;</a></p>
     {% else %}
       <div class="empty"><p>All active docs reviewed recently.</p></div>
