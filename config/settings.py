@@ -290,6 +290,9 @@ SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
 SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool(
     "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False
 )
+# Requesting a certificate is an outward action with a real-world effect, so
+# it is gated on its own rather than riding along with declaring topology.
+SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", False)
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
     "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
 )
