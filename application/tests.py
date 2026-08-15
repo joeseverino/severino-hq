@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from assets.models import Asset
@@ -736,3 +736,43 @@ class ExpenseApplicationServiceTests(TestCase):
         cli_result = json.loads(output.getvalue())
         self.assertEqual(set(mcp_result["expense"]), set(cli_result["expense"]))
         self.assertEqual(mcp_result["expense"]["related_project"], "ops")
+
+
+class DocumentationSyncCapabilityTests(SimpleTestCase):
+    """`hq sync` must be grantable without handing over every other write."""
+
+    def test_doc_sync_flag_grants_only_documentation_sync(self):
+        from application.security import AuthorizationError, Capability, mcp_principal
+
+        with self.settings(
+            SEVERINO_MCP_ENABLE_DOC_SYNC=True, SEVERINO_MCP_ENABLE_WRITES=False
+        ):
+            principal = mcp_principal()
+        principal.require(Capability.SYNC_DOCUMENTATION)
+        for withheld in (
+            Capability.WRITE_EXPENSES,
+            Capability.WRITE_RECEIPTS,
+            Capability.WRITE_PROJECTS,
+            Capability.WRITE_ASSETS,
+            Capability.WRITE_CONTENT,
+            Capability.WRITE_DOCUMENTATION,
+        ):
+            with self.assertRaises(AuthorizationError):
+                principal.require(withheld)
+
+    def test_broad_writes_still_imply_doc_sync(self):
+        from application.security import Capability, mcp_principal
+
+        with self.settings(
+            SEVERINO_MCP_ENABLE_WRITES=True, SEVERINO_MCP_ENABLE_DOC_SYNC=False
+        ):
+            mcp_principal().require(Capability.SYNC_DOCUMENTATION)
+
+    def test_both_flags_off_withholds_doc_sync(self):
+        from application.security import AuthorizationError, Capability, mcp_principal
+
+        with self.settings(
+            SEVERINO_MCP_ENABLE_WRITES=False, SEVERINO_MCP_ENABLE_DOC_SYNC=False
+        ):
+            with self.assertRaises(AuthorizationError):
+                mcp_principal().require(Capability.SYNC_DOCUMENTATION)

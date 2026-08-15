@@ -280,6 +280,11 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
+# Mirroring the vault documentation index is gated separately from the broad
+# write flag: it is the one write wanted routinely, and bundling it meant the
+# only way to enable `hq sync` was to also grant write access to expenses,
+# receipts, projects, assets and content.
+SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC", False)
 SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
 SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
 SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool(
