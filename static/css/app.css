@@ -873,3 +873,16 @@ a.kpi:hover { background: var(--surface-2); }
 .renewal-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .renewal-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .renewal-meta { font-size: 12px; color: var(--muted); }
+
+/* ── Notice pages (404 / 500) ───────────────────────────────────────
+   Deliberately plain: the operator is here by accident, so the page
+   orients and offers one way out rather than decorating the mistake. */
+
+.notice-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
+.notice-code {
+  margin: 0 0 6px; font-size: 12px; font-weight: 650; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted-2); font-feature-settings: "tnum";
+}
+.notice-page h1 { margin: 0 0 10px; font-size: 22px; letter-spacing: -.02em; }
+.notice-body { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
+.notice-page .page-actions { justify-content: center; display: flex; }

@@ -137,3 +137,33 @@ class StyleContractTests(SimpleTestCase):
                 used & reserved,
                 f"status colours are reserved and must not encode a series: {used & reserved}",
             )
+
+
+class TemplateCommentTests(SimpleTestCase):
+    """Django's {# #} comment is single-line only.
+
+    A multi-line one is not a comment: it renders verbatim into the page. This
+    shipped once, printing template source across the site navigation, and the
+    failure is invisible in review because it looks exactly like a comment.
+    """
+
+    def test_no_multi_line_hash_comments_in_templates(self):
+        import re
+
+        root = Path(__file__).resolve().parents[1] / "templates"
+        offenders = []
+        for template in sorted(root.rglob("*.html")):
+            text = template.read_text(encoding="utf-8")
+            for match in re.finditer(r"\{#(.*?)#\}", text, re.DOTALL):
+                if "\n" in match.group(1):
+                    line = text[: match.start()].count("\n") + 1
+                    offenders.append(f"{template.relative_to(root)}:{line}")
+            for number, line in enumerate(text.splitlines(), 1):
+                if "{#" in line and "#}" not in line:
+                    offenders.append(f"{template.relative_to(root)}:{number}")
+
+        self.assertEqual(
+            sorted(set(offenders)),
+            [],
+            "use {% comment %}…{% endcomment %} for multi-line comments",
+        )
