@@ -68,7 +68,16 @@ class CurrentUserMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        token = _current_user.set(getattr(request, "user", None))
+        user = getattr(request, "user", None)
+        if user is not None:
+            # AuthenticationMiddleware exposes a SimpleLazyObject. Keeping it
+            # in a ContextVar lets ASGI's context restoration evaluate the
+            # session-backed object on the event-loop thread (Django 6.1 then
+            # correctly raises SynchronousOnlyOperation). Resolve it while
+            # this synchronous middleware is still running in its worker.
+            user.is_authenticated
+            user = getattr(request, "_cached_user", user)
+        token = _current_user.set(user)
         try:
             return self.get_response(request)
         finally:

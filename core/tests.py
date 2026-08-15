@@ -20,7 +20,9 @@ from urllib.parse import parse_qs, urlsplit
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
+from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.auth import get_user_model
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -29,7 +31,7 @@ from django.utils import timezone
 
 from assets.models import Asset
 from content.models import ContentItem
-from core.middleware import get_current_user, set_current_user
+from core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
 from core.logging import JsonFormatter, reset_request_id, set_request_id
 from core.models import AuditLog
 from core.oidc import HQOIDCAuthenticationBackend
@@ -108,6 +110,15 @@ class AuthGateTests(TestCase):
 
 
 class SecurityBoundaryTests(TestCase):
+    def test_current_user_context_never_retains_session_lazy_object(self):
+        request = self.client.request().wsgi_request
+        SessionMiddleware(lambda value: value).process_request(request)
+        AuthenticationMiddleware(lambda value: value).process_request(request)
+        observed = CurrentUserMiddleware(lambda _request: get_current_user())(request)
+
+        self.assertIs(observed, request._cached_user)
+        self.assertNotEqual(type(observed).__name__, "SimpleLazyObject")
+
     def test_json_logs_carry_request_correlation_without_query_strings(self):
         token = set_request_id("request-123")
         try:
