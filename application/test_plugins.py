@@ -222,3 +222,77 @@ class PluginContractTests(TestCase):
                 self.assertRaisesRegex(ImproperlyConfigured, "version does not match"),
             ):
                 installed_plugins()
+
+
+class AttentionContractTests(TestCase):
+    """The cross-surface attention queue is only useful if it is trustworthy."""
+
+    @staticmethod
+    def _manifest(**overrides):
+        from application.plugins import PluginManifest
+
+        base = dict(
+            id="example.demo",
+            name="Demo",
+            version="1.0.0",
+            distribution="demo",
+            source_repository="owner/demo",
+            source_workflow=".github/workflows/admit-plugin.yml",
+            attention_provider="demo:items",
+        )
+        return PluginManifest(**{**base, **overrides})
+
+    def _gather(self, manifests, items_by_ref):
+        from application import plugins
+
+        with (
+            mock.patch.object(plugins, "installed_plugins", return_value=manifests),
+            mock.patch.object(
+                plugins, "_import", side_effect=lambda ref: (lambda: items_by_ref[ref])
+            ),
+        ):
+            return plugins.plugin_attention_items()
+
+    def test_serious_items_sort_ahead_of_attention_across_extensions(self):
+        from application.ui import Insight
+
+        a = self._manifest(id="example.a", name="Aaa", attention_provider="a:items")
+        b = self._manifest(id="example.b", name="Bbb", attention_provider="b:items")
+        gathered = self._gather(
+            (a, b),
+            {
+                "a:items": [Insight("attention", "e", "A watch", "1", "body")],
+                "b:items": [Insight("serious", "e", "B urgent", "2", "body")],
+            },
+        )
+        # Severity must beat source ordering, or the urgent item hides below.
+        self.assertEqual([e["item"].title for e in gathered], ["B urgent", "A watch"])
+
+    def test_healthy_and_neutral_items_are_not_attention(self):
+        from application.ui import Insight
+
+        manifest = self._manifest()
+        gathered = self._gather(
+            (manifest,),
+            {
+                "demo:items": [
+                    Insight("good", "e", "Fine", "1", "body"),
+                    Insight("neutral", "e", "Context", "2", "body"),
+                    Insight("serious", "e", "Broken", "3", "body"),
+                ]
+            },
+        )
+        self.assertEqual([e["item"].title for e in gathered], ["Broken"])
+
+    def test_items_carry_their_source_for_attribution(self):
+        from application.ui import Insight
+
+        gathered = self._gather(
+            (self._manifest(),), {"demo:items": [Insight("serious", "e", "T", "1", "b")]}
+        )
+        self.assertEqual(gathered[0]["source"], "Demo")
+        self.assertEqual(gathered[0]["source_id"], "example.demo")
+
+    def test_extension_without_a_provider_is_skipped(self):
+        gathered = self._gather((self._manifest(attention_provider=""),), {})
+        self.assertEqual(gathered, ())

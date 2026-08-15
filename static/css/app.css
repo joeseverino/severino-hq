@@ -21,6 +21,20 @@
   --warn: #a35a00;
   --ok: #1d6b35;
   --attn: #b0521a;
+
+  /* Categorical series palette. Assigned in fixed order, never cycled: colour
+     follows the entity, not its rank, so filtering a series must not repaint
+     the survivors. These are validated as a set (lightness band, chroma floor,
+     colour-vision separation, normal-vision floor) against the white chart
+     surface -- do not hand-tune a slot without re-validating the whole set.
+     Slots 3-5 sit under 3:1 contrast on white, so any chart using them must
+     also carry visible labels or its data table (both shipped by the chart
+     primitive). Status colours above are reserved and never used as a slot. */
+  --series-1: #0e88a8;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
   --radius: 8px;
   --radius-sm: 5px;
   --shadow-sm: 0 1px 1px rgba(20, 20, 30, .03);
@@ -71,20 +85,52 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 .brand:hover { text-decoration: none; }
 .primary-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* Must stay visible: an overflow scroll container clips absolutely
+     positioned descendants, which silently swallowed the group dropdowns.
+     Grouping bounds the control count, so the scroller is no longer needed. */
+  overflow: visible;
 }
-.primary-nav::-webkit-scrollbar { display: none; }
 .primary-nav a {
   color: var(--muted); font-weight: 500; font-size: 13.5px;
   padding: 5px 10px; border-radius: 6px;
   white-space: nowrap;
   transition: background .12s ease, color .12s ease;
 }
+.primary-nav > a, .nav-group > summary { color: var(--muted); font-weight: 500; font-size: 13.5px; padding: 5px 10px; border-radius: 6px; white-space: nowrap; }
 .primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
 .primary-nav a.active { color: var(--ink); background: var(--bg-tint); }
+
+/* Grouped sections. A <details> dropdown keeps the bar to a fixed number of
+   controls as sections are added, instead of overflowing behind a hidden
+   scrollbar where the tail becomes unreachable. */
+.nav-group { position: relative; }
+/* Safari stops toggling <details> when `display` on <summary> is changed away
+   from list-item, so the summary keeps its default display and an inner span
+   does the layout. Chromium toggles either way, which is exactly why this has
+   to be checked in Safari rather than assumed. */
+.nav-group > summary {
+  display: list-item; list-style: none;
+  cursor: pointer; user-select: none;
+  transition: background .12s ease, color .12s ease;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::marker { content: ""; }
+.nav-group-label { display: inline-flex; align-items: center; gap: 5px; }
+.nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }
+.nav-group > summary.active { color: var(--ink); background: var(--bg-tint); }
+.nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.nav-group[open] .nav-caret { transform: rotate(180deg); }
+.nav-group-panel {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
+  min-width: 176px; display: flex; flex-direction: column; gap: 1px;
+  padding: 5px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.nav-group-panel a { padding: 6px 9px; border-radius: var(--radius-sm); font-size: 13px; }
 
 .global-search { min-width: 0; }
 .global-search input {
@@ -222,18 +268,32 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 .chart-axis { fill: var(--muted); font-size: 11px; }
 .chart-category { font-size: 10px; }
+/* <figure> carries a UA margin of 1em 40px, which inset every chart card from
+   the surrounding grid and broke the page's left/right alignment. */
+.chart-card { margin: 0 0 18px; }
 .chart-card figcaption h2 { margin: 0; }
 .chart-card figcaption p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 2px; color: var(--muted); font-size: 12px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
 .chart-scroll { overflow-x: auto; }
-.bar-chart { display: block; min-width: 620px; width: 100%; height: auto; }
-.chart-series-1 { fill: var(--accent); background: var(--accent); }
-.chart-series-2 { fill: var(--success); background: var(--success); }
-.chart-series-3 { fill: var(--warning); background: var(--warning); }
-.chart-series-4 { fill: var(--danger); background: var(--danger); }
-.chart-series-5 { fill: var(--muted-2); background: var(--muted-2); }
+/* The floor is what keeps category labels from colliding, not a target width.
+   At 620px a chart placed in a two-column row overflowed its own column and
+   silently clipped the final category behind the scroller, so the most recent
+   period -- the one being read -- was the one cut off. */
+.bar-chart { display: block; min-width: 480px; width: 100%; height: auto; }
+/* Series fills. Previously these pointed at --success/--warning, which are not
+   defined in :root; an undefined custom property makes `fill` invalid and SVG
+   falls back to black, so multi-series charts rendered as solid black stacks.
+   The :root-variable test guards against that regression returning. */
+.chart-series-1 { fill: var(--series-1); background: var(--series-1); }
+.chart-series-2 { fill: var(--series-2); background: var(--series-2); }
+.chart-series-3 { fill: var(--series-3); background: var(--series-3); }
+.chart-series-4 { fill: var(--series-4); background: var(--series-4); }
+.chart-series-5 { fill: var(--series-5); background: var(--series-5); }
+/* 2px surface gap between stacked segments so adjacent fills read as separate
+   marks rather than one block; also carries the CVD relief for close hues. */
+.bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .chart-data { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .control-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .control-good, .control-healthy { color: #1f7250; }
@@ -413,10 +473,87 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; margin: 0 0 24px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .kpi { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+/* A linked KPI is a whole tile target, so it should not also wear inline-link
+   underlines on its label and value. */
+a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
+a.kpi:hover { background: var(--surface-2); }
 .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 .kpi .value { font-size: 24px; font-weight: 650; letter-spacing: -.018em; line-height: 1.1; font-feature-settings: "tnum"; }
 .kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
 .kpi .muted { font-size: 11.5px; }
+/* Nested in a card, the grid's own bottom margin becomes dead space inside the
+   card's padding rather than separation between sections. */
+.card > .kpi-grid:last-child, .card > .insight-grid:last-child { margin-bottom: 0; }
+
+/* ── Insight grid ───────────────────────────────────────────────────
+   Decision-support cards: a reading, its interpretation, the next action.
+   Extensions render against this rather than defining their own card class --
+   an undefined class is silent at runtime and simply renders unstyled. */
+
+.insight-grid {
+  display: grid;
+  /* A narrower track ceiling lets four insights share one row at desktop
+     widths instead of stranding the fourth alone beside two empty columns. */
+  grid-template-columns: repeat(auto-fit, minmax(clamp(240px, 22%, 290px), 1fr));
+  gap: 14px;
+  margin: 18px 0 24px;
+}
+.insight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px 17px;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+.insight-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.insight-value { font-size: 17px; font-weight: 650; letter-spacing: -.015em; font-feature-settings: "tnum"; white-space: nowrap; }
+.insight-title { margin: 0; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.insight-title a { color: inherit; }
+.insight-body { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.insight-action { margin: auto 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.insight-action-label { font-weight: 650; color: var(--ink-2); }
+.insight-action-label::after { content: ":"; }
+
+/* Status pills for insights. Reserved states, each carrying its own text so
+   meaning never rests on colour alone. */
+.pill-good { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
+.pill-attention { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
+.pill-serious { background: #fcdcd0; color: #843300; border-color: #ffbfa8; }
+.pill-neutral { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
+
+/* ── Attention queue ────────────────────────────────────────────────
+   Cross-surface list of things awaiting a decision. A row, not a card: these
+   are scanned top-down in severity order, and cards would imply the grid
+   position carries meaning when only the order does. */
+
+.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.attention-row {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) 1fr auto;
+  align-items: start;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line-2);
+}
+.attention-row:first-child { border-top: 0; padding-top: 4px; }
+/* Grid items stretch to fill their track by default, which inflated the pill
+   into a wide oval instead of hugging its label. */
+.attention-row > .pill { justify-self: start; align-self: start; }
+.attention-body { min-width: 0; }
+.attention-title { display: block; font-size: 14px; font-weight: 650; color: var(--ink); letter-spacing: -.005em; }
+.attention-detail { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.attention-action { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.attention-value { font-size: 13px; font-weight: 650; color: var(--ink-2); white-space: nowrap; font-feature-settings: "tnum"; }
+.attention-clear { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+
+@media (max-width: 720px) {
+  .attention-row { grid-template-columns: 1fr auto; }
+  .attention-row > .pill { grid-column: 1 / -1; justify-self: start; }
+}
 
 /* ── Operations panels ──────────────────────────────────────────── */
 
@@ -710,3 +847,27 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 @media (max-width: 420px) {
   .kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Renewal timeline ───────────────────────────────────────────────
+   A countdown list. The number leads because "how long have I got" is the
+   question being asked; the date answers the follow-up. */
+
+.renewal-list { list-style: none; margin: 0; padding: 0; }
+.renewal-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-2);
+}
+.renewal-row:first-child { border-top: 0; padding-top: 2px; }
+.renewal-when {
+  font-size: 19px; font-weight: 650; letter-spacing: -.02em;
+  color: var(--ink); text-align: right; font-feature-settings: "tnum";
+}
+.renewal-when.is-due { color: var(--attn); }
+.renewal-unit { font-size: 12px; font-weight: 550; color: var(--muted); margin-left: 1px; }
+.renewal-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.renewal-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.renewal-meta { font-size: 12px; color: var(--muted); }

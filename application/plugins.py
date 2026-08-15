@@ -12,6 +12,8 @@ from typing import Any, Callable, Iterable
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import include, path
 
+from .ui import STATUS_VALUES
+
 PLUGIN_API_VERSION = 1
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -25,6 +27,10 @@ class NavigationItem:
     route: str
     namespace: str
     order: int = 500
+    # Empty renders inline in the primary nav; a name collects this item into
+    # the matching dropdown. Defaults to inline so a surface stays reachable in
+    # one click, and so existing manifests keep their current placement.
+    group: str = ""
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,10 @@ class PluginManifest:
     urlconf: str = ""
     navigation: tuple[NavigationItem, ...] = ()
     dashboard_provider: str = ""
+    # Optional. Returns Insight-shaped items this extension believes need an
+    # operator decision now. Composing surfaces gather these across extensions,
+    # so a thing that needs doing is visible without opening its own page.
+    attention_provider: str = ""
     capability_provider: str = ""
     search_provider: str = ""
     health_provider: str = ""
@@ -148,15 +158,112 @@ def _provided(attribute: str) -> tuple[Any, ...]:
     return tuple(values)
 
 
+# A card is a scalar and a link, plus optional interpretation. Kept deliberately
+# small: the aggregate is rendered by surfaces that compose many extensions at
+# once, so a card must be cheap to produce and safe to show beside any other.
+CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
+CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
+# Imported, not restated: one status vocabulary serves every surface that shows
+# state, so a card and an insight cannot drift apart on what "attention" means.
+CARD_STATUS_VALUES = STATUS_VALUES
+# Direction of travel, not a judgement: whether "up" is good is the domain's
+# business, which is what `status` is for.
+CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
+
+
+def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
+    """Dashboard cards grouped by the extension that produced them.
+
+    Attribution is authoritative: the host already knows which extension a
+    provider belongs to, so a surface composing several of them never has to
+    infer ownership from an id-naming convention that nothing enforces.
+    """
+    sections = []
+    for plugin in installed_plugins():
+        if not plugin.dashboard_provider:
+            continue
+        cards = tuple(_import(plugin.dashboard_provider)())
+        _validate_dashboard_cards(cards)
+        sections.append({"id": plugin.id, "label": plugin.name, "cards": cards})
+    return tuple(sections)
+
+
 def plugin_dashboard_cards() -> tuple[dict[str, Any], ...]:
-    cards = _provided("dashboard_provider")
-    required = {"id", "label", "value", "url"}
+    # Derived from the grouped form so the flat and grouped views cannot
+    # disagree about what was provided.
+    return tuple(
+        card for section in plugin_dashboard_sections() for card in section["cards"]
+    )
+
+
+def _validate_dashboard_cards(cards: Iterable[dict[str, Any]]) -> None:
     for card in cards:
-        if not isinstance(card, dict) or not required <= card.keys():
+        if not isinstance(card, dict) or not CARD_REQUIRED_KEYS <= card.keys():
             raise ImproperlyConfigured(
                 "Plugin dashboard cards require id, label, value, and url."
             )
-    return cards
+        # Unknown keys are rejected rather than ignored: a typo'd optional key
+        # would otherwise silently render nothing at all.
+        unknown = card.keys() - CARD_REQUIRED_KEYS - CARD_OPTIONAL_KEYS
+        if unknown:
+            raise ImproperlyConfigured(
+                f"Unknown dashboard card keys: {', '.join(sorted(unknown))}."
+            )
+        status = card.get("status")
+        if status is not None and status not in CARD_STATUS_VALUES:
+            raise ImproperlyConfigured(
+                f"Dashboard card status must be one of "
+                f"{', '.join(sorted(CARD_STATUS_VALUES))}; got {status!r}."
+            )
+        trend = card.get("trend")
+        if trend is not None and trend not in CARD_TREND_VALUES:
+            raise ImproperlyConfigured(
+                f"Dashboard card trend must be one of "
+                f"{', '.join(sorted(CARD_TREND_VALUES))}; got {trend!r}."
+            )
+
+
+# Most urgent first. An operator scanning this list top-down should hit the
+# thing that will hurt soonest; "neutral" is context, not a call to action, and
+# is excluded from attention entirely.
+ATTENTION_ORDER = ("serious", "attention")
+
+
+def plugin_attention_items() -> tuple[dict[str, Any], ...]:
+    """What every installed extension believes needs a decision now.
+
+    Each entry carries its source so a composing surface can say where the item
+    came from without the extension having to restate its own name. Items are
+    returned already ordered by severity: the ordering is a property of the
+    status vocabulary, so every surface that renders them agrees on urgency
+    rather than each re-sorting to its own taste.
+    """
+    gathered: list[dict[str, Any]] = []
+    for plugin in installed_plugins():
+        if not plugin.attention_provider:
+            continue
+        for item in _import(plugin.attention_provider)():
+            status = getattr(item, "status", None)
+            if status not in STATUS_VALUES:
+                raise ImproperlyConfigured(
+                    f"{plugin.id!r} produced an attention item with status "
+                    f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
+                )
+            if status not in ATTENTION_ORDER:
+                continue
+            gathered.append(
+                {"item": item, "source": plugin.name, "source_id": plugin.id}
+            )
+    return tuple(
+        sorted(
+            gathered,
+            key=lambda entry: (
+                ATTENTION_ORDER.index(entry["item"].status),
+                entry["source"],
+                entry["item"].title,
+            ),
+        )
+    )
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:
