@@ -9,7 +9,12 @@ name: Compose and deploy extensions
 # rebuild the current set (for example after a host release).
 
 on:
-  push:
+  # After the host image exists, never in parallel with it being built. On a
+  # plain push this raced the build and resolved a tag that was not published
+  # yet.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   repository_dispatch:
     types: [extension-admitted]
@@ -37,6 +42,10 @@ env:
 jobs:
   compose:
     name: Compose admitted extensions
+    # A failed host build must not be composed onto.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.publish.outputs.image }}
@@ -146,7 +155,7 @@ jobs:
         # hand and no way for the composition to be built on a stale host.
         run: |
           set -euo pipefail
-          ref="${{ github.event.client_payload.host_sha || github.sha }}"
+          ref="${{ github.event.workflow_run.head_sha || github.event.client_payload.host_sha || github.sha }}"
           image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
           digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
