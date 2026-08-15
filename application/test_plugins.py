@@ -347,9 +347,13 @@ class ComposedPluginTestKitTests(TestCase):
         )
         self.case(siblings=(sibling(attention=(item,)),))
 
+        # Asserts the sibling is present, not that it is alone: this suite runs
+        # with whatever extension is installed alongside, which is the whole
+        # point of the kit and was the exact assumption it exists to catch.
         entries = plugin_attention_items()
-        self.assertEqual([entry["source"] for entry in entries], ["Alpha"])
-        self.assertEqual(entries[0]["item"].title, "Something is wrong")
+        alpha = [entry for entry in entries if entry["source"] == "Alpha"]
+        self.assertEqual(len(alpha), 1)
+        self.assertEqual(alpha[0]["item"].title, "Something is wrong")
 
     def test_the_registry_is_restored_afterwards(self):
         from .plugin_testing import sibling
