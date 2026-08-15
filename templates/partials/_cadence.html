@@ -1,0 +1,30 @@
+{% comment %}
+Cadence strip — whether a thing happened, period by period.
+
+  {% include "partials/_cadence.html" with cadence=chest_cadence %}
+
+`cadence` is application.ui.Cadence. Use this when the question is "did I keep
+this up", not "how much" -- a gap in a row of filled marks is visible in a way a
+short bar beside tall ones is not. Pair it with a chart rather than replacing
+one.
+{% endcomment %}
+<div class="cadence">
+  <div class="cadence-head">
+    {% comment %}
+    The title is optional: inside a card that already names the thing, repeating
+    it is noise. The ratio is not optional -- it is the reading.
+    {% endcomment %}
+    {% if cadence.title %}<span class="cadence-title">{{ cadence.title }}</span>{% else %}<span></span>{% endif %}
+    <span class="cadence-count">{{ cadence.hits }}/{{ cadence.weeks|length }}{% if cadence.streak > 1 %} · {{ cadence.streak }} in a row{% endif %}</span>
+  </div>
+  <ol class="cadence-strip">
+    {% for week in cadence.weeks %}
+      <li class="cadence-week">
+        <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" title="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
+        <span class="cadence-label">{{ week.label }}</span>
+        <span class="visually-hidden">{{ week.detail|default:week.label }}</span>
+      </li>
+    {% endfor %}
+  </ol>
+  {% if cadence.description %}<p class="cadence-note">{{ cadence.description }}</p>{% endif %}
+</div>

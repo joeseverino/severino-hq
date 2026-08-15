@@ -869,6 +869,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .modal::backdrop { background: rgba(24, 24, 27, .38); }
 .modal-panel { padding: 18px 20px 20px; }
+.modal-panel:focus { outline: none; }
 .modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
 .modal-head h2 { margin: 0; flex: 1; font-size: 16px; letter-spacing: -.01em; }
 .modal-close {
@@ -1043,7 +1044,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 
 @media (max-width: 420px) {
-  .kpi { flex-basis: 100%; }
+  .kpi { flex-basis: calc(50% - 1px); }
 }
 
 /* ── Renewal timeline ───────────────────────────────────────────────
@@ -1082,3 +1083,88 @@ a.kpi:hover { background: var(--surface-2); }
 .notice-page h1 { margin: 0 0 10px; font-size: 22px; letter-spacing: -.02em; }
 .notice-body { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
 .notice-page .page-actions { justify-content: center; display: flex; }
+
+/* ── Tables on a phone ──────────────────────────────────────────────
+   A six-column table on a 390px screen is a horizontal scroll, and a row you
+   have to drag sideways to read is a row you do not read. Below the breakpoint
+   each row becomes its own block and each cell carries its column name, so the
+   same markup serves both without a second template.
+
+   Cells opt in by carrying `data-label`; a table whose cells do not simply
+   keeps its existing scroll behaviour, so this cannot break one that has not
+   been converted. */
+@media (max-width: 640px) {
+  .data-table.stacks thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .data-table.stacks, .data-table.stacks tbody, .data-table.stacks tr, .data-table.stacks td { display: block; width: 100%; }
+  .data-table.stacks tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--surface);
+  }
+  .data-table.stacks td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 3px 0;
+    border: 0;
+    text-align: right;
+  }
+  .data-table.stacks td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  /* The first cell is the row's identity, so it reads as a heading rather than
+     as another label/value pair. */
+  .data-table.stacks td:first-child { display: block; text-align: left; font-weight: 650; font-size: 14.5px; padding-bottom: 6px; }
+  .data-table.stacks td:first-child::before { display: none; }
+  .data-table.stacks td[data-label]:empty { display: none; }
+  .table-scroll:has(.data-table.stacks) { overflow-x: visible; }
+}
+
+/* ── Cadence strip ──────────────────────────────────────────────────
+   Whether a thing happened, period by period. A filled mark is a period it
+   happened in; the gaps are the point, so they stay the same size and shape as
+   the hits rather than collapsing. */
+
+.cadence { display: flex; flex-direction: column; gap: 8px; }
+.cadence-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cadence-title { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.cadence-count { font-size: 12px; color: var(--muted); font-feature-settings: "tnum"; white-space: nowrap; }
+.cadence-strip { display: flex; flex-wrap: wrap; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.cadence-week { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 34px; }
+.cadence-mark {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 650; color: var(--muted);
+  font-feature-settings: "tnum";
+}
+.cadence-mark.is-hit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cadence-label { font-size: 10.5px; color: var(--muted-2); white-space: nowrap; }
+.cadence-note { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Cadence matrix — the same marks as a single strip, aligned in columns so the
+   rows can be read against each other. Deliberately not stacked on a phone: a
+   matrix that becomes a list of lists loses the alignment it exists for, and a
+   row of five dots fits a narrow screen comfortably. */
+.cadence-matrix th[scope="col"] { text-align: center; }
+.cadence-matrix th[scope="col"]:first-child { text-align: left; }
+.cadence-matrix th[scope="row"] { text-align: left; font-weight: 650; white-space: nowrap; }
+.cadence-matrix th[scope="row"] a { color: var(--ink); }
+.cadence-matrix th[scope="row"] a:hover { color: var(--accent); }
+.cadence-detail { display: block; font-weight: 400; font-size: 11.5px; }
+.cadence-cell { text-align: center; }
+.cadence-cell .cadence-mark { margin: 0 auto; }
+.cadence-period { font-size: 11px; color: var(--muted-2); font-weight: 500; white-space: nowrap; }
+.cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }

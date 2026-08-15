@@ -1,0 +1,37 @@
+{% comment %}
+Cadence matrix — several things tracked over the same periods.
+
+  {% include "partials/_cadence_matrix.html" with matrix=split_matrix %}
+
+`matrix` is application.ui.CadenceMatrix. A real table because that is what it
+is: one row per thing, one column per period, and the alignment down a column is
+what makes the comparison possible. Use _cadence.html for a single strip.
+{% endcomment %}
+<div class="table-scroll">
+  <table class="data-table cadence-matrix">
+    <thead>
+      <tr>
+        <th scope="col">{{ label|default:"Tracked" }}</th>
+        {% for period in matrix.periods %}<th scope="col" class="cadence-period">{{ period }}</th>{% endfor %}
+        <th scope="col" class="cadence-total">Hit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in matrix.rows %}
+        <tr>
+          <th scope="row">
+            {% if row.url %}<a href="{{ row.url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}
+            {% if row.detail %}<span class="muted cadence-detail">{{ row.detail }}</span>{% endif %}
+          </th>
+          {% for week in row.weeks %}
+            <td class="cadence-cell">
+              <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" title="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
+              <span class="visually-hidden">{{ week.detail }}</span>
+            </td>
+          {% endfor %}
+          <td class="cadence-total">{{ row.hits }}/{{ matrix.periods|length }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
