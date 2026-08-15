@@ -1,0 +1,5 @@
+# The homelab deploy runner. Declared so actionlint stops reporting the label
+# as unknown on every workflow that deploys.
+self-hosted-runner:
+  labels:
+    - severino-hq
