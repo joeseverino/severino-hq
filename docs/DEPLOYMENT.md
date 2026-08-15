@@ -151,9 +151,14 @@ an administrator bootstrap boundary; application deployment cannot rewrite its
 own remote authorization policy.
 
 Pull requests run application checks, build the production image, boot it to
-readiness, and scan it with Trivy. A push to `main` publishes the image and
-runs the same scan before homelab deployment, health verification, and
-controller activation.
+readiness, and scan it with Trivy. A push to `main` publishes and scans the
+image but does **not** deploy it.
+
+Deployment is the composition workflow's job, and it is the only path to
+production. It waits for the host workflow to finish, rebuilds every admitted
+extension onto the new host image, and deploys that. Two deploy paths existed
+once — the host's and each extension's — and whichever ran last won, so a host
+release silently dropped every extension out of production.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running
 image, and restores it automatically if the exact SHA-tagged replacement does
 not become healthy or its controller cannot pass activation. After rollback,
