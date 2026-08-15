@@ -103,6 +103,7 @@ jobs:
           for index in $(seq 0 $((count - 1))); do
             repo=$(jq -r ".extensions[$index].repository" composition-set.json)
             workflow=$(jq -r ".extensions[$index].workflow" composition-set.json)
+            plugin_id=$(jq -r ".extensions[$index].id" composition-set.json)
             dir="artifacts/$(basename "$repo")"
             statement=$(find "$dir" -name admission.json -print -quit)
             bundle=$(find "$dir" -name admission.sigstore.json -print -quit)
@@ -120,8 +121,8 @@ jobs:
               --repository "$repo" \
               --workflow "$workflow" \
               --host severino-hq \
-              --policy policy/plugin-admission-v1.json \
-              --policy-sha256 "$policy_sha" > "$entry"
+              --plugin-id "$plugin_id" \
+              --policy-sha "$policy_sha" > "$entry"
             args="$args --entry $entry --wheel $wheel"
           done
           echo "args=$args" >> "$GITHUB_OUTPUT"
