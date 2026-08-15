@@ -9,6 +9,8 @@ name: Compose and deploy extensions
 # rebuild the current set (for example after a host release).
 
 on:
+  push:
+    branches: [main]
   repository_dispatch:
     types: [extension-admitted]
   workflow_dispatch:
@@ -126,11 +128,29 @@ jobs:
           CORDON_LOCK: ./cordon/admission/lock.mjs
         run: python scripts/compose-plugins.py ${{ steps.collect.outputs.args }} --out build/composition
 
+      - name: Authenticate to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the host image
+        id: host
+        # Derived from the commit being composed, so there is no pin to bump by
+        # hand and no way for the composition to be built on a stale host.
+        run: |
+          set -euo pipefail
+          ref="${{ github.event.client_payload.host_sha || github.sha }}"
+          image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
+          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "host image: ${image%:*}@$digest"
+
       - name: Build composed image
         env:
-          HQ_IMAGE: ${{ vars.HQ_IMAGE }}
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
-          test -n "$HQ_IMAGE" || { echo "::error::HQ_IMAGE must be pinned by digest"; exit 1; }
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
             --build-arg PLUGIN_WHEEL_DIGESTS="${{ steps.compose.outputs.digests }}" \
