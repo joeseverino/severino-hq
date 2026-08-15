@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Something broke · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<section class="notice-page">
+  <p class="notice-code">500</p>
+  <h1>Something broke on our side</h1>
+  <p class="notice-body">
+    The error was logged with a request id. Nothing you did caused it, and
+    retrying is safe.
+  </p>
+  <p class="page-actions">
+    <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>
+  </p>
+</section>
+{% endblock %}

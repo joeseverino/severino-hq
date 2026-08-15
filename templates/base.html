@@ -21,8 +21,8 @@
       <nav class="primary-nav">
         {% for entry in nav_entries %}
           {% if entry.kind == "group" %}
-            {# Shared name makes the groups a native exclusive accordion, so
-               only one panel is ever open even before JS loads. #}
+            {% comment %}Shared name makes the groups a native exclusive
+            accordion, so only one panel is open even before JS loads.{% endcomment %}
             <details class="nav-group" name="nav-group">
               <summary{% if entry.active %} class="active"{% endif %}>
                 <span class="nav-group-label">
