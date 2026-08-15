@@ -257,6 +257,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .muted-2 { color: var(--muted-2); }
 
 .page-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: var(--stack-gap); }
+.page-head-compact { margin-bottom: 0; }
+.page-head-compact .page-lede { margin-bottom: 0; }
 .page-head h1 { margin: 0; }
 .page-head .page-actions { margin-left: auto; display: flex; gap: 8px; }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
@@ -751,6 +753,44 @@ a.kpi:hover { background: var(--surface-2); }
 .section-head h2 { margin: 0; flex: 1; }
 .section-head .count { font-size: 11.5px; color: var(--muted-2); font-weight: 500; }
 
+/* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
+   this layout in the host means every present and future private domain gets
+   the same rhythm without shipping its own near-copy of the shell. */
+.domain-stack { display: grid; gap: calc(var(--stack-gap) * 1.5); }
+.domain-stack > * { min-width: 0; }
+.domain-stack > section { display: grid; gap: 12px; }
+.domain-stack-head,
+.domain-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--layout-gap);
+}
+.domain-stack-head h2,
+.domain-head h2 { margin: 0; }
+.domain-head h2 {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+.domain-head-copy { min-width: 0; }
+.domain-head-copy .eyebrow { display: block; margin-bottom: 4px; }
+.domain-head-copy p { margin: 5px 0 0; max-width: 680px; }
+.domain-head .btn { flex: 0 0 auto; }
+.domain-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: var(--layout-gap);
+  align-items: start;
+}
+.domain-workspace > * { min-width: 0; margin: 0; }
+.domain-workspace .bar-chart { max-width: none; }
+.domain-workspace .chart-card figcaption p { max-width: 62ch; }
+.domain-workspace .attention-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.domain-workspace .attention-row > .pill { display: none; }
+
 .list-rows { list-style: none; padding: 0; margin: 0; }
 .list-rows li {
   padding: 9px 0;
@@ -791,6 +831,7 @@ a.kpi:hover { background: var(--surface-2); }
 .kv { display: grid; grid-template-columns: 200px 1fr; gap: 8px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); font-size: 13.5px; }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { margin: 0; color: var(--ink); }
+.eyebrow { display: block; margin-bottom: 3px; color: var(--muted-2); font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
 /* ── Audit / activity list ─────────────────────────────────────── */
 
@@ -946,6 +987,7 @@ a.kpi:hover { background: var(--surface-2); }
 @media (max-width: 900px) {
   .content { padding: 22px 18px; }
   .dashboard-command { grid-template-columns: 1fr; }
+  .domain-workspace { grid-template-columns: minmax(0, 1fr); }
   .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 14px 16px; }
   .kv dt { margin-top: 8px; font-size: 12px; }
   .kv dt:first-of-type { margin-top: 0; }
@@ -1010,6 +1052,8 @@ a.kpi:hover { background: var(--surface-2); }
   .page-head { flex-wrap: wrap; gap: 8px; }
   .page-head .page-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .page-head > .btn, .page-head > form { margin-left: 0; }
+  .domain-stack-head,
+  .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
 
   .filter-bar { padding: 8px; gap: 6px; }
   .filter-bar input[type=search] { flex-basis: 100%; }
@@ -1070,6 +1114,63 @@ a.kpi:hover { background: var(--surface-2); }
 .renewal-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .renewal-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .renewal-meta { font-size: 12px; color: var(--muted); }
+
+/* ── Planning timeline ─────────────────────────────────────────────
+   One chronological primitive for every domain. A two-column horizon uses the
+   desktop canvas without turning eight dates into a full page of vertical rail;
+   source order remains chronological and collapses to one column on phones. */
+.timeline-head { align-items: flex-start; }
+.timeline-head > div { min-width: 0; }
+.timeline-head .count { margin-left: auto; }
+.timeline-description { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.timeline-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+}
+.timeline-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 62px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-2);
+}
+.timeline-item:nth-child(-n+2) { border-top: 0; }
+.timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
+.timeline-month { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.timeline-day { color: var(--ink); font-size: 19px; font-weight: 650; line-height: 1.1; }
+.timeline-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; font-size: 13.5px; }
+.timeline-copy a { color: var(--ink); }
+.timeline-copy a:hover { color: var(--accent); }
+@media (max-width: 640px) {
+  .timeline-list { grid-template-columns: minmax(0, 1fr); }
+  .timeline-item,
+  .timeline-item:nth-child(2) { border-top: 1px solid var(--line-2); }
+  .timeline-item:first-child { border-top: 0; }
+  .timeline-item { grid-template-columns: 40px minmax(0, 1fr); column-gap: 8px; padding: 8px 0; }
+  .timeline-item > .pill { grid-column: 2; justify-self: start; margin-top: 4px; }
+}
+
+/* Low-frequency administration should stay reachable without presenting
+   itself as another primary domain. */
+.utility-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 2px;
+}
+.utility-links .eyebrow { margin-right: 4px; }
+.utility-links a { color: var(--muted); font-size: 13px; font-weight: 550; }
+.utility-links a:hover { color: var(--accent); }
+@media (max-width: 720px) {
+  .utility-links { flex-wrap: wrap; }
+  .utility-links .eyebrow { flex-basis: 100%; }
+}
 
 /* ── Notice pages (404 / 500) ───────────────────────────────────────
    Deliberately plain: the operator is here by accident, so the page

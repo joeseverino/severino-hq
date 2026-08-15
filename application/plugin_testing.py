@@ -44,8 +44,9 @@ def sibling(
     name: str = "Alpha",
     cards: Iterable[dict[str, Any]] = (),
     attention: Iterable[Insight] = (),
+    overview: Any = None,
     **manifest_fields: Any,
-) -> tuple[PluginManifest, tuple[dict[str, Any], ...], tuple[Insight, ...]]:
+) -> tuple[PluginManifest, tuple[dict[str, Any], ...], tuple[Insight, ...], Any]:
     """One synthetic extension: a manifest plus what it reports.
 
     Returns the manifest and its contributions together so the caller declares a
@@ -68,9 +69,10 @@ def sibling(
         # these by importing the reference, and an empty one is never imported.
         dashboard_provider=f"{identifier}:cards" if cards else "",
         attention_provider=f"{identifier}:attention" if attention else "",
+        overview_provider=f"{identifier}:overview" if overview else "",
         **manifest_fields,
     )
-    return manifest, tuple(cards), tuple(attention)
+    return manifest, tuple(cards), tuple(attention), overview
 
 
 class ComposedPluginTestCase:
@@ -92,10 +94,10 @@ class ComposedPluginTestCase:
         self.addCleanup(installed_plugins.cache_clear)
 
         real = os.environ.get("SEVERINO_HQ_PLUGINS", "")
-        manifests = [manifest for manifest, _, _ in self.siblings]
+        manifests = [manifest for manifest, _, _, _ in self.siblings]
         contributions = {
-            manifest.id: (cards, attention)
-            for manifest, cards, attention in self.siblings
+            manifest.id: (cards, attention, overview)
+            for manifest, cards, attention, overview in self.siblings
         }
         references = [f"{manifest.id}:manifest" for manifest in manifests]
         self._composition.enter_context(
@@ -120,13 +122,15 @@ class ComposedPluginTestCase:
             """
             module, _, attribute = spec.partition(":")
             if module in contributions:
-                cards, attention = contributions[module]
+                cards, attention, overview = contributions[module]
                 if attribute == "manifest":
                     return next(m for m in manifests if m.id == module)
                 if attribute == "cards":
                     return lambda: cards
                 if attribute == "attention":
                     return lambda: attention
+                if attribute == "overview":
+                    return lambda: overview
             return original(spec)
 
         self._composition.enter_context(

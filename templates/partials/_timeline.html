@@ -1,0 +1,32 @@
+{% comment %}
+Chronological planning horizon. Plugins emit application.ui.TimelineItem values;
+HQ owns the one visual and responsive implementation.
+{% endcomment %}
+<section class="timeline{% if not plain %} card{% endif %}" aria-labelledby="timeline-title">
+  <div class="section-head timeline-head">
+    <div>
+      <h2 id="timeline-title">{{ timeline.title }}</h2>
+      {% if timeline.description %}<p class="timeline-description">{{ timeline.description }}</p>{% endif %}
+    </div>
+    {% if timeline.items %}<span class="count">{{ timeline.items|length }} event{{ timeline.items|pluralize }}</span>{% endif %}
+  </div>
+  {% if timeline.items %}
+    <ol class="timeline-list">
+      {% for item in timeline.items %}
+        <li class="timeline-item timeline-{{ item.status }}">
+          <time datetime="{{ item.when|date:'Y-m-d' }}">
+            <span class="timeline-month">{{ item.when|date:"M" }}</span>
+            <span class="timeline-day">{{ item.when|date:"j" }}</span>
+          </time>
+          <span class="timeline-copy">
+            {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
+            {% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}
+          </span>
+          {% if item.badge %}<span class="pill pill-{{ item.status }}">{{ item.badge }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    {% include "partials/_empty_state.html" with message="Nothing scheduled in this horizon." %}
+  {% endif %}
+</section>

@@ -1,6 +1,7 @@
 """Stable view models consumed by HQ's shared server-rendered UI primitives."""
 
 from dataclasses import dataclass
+from datetime import date
 import math
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
@@ -82,6 +83,43 @@ class ListRow:
                 "ListRow status needs a badge: state is never carried by colour "
                 "alone."
             )
+
+
+@dataclass(frozen=True)
+class TimelineItem:
+    """One dated event in the host-owned planning horizon.
+
+    Plugins emit meaning; HQ owns chronology, accessibility, responsive layout,
+    and state styling. The date remains a real ``date`` until the template so
+    callers cannot accidentally sort display strings such as "Nov 1".
+    """
+
+    when: date
+    title: str
+    detail: str = ""
+    url: str = ""
+    status: str = "neutral"
+    badge: str = ""
+
+    def __post_init__(self) -> None:
+        if self.status not in STATUS_VALUES:
+            raise ValueError(
+                f"TimelineItem status must be one of "
+                f"{', '.join(sorted(STATUS_VALUES))}; got {self.status!r}."
+            )
+
+
+@dataclass(frozen=True)
+class Timeline:
+    """A chronological, dependency-free planning surface."""
+
+    title: str
+    description: str
+    items: tuple[TimelineItem, ...]
+
+    def __post_init__(self) -> None:
+        if tuple(sorted(self.items, key=lambda item: (item.when, item.title))) != self.items:
+            raise ValueError("Timeline items must be sorted chronologically.")
 
 
 @dataclass(frozen=True)
@@ -223,6 +261,22 @@ class StackedBarChart:
     empty: bool
     width: int = 720
     height: int = 260
+
+
+@dataclass(frozen=True)
+class DomainOverview:
+    """One plugin's useful contribution to a cross-domain surface.
+
+    The domain owns readings and interpretation. HQ owns rendering primitives,
+    so adding a domain requires no import or template change in the composer.
+    """
+
+    description: str
+    url: str
+    kpis: tuple[Kpi, ...]
+    insights: tuple[Insight, ...] = ()
+    charts: tuple[StackedBarChart, ...] = ()
+    timeline: tuple[TimelineItem, ...] = ()
 
 
 def stacked_bar_chart(

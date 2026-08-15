@@ -333,6 +333,18 @@ class ComposedPluginTestKitTests(TestCase):
 
         sections = {section["id"]: section for section in plugin_dashboard_sections()}
         self.assertEqual(sections["example.alpha"]["cards"], (card,))
+        self.assertEqual(sections["example.alpha"]["url"], "/alpha/")
+
+    def test_a_sibling_contributes_a_typed_domain_overview(self):
+        from .plugin_testing import sibling
+        from .plugins import plugin_overviews
+        from .ui import DomainOverview, Kpi
+
+        overview = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
+        self.case(siblings=(sibling(overview=overview),))
+
+        sections = {section["id"]: section for section in plugin_overviews()}
+        self.assertEqual(sections["example.alpha"]["overview"], overview)
 
     def test_a_sibling_contributes_to_the_attention_queue(self):
         from .plugin_testing import sibling

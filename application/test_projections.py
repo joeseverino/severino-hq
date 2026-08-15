@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -17,10 +17,39 @@ from projects.models import Project
 
 from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
-from .ui import ChartSeries, stacked_bar_chart
+from .ui import ChartSeries, Timeline, TimelineItem, stacked_bar_chart
 
 
 class UiProjectionTests(TestCase):
+    def test_timeline_requires_chronological_items_and_renders_links(self):
+        item = TimelineItem(
+            date(2026, 11, 1),
+            "Enrollment opens",
+            "Available on this date",
+            "/tasks/enroll/",
+            "good",
+            "opens",
+        )
+        timeline = Timeline("Next", "The planning horizon.", (item,))
+
+        rendered = render_to_string(
+            "partials/_timeline.html", {"timeline": timeline}
+        )
+
+        self.assertIn('datetime="2026-11-01"', rendered)
+        self.assertIn('href="/tasks/enroll/"', rendered)
+
+    def test_timeline_rejects_unsorted_events(self):
+        with self.assertRaisesMessage(ValueError, "chronologically"):
+            Timeline(
+                "Next",
+                "",
+                (
+                    TimelineItem(date(2027, 1, 1), "Later"),
+                    TimelineItem(date(2026, 1, 1), "Sooner"),
+                ),
+            )
+
     def test_stacked_chart_projects_aligned_series_once(self):
         chart = stacked_bar_chart(
             "Training",
