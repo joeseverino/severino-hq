@@ -1,0 +1,23 @@
+{% comment %}
+Modal — a dialog for one short, self-contained task.
+
+The trigger must be a real link to a page that does the same job, so the surface
+still works when the dialog does not open:
+
+  <a class="btn primary" href="{% url 'app:import' %}" data-modal-open="import">Import</a>
+  {% include "partials/_modal.html" with id="import" title="Import records"
+     lede="Known files are skipped." body_template="app/_import_form.html" %}
+
+`body_template` is rendered with the surrounding context. Escape and the
+backdrop close the dialog; both are handled by the host, not by the caller.
+{% endcomment %}
+<dialog class="modal" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2 id="modal-{{ id }}-title">{{ title }}</h2>
+      <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
+    </div>
+    {% if lede %}<p class="modal-lede">{{ lede }}</p>{% endif %}
+    {% if body_template %}{% include body_template %}{% endif %}
+  </div>
+</dialog>

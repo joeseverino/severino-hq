@@ -1,0 +1,27 @@
+{% comment %}
+Attention queue — what needs a decision, across whatever is installed.
+
+  {% include "partials/_attention_list.html" with entries=attention.entries %}
+
+`entries` are the host's plugin_attention_items(): each carries an Insight and
+the name of the extension that raised it. Lives here rather than in whichever
+surface composes them, so a second composing surface does not re-derive the row.
+
+A row, not a card: these are read top-down in severity order, and a grid would
+imply the position carries meaning when only the order does.
+{% endcomment %}
+<ul class="attention-list">
+  {% for entry in entries %}
+    <li class="attention-row">
+      <span class="pill pill-{{ entry.item.status }}">{{ entry.source }}</span>
+      <div class="attention-body">
+        {% if entry.item.url %}<a class="attention-title" href="{{ entry.item.url }}">{{ entry.item.title }}</a>{% else %}<span class="attention-title">{{ entry.item.title }}</span>{% endif %}
+        {% if entry.item.body %}<p class="attention-detail">{{ entry.item.body }}</p>{% endif %}
+        {% if entry.item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ entry.item.action }}</p>{% endif %}
+      </div>
+      {% if entry.item.value %}<span class="attention-value">{{ entry.item.value }}</span>{% endif %}
+    </li>
+  {% empty %}
+    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing is waiting on you." }}</p></li>
+  {% endfor %}
+</ul>

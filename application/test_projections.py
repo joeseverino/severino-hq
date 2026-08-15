@@ -40,8 +40,13 @@ class UiProjectionTests(TestCase):
             "partials/_stacked_bar_chart.html", {"chart": chart}
         )
         self.assertIn("Training", rendered)
-        self.assertIn("Run: 45.0 minutes", rendered)
         self.assertIn("View chart data", rendered)
+        # The tooltip names its period as well as its series: hovering a bar
+        # without being told which week it is answers half a question.
+        self.assertIn('data-tip="Aug 10 · Run: 45 minutes"', rendered)
+        # No SVG <title>: that is the browser's own tooltip, which waits a
+        # second or two and would double up with the host's.
+        self.assertNotIn("<title>", rendered)
 
     def test_stacked_chart_rejects_misaligned_series(self):
         with self.assertRaises(ValueError):

@@ -1,0 +1,22 @@
+{% comment %}
+Record list — a compact list of records that speak for themselves.
+
+  {% include "partials/_record_list.html" with rows=recent empty="Nothing yet." %}
+
+`rows` are application.ui.ListRow. Use _insight_grid.html instead when each
+entry needs interpreting rather than just identifying.
+{% endcomment %}
+<ul class="list-rows"{% if label %} aria-label="{{ label }}"{% endif %}>
+  {% for row in rows %}
+    <li>
+      <span class="row-main">
+        {% if row.url %}<a href="{{ row.url }}"{% if row.external %} target="_blank" rel="noopener"{% endif %}><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}
+        {% if row.detail %}<span class="muted">· {{ row.detail }}</span>{% endif %}
+        {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge }}</span>{% endif %}
+      </span>
+      {% if row.meta %}<span class="row-meta">{{ row.meta }}</span>{% endif %}
+    </li>
+  {% empty %}
+    <li class="row-empty"><span class="muted">{{ empty|default:"Nothing here yet." }}</span></li>
+  {% endfor %}
+</ul>

@@ -27,6 +27,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from assets.models import Asset
@@ -874,3 +875,45 @@ class AuditRegistryCommandTests(TestCase):
         out = StringIO()
         call_command("audit_registry", stdout=out)
         self.assertIn("Registry  ok", out.getvalue())
+
+
+class NavigationTests(TestCase):
+    """The bar has to say where you are, and only where you are."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(username="nav")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def _entries(self, url):
+        from core.context_processors import nav
+
+        response = self.client.get(url)
+        request = response.wsgi_request
+        return nav(request)["nav_entries"]
+
+    def test_only_the_current_page_is_marked_active(self):
+        # Every entry in a section shares one namespace, so matching on that lit
+        # the whole dropdown at once.
+        entries = self._entries(reverse("expenses:list"))
+        active = [
+            item["label"]
+            for entry in entries
+            for item in (entry.get("items") or [entry])
+            if item.get("active")
+        ]
+        self.assertEqual(active, ["Expenses"])
+
+    def test_the_section_holding_the_page_is_marked_even_with_no_entry(self):
+        # The create page has no nav entry; its section must still show.
+        entries = self._entries(reverse("expenses:create"))
+        groups = {entry["label"]: entry for entry in entries if entry["kind"] == "group"}
+        self.assertTrue(groups["Finance"]["active"])
+        self.assertFalse(groups["Business"]["active"])
+
+    def test_system_sorts_after_every_section_that_holds_work(self):
+        entries = self._entries(reverse("dashboard"))
+        labels = [entry["label"] for entry in entries]
+        self.assertEqual(labels[-1], "System")

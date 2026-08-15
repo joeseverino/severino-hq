@@ -804,3 +804,71 @@ class InfrastructureCapabilityTests(SimpleTestCase):
         principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
         with self.assertRaises(AuthorizationError):
             principal.require(Capability.MANAGE_INFRASTRUCTURE)
+
+
+class MultipleFileFieldTests(SimpleTestCase):
+    """Several files selected must mean several files imported.
+
+    Django's FileField binds one upload; pointed at a multiple input it keeps
+    whichever the widget returned and drops the rest silently -- an operator
+    would see one file land and no explanation for the others.
+    """
+
+    @staticmethod
+    def _upload(name, body=b"x"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return SimpleUploadedFile(name, body)
+
+    def test_every_selected_file_is_returned(self):
+        from django.http import QueryDict
+        from django.utils.datastructures import MultiValueDict
+
+        from .forms import MultipleFileField
+
+        field = MultipleFileField()
+        files = MultiValueDict({"f": [self._upload("a.csv"), self._upload("b.csv")]})
+        data = field.widget.value_from_datadict(QueryDict(), files, "f")
+        self.assertEqual([item.name for item in field.clean(data)], ["a.csv", "b.csv"])
+
+    def test_widget_reads_the_full_list_from_the_request(self):
+        from .forms import MultipleFileField
+
+        # The multiple attribute has to come from the widget: rendering it while
+        # reading a single file is how uploads get dropped without an error.
+        self.assertTrue(MultipleFileField().widget.attrs.get("multiple"))
+
+    def test_each_file_is_validated_not_just_the_first(self):
+        from django.core.exceptions import ValidationError as FormValidationError
+
+        from .forms import MultipleFileField
+
+        field = MultipleFileField(max_length=5)
+        with self.assertRaises(FormValidationError):
+            field.clean([self._upload("ok.csv"), self._upload("far-too-long.csv")])
+
+    def test_no_selection_raises_the_ordinary_required_error(self):
+        from django.core.exceptions import ValidationError as FormValidationError
+
+        from .forms import MultipleFileField
+
+        with self.assertRaises(FormValidationError):
+            MultipleFileField().clean([])
+        self.assertEqual(MultipleFileField(required=False).clean([]), [])
+
+
+class ListRowTests(SimpleTestCase):
+    """State on a shared row is never carried by colour alone."""
+
+    def test_status_requires_its_own_text(self):
+        from .ui import ListRow
+
+        ListRow(title="Import", status="attention", badge="Needs review")
+        with self.assertRaises(ValueError):
+            ListRow(title="Import", status="attention")
+
+    def test_status_must_come_from_the_one_vocabulary(self):
+        from .ui import ListRow
+
+        with self.assertRaises(ValueError):
+            ListRow(title="Import", status="warning", badge="Warning")
