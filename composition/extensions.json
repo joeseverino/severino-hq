@@ -1,0 +1,15 @@
+{
+  "$comment": [
+    "The extensions production runs, declared in the host so the composition is",
+    "reviewable in one place rather than implied by whichever extension deployed",
+    "last. Adding one is an entry here plus a dispatch from its admission workflow.",
+    "",
+    "'repository' and 'workflow' are the trust declaration: the host verifies each",
+    "signature against the identity built from these, so an extension cannot widen",
+    "who may sign for it by editing its own repository. Listing an extension grants",
+    "nothing on its own -- each is still admitted independently, and the host",
+    "refuses to boot unless the lock inventory exactly matches the enabled set."
+  ],
+  "schema_version": 1,
+  "extensions": []
+}
