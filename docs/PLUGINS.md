@@ -60,6 +60,25 @@ a claim that arbitrary plugin code or future versions are safe. A changed
 wheel, version, workflow, policy, host API, or enabled inventory requires a new
 approval and image build.
 
+## Composition
+
+Production runs **one image carrying every admitted plugin**. Plugins do not
+build or deploy images: each verifies and admits itself, publishes its signed
+bundle, and triggers the host's composition workflow. When a plugin shipped its
+own image, deploying one replaced the others and silently dropped them.
+
+The composition workflow is the only path to production. It verifies each
+signature itself, against the identity built from the declared repository and
+workflow, so a plugin cannot widen who may sign for it by editing its own
+repository. Entries are merged into one lock by Cordon's lock tool, which
+already accepts several entries — the host does not reimplement it.
+`SEVERINO_HQ_PLUGINS` is derived from the merged lock, because the enabled and
+approved inventories must be identical or the host refuses to start.
+
+The declared set lives in a repository variable rather than a committed file:
+this repository is public and the extensions it composes are not.
+`composition/extensions.json` documents the shape.
+
 ## Contract boundary
 
 The plugin API is for trusted code that ships with an HQ deployment. External
