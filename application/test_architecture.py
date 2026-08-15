@@ -4,9 +4,18 @@ import ast
 from pathlib import Path
 
 from django.test import SimpleTestCase
+from starlette.staticfiles import StaticFiles
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
+    def test_asgi_routes_static_assets_before_django(self):
+        from config.asgi import application
+
+        static_route, django_route = application.routes[-2:]
+        self.assertEqual(static_route.path, "/static")
+        self.assertIsInstance(static_route.app, StaticFiles)
+        self.assertEqual(django_route.path, "")
+
     def test_mcp_services_do_not_access_django_models(self):
         """Keep MCP as an adapter over application-owned behavior and projections."""
         source_path = Path(__file__).resolve().parents[1] / "hq_mcp" / "services.py"

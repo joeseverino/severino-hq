@@ -1,0 +1,9 @@
+<section class="kpi-grid"{% if label %} aria-label="{{ label }}"{% endif %}>
+  {% for item in items %}
+    {% if item.url %}<a class="kpi{% if item.is_zero %} is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi{% if item.is_zero %} is-zero{% endif %}">{% endif %}
+      <span class="label">{{ item.label }}</span>
+      <span class="value">{{ item.value }}</span>
+      {% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}
+    {% if item.url %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</section>

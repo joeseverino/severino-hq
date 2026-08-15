@@ -17,6 +17,9 @@ plugin = PluginManifest(
     id="example.notes",
     name="Notes",
     version="1.0.0",
+    distribution="example-notes",
+    source_repository="example/example-notes",
+    source_workflow=".github/workflows/admit-plugin.yml",
     django_apps=("example_notes",),
     url_prefix="notes/",
     urlconf="example_notes.urls",
@@ -35,6 +38,28 @@ Set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the package in
 the deployment image, and run its migrations. `python manage.py plugins` emits
 the effective, machine-readable inventory and validates compatibility.
 
+## Cordon admission
+
+Production loading is fail-closed. When plugins are enabled with `DJANGO_DEBUG`
+off, HQ requires `SEVERINO_HQ_PLUGIN_LOCK` and
+`SEVERINO_HQ_PLUGIN_POLICY_SHA256`. The lock inventory must exactly equal the
+enabled manifest inventory. Every entry binds the plugin ID, distribution,
+installed version, host API version, immutable source commit, wheel SHA-256,
+and Cordon policy SHA-256.
+
+The canonical policy is `policy/plugin-admission-v1.json`. Admission requires
+the plugin contract and package tests, a dependency lock and audit, secret
+scan, wheel SBOM, and wheel vulnerability scan with no fixable high or critical
+findings. Private composition CI signs the statement with GitHub OIDC through
+Sigstore. Cordon verifies the signature bundle against the exact repository and
+workflow identity before installation, then emits the lock entry embedded in
+the composed image.
+
+The lock is evidence of a specific artifact under a specific policy. It is not
+a claim that arbitrary plugin code or future versions are safe. A changed
+wheel, version, workflow, policy, host API, or enabled inventory requires a new
+approval and image build.
+
 ## Contract boundary
 
 The plugin API is for trusted code that ships with an HQ deployment. External
@@ -47,6 +72,28 @@ search, MCP, and future native clients cannot develop conflicting behavior.
 compatible within a version; removals or semantic changes require the next API
 version. Plugin identifiers are stable, reverse-DNS-style names and must not be
 reused.
+
+## Shared UI contract
+
+Installable modules inherit HQ's design system and should not ship a parallel
+stylesheet for ordinary application structure. API v1 guarantees these host
+templates:
+
+| Template | Contract |
+| --- | --- |
+| `base.html` | Authenticated shell, navigation, messages, static assets, and security metadata |
+| `partials/_page_head.html` | Page title, lede, and optional primary action |
+| `partials/_kpi_grid.html` | Responsive linked or static KPI collection |
+| `partials/_empty_state.html` | Consistent empty state and optional action |
+| `partials/_form_field.html` | Label, control, help text, and validation errors |
+| `partials/_pagination.html` | Query-preserving paginated navigation |
+
+Standard cards, section headings, data tables, list rows, forms, buttons, tags,
+and two-column layouts use the classes demonstrated by `example_hq_plugin`.
+Plugin templates supply domain content while HQ owns layout behavior, tokens,
+responsive rules, accessibility states, and visual evolution. A new shared
+pattern belongs in HQ first; copying host CSS or markup into every plugin is a
+contract failure.
 
 ## Native and machine clients
 

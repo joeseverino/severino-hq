@@ -14,6 +14,9 @@ from django.urls import include, path
 
 PLUGIN_API_VERSION = 1
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
+PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+PLUGIN_WORKFLOW = re.compile(r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$")
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,9 @@ class PluginManifest:
     id: str
     name: str
     version: str
+    distribution: str
+    source_repository: str
+    source_workflow: str
     api_version: int = PLUGIN_API_VERSION
     django_apps: tuple[str, ...] = ()
     url_prefix: str = ""
@@ -65,6 +71,18 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
         raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     if not PLUGIN_ID.fullmatch(manifest.id):
         raise ImproperlyConfigured(f"Invalid HQ plugin id {manifest.id!r}.")
+    if not PLUGIN_DISTRIBUTION.fullmatch(manifest.distribution):
+        raise ImproperlyConfigured(
+            f"Invalid HQ plugin distribution {manifest.distribution!r}."
+        )
+    if not PLUGIN_REPOSITORY.fullmatch(manifest.source_repository):
+        raise ImproperlyConfigured(
+            f"Invalid HQ plugin repository {manifest.source_repository!r}."
+        )
+    if not PLUGIN_WORKFLOW.fullmatch(manifest.source_workflow):
+        raise ImproperlyConfigured(
+            f"Invalid HQ plugin workflow {manifest.source_workflow!r}."
+        )
     if manifest.api_version != PLUGIN_API_VERSION:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} requires API {manifest.api_version}; "
@@ -92,7 +110,11 @@ def installed_plugins() -> tuple[PluginManifest, ...]:
             raise ImproperlyConfigured(f"Duplicate HQ plugin id {manifest.id!r}.")
         ids.add(manifest.id)
         plugins.append(manifest)
-    return tuple(sorted(plugins, key=lambda item: item.id))
+    installed = tuple(sorted(plugins, key=lambda item: item.id))
+    from .plugin_admission import enforce_plugin_admission
+
+    enforce_plugin_admission(installed)
+    return installed
 
 
 def installed_plugin_apps() -> list[str]:

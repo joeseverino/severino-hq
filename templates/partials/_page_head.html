@@ -1,0 +1,11 @@
+<header class="page-head">
+  <div>
+    <h1>{{ title }}</h1>
+    {% if lede %}<p class="page-lede">{{ lede }}</p>{% endif %}
+  </div>
+  {% if action_url and action_label %}
+    <div class="page-actions">
+      <a class="btn{% if action_primary %} primary{% endif %}" href="{{ action_url }}">{{ action_label }}</a>
+    </div>
+  {% endif %}
+</header>
