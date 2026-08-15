@@ -38,6 +38,7 @@ from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 from .topology import TopologySyncCommand, execute_topology_sync
+from .plugins import plugin_capability_specs
 
 
 @dataclass(frozen=True)
@@ -45,13 +46,13 @@ class CapabilitySpec:
     name: str
     summary: str
     effect: str
-    required_capability: Capability | tuple[Capability, ...]
+    required_capability: Capability | str | tuple[Capability | str, ...]
     command_type: type
     handler: Callable
     target_kind: str | None = None
 
     @property
-    def required_capabilities(self) -> tuple[Capability, ...]:
+    def required_capabilities(self) -> tuple[Capability | str, ...]:
         if isinstance(self.required_capability, tuple):
             return self.required_capability
         return (self.required_capability,)
@@ -283,7 +284,16 @@ _SPECS = (
     ),
 )
 
-REGISTRY = {spec.name: spec for spec in _SPECS}
+def capability_specs() -> tuple[CapabilitySpec, ...]:
+    specs = (*_SPECS, *plugin_capability_specs())
+    names = [spec.name for spec in specs]
+    if len(names) != len(set(names)):
+        raise RuntimeError("Duplicate capability name across HQ core and plugins.")
+    return specs
+
+
+def capability_registry() -> dict[str, CapabilitySpec]:
+    return {spec.name: spec for spec in capability_specs()}
 
 
 def describe_capabilities() -> dict[str, Any]:
@@ -298,12 +308,13 @@ def describe_capabilities() -> dict[str, Any]:
                 "summary": spec.summary,
                 "effect": spec.effect,
                 "required_capabilities": [
-                    capability.value for capability in spec.required_capabilities
+                    capability.value if isinstance(capability, Capability) else capability
+                    for capability in spec.required_capabilities
                 ],
                 "target": spec.target_kind,
                 "input_schema": TypeAdapter(spec.command_type).json_schema(),
             }
-            for spec in _SPECS
+            for spec in capability_specs()
         ],
     }
 
@@ -318,7 +329,7 @@ def execute_capability(
 ) -> dict[str, Any]:
     """Validate JSON and execute one allowlisted application capability."""
 
-    spec = REGISTRY.get(name)
+    spec = capability_registry().get(name)
     if spec is None:
         return _error("unknown_capability", f"Unknown capability {name!r}.")
     if spec.target_kind and target is None:

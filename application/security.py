@@ -36,35 +36,50 @@ class AuthorizationError(PermissionError):
     code = "forbidden"
 
 
+# Stable core contract retained for callers constructing explicit principals.
+# Runtime operator principals derive plugin grants in addition to this set.
+OPERATOR_CAPABILITIES = frozenset(Capability)
+
+
 @dataclass(frozen=True)
 class Principal:
     actor: str
     interface: str
-    capabilities: frozenset[Capability]
+    capabilities: frozenset[Capability | str]
 
-    def require(self, capability: Capability) -> None:
-        if capability not in self.capabilities:
+    def require(self, capability: Capability | str) -> None:
+        name = capability.value if isinstance(capability, Capability) else capability
+        available = {
+            item.value if isinstance(item, Capability) else item for item in self.capabilities
+        }
+        if name not in available:
             raise AuthorizationError(
                 f"{self.interface} principal {self.actor!r} lacks "
-                f"{capability.value!r}."
+                f"{name!r}."
             )
 
 
-OPERATOR_CAPABILITIES = frozenset(Capability)
+def _operator_capabilities():
+    from .plugins import plugin_capabilities
+
+    return OPERATOR_CAPABILITIES | plugin_capabilities("operator")
 
 
 def web_principal(user) -> Principal:
     if not getattr(user, "is_authenticated", False):
         raise AuthorizationError("An authenticated web operator is required.")
-    return Principal(user.get_username(), "web", OPERATOR_CAPABILITIES)
+    return Principal(user.get_username(), "web", _operator_capabilities())
 
 
 def cli_principal() -> Principal:
-    return Principal("local-operator", "cli", OPERATOR_CAPABILITIES)
+    return Principal("local-operator", "cli", _operator_capabilities())
 
 
 def mcp_principal() -> Principal:
+    from .plugins import plugin_capabilities
+
     capabilities = {Capability.READ}
+    capabilities.update(plugin_capabilities("mcp_read"))
     if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
         capabilities.update(
             {
@@ -77,6 +92,7 @@ def mcp_principal() -> Principal:
                 Capability.WRITE_DOCUMENTATION,
             }
         )
+        capabilities.update(plugin_capabilities("mcp_write"))
     if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
         capabilities.add(Capability.PRUNE_DOCUMENTATION)
     if getattr(

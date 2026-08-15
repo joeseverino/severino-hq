@@ -36,6 +36,18 @@
   </div>
 </section>
 
+{% if plugin_dashboard_cards %}
+<section class="kpi-grid plugin-kpi-grid" aria-label="Installed modules">
+  {% for card in plugin_dashboard_cards %}
+    <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
+      <span class="label">{{ card.label }}</span>
+      <span class="value">{{ card.value }}</span>
+      {% if card.detail %}<span class="muted">{{ card.detail }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section class="dashboard-command">
   <div class="command-main">
     <section class="card">

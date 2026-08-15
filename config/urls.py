@@ -5,6 +5,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from core.views import DashboardView, SearchView, health_live, health_ready
+from application.plugins import plugin_urlpatterns
 
 urlpatterns = [
     path("health/live/", health_live, name="health_live"),
@@ -34,3 +35,5 @@ urlpatterns = [
     path("infrastructure/", include("control_plane.urls")),
     path("audit/", include("core.urls")),
 ]
+
+urlpatterns.extend(plugin_urlpatterns())
