@@ -17,6 +17,8 @@ from pathlib import Path
 
 from django.utils.csp import CSP
 
+from application.plugins import installed_plugin_apps
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Production mounts the 1Password-rendered app env (shell-quoted KEY='value'
@@ -146,7 +148,7 @@ INSTALLED_APPS = [
     "contacts",
     "control_plane",
     "search_index",
-]
+] + installed_plugin_apps()
 
 MIDDLEWARE = [
     "core.middleware.RequestContextMiddleware",

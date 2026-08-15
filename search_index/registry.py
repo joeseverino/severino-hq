@@ -2,56 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from assets.models import Asset
+from application.search_contracts import SearchDefinition
 from content.models import ContentItem
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
+from application.plugins import plugin_search_definitions
 
-
-@dataclass(frozen=True)
-class SearchDefinition:
-    scope: str
-    model: type
-    identifier_field: str
-    fields: tuple[str, ...]
-    # Presentation contract shared by every search surface (web, CLI, MCP):
-    # how a hit in this scope is labeled without leaking str() internals
-    # like "doc_id — title" into result lists.
-    label: str = ""
-    title_field: str = ""
-    badge_field: str = ""
-    timestamp_field: str = "updated_at"
-
-    def object_id(self, instance) -> str:
-        return str(getattr(instance, self.identifier_field))
-
-    def body(self, instance) -> str:
-        return "\n".join(
-            str(value)
-            for field in self.fields
-            if (value := getattr(instance, field, "")) not in (None, "")
-        )
-
-    def title(self, instance) -> str:
-        if self.title_field:
-            return str(getattr(instance, self.title_field))
-        return str(instance)
-
-    def badge(self, instance) -> str:
-        if self.badge_field:
-            return str(getattr(instance, self.badge_field))
-        return ""
-
-    def timestamp(self, instance):
-        return getattr(instance, self.timestamp_field, None)
-
-
-DEFINITIONS = (
+CORE_DEFINITIONS = (
     SearchDefinition(
         "projects", Project, "slug",
         ("name", "slug", "description", "technologies_used", "notes"),
@@ -88,6 +49,8 @@ DEFINITIONS = (
         label="Audit log", timestamp_field="created_at",
     ),
 )
+
+DEFINITIONS = (*CORE_DEFINITIONS, *plugin_search_definitions())
 
 BY_MODEL = {definition.model: definition for definition in DEFINITIONS}
 BY_SCOPE = {definition.scope: definition for definition in DEFINITIONS}

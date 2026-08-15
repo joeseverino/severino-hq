@@ -1,0 +1,15 @@
+"""One declaration from which HQ derives every example integration surface."""
+
+from application.plugins import NavigationItem, PluginManifest
+
+plugin = PluginManifest(
+    id="example.notes",
+    name="Notes contract example",
+    version="1.0.0",
+    django_apps=("example_hq_plugin",),
+    url_prefix="examples/notes/",
+    urlconf="example_hq_plugin.urls",
+    navigation=(NavigationItem("Example", "example_plugin:index", "example_plugin"),),
+    dashboard_provider="example_hq_plugin.projections:dashboard_cards",
+    health_provider="example_hq_plugin.projections:ready",
+)

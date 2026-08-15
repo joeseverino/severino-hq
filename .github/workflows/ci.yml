@@ -73,6 +73,12 @@ jobs:
       - run: pip install --require-hashes -r requirements.txt
       - run: pip install coverage
       - run: python manage.py check
+      - name: Public plugin contract
+        env:
+          SEVERINO_HQ_PLUGINS: example_hq_plugin.plugin:plugin
+        run: |
+          python manage.py check
+          python manage.py plugins
       - run: python manage.py makemigrations --check --dry-run
       - name: Tests with coverage gate
         run: |

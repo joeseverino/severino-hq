@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.views.generic import ListView, TemplateView
 
 from application.dashboard import operating_snapshot
+from application.plugins import plugin_dashboard_cards, plugin_health
 from application.search import global_search
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
@@ -57,6 +58,7 @@ def health_ready(request):
     checks["storage"] = all(
         path.is_dir() and os.access(path, os.W_OK) for path in writable_paths
     )
+    checks.update({f"plugin:{key}": value for key, value in plugin_health().items()})
     ready = all(checks.values())
     return JsonResponse(
         {"status": "ok" if ready else "unavailable", "checks": checks},
@@ -156,6 +158,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             action_queue_count=snapshot["priority_count"],
             action_queue_group_count=snapshot["priority_group_count"],
             this_year=snapshot["year"],
+            plugin_dashboard_cards=plugin_dashboard_cards(),
         )
         return ctx
 

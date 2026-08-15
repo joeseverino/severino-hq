@@ -1,3 +1,4 @@
+from application.plugins import plugin_navigation
 from django.conf import settings
 
 # Primary-nav definition: (label, url name, namespace).
@@ -29,13 +30,20 @@ def nav(request):
     match = request.resolver_match
     namespace = getattr(match, "namespace", "") or ""
     url_name = getattr(match, "url_name", "") or ""
+    definitions = [
+        *NAV_ITEMS,
+        *(
+            (item.label, item.route, item.namespace)
+            for item in plugin_navigation()
+        ),
+    ]
     items = [
         {
             "label": label,
             "url": route,
             "active": (url_name == "dashboard") if ns is None else (namespace == ns),
         }
-        for label, route, ns in NAV_ITEMS
+        for label, route, ns in definitions
     ]
     return {"nav_items": items}
 

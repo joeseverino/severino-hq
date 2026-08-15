@@ -7,7 +7,8 @@ from django.db.models import Case, IntegerField, Q, QuerySet, When
 from django.db.models.expressions import RawSQL
 
 from search_index.backends import SnippetParts, search_backend
-from search_index.registry import BY_SCOPE, SearchDefinition
+from application.search_contracts import SearchDefinition
+from search_index.registry import BY_SCOPE
 
 from .security import AuthorizationError, Capability, Principal
 

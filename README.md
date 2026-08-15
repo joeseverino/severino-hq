@@ -35,6 +35,9 @@ Adapters parse and render; `application/` owns validation, transactions,
 persistence, audit attribution, and canonical results. The reference project
 slice and documentation sync mutation are described in
 [`docs/APPLICATION_ARCHITECTURE.md`](docs/APPLICATION_ARCHITECTURE.md).
+Trusted, installable modules use the domain-neutral, versioned
+[`plugin contract`](docs/PLUGINS.md); a generic conformance plugin proves the
+contract in public CI without coupling HQ to any private module.
 
 Infrastructure follows the same rule: Severino Labs emits one validated
 topology inventory, HQ derives desired resources and dependency-aware status,
