@@ -219,6 +219,22 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .control-metric { display: flex; flex-direction: column; gap: 5px; }
 .control-metric strong { font-size: 18px; }
 .control-metric > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.chart-grid { stroke: var(--line-2); stroke-width: 1; }
+.chart-axis { fill: var(--muted); font-size: 11px; }
+.chart-category { font-size: 10px; }
+.chart-card figcaption h2 { margin: 0; }
+.chart-card figcaption p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 2px; color: var(--muted); font-size: 12px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+.chart-scroll { overflow-x: auto; }
+.bar-chart { display: block; min-width: 620px; width: 100%; height: auto; }
+.chart-series-1 { fill: var(--accent); background: var(--accent); }
+.chart-series-2 { fill: var(--success); background: var(--success); }
+.chart-series-3 { fill: var(--warning); background: var(--warning); }
+.chart-series-4 { fill: var(--danger); background: var(--danger); }
+.chart-series-5 { fill: var(--muted-2); background: var(--muted-2); }
+.chart-data { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .control-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .control-good, .control-healthy { color: #1f7250; }
 .control-warn, .control-degraded, .control-drifted { color: #9a5a12; }
