@@ -85,6 +85,91 @@ class ListRow:
 
 
 @dataclass(frozen=True)
+class CadenceWeek:
+    """One period in a "did I do this" strip.
+
+    Answers a different question from a chart. A bar says how much; this says
+    whether, week after week, at a glance -- which is what a habit is actually
+    judged on. A gap in a row of filled marks is visible in a way a short bar
+    beside tall ones is not.
+    """
+
+    label: str
+    hit: bool
+    # How many times in the period, when more than once is meaningful.
+    count: int = 0
+    # Read out for assistive technology, and shown on hover.
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class Cadence:
+    title: str
+    description: str
+    weeks: tuple[CadenceWeek, ...]
+
+    @property
+    def hits(self) -> int:
+        return sum(1 for week in self.weeks if week.hit)
+
+    @property
+    def streak(self) -> int:
+        """Consecutive periods, counting back from the most recent."""
+        run = 0
+        for week in reversed(self.weeks):
+            if not week.hit:
+                break
+            run += 1
+        return run
+
+
+@dataclass(frozen=True)
+class CadenceRow:
+    """One thing tracked across the shared periods of a matrix."""
+
+    label: str
+    weeks: tuple[CadenceWeek, ...]
+    url: str = ""
+    detail: str = ""
+
+    @property
+    def hits(self) -> int:
+        return sum(1 for week in self.weeks if week.hit)
+
+    @property
+    def streak(self) -> int:
+        run = 0
+        for week in reversed(self.weeks):
+            if not week.hit:
+                break
+            run += 1
+        return run
+
+
+@dataclass(frozen=True)
+class CadenceMatrix:
+    """Several cadences sharing one set of periods, so they can be compared.
+
+    Separate strips answer "did I keep this up" one at a time; stacked in
+    columns that line up they answer "which of these am I neglecting", which is
+    the question worth asking when there is more than one. The period labels
+    appear once, at the top, because that alignment is the whole point.
+    """
+
+    periods: tuple[str, ...]
+    rows: tuple[CadenceRow, ...]
+
+    def __post_init__(self) -> None:
+        for row in self.rows:
+            if len(row.weeks) != len(self.periods):
+                raise ValueError(
+                    f"{row.label!r} has {len(row.weeks)} periods; the matrix "
+                    f"has {len(self.periods)}. Columns that do not line up "
+                    "make the comparison wrong rather than merely ugly."
+                )
+
+
+@dataclass(frozen=True)
 class ChartSeries:
     label: str
     values: tuple[float, ...]

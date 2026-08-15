@@ -12,7 +12,11 @@ still works when the dialog does not open:
 backdrop close the dialog; both are handled by the host, not by the caller.
 {% endcomment %}
 <dialog class="modal" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title">
-  <div class="modal-panel">
+  {% comment %}
+  tabindex and autofocus together: the dialog moves focus inside itself on open,
+  and without a target it lands on the close button and rings it.
+  {% endcomment %}
+  <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
       <h2 id="modal-{{ id }}-title">{{ title }}</h2>
       <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
