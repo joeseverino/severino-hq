@@ -8,6 +8,7 @@ from unittest.mock import patch
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
@@ -16,6 +17,41 @@ from projects.models import Project
 
 from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
+from .ui import ChartSeries, stacked_bar_chart
+
+
+class UiProjectionTests(TestCase):
+    def test_stacked_chart_projects_aligned_series_once(self):
+        chart = stacked_bar_chart(
+            "Training",
+            "Weekly minutes",
+            ("Aug 3", "Aug 10"),
+            (
+                ChartSeries("Run", (30.0, 45.0), 1),
+                ChartSeries("Strength", (60.0, 30.0), 2),
+            ),
+            unit="minutes",
+        )
+
+        self.assertFalse(chart.empty)
+        self.assertEqual(chart.rows[1].values, (45.0, 30.0))
+        self.assertEqual(len(chart.bars), 4)
+        rendered = render_to_string(
+            "partials/_stacked_bar_chart.html", {"chart": chart}
+        )
+        self.assertIn("Training", rendered)
+        self.assertIn("Run: 45.0 minutes", rendered)
+        self.assertIn("View chart data", rendered)
+
+    def test_stacked_chart_rejects_misaligned_series(self):
+        with self.assertRaises(ValueError):
+            stacked_bar_chart(
+                "Training",
+                "Weekly minutes",
+                ("Aug 3",),
+                (ChartSeries("Run", (30.0, 45.0), 1),),
+                unit="minutes",
+            )
 
 
 class DashboardProjectionTests(TestCase):

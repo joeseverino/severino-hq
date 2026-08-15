@@ -1,0 +1,29 @@
+<figure class="chart-card card">
+  <figcaption>
+    <h2>{{ chart.title }}</h2>
+    <p>{{ chart.description }}</p>
+  </figcaption>
+  {% if chart.empty %}
+    {% include "partials/_empty_state.html" with message="Not enough data to chart yet." %}
+  {% else %}
+    <div class="chart-legend" aria-label="Legend">
+      {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label }}</span>{% endfor %}
+    </div>
+    <div class="chart-scroll">
+      <svg class="bar-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}">
+        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="702" y1="{{ tick.y }}" y2="{{ tick.y }}"></line><text class="chart-axis" x="42" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>{% endfor %}
+        {% for bar in chart.bars %}{% if bar.height %}<rect class="chart-series-{{ bar.slot }}" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}"><title>{{ bar.label }}: {{ bar.value }} {{ chart.unit }}</title></rect>{% endif %}{% endfor %}
+        {% for category in chart.categories %}<text class="chart-axis chart-category" x="{{ category.x }}" y="238" text-anchor="middle">{{ category.label }}</text>{% endfor %}
+      </svg>
+    </div>
+    <details class="chart-data">
+      <summary>View chart data</summary>
+      <div class="table-scroll">
+        <table class="data-table compact-table">
+          <thead><tr><th>Period</th>{% for series in chart.series %}<th>{{ series.label }} ({{ chart.unit }})</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in chart.rows %}<tr><th>{{ row.label }}</th>{% for value in row.values %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
+  {% endif %}
+</figure>
