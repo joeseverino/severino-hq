@@ -776,3 +776,31 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
         ):
             with self.assertRaises(AuthorizationError):
                 mcp_principal().require(Capability.SYNC_DOCUMENTATION)
+
+
+class InfrastructureCapabilityTests(SimpleTestCase):
+    """Declaring topology and requesting certificates are different powers."""
+
+    def test_infrastructure_flag_does_not_grant_certificate_renewal(self):
+        from application.security import AuthorizationError, Capability, mcp_principal
+
+        with self.settings(
+            SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True,
+            SEVERINO_MCP_ENABLE_CERT_RENEWAL=False,
+        ):
+            principal = mcp_principal()
+        principal.require(Capability.MANAGE_INFRASTRUCTURE)
+        with self.assertRaises(AuthorizationError):
+            principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
+
+    def test_certificate_renewal_is_grantable_on_its_own(self):
+        from application.security import AuthorizationError, Capability, mcp_principal
+
+        with self.settings(
+            SEVERINO_MCP_ENABLE_INFRASTRUCTURE=False,
+            SEVERINO_MCP_ENABLE_CERT_RENEWAL=True,
+        ):
+            principal = mcp_principal()
+        principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
+        with self.assertRaises(AuthorizationError):
+            principal.require(Capability.MANAGE_INFRASTRUCTURE)

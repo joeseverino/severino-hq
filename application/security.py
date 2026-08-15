@@ -117,11 +117,11 @@ def mcp_principal() -> Principal:
                 Capability.DELETE_RECEIPTS,
             }
         )
+    # Topology sync needs to declare infrastructure; it never needs to ask a
+    # certificate authority for anything. Bundling the two meant enabling
+    # `hq sync` also handed the service account certificate renewal.
     if getattr(settings, "SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False):
-        capabilities.update(
-            {
-                Capability.MANAGE_INFRASTRUCTURE,
-                Capability.REQUEST_CERTIFICATE_RENEWAL,
-            }
-        )
+        capabilities.add(Capability.MANAGE_INFRASTRUCTURE)
+    if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
+        capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))
