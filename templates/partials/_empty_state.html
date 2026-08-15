@@ -1,0 +1,6 @@
+<div class="empty{% if compact %} compact{% endif %}">
+  <p>{{ message }}</p>
+  {% if action_url and action_label %}
+    <p><a class="empty-cta" href="{{ action_url }}">{{ action_label }} &rarr;</a></p>
+  {% endif %}
+</div>

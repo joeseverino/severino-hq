@@ -7,10 +7,12 @@ from django.conf import settings
 from django.core.asgi import get_asgi_application
 from starlette.applications import Starlette
 from starlette.routing import Mount
+from starlette.staticfiles import StaticFiles
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_application = get_asgi_application()
+static_application = StaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
 
 from hq_mcp.security import MCPBoundary  # noqa: E402
 from hq_mcp.server import mcp  # noqa: E402
@@ -33,6 +35,9 @@ async def lifespan(app):
 application = Starlette(
     routes=[
         Mount("/mcp", app=mcp_application),
+        # Serve collected assets on the native async path. WhiteNoise remains
+        # the WSGI fallback, but its synchronous iterator never reaches Uvicorn.
+        Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
         Mount("/", app=django_application),
     ],
     lifespan=lifespan,

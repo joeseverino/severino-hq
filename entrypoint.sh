@@ -2,7 +2,7 @@
 # Severino HQ container entrypoint.
 #
 # - Applies any pending migrations on boot.
-# - Collects static files (WhiteNoise serves them from the ASGI app).
+# - Collects static files for the native ASGI static mount.
 # - Then exec's whatever CMD was passed (Uvicorn by default).
 #
 # Intentionally minimal — we want boot failures to be loud and obvious.

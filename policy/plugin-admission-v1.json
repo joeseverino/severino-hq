@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "cordon.hq-plugin",
+  "host": "severino-hq",
+  "plugin_api_version": 1,
+  "artifact": "python-wheel",
+  "required_evidence": [
+    "plugin-contract-tests",
+    "package-tests",
+    "dependency-lock",
+    "dependency-audit",
+    "secret-scan",
+    "wheel-sbom",
+    "wheel-vulnerability-scan"
+  ],
+  "admission": {
+    "signature": "sigstore-keyless",
+    "immutable_source_commit": true,
+    "exact_repository": true,
+    "exact_workflow_identity": true,
+    "exact_artifact_sha256": true,
+    "exact_policy_sha256": true,
+    "high_or_critical_fixable_vulnerabilities": 0
+  }
+}

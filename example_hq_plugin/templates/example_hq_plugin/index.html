@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Example Notes · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Example Notes" lede="A minimal plugin composed entirely from the HQ UI contract." %}
+{% include "partials/_kpi_grid.html" with label="Notes summary" items=example_metrics %}
+<section class="card">
+  <div class="section-head"><h2>Notes</h2></div>
+  {% include "partials/_empty_state.html" with message="No notes have been created." %}
+</section>
+{% endblock %}
