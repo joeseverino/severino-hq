@@ -1,0 +1,161 @@
+name: Admit an HQ extension
+description: >-
+  Build, scan, attest and Sigstore-sign an extension wheel, then retain the
+  signed admission bundle as a private run artifact.
+
+# WHY THIS IS A COMPOSITE ACTION AND NOT A REUSABLE WORKFLOW
+# ---------------------------------------------------------
+# The host verifies each admission with
+#   cosign verify-blob --certificate-identity \
+#     "https://github.com/<repo>/<workflow>@refs/heads/main"
+# and Fulcio derives that certificate identity from the OIDC `job_workflow_ref`
+# claim -- the workflow file the *job* actually runs from.
+#
+# A composite action runs inside the calling job, so `job_workflow_ref` stays
+# the caller's own .github/workflows/admit-plugin.yml and the identity is
+# unchanged. A `workflow_call` job does not: it would be signed as
+# severino-hq/.github/workflows/<whatever>.yml, every extension would share one
+# signer identity, and the signature would stop proving which repository built
+# the wheel. That is the exact widening composition/extensions.json exists to
+# prevent, so the signing steps live here, in an action, on purpose.
+#
+# Everything that does not sign lives in ../../workflows/plugin-checks.yml.
+
+inputs:
+  plugin-id:
+    description: Plugin identifier declared in the manifest, e.g. example.alpha.
+    required: true
+  distribution:
+    description: >-
+      Installable distribution name. Also names the retained run artifact, and
+      must equal the manifest's declared distribution.
+    required: true
+  hq-commit:
+    description: >-
+      Immutable 40-character host commit this admission is built against.
+      Normally the caller's HQ_COMMIT repository variable. A tag or branch is
+      rejected.
+    required: true
+  workflow-path:
+    description: >-
+      Path of the CALLING workflow file inside the calling repository. This is
+      recorded as source.workflow and is half of the signer identity the host
+      checks, so it must match the caller's real path and the `workflow` field
+      declared for this extension in COMPOSITION_EXTENSIONS. Only override it
+      if the caller is not at the default path.
+    required: false
+    default: .github/workflows/admit-plugin.yml
+
+runs:
+  using: composite
+  steps:
+    - name: Require immutable deployment inputs
+      shell: bash
+      env:
+        HQ_COMMIT: ${{ inputs.hq-commit }}
+      run: |
+        [[ "$HQ_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
+    - name: Check out the plugin
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    - name: Check out exact HQ source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: joeseverino/severino-hq
+        ref: ${{ inputs.hq-commit }}
+        path: host
+
+    - name: Check out exact Cordon verifier
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: joeseverino/cordon
+        ref: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
+        path: cordon
+
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      with:
+        python-version: "3.12"
+
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+
+    - name: Build the immutable wheel
+      shell: bash
+      run: |
+        uv lock --check
+        uv build --wheel --out-dir dist
+        test "$(find dist -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
+
+    - name: Audit locked dependencies
+      uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266
+      with:
+        inputs: .
+
+    - name: Generate wheel SBOM
+      uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+      with:
+        path: dist
+        format: spdx-json
+        output-file: wheel.spdx.json
+        upload-artifact: false
+
+    - name: Scan wheel
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      with:
+        scan-type: fs
+        scan-ref: dist
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
+        exit-code: "1"
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+
+    - name: Emit and sign admission
+      shell: bash
+      # Inputs are passed through the environment rather than interpolated into
+      # the script, so a manifest value can never become shell syntax.
+      env:
+        POLICY_PATH: host/policy/plugin-admission-v1.json
+        PLUGIN_ID: ${{ inputs.plugin-id }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        WORKFLOW_PATH: ${{ inputs.workflow-path }}
+        HOST_ID: severino-hq
+        PLUGIN_API_VERSION: "1"
+      run: |
+        wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+        version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+        node cordon/admission/evidence.mjs --policy "$POLICY_PATH" > evidence.json
+        node cordon/admission/create.mjs \
+          --artifact "$wheel" \
+          --repository "$GITHUB_REPOSITORY" \
+          --commit "$GITHUB_SHA" \
+          --workflow "$WORKFLOW_PATH" \
+          --plugin-id "$PLUGIN_ID" \
+          --plugin-version "$version" \
+          --distribution "$DISTRIBUTION" \
+          --host "$HOST_ID" \
+          --plugin-api-version "$PLUGIN_API_VERSION" \
+          --policy "$POLICY_PATH" \
+          --checks evidence.json \
+          --sbom wheel.spdx.json \
+          --dependency-lock uv.lock > admission.json
+        cosign sign-blob --yes --bundle admission.sigstore.json admission.json
+
+    - name: Install pinned Cordon dependencies
+      shell: bash
+      run: npm ci --prefix cordon --ignore-scripts
+
+    - name: Retain private provenance
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.distribution }}-admission-${{ github.sha }}
+        path: |
+          admission.json
+          admission.sigstore.json
+          evidence.json
+          wheel.spdx.json
+          uv.lock
+          dist/*.whl
+        if-no-files-found: error
+        retention-days: 90
