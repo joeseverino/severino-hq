@@ -11,7 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
   <meta name="theme-color" content="#1f4d57">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ ASSET_VERSION }}">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -19,8 +19,24 @@
     <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
     {% if user.is_authenticated %}
       <nav class="primary-nav">
-        {% for item in nav_items %}
-          <a href="{% url item.url %}"{% if item.active %} class="active"{% endif %}>{{ item.label }}</a>
+        {% for entry in nav_entries %}
+          {% if entry.kind == "group" %}
+            <details class="nav-group">
+              <summary{% if entry.active %} class="active"{% endif %}>
+                <span class="nav-group-label">
+                  {{ entry.label }}
+                  <svg class="nav-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg>
+                </span>
+              </summary>
+              <div class="nav-group-panel">
+                {% for item in entry.items %}
+                  <a href="{% url item.url %}"{% if item.active %} class="active"{% endif %}>{{ item.label }}</a>
+                {% endfor %}
+              </div>
+            </details>
+          {% else %}
+            <a href="{% url entry.url %}"{% if entry.active %} class="active"{% endif %}>{{ entry.label }}</a>
+          {% endif %}
         {% endfor %}
       </nav>
       <form class="global-search" action="{% url 'search' %}" method="get">

@@ -91,3 +91,49 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
                     violations.append(f"{source_path.relative_to(root)}:{node.name}")
 
         self.assertEqual(violations, [])
+
+
+class StyleContractTests(SimpleTestCase):
+    """The style bundle is a contract that extensions render against.
+
+    These guard failures that are invisible in review and silent at runtime:
+    CSS resolves an undefined custom property to an invalid value rather than
+    erroring, so a typo'd token degrades to a browser default (a black SVG
+    fill) instead of breaking loudly.
+    """
+
+    @staticmethod
+    def _stylesheet() -> str:
+        root = Path(__file__).resolve().parents[1]
+        return (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    def test_every_referenced_custom_property_is_defined(self):
+        import re
+
+        css = self._stylesheet()
+        defined = set(re.findall(r"^\s*(--[a-z0-9-]+)\s*:", css, re.MULTILINE))
+        referenced = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", css))
+        # A fallback (var(--x, #fff)) is still a typo worth catching, so the
+        # comparison deliberately ignores whether one was supplied.
+        self.assertEqual(sorted(referenced - defined), [])
+
+    def test_categorical_series_slots_are_defined_and_distinct(self):
+        import re
+
+        css = self._stylesheet()
+        slots = re.findall(r"^\s*(--series-\d+)\s*:\s*(#[0-9a-fA-F]{6})", css, re.MULTILINE)
+        values = [value.lower() for _, value in slots]
+        self.assertGreaterEqual(len(slots), 5, "expected at least 5 categorical slots")
+        self.assertEqual(len(values), len(set(values)), "series slots must be distinct")
+
+    def test_series_fills_use_categorical_slots_not_status_colours(self):
+        import re
+
+        css = self._stylesheet()
+        reserved = {"--danger", "--warn", "--ok", "--attn"}
+        for rule in re.findall(r"\.chart-series-\d+\s*\{([^}]*)\}", css):
+            used = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", rule))
+            self.assertFalse(
+                used & reserved,
+                f"status colours are reserved and must not encode a series: {used & reserved}",
+            )

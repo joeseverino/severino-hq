@@ -1,0 +1,34 @@
+{% comment %}
+Insight grid — a decision-support panel: each item states a reading, what it
+means, and the next action.
+
+Use this when a number needs interpretation. Use _kpi_grid.html when the number
+speaks for itself.
+
+Each item accepts:
+  eyebrow  short category label (e.g. "Data readiness")
+  value    the reading itself, kept short
+  title    what the reading is about
+  body     the interpretation
+  action   the recommended next step (rendered after a "Next" label)
+  status   good | attention | serious | neutral (default neutral)
+  url      optional; makes the card a link
+
+`status` drives a pill that always carries its own text, so state is never
+communicated by colour alone.
+{% endcomment %}
+<section class="insight-grid"{% if label %} aria-label="{{ label }}"{% endif %}>
+  {% for item in items %}
+    <article class="insight-card">
+      <div class="insight-head">
+        {% if item.eyebrow %}<span class="pill pill-{{ item.status|default:'neutral' }}">{{ item.eyebrow }}</span>{% endif %}
+        {% if item.value %}<strong class="insight-value">{{ item.value }}</strong>{% endif %}
+      </div>
+      <h3 class="insight-title">
+        {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+      </h3>
+      {% if item.body %}<p class="insight-body">{{ item.body }}</p>{% endif %}
+      {% if item.action %}<p class="insight-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+    </article>
+  {% endfor %}
+</section>
