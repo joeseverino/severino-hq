@@ -7,12 +7,20 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from django.core.exceptions import ImproperlyConfigured
 
-if TYPE_CHECKING:
-    from .plugins import PluginManifest
+
+class AdmittedPlugin(Protocol):
+    """The admission-facing slice of a plugin manifest."""
+
+    id: str
+    version: str
+    distribution: str
+    api_version: int
+    source_repository: str
+    source_workflow: str
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 LOCK_KEYS = {
@@ -71,7 +79,7 @@ def _load_lock() -> list[dict[str, Any]]:
     return plugins
 
 
-def enforce_plugin_admission(manifests: tuple[PluginManifest, ...]) -> None:
+def enforce_plugin_admission(manifests: tuple[AdmittedPlugin, ...]) -> None:
     if not manifests or not admission_required():
         return
     expected_policy = os.environ.get(
