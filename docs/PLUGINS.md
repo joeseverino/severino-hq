@@ -29,6 +29,7 @@ plugin = PluginManifest(
     capability_provider="example_notes.capabilities:specs",
     search_provider="example_notes.projections:search_definitions",
     health_provider="example_notes.health:ready",
+    token_authenticated_routes=("api/v1/",),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
     mcp_write_capabilities=("notes.write",),
@@ -116,6 +117,22 @@ Plugin templates supply domain content while HQ owns layout behavior, tokens,
 responsive rules, accessibility states, and visual evolution. A new shared
 pattern belongs in HQ first; copying host CSS or markup into every plugin is a
 contract failure.
+
+## Routes that authenticate themselves
+
+`token_authenticated_routes` names paths under a plugin's own `url_prefix` that
+carry their own request authentication — a bearer token, a signed body — rather
+than the session cookie. They are exempted from the session login **redirect**,
+not from authentication.
+
+The distinction matters because a 302 to an HTML login page is the wrong answer
+for a native or machine client: it cannot render one, and it cannot tell that
+response from success. Those routes answer 401 instead, and the view remains
+responsible for authenticating the request.
+
+Routes are declared relative and joined to `url_prefix` by the host, so a plugin
+can only ever say "these paths of mine". An absolute path, a traversing one, or
+one declared without a `url_prefix` to anchor it fails closed at load.
 
 ## Native and machine clients
 

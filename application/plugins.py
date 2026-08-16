@@ -55,6 +55,16 @@ class PluginManifest:
     capability_provider: str = ""
     search_provider: str = ""
     health_provider: str = ""
+    # Optional. Routes under this plugin's own url_prefix that carry their own
+    # request authentication (a bearer token, a signed body) instead of the
+    # session cookie. They are exempted from the session login *redirect*, not
+    # from authentication: a 302 to an HTML login page is the wrong answer for
+    # a native or machine client, which needs a 401 it can act on.
+    #
+    # Deliberately relative. The host joins each one to url_prefix, so a plugin
+    # can only ever say "these paths of mine" -- never /admin/, never another
+    # plugin's mount.
+    token_authenticated_routes: tuple[str, ...] = ()
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
@@ -103,6 +113,19 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} must declare url_prefix and urlconf together."
         )
+    for route in manifest.token_authenticated_routes:
+        if not manifest.url_prefix:
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} declares token-authenticated routes "
+                "without a url_prefix to anchor them to."
+            )
+        # An absolute or traversing route would reach outside the plugin's own
+        # mount, which is the one thing this field must never be able to do.
+        if not route or route.startswith("/") or ".." in route:
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} token-authenticated route {route!r} "
+                "must be a non-empty path relative to its url_prefix."
+            )
     for item in manifest.navigation:
         if not item.namespace or not item.route:
             raise ImproperlyConfigured(
@@ -138,6 +161,20 @@ def plugin_urlpatterns() -> list:
         for plugin in installed_plugins()
         if plugin.urlconf
     ]
+
+
+def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
+    """Absolute path prefixes that authenticate themselves, not via the session.
+
+    Built here rather than declared, so what a plugin asked for is always
+    re-anchored to the mount the host gave it.
+    """
+
+    return tuple(
+        f"/{plugin.url_prefix}{route}"
+        for plugin in installed_plugins()
+        for route in plugin.token_authenticated_routes
+    )
 
 
 def plugin_navigation() -> tuple[NavigationItem, ...]:

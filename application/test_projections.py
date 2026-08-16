@@ -17,6 +17,7 @@ from projects.models import Project
 
 from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
+from .read_models import change_feed
 from .ui import ChartSeries, Timeline, TimelineItem, stacked_bar_chart
 
 
@@ -169,6 +170,49 @@ class DashboardProjectionTests(TestCase):
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
+
+
+class ChangeFeedTests(TestCase):
+    """A cursor a phone can hold across launches, sleeps, and network gaps."""
+
+    def test_a_first_sync_gets_the_head_and_no_backlog(self):
+        Project.objects.create(slug="alpha", name="Alpha")
+        feed = change_feed()
+        self.assertEqual(feed["items"], [])
+        self.assertFalse(feed["has_more"])
+        self.assertGreater(feed["cursor"], 0)
+
+    def test_only_changes_after_the_cursor_come_back(self):
+        Project.objects.create(slug="alpha", name="Alpha")
+        cursor = change_feed()["cursor"]
+        Project.objects.create(slug="beta", name="Beta")
+
+        feed = change_feed(since=cursor)
+        self.assertEqual([item["object_id"] for item in feed["items"]], ["2"])
+        self.assertEqual(feed["items"][0]["action"], "created")
+        self.assertGreater(feed["cursor"], cursor)
+
+        # Replaying the returned cursor is idempotent: no event is delivered
+        # twice, which is what makes it safe to persist and resume from.
+        self.assertEqual(change_feed(since=feed["cursor"])["items"], [])
+
+    def test_the_feed_carries_no_free_text(self):
+        Project.objects.create(slug="alpha", name="Alpha")
+        cursor = change_feed()["cursor"]
+        Project.objects.create(slug="beta", name="Beta")
+        self.assertEqual(
+            set(change_feed(since=cursor)["items"][0]),
+            {"id", "action", "object_type", "object_id", "created_at"},
+        )
+
+    def test_a_partial_page_advertises_more(self):
+        cursor = change_feed()["cursor"]
+        for index in range(4):
+            Project.objects.create(slug=f"p{index}", name=f"P{index}")
+        feed = change_feed(since=cursor, limit=2)
+        self.assertEqual(feed["count"], 2)
+        self.assertTrue(feed["has_more"])
+        self.assertFalse(change_feed(since=feed["cursor"], limit=2)["has_more"])
 
 
 class OperationProjectionTests(TestCase):

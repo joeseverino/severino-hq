@@ -163,6 +163,46 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
     return {"items": items, "count": len(items)}
 
 
+def change_feed(*, since: int | None = None, limit: int = 100) -> dict[str, Any]:
+    """Forward-only invalidation feed for clients that keep a local cache.
+
+    Deliberately thinner than ``recent_activity``: a cache needs to know *what*
+    changed, not what it said. Ordered by primary key, the only monotonic
+    column available -- ``created_at`` defaults to ``timezone.now``, so two
+    events written in the same tick would make a timestamp cursor lossy.
+
+    ``since=None`` is "I have nothing yet": it returns the current head and no
+    items, so a first sync pulls resources directly instead of replaying the
+    entire audit log to arrive at the same state.
+    """
+
+    head = AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
+    if since is None:
+        return {"items": [], "count": 0, "cursor": head, "has_more": False}
+
+    events = list(
+        AuditLog.objects.fetch_mode(FETCH_RAISE)
+        .filter(pk__gt=since)
+        .order_by("pk")[: _page_size(limit)]
+    )
+    cursor = events[-1].pk if events else since
+    return {
+        "items": [
+            {
+                "id": event.id,
+                "action": event.action,
+                "object_type": event.object_type,
+                "object_id": event.object_id,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in events
+        ],
+        "count": len(events),
+        "cursor": cursor,
+        "has_more": cursor < head,
+    }
+
+
 def system_health() -> dict[str, Any]:
     """Prove database access and return only non-sensitive record counts."""
     return {
