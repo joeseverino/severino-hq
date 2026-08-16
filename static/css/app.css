@@ -342,6 +342,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 /* 2px surface gap between stacked segments so adjacent fills read as separate
    marks rather than one block; also carries the CVD relief for close hues. */
 .bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
+/* A share-of-one drawing, sized to itself. It must not borrow .bar-chart:
+   that is width:100% against a wide, short viewBox, and a square one under the
+   same rule scales to the full card and takes its own width in height. */
+.pie-chart { display: block; inline-size: 190px; block-size: auto; max-inline-size: 100%; }
+.pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .chart-data { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .control-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .control-good, .control-healthy { color: #1f7250; }
