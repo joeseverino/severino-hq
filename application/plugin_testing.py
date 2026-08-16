@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import os
+from pathlib import Path
+import re
 from typing import Any, Iterable
 from unittest import mock
 
@@ -36,6 +38,43 @@ from .ui import Insight
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
 SIBLING_PREFIX = "example."
+
+
+def undefined_style_classes(template_root) -> list[str]:
+    """Class names an extension's templates use that the host does not define.
+
+    An extension that invents a class gets no error and no styling -- the page
+    renders, slightly wrong, and stays that way. The host has this check for
+    its own partials, but it cannot see an extension's templates: they live in
+    another repository and are not installed when the host's suite runs. So the
+    check has to run from the extension's side, against the host's real bundle.
+
+    It caught `.section-action` -- a section-head link two extensions used and
+    nothing ever styled, shipped to production reading as a plain browser link.
+
+        class StyleTests(SimpleTestCase):
+            def test_templates_only_use_defined_classes(self):
+                root = Path(__file__).resolve().parent / "templates"
+                self.assertEqual(undefined_style_classes(root), [])
+
+    Returns sorted "template.html: .name" strings so a failure names the file.
+    """
+    import application
+
+    css = Path(application.__file__).resolve().parents[1] / "static" / "css" / "app.css"
+    defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", css.read_text(encoding="utf-8")))
+    offenders = set()
+    for template in sorted(Path(template_root).rglob("*.html")):
+        text = template.read_text(encoding="utf-8")
+        for attribute in re.findall(r'class="([^"]*)"', text):
+            # Interpolated values are decided at render time; the pieces that
+            # make them up are checked where they are defined instead.
+            if "{{" in attribute or "{%" in attribute:
+                continue
+            for name in attribute.split():
+                if name not in defined:
+                    offenders.add(f"{template.name}: .{name}")
+    return sorted(offenders)
 
 
 def sibling(

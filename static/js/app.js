@@ -144,9 +144,6 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   // Touch already has the chart's data table, which is always rendered.
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
 
-  const charts = document.querySelectorAll("[data-chart]");
-  if (!charts.length) return;
-
   const tip = document.createElement("div");
   tip.className = "chart-tip";
   tip.hidden = true;
@@ -166,19 +163,59 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     tip.style.top = `${above < gap ? event.clientY + gap : above}px`;
   };
 
-  charts.forEach((chart) => {
-    chart.addEventListener("pointermove", (event) => {
-      const mark = event.target.closest("[data-tip]");
-      if (!mark) {
-        tip.hidden = true;
-        return;
-      }
-      if (tip.textContent !== mark.dataset.tip) tip.textContent = mark.dataset.tip;
-      tip.hidden = false;
-      place(event);
-    });
-    chart.addEventListener("pointerleave", () => {
+  // Delegated from the document rather than bound per chart: a calendar that
+  // pages to another month is replaced in place, and per-element listeners
+  // would have gone with the node it swapped out.
+  document.addEventListener("pointermove", (event) => {
+    const mark = event.target.closest("[data-chart] [data-tip]");
+    if (!mark) {
       tip.hidden = true;
+      return;
+    }
+    if (tip.textContent !== mark.dataset.tip) tip.textContent = mark.dataset.tip;
+    tip.hidden = false;
+    place(event);
+  });
+  document.addEventListener("pointerleave", () => {
+    tip.hidden = true;
+  });
+})();
+
+// Calendar paging without a page load. The links work on their own -- this
+// only replaces the card in place so the rest of the page, and the scroll
+// position, stay where they were.
+(() => {
+  const swap = async (link) => {
+    const card = link.closest(".calendar-card");
+    if (!card || !card.id) return false;
+    // X-Fragment lets the view skip everything it would otherwise rebuild to
+    // redraw one grid, and return the card on its own.
+    const response = await fetch(link.href, {
+      credentials: "same-origin",
+      headers: { "X-Fragment": "calendar" },
     });
+    if (!response.ok) return false;
+    const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
+    const next = parsed.getElementById(card.id);
+    if (!next) return false;
+    card.replaceWith(next);
+    // replaceState, not pushState: paging months is not a place worth putting
+    // between the operator and the Back button.
+    history.replaceState(null, "", link.href);
+    return true;
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest(".calendar-nav a");
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    // Any failure falls through to the ordinary navigation the link already is.
+    swap(link)
+      .then((done) => {
+        if (!done) window.location.href = link.href;
+      })
+      .catch(() => {
+        window.location.href = link.href;
+      });
   });
 })();

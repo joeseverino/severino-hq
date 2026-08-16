@@ -1,22 +1,37 @@
 {% comment %}
 Chronological planning horizon. Plugins emit application.ui.TimelineItem values;
 HQ owns the one visual and responsive implementation.
+
+Labelled with aria-label rather than aria-labelledby, matching _kpi_grid.html: a
+partial cannot own a document-unique id. Two timelines on one page -- a domain's
+horizon beside the composed one -- would both emit id="timeline-title", and a
+screen reader resolves a duplicate id to the first match, so the second section
+would announce the first one's name.
 {% endcomment %}
-<section class="timeline{% if not plain %} card{% endif %}" aria-labelledby="timeline-title">
+<section class="timeline{% if not plain %} card{% endif %}" aria-label="{{ timeline.title }}">
   <div class="section-head timeline-head">
     <div>
-      <h2 id="timeline-title">{{ timeline.title }}</h2>
+      <h2>{{ timeline.title }}</h2>
       {% if timeline.description %}<p class="timeline-description">{{ timeline.description }}</p>{% endif %}
     </div>
     {% if timeline.items %}<span class="count">{{ timeline.items|length }} event{{ timeline.items|pluralize }}</span>{% endif %}
   </div>
   {% if timeline.items %}
+    {% comment %}
+    The year appears only when it is not this one. A horizon can run years out
+    -- a passport, a licence -- and month-and-day alone rendered "Sep 15" above
+    "Mar 19" with no way to tell they were 2029 and 2030, so a correctly sorted
+    list read as a sorting bug. Stamping every row with the current year instead
+    would be noise on the rows that are actually soon.
+    {% endcomment %}
+    {% now "Y" as current_year %}
     <ol class="timeline-list">
       {% for item in timeline.items %}
         <li class="timeline-item timeline-{{ item.status }}">
           <time datetime="{{ item.when|date:'Y-m-d' }}">
             <span class="timeline-month">{{ item.when|date:"M" }}</span>
             <span class="timeline-day">{{ item.when|date:"j" }}</span>
+            {% if item.when|date:"Y" != current_year %}<span class="timeline-year">{{ item.when|date:"Y" }}</span>{% endif %}
           </time>
           <span class="timeline-copy">
             {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>{% else %}<strong>{{ item.title }}</strong>{% endif %}

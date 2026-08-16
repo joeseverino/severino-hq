@@ -367,6 +367,46 @@ class ComposedPluginTestKitTests(TestCase):
         self.assertEqual(len(alpha), 1)
         self.assertEqual(alpha[0]["item"].title, "Something is wrong")
 
+    def test_a_rich_domain_still_reaches_the_attention_queue(self):
+        """A DomainOverview must not displace its domain's attention items.
+
+        The regression: a composing surface dropped every domain that supplied
+        an overview from the queue and re-read severity off the overview
+        instead. Overviews are a display surface and truncate, so a `serious`
+        item past the cutoff vanished from the one place it was guaranteed to
+        appear -- and the page looked healthier the more a domain reported.
+        """
+        from .plugin_testing import sibling
+        from .plugins import plugin_attention_items
+        from .ui import DomainOverview, Kpi
+
+        item = Insight(
+            status="serious",
+            eyebrow="Alpha",
+            title="Still wrong",
+            value="1",
+            body="Body.",
+        )
+        self.case(
+            siblings=(
+                sibling(
+                    attention=(item,),
+                    overview=DomainOverview("State.", "/alpha/", (Kpi("Open", 3),)),
+                ),
+            )
+        )
+
+        titles = [entry["item"].title for entry in plugin_attention_items()]
+        self.assertIn("Still wrong", titles)
+
+    def test_an_overview_cannot_carry_attention_items(self):
+        """One channel for "needs a decision", enforced by the type."""
+        from dataclasses import fields
+
+        from .ui import DomainOverview
+
+        self.assertNotIn("insights", {field.name for field in fields(DomainOverview)})
+
     def test_the_registry_is_restored_afterwards(self):
         from .plugin_testing import sibling
 
