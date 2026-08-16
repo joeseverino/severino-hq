@@ -797,6 +797,21 @@ a.kpi:hover { background: var(--surface-2); }
    wrong when one is a short table beside a tall drawing: the short one grows a
    band of empty card under its last row. */
 .two-col.align-top { align-items: start; }
+/* A paired row whose two cards end at different points is the complaint this
+   file has answered more times than any other. `align-top` was the wrong
+   answer: it stops a short card stretching, which is exactly what makes the
+   pair ragged. The right one is to let them stretch and give the shorter card
+   somewhere to put the difference -- so a card in a stretched pair is a
+   column, and its drawing sits in the middle of whatever height the row ends
+   up being rather than leaving the slack in one lump at the bottom. */
+.two-col:not(.align-top) > .card,
+.two-col:not(.align-top) > .chart-card {
+  display: flex;
+  flex-direction: column;
+}
+.two-col:not(.align-top) > .chart-card > .chart-scroll,
+.two-col:not(.align-top) > .chart-card > .pie-row { margin-block: auto; }
+.two-col:not(.align-top) > .card > .table-scroll:only-of-type { margin-bottom: auto; }
 /* Panels that flow rather than pair. Assigning cards to a fixed left and right
    column means their heights are whatever the data made them, so one column
    ends early and the page carries the difference as a hole. Columns balance

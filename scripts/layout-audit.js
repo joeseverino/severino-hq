@@ -27,6 +27,37 @@ async (page) => {
     // card is stretching to a neighbour it should not match, or something was
     // removed and the padding stayed.
     const CARD_SLACK = 28;
+    // How much of a card's slack is owed to the pair it sits in. A stretched
+    // pair is equal by construction, so the shorter card's spare height is the
+    // difference between them -- that is what "equal" costs, not a defect.
+    // Only the difference is forgiven: slack beyond it is still a fault, so
+    // this cannot quietly excuse an unrelated gap.
+    const filled = (el) => {
+      const kids = [...el.children].filter(
+        (c) => c.getBoundingClientRect().height > 0,
+      );
+      if (!kids.length) return 0;
+      return (
+        Math.max(...kids.map((k) => k.getBoundingClientRect().bottom)) -
+        el.getBoundingClientRect().top
+      );
+    };
+    const paired = (card) => {
+      const row = card.parentElement;
+      if (!row || !row.classList.contains('two-col')) return 0;
+      if (row.classList.contains('align-top')) return 0;
+      const kids = [...row.children].filter(
+        (k) => k.getBoundingClientRect().height > 0,
+      );
+      if (kids.length !== 2) return 0;
+      // Compared by *content*, not by box. Once a pair has stretched, the two
+      // boxes are equal by construction and their difference is zero -- so
+      // measuring the boxes forgives nothing and flags the shorter card for
+      // slack the stretch itself created. What one card was stretched by is
+      // how much less it had to say than the other.
+      const content = kids.map(filled);
+      return round(Math.max(...content) - filled(card));
+    };
     document.querySelectorAll('.card, figure.chart-card').forEach((card) => {
       const kids = [...card.children].filter(
         (c) => c.getBoundingClientRect().height > 0,
@@ -34,7 +65,7 @@ async (page) => {
       if (!kids.length) return;
       const bottom = card.getBoundingClientRect().bottom;
       const last = Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
-      const slack = round(bottom - last);
+      const slack = round(bottom - last) - paired(card);
       if (slack > CARD_SLACK) add('empty-card-bottom', { card: name(card), slack });
     });
 
@@ -174,6 +205,23 @@ async (page) => {
           add('ragged-number-column', { column: index, edges: [...edges] });
         }
       });
+    });
+
+    // A paired row whose two cards end at different points. This is the single
+    // most-repeated complaint about these pages, and it was answered by hand
+    // each time -- reordering cards, trimming a table, moving a panel -- which
+    // only ever fixed the one session whose data happened to be on screen.
+    // A pair stretches; if these differ, something stopped it stretching.
+    document.querySelectorAll('.two-col').forEach((row) => {
+      const kids = [...row.children].filter(
+        (k) => k.getBoundingClientRect().height > 0,
+      );
+      if (kids.length !== 2) return;
+      const heights = kids.map((k) => round(k.getBoundingClientRect().height));
+      const gap = Math.max(...heights) - Math.min(...heights);
+      if (gap > 2) {
+        add('uneven-pair', { row: name(kids[0]), heights, gap });
+      }
     });
 
     // A sentence inside a flex row. `.row-main` lays its children out as flex
