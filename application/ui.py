@@ -1,8 +1,8 @@
 """Stable view models consumed by HQ's shared server-rendered UI primitives."""
 
-from dataclasses import dataclass
-from datetime import date
 import math
+from dataclasses import dataclass
+from datetime import date, timedelta
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
 # insight panels, extension-provided projections -- draws from this set, so a
@@ -264,6 +264,235 @@ class StackedBarChart:
     height: int = 260
 
 
+@dataclass(frozen=True)
+class LinePoint:
+    """One reading, placed."""
+
+    x: float
+    y: float
+    value: float
+    label: str
+    tooltip: str = ""
+
+
+@dataclass(frozen=True)
+class LineSeries:
+    """One line, already projected into the plot's coordinates."""
+
+    label: str
+    slot: int
+    path: str
+    points: tuple[LinePoint, ...]
+    # A fitted line through the same points, drawn dashed. Optional because a
+    # trend is a claim: it belongs on a series where the direction is the
+    # question, and nowhere else.
+    trend: str = ""
+
+
+@dataclass(frozen=True)
+class LineMark:
+    """A vertical rule at a date -- the day something began."""
+
+    x: float
+    label: str
+
+
+@dataclass(frozen=True)
+class LineChart:
+    """A measure over time, on an axis fitted to the measure.
+
+    Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
+    contract, which is right for quantities that add up -- minutes trained,
+    volume lifted -- and wrong for anything that varies around a level. Every
+    mile of a run sits between 140 and 160 bpm, and drawn from zero those are
+    identical bars: the chart says nothing changed, which is the opposite of
+    what the numbers say. This axis is fitted to the data's own range, so the
+    variation is the drawing.
+
+    The trade is real and worth stating: a fitted axis exaggerates small
+    movements, which is exactly why the range is printed on the axis and the
+    numbers stay in the table underneath.
+    """
+
+    title: str
+    description: str
+    unit: str
+    series: tuple[LineSeries, ...]
+    ticks: tuple[ChartTick, ...]
+    categories: tuple[ChartCategory, ...]
+    marks: tuple[LineMark, ...]
+    rows: tuple[ChartRow, ...]
+    empty: bool
+    width: int = 720
+    height: int = 260
+
+
+# The plot rectangle every chart in HQ draws inside. Stated once so a line and
+# a bar chart placed one above the other share an axis position rather than
+# nearly sharing one.
+PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+
+
+def line_chart(
+    title: str,
+    description: str,
+    series: "tuple[tuple[str, tuple[tuple[date, float], ...], int], ...]",
+    *,
+    unit: str,
+    marks: "tuple[tuple[date, str], ...]" = (),
+    trend: bool = False,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> LineChart:
+    """Dated readings as lines, on an axis fitted to what they actually are.
+
+    Each series is `(label, ((date, value), ...), slot)`. Dates rather than
+    positions: readings are not evenly spaced, and plotting against index
+    silently restates a month's gap as one step.
+    """
+    cleaned = [
+        (label, tuple(sorted(points)), slot)
+        for label, points, slot in series
+        if points
+    ]
+    if any(item[2] not in range(1, 6) for item in cleaned):
+        raise ValueError("Chart series slots must be between 1 and 5.")
+    every = [value for _, points, _ in cleaned for _, value in points]
+    if not every or len(every) < 2:
+        return LineChart(
+            title=title,
+            description=description,
+            unit=unit,
+            series=(),
+            ticks=(),
+            categories=(),
+            marks=(),
+            rows=(),
+            empty=True,
+        )
+
+    days = [day for _, points, _ in cleaned for day, _ in points]
+    first_day, last_day = min(days), max(days)
+    span = max(1, (last_day - first_day).days)
+
+    low = minimum if minimum is not None else min(every)
+    high = maximum if maximum is not None else max(every)
+    if high == low:
+        # A flat series still has to be drawn somewhere other than on the axis
+        # itself. Half a unit either side keeps the line in the middle of the
+        # plot and keeps the ticks distinct.
+        low, high = low - 0.5, high + 0.5
+    else:
+        padding = (high - low) * 0.08
+        floor, ceiling = low, high
+        low, high = low - padding, high + padding
+        # Do not invent axis below a floor the measure cannot cross. Walking
+        # asymmetry is a percentage of steps and cannot be negative; padding it
+        # to -0.3 draws a region no reading could ever occupy and makes the
+        # data look like it is hovering above some boundary that means nothing.
+        if floor >= 0 > low:
+            low = 0.0
+        if ceiling <= 100 and high > 100 and floor >= 0:
+            high = 100.0
+
+    def place_x(day) -> float:
+        return PLOT_LEFT + PLOT_WIDTH * ((day - first_day).days / span)
+
+    def place_y(value: float) -> float:
+        return PLOT_TOP + PLOT_HEIGHT * (1 - (value - low) / (high - low))
+
+    lines = []
+    for label, points, slot in cleaned:
+        placed = tuple(
+            LinePoint(
+                x=place_x(day),
+                y=place_y(value),
+                value=value,
+                label=f"{day:%b %-d, %Y}",
+                tooltip=f"{day:%b %-d, %Y} · {label}: {_format_tooltip_value(value)} {unit}",
+            )
+            for day, value in points
+        )
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}"
+            for index, p in enumerate(placed)
+        )
+        lines.append(
+            LineSeries(
+                label=label,
+                slot=slot,
+                path=path,
+                points=placed,
+                trend=_trend_path(points, place_x, place_y) if trend else "",
+            )
+        )
+
+    ticks = tuple(
+        ChartTick(place_y(value), _format_fitted_value(value, high - low))
+        for value in (low, (low + high) / 2, high)
+    )
+    # Six labels at most: a date every few pixels is a smear, not an axis.
+    step = max(1, (span + 1) // 5)
+    stamps = []
+    cursor = first_day
+    while cursor <= last_day:
+        stamps.append(cursor)
+        cursor += timedelta(days=step)
+    if stamps[-1] != last_day:
+        stamps.append(last_day)
+    categories = tuple(
+        ChartCategory(place_x(day), f"{day:%b %-d}") for day in stamps
+    )
+
+    dated: dict = {}
+    for label, points, _ in cleaned:
+        for day, value in points:
+            dated.setdefault(day, {})[label] = value
+    rows = tuple(
+        ChartRow(
+            f"{day:%b %-d, %Y}",
+            tuple(dated[day].get(label, 0.0) for label, _, _ in cleaned),
+        )
+        for day in sorted(dated)
+    )
+
+    return LineChart(
+        title=title,
+        description=description,
+        unit=unit,
+        series=tuple(lines),
+        ticks=ticks,
+        categories=categories,
+        marks=tuple(
+            LineMark(place_x(day), label)
+            for day, label in marks
+            if first_day <= day <= last_day
+        ),
+        rows=rows,
+        empty=False,
+    )
+
+
+def _trend_path(points, place_x, place_y) -> str:
+    """A least-squares line across the plot, or nothing when it cannot be fit."""
+    if len(points) < 3:
+        return ""
+    xs = [float(day.toordinal()) for day, _ in points]
+    ys = [float(value) for _, value in points]
+    x_mean = sum(xs) / len(xs)
+    y_mean = sum(ys) / len(ys)
+    variation = sum((x - x_mean) ** 2 for x in xs)
+    if variation == 0:
+        return ""
+    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / variation
+    intercept = y_mean - slope * x_mean
+    first, last = points[0][0], points[-1][0]
+    return (
+        f"M {place_x(first):.1f} {place_y(intercept + slope * first.toordinal()):.1f} "
+        f"L {place_x(last):.1f} {place_y(intercept + slope * last.toordinal()):.1f}"
+    )
+
+
 # What a calendar day can be. "planned" is a commitment not yet due; "missed"
 # is one whose day has passed. They are separate states because they call for
 # opposite reactions, and a single hollow ring for both makes the plan look
@@ -464,7 +693,12 @@ def stacked_bar_chart(
     ):
         raise ValueError("Chart values must be finite and non-negative.")
 
-    plot_left, plot_top, plot_width, plot_height = 48.0, 12.0, 654.0, 202.0
+    plot_left, plot_top, plot_width, plot_height = (
+        PLOT_LEFT,
+        PLOT_TOP,
+        PLOT_WIDTH,
+        PLOT_HEIGHT,
+    )
     totals = tuple(
         sum(item.values[index] for item in series) for index in range(len(labels))
     )
@@ -548,6 +782,22 @@ def _format_tooltip_value(value: float) -> str:
     if value >= 1000:
         return f"{value:,.0f}"
     return f"{value:.0f}" if float(value).is_integer() else f"{value:.1f}"
+
+
+def _format_fitted_value(value: float, span: float) -> str:
+    """An axis label with enough precision for the range it sits in.
+
+    The bar chart's formatter drops decimals above ten, which is right for an
+    axis that starts at zero -- its ticks are always far apart. A fitted axis is
+    not: a pace chart running from 10.6 to 11.8 min/mi has three ticks that all
+    round to "11", and an axis reading 11, 11, 12 looks broken and says nothing.
+
+    Precision therefore comes from the span rather than the magnitude.
+    """
+    if span >= 10 or not span:
+        return _format_chart_value(value)
+    decimals = 1 if span >= 1 else 2
+    return f"{value:,.{decimals}f}"
 
 
 def _format_chart_value(value: float) -> str:

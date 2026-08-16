@@ -1,0 +1,37 @@
+{% comment %}
+Tabbed charts — several drawings of one thing, in the space of one.
+
+  {% include "partials/_chart_tabs.html" with charts=my_charts group="splits" %}
+
+`charts` is a sequence of LineChart or StackedBarChart, at most four. `group`
+must be unique on the page: it names the radio group the tabs are built from.
+
+Radios and CSS rather than JavaScript, for the same reason the rest of HQ is
+server-rendered: the panel works before any script runs, arrow keys move
+between tabs for free, and there is no state to fall out of step with the
+markup.
+
+The inputs are siblings of the panels rather than children of the tab strip,
+because the selector that shows a panel is a sibling combinator and cannot
+climb back out of a wrapper. The labels sit in the strip and point at them by
+id, which is what keeps the visual grouping without nesting the controls.
+{% endcomment %}
+<div class="chart-tabs card">
+  {% for chart in charts %}
+    <input type="radio" name="tabs-{{ group }}" id="tab-{{ group }}-{{ forloop.counter }}" class="chart-tab-input"{% if forloop.first %} checked{% endif %}>
+  {% endfor %}
+  <div class="chart-tablist" role="tablist">
+    {% for chart in charts %}
+      <label class="chart-tab" for="tab-{{ group }}-{{ forloop.counter }}">{{ chart.title }}</label>
+    {% endfor %}
+  </div>
+  {% for chart in charts %}
+    <div class="chart-panel chart-panel-{{ forloop.counter }}">
+      {% if chart.bars %}
+        {% include "partials/_stacked_bar_chart.html" with chart=chart %}
+      {% else %}
+        {% include "partials/_line_chart.html" with chart=chart %}
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>

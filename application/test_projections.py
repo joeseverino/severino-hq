@@ -18,7 +18,13 @@ from projects.models import Project
 from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
 from .read_models import change_feed
-from .ui import ChartSeries, Timeline, TimelineItem, stacked_bar_chart
+from .ui import (
+    ChartSeries,
+    Timeline,
+    TimelineItem,
+    line_chart,
+    stacked_bar_chart,
+)
 
 
 class UiProjectionTests(TestCase):
@@ -87,6 +93,207 @@ class UiProjectionTests(TestCase):
                 (ChartSeries("Run", (30.0, 45.0), 1),),
                 unit="minutes",
             )
+
+
+class LineChartTests(TestCase):
+    """A measure over time, on an axis fitted to the measure."""
+
+    SERIES = (
+        (
+            "Resting heart rate",
+            (
+                (date(2026, 1, 1), 52.0),
+                (date(2026, 1, 15), 54.0),
+                (date(2026, 2, 1), 51.0),
+            ),
+            1,
+        ),
+    )
+
+    def test_the_axis_is_fitted_to_the_data_not_to_zero(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        floor = float(chart.ticks[0].label.replace(",", ""))
+        # A zero-based axis draws 51, 52 and 54 as three identical heights and
+        # the chart then says nothing happened. That is the whole reason this
+        # primitive exists beside the bar chart.
+        self.assertGreater(floor, 45.0)
+        self.assertLess(floor, 52.0)
+
+    def test_dates_are_placed_by_the_calendar_not_by_index(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        points = chart.series[0].points
+        first, middle, last = (p.x for p in points)
+        # Jan 1 → Jan 15 is a fortnight and Jan 15 → Feb 1 is longer, so the
+        # second gap has to be the wider one. Plotted against index they would
+        # be equal, which would restate the calendar.
+        self.assertLess(middle - first, last - middle)
+
+    def test_a_narrow_range_keeps_the_ticks_distinguishable(self):
+        # Pace across a run: 10.6 to 11.8 min/mi. Rounded to whole numbers the
+        # three ticks read 11, 11, 12, which looks like a bug and carries no
+        # information about the axis it labels.
+        chart = line_chart(
+            "Pace",
+            "",
+            (
+                (
+                    "Pace",
+                    (
+                        (date(2026, 1, 1), 10.6),
+                        (date(2026, 1, 2), 11.2),
+                        (date(2026, 1, 3), 11.8),
+                    ),
+                    1,
+                ),
+            ),
+            unit="min/mi",
+        )
+        labels = [tick.label for tick in chart.ticks]
+        self.assertEqual(len(set(labels)), len(labels))
+        self.assertTrue(all("." in label for label in labels), labels)
+
+    def test_a_wide_range_still_drops_the_decimals(self):
+        chart = line_chart(
+            "Steps",
+            "",
+            (
+                (
+                    "Steps",
+                    ((date(2026, 1, 1), 2000.0), (date(2026, 1, 2), 18000.0)),
+                    1,
+                ),
+            ),
+            unit="steps",
+        )
+        self.assertTrue(any("k" in tick.label for tick in chart.ticks))
+
+    def test_the_axis_does_not_pad_below_a_natural_floor(self):
+        # Walking asymmetry is a share of steps. Padding 0.1 down by 8% of the
+        # range draws an axis reaching below zero, which is a region no reading
+        # can occupy.
+        chart = line_chart(
+            "Asymmetry",
+            "",
+            (
+                (
+                    "Asymmetry",
+                    (
+                        (date(2026, 1, 1), 0.1),
+                        (date(2026, 1, 2), 1.4),
+                        (date(2026, 1, 3), 3.0),
+                    ),
+                    1,
+                ),
+            ),
+            unit="%",
+        )
+        self.assertEqual(float(chart.ticks[0].label), 0.0)
+
+    def test_a_series_that_does_go_negative_still_gets_its_room(self):
+        chart = line_chart(
+            "Drift",
+            "",
+            (
+                (
+                    "Drift",
+                    ((date(2026, 1, 1), -4.0), (date(2026, 1, 2), 6.0)),
+                    1,
+                ),
+            ),
+            unit="",
+        )
+        self.assertLess(float(chart.ticks[0].label), -4.0)
+
+    def test_a_flat_series_is_still_drawn_inside_the_plot(self):
+        chart = line_chart(
+            "Flat",
+            "",
+            (("Steady", ((date(2026, 1, 1), 7.0), (date(2026, 1, 2), 7.0)), 1),),
+            unit="h",
+        )
+        self.assertFalse(chart.empty)
+        for point in chart.series[0].points:
+            self.assertGreater(point.y, 12.0)
+            self.assertLess(point.y, 214.0)
+
+    def test_one_reading_is_not_a_chart(self):
+        chart = line_chart(
+            "Lonely", "", (("Only", ((date(2026, 1, 1), 7.0),), 1),), unit="h"
+        )
+        self.assertTrue(chart.empty)
+
+    def test_a_mark_lands_on_its_own_date(self):
+        chart = line_chart(
+            "Resting",
+            "",
+            self.SERIES,
+            unit="bpm",
+            marks=((date(2026, 1, 15), "Care"),),
+        )
+        self.assertEqual(len(chart.marks), 1)
+        self.assertAlmostEqual(
+            chart.marks[0].x, chart.series[0].points[1].x, places=1
+        )
+
+    def test_a_mark_outside_the_window_is_dropped(self):
+        chart = line_chart(
+            "Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),)
+        )
+        self.assertEqual(chart.marks, ())
+
+    def test_the_line_is_stroked_rather_than_filled(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm", trend=True)
+        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        # `.chart-series-N` sets `fill`, which would render the path as a
+        # filled blob. Lines use the stroke classes.
+        self.assertIn('class="chart-line chart-line-1"', rendered)
+        self.assertIn("chart-trend", rendered)
+        self.assertIn("View chart data", rendered)
+        self.assertNotIn("<title>", rendered)
+
+    def test_each_point_has_a_target_big_enough_to_hit(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        # The visible dot is three pixels across, which is smaller than a
+        # pointer can be aimed: the tooltip worked and could not be reached.
+        # The tip belongs to an invisible circle several times its size.
+        self.assertIn('class="chart-hit"', rendered)
+        self.assertIn('r="11"', rendered)
+        self.assertNotIn('r="3" data-tip', rendered)
+        # And the target has to be drawn after the lines, or a line crossing it
+        # takes the pointer first.
+        self.assertGreater(
+            rendered.index("chart-hit"), rendered.rindex("chart-line-")
+        )
+
+    def test_every_point_carries_the_hosts_own_tooltip(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm")
+        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        self.assertIn("Jan 1, 2026 · Resting heart rate: 52 bpm", rendered)
+        self.assertNotIn("title=", rendered)
+
+    def test_a_slot_outside_the_palette_is_refused(self):
+        with self.assertRaises(ValueError):
+            line_chart(
+                "Resting",
+                "",
+                (("Resting", ((date(2026, 1, 1), 1.0), (date(2026, 1, 2), 2.0)), 9),),
+                unit="bpm",
+            )
+
+    def test_the_plot_rectangle_is_shared_with_the_bar_chart(self):
+        line = line_chart("Resting", "", self.SERIES, unit="bpm")
+        bars = stacked_bar_chart(
+            "Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m"
+        )
+        # Two charts stacked in a column have to share an axis position, or the
+        # page reads as two unrelated drawings. A bar is centred in its own
+        # column so its x is not the plot's left edge; the axis is what has to
+        # line up, and the line does start at the edge.
+        self.assertEqual(line.ticks[0].y, bars.ticks[0].y)
+        self.assertEqual(line.ticks[-1].y, bars.ticks[-1].y)
+        self.assertAlmostEqual(line.series[0].points[0].x, 48.0, places=1)
+        self.assertAlmostEqual(line.series[0].points[-1].x, 48.0 + 654.0, places=1)
 
 
 class DashboardProjectionTests(TestCase):
