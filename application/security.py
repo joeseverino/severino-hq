@@ -75,24 +75,6 @@ def cli_principal() -> Principal:
     return Principal("local-operator", "cli", _operator_capabilities())
 
 
-def mobile_principal(user) -> Principal:
-    """A registered native client acting as the operator who authenticated it.
-
-    Same authority as the browser session it was established from, on purpose.
-    A phone that could only do less would send the operator back to a laptop
-    for precisely the work a phone is best at -- capture in the moment -- and
-    the narrower grant would be undone the first time that got annoying.
-
-    The separate interface label is the point: every event a phone causes is
-    attributable to a phone in the audit log, and a device is revocable on its
-    own without touching the operator's account.
-    """
-
-    if not getattr(user, "is_authenticated", False):
-        raise AuthorizationError("An authenticated operator is required.")
-    return Principal(user.get_username(), "mobile", _operator_capabilities())
-
-
 def mcp_principal() -> Principal:
     from .plugins import plugin_capabilities
 

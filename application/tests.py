@@ -7,7 +7,6 @@ from datetime import date, datetime, timezone
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -35,8 +34,6 @@ from .security import (
     Principal,
     cli_principal,
     mcp_principal,
-    mobile_principal,
-    web_principal,
 )
 
 
@@ -381,39 +378,6 @@ class AdapterParityTests(TestCase):
             AuditLog.objects.get(object_repr="CLI Project").metadata["interface"],
             "cli",
         )
-
-
-class MobilePrincipalTests(TestCase):
-    """A registered device acts as its operator, and says so in the log."""
-
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="joe", password="test-password"
-        )
-
-    def test_a_device_carries_the_same_authority_as_the_browser(self):
-        self.assertEqual(
-            mobile_principal(self.user).capabilities,
-            web_principal(self.user).capabilities,
-        )
-
-    def test_the_interface_stays_distinguishable_in_the_audit_trail(self):
-        principal = mobile_principal(self.user)
-        self.assertEqual(principal.interface, "mobile")
-        self.assertEqual(principal.actor, "joe")
-
-        save_project(
-            ProjectCommand(slug="phone-project", name="Phone Project"),
-            principal=principal,
-        )
-        self.assertEqual(
-            AuditLog.objects.get(object_repr="Phone Project").metadata["interface"],
-            "mobile",
-        )
-
-    def test_an_unauthenticated_user_gets_no_principal(self):
-        with self.assertRaises(AuthorizationError):
-            mobile_principal(AnonymousUser())
 
 
 @override_settings(SEVERINO_MCP_ENABLE_WRITES=True)

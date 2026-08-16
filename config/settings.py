@@ -241,6 +241,10 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
     "/accounts/logout",
     "/oidc/",
     "/static/",
+    # Exempt from the session-login *redirect*, not from authentication. These
+    # views read a bearer token and answer 401; a 302 to an HTML login page is
+    # the wrong answer for a Shortcut, which cannot fill one in.
+    "/api/",
 )
 
 AUTHENTICATION_BACKENDS = [
@@ -269,6 +273,18 @@ OIDC_USE_PKCE = True
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
+
+# Machine-client API. HQ verifies access tokens Pocket ID issued for this
+# resource and mints no credential of its own, so there is nothing to revoke
+# here -- revocation is done on the client in Pocket ID.
+#
+# Empty disables the surface fail-closed, and must: without a resource to check
+# `aud` against, a token minted for any other API on the same issuer would
+# verify here on signature alone.
+SEVERINO_API_RESOURCE = os.environ.get("SEVERINO_API_RESOURCE", "")
+# Clock skew allowance between the phone, Pocket ID and HQ. Small on purpose:
+# the tokens are short-lived, and a generous window is a longer replay window.
+SEVERINO_API_LEEWAY_SECONDS = int(os.environ.get("SEVERINO_API_LEEWAY_SECONDS", "30"))
 
 # Private MCP endpoint. All three settings are enforced by the ASGI boundary;
 # empty hosts or a short/empty token disable MCP fail-closed.
