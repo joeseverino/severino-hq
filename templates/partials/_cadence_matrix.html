@@ -6,9 +6,11 @@ Cadence matrix — several things tracked over the same periods.
 `matrix` is application.ui.CadenceMatrix. A real table because that is what it
 is: one row per thing, one column per period, and the alignment down a column is
 what makes the comparison possible. Use _cadence.html for a single strip.
+
+Pass compact=True where it shares a row with a chart rather than owning a page.
 {% endcomment %}
 <div class="table-scroll">
-  <table class="data-table cadence-matrix">
+  <table class="data-table cadence-matrix{% if compact %} is-compact{% endif %}">
     <thead>
       <tr>
         <th scope="col">{{ label|default:"Tracked" }}</th>

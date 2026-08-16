@@ -10,9 +10,9 @@ import re
 from typing import Any, Callable, Iterable
 
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import include, path
+from django.urls import include, path, reverse
 
-from .ui import STATUS_VALUES
+from .ui import STATUS_VALUES, DomainOverview
 
 PLUGIN_API_VERSION = 1
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
@@ -47,6 +47,7 @@ class PluginManifest:
     urlconf: str = ""
     navigation: tuple[NavigationItem, ...] = ()
     dashboard_provider: str = ""
+    overview_provider: str = ""
     # Optional. Returns Insight-shaped items this extension believes need an
     # operator decision now. Composing surfaces gather these across extensions,
     # so a thing that needs doing is visible without opening its own page.
@@ -184,7 +185,18 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
             continue
         cards = tuple(_import(plugin.dashboard_provider)())
         _validate_dashboard_cards(cards)
-        sections.append({"id": plugin.id, "label": plugin.name, "cards": cards})
+        sections.append(
+            {
+                "id": plugin.id,
+                "label": plugin.name,
+                "url": (
+                    reverse(plugin.navigation[0].route)
+                    if plugin.navigation
+                    else cards[0]["url"] if cards else ""
+                ),
+                "cards": cards,
+            }
+        )
     return tuple(sections)
 
 
@@ -194,6 +206,21 @@ def plugin_dashboard_cards() -> tuple[dict[str, Any], ...]:
     return tuple(
         card for section in plugin_dashboard_sections() for card in section["cards"]
     )
+
+
+def plugin_overviews() -> tuple[dict[str, Any], ...]:
+    """Typed rich overviews with attribution owned by the host registry."""
+    sections = []
+    for plugin in installed_plugins():
+        if not plugin.overview_provider:
+            continue
+        overview = _import(plugin.overview_provider)()
+        if not isinstance(overview, DomainOverview):
+            raise ImproperlyConfigured(
+                f"Plugin {plugin.id!r} overview_provider must return DomainOverview."
+            )
+        sections.append({"id": plugin.id, "label": plugin.name, "overview": overview})
+    return tuple(sections)
 
 
 def _validate_dashboard_cards(cards: Iterable[dict[str, Any]]) -> None:
@@ -237,6 +264,13 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     returned already ordered by severity: the ordering is a property of the
     status vocabulary, so every surface that renders them agrees on urgency
     rather than each re-sorting to its own taste.
+
+    Takes no exclusions on purpose. An earlier signature let a composer drop a
+    domain here and substitute that domain's `DomainOverview` -- which is a
+    display surface, and truncates. The queue is the one place a `serious` item
+    is guaranteed to appear, so nothing may quietly remove a domain from it.
+    A composer that also renders per-domain panels should group these by
+    `source_id` rather than fetch the same question from a second channel.
     """
     gathered: list[dict[str, Any]] = []
     for plugin in installed_plugins():

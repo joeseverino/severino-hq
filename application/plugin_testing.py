@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import os
+from pathlib import Path
+import re
 from typing import Any, Iterable
 from unittest import mock
 
@@ -38,14 +40,52 @@ from .ui import Insight
 SIBLING_PREFIX = "example."
 
 
+def undefined_style_classes(template_root) -> list[str]:
+    """Class names an extension's templates use that the host does not define.
+
+    An extension that invents a class gets no error and no styling -- the page
+    renders, slightly wrong, and stays that way. The host has this check for
+    its own partials, but it cannot see an extension's templates: they live in
+    another repository and are not installed when the host's suite runs. So the
+    check has to run from the extension's side, against the host's real bundle.
+
+    It caught `.section-action` -- a section-head link two extensions used and
+    nothing ever styled, shipped to production reading as a plain browser link.
+
+        class StyleTests(SimpleTestCase):
+            def test_templates_only_use_defined_classes(self):
+                root = Path(__file__).resolve().parent / "templates"
+                self.assertEqual(undefined_style_classes(root), [])
+
+    Returns sorted "template.html: .name" strings so a failure names the file.
+    """
+    import application
+
+    css = Path(application.__file__).resolve().parents[1] / "static" / "css" / "app.css"
+    defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", css.read_text(encoding="utf-8")))
+    offenders = set()
+    for template in sorted(Path(template_root).rglob("*.html")):
+        text = template.read_text(encoding="utf-8")
+        for attribute in re.findall(r'class="([^"]*)"', text):
+            # Interpolated values are decided at render time; the pieces that
+            # make them up are checked where they are defined instead.
+            if "{{" in attribute or "{%" in attribute:
+                continue
+            for name in attribute.split():
+                if name not in defined:
+                    offenders.add(f"{template.name}: .{name}")
+    return sorted(offenders)
+
+
 def sibling(
     *,
     identifier: str = "example.alpha",
     name: str = "Alpha",
     cards: Iterable[dict[str, Any]] = (),
     attention: Iterable[Insight] = (),
+    overview: Any = None,
     **manifest_fields: Any,
-) -> tuple[PluginManifest, tuple[dict[str, Any], ...], tuple[Insight, ...]]:
+) -> tuple[PluginManifest, tuple[dict[str, Any], ...], tuple[Insight, ...], Any]:
     """One synthetic extension: a manifest plus what it reports.
 
     Returns the manifest and its contributions together so the caller declares a
@@ -68,9 +108,10 @@ def sibling(
         # these by importing the reference, and an empty one is never imported.
         dashboard_provider=f"{identifier}:cards" if cards else "",
         attention_provider=f"{identifier}:attention" if attention else "",
+        overview_provider=f"{identifier}:overview" if overview else "",
         **manifest_fields,
     )
-    return manifest, tuple(cards), tuple(attention)
+    return manifest, tuple(cards), tuple(attention), overview
 
 
 class ComposedPluginTestCase:
@@ -92,10 +133,10 @@ class ComposedPluginTestCase:
         self.addCleanup(installed_plugins.cache_clear)
 
         real = os.environ.get("SEVERINO_HQ_PLUGINS", "")
-        manifests = [manifest for manifest, _, _ in self.siblings]
+        manifests = [manifest for manifest, _, _, _ in self.siblings]
         contributions = {
-            manifest.id: (cards, attention)
-            for manifest, cards, attention in self.siblings
+            manifest.id: (cards, attention, overview)
+            for manifest, cards, attention, overview in self.siblings
         }
         references = [f"{manifest.id}:manifest" for manifest in manifests]
         self._composition.enter_context(
@@ -120,13 +161,15 @@ class ComposedPluginTestCase:
             """
             module, _, attribute = spec.partition(":")
             if module in contributions:
-                cards, attention = contributions[module]
+                cards, attention, overview = contributions[module]
                 if attribute == "manifest":
                     return next(m for m in manifests if m.id == module)
                 if attribute == "cards":
                     return lambda: cards
                 if attribute == "attention":
                     return lambda: attention
+                if attribute == "overview":
+                    return lambda: overview
             return original(spec)
 
         self._composition.enter_context(

@@ -1,6 +1,7 @@
 """Stable view models consumed by HQ's shared server-rendered UI primitives."""
 
 from dataclasses import dataclass
+from datetime import date
 import math
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
@@ -82,6 +83,44 @@ class ListRow:
                 "ListRow status needs a badge: state is never carried by colour "
                 "alone."
             )
+
+
+@dataclass(frozen=True)
+class TimelineItem:
+    """One dated event in the host-owned planning horizon.
+
+    Plugins emit meaning; HQ owns chronology, accessibility, responsive layout,
+    and state styling. The date remains a real ``date`` until the template so
+    callers cannot accidentally sort display strings such as "Nov 1".
+    """
+
+    when: date
+    title: str
+    detail: str = ""
+    url: str = ""
+    status: str = "neutral"
+    badge: str = ""
+
+    def __post_init__(self) -> None:
+        if self.status not in STATUS_VALUES:
+            raise ValueError(
+                f"TimelineItem status must be one of "
+                f"{', '.join(sorted(STATUS_VALUES))}; got {self.status!r}."
+            )
+
+
+@dataclass(frozen=True)
+class Timeline:
+    """A chronological, dependency-free planning surface."""
+
+    title: str
+    description: str
+    items: tuple[TimelineItem, ...]
+
+    def __post_init__(self) -> None:
+        ordered = tuple(sorted(self.items, key=lambda item: (item.when, item.title)))
+        if ordered != self.items:
+            raise ValueError("Timeline items must be sorted chronologically.")
 
 
 @dataclass(frozen=True)
@@ -223,6 +262,181 @@ class StackedBarChart:
     empty: bool
     width: int = 720
     height: int = 260
+
+
+# What a calendar day can be. "planned" is a commitment not yet due; "missed"
+# is one whose day has passed. They are separate states because they call for
+# opposite reactions, and a single hollow ring for both makes the plan look
+# broken every time you check it mid-week.
+CALENDAR_STATES = frozenset({"done", "missed", "planned", "empty"})
+
+
+@dataclass(frozen=True)
+class CalendarDay:
+    """One day: what the plan asked for, and what actually happened.
+
+    `slots` are ChartSeries slot numbers, so a filled dot takes the same colour
+    as that series' band in the chart beside it. The shared vocabulary is the
+    point -- "green is strength" has to mean the same thing in both, or reading
+    them together is worse than reading either alone.
+    """
+
+    when: date
+    state: str = "empty"
+    slots: tuple[int, ...] = ()
+    detail: str = ""
+    # Whether the plan asked for this day, kept separately from `state` so a
+    # completed day can still say whether it was scheduled or extra.
+    planned: bool = False
+    # A day outside the window, rendered as a spacer so the weekday columns
+    # line up. Alignment is what makes the grid readable as weeks at all.
+    filler: bool = False
+
+    def __post_init__(self) -> None:
+        if self.state not in CALENDAR_STATES:
+            raise ValueError(
+                f"CalendarDay state must be one of "
+                f"{', '.join(sorted(CALENDAR_STATES))}; got {self.state!r}."
+            )
+        if self.state in ("missed", "planned") and not self.planned:
+            raise ValueError(
+                f"A {self.state!r} day is by definition planned; set planned=True."
+            )
+
+
+@dataclass(frozen=True)
+class ActivityCalendar:
+    """Plan against execution, day by day, laid out as weeks.
+
+    A chart answers how much and a cadence strip answers whether, per week.
+    This answers *when* -- which days the plan asks for, which were kept, and
+    which were not. None of that survives aggregation into a weekly bar: four
+    sessions crammed into a weekend and four spread across the week produce
+    the same bar and are not the same training.
+    """
+
+    title: str
+    description: str
+    weeks: tuple[tuple[CalendarDay, ...], ...]
+    series: tuple[ChartSeries, ...] = ()
+    # The period being shown, e.g. "May 2026". A calendar without one asks the
+    # reader to infer the month from the date numbers, which they cannot do
+    # when the grid spans two.
+    period_label: str = ""
+    # Paging. Blank means this surface does not offer it -- a composed overview
+    # shows the current period and links to the domain for the rest.
+    previous_url: str = ""
+    next_url: str = ""
+    # Jump back to the period the data ends in. Blank when already there.
+    current_url: str = ""
+
+    def __post_init__(self) -> None:
+        for week in self.weeks:
+            if len(week) != 7:
+                raise ValueError(
+                    f"A calendar week needs 7 days for the columns to line up; "
+                    f"got {len(week)}. Pad the ends with filler days."
+                )
+
+    def _count(self, state: str) -> int:
+        return sum(1 for week in self.weeks for day in week if day.state == state)
+
+    @property
+    def done(self) -> int:
+        return self._count("done")
+
+    @property
+    def missed(self) -> int:
+        return self._count("missed")
+
+    @property
+    def kept(self) -> str:
+        """Planned days kept, as "n/m" -- blank when nothing has come due.
+
+        Counts only days the plan asked for and whose day has passed. Unplanned
+        training is real work and shows as a filled dot, but crediting it here
+        would let extra sessions paper over a schedule that is not being kept;
+        counting days still ahead would make every Monday look like a failure.
+        """
+        kept = sum(
+            1
+            for week in self.weeks
+            for day in week
+            if day.planned and day.state == "done"
+        )
+        due = kept + self.missed
+        return f"{kept}/{due}" if due else ""
+
+
+@dataclass(frozen=True)
+class PlannedDay:
+    """One weekday in a recurring plan.
+
+    Several things can be scheduled on the same day -- a run and a lift -- so
+    marks are a tuple of ChartSeries slots rather than one flag. `note` names
+    what the day is for when the dot alone does not say it.
+    """
+
+    label: str
+    full_label: str
+    slots: tuple[int, ...] = ()
+    note: str = ""
+    detail: str = ""
+
+    @property
+    def planned(self) -> bool:
+        return bool(self.slots)
+
+
+@dataclass(frozen=True)
+class PlanNote:
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
+class WeekPlan:
+    """The recurring shape of a week: what is scheduled, on which days.
+
+    Distinct from an ActivityCalendar, which records what happened on real
+    dates. This is the commitment those dates get judged against, and it is
+    worth stating on its own -- a plan that lives only in the operator's head
+    cannot be compared to anything.
+    """
+
+    title: str
+    days: tuple[PlannedDay, ...]
+    notes: tuple[PlanNote, ...] = ()
+    url: str = ""
+
+    def __post_init__(self) -> None:
+        if len(self.days) != 7:
+            raise ValueError(f"A week plan needs 7 days; got {len(self.days)}.")
+
+
+@dataclass(frozen=True)
+class DomainOverview:
+    """One plugin's useful contribution to a cross-domain surface.
+
+    The domain owns readings and interpretation. HQ owns rendering primitives,
+    so adding a domain requires no import or template change in the composer.
+
+    Deliberately carries no insights. A domain says "this needs a decision"
+    through `attention_provider` and nowhere else, because that channel is
+    complete and severity-ordered by the host. An overview is a display
+    surface, and display surfaces truncate -- the first version of this field
+    was populated with `insights[:3]` from a list built in derivation order, so
+    a domain's fourth insight could be `serious` and still never reach the
+    composed queue. Two channels for one question means the quieter one wins
+    silently. There is one channel.
+    """
+
+    description: str
+    url: str
+    kpis: tuple[Kpi, ...]
+    charts: tuple[StackedBarChart, ...] = ()
+    calendars: tuple[ActivityCalendar, ...] = ()
+    timeline: tuple[TimelineItem, ...] = ()
 
 
 def stacked_bar_chart(

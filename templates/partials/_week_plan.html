@@ -1,0 +1,31 @@
+{% comment %}
+Week plan — which days of the week a thing is scheduled for.
+
+  {% include "partials/_week_plan.html" with plan=training_week_plan %}
+
+`plan` is application.ui.WeekPlan. The recurring shape of a week, not a record
+of one: use _activity_calendar.html for what actually happened on given dates.
+{% endcomment %}
+<section class="card week-plan-card">
+  <div class="section-head">
+    <h2>{{ plan.title }}</h2>
+    {% if plan.url %}<a class="section-action" href="{{ plan.url }}">Edit &rarr;</a>{% endif %}
+  </div>
+  <ol class="week-plan">
+    {% for day in plan.days %}
+      <li class="week-plan-day{% if day.planned %} is-planned{% endif %}">
+        <span class="week-plan-label" aria-hidden="true">{{ day.label }}</span>
+        <span class="week-plan-mark">
+          <span class="visually-hidden">{{ day.full_label }}: {{ day.detail|default:"nothing scheduled" }}</span>
+          {% for slot in day.slots %}<i class="chart-series-{{ slot }}" aria-hidden="true"></i>{% endfor %}
+        </span>
+        {% if day.note %}<span class="week-plan-note" aria-hidden="true">{{ day.note }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  {% if plan.notes %}
+    <ul class="week-plan-notes">
+      {% for note in plan.notes %}<li><span class="muted">{{ note.label }}</span><strong>{{ note.value }}</strong></li>{% endfor %}
+    </ul>
+  {% endif %}
+</section>

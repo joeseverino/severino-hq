@@ -25,6 +25,7 @@ plugin = PluginManifest(
     urlconf="example_notes.urls",
     navigation=(NavigationItem("Notes", "notes:list", "notes"),),
     dashboard_provider="example_notes.projections:dashboard_cards",
+    overview_provider="example_notes.projections:domain_overview",
     capability_provider="example_notes.capabilities:specs",
     search_provider="example_notes.projections:search_definitions",
     health_provider="example_notes.health:ready",
@@ -103,6 +104,8 @@ templates:
 | `base.html` | Authenticated shell, navigation, messages, static assets, and security metadata |
 | `partials/_page_head.html` | Page title, lede, and optional primary action |
 | `partials/_kpi_grid.html` | Responsive linked or static KPI collection |
+| `partials/_timeline.html` | Chronological linked events from `application.ui.Timeline` |
+| `partials/_stacked_bar_chart.html` | Accessible chart from `application.ui.StackedBarChart` |
 | `partials/_empty_state.html` | Consistent empty state and optional action |
 | `partials/_form_field.html` | Label, control, help text, and validation errors |
 | `partials/_pagination.html` | Query-preserving paginated navigation |

@@ -240,7 +240,12 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 
 /* ── Layout ─────────────────────────────────────────────────────── */
 
-.content { max-width: 1180px; margin: 0 auto; padding: 28px; }
+/* overflow-x: clip, not hidden: clip contains sideways overflow without making
+   this a scroll container, so position: sticky and the chart tooltip still
+   work. A single wide table -- the eight-week split matrix on a phone -- was
+   otherwise able to widen the whole document behind its own card's scroller,
+   which reads as the page drifting rather than as a table that scrolls. */
+.content { max-width: 1180px; margin: 0 auto; padding: 28px; overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
@@ -257,6 +262,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .muted-2 { color: var(--muted-2); }
 
 .page-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: var(--stack-gap); }
+.page-head-compact { margin-bottom: 0; }
+.page-head-compact .page-lede { margin-bottom: 0; }
 .page-head h1 { margin: 0; }
 .page-head .page-actions { margin-left: auto; display: flex; gap: 8px; }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
@@ -373,7 +380,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 /* ── Data table ─────────────────────────────────────────────────── */
 
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
+/* min-width:0 so the scroller can actually be narrower than its table. Without
+   it a grid or flex ancestor sizes to the table's content instead, and the
+   overflow escapes to the page -- the widest table on the site pushed the
+   whole layout sideways on a phone rather than scrolling inside its card. */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
@@ -751,6 +762,191 @@ a.kpi:hover { background: var(--surface-2); }
 .section-head h2 { margin: 0; flex: 1; }
 .section-head .count { font-size: 11.5px; color: var(--muted-2); font-weight: 500; }
 
+/* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
+   this layout in the host means every present and future private domain gets
+   the same rhythm without shipping its own near-copy of the shell. */
+.domain-stack { display: grid; gap: calc(var(--stack-gap) * 1.5); }
+.domain-stack > * { min-width: 0; }
+.domain-stack > section { display: grid; gap: 12px; }
+.domain-stack-head,
+.domain-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--layout-gap);
+}
+.domain-stack-head h2,
+.domain-head h2 { margin: 0; }
+.domain-head h2 {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+.domain-head-copy { min-width: 0; }
+.domain-head-copy .eyebrow { display: block; margin-bottom: 4px; }
+.domain-head-copy p { margin: 5px 0 0; max-width: 680px; }
+.domain-head .btn { flex: 0 0 auto; }
+.domain-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: var(--layout-gap);
+  align-items: start;
+}
+.domain-workspace > * { min-width: 0; margin: 0; }
+.domain-workspace .bar-chart { max-width: none; }
+.domain-workspace .chart-card figcaption p { max-width: 62ch; }
+.domain-workspace .attention-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.domain-workspace .attention-row > .pill { display: none; }
+
+/* A domain's featured analysis: the chart and the calendar beside it. Two
+   explicit columns rather than .two-col's auto-fit, so the pair stays paired.
+   A chart alone in this row is the case that went wrong twice -- capped it sat
+   in a card twice its width and read as broken spacing; uncapped it scaled its
+   720x260 viewBox across the row and rendered ~520px tall. The answer was not
+   a better cap, it was putting something worth reading in the other half. */
+.domain-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--layout-gap);
+  margin: 0 0 var(--stack-gap);
+}
+.domain-charts > * { min-width: 0; margin: 0; }
+.domain-charts .chart-card figcaption p { max-width: 62ch; }
+@media (max-width: 1080px) { .domain-charts { grid-template-columns: minmax(0, 1fr); } }
+
+/* Activity calendar — one month of plan against execution. */
+.calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.calendar-head h2 { margin: 0; }
+.calendar-head-copy { min-width: 0; }
+/* A column inside a layout cell — stack cards under one another where the
+   neighbouring cell is taller. A bare wrapper, not a card: `.two-col > div`
+   carries card chrome, so without this the stack drew its own border and
+   padding around the cards it holds, boxing them twice. */
+.col-stack,
+.two-col > .col-stack,
+.split > .col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--layout-gap);
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+.col-stack > * { margin: 0; }
+
+/* Week plan — the recurring shape of a week, in the calendar's own columns. */
+.week-plan-card { margin: 0; }
+.week-plan {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.week-plan-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
+.week-plan-label { color: var(--muted-2); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.week-plan-day.is-planned .week-plan-label { color: var(--ink); }
+.week-plan-mark { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 8px; }
+.week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.week-plan-note { color: var(--muted); font-size: 10.5px; line-height: 1.2; text-align: center; }
+.week-plan-notes { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.week-plan-notes li { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+
+.calendar-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.calendar-period { color: var(--ink); font-size: 14px; font-weight: 650; white-space: nowrap; }
+.calendar-nav { display: flex; gap: 4px; flex: 0 0 auto; }
+/* Scoped to beat `.calendar-nav a`, which fixes the arrows at a 28px square --
+   the label was being forced into that box and overlapping the next arrow. */
+.calendar-nav .calendar-now {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.calendar-nav a,
+.calendar-nav span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: none;
+}
+.calendar-nav a:hover { color: var(--accent); border-color: var(--accent); }
+/* The disabled end of the range keeps its box so the pair does not shift. */
+.calendar-nav span { opacity: .35; }
+.calendar-description { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+.calendar-card .chart-legend { margin-bottom: 0; }
+.calendar-key-missed {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--muted-2);
+}
+.activity-calendar { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
+.calendar-weekday {
+  padding: 0 0 2px;
+  color: var(--muted-2);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.calendar-day {
+  height: 46px;
+  padding: 5px 2px 4px;
+  text-align: center;
+  vertical-align: top;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.calendar-date { display: block; color: var(--muted); font-size: 11.5px; line-height: 1; font-weight: 550; font-feature-settings: "tnum"; }
+.calendar-marks { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 10px; margin-top: 7px; }
+.calendar-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.calendar-dot.is-missed { background: transparent; border: 1.5px solid var(--muted-2); }
+/* A day still ahead is drawn faintly: information, not a verdict. Drawn like a
+   miss, every plan looks broken by Monday lunchtime. */
+.calendar-dot.is-planned { background: transparent; border: 1.5px dashed var(--line-2); }
+/* Trained days are the figure, everything else the ground. */
+.calendar-day.is-done { background: var(--surface-2); border-color: var(--line-2); }
+.calendar-day.is-done .calendar-date { color: var(--ink); font-weight: 650; }
+.calendar-day.is-missed .calendar-date { color: var(--muted); }
+.calendar-day.is-filler { border-color: transparent; }
+.calendar-day[data-tip] { cursor: default; }
+
 .list-rows { list-style: none; padding: 0; margin: 0; }
 .list-rows li {
   padding: 9px 0;
@@ -776,6 +972,14 @@ a.kpi:hover { background: var(--surface-2); }
 .section-foot a { color: var(--muted); font-weight: 500; }
 .section-foot a:hover { color: var(--accent); }
 
+/* The trailing action in a section head — "Edit →", "All →". Shipped unstyled
+   for a while: two plugins used the class and no rule ever defined it, because
+   the style test only reads the host's own partials and a plugin's templates
+   live in another repository. It renders as a plain browser link, which is why
+   it read as slightly wrong rather than obviously broken. */
+.section-action { color: var(--muted); font-size: 12px; font-weight: 500; }
+.section-action:hover { color: var(--accent); }
+
 /* Empty state — make zero panels feel intentional, not broken */
 .empty {
   padding: 14px 0 4px;
@@ -791,6 +995,7 @@ a.kpi:hover { background: var(--surface-2); }
 .kv { display: grid; grid-template-columns: 200px 1fr; gap: 8px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); font-size: 13.5px; }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { margin: 0; color: var(--ink); }
+.eyebrow { display: block; margin-bottom: 3px; color: var(--muted-2); font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
 /* ── Audit / activity list ─────────────────────────────────────── */
 
@@ -946,6 +1151,7 @@ a.kpi:hover { background: var(--surface-2); }
 @media (max-width: 900px) {
   .content { padding: 22px 18px; }
   .dashboard-command { grid-template-columns: 1fr; }
+  .domain-workspace { grid-template-columns: minmax(0, 1fr); }
   .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 14px 16px; }
   .kv dt { margin-top: 8px; font-size: 12px; }
   .kv dt:first-of-type { margin-top: 0; }
@@ -1007,9 +1213,29 @@ a.kpi:hover { background: var(--surface-2); }
   h1 { font-size: 19px; }
   h2 { font-size: 12px; }
 
+  /* The header needs four rows on a phone -- brand, search, and the nav over
+     two lines -- which is 169px of a ~900px viewport held permanently by
+     `position: sticky`. It scrolls away here instead: the nav is one swipe
+     back, and the page gets the fifth of its height that was being spent on
+     chrome. Tightened as well, so the four rows cost less while on screen. */
+  .site-header { position: static; padding: 8px 12px; gap: 6px 10px; }
+  .brand { font-size: 13.5px; }
+  .primary-nav { gap: 2px; margin: 0; }
+  .primary-nav a, .nav-group > summary { font-size: 12.5px; padding: 6px 8px; }
+  .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
+
+  /* Charts fit the phone rather than scrolling inside their cards. The floor
+     exists so a wide chart does not shrink into illegibility in a desktop
+     column; on a 390px screen it only guaranteed that every chart on the page
+     carried its own horizontal scrollbar, which is worse than a narrow plot
+     with a data table under it. */
+  :root { --chart-min: 0px; }
+
   .page-head { flex-wrap: wrap; gap: 8px; }
   .page-head .page-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .page-head > .btn, .page-head > form { margin-left: 0; }
+  .domain-stack-head,
+  .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
 
   .filter-bar { padding: 8px; gap: 6px; }
   .filter-bar input[type=search] { flex-basis: 100%; }
@@ -1070,6 +1296,64 @@ a.kpi:hover { background: var(--surface-2); }
 .renewal-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .renewal-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .renewal-meta { font-size: 12px; color: var(--muted); }
+
+/* ── Planning timeline ─────────────────────────────────────────────
+   One chronological primitive for every domain. A two-column horizon uses the
+   desktop canvas without turning eight dates into a full page of vertical rail;
+   source order remains chronological and collapses to one column on phones. */
+.timeline-head { align-items: flex-start; }
+.timeline-head > div { min-width: 0; }
+.timeline-head .count { margin-left: auto; }
+.timeline-description { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.timeline-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+}
+.timeline-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 62px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-2);
+}
+.timeline-item:nth-child(-n+2) { border-top: 0; }
+.timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
+.timeline-month { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.timeline-day { color: var(--ink); font-size: 19px; font-weight: 650; line-height: 1.1; }
+.timeline-year { color: var(--muted-2); font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+.timeline-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; font-size: 13.5px; }
+.timeline-copy a { color: var(--ink); }
+.timeline-copy a:hover { color: var(--accent); }
+@media (max-width: 640px) {
+  .timeline-list { grid-template-columns: minmax(0, 1fr); }
+  .timeline-item,
+  .timeline-item:nth-child(2) { border-top: 1px solid var(--line-2); }
+  .timeline-item:first-child { border-top: 0; }
+  .timeline-item { grid-template-columns: 40px minmax(0, 1fr); column-gap: 8px; padding: 8px 0; }
+  .timeline-item > .pill { grid-column: 2; justify-self: start; margin-top: 4px; }
+}
+
+/* Low-frequency administration should stay reachable without presenting
+   itself as another primary domain. */
+.utility-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 2px;
+}
+.utility-links .eyebrow { margin-right: 4px; }
+.utility-links a { color: var(--muted); font-size: 13px; font-weight: 550; }
+.utility-links a:hover { color: var(--accent); }
+@media (max-width: 720px) {
+  .utility-links { flex-wrap: wrap; }
+  .utility-links .eyebrow { flex-basis: 100%; }
+}
 
 /* ── Notice pages (404 / 500) ───────────────────────────────────────
    Deliberately plain: the operator is here by accident, so the page
@@ -1168,3 +1452,17 @@ a.kpi:hover { background: var(--surface-2); }
 .cadence-cell .cadence-mark { margin: 0 auto; }
 .cadence-period { font-size: 11px; color: var(--muted-2); font-weight: 500; white-space: nowrap; }
 .cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
+/* Compact — for a matrix sharing a row with a chart, where the default cell
+   padding pushed eight columns past a half-width card and put a scrollbar on
+   something that should simply fit. */
+.cadence-matrix.is-compact th,
+.cadence-matrix.is-compact td { padding: 6px 4px; }
+.cadence-matrix.is-compact .cadence-period { font-size: 10px; }
+.cadence-matrix.is-compact th[scope="row"] { font-size: 13px; }
+.cadence-matrix.is-compact .cadence-detail { font-size: 10.5px; }
+@media (max-width: 640px) {
+  /* The "last trained" line is what pushes the label column past a phone. The
+     dots are the reading; the exact recency is on the split page. */
+  .cadence-matrix .cadence-detail { display: none; }
+  .cadence-matrix th, .cadence-matrix td { padding: 6px 3px; }
+}
