@@ -1213,6 +1213,17 @@ a.kpi:hover { background: var(--surface-2); }
   h1 { font-size: 19px; }
   h2 { font-size: 12px; }
 
+  /* The header needs four rows on a phone -- brand, search, and the nav over
+     two lines -- which is 169px of a ~900px viewport held permanently by
+     `position: sticky`. It scrolls away here instead: the nav is one swipe
+     back, and the page gets the fifth of its height that was being spent on
+     chrome. Tightened as well, so the four rows cost less while on screen. */
+  .site-header { position: static; padding: 8px 12px; gap: 6px 10px; }
+  .brand { font-size: 13.5px; }
+  .primary-nav { gap: 2px; margin: 0; }
+  .primary-nav a, .nav-group > summary { font-size: 12.5px; padding: 6px 8px; }
+  .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
+
   /* Charts fit the phone rather than scrolling inside their cards. The floor
      exists so a wide chart does not shrink into illegibility in a desktop
      column; on a 390px screen it only guaranteed that every chart on the page
