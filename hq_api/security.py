@@ -13,6 +13,8 @@ stale the next time a plugin adds a capability.
 
 from __future__ import annotations
 
+import logging
+
 from functools import cache
 from typing import Any
 
@@ -29,6 +31,9 @@ from application.security import AuthorizationError, Principal
 GRANT_CLAIMS = ("scope", "scp", "permissions")
 
 INTERFACE = "api"
+
+
+logger = logging.getLogger("severino.api")
 
 
 class TokenError(Exception):
@@ -80,7 +85,16 @@ def verify(token: str) -> dict[str, Any]:
             options={"require": ["exp", "iss", "aud"]},
         )
     except jwt.PyJWTError as exc:
-        raise TokenError(str(exc)) from exc
+        # The library's own message does not cross the boundary. It names the
+        # signing key it looked for, the algorithms it would have accepted and
+        # the audience it expected, which tells someone holding a rejected
+        # token exactly what to change about the next one. The client is told
+        # that the token was not accepted; the reason is logged here, where it
+        # is useful and unreachable.
+        logger.warning(
+            "Rejected a machine API token: %s", exc, extra={"event": "api.token.rejected"}
+        )
+        raise TokenError("The access token was not accepted.") from exc
 
 
 def granted(claims: dict[str, Any]) -> frozenset[str]:
