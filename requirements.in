@@ -3,3 +3,6 @@ mcp>=1.29.0,<2
 mozilla-django-oidc>=5.0.2,<6.0
 uvicorn>=0.52.1,<1
 whitenoise>=6.12.0
+# Plugins are installed with --no-deps, so anything they import has to be
+# pinned here. severino-fitness streams the HealthKit archive with it.
+defusedxml>=0.7,<0.8
