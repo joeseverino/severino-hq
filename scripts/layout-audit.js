@@ -40,18 +40,21 @@ async (page) => {
 
     // A short card beside a tall one. The next row cannot start until the
     // tallest finishes, so the difference is a hole in the page.
-    const ROW_GAP = 80;
+    const ROW_GAP = 48;
     document.querySelectorAll('.two-col, .split').forEach((row) => {
       const kids = [...row.children];
       if (kids.length < 2) return;
-      // Independent columns are allowed to end at different points: that is
-      // the bottom of the page, not a hole between two rows.
-      if (kids.some((k) => k.classList.contains('col-stack'))) return;
       const heights = kids.map((k) => round(k.getBoundingClientRect().height));
       const gap = Math.max(...heights) - Math.min(...heights);
-      if (gap > ROW_GAP) {
-        add('row-height-hole', { row: name(kids[0]), heights, gap });
+      if (gap <= ROW_GAP) return;
+      // A short column is only a hole when something follows it. At the end of
+      // a page, columns ending at different points is just the page ending.
+      let after = row.nextElementSibling;
+      while (after && !after.getBoundingClientRect().height) {
+        after = after.nextElementSibling;
       }
+      if (!after) return;
+      add('row-height-hole', { row: name(kids[0]), heights, gap });
     });
 
     // The seam between two columns should land in the same place on every

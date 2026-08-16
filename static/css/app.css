@@ -764,6 +764,13 @@ a.kpi:hover { background: var(--surface-2); }
    wrong when one is a short table beside a tall drawing: the short one grows a
    band of empty card under its last row. */
 .two-col.align-top { align-items: start; }
+/* Panels that flow rather than pair. Assigning cards to a fixed left and right
+   column means their heights are whatever the data made them, so one column
+   ends early and the page carries the difference as a hole. Columns balance
+   themselves; a card just has to not be split across the break. */
+.card-columns { columns: 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
+@media (max-width: 720px) { .card-columns { columns: 1; } }
 .dashboard-command {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
