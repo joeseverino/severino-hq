@@ -21,20 +21,21 @@ a zero-based axis would draw every reading as the same height.
       </div>
     {% endif %}
     <div class="chart-scroll">
+      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}" style="--gutter: {{ chart.gutter }}%">
       {% comment %}
       aria-hidden in effect: the exact numbers are in the table below, which a
       screen reader can navigate. Announcing ninety points one at a time is not
       a chart, it is a recitation.
       {% endcomment %}
       <svg class="line-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
-        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="702" y1="{{ tick.y }}" y2="{{ tick.y }}"></line><text class="chart-axis" x="42" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>{% endfor %}
+        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="702" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>{% endfor %}
         {% for mark in chart.marks %}<line class="chart-mark" x1="{{ mark.x }}" x2="{{ mark.x }}" y1="12" y2="214"></line><text class="chart-axis chart-mark-label" x="{{ mark.x }}" y="8" text-anchor="middle">{{ mark.label }}</text>{% endfor %}
         {% for series in chart.series %}
           {% if series.trend %}<path class="chart-trend chart-line-{{ series.slot }}" d="{{ series.trend }}"></path>{% endif %}
           <path class="chart-line chart-line-{{ series.slot }}" d="{{ series.path }}"></path>
           {% for point in series.points %}<circle class="chart-dot chart-series-{{ series.slot }}" cx="{{ point.x }}" cy="{{ point.y }}" r="3"></circle>{% endfor %}
         {% endfor %}
-        {% for category in chart.categories %}<text class="chart-axis chart-category" x="{{ category.x }}" y="238" text-anchor="middle">{{ category.label }}</text>{% endfor %}
+        
         {% comment %}
         Invisible targets, drawn last so they sit above every line. A plotted
         point is three pixels across, which is smaller than a pointer can be
@@ -43,6 +44,15 @@ a zero-based axis would draw every reading as the same height.
         {% endcomment %}
         {% for series in chart.series %}{% for point in series.points %}<circle class="chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="11" data-tip="{{ point.tooltip }}"></circle>{% endfor %}{% endfor %}
       </svg>
+        {% comment %}
+        The axis, in HTML. Positioned by the same percentages the geometry above
+        is drawn at, so a label sits over its own point at any card width, and
+        rendered by the browser rather than by the SVG, so it stays 11px however
+        far the drawing has been scaled to fit.
+        {% endcomment %}
+        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label }}</span>{% endfor %}
+        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label }}</span>{% endfor %}</div>
+      </div>
     </div>
     <details class="chart-data">
       <summary>View chart data</summary>

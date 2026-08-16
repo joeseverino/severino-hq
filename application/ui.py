@@ -208,6 +208,39 @@ class CadenceMatrix:
                 )
 
 
+# The plot rectangle every chart in HQ draws inside. Stated once so a line and
+# a bar chart placed one above the other share an axis position rather than
+# nearly sharing one.
+PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+# A chart in a card of its own, rather than one of a pair. The drawing was
+# capped at the width of a half-width card whatever it was placed in, so a
+# full-width card held a 640px chart and six hundred pixels of nothing beside
+# it. The height is unchanged: this is the same chart given the room it was
+# put in, not a bigger one.
+# Room to the right of the plot for the last category label, which is centred
+# on the last point and so hangs half its width past the axis. Sized for the
+# label at its largest -- a phone scales the whole drawing down, so the type
+# has to be enlarged in these units to survive it, and the overhang is twice
+# what a desktop needs. Padding rather than a special case for the final
+# label: re-anchoring one label moves it off the point it belongs to.
+# The drawing is only the drawing now. Labels are HTML positioned over it, so
+# the box needs no room for type that is no longer inside it -- and one
+# geometry serves a half-width card and a full-width one alike, because
+# stretching rectangles is not the same as stretching words.
+STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH)
+STANDARD_HEIGHT = 260
+# What an axis label costs, in pixels, at the 11px it is rendered at: roughly
+# six per character, plus a gap before the next one. Used to work out whether a
+# set of labels can fit a narrow card at all -- a count cannot answer that,
+# because "Jan 2026" needs half again what "Jul 6" does, and it was a count
+# that let eight month names through to overlap each other seven times.
+LABEL_CHAR_PX = 6.0
+LABEL_GAP_PX = 8.0
+# The narrowest card an axis is expected to fill, less the gutter its y-axis
+# labels sit in. The container query that acts on `dense` uses the same figure.
+NARROW_PLOT_PX = 420.0
+
+
 @dataclass(frozen=True)
 class ChartSeries:
     label: str
@@ -244,6 +277,22 @@ class ChartCategory:
 
 
 @dataclass(frozen=True)
+class PlacedLabel:
+    """An axis label and where it sits, as a share of the drawing.
+
+    Rendered outside the SVG, so it needs its position as a percentage rather
+    than in chart units. Derived by the chart rather than supplied with the
+    category, because the share depends on the chart's width and a caller
+    building its own categories -- the mile profile and the route elevation
+    both do -- has no reason to know it. Asked for it, all three forgot, and
+    every label on those charts stacked at zero.
+    """
+
+    at: float
+    label: str
+
+
+@dataclass(frozen=True)
 class ChartRow:
     label: str
     values: tuple[float, ...]
@@ -260,8 +309,56 @@ class StackedBarChart:
     categories: tuple[ChartCategory, ...]
     rows: tuple[ChartRow, ...]
     empty: bool
-    width: int = 720
-    height: int = 260
+    width: int = STANDARD_SVG
+    height: int = STANDARD_HEIGHT
+    # Where the gridlines stop. Carried rather than hardcoded in the template,
+    # which drew them to 702 whatever the chart's own width was.
+    plot_right: float = PLOT_LEFT + PLOT_WIDTH
+
+    @property
+    def dense(self) -> bool:
+        """Whether these labels can fit a narrow card side by side.
+
+        Measured, not counted: the width they need is the sum of what each one
+        costs, and that is knowable here because the text is here. How much
+        room they actually get is knowable only to the browser, so this says
+        its half -- these labels want more than a narrow card has -- and a
+        container query says the other half, whether the card they landed in
+        is that narrow.
+        """
+        if not self.categories:
+            return False
+        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
+        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
+        return text + gaps > NARROW_PLOT_PX
+
+    @property
+    def gutter(self) -> float:
+        """Where the plot starts, as a share of the drawing.
+
+        The y-axis labels sit in the strip to the left of it. Given a fixed
+        width instead, that strip stayed 44px while the drawing's own gutter
+        shrank with the card, and on a phone the first date label was printed
+        on top of the bottom tick.
+        """
+        return PLOT_LEFT / self.width * 100
+
+    @property
+    def axis_x(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.x / self.width * 100, item.label)
+            for item in self.categories
+        )
+
+    @property
+    def axis_y(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.y / self.height * 100, item.label)
+            for item in self.ticks
+        )
+
+
+
 
 
 @dataclass(frozen=True)
@@ -323,14 +420,59 @@ class LineChart:
     marks: tuple[LineMark, ...]
     rows: tuple[ChartRow, ...]
     empty: bool
-    width: int = 720
-    height: int = 260
+    width: int = STANDARD_SVG
+    height: int = STANDARD_HEIGHT
+    # Where the gridlines stop. Carried rather than hardcoded in the template,
+    # which drew them to 702 whatever the chart's own width was.
+    plot_right: float = PLOT_LEFT + PLOT_WIDTH
+
+    @property
+    def dense(self) -> bool:
+        """Whether these labels can fit a narrow card side by side.
+
+        Measured, not counted: the width they need is the sum of what each one
+        costs, and that is knowable here because the text is here. How much
+        room they actually get is knowable only to the browser, so this says
+        its half -- these labels want more than a narrow card has -- and a
+        container query says the other half, whether the card they landed in
+        is that narrow.
+        """
+        if not self.categories:
+            return False
+        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
+        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
+        return text + gaps > NARROW_PLOT_PX
+
+    @property
+    def gutter(self) -> float:
+        """Where the plot starts, as a share of the drawing.
+
+        The y-axis labels sit in the strip to the left of it. Given a fixed
+        width instead, that strip stayed 44px while the drawing's own gutter
+        shrank with the card, and on a phone the first date label was printed
+        on top of the bottom tick.
+        """
+        return PLOT_LEFT / self.width * 100
+
+    @property
+    def axis_x(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.x / self.width * 100, item.label)
+            for item in self.categories
+        )
+
+    @property
+    def axis_y(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.y / self.height * 100, item.label)
+            for item in self.ticks
+        )
 
 
-# The plot rectangle every chart in HQ draws inside. Stated once so a line and
-# a bar chart placed one above the other share an axis position rather than
-# nearly sharing one.
-PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+
+
+
+
 # How much room a date label needs beside its neighbour. "Aug 14" is about
 # forty pixels at the axis size, and two of them closer than this print over
 # one another rather than beside each other.
@@ -720,6 +862,7 @@ def stacked_bar_chart(
         PLOT_WIDTH,
         PLOT_HEIGHT,
     )
+    svg_width = STANDARD_SVG
     totals = tuple(
         sum(item.values[index] for item in series) for index in range(len(labels))
     )
@@ -775,6 +918,8 @@ def stacked_bar_chart(
         categories=tuple(categories),
         rows=rows,
         empty=not any(totals),
+        width=svg_width,
+        plot_right=plot_left + plot_width,
     )
 
 

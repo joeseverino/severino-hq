@@ -52,6 +52,15 @@
      illegibility. */
   --chart-max: 640px;
   --chart-min: 480px;
+  /* Where one axis label sits, as a share of the drawing it labels. Set per
+     label on the element itself, because there is one per data point and the
+     position is computed from the data -- this declaration is the default a
+     label falls back to if it ever arrives without one, and the reason the
+     property is a declared part of the contract rather than an invention of a
+     template. */
+  --at: 0%;
+  /* Where a chart's plot begins, as a share of its width; set per chart. */
+  --gutter: 0%;
   --shadow-sm: 0 1px 1px rgba(20, 20, 30, .03);
   --shadow: 0 1px 2px rgba(20, 20, 30, .04), 0 2px 8px rgba(20, 20, 30, .04);
 }
@@ -149,7 +158,22 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 }
 .nav-group-panel a { padding: 6px 9px; border-radius: var(--radius-sm); font-size: 13px; }
 
-.global-search { min-width: 0; }
+.global-search { min-width: 0; position: relative; }
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+  /* Hidden where the field is wide enough to speak for itself: its own
+     placeholder already says what it is, and an icon beside the word is one
+     more thing to read. */
+  opacity: 0;
+}
 .global-search input {
   width: 100%;
   padding: 5px 9px;
@@ -307,8 +331,75 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .control-metric strong { font-size: 18px; }
 .control-metric > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
-.chart-axis { fill: var(--muted); font-size: 11px; }
-.chart-category { font-size: 10px; }
+/* Axis labels are HTML over the plot, not <text> inside it.
+
+   Text in an SVG is drawn in the SVG's own coordinates, so it scales with the
+   drawing: the same chart is 720 units wide in a half-width card and 1400 in a
+   full-width one, and on a phone either is squeezed into about 340 real pixels.
+   An 11px label came out at five. Compensating by enlarging the type in chart
+   units means guessing the scale, and the guess is wrong the moment a card
+   changes width -- which is the whole point of a responsive card.
+
+   Positioned by percentage of the same viewBox the geometry uses, so a label
+   sits exactly over its bar at any size, and rendered by the browser at a real
+   11px whatever that size is. The plot keeps the SVG, which is what SVG is for:
+   the bars and lines are geometry and are supposed to scale. */
+.chart-frame { position: relative; container-type: inline-size; }
+/* A crowded axis in a card too narrow to hold it. The template says the axis
+   is crowded -- it counted the labels; the container query says the card is
+   narrow -- only the browser knows that. Neither could decide it alone, and
+   guessing a viewport width would have been wrong for the same chart placed in
+   a half-width card on a desktop.
+   The ends survive rather than every other one: first and last are the two
+   labels that say what range is being looked at, they are the two already
+   anchored inward so they cannot clip, and choosing them is a statement about
+   an axis rather than an accident of how many bars there happen to be. Every
+   period is still named in the data table under the chart. */
+@container (max-width: 460px) {
+  .chart-frame-dense .chart-category { display: none; }
+  .chart-frame-dense .chart-cats .chart-category:first-child,
+  .chart-frame-dense .chart-cats .chart-category:last-child { display: block; }
+}
+/* The one thing a stylesheet cannot know is where a given label goes, because
+   there is one per data point and the position is computed from the data. That
+   single coordinate arrives as `--at`; every decision about how the label looks
+   -- size, colour, weight, how it is anchored -- is here, where decisions
+   belong. */
+.chart-frame .chart-axis {
+  position: absolute;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Right-aligned against the plot's own left edge, wherever that has ended up.
+   The strip it sits in is the drawing's gutter, given as the same share of the
+   width the geometry uses, so the two cannot disagree at any card size. Fixed
+   at 44px it stayed put while the drawing shrank, and on a phone the opening
+   date was printed over the bottom tick. */
+.chart-frame .chart-tick {
+  top: var(--at);
+  left: var(--gutter);
+  padding-right: 6px;
+  transform: translate(-100%, -50%);
+}
+/* Under the plot, centred on the point named. The first and last sit on points
+   at the very edge of the drawing, so half of each would fall outside the card;
+   those two anchor inward instead. */
+/* A layer of its own, so "first" and "last" mean the first and last date --
+   as spans among the y-axis ticks they meant the topmost tick. */
+.chart-cats { position: absolute; inset: 0; pointer-events: none; }
+/* Every label is centred on the point it names, including the two at the ends.
+   Anchoring those two inward instead did stop them hanging off the drawing,
+   but it moved them off their own points and into their neighbours: the first
+   two and last two dates then overlapped on every chart on the page. Room is
+   made for the overhang below rather than taken out of the label. */
+.chart-frame .chart-category {
+  left: var(--at);
+  bottom: 0;
+  transform: translateX(-50%);
+}
 /* <figure> carries a UA margin of 1em 40px, which inset every chart card from
    the surrounding grid and broke the page's left/right alignment. */
 .chart-card { margin: 0 0 var(--stack-gap); }
@@ -319,7 +410,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 2px; color: var(--muted); font-size: 12px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
-.chart-scroll { overflow-x: auto; }
+/* Padded by half a label, and pulled back by the same amount, so the drawing
+   sits exactly where it did while the first and last labels have somewhere to
+   hang. Without it the scroller clipped them, or grew a scrollbar to show
+   twenty pixels of date. */
+.chart-scroll { overflow-x: auto; padding-inline: 24px; margin-inline: -24px; }
 /* Fixed drawing, variable card. `max-width` stops a full-width card from
    upscaling the whole SVG -- type, bars and ticks included -- so the plot is
    the same size whether its card is half or full width; only the surrounding
@@ -328,13 +423,20 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    colliding, not a target width: at 620px a chart placed in a two-column row
    overflowed its own column and silently clipped the final category behind the
    scroller, so the most recent period -- the one being read -- was cut off. */
+/* Fills the card it is in, at a height this stylesheet decides rather than one
+   the viewBox dictates. Its parts are rectangles and horizontal rules, so
+   `preserveAspectRatio="none"` stretches them to the box without saying
+   anything untrue -- and because the labels are HTML over the top, none of the
+   type stretches with it. That is what removed the cap: it was there to stop a
+   full-width card upscaling the words inside the drawing, and there are no
+   longer any words inside the drawing. */
 .bar-chart {
   display: block;
   width: 100%;
   min-width: var(--chart-min);
-  max-width: var(--chart-max);
-  height: auto;
+  height: 214px;
 }
+
 /* Series fills. Previously these pointed at --success/--warning, which are not
    defined in :root; an undefined custom property makes `fill` invalid and SVG
    falls back to black, so multi-series charts rendered as solid black stacks.
@@ -1309,8 +1411,27 @@ a.kpi:hover { background: var(--surface-2); }
     box-shadow: none;
     border-radius: var(--radius-sm);
   }
-  .global-search { order: 2; margin-left: 0; flex: 1 1 180px; }
-  .user-menu { margin-left: auto; justify-self: auto; }
+  /* Search collapses to the size of its own icon and sits next to the account
+     button, instead of taking a full row of a screen that has few rows to
+     spare. Tapping it is what opens it -- it grows leftward into the space
+     beside the brand, because it is the last thing before the account button
+     and that is the only direction free. */
+  .global-search {
+    order: 1;
+    margin-left: auto;
+    flex: 0 0 auto;
+    width: 38px;
+    transition: width .16s ease;
+  }
+  .global-search:focus-within { width: min(62vw, 280px); }
+  .search-icon { opacity: 1; }
+  .global-search:focus-within .search-icon { opacity: 0; }
+  /* Collapsed, the field is the tap target under the icon and shows nothing
+     else; open, it behaves as it always has. */
+  .global-search input { padding-inline: 9px; }
+  .global-search:not(:focus-within) input { color: transparent; }
+  .global-search:not(:focus-within) input::placeholder { color: transparent; }
+  .user-menu { order: 2; margin-left: 8px; justify-self: auto; }
 }
 
 @media (max-width: 640px) {
@@ -1336,9 +1457,16 @@ a.kpi:hover { background: var(--surface-2); }
      with a data table under it. */
   :root { --chart-min: 0px; }
 
-  .page-head { flex-wrap: wrap; gap: 8px; }
-  .page-head .page-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
-  .page-head > .btn, .page-head > form { margin-left: 0; }
+
+  /* The action stays beside the title. Given a full-width row of its own it
+     dropped under the lede, which left the space to the right of a two-word
+     heading empty and put a band of nothing between the head and the first
+     card -- a phone is the surface with the least room to spend on that. It
+     sits against the top instead, level with the heading, and the lede runs
+     its full width underneath both. */
+  .page-head { align-items: flex-start; gap: 8px 12px; }
+  .page-head > div:first-child { flex: 1 1 60%; min-width: 0; }
+  .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .domain-stack-head,
   .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
 
@@ -1517,6 +1645,18 @@ a.kpi:hover { background: var(--surface-2); }
   .data-table.stacks td:first-child::before { display: none; }
   .data-table.stacks td[data-label]:empty { display: none; }
   .table-scroll:has(.data-table.stacks) { overflow-x: visible; }
+
+  /* The cadence matrix drops its oldest periods rather than scrolling. A
+     sideways scrollbar under a five-column grid of dots is both ugly and
+     useless -- the columns only mean anything lined up against each other, and
+     half of them parked off-screen are not lined up against anything. The
+     three most recent survive, which is the end of the row an eye goes to
+     first and the part a decision is made from; the full history is a tap away
+     on the page this panel links to.
+     Counted from the end, so it is "the last three" whatever the window
+     length happens to be, rather than a fixed set of column numbers. */
+  .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
+  .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
 }
 
 /* ── Cadence strip ──────────────────────────────────────────────────

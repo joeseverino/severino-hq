@@ -10,16 +10,26 @@
       {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label }}</span>{% endfor %}
     </div>
     <div class="chart-scroll">
+      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}" style="--gutter: {{ chart.gutter }}%">
       {% comment %}
       aria-hidden, with the exact numbers in the data table below. A screen
       reader announcing 60 bars one at a time is worse than a table it can
       navigate, and the table is always rendered.
       {% endcomment %}
-      <svg class="bar-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
-        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="702" y1="{{ tick.y }}" y2="{{ tick.y }}"></line><text class="chart-axis" x="42" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>{% endfor %}
+      <svg class="bar-chart" preserveAspectRatio="none" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
+        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="{{ chart.plot_right }}" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>{% endfor %}
         {% for bar in chart.bars %}{% if bar.height %}<rect class="chart-series-{{ bar.slot }}" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}" data-tip="{{ bar.tooltip }}"></rect>{% endif %}{% endfor %}
-        {% for category in chart.categories %}<text class="chart-axis chart-category" x="{{ category.x }}" y="238" text-anchor="middle">{{ category.label }}</text>{% endfor %}
+        
       </svg>
+        {% comment %}
+        The axis, in HTML. Positioned by the same percentages the geometry above
+        is drawn at, so a label sits over its own point at any card width, and
+        rendered by the browser rather than by the SVG, so it stays 11px however
+        far the drawing has been scaled to fit.
+        {% endcomment %}
+        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label }}</span>{% endfor %}
+        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label }}</span>{% endfor %}</div>
+      </div>
     </div>
     <details class="chart-data">
       <summary>View chart data</summary>
