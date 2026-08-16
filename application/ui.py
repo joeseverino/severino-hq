@@ -1,8 +1,8 @@
 """Stable view models consumed by HQ's shared server-rendered UI primitives."""
 
-from dataclasses import dataclass
-from datetime import date
 import math
+from dataclasses import dataclass
+from datetime import date, timedelta
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
 # insight panels, extension-provided projections -- draws from this set, so a
@@ -208,6 +208,39 @@ class CadenceMatrix:
                 )
 
 
+# The plot rectangle every chart in HQ draws inside. Stated once so a line and
+# a bar chart placed one above the other share an axis position rather than
+# nearly sharing one.
+PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+# A chart in a card of its own, rather than one of a pair. The drawing was
+# capped at the width of a half-width card whatever it was placed in, so a
+# full-width card held a 640px chart and six hundred pixels of nothing beside
+# it. The height is unchanged: this is the same chart given the room it was
+# put in, not a bigger one.
+# Room to the right of the plot for the last category label, which is centred
+# on the last point and so hangs half its width past the axis. Sized for the
+# label at its largest -- a phone scales the whole drawing down, so the type
+# has to be enlarged in these units to survive it, and the overhang is twice
+# what a desktop needs. Padding rather than a special case for the final
+# label: re-anchoring one label moves it off the point it belongs to.
+# The drawing is only the drawing now. Labels are HTML positioned over it, so
+# the box needs no room for type that is no longer inside it -- and one
+# geometry serves a half-width card and a full-width one alike, because
+# stretching rectangles is not the same as stretching words.
+STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH)
+STANDARD_HEIGHT = 260
+# What an axis label costs, in pixels, at the 11px it is rendered at: roughly
+# six per character, plus a gap before the next one. Used to work out whether a
+# set of labels can fit a narrow card at all -- a count cannot answer that,
+# because "Jan 2026" needs half again what "Jul 6" does, and it was a count
+# that let eight month names through to overlap each other seven times.
+LABEL_CHAR_PX = 6.0
+LABEL_GAP_PX = 8.0
+# The narrowest card an axis is expected to fill, less the gutter its y-axis
+# labels sit in. The container query that acts on `dense` uses the same figure.
+NARROW_PLOT_PX = 420.0
+
+
 @dataclass(frozen=True)
 class ChartSeries:
     label: str
@@ -244,6 +277,22 @@ class ChartCategory:
 
 
 @dataclass(frozen=True)
+class PlacedLabel:
+    """An axis label and where it sits, as a share of the drawing.
+
+    Rendered outside the SVG, so it needs its position as a percentage rather
+    than in chart units. Derived by the chart rather than supplied with the
+    category, because the share depends on the chart's width and a caller
+    building its own categories -- the mile profile and the route elevation
+    both do -- has no reason to know it. Asked for it, all three forgot, and
+    every label on those charts stacked at zero.
+    """
+
+    at: float
+    label: str
+
+
+@dataclass(frozen=True)
 class ChartRow:
     label: str
     values: tuple[float, ...]
@@ -260,8 +309,351 @@ class StackedBarChart:
     categories: tuple[ChartCategory, ...]
     rows: tuple[ChartRow, ...]
     empty: bool
-    width: int = 720
-    height: int = 260
+    width: int = STANDARD_SVG
+    height: int = STANDARD_HEIGHT
+    # Where the gridlines stop. Carried rather than hardcoded in the template,
+    # which drew them to 702 whatever the chart's own width was.
+    plot_right: float = PLOT_LEFT + PLOT_WIDTH
+
+    @property
+    def dense(self) -> bool:
+        """Whether these labels can fit a narrow card side by side.
+
+        Measured, not counted: the width they need is the sum of what each one
+        costs, and that is knowable here because the text is here. How much
+        room they actually get is knowable only to the browser, so this says
+        its half -- these labels want more than a narrow card has -- and a
+        container query says the other half, whether the card they landed in
+        is that narrow.
+        """
+        if not self.categories:
+            return False
+        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
+        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
+        return text + gaps > NARROW_PLOT_PX
+
+    @property
+    def gutter(self) -> float:
+        """Where the plot starts, as a share of the drawing.
+
+        The y-axis labels sit in the strip to the left of it. Given a fixed
+        width instead, that strip stayed 44px while the drawing's own gutter
+        shrank with the card, and on a phone the first date label was printed
+        on top of the bottom tick.
+        """
+        return PLOT_LEFT / self.width * 100
+
+    @property
+    def axis_x(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.x / self.width * 100, item.label)
+            for item in self.categories
+        )
+
+    @property
+    def axis_y(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.y / self.height * 100, item.label)
+            for item in self.ticks
+        )
+
+
+
+
+
+@dataclass(frozen=True)
+class LinePoint:
+    """One reading, placed."""
+
+    x: float
+    y: float
+    value: float
+    label: str
+    tooltip: str = ""
+
+
+@dataclass(frozen=True)
+class LineSeries:
+    """One line, already projected into the plot's coordinates."""
+
+    label: str
+    slot: int
+    path: str
+    points: tuple[LinePoint, ...]
+    # A fitted line through the same points, drawn dashed. Optional because a
+    # trend is a claim: it belongs on a series where the direction is the
+    # question, and nowhere else.
+    trend: str = ""
+
+
+@dataclass(frozen=True)
+class LineMark:
+    """A vertical rule at a date -- the day something began."""
+
+    x: float
+    label: str
+
+
+@dataclass(frozen=True)
+class LineChart:
+    """A measure over time, on an axis fitted to the measure.
+
+    Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
+    contract, which is right for quantities that add up -- minutes trained,
+    volume lifted -- and wrong for anything that varies around a level. Every
+    mile of a run sits between 140 and 160 bpm, and drawn from zero those are
+    identical bars: the chart says nothing changed, which is the opposite of
+    what the numbers say. This axis is fitted to the data's own range, so the
+    variation is the drawing.
+
+    The trade is real and worth stating: a fitted axis exaggerates small
+    movements, which is exactly why the range is printed on the axis and the
+    numbers stay in the table underneath.
+    """
+
+    title: str
+    description: str
+    unit: str
+    series: tuple[LineSeries, ...]
+    ticks: tuple[ChartTick, ...]
+    categories: tuple[ChartCategory, ...]
+    marks: tuple[LineMark, ...]
+    rows: tuple[ChartRow, ...]
+    empty: bool
+    width: int = STANDARD_SVG
+    height: int = STANDARD_HEIGHT
+    # Where the gridlines stop. Carried rather than hardcoded in the template,
+    # which drew them to 702 whatever the chart's own width was.
+    plot_right: float = PLOT_LEFT + PLOT_WIDTH
+
+    @property
+    def dense(self) -> bool:
+        """Whether these labels can fit a narrow card side by side.
+
+        Measured, not counted: the width they need is the sum of what each one
+        costs, and that is knowable here because the text is here. How much
+        room they actually get is knowable only to the browser, so this says
+        its half -- these labels want more than a narrow card has -- and a
+        container query says the other half, whether the card they landed in
+        is that narrow.
+        """
+        if not self.categories:
+            return False
+        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
+        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
+        return text + gaps > NARROW_PLOT_PX
+
+    @property
+    def gutter(self) -> float:
+        """Where the plot starts, as a share of the drawing.
+
+        The y-axis labels sit in the strip to the left of it. Given a fixed
+        width instead, that strip stayed 44px while the drawing's own gutter
+        shrank with the card, and on a phone the first date label was printed
+        on top of the bottom tick.
+        """
+        return PLOT_LEFT / self.width * 100
+
+    @property
+    def axis_x(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.x / self.width * 100, item.label)
+            for item in self.categories
+        )
+
+    @property
+    def axis_y(self) -> tuple:
+        return tuple(
+            PlacedLabel(item.y / self.height * 100, item.label)
+            for item in self.ticks
+        )
+
+
+
+
+
+
+# How much room a date label needs beside its neighbour. "Aug 14" is about
+# forty pixels at the axis size, and two of them closer than this print over
+# one another rather than beside each other.
+LABEL_GAP = 52.0
+
+
+def line_chart(
+    title: str,
+    description: str,
+    series: "tuple[tuple[str, tuple[tuple[date, float], ...], int], ...]",
+    *,
+    unit: str,
+    marks: "tuple[tuple[date, str], ...]" = (),
+    trend: bool = False,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> LineChart:
+    """Dated readings as lines, on an axis fitted to what they actually are.
+
+    Each series is `(label, ((date, value), ...), slot)`. Dates rather than
+    positions: readings are not evenly spaced, and plotting against index
+    silently restates a month's gap as one step.
+    """
+    cleaned = [
+        (label, tuple(sorted(points)), slot)
+        for label, points, slot in series
+        if points
+    ]
+    if any(item[2] not in range(1, 6) for item in cleaned):
+        raise ValueError("Chart series slots must be between 1 and 5.")
+    slots = [item[2] for item in cleaned]
+    if len(set(slots)) != len(slots):
+        # The slot is the colour. Two series sharing one draws a legend with
+        # the same swatch twice and two indistinguishable lines under it --
+        # a chart that looks finished and cannot be read. Caught here because
+        # it is invisible in the data and only shows up on the rendered page.
+        raise ValueError(
+            f"Chart series must not share a colour slot: {sorted(slots)}."
+        )
+    every = [value for _, points, _ in cleaned for _, value in points]
+    if not every or len(every) < 2:
+        return LineChart(
+            title=title,
+            description=description,
+            unit=unit,
+            series=(),
+            ticks=(),
+            categories=(),
+            marks=(),
+            rows=(),
+            empty=True,
+        )
+
+    days = [day for _, points, _ in cleaned for day, _ in points]
+    first_day, last_day = min(days), max(days)
+    span = max(1, (last_day - first_day).days)
+
+    low = minimum if minimum is not None else min(every)
+    high = maximum if maximum is not None else max(every)
+    if high == low:
+        # A flat series still has to be drawn somewhere other than on the axis
+        # itself. Half a unit either side keeps the line in the middle of the
+        # plot and keeps the ticks distinct.
+        low, high = low - 0.5, high + 0.5
+    else:
+        padding = (high - low) * 0.08
+        floor, ceiling = low, high
+        low, high = low - padding, high + padding
+        # Do not invent axis below a floor the measure cannot cross. Walking
+        # asymmetry is a percentage of steps and cannot be negative; padding it
+        # to -0.3 draws a region no reading could ever occupy and makes the
+        # data look like it is hovering above some boundary that means nothing.
+        if floor >= 0 > low:
+            low = 0.0
+        if ceiling <= 100 and high > 100 and floor >= 0:
+            high = 100.0
+
+    def place_x(day) -> float:
+        return PLOT_LEFT + PLOT_WIDTH * ((day - first_day).days / span)
+
+    def place_y(value: float) -> float:
+        return PLOT_TOP + PLOT_HEIGHT * (1 - (value - low) / (high - low))
+
+    lines = []
+    for label, points, slot in cleaned:
+        placed = tuple(
+            LinePoint(
+                x=place_x(day),
+                y=place_y(value),
+                value=value,
+                label=f"{day:%b %-d, %Y}",
+                tooltip=f"{day:%b %-d, %Y} · {label}: {_format_tooltip_value(value)} {unit}",
+            )
+            for day, value in points
+        )
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}"
+            for index, p in enumerate(placed)
+        )
+        lines.append(
+            LineSeries(
+                label=label,
+                slot=slot,
+                path=path,
+                points=placed,
+                trend=_trend_path(points, place_x, place_y) if trend else "",
+            )
+        )
+
+    ticks = tuple(
+        ChartTick(place_y(value), _format_fitted_value(value, high - low))
+        for value in (low, (low + high) / 2, high)
+    )
+    # Six labels at most: a date every few pixels is a smear, not an axis.
+    step = max(1, (span + 1) // 5)
+    stamps = []
+    cursor = first_day
+    while cursor <= last_day:
+        stamps.append(cursor)
+        cursor += timedelta(days=step)
+    # The last day is always labelled -- it is the one an eye goes to -- but
+    # stepping from the first rarely lands on it, so the step before it can
+    # fall a couple of days short and the two labels print on top of each
+    # other. Whichever of the pair is not the last day gives way.
+    if stamps[-1] != last_day:
+        while len(stamps) > 1 and place_x(last_day) - place_x(stamps[-1]) < (
+            LABEL_GAP
+        ):
+            stamps.pop()
+        stamps.append(last_day)
+    categories = tuple(
+        ChartCategory(place_x(day), f"{day:%b %-d}") for day in stamps
+    )
+
+    dated: dict = {}
+    for label, points, _ in cleaned:
+        for day, value in points:
+            dated.setdefault(day, {})[label] = value
+    rows = tuple(
+        ChartRow(
+            f"{day:%b %-d, %Y}",
+            tuple(dated[day].get(label, 0.0) for label, _, _ in cleaned),
+        )
+        for day in sorted(dated)
+    )
+
+    return LineChart(
+        title=title,
+        description=description,
+        unit=unit,
+        series=tuple(lines),
+        ticks=ticks,
+        categories=categories,
+        marks=tuple(
+            LineMark(place_x(day), label)
+            for day, label in marks
+            if first_day <= day <= last_day
+        ),
+        rows=rows,
+        empty=False,
+    )
+
+
+def _trend_path(points, place_x, place_y) -> str:
+    """A least-squares line across the plot, or nothing when it cannot be fit."""
+    if len(points) < 3:
+        return ""
+    xs = [float(day.toordinal()) for day, _ in points]
+    ys = [float(value) for _, value in points]
+    x_mean = sum(xs) / len(xs)
+    y_mean = sum(ys) / len(ys)
+    variation = sum((x - x_mean) ** 2 for x in xs)
+    if variation == 0:
+        return ""
+    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys)) / variation
+    intercept = y_mean - slope * x_mean
+    first, last = points[0][0], points[-1][0]
+    return (
+        f"M {place_x(first):.1f} {place_y(intercept + slope * first.toordinal()):.1f} "
+        f"L {place_x(last):.1f} {place_y(intercept + slope * last.toordinal()):.1f}"
+    )
 
 
 # What a calendar day can be. "planned" is a commitment not yet due; "missed"
@@ -464,7 +856,13 @@ def stacked_bar_chart(
     ):
         raise ValueError("Chart values must be finite and non-negative.")
 
-    plot_left, plot_top, plot_width, plot_height = 48.0, 12.0, 654.0, 202.0
+    plot_left, plot_top, plot_width, plot_height = (
+        PLOT_LEFT,
+        PLOT_TOP,
+        PLOT_WIDTH,
+        PLOT_HEIGHT,
+    )
+    svg_width = STANDARD_SVG
     totals = tuple(
         sum(item.values[index] for item in series) for index in range(len(labels))
     )
@@ -520,6 +918,8 @@ def stacked_bar_chart(
         categories=tuple(categories),
         rows=rows,
         empty=not any(totals),
+        width=svg_width,
+        plot_right=plot_left + plot_width,
     )
 
 
@@ -548,6 +948,22 @@ def _format_tooltip_value(value: float) -> str:
     if value >= 1000:
         return f"{value:,.0f}"
     return f"{value:.0f}" if float(value).is_integer() else f"{value:.1f}"
+
+
+def _format_fitted_value(value: float, span: float) -> str:
+    """An axis label with enough precision for the range it sits in.
+
+    The bar chart's formatter drops decimals above ten, which is right for an
+    axis that starts at zero -- its ticks are always far apart. A fitted axis is
+    not: a pace chart running from 10.6 to 11.8 min/mi has three ticks that all
+    round to "11", and an axis reading 11, 11, 12 looks broken and says nothing.
+
+    Precision therefore comes from the span rather than the magnitude.
+    """
+    if span >= 10 or not span:
+        return _format_chart_value(value)
+    decimals = 1 if span >= 1 else 2
+    return f"{value:,.{decimals}f}"
 
 
 def _format_chart_value(value: float) -> str:

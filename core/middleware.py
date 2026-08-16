@@ -101,8 +101,17 @@ class LoginRequiredMiddleware:
 
     @staticmethod
     def _is_exempt(request) -> bool:
+        from application.plugins import plugin_token_authenticated_prefixes
+
         path = request.path
         for prefix in settings.LOGIN_EXEMPT_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return True
+        # Routes an extension declared as carrying their own authentication.
+        # Skipping the redirect here is not skipping auth: the view still has
+        # to authenticate the request, and answers 401 rather than serving an
+        # HTML login page to a client that cannot use one.
+        for prefix in plugin_token_authenticated_prefixes():
             if path.startswith(prefix):
                 return True
         try:

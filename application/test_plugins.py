@@ -19,6 +19,7 @@ from .plugins import (
     installed_plugins,
     plugin_capabilities,
     plugin_navigation,
+    plugin_token_authenticated_prefixes,
 )
 from .ui import Insight, Kpi
 
@@ -88,6 +89,41 @@ class PluginContractTests(TestCase):
 
     def test_route_configuration_is_atomic(self):
         env, importer = self.load(replace(VALID, url_prefix="notes/"))
+        with env, importer, self.assertRaises(ImproperlyConfigured):
+            installed_plugins()
+
+    def test_token_authenticated_routes_are_anchored_to_the_plugin_mount(self):
+        env, importer = self.load(
+            replace(
+                VALID,
+                url_prefix="mobile/",
+                urlconf="example.urls",
+                token_authenticated_routes=("api/v1/",),
+            )
+        )
+        with env, importer:
+            self.assertEqual(
+                plugin_token_authenticated_prefixes(), ("/mobile/api/v1/",)
+            )
+
+    def test_a_token_route_cannot_escape_its_own_mount(self):
+        for route in ("/admin/", "../admin/", ""):
+            with self.subTest(route=route):
+                env, importer = self.load(
+                    replace(
+                        VALID,
+                        url_prefix="mobile/",
+                        urlconf="example.urls",
+                        token_authenticated_routes=(route,),
+                    )
+                )
+                with env, importer, self.assertRaises(ImproperlyConfigured):
+                    installed_plugins()
+
+    def test_a_token_route_without_a_mount_fails_closed(self):
+        env, importer = self.load(
+            replace(VALID, token_authenticated_routes=("api/v1/",))
+        )
         with env, importer, self.assertRaises(ImproperlyConfigured):
             installed_plugins()
 

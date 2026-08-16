@@ -38,3 +38,7 @@ docs/HOMELAB.md
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Playwright MCP scratch output: screenshots and page snapshots taken while
+# checking a rendered page. Evidence for a fix, not part of the app.
+.playwright-mcp/

@@ -1,0 +1,67 @@
+{% comment %}
+Line chart — a measure over time, on an axis fitted to the measure.
+
+  {% include "partials/_line_chart.html" with chart=my_chart %}
+
+`chart` is application.ui.LineChart. Use _stacked_bar_chart.html for
+quantities that add up; this is for anything that varies around a level, where
+a zero-based axis would draw every reading as the same height.
+{% endcomment %}
+<figure class="chart-card card">
+  <figcaption>
+    <h2>{{ chart.title }}</h2>
+    <p>{{ chart.description }}</p>
+  </figcaption>
+  {% if chart.empty %}
+    {% include "partials/_empty_state.html" with message="Not enough readings to chart yet." %}
+  {% else %}
+    {% if chart.series|length > 1 %}
+      <div class="chart-legend" aria-label="Legend">
+        {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label }}</span>{% endfor %}
+      </div>
+    {% endif %}
+    <div class="chart-scroll">
+      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}" style="--gutter: {{ chart.gutter }}%">
+      {% comment %}
+      aria-hidden in effect: the exact numbers are in the table below, which a
+      screen reader can navigate. Announcing ninety points one at a time is not
+      a chart, it is a recitation.
+      {% endcomment %}
+      <svg class="line-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
+        {% for tick in chart.ticks %}<line class="chart-grid" x1="48" x2="702" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>{% endfor %}
+        {% for mark in chart.marks %}<line class="chart-mark" x1="{{ mark.x }}" x2="{{ mark.x }}" y1="12" y2="214"></line><text class="chart-axis chart-mark-label" x="{{ mark.x }}" y="8" text-anchor="middle">{{ mark.label }}</text>{% endfor %}
+        {% for series in chart.series %}
+          {% if series.trend %}<path class="chart-trend chart-line-{{ series.slot }}" d="{{ series.trend }}"></path>{% endif %}
+          <path class="chart-line chart-line-{{ series.slot }}" d="{{ series.path }}"></path>
+          {% for point in series.points %}<circle class="chart-dot chart-series-{{ series.slot }}" cx="{{ point.x }}" cy="{{ point.y }}" r="3"></circle>{% endfor %}
+        {% endfor %}
+        
+        {% comment %}
+        Invisible targets, drawn last so they sit above every line. A plotted
+        point is three pixels across, which is smaller than a pointer can be
+        aimed -- the tooltip worked and could not be reached. The mark carries
+        the tip; the dot only has to be visible.
+        {% endcomment %}
+        {% for series in chart.series %}{% for point in series.points %}<circle class="chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="11" data-tip="{{ point.tooltip }}"></circle>{% endfor %}{% endfor %}
+      </svg>
+        {% comment %}
+        The axis, in HTML. Positioned by the same percentages the geometry above
+        is drawn at, so a label sits over its own point at any card width, and
+        rendered by the browser rather than by the SVG, so it stays 11px however
+        far the drawing has been scaled to fit.
+        {% endcomment %}
+        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label }}</span>{% endfor %}
+        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label }}</span>{% endfor %}</div>
+      </div>
+    </div>
+    <details class="chart-data">
+      <summary>View chart data</summary>
+      <div class="table-scroll">
+        <table class="data-table compact-table">
+          <thead><tr><th>Date</th>{% for series in chart.series %}<th class="num-col">{{ series.label }} ({{ chart.unit }})</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in chart.rows %}<tr><th>{{ row.label }}</th>{% for value in row.values %}<td class="num-col">{{ value|floatformat:"-2" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
+  {% endif %}
+</figure>
