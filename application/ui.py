@@ -331,6 +331,10 @@ class LineChart:
 # a bar chart placed one above the other share an axis position rather than
 # nearly sharing one.
 PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+# How much room a date label needs beside its neighbour. "Aug 14" is about
+# forty pixels at the axis size, and two of them closer than this print over
+# one another rather than beside each other.
+LABEL_GAP = 52.0
 
 
 def line_chart(
@@ -357,6 +361,15 @@ def line_chart(
     ]
     if any(item[2] not in range(1, 6) for item in cleaned):
         raise ValueError("Chart series slots must be between 1 and 5.")
+    slots = [item[2] for item in cleaned]
+    if len(set(slots)) != len(slots):
+        # The slot is the colour. Two series sharing one draws a legend with
+        # the same swatch twice and two indistinguishable lines under it --
+        # a chart that looks finished and cannot be read. Caught here because
+        # it is invisible in the data and only shows up on the rendered page.
+        raise ValueError(
+            f"Chart series must not share a colour slot: {sorted(slots)}."
+        )
     every = [value for _, points, _ in cleaned for _, value in points]
     if not every or len(every) < 2:
         return LineChart(
@@ -438,7 +451,15 @@ def line_chart(
     while cursor <= last_day:
         stamps.append(cursor)
         cursor += timedelta(days=step)
+    # The last day is always labelled -- it is the one an eye goes to -- but
+    # stepping from the first rarely lands on it, so the step before it can
+    # fall a couple of days short and the two labels print on top of each
+    # other. Whichever of the pair is not the last day gives way.
     if stamps[-1] != last_day:
+        while len(stamps) > 1 and place_x(last_day) - place_x(stamps[-1]) < (
+            LABEL_GAP
+        ):
+            stamps.pop()
         stamps.append(last_day)
     categories = tuple(
         ChartCategory(place_x(day), f"{day:%b %-d}") for day in stamps
