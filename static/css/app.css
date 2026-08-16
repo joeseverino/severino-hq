@@ -399,6 +399,12 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table tbody tr:hover { background: var(--surface-2); }
 .data-table .select-column { width: 38px; text-align: center; padding-inline: 8px; }
+/* Measurements, right-aligned on a fixed digit width so a column of them can
+   be compared by eye. Left-aligned, "10m" and "1m" start together and end
+   wherever the digits run out, which is the one thing a column of numbers
+   exists to make easy. Applied to the header too, so the label sits over the
+   figures rather than off to their left. */
+.data-table .num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
 
 .table-toolbar { display: grid; gap: 8px; margin: 0 0 12px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
