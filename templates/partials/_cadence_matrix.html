@@ -9,7 +9,7 @@ what makes the comparison possible. Use _cadence.html for a single strip.
 
 Pass compact=True where it shares a row with a chart rather than owning a page.
 {% endcomment %}
-<div class="table-scroll">
+<div class="table-scroll" data-chart>
   <table class="data-table cadence-matrix{% if compact %} is-compact{% endif %}">
     <thead>
       <tr>
@@ -27,7 +27,7 @@ Pass compact=True where it shares a row with a chart rather than owning a page.
           </th>
           {% for week in row.weeks %}
             <td class="cadence-cell">
-              <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" title="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
+              <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" data-tip="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
               <span class="visually-hidden">{{ week.detail }}</span>
             </td>
           {% endfor %}

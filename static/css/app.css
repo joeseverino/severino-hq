@@ -265,6 +265,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .page-head-compact { margin-bottom: 0; }
 .page-head-compact .page-lede { margin-bottom: 0; }
 .page-head h1 { margin: 0; }
+.page-head .page-lede { margin-bottom: 0; }
 .page-head .page-actions { margin-left: auto; display: flex; gap: 8px; }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge -- otherwise
@@ -397,6 +398,12 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    whole layout sideways on a phone rather than scrolling inside its card. */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
+/* Nothing follows it, so the gap it reserves is dead card. The same is true
+   of anything that ends a card: a trailing margin inside a padded box is a
+   band of empty card, and it was showing up on every panel that ended in a
+   table, a grid or a footnote. */
+.table-scroll:last-child { margin-bottom: 0; }
+.card > :last-child, figure.chart-card > :last-child { margin-bottom: 0; }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
 .table-scroll td { overflow-wrap: break-word; }
@@ -997,7 +1004,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .activity-tail { margin-top: 0; }
 
-.section-foot { margin-top: 12px; font-size: 13px; }
+.section-foot { margin: 12px 0 0; font-size: 13px; }
 .section-foot a { color: var(--muted); font-weight: 500; }
 .section-foot a:hover { color: var(--accent); }
 

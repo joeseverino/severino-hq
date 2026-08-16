@@ -17,10 +17,10 @@ one.
     {% if cadence.title %}<span class="cadence-title">{{ cadence.title }}</span>{% else %}<span></span>{% endif %}
     <span class="cadence-count">{{ cadence.hits }}/{{ cadence.weeks|length }}{% if cadence.streak > 1 %} · {{ cadence.streak }} in a row{% endif %}</span>
   </div>
-  <ol class="cadence-strip">
+  <ol class="cadence-strip" data-chart>
     {% for week in cadence.weeks %}
       <li class="cadence-week">
-        <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" title="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
+        <span class="cadence-mark{% if week.hit %} is-hit{% endif %}" data-tip="{{ week.detail }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
         <span class="cadence-label">{{ week.label }}</span>
         <span class="visually-hidden">{{ week.detail|default:week.label }}</span>
       </li>
