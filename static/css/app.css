@@ -266,7 +266,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .page-head-compact .page-lede { margin-bottom: 0; }
 .page-head h1 { margin: 0; }
 .page-head .page-lede { margin-bottom: 0; }
-.page-head .page-actions { margin-left: auto; display: flex; gap: 8px; }
+/* Never squeezed by the lede beside it. A flex item defaults to shrinking at
+   its content, so a long lede wrapped "Download .md" onto two lines and left
+   the two controls beside it different heights. */
+.page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+.page-head .page-actions > * { white-space: nowrap; }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge -- otherwise
    the same button lands beside the title on one page and against the right
@@ -1004,6 +1008,20 @@ a.kpi:hover { background: var(--surface-2); }
 .list-rows .row-meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
+
+/* Prose list — sentences, where .list-rows carries chips.
+   `.row-main` is a flex container, which is right for a row assembled from a
+   dot, a link and a badge and wrong for a sentence: every inline element in a
+   flex container becomes a block-level flex item, so emphasis inside one is
+   laid out as a separate box and the sentence comes apart at the seams. This
+   is the other list: bullets or numbers, ordinary inline flow inside, and a
+   trailing muted note. */
+.prose-list { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; }
+.prose-list li { margin: 0 0 8px; line-height: 1.55; }
+.prose-list li:last-child { margin-bottom: 0; }
+.prose-list li::marker { color: var(--muted); }
+.prose-list strong { font-weight: 650; }
+.prose-list .prose-meta { color: var(--muted); white-space: nowrap; }
 .subtle-link {
   color: var(--muted);
   font-size: 12px;

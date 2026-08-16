@@ -176,6 +176,31 @@ async (page) => {
       });
     });
 
+    // A sentence inside a flex row. `.row-main` lays its children out as flex
+    // items, so inline emphasis inside a sentence is promoted to a block and
+    // the sentence is rendered as separate boxes with gaps between them.
+    //
+    // Detected structurally rather than by guessing at prose: the first
+    // version of this rule looked for sentence punctuation and missed the
+    // defect that prompted it, because the text read "27.06%." and the
+    // pattern wanted letters before the full stop. What actually distinguishes
+    // a sentence from a row of chips is that a sentence interleaves bare text
+    // with elements -- a chip row is elements all the way down. That has no
+    // heuristic in it and no false positives on the rows already written.
+    document.querySelectorAll('.list-rows .row-main, .list-rows li').forEach((row) => {
+      if (getComputedStyle(row).display !== 'flex') return;
+      const texts = [...row.childNodes].filter(
+        (n) => n.nodeType === 3 && n.nodeValue.trim(),
+      ).length;
+      const elements = [...row.children].length;
+      if (texts && elements) {
+        add('sentence-in-a-chip-row', {
+          row: row.className,
+          text: row.textContent.replace(/\s+/g, ' ').trim().slice(0, 80),
+        });
+      }
+    });
+
     return {
       url: location.pathname,
       viewport: [innerWidth, innerHeight],
