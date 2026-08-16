@@ -454,7 +454,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    wherever the digits run out, which is the one thing a column of numbers
    exists to make easy. Applied to the header too, so the label sits over the
    figures rather than off to their left. */
-.data-table .num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data-table .date-col { white-space: nowrap; }
+.num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* An index or label column that should take only what it needs. Auto layout
    otherwise hands a column of single digits the same share as one of
    sentences, and the row reads as a gap with a number on either side. */
@@ -1605,3 +1606,31 @@ a.kpi:hover { background: var(--surface-2); }
    gets read; the numbers are what make it checkable. */
 .finding { margin: 2px 0 2px; font-size: 15px; font-weight: 600; line-height: 1.4; }
 .finding-evidence { margin: 0 0 14px; font-size: 12.5px; }
+
+/* A route, drawn from its own points. No basemap, so the line carries
+   everything: shape for where, colour for how fast. */
+.route-frame { background: var(--bg-tint); border-radius: var(--radius); padding: 4px; margin: 10px 0 4px; }
+.route-map { display: block; width: 100%; height: auto; }
+/* Semi-transparent so a retraced route shows its repeats as density rather
+   than hiding every pass but the last under an opaque line. */
+.route-line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; }
+/* A sequential ramp, slowest to fastest. Deliberately not the categorical
+   series palette: these bands are ordered, and a reader has to be able to see
+   which way the order runs without consulting the legend. */
+.route-band-1 { stroke: #b4531f; }
+.route-band-2 { stroke: #c98a2b; }
+.route-band-3 { stroke: #9a9a34; }
+.route-band-4 { stroke: #3f9268; }
+.route-band-5 { stroke: #0e7f9c; }
+.route-swatch { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+.route-band-1.route-swatch { background: #b4531f; }
+.route-band-2.route-swatch { background: #c98a2b; }
+.route-band-3.route-swatch { background: #9a9a34; }
+.route-band-4.route-swatch { background: #3f9268; }
+.route-band-5.route-swatch { background: #0e7f9c; }
+.route-marker { stroke: var(--surface); stroke-width: 2.5; }
+.route-start { fill: #1f7250; }
+.route-finish { fill: #843300; }
+.route-scale { stroke: var(--ink-2); stroke-width: 2; }
+.route-map:hover .route-line:not(:hover) { opacity: .55; }
+.route-line { transition: opacity .08s ease; }
