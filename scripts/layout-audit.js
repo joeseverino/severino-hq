@@ -65,9 +65,55 @@ async (page) => {
     });
     if (seams.size > 1) add('seam-mismatch', { seams: [...seams].sort() });
 
+    // A card far wider than what is drawn in it. Measured as ink -- text-node
+    // rects and replaced elements -- because a paragraph, a flex row or a
+    // table stretches to the card whatever its contents need, so no wrapper's
+    // width says how much of the card is actually used.
+    const CARD_FILL = 0.72;
+    const inkRight = (root) => {
+      let max = 0;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue.trim()) continue;
+        if (node.parentElement.closest('.section-head, figcaption')) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const r of range.getClientRects()) if (r.width) max = Math.max(max, r.right);
+      }
+      root.querySelectorAll('svg, img, canvas, input, button, select, textarea').forEach((el) => {
+        if (el.closest('.section-head, figcaption')) return;
+        const r = el.getBoundingClientRect();
+        if (r.width) max = Math.max(max, r.right);
+      });
+      return max;
+    };
+    document.querySelectorAll('.card, figure.chart-card').forEach((card) => {
+      const rect = card.getBoundingClientRect();
+      const style = getComputedStyle(card);
+      const left = rect.left + parseFloat(style.paddingLeft);
+      const right = rect.right - parseFloat(style.paddingRight);
+      if (right - left < 200) return;
+      // A form's fields are bounded for readability, so a card wider than the
+      // form inside it is not a layout fault.
+      if (card.querySelector('form')) return;
+      const used = Math.max(inkRight(card), left) - left;
+      const fill = used / (right - left);
+      if (fill < CARD_FILL) {
+        add('card-too-wide', {
+          card: name(card),
+          fill: +fill.toFixed(2),
+          used: round(used),
+          available: round(right - left),
+        });
+      }
+    });
+
     // A row of content far narrower than the box holding it.
     const SLACK_RATIO = 0.6;
-    document.querySelectorAll('.pie-row, .chart-legend').forEach((box) => {
+    // Legends are excluded: a one-series chart has one legend item, and a
+    // short legend is not a layout fault.
+    document.querySelectorAll('.pie-row').forEach((box) => {
       const width = box.getBoundingClientRect().width;
       const kids = [...box.children];
       if (!kids.length || !width) return;
