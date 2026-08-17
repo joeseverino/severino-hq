@@ -162,6 +162,52 @@ async (page) => {
       }
     });
 
+    // A scrollbar nobody asked for. Any box that offers to scroll and has
+    // something to scroll is reported, in both axes, with the overflow that
+    // earned it -- because the two ways this has gone wrong were invisible to
+    // reading the stylesheet.
+    //
+    // A drawing given a `min-width` wider than the column it is placed in: the
+    // floor was 480px and a half-width card is 284-446px, so every chart on
+    // the page grew a horizontal scrollbar at the same moment and none of the
+    // breakpoints were watching that band.
+    //
+    // And `overflow-x: auto` on its own, which is not on its own: the other
+    // axis computes from `visible` to `auto`, so one declared scrollbar is two
+    // offered ones, and an SVG whose height lands on a fraction overflows
+    // itself by a single rounded pixel. One pixel draws a full-height bar.
+    //
+    // Threshold of 1px, not 0: sub-pixel rounding is normal and is not what
+    // this is looking for.
+    const SCROLL_SLOP = 1;
+    document.querySelectorAll('*').forEach((el) => {
+      const style = getComputedStyle(el);
+      const scrolls = (value) => value === 'auto' || value === 'scroll';
+      const horizontal = el.scrollWidth - el.clientWidth;
+      const vertical = el.scrollHeight - el.clientHeight;
+      const axes = [];
+      if (scrolls(style.overflowX) && horizontal > SCROLL_SLOP) {
+        axes.push({ axis: 'x', overflow: round(horizontal) });
+      }
+      if (scrolls(style.overflowY) && vertical > SCROLL_SLOP) {
+        axes.push({ axis: 'y', overflow: round(vertical) });
+      }
+      if (!axes.length) return;
+      // A table wider than its card is the one scroller that is meant to be
+      // there: `.table-scroll` exists so a wide table scrolls instead of
+      // widening the page, and that is a decision rather than an accident.
+      if (el.classList.contains('table-scroll')) return;
+      axes.forEach(({ axis, overflow }) => {
+        add('unwanted-scrollbar', {
+          box: el.className || el.tagName.toLowerCase(),
+          card: name(el.closest('.card, figure.chart-card') || el),
+          axis,
+          overflow,
+          box_size: axis === 'x' ? el.clientWidth : el.clientHeight,
+        });
+      });
+    });
+
     // The operating system's grey tooltip where the app has its own.
     document.querySelectorAll('.card [title], figure [title]').forEach((el) => {
       add('native-tooltip', { tag: el.tagName.toLowerCase(), title: el.title });
