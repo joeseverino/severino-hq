@@ -58,16 +58,24 @@ class AuthGateTests(TestCase):
         self.assertEqual(live.status_code, 200)
         self.assertEqual(live.json(), {"status": "ok"})
         self.assertEqual(ready.status_code, 200)
-        self.assertEqual(
-            ready.json(),
-            {
-                "status": "ok",
-                "checks": {
-                    "database": True,
-                    "migrations": True,
-                    "storage": True,
-                },
-            },
+        payload = ready.json()
+        self.assertEqual(payload["status"], "ok")
+        # The host's own checks must be present and passing. Asserted as a
+        # subset, not as the whole dictionary: every admitted extension
+        # contributes a `plugin:<id>` check of its own, so an equality here is
+        # an assertion that nothing else is installed. That is true in this
+        # repository's CI, which loads no extension, and false in the composed
+        # image, which is the only place it matters -- it passed every gate and
+        # failed the composition.
+        #
+        # What this test is for is that readiness answers anonymously and
+        # reports the host as healthy. It is not for how many extensions
+        # happen to be composed alongside it.
+        for name in ("database", "migrations", "storage"):
+            self.assertIs(payload["checks"].get(name), True, name)
+        self.assertTrue(
+            all(payload["checks"].values()),
+            f"a readiness check reported unhealthy: {payload['checks']}",
         )
 
     @override_settings(MEDIA_ROOT=Path("/path/that/does/not/exist"))

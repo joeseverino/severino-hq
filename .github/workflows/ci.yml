@@ -27,6 +27,46 @@ jobs:
           python-version: "3.12"
       - run: pip install ruff==0.15.18
       - run: ruff check .
+      - name: No private extension names in the public tree
+        # The extensions are private repositories; this one is public. Their
+        # inventory is kept in the COMPOSITION_EXTENSIONS variable rather than
+        # committed, and a test already asserts the committed inventory file
+        # stays empty. Nothing stopped the names appearing in prose, though --
+        # a doc, a comment, a commit message -- and that is how one reached
+        # this repository.
+        #
+        # Checked against the variable, so this file never has to name the
+        # thing it is protecting. Matched on the repository and identifier
+        # forms only (`severino-x`, `severino.x`, `severino_x`), not the bare
+        # word: bare words appear in ordinary English -- the MIT licence says
+        # "FITNESS FOR A PARTICULAR PURPOSE" -- and a check with false
+        # positives gets switched off.
+        env:
+          COMPOSITION_EXTENSIONS: ${{ vars.COMPOSITION_EXTENSIONS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${COMPOSITION_EXTENSIONS:-}" ]; then
+            echo "COMPOSITION_EXTENSIONS is unset; nothing to check against"
+            exit 0
+          fi
+          names=$(printf '%s' "$COMPOSITION_EXTENSIONS" \
+            | jq -r '[.extensions[] | (.repository | split("/") | last), .id]
+                     | unique | .[]' \
+            | grep -v '^$' || true)
+          found=0
+          for name in $names; do
+            stem=${name##*/}
+            for form in "$stem" "${stem//-/.}" "${stem//-/_}"; do
+              hits=$(git grep -Iril -e "$form" -- . ':!LICENSE' || true)
+              if [ -n "$hits" ]; then
+                echo "::error::a private extension identifier appears in tracked files"
+                printf '%s\n' "$hits" | sed 's/^/  /'
+                found=1
+              fi
+            done
+          done
+          [ "$found" -eq 0 ] || exit 1
+          echo "no private extension identifiers in the tracked tree"
       - name: Shell safety
         run: |
           sh -n scripts/deploy-image.sh scripts/install-controller.sh \
