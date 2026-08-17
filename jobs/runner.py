@@ -185,12 +185,15 @@ def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
 
 
 
-def _counts(result: dict):
+def _counts(result: dict) -> list[Counts]:
     """The work's own numbers, where it reported any in the shared shape.
 
     Read rather than required: work returns whatever it wants, and a job that
     reports nothing countable is normal. What is not normal is inventing a
     count that was never measured, so anything absent stays absent.
+
+    A list because the answer is none or one, and a tuple whose length carries
+    meaning is a record -- which this is not.
     """
     counts = Counts(
         seen=result.get("seen"),
@@ -198,7 +201,7 @@ def _counts(result: dict):
         updated=result.get("updated"),
         skipped=result.get("skipped"),
     )
-    return (counts,) if counts.as_metadata() else ()
+    return [counts] if counts.as_metadata() else []
 
 
 def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) -> None:
