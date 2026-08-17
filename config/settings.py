@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import tempfile
 from pathlib import Path
 
 from django.utils.csp import CSP
@@ -224,7 +225,15 @@ DATABASES = {
             # fails with "database table is locked" -- an error production
             # cannot produce. A file gives the suite the same journal mode,
             # lock and timeout as the running host, for a couple of seconds.
-            "NAME": str(BASE_DIR / "data" / "test-severino.sqlite3"),
+            #
+            # In the temporary directory rather than beside the real database:
+            # `data/` is a mounted volume in production and does not exist in
+            # the composed image, where the suite runs as its own admission
+            # gate. Only being a file matters, not where the file is.
+            "NAME": os.environ.get(
+                "SEVERINO_TEST_DATABASE_PATH",
+                str(Path(tempfile.gettempdir()) / "severino-test.sqlite3"),
+            ),
         },
     }
 }
