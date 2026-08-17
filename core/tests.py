@@ -938,3 +938,92 @@ class NavigationTests(TestCase):
         entries = self._entries(reverse("dashboard"))
         labels = [entry["label"] for entry in entries]
         self.assertEqual(labels[-1], "System")
+
+
+class CompressedResponseTests(TestCase):
+    """The compressed path has to hand the server one Content-Length.
+
+    Django emits header names in the case they were set; ASGI says lowercase,
+    and Starlette's compressor matches on lowercase. Mismatched, it appends a
+    second Content-Length rather than replacing the first, and h11 refuses to
+    send a response carrying two -- a 502 on every page big enough to compress.
+    """
+
+    def _send_through(self, app, headers, body):
+        async def django_like(scope, receive, send):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": headers,
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+
+        sent = []
+
+        async def collect(message):
+            sent.append(message)
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"accept-encoding", b"gzip")],
+        }
+        async_to_sync(app(django_like))(scope, receive, collect)
+        return sent
+
+    def _compressible(self):
+        body = b"<p>severino</p>" * 200
+        return [
+            (b"Content-Type", b"text/html; charset=utf-8"),
+            (b"Content-Length", str(len(body)).encode()),
+            (b"Vary", b"Cookie"),
+        ], body
+
+    def test_a_compressed_response_carries_exactly_one_content_length(self):
+        from starlette.middleware.gzip import GZipMiddleware
+
+        from core.headers import LowercaseHeaders
+
+        headers, body = self._compressible()
+        sent = self._send_through(
+            lambda app: GZipMiddleware(LowercaseHeaders(app), minimum_size=1000),
+            headers,
+            body,
+        )
+
+        start = next(m for m in sent if m["type"] == "http.response.start")
+        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
+        self.assertEqual(len(lengths), 1)
+        self.assertEqual(int(lengths[0]), len(sent[-1]["body"]))
+
+    def test_the_unwrapped_compressor_is_what_produced_two(self):
+        # Pins the cause rather than the symptom: without the normalisation,
+        # the same response goes out with conflicting lengths.
+        from starlette.middleware.gzip import GZipMiddleware
+
+        headers, body = self._compressible()
+        sent = self._send_through(
+            lambda app: GZipMiddleware(app, minimum_size=1000), headers, body
+        )
+
+        start = next(m for m in sent if m["type"] == "http.response.start")
+        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
+        self.assertEqual(len(lengths), 2)
+
+    def test_every_header_name_reaching_the_server_is_lowercase(self):
+        from core.headers import LowercaseHeaders
+
+        headers, body = self._compressible()
+        sent = self._send_through(LowercaseHeaders, headers, body)
+
+        start = next(m for m in sent if m["type"] == "http.response.start")
+        self.assertEqual(
+            [name for name, _ in start["headers"]],
+            [name.lower() for name, _ in headers],
+        )

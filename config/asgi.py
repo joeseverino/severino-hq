@@ -9,6 +9,7 @@ from starlette.applications import Starlette
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Mount
 
+from core.headers import LowercaseHeaders
 from core.static import CachedStaticFiles
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -18,8 +19,11 @@ static_application = GZipMiddleware(
     CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
     minimum_size=500,
 )
+# LowercaseHeaders inside the compressor, not outside it: the compressor has to
+# see names it can match, and by the time the response leaves it the damage
+# would already be two Content-Lengths.
 compressed_django_application = GZipMiddleware(
-    django_application,
+    LowercaseHeaders(django_application),
     minimum_size=1000,
 )
 
