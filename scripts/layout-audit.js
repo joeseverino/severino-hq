@@ -193,11 +193,21 @@ async (page) => {
         axes.push({ axis: 'y', overflow: round(vertical) });
       }
       if (!axes.length) return;
-      // A table wider than its card is the one scroller that is meant to be
-      // there: `.table-scroll` exists so a wide table scrolls instead of
-      // widening the page, and that is a decision rather than an accident.
-      if (el.classList.contains('table-scroll')) return;
+      // A box the stylesheet has explicitly capped is one whose author chose
+      // to scroll it: a filter menu held to 280px so a long list of options
+      // does not run off the page, a wide table held to its card so it scrolls
+      // instead of widening the document. The cap is the statement of intent,
+      // so it is read from the box rather than kept as a list of class names
+      // here -- a list would need editing every time a capped box is added,
+      // and the one nobody edited it for would be reported as a fault.
+      //
+      // An accidental scrollbar is exactly the case with no cap: nothing was
+      // limiting the box, it simply came out a pixel smaller than its
+      // contents.
+      const capped = (axis) =>
+        axis === 'x' ? style.maxWidth !== 'none' : style.maxHeight !== 'none';
       axes.forEach(({ axis, overflow }) => {
+        if (capped(axis)) return;
         add('unwanted-scrollbar', {
           box: el.className || el.tagName.toLowerCase(),
           card: name(el.closest('.card, figure.chart-card') || el),
@@ -220,15 +230,27 @@ async (page) => {
 
     // A column whose every cell is empty or an em dash is a heading over
     // nothing: the session cannot have that measurement.
+    //
+    // Text is not the only thing a cell can hold. The row-selection column is
+    // a checkbox under a deliberately blank header, so measured by text alone
+    // it read as dead on every list page in HQ -- a rule that is wrong on
+    // pages that are right is worse than no rule, because the next real dead
+    // column arrives in a report nobody trusts. A cell counts as saying
+    // something if it has text or if it has a control in it.
     document.querySelectorAll('table').forEach((table) => {
       const heads = [...table.querySelectorAll('thead th')].map((th) =>
         th.textContent.trim(),
       );
       const rows = [...table.querySelectorAll('tbody tr')];
       if (rows.length < 2) return;
+      const speaks = (cell) => {
+        if (!cell) return false;
+        const text = (cell.textContent || '').trim();
+        if (text && text !== '—') return true;
+        return !!cell.querySelector('input, button, select, textarea, a, svg, img');
+      };
       heads.forEach((head, index) => {
-        const cells = rows.map((r) => (r.children[index] || {}).textContent || '');
-        if (cells.every((c) => !c.trim() || c.trim() === '—')) {
+        if (!rows.some((row) => speaks(row.children[index]))) {
           add('dead-column', { table: heads.join(' | '), column: head });
         }
       });
