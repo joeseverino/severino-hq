@@ -39,8 +39,8 @@ reporting a change as deployed.
 It predates composition and was never updated for it. It resolves the last
 green run of `ci.yml` and deploys `severino-hq:sha-…`, the **host-only**
 image, while production runs `severino-hq/composition:…` — the host *plus*
-every admitted extension. Running it takes the extensions off production: the
-Fitness domain stops existing. That is the exact failure composition was
+every admitted extension. Running it takes the extensions off production —
+whole domains stop existing. That is the exact failure composition was
 introduced to end, so the command now does the thing its own architecture
 forbids.
 
