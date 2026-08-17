@@ -149,6 +149,52 @@ class StyleContractTests(SimpleTestCase):
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
 
+    def test_images_live_where_images_belong(self):
+        """A screenshot taken while debugging is not an asset of this project.
+
+        A full-page capture taken while checking a rendered page was once
+        committed to the root of this repository and referenced by nothing.
+        This repository is public, so a capture of any internal page is
+        published the moment it is pushed -- carrying whatever happened to be
+        on screen -- and force-pushing afterwards does not unpublish it.
+
+        Images are diagrams, documentation captures, or icons, and each of
+        those has a home. Anything outside them is something that arrived by
+        accident.
+
+        The question is what is *committed*, not what is on the disk, so it is
+        asked of git rather than of the filesystem. A working tree holds plenty
+        of images that are nobody's business -- the Playwright MCP writes
+        captures to `.playwright-mcp/`, which is ignored and therefore already
+        safe -- and a walk of the disk would either report those or need a
+        hand-maintained list of directories to skip. Tracked files are exactly
+        the ones that can be pushed.
+        """
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        allowed = ("docs/diagrams/", "docs/images/", "static/img/")
+        suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        strays = [
+            name
+            for name in tracked
+            if name
+            and Path(name).suffix.lower() in suffixes
+            and not name.startswith(allowed)
+        ]
+        self.assertEqual(
+            sorted(strays),
+            [],
+            f"images belong in one of {allowed}",
+        )
+
     def test_chart_templates_do_not_hardcode_the_plot_rectangle(self):
         """The geometry is in ui.py, and a copy of it in a template is a bug.
 
