@@ -50,20 +50,13 @@
      Capping the rendered width fixes the drawing's size; only the surrounding
      card changes.
 
-     There is deliberately no matching floor. One lived here for a long time --
-     620px, then 480px -- to stop a plot shrinking into illegibility, and it
-     never once did that job: `.two-col` lays its columns out at
-     `minmax(320px, 1fr)`, so a half-width card offers between 284px and 446px
-     of drawing, which is under any floor ever set. The floor could therefore
-     only ever fire, and firing means a scrollbar under every chart on the page
-     at once. That is what the phone override below was working around, one
-     breakpoint at a time.
-     What actually keeps an axis legible is measured rather than assumed:
-     `StackedBarChart.dense` sums the width its labels really need, and a
-     container query asks whether the card they landed in is really that
-     narrow. Two measurements of the true quantity beat one guess at a proxy,
-     so the guess is gone. `.chart-scroll` stays as the safety net for a chart
-     that overflows anyway. */
+     There is deliberately no matching floor. One lived here — 620px, then
+     480px — to stop a plot shrinking into illegibility, and never did that
+     job: `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width card
+     offers 284-446px, under any floor ever set. It could only ever fire, and
+     firing is a scrollbar under every chart at once.
+     Label collision is instead measured: `Chart.dense` sums the width the
+     labels need, and a container query asks how wide the card is. */
   --chart-max: 640px;
   /* Where one axis label sits, as a share of the drawing it labels. Set per
      label on the element itself, because there is one per data point and the
@@ -357,7 +350,19 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    sits exactly over its bar at any size, and rendered by the browser at a real
    11px whatever that size is. The plot keeps the SVG, which is what SVG is for:
    the bars and lines are geometry and are supposed to scale. */
-.chart-frame { position: relative; container-type: inline-size; }
+/* Capped with the drawing it labels. Every label is positioned as a percentage
+   of this box, so this box must be the drawing's box: the line chart is held to
+   `--chart-max` and the frame was not, so in a full-width card the labels
+   spread to 1400px while the drawing stopped at 640 and every date sat right of
+   the point it named. */
+.chart-frame {
+  position: relative;
+  container-type: inline-size;
+  max-width: var(--chart-max);
+}
+/* The bar chart has no cap and stretches to its card, so its frame must not
+   have one either, or the same fault appears the other way round. */
+.chart-frame:has(> .bar-chart) { max-width: none; }
 /* A crowded axis in a card too narrow to hold it. The template says the axis
    is crowded -- it counted the labels; the container query says the card is
    narrow -- only the browser knows that. Neither could decide it alone, and
@@ -427,19 +432,13 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    sits exactly where it did while the first and last labels have somewhere to
    hang. Without it the scroller clipped them, or grew a scrollbar to show
    twenty pixels of date. */
-/* Both axes are stated, and that is the whole point of the second one.
-   `overflow-x: auto` alone does not leave the other axis alone: a `visible`
-   counterpart computes to `auto`, so declaring one scrollbar quietly declared
-   two. The drawing's height is fractional -- an SVG sized by aspect ratio
-   lands on 190.55px, and a scroll container rounds its content up and its box
-   down -- so every chart overflowed itself by exactly one pixel and every
-   chart drew a full-height vertical scrollbar for it.
-   Written as `clip` to say what is meant -- contain it, do not offer to scroll
-   it. Alongside a scrolling axis the spec then uses it as `hidden`, which is
-   what the computed style reports and is the same result here; `clip` is kept
-   because it is the accurate word and it is what applies if the other axis
-   ever stops scrolling. The tooltip is appended to <body>, so it is not
-   clipped by this. */
+/* Both axes stated, which is the point of the second one: `overflow-x: auto`
+   alone does not leave the other axis alone — a `visible` counterpart computes
+   to `auto`. The drawing's height is fractional, so every chart overflowed
+   itself by one rounded pixel and drew a full-height scrollbar for it.
+   `clip` says what is meant. Alongside a scrolling axis the spec uses it as
+   `hidden`, which is the same result here. The tooltip is appended to <body>,
+   so it is not clipped. */
 .chart-scroll {
   overflow-x: auto;
   overflow-y: clip;
@@ -555,9 +554,8 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    overflow escapes to the page -- the widest table on the site pushed the
    whole layout sideways on a phone rather than scrolling inside its card. */
 /* A wide table scrolls sideways rather than widening the page. `overflow-y`
-   is stated for the same reason `.chart-scroll` states it: left alone it does
-   not stay `visible`, it computes to `auto`, and a table whose height lands on
-   a fraction then offers a vertical scrollbar it has no content for. */
+   is stated for the same reason as `.chart-scroll`: left alone it computes to
+   `auto` and offers a scrollbar it has no content for. */
 .table-scroll { overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: 16px; min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* Nothing follows it, so the gap it reserves is dead card. The same is true
@@ -1478,12 +1476,8 @@ a.kpi:hover { background: var(--surface-2); }
   .primary-nav a, .nav-group > summary { font-size: 12.5px; padding: 6px 8px; }
   .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
 
-  /* The chart floor used to be zeroed here, because on a 390px screen it only
-     guaranteed that every chart on the page carried its own horizontal
-     scrollbar. That was the right diagnosis at the wrong scope: a half-width
-     desktop card is 284-446px, so the same thing happened in a two-column row
-     on a laptop, where no breakpoint was watching. The floor is gone
-     altogether now, so there is nothing left to override here. */
+  /* The chart floor was zeroed here for phones. It is gone altogether now —
+     it never fit a half-width card either — so there is nothing to override. */
 
 
   /* The action stays beside the title. Given a full-width row of its own it
@@ -1817,3 +1811,180 @@ a.kpi:hover { background: var(--surface-2); }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
 .route-line { transition: opacity .08s ease; }
+
+/* ── Background jobs ────────────────────────────────────────────── */
+/* Work that outlives its request, reporting where it has got to. */
+.job-progress { margin: 0 0 var(--stack-gap); }
+.job-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.job-state { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+/* The track. `overflow: hidden` so the fill's corners are the track's. */
+.job-bar {
+  position: relative;
+  overflow: hidden;
+  block-size: 6px;
+  margin: 10px 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+/* Filled to `--at`, set by the poller. Transitioned so a jump from 10% to
+   60% between polls reads as progress rather than a glitch. */
+.job-bar i {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--at, 0%);
+  border-radius: inherit;
+  background: var(--accent);
+  transition: inline-size .4s ease;
+}
+/* Work that cannot say how far along it is: a travelling band rather than a
+   bar sitting at a number nobody computed. */
+.job-bar-unknown i {
+  inline-size: 30%;
+  animation: job-sweep 1.4s ease-in-out infinite;
+}
+@keyframes job-sweep {
+  0% { inset-inline-start: -30%; }
+  100% { inset-inline-start: 100%; }
+}
+.job-note { margin: 0; color: var(--muted); font-size: 13px; }
+.job-progress[data-state="failed"] .job-bar i,
+.job-progress[data-state="lost"] .job-bar i { background: var(--danger); }
+.job-progress[data-state="succeeded"] .job-bar i { background: var(--ok, var(--accent)); }
+/* Reduced motion: the sweep is decoration. The bar still fills. */
+@media (prefers-reduced-motion: reduce) {
+  .job-bar-unknown i { animation: none; inline-size: 100%; opacity: .35; }
+  .job-bar i { transition: none; }
+}
+
+/* Shown only on paper. In the document rather than in CSS `content` so it
+   can carry real values — a date, a name. */
+.print-only { display: none; }
+
+/* ── Print ──────────────────────────────────────────────────────── */
+/* A page that leaves the building: the care brief is handed to a clinician on
+   paper, in black and white. Three things break when a screen page is printed
+   without help — backgrounds and borders are dropped, so cards dissolve;
+   anything carried by colour is carried by nothing; and a chart lands half on
+   one page and half on the next. */
+@media print {
+  /* Room for the browser's own header and footer. */
+  @page { margin: 14mm 12mm; }
+
+  html, body { background: #fff; color: #000; font-size: 10.5pt; }
+  .content { max-width: none; padding: 0; overflow: visible; }
+
+  /* Chrome that means nothing on paper: navigation cannot be followed, the
+     search box cannot be typed into, buttons cannot be pressed. */
+  .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
+  .table-controls, .table-filter-menu, .table-selection, .section-foot,
+  .btn, button, .job-progress, .page-actions, form,
+  /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
+     inside a table are content and are kept. */
+  .page-head .pill, .section-head .pill,
+  /* The app's warning banner addresses whoever is at the screen. Printed
+     under a page of gait measurements it reads as an accusation. */
+  .site-footer { display: none !important; }
+
+  /* Cards become ruled sections: backgrounds are dropped, so the separation
+     has to be drawn in ink rather than in a tint. */
+  .card, figure.chart-card, .two-col > section, .two-col > div {
+    background: none;
+    border: 1px solid #000;
+    box-shadow: none;
+    padding: 10pt 12pt;
+    margin: 0 0 8pt;
+  }
+
+
+  /* The card is the unit that moves whole. `table` deliberately does *not*
+     avoid breaking: nested elements that each refuse to split are how a card
+     starts on one page, its table jumps to the next, and the card's opening
+     border is left behind as an empty rectangle. Rows still hold together. */
+  .card, figure.chart-card, .section-head, tr { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+
+  /* Two across on paper, where the screen fits three: A4 gives about 186mm
+     between the margins, so a pair is ~90mm each — close to the width these
+     are legible at, and six measures in three rows rather than six pages. */
+  /* Charts only. Two five-column tables at half width lose their last
+     columns off the edge of the paper. Selected by what the row contains, so
+     it cannot be applied to a row of tables by accident. */
+  /* Inline-block columns, not a grid: Chromium fragments grid items across
+     page breaks badly, printing the card as an empty box with no chart in it.
+     49% rather than 50% because inline-block boxes are separated by the
+     whitespace between the tags. */
+  .two-col:has(> .chart-card) { display: block; font-size: 0; }
+  .two-col:has(> .chart-card) > .chart-card {
+    display: inline-block;
+    width: 49%;
+    vertical-align: top;
+    font-size: 10.5pt;
+    margin: 0 0 8pt;
+  }
+  .two-col:has(> .chart-card) > .chart-card:nth-child(odd) { margin-right: 1.5%; }
+  /* Everything else stacks and keeps full width, which is how a wide table
+     survives the margins. */
+  .two-col:not(:has(> .chart-card)) { display: block; }
+  .two-col:not(:has(> .chart-card)) > * { margin-bottom: 8pt; }
+  .chart-frame, .line-chart, .bar-chart { max-width: none !important; }
+  .chart-card { margin-bottom: 0; }
+
+  /* These charts use colour to separate a declared measure from context; on
+     paper that distinction lives in the caption instead and every line is
+     drawn in the one ink there is. `print-color-adjust` is what keeps the
+     grid a grey rather than nothing. */
+  .chart-line, .chart-line-1, .chart-line-2, .chart-line-3, .chart-line-4,
+  .chart-line-5 { stroke: #000 !important; }
+  .chart-dot, .chart-series-1, .chart-series-2, .chart-series-3,
+  .chart-series-4, .chart-series-5 { fill: #000 !important; }
+  .chart-grid, .chart-mark {
+    stroke: #999 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .chart-trend { stroke: #666 !important; }
+  .chart-axis, .chart-mark-label { color: #000; fill: #000; }
+  /* A hit area for a pointer paper does not have. */
+  .chart-hit { display: none; }
+
+  /* Muted greys print faint, and the small print is the part a careful
+     reader wants. */
+  /* Secondary greys — dates, reading counts, chart captions — recede on a
+     backlit display and disappear on paper. On paper it is all one ink. */
+  .muted, .lede, p, td, th, li, span, small, figcaption, .count,
+  .page-lede, .chart-card figcaption p,
+  /* Headings too: a muted grey reads as hierarchy on screen and as faded
+     toner on paper. */
+  h1, h2, h3, .section-head h2, .page-head h1 { color: #000 !important; }
+  .data-table th, .data-table td { border-bottom: 0.5pt solid #666; padding: 4pt 6pt; }
+  .data-table thead th { background: none; border-bottom: 1pt solid #000; }
+  .table-scroll { overflow: visible; }
+  /* The chart's scroller, unclipped. On paper there is nothing to scroll,
+     and a clipping box that a page break lands inside prints empty. */
+  .chart-scroll {
+    overflow: visible !important;
+    margin-inline: 0 !important;
+    padding-inline: 0 !important;
+  }
+
+  /* Disclosures print closed, silently dropping their contents — and those
+     are the numbers behind every drawing. */
+  details { display: block; }
+  details > summary { display: none; }
+  details > *:not(summary) { display: revert; }
+
+  a { color: #000; text-decoration: none; }
+
+  /* A sheet of numbers with no date on it is one nobody can place. Rendered
+     by the page, not here: `counter(page)` only resolves inside an `@page`
+     margin box and silently produces nothing in ordinary flow. */
+  .print-only { display: block !important; }
+  .print-footer {
+    margin-top: 10pt;
+    padding-top: 6pt;
+    border-top: 0.5pt solid #666;
+    font-size: 8pt;
+    color: #333;
+  }
+}

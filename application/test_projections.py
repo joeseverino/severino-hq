@@ -307,6 +307,33 @@ class LineChartTests(TestCase):
         self.assertAlmostEqual(line.plot_left, bars.plot_left, places=1)
 
 
+class ChartAxisSpanTests(TestCase):
+    """What the axis calls a date depends on how much time the chart covers."""
+
+    def _chart(self, days):
+        start = date(2020, 1, 15)
+        points = tuple(
+            (start + timedelta(days=step), 1.0 + step / 100)
+            for step in range(0, days, max(1, days // 40))
+        )
+        return line_chart("Span", "", (("Measure", points, 1),), unit="u")
+
+    def test_a_short_range_labels_the_day(self):
+        labels = [item.label for item in self._chart(90).categories]
+
+        self.assertTrue(any("15" in label for label in labels), labels)
+        self.assertFalse(any("2020" in label for label in labels), labels)
+
+    def test_a_multi_year_range_labels_the_year(self):
+        # Six years of monthly readings on an axis reading "Sep 15" is an axis
+        # that looks like one year. A clinician cannot tell 2021 from 2026,
+        # which is the entire content of a long-run chart.
+        labels = [item.label for item in self._chart(365 * 6).categories]
+
+        self.assertTrue(all(any(ch.isdigit() for ch in label) for label in labels))
+        self.assertTrue(any("202" in label for label in labels), labels)
+
+
 class DashboardProjectionTests(TestCase):
     def test_snapshot_stays_within_its_query_budget(self):
         Project.objects.create(
