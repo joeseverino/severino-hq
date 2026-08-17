@@ -145,7 +145,21 @@ class ComposedPluginTestCase:
                 {
                     "SEVERINO_HQ_PLUGINS": ",".join(
                         part for part in (real, *references) if part
-                    )
+                    ),
+                    # A sibling built here exists for the length of one test.
+                    # It has no wheel, no artifact digest and no signed
+                    # approval, so it can never appear in the admission lock --
+                    # and admission requires the lock to match the enabled set
+                    # exactly. Left on, the kit's own siblings are read as an
+                    # unsigned plugin and every suite using it fails.
+                    #
+                    # Stated rather than inherited, because admission defaults
+                    # to off under DEBUG and on otherwise. Both the local gate
+                    # and CI run with DEBUG on, so this passed everywhere it
+                    # was run and failed in the one place it was not: the
+                    # composed image, which runs this suite with DEBUG off.
+                    # A test kit must not behave differently there.
+                    "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
                 },
                 clear=False,
             )

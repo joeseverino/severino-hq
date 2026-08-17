@@ -37,6 +37,23 @@ echo "[check] Django configuration and migration drift"
 echo "[check] Complete test suite"
 "$python" manage.py test --noinput
 
+# Again with DEBUG off, because production is not DEBUG and neither is the
+# composed image -- which runs this same suite as its own admission gate.
+#
+# Some behaviour is chosen by that flag rather than merely logged differently
+# by it: plugin admission defaults to on when DEBUG is off. Every way of
+# running these tests set DEBUG on, so a suite that could only pass with
+# admission disabled passed the gate, passed CI, and then failed inside the
+# composition, where the fix costs a merge and a rebuild instead of a rerun.
+#
+# The cost is one more short run. The thing it catches is the class of failure
+# that is invisible everywhere it is cheap to find.
+echo "[check] Complete test suite (DEBUG off, as production runs it)"
+DJANGO_DEBUG= \
+DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
+DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
+    "$python" manage.py test --noinput
+
 echo "[check] Patch integrity"
 git diff --check
 
