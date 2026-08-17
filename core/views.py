@@ -269,7 +269,7 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
         TableSort("-message", "Message Z–A", "-message"),
     )
     table_default_sort = "-created_at"
-    table_search_placeholder = "Search objects, IDs, and messages…"
+    table_search_placeholder = "Search objects, operation IDs, and messages…"
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user")

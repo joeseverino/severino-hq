@@ -1,6 +1,6 @@
 from django.shortcuts import render
 
-from application.ui import Kpi
+from hq_sdk.ui import Kpi
 
 
 def index(request):

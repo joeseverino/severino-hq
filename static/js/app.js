@@ -66,6 +66,26 @@ document.addEventListener("change", (event) => {
   if (control?.form) control.form.requestSubmit();
 });
 
+// Long-running forms stay ordinary HTML forms: uploads and commands still work
+// without JavaScript and keep Django's redirect/error semantics. Enhancement
+// only makes the committed state explicit, prevents accidental double-submit,
+// and gives assistive technology a live status while the server works.
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("form[data-submit-busy]");
+  if (!form) return;
+
+  form.setAttribute("aria-busy", "true");
+  form.querySelectorAll("button[type=submit], input[type=submit]").forEach((control) => {
+    control.disabled = true;
+    if (control instanceof HTMLButtonElement && form.dataset.submitLabel) {
+      control.textContent = form.dataset.submitLabel;
+    }
+  });
+
+  const status = form.querySelector("[data-submit-status]");
+  if (status) status.hidden = false;
+});
+
 // Modals. A trigger is always a real link to a page that does the same job, so
 // this only intercepts when there is in fact a dialog here to open -- otherwise
 // the link is followed and the operator lands on the full page instead.

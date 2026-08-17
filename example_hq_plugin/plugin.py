@@ -1,6 +1,6 @@
 """One declaration from which HQ derives every example integration surface."""
 
-from application.plugins import NavigationItem, PluginManifest
+from hq_sdk.plugin import NavigationItem, PluginManifest
 
 plugin = PluginManifest(
     id="example.notes",

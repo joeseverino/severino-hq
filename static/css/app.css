@@ -48,10 +48,23 @@
      and 1086px in a full-width one -- axis type, bar widths and tick labels all
      inflated, and two charts on one page read as two different applications.
      Capping the rendered width fixes the drawing's size; only the surrounding
-     card changes. Below the floor the plot scrolls rather than shrinking into
-     illegibility. */
+     card changes.
+
+     There is deliberately no matching floor. One lived here for a long time --
+     620px, then 480px -- to stop a plot shrinking into illegibility, and it
+     never once did that job: `.two-col` lays its columns out at
+     `minmax(320px, 1fr)`, so a half-width card offers between 284px and 446px
+     of drawing, which is under any floor ever set. The floor could therefore
+     only ever fire, and firing means a scrollbar under every chart on the page
+     at once. That is what the phone override below was working around, one
+     breakpoint at a time.
+     What actually keeps an axis legible is measured rather than assumed:
+     `StackedBarChart.dense` sums the width its labels really need, and a
+     container query asks whether the card they landed in is really that
+     narrow. Two measurements of the true quantity beat one guess at a proxy,
+     so the guess is gone. `.chart-scroll` stays as the safety net for a chart
+     that overflows anyway. */
   --chart-max: 640px;
-  --chart-min: 480px;
   /* Where one axis label sits, as a share of the drawing it labels. Set per
      label on the element itself, because there is one per data point and the
      position is computed from the data -- this declaration is the default a
@@ -414,26 +427,38 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    sits exactly where it did while the first and last labels have somewhere to
    hang. Without it the scroller clipped them, or grew a scrollbar to show
    twenty pixels of date. */
-.chart-scroll { overflow-x: auto; padding-inline: 24px; margin-inline: -24px; }
-/* Fixed drawing, variable card. `max-width` stops a full-width card from
-   upscaling the whole SVG -- type, bars and ticks included -- so the plot is
-   the same size whether its card is half or full width; only the surrounding
-   card changes. It stays flush left so its axis shares an edge with the
-   caption and legend above it. The floor is what keeps category labels from
-   colliding, not a target width: at 620px a chart placed in a two-column row
-   overflowed its own column and silently clipped the final category behind the
-   scroller, so the most recent period -- the one being read -- was cut off. */
+/* Both axes are stated, and that is the whole point of the second one.
+   `overflow-x: auto` alone does not leave the other axis alone: a `visible`
+   counterpart computes to `auto`, so declaring one scrollbar quietly declared
+   two. The drawing's height is fractional -- an SVG sized by aspect ratio
+   lands on 190.55px, and a scroll container rounds its content up and its box
+   down -- so every chart overflowed itself by exactly one pixel and every
+   chart drew a full-height vertical scrollbar for it.
+   Written as `clip` to say what is meant -- contain it, do not offer to scroll
+   it. Alongside a scrolling axis the spec then uses it as `hidden`, which is
+   what the computed style reports and is the same result here; `clip` is kept
+   because it is the accurate word and it is what applies if the other axis
+   ever stops scrolling. The tooltip is appended to <body>, so it is not
+   clipped by this. */
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: clip;
+  padding-inline: 24px;
+  margin-inline: -24px;
+}
 /* Fills the card it is in, at a height this stylesheet decides rather than one
    the viewBox dictates. Its parts are rectangles and horizontal rules, so
    `preserveAspectRatio="none"` stretches them to the box without saying
    anything untrue -- and because the labels are HTML over the top, none of the
    type stretches with it. That is what removed the cap: it was there to stop a
    full-width card upscaling the words inside the drawing, and there are no
-   longer any words inside the drawing. */
+   longer any words inside the drawing.
+   No floor either, for the reason recorded at `--chart-max`: a half-width card
+   is narrower than any floor worth setting, so a floor could only ever turn
+   into a scrollbar. */
 .bar-chart {
   display: block;
   width: 100%;
-  min-width: var(--chart-min);
   height: 214px;
 }
 
@@ -455,7 +480,6 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .line-chart {
   display: block;
   width: 100%;
-  min-width: var(--chart-min);
   max-width: var(--chart-max);
   height: auto;
 }
@@ -530,7 +554,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    it a grid or flex ancestor sizes to the table's content instead, and the
    overflow escapes to the page -- the widest table on the site pushed the
    whole layout sideways on a phone rather than scrolling inside its card. */
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; min-width: 0; max-width: 100%; }
+/* A wide table scrolls sideways rather than widening the page. `overflow-y`
+   is stated for the same reason `.chart-scroll` states it: left alone it does
+   not stay `visible`, it computes to `auto`, and a table whose height lands on
+   a fraction then offers a vertical scrollbar it has no content for. */
+.table-scroll { overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: 16px; min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
 /* Nothing follows it, so the gap it reserves is dead card. The same is true
    of anything that ends a card: a trailing margin inside a padded box is a
@@ -1450,12 +1478,12 @@ a.kpi:hover { background: var(--surface-2); }
   .primary-nav a, .nav-group > summary { font-size: 12.5px; padding: 6px 8px; }
   .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
 
-  /* Charts fit the phone rather than scrolling inside their cards. The floor
-     exists so a wide chart does not shrink into illegibility in a desktop
-     column; on a 390px screen it only guaranteed that every chart on the page
-     carried its own horizontal scrollbar, which is worse than a narrow plot
-     with a data table under it. */
-  :root { --chart-min: 0px; }
+  /* The chart floor used to be zeroed here, because on a 390px screen it only
+     guaranteed that every chart on the page carried its own horizontal
+     scrollbar. That was the right diagnosis at the wrong scope: a half-width
+     desktop card is 284-446px, so the same thing happened in a two-column row
+     on a laptop, where no breakpoint was watching. The floor is gone
+     altogether now, so there is nothing left to override here. */
 
 
   /* The action stays beside the title. Given a full-width row of its own it

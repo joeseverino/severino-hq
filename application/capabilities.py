@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
+import inspect
+import re
 from typing import Any, Callable
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
@@ -39,6 +43,12 @@ from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 from .topology import TopologySyncCommand, execute_topology_sync
 from .plugins import plugin_capability_specs
+
+CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
+CAPABILITY_EFFECTS = frozenset(
+    {"read", "remote_write", "destructive", "infrastructure_change"}
+)
+TARGET_KINDS = frozenset({"slug", "doc_id", "integer", "key"})
 
 
 @dataclass(frozen=True)
@@ -286,14 +296,92 @@ _SPECS = (
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
     specs = (*_SPECS, *plugin_capability_specs())
+    for spec in specs:
+        _validate_capability_spec(spec)
     names = [spec.name for spec in specs]
     if len(names) != len(set(names)):
-        raise RuntimeError("Duplicate capability name across HQ core and plugins.")
+        raise ImproperlyConfigured(
+            "Duplicate capability name across HQ core and plugins."
+        )
     return specs
+
+
+def _validate_capability_spec(spec: CapabilitySpec) -> None:
+    """Fail at registry construction, not on the first production request."""
+
+    if not isinstance(spec, CapabilitySpec):
+        raise ImproperlyConfigured(
+            "A capability provider returned something other than CapabilitySpec."
+        )
+    if not CAPABILITY_NAME.fullmatch(spec.name):
+        raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
+    if not spec.summary.strip():
+        raise ImproperlyConfigured(f"Capability {spec.name!r} has no summary.")
+    if spec.effect not in CAPABILITY_EFFECTS:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has invalid effect {spec.effect!r}."
+        )
+    if spec.target_kind is not None and spec.target_kind not in TARGET_KINDS:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has invalid target {spec.target_kind!r}."
+        )
+    required = [
+        item.value if isinstance(item, Capability) else item
+        for item in spec.required_capabilities
+    ]
+    if not required or any(
+        not isinstance(item, str) or not CAPABILITY_NAME.fullmatch(item)
+        for item in required
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} must declare valid required capabilities."
+        )
+    if len(required) != len(set(required)):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} repeats a required capability."
+        )
+    try:
+        _command_schema(spec.command_type)
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} command type cannot emit JSON Schema."
+        ) from exc
+    if not callable(spec.handler):
+        raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
+
+    kwargs: dict[str, Any] = {"principal": None, "expected_updated_at": None}
+    target_parameter = {
+        "slug": "current_slug",
+        "doc_id": "current_doc_id",
+        "integer": "current_id",
+        "key": "current_key",
+    }.get(spec.target_kind)
+    if target_parameter:
+        kwargs[target_parameter] = None
+    try:
+        inspect.signature(spec.handler).bind(None, **kwargs)
+    except TypeError as exc:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} handler does not implement the host call contract."
+        ) from exc
+
+
+@cache
+def _command_schema(command_type: type) -> dict[str, Any]:
+    """Build an immutable command type's schema once per process."""
+
+    return TypeAdapter(command_type).json_schema()
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
     return {spec.name: spec for spec in capability_specs()}
+
+
+def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
+    """Apply the registry's one authorization rule for every adapter."""
+
+    for capability in spec.required_capabilities:
+        principal.require(capability)
 
 
 def describe_capabilities() -> dict[str, Any]:
@@ -312,7 +400,7 @@ def describe_capabilities() -> dict[str, Any]:
                     for capability in spec.required_capabilities
                 ],
                 "target": spec.target_kind,
-                "input_schema": TypeAdapter(spec.command_type).json_schema(),
+                "input_schema": _command_schema(spec.command_type),
             }
             for spec in capability_specs()
         ],
@@ -338,21 +426,25 @@ def execute_capability(
         return _error("target_not_allowed", f"{name} does not accept a target.")
 
     try:
-        for capability in spec.required_capabilities:
-            principal.require(capability)
+        authorize_capability(spec, principal)
         command = TypeAdapter(spec.command_type).validate_python(payload)
         kwargs: dict[str, Any] = {
             "principal": principal,
             "expected_updated_at": expected_updated_at,
         }
-        if spec.target_kind == "slug":
-            kwargs["current_slug"] = str(target)
-        elif spec.target_kind == "doc_id":
-            kwargs["current_doc_id"] = str(target)
-        elif spec.target_kind == "integer":
-            kwargs["current_id"] = int(target)
-        elif spec.target_kind == "key":
-            kwargs["current_key"] = str(target)
+        try:
+            if spec.target_kind == "slug":
+                kwargs["current_slug"] = str(target)
+            elif spec.target_kind == "doc_id":
+                kwargs["current_doc_id"] = str(target)
+            elif spec.target_kind == "integer":
+                kwargs["current_id"] = int(target)
+            elif spec.target_kind == "key":
+                kwargs["current_key"] = str(target)
+        except (ValueError, TypeError):
+            return _error(
+                "invalid_input", f"{name} requires a {spec.target_kind} target."
+            )
         return spec.handler(command, **kwargs)
     except AuthorizationError as exc:
         return _error(exc.code, str(exc))

@@ -172,6 +172,23 @@ jobs:
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="${{ steps.compose.outputs.references }}" \
             -t ghcr.io/${{ github.repository }}/composition:${{ github.sha }} .
 
+      - name: Verify the composition as one application
+        # Per-plugin admission proves each wheel against the host in isolation.
+        # This second layer is deliberately after assembly: only the real image
+        # can expose duplicate routes/capabilities, migration conflicts, missing
+        # host-owned dependencies, or a test that wrongly assumes its plugin is
+        # the only contributor to a global surface.
+        run: |
+          image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
+          docker run --rm --entrypoint python \
+            --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
+            --env DJANGO_ALLOWED_HOSTS=localhost \
+            "$image" manage.py check
+          docker run --rm --entrypoint python \
+            --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
+            --env DJANGO_ALLOWED_HOSTS=localhost \
+            "$image" manage.py test --verbosity 1
+
       - name: Scan composed image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:

@@ -104,6 +104,19 @@ class AuthGateTests(TestCase):
         self.assertIn("object-src 'none'", policy)
         self.assertIn("frame-ancestors 'none'", policy)
 
+    def test_application_shell_versions_every_shared_asset(self):
+        content = self.client.get("/accounts/login/").content.decode()
+        for asset in (
+            "css/app.css",
+            "img/apple-touch-icon.png",
+            "img/favicon.ico",
+            "img/favicon.svg",
+            "js/app.js",
+            "js/tables.js",
+        ):
+            with self.subTest(asset=asset):
+                self.assertRegex(content, rf"/static/{re.escape(asset)}\?v=[0-9a-f]{{12}}")
+
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
         response = self.client.get("/accounts/login/")

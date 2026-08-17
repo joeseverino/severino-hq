@@ -24,7 +24,7 @@ That asymmetry buys three things a bespoke token store would not:
 |---|---|
 | **Nothing to leak** | HQ stores no secret. A database dump yields no working credential. |
 | **Revocation is central** | Kill the client in Pocket ID and it is dead everywhere, immediately. |
-| **Real scoping** | A credential can be granted `fitness.write` and nothing else. |
+| **Real scoping** | A credential can be granted `example.write` and nothing else. |
 
 The last one is the point. A web operator holds every capability HQ has. A
 credential living on a phone should not, and here it does not: the principal's
@@ -49,7 +49,7 @@ In Pocket ID, **Administration → APIs**:
    `SEVERINO_API_RESOURCE` (e.g. `https://hq.jseverino.com/api`). This becomes
    the `aud` claim and **cannot be changed later**.
 2. Add a **Permission** for each capability the client needs, named *exactly*
-   as HQ names it — `fitness.write`, `write_receipts`, `write_expenses`.
+   as HQ names it — `example.write`, `write_receipts`, `write_expenses`.
 
 The permission keys are HQ's capability names on purpose. A mapping table
 between the two systems would be a third home for the authorization model and
@@ -71,40 +71,57 @@ curl -s https://sso.jseverino.com/api/oidc/token \
   -d client_id="$CLIENT_ID" \
   -d client_secret="$CLIENT_SECRET" \
   -d resource="https://hq.jseverino.com/api" \
-  -d scope="fitness.write"
+  -d scope="example.write"
 ```
 
 Ask what it may do:
 
 ```bash
-curl -s https://hq.jseverino.com/api/v1/ -H "Authorization: Bearer $TOKEN"
+curl -s https://hq.jseverino.com/api/v2/ -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json
-{"ok":true,"data":{"actor":"health-sync-shortcut","granted":["fitness.write"],...}}
+{"ok":true,"data":{"actor":"example-automation","granted":["example.write"],...}}
 ```
 
 Run a capability:
 
 ```bash
-curl -s https://hq.jseverino.com/api/v1/capabilities/fitness.import/ \
+curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
   -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
-  -d '{"payload":{"documents":[{"name":"health.csv","content":"...","encoding":"text"}]}}'
+  -d '{"payload":{"records":[{"external_id":"sample-1","value":42}]}}'
 ```
 
 ### Routes
 
 | Method | Path | |
 |---|---|---|
-| `GET` | `/api/v1/` | Who you are and what you were granted |
-| `GET` | `/api/v1/capabilities/` | Every capability, flagged `permitted` for this token |
-| `POST` | `/api/v1/capabilities/<name>/` | Run one |
+| `GET` | `/api/v2/` | Who you are and what you were granted |
+| `GET` | `/api/v2/capabilities/` | Every capability, flagged `permitted` for this token |
+| `POST` | `/api/v2/capabilities/<name>/` | Run one |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
 header, never a 302 to an HTML login page — a Shortcut cannot fill one in, and
 would record the redirect as success while importing nothing.
+
+Each capability description includes the domain `input_schema` and the complete
+HTTP `request_schema`, including target and optimistic-concurrency fields,
+unknown-field rejection, and whether an idempotency key is required. Clients
+can therefore generate and validate requests from the deployed composition's
+actual registry; a plugin does not maintain a parallel API document.
+
+### Compatibility policy
+
+The path is the semantic major version. Additive fields may join an existing
+version; removing a field, tightening accepted input, or changing retry
+semantics requires a new path. Version 1 remains available for the original
+Shortcut contract and returns `Deprecation: true` plus a `successor-version`
+link. Version 2 is the current contract and requires durable idempotency for
+state changes. No sunset date is advertised until there is an actual removal
+decision and migration window; clients are never given a fictional deadline.
 
 ### Errors
 
@@ -115,36 +132,54 @@ Always `{"ok": false, "error": {"code", "message", "details"}}`.
 | `401` | No token, or it failed verification. Mint a new one. |
 | `403` | Verified, but this client was not granted that capability. Fix its scope. |
 | `404` | No such capability on this deployment. |
-| `409` | The command ran and the domain refused it. |
+| `409` | The domain refused the command, or a retry key was reused with different input. |
+| `413` | The request exceeds the deployment's body-size safety limit. |
+| `415` | A capability request was not sent as `application/json`. |
 | `503` | `SEVERINO_API_RESOURCE` is unset here. |
 
-### No idempotency key
+### Safe retries
 
-Deliberate. The write this exists for — an import — is already idempotent by
-content hash inside the domain, so a Shortcut retried on a dropped connection
-reports a duplicate rather than creating one. A key here would be a second
-mechanism guarding something already guarded.
+Every capability whose effect is not `read` requires an `Idempotency-Key`
+header. Generate one opaque key per logical operation and keep it unchanged
+when retrying that operation. HQ stores the actor, canonical request hash, HTTP
+status, and response in the same database transaction as the domain write. A
+retry therefore receives the committed response without running the command a
+second time—even after a process restart. Reusing the key with different input
+returns `409 idempotency_conflict`.
 
-## Recipe: one-tap health sync
+Records expire after 24 hours by default and expired records are pruned by the
+next machine write. Configure the window with
+`SEVERINO_API_IDEMPOTENCY_TTL_SECONDS`. Domain-level idempotency remains useful:
+it protects imports arriving through web, CLI, or MCP, while this transport
+contract protects an HTTP client that did not receive the first response.
 
-In Shortcuts on iOS:
+## Recipe: a narrowly scoped first-party automation
 
-1. **Health Export CSV** action → produces the workout CSV.
-2. **Get Contents of URL** — `https://sso.jseverino.com/api/oidc/token`, POST,
+This synthetic example demonstrates the transport contract without placing a
+private plugin's domain vocabulary or workflow in the public host repository.
+The deployed plugin's capability schema is the source of truth for its real
+payload; its private repository owns the corresponding setup guide.
+
+In an automation client:
+
+1. Produce the source records for one logical operation.
+2. Request a token from `https://sso.jseverino.com/api/oidc/token`, POST,
    `Form` body: `grant_type=client_credentials`, `client_id`, `client_secret`,
-   `resource=https://hq.jseverino.com/api`, `scope=fitness.write`.
-3. **Get Dictionary Value** `access_token` from the result.
-4. **Get Contents of URL** —
-   `https://hq.jseverino.com/api/v1/capabilities/fitness.import/`, POST,
-   header `Authorization: Bearer <the value from step 3>`, `JSON` body:
+   `resource=https://hq.jseverino.com/api`, `scope=example.write`.
+3. Read `access_token` from the result.
+4. Generate a UUID and retain it as the operation's retry key.
+5. POST to
+   `https://hq.jseverino.com/api/v2/capabilities/example.import/`, with
+   headers `Authorization: Bearer <the value from step 3>` and
+   `Idempotency-Key: <the UUID from step 4>`, `JSON` body:
 
    ```json
-   {"payload": {"documents": [{"name": "health.csv", "content": "<CSV text from step 1>", "encoding": "text"}]}}
+   {"payload": {"records": [{"external_id": "sample-1", "value": 42}]}}
    ```
 
-5. **Show Result** — `changed` is how many workouts actually landed.
+6. Interpret the capability's typed result.
 
-The client secret sits in the Shortcut. That is a real exposure and the reason
-the client is scoped to `fitness.write`: worst case, someone who extracts it
-can import workouts. They cannot read an expense, touch a project, or delete
-anything.
+The client secret sits in the automation client. That is a real exposure and
+the reason it receives only `example.write`: someone who extracts it can run
+that one plugin capability, but cannot read unrelated records, touch a project,
+or delete anything.

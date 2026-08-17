@@ -17,7 +17,7 @@
         <td>{{ ev.user.get_username|default:"system" }}</td>
         <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
         <td>{% if ev.object_type %}<code>{{ ev.object_type }}</code>{% if ev.object_id %} #{{ ev.object_id }}{% endif %}{% endif %}<br><span class="muted">{{ ev.object_repr }}</span></td>
-        <td class="muted">{{ ev.message }}</td>
+        <td class="muted">{{ ev.message }}{% if ev.operation_id %}<br><code>{{ ev.operation_id }}</code>{% endif %}</td>
       </tr>
     {% empty %}
       <tr><td colspan="6" class="muted">No audit events.</td></tr>

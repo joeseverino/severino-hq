@@ -148,6 +148,7 @@ INSTALLED_APPS = [
     "contacts",
     "control_plane",
     "search_index",
+    "hq_api",
 ] + installed_plugin_apps()
 
 MIDDLEWARE = [
@@ -285,6 +286,14 @@ SEVERINO_API_RESOURCE = os.environ.get("SEVERINO_API_RESOURCE", "")
 # Clock skew allowance between the phone, Pocket ID and HQ. Small on purpose:
 # the tokens are short-lived, and a generous window is a longer replay window.
 SEVERINO_API_LEEWAY_SECONDS = int(os.environ.get("SEVERINO_API_LEEWAY_SECONDS", "30"))
+# A retry key represents one machine request for this long. The record is
+# durable because a process restart is exactly when an in-memory replay cache
+# would fail the client that needs it.
+SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = int(
+    os.environ.get("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", "86400")
+)
+if SEVERINO_API_IDEMPOTENCY_TTL_SECONDS < 60:
+    raise RuntimeError("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS must be at least 60.")
 
 # Private MCP endpoint. All three settings are enforced by the ASGI boundary;
 # empty hosts or a short/empty token disable MCP fail-closed.
@@ -363,6 +372,10 @@ FILE_UPLOAD_PERMISSIONS = 0o640
 
 # ----- Logging -----------------------------------------------------------------
 
+SEVERINO_LOG_LEVEL = os.environ.get("SEVERINO_LOG_LEVEL", "INFO").upper()
+if SEVERINO_LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    raise RuntimeError("SEVERINO_LOG_LEVEL must be a standard Python log level.")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -375,11 +388,11 @@ LOGGING = {
             "formatter": "json",
         },
     },
-    "root": {"handlers": ["console"], "level": "INFO"},
+    "root": {"handlers": ["console"], "level": SEVERINO_LOG_LEVEL},
     "loggers": {
-        "django.request": {"level": "WARNING", "propagate": True},
-        "severino.request": {"level": "INFO", "propagate": True},
-        "severino": {"level": "INFO", "propagate": True},
+        "django.request": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
+        "severino.request": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
+        "severino": {"level": SEVERINO_LOG_LEVEL, "propagate": True},
     },
 }
 

@@ -7,9 +7,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
-  <link rel="icon" href="{% static 'img/favicon.ico' %}" sizes="any">
-  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
-  <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
+  <link rel="icon" href="{% static 'img/favicon.ico' %}?v={{ ASSET_VERSION }}" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}?v={{ ASSET_VERSION }}">
+  <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}?v={{ ASSET_VERSION }}">
   <meta name="theme-color" content="#1f4d57">
   <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ ASSET_VERSION }}">
   {% block head_extra %}{% endblock %}
@@ -95,8 +95,8 @@
     <span>{{ SITE_NAME }} · Unauthorized Access is Strictly Prohibited</span>
   </footer>
 
-  <script src="{% static 'js/app.js' %}" defer></script>
-  <script src="{% static 'js/tables.js' %}" defer></script>
+  <script src="{% static 'js/app.js' %}?v={{ ASSET_VERSION }}" defer></script>
+  <script src="{% static 'js/tables.js' %}?v={{ ASSET_VERSION }}" defer></script>
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

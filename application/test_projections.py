@@ -19,6 +19,8 @@ from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
 from .read_models import change_feed
 from .ui import (
+    PLOT_LEFT,
+    PLOT_WIDTH,
     ChartSeries,
     Timeline,
     TimelineItem,
@@ -292,8 +294,17 @@ class LineChartTests(TestCase):
         # line up, and the line does start at the edge.
         self.assertEqual(line.ticks[0].y, bars.ticks[0].y)
         self.assertEqual(line.ticks[-1].y, bars.ticks[-1].y)
-        self.assertAlmostEqual(line.series[0].points[0].x, 48.0, places=1)
-        self.assertAlmostEqual(line.series[0].points[-1].x, 48.0 + 654.0, places=1)
+        # Against the constants, not against 48 and 702. Written as literals
+        # this test pinned a copy of the geometry rather than the geometry, so
+        # moving the plot broke the test that exists to prove the plot moved
+        # everywhere at once -- the same copied-constant fault the templates
+        # had.
+        self.assertAlmostEqual(line.series[0].points[0].x, PLOT_LEFT, places=1)
+        self.assertAlmostEqual(
+            line.series[0].points[-1].x, PLOT_LEFT + PLOT_WIDTH, places=1
+        )
+        self.assertAlmostEqual(line.plot_right, bars.plot_right, places=1)
+        self.assertAlmostEqual(line.plot_left, bars.plot_left, places=1)
 
 
 class DashboardProjectionTests(TestCase):

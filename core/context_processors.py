@@ -1,4 +1,6 @@
 from application.plugins import plugin_navigation
+from functools import cache
+import hashlib
 from pathlib import Path
 
 from django.conf import settings
@@ -31,22 +33,41 @@ NAV_ITEMS = (
 )
 
 
-def _asset_version() -> str:
-    """Cache-busting token for the style bundle.
+def _asset_fingerprint() -> str:
+    """Content fingerprint for every bundle loaded by the application shell.
 
     STORAGES deliberately uses the non-manifest static backend, so asset URLs
     carry no content hash -- while WhiteNoise serves them with far-future cache
-    headers. Without a version token a deployed stylesheet change is invisible
-    to any browser holding a cached copy, which looks exactly like the change
-    never shipped. Derived from the file's mtime and size: no build step, and it
-    changes precisely when the file does.
+    headers. Without a version token a deployed asset change is invisible to a
+    browser holding a cached copy. Content—not mtimes—means an image rebuild
+    neither busts unchanged assets nor retains changed JavaScript.
     """
-    path = Path(settings.BASE_DIR) / "static" / "css" / "app.css"
-    try:
-        stat = path.stat()
-    except OSError:
-        return "0"
-    return f"{int(stat.st_mtime)}-{stat.st_size}"
+    digest = hashlib.sha256()
+    root = Path(settings.BASE_DIR) / "static"
+    for relative in (
+        "css/app.css",
+        "img/apple-touch-icon.png",
+        "img/favicon.ico",
+        "img/favicon.svg",
+        "js/app.js",
+        "js/tables.js",
+    ):
+        try:
+            digest.update((root / relative).read_bytes())
+        except OSError:
+            return "0"
+    return digest.hexdigest()[:12]
+
+
+@cache
+def _production_asset_version() -> str:
+    return _asset_fingerprint()
+
+
+def _asset_version() -> str:
+    # Development reflects edits without a restart. Production computes once,
+    # avoiding filesystem reads in every template context.
+    return _asset_fingerprint() if settings.DEBUG else _production_asset_version()
 
 
 def site(request):

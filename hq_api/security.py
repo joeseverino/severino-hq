@@ -117,7 +117,7 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     Note what this does *not* do: widen. A web operator holds every capability
     HQ has, and it would have been one line to hand a verified client the same
     set. The point of routing a Shortcut through an OAuth resource server is
-    that the credential on the phone can import a workout and nothing else --
+    that a credential can run one narrow automation and nothing else --
     granting more here would throw that away and leave only the ceremony.
     """
 

@@ -2,33 +2,52 @@
 
 Loaded automatically for every Claude Code session in this repo.
 
+Read `AGENTS.md` first. It is the shared engineering contract, architecture
+map, public/private boundary, quality bar, and definition of done. This file
+adds Claude-specific operational guidance only.
+
 ---
 
 ## Deploy
 
-**Pushing to GitHub does NOT update the running app.** The container on
-`homelab-server` keeps running the previously deployed image until someone
-redeploys it.
+**Landing on `main` IS the deploy.** Nothing is run by hand.
 
-Routine deploy (after a `git push` from this Mac):
-
-```bash
-hq deploy            # rebuild + recreate the container
-hq deploy --no-build # env / compose changes only, no rebuild
+```
+push/merge to main → ci (build + scan the host image)
+                   → compose (host + every admitted extension → one image)
+                   → deploy (self-hosted runner on the homelab, health-gated,
+                             rolls back to the previous image on failure)
 ```
 
-`hq deploy` runs `git pull --ff-only && docker compose up -d --build` on
-`homelab-server`. The image entrypoint re-runs `migrate` and `collectstatic`
-on every boot, so no manual migration step is needed.
+`compose` is triggered by `ci` completing successfully on `main`, never in
+parallel with it. The image entrypoint re-runs `migrate` and `collectstatic`
+on every boot, so there is no manual migration step.
 
-If the user says "push it", "ship it", "deploy it", or similar after a code
-change, the expected sequence is:
+If the user says "push it", "ship it", or "deploy it" after a code change:
 
-1. `git commit` + `git push`
-2. `hq deploy`
+1. `git commit` + `git push` (or open a PR and merge it — `main` is protected)
+2. Watch the pipeline: `gh run watch`, or `gh run list --branch main --limit 3`
+3. It is live when the `deploy` job in **Compose and deploy extensions** is
+   green — not when `ci` is green, which has only built the host image
 
-Doing only step 1 is not "live." Confirm step 2 happened (or run it) before
-reporting the change as deployed.
+Step 1 alone is not "live", but neither is anything you type: what makes it
+live is the pipeline finishing. Confirm the deploy job succeeded before
+reporting a change as deployed.
+
+### `hq deploy` is legacy. Do not run it.
+
+It predates composition and was never updated for it. It resolves the last
+green run of `ci.yml` and deploys `severino-hq:sha-…`, the **host-only**
+image, while production runs `severino-hq/composition:…` — the host *plus*
+every admitted extension. Running it takes the extensions off production: the
+Fitness domain stops existing. That is the exact failure composition was
+introduced to end, so the command now does the thing its own architecture
+forbids.
+
+There is no situation in this repo where it is the right call. To rebuild the
+current composed set by hand, run the **Compose and deploy extensions**
+workflow (`workflow_dispatch`). To go back to a known-good release, re-run that
+workflow at the commit you want.
 
 **First-time bringup** is a different procedure — see the vault runbook
 [[Deploy Severino HQ]] (`rb-deploy-severino-hq`), reachable via the

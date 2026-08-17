@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 import os
+from pathlib import Path
 import tempfile
 from unittest import TestCase, mock
 
@@ -56,6 +57,18 @@ class PluginContractTests(TestCase):
             installed_plugins.cache_clear()
             self.assertEqual(installed_plugins(), ())
 
+    def test_the_public_repo_never_commits_the_private_composition_inventory(self):
+        root = Path(__file__).resolve().parents[1]
+        document = json.loads(
+            (root / "composition" / "extensions.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            document["extensions"],
+            [],
+            "private extension identities belong in COMPOSITION_EXTENSIONS, "
+            "never in the public host repository",
+        )
+
     def test_manifest_is_projected_into_every_registered_surface(self):
         env, importer = self.load()
         with env, importer:
@@ -75,6 +88,28 @@ class PluginContractTests(TestCase):
         with env, importer, self.assertRaises(ImproperlyConfigured):
             installed_plugins()
 
+    def test_mcp_cannot_receive_a_capability_the_operator_does_not_hold(self):
+        env, importer = self.load(
+            replace(
+                VALID,
+                operator_capabilities=("notes.read",),
+                mcp_read_capabilities=("notes.export",),
+            )
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "operator does not hold"
+        ):
+            installed_plugins()
+
+    def test_malformed_plugin_capability_names_fail_closed(self):
+        env, importer = self.load(
+            replace(VALID, operator_capabilities=("Notes Write",))
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "invalid capability"
+        ):
+            installed_plugins()
+
     def test_duplicate_ids_fail_closed(self):
         installed_plugins.cache_clear()
         with (
@@ -84,6 +119,82 @@ class PluginContractTests(TestCase):
             ),
             mock.patch("application.plugins._import", return_value=VALID),
             self.assertRaises(ImproperlyConfigured),
+        ):
+            installed_plugins()
+
+    def test_duplicate_plugin_mounts_fail_before_django_orders_them(self):
+        first = replace(
+            VALID,
+            id="example.first",
+            distribution="example-first",
+            url_prefix="records/",
+            urlconf="example_first.urls",
+        )
+        second = replace(
+            VALID,
+            id="example.second",
+            distribution="example-second",
+            url_prefix="records/",
+            urlconf="example_second.urls",
+        )
+        installed_plugins.cache_clear()
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"SEVERINO_HQ_PLUGINS": "first:plugin,second:plugin"},
+            ),
+            mock.patch(
+                "application.plugins._import",
+                side_effect=(first, second),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "Duplicate plugin URL prefix"),
+        ):
+            installed_plugins()
+
+    def test_nested_plugin_mounts_fail_instead_of_shadowing_by_order(self):
+        first = replace(
+            VALID,
+            id="example.first",
+            distribution="example-first",
+            url_prefix="records/",
+            urlconf="example_first.urls",
+        )
+        second = replace(
+            VALID,
+            id="example.second",
+            distribution="example-second",
+            url_prefix="records/archive/",
+            urlconf="example_second.urls",
+        )
+        installed_plugins.cache_clear()
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"SEVERINO_HQ_PLUGINS": "first:plugin,second:plugin"},
+            ),
+            mock.patch(
+                "application.plugins._import",
+                side_effect=(first, second),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "prefixes overlap"),
+        ):
+            installed_plugins()
+
+    def test_invalid_provider_reference_fails_at_startup(self):
+        env, importer = self.load(
+            replace(VALID, health_provider="not a module reference")
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "invalid health_provider"
+        ):
+            installed_plugins()
+
+    def test_malformed_url_prefix_fails_at_startup(self):
+        env, importer = self.load(
+            replace(VALID, url_prefix="/notes", urlconf="example.urls")
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "invalid url_prefix"
         ):
             installed_plugins()
 

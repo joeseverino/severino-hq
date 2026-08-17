@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
+import httpx
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
+
+from core.static import CachedStaticFiles
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
@@ -13,8 +19,34 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         static_route, django_route = application.routes[-2:]
         self.assertEqual(static_route.path, "/static")
-        self.assertIsInstance(static_route.app, StaticFiles)
+        self.assertIsInstance(static_route.app, GZipMiddleware)
+        self.assertIsInstance(static_route.app.app, StaticFiles)
+        self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
+        self.assertIsInstance(django_route.app, GZipMiddleware)
+
+    def test_versioned_static_assets_are_compressed_and_immutable(self):
+        async def request(root):
+            app = GZipMiddleware(CachedStaticFiles(directory=root), minimum_size=500)
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                return await client.get(
+                    "/bundle.css?v=content-hash",
+                    headers={"Accept-Encoding": "gzip"},
+                )
+
+        with TemporaryDirectory() as directory:
+            Path(directory, "bundle.css").write_text("a" * 2000, encoding="utf-8")
+            response = async_to_sync(request)(directory)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(
+            response.headers["cache-control"],
+            "public, max-age=31536000, immutable",
+        )
 
     def test_mcp_services_do_not_access_django_models(self):
         """Keep MCP as an adapter over application-owned behavior and projections."""
@@ -116,6 +148,146 @@ class StyleContractTests(SimpleTestCase):
         # A fallback (var(--x, #fff)) is still a typo worth catching, so the
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
+
+    def test_images_live_where_images_belong(self):
+        """A screenshot taken while debugging is not an asset of this project.
+
+        A full-page capture taken while checking a rendered page was once
+        committed to the root of this repository and referenced by nothing.
+        This repository is public, so a capture of any internal page is
+        published the moment it is pushed -- carrying whatever happened to be
+        on screen -- and force-pushing afterwards does not unpublish it.
+
+        Images are diagrams, documentation captures, or icons, and each of
+        those has a home. Anything outside them is something that arrived by
+        accident.
+
+        The question is what is *committed*, not what is on the disk, so it is
+        asked of git rather than of the filesystem. A working tree holds plenty
+        of images that are nobody's business -- the Playwright MCP writes
+        captures to `.playwright-mcp/`, which is ignored and therefore already
+        safe -- and a walk of the disk would either report those or need a
+        hand-maintained list of directories to skip. Tracked files are exactly
+        the ones that can be pushed.
+        """
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        allowed = ("docs/diagrams/", "docs/images/", "static/img/")
+        suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        strays = [
+            name
+            for name in tracked
+            if name
+            and Path(name).suffix.lower() in suffixes
+            and not name.startswith(allowed)
+        ]
+        self.assertEqual(
+            sorted(strays),
+            [],
+            f"images belong in one of {allowed}",
+        )
+
+    def test_chart_templates_do_not_hardcode_the_plot_rectangle(self):
+        """The geometry is in ui.py, and a copy of it in a template is a bug.
+
+        `plot_right` was added to the bar chart precisely so its template would
+        stop drawing gridlines to 702 whatever the chart's own width was. The
+        line chart's template was then written with 48, 702, 12 and 214 spelled
+        out, so moving the plot moved the bars and the line but left that
+        chart's gridlines and marks behind. Any literal that equals a plot
+        coordinate is the same fault returning.
+        """
+        import re
+
+        from .ui import PLOT_HEIGHT, PLOT_LEFT, PLOT_RIGHT, PLOT_TOP, PLOT_WIDTH
+
+        forbidden = {
+            str(round(value))
+            for value in (
+                PLOT_LEFT,
+                PLOT_TOP,
+                PLOT_LEFT + PLOT_WIDTH,
+                PLOT_TOP + PLOT_HEIGHT,
+                PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT,
+            )
+        }
+        root = Path(__file__).resolve().parents[1]
+        offenders = []
+        for template in (root / "templates" / "partials").glob("*chart*.html"):
+            text = template.read_text(encoding="utf-8")
+            # Only the SVG geometry attributes. A viewBox is rendered from the
+            # chart's own width and height, so it is read from the model too.
+            for attribute, literal in re.findall(
+                r'\b(x1|x2|y1|y2|cx|cy|width|height)="([0-9.]+)"', text
+            ):
+                if literal.split(".")[0] in forbidden:
+                    offenders.append(f"{template.name}: {attribute}=\"{literal}\"")
+        self.assertEqual(
+            offenders,
+            [],
+            "chart templates must read plot coordinates from the chart, "
+            "not restate them",
+        )
+
+    def test_chart_drawings_declare_no_fixed_pixel_floor(self):
+        """A floor wider than the column it lives in is only ever a scrollbar.
+
+        `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width chart card
+        offers roughly 284-446px. Every floor ever set here -- 620px, then
+        480px -- was above that range, so it could not protect a narrow plot;
+        it could only guarantee that every chart on the page scrolled at once.
+        Label collision is handled by `Chart.dense` and a container query,
+        which measure the labels and the card rather than guessing at a width.
+        """
+        import re
+
+        css = self._stylesheet()
+        for rule in ("bar-chart", "line-chart"):
+            block = re.search(
+                r"^\." + rule + r"\s*\{(.*?)\}", css, re.MULTILINE | re.DOTALL
+            )
+            self.assertIsNotNone(block, f".{rule} must exist")
+            self.assertNotIn(
+                "min-width",
+                block.group(1),
+                f".{rule} must not declare a fixed floor; it cannot be "
+                "satisfied by a half-width card",
+            )
+
+    def test_scrollable_boxes_state_both_axes(self):
+        """One declared scrollbar is two offered ones unless both are stated.
+
+        A box with `overflow-x: auto` and no `overflow-y` does not keep the
+        other axis at `visible`: the spec computes it to `auto`. Chart
+        drawings land on fractional heights, so each overflowed itself by one
+        rounded pixel and drew a full-height vertical scrollbar for it. Any
+        rule that scrolls one axis has to say what the other one does.
+        """
+        import re
+
+        css = self._stylesheet()
+        offenders = []
+        for selector, body in re.findall(
+            r"^(\.[a-z0-9-]+)\s*\{([^}]*)\}", css, re.MULTILINE
+        ):
+            has_x = re.search(r"overflow-x\s*:\s*(auto|scroll)", body)
+            if not has_x:
+                continue
+            if not re.search(r"overflow-y\s*:", body):
+                offenders.append(selector)
+        self.assertEqual(
+            offenders,
+            [],
+            "a rule that scrolls one axis must declare the other",
+        )
 
     def test_categorical_series_slots_are_defined_and_distinct(self):
         import re

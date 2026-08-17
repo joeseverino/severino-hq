@@ -162,6 +162,62 @@ async (page) => {
       }
     });
 
+    // A scrollbar nobody asked for. Any box that offers to scroll and has
+    // something to scroll is reported, in both axes, with the overflow that
+    // earned it -- because the two ways this has gone wrong were invisible to
+    // reading the stylesheet.
+    //
+    // A drawing given a `min-width` wider than the column it is placed in: the
+    // floor was 480px and a half-width card is 284-446px, so every chart on
+    // the page grew a horizontal scrollbar at the same moment and none of the
+    // breakpoints were watching that band.
+    //
+    // And `overflow-x: auto` on its own, which is not on its own: the other
+    // axis computes from `visible` to `auto`, so one declared scrollbar is two
+    // offered ones, and an SVG whose height lands on a fraction overflows
+    // itself by a single rounded pixel. One pixel draws a full-height bar.
+    //
+    // Threshold of 1px, not 0: sub-pixel rounding is normal and is not what
+    // this is looking for.
+    const SCROLL_SLOP = 1;
+    document.querySelectorAll('*').forEach((el) => {
+      const style = getComputedStyle(el);
+      const scrolls = (value) => value === 'auto' || value === 'scroll';
+      const horizontal = el.scrollWidth - el.clientWidth;
+      const vertical = el.scrollHeight - el.clientHeight;
+      const axes = [];
+      if (scrolls(style.overflowX) && horizontal > SCROLL_SLOP) {
+        axes.push({ axis: 'x', overflow: round(horizontal) });
+      }
+      if (scrolls(style.overflowY) && vertical > SCROLL_SLOP) {
+        axes.push({ axis: 'y', overflow: round(vertical) });
+      }
+      if (!axes.length) return;
+      // A box the stylesheet has explicitly capped is one whose author chose
+      // to scroll it: a filter menu held to 280px so a long list of options
+      // does not run off the page, a wide table held to its card so it scrolls
+      // instead of widening the document. The cap is the statement of intent,
+      // so it is read from the box rather than kept as a list of class names
+      // here -- a list would need editing every time a capped box is added,
+      // and the one nobody edited it for would be reported as a fault.
+      //
+      // An accidental scrollbar is exactly the case with no cap: nothing was
+      // limiting the box, it simply came out a pixel smaller than its
+      // contents.
+      const capped = (axis) =>
+        axis === 'x' ? style.maxWidth !== 'none' : style.maxHeight !== 'none';
+      axes.forEach(({ axis, overflow }) => {
+        if (capped(axis)) return;
+        add('unwanted-scrollbar', {
+          box: el.className || el.tagName.toLowerCase(),
+          card: name(el.closest('.card, figure.chart-card') || el),
+          axis,
+          overflow,
+          box_size: axis === 'x' ? el.clientWidth : el.clientHeight,
+        });
+      });
+    });
+
     // The operating system's grey tooltip where the app has its own.
     document.querySelectorAll('.card [title], figure [title]').forEach((el) => {
       add('native-tooltip', { tag: el.tagName.toLowerCase(), title: el.title });
@@ -174,15 +230,27 @@ async (page) => {
 
     // A column whose every cell is empty or an em dash is a heading over
     // nothing: the session cannot have that measurement.
+    //
+    // Text is not the only thing a cell can hold. The row-selection column is
+    // a checkbox under a deliberately blank header, so measured by text alone
+    // it read as dead on every list page in HQ -- a rule that is wrong on
+    // pages that are right is worse than no rule, because the next real dead
+    // column arrives in a report nobody trusts. A cell counts as saying
+    // something if it has text or if it has a control in it.
     document.querySelectorAll('table').forEach((table) => {
       const heads = [...table.querySelectorAll('thead th')].map((th) =>
         th.textContent.trim(),
       );
       const rows = [...table.querySelectorAll('tbody tr')];
       if (rows.length < 2) return;
+      const speaks = (cell) => {
+        if (!cell) return false;
+        const text = (cell.textContent || '').trim();
+        if (text && text !== '—') return true;
+        return !!cell.querySelector('input, button, select, textarea, a, svg, img');
+      };
       heads.forEach((head, index) => {
-        const cells = rows.map((r) => (r.children[index] || {}).textContent || '');
-        if (cells.every((c) => !c.trim() || c.trim() === '—')) {
+        if (!rows.some((row) => speaks(row.children[index]))) {
           add('dead-column', { table: heads.join(' | '), column: head });
         }
       });

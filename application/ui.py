@@ -211,7 +211,22 @@ class CadenceMatrix:
 # The plot rectangle every chart in HQ draws inside. Stated once so a line and
 # a bar chart placed one above the other share an axis position rather than
 # nearly sharing one.
-PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 606.0, 202.0
+# The strip after the plot, and the mirror of the gutter before it. The left
+# gutter holds the y-axis labels and so was always there; the right had nothing
+# to hold and was given nothing, which put the last gridline, the last bar and
+# the final point hard against the edge of the drawing while the opposite side
+# breathed for 48 units. A chart read as leaning left, and the most recent
+# period -- the one actually being looked at -- was the one with no room
+# around it.
+# The same number as the left rather than a smaller one chosen to taste: the
+# end labels are centred on their points, so equal margins are what make the
+# first and last label clear their edges by the same amount. At 24 the last
+# label still hung 2px past the frame while the first cleared it by 17.
+# Taken out of the plot rather than added to the box: the drawing stays 702
+# units wide, so every chart keeps the aspect ratio it already had and a line
+# chart sized by `height: auto` does not change height on its own.
+PLOT_RIGHT = PLOT_LEFT
 # A chart in a card of its own, rather than one of a pair. The drawing was
 # capped at the width of a half-width card whatever it was placed in, so a
 # full-width card held a 640px chart and six hundred pixels of nothing beside
@@ -227,7 +242,7 @@ PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
 # the box needs no room for type that is no longer inside it -- and one
 # geometry serves a half-width card and a full-width one alike, because
 # stretching rectangles is not the same as stretching words.
-STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH)
+STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT)
 STANDARD_HEIGHT = 260
 # What an axis label costs, in pixels, at the 11px it is rendered at: roughly
 # six per character, plus a gap before the next one. Used to work out whether a
@@ -298,22 +313,48 @@ class ChartRow:
     values: tuple[float, ...]
 
 
-@dataclass(frozen=True)
-class StackedBarChart:
+@dataclass(frozen=True, kw_only=True)
+class Chart:
+    """What every chart in HQ is, and the one place its axis is derived.
+
+    A bar chart and a line chart differ in what they draw -- rectangles or a
+    path -- and in nothing else. They share a plot rectangle, a set of ticks, a
+    set of categories, the table underneath, and the four derivations that turn
+    those into something a template can position. Held separately, they agreed
+    by inspection: the same `dense`, `gutter`, `axis_x` and `axis_y` were
+    written out twice, and the copies stopped agreeing exactly where you would
+    expect. `plot_right` was added to the bar chart to stop its template
+    hardcoding 702; the line chart's template went on hardcoding 702, 48, 12
+    and 214, because there was no shared thing for the fix to land on.
+
+    So the shared part is one class and the difference is the subclass. A third
+    chart type inherits a correct axis instead of copying one, which is the
+    only version of this that stays true as the drawing types multiply.
+
+    Keyword-only: every field has a default below the ones that do not, and
+    subclasses add their own required fields after them. Positional
+    construction would make that an ordering puzzle; nothing constructs these
+    positionally, so the puzzle is simply removed.
+    """
+
     title: str
     description: str
     unit: str
-    series: tuple[ChartSeries, ...]
-    bars: tuple[ChartBar, ...]
     ticks: tuple[ChartTick, ...]
     categories: tuple[ChartCategory, ...]
     rows: tuple[ChartRow, ...]
     empty: bool
     width: int = STANDARD_SVG
     height: int = STANDARD_HEIGHT
-    # Where the gridlines stop. Carried rather than hardcoded in the template,
-    # which drew them to 702 whatever the chart's own width was.
+    # The plot's own edges. Carried rather than hardcoded in the template,
+    # which drew gridlines to 702 whatever the chart's own width was. All four
+    # are here because the line chart went on hardcoding the other three after
+    # `plot_right` was introduced for the bar chart, and a constant copied into
+    # a template is a constant that stops agreeing the moment this file moves.
+    plot_left: float = PLOT_LEFT
     plot_right: float = PLOT_LEFT + PLOT_WIDTH
+    plot_top: float = PLOT_TOP
+    plot_bottom: float = PLOT_TOP + PLOT_HEIGHT
 
     @property
     def dense(self) -> bool:
@@ -340,8 +381,12 @@ class StackedBarChart:
         width instead, that strip stayed 44px while the drawing's own gutter
         shrank with the card, and on a phone the first date label was printed
         on top of the bottom tick.
+
+        Read from `plot_left` rather than the module constant, so a chart that
+        is given a plot different from the standard one reports the gutter it
+        actually has rather than the one this file happens to default to.
         """
-        return PLOT_LEFT / self.width * 100
+        return self.plot_left / self.width * 100
 
     @property
     def axis_x(self) -> tuple:
@@ -357,6 +402,13 @@ class StackedBarChart:
             for item in self.ticks
         )
 
+
+@dataclass(frozen=True, kw_only=True)
+class StackedBarChart(Chart):
+    """Quantities that add up, on a zero-based axis."""
+
+    series: tuple[ChartSeries, ...]
+    bars: tuple[ChartBar, ...]
 
 
 
@@ -394,8 +446,8 @@ class LineMark:
     label: str
 
 
-@dataclass(frozen=True)
-class LineChart:
+@dataclass(frozen=True, kw_only=True)
+class LineChart(Chart):
     """A measure over time, on an axis fitted to the measure.
 
     Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
@@ -409,66 +461,13 @@ class LineChart:
     The trade is real and worth stating: a fitted axis exaggerates small
     movements, which is exactly why the range is printed on the axis and the
     numbers stay in the table underneath.
+
+    Everything about where its axis sits comes from `Chart`. What is declared
+    here is only what a line has and a bar does not.
     """
 
-    title: str
-    description: str
-    unit: str
     series: tuple[LineSeries, ...]
-    ticks: tuple[ChartTick, ...]
-    categories: tuple[ChartCategory, ...]
     marks: tuple[LineMark, ...]
-    rows: tuple[ChartRow, ...]
-    empty: bool
-    width: int = STANDARD_SVG
-    height: int = STANDARD_HEIGHT
-    # Where the gridlines stop. Carried rather than hardcoded in the template,
-    # which drew them to 702 whatever the chart's own width was.
-    plot_right: float = PLOT_LEFT + PLOT_WIDTH
-
-    @property
-    def dense(self) -> bool:
-        """Whether these labels can fit a narrow card side by side.
-
-        Measured, not counted: the width they need is the sum of what each one
-        costs, and that is knowable here because the text is here. How much
-        room they actually get is knowable only to the browser, so this says
-        its half -- these labels want more than a narrow card has -- and a
-        container query says the other half, whether the card they landed in
-        is that narrow.
-        """
-        if not self.categories:
-            return False
-        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
-        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
-        return text + gaps > NARROW_PLOT_PX
-
-    @property
-    def gutter(self) -> float:
-        """Where the plot starts, as a share of the drawing.
-
-        The y-axis labels sit in the strip to the left of it. Given a fixed
-        width instead, that strip stayed 44px while the drawing's own gutter
-        shrank with the card, and on a phone the first date label was printed
-        on top of the bottom tick.
-        """
-        return PLOT_LEFT / self.width * 100
-
-    @property
-    def axis_x(self) -> tuple:
-        return tuple(
-            PlacedLabel(item.x / self.width * 100, item.label)
-            for item in self.categories
-        )
-
-    @property
-    def axis_y(self) -> tuple:
-        return tuple(
-            PlacedLabel(item.y / self.height * 100, item.label)
-            for item in self.ticks
-        )
-
-
 
 
 
