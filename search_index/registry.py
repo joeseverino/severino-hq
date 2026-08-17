@@ -45,7 +45,14 @@ CORE_DEFINITIONS = (
     ),
     SearchDefinition(
         "audit", AuditLog, "pk",
-        ("action", "object_type", "object_id", "object_repr", "message"),
+        (
+            "action",
+            "object_type",
+            "object_id",
+            "object_repr",
+            "operation_id",
+            "message",
+        ),
         label="Audit log", timestamp_field="created_at",
     ),
 )

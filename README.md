@@ -135,6 +135,15 @@ reach the box.
 
 ## Local development
 
+Coding agents and contributors should read [`AGENTS.md`](AGENTS.md) first. It
+contains the one-page architecture map, placement rules, public/private
+boundary, frontend standards, and definition of done. After setup, the entire
+local quality gate is one command:
+
+```bash
+./scripts/check.sh
+```
+
 ```bash
 # 1. Clone & enter
 git clone <your-mirror> severino-hq
@@ -156,12 +165,16 @@ python manage.py createsuperuser
 # 5. Optional demo data
 python manage.py seed_demo
 
-# 6. Run the dev server (bind to localhost only)
-DJANGO_DEBUG=1 DJANGO_ALLOWED_HOSTS=127.0.0.1 \
-  python manage.py runserver 127.0.0.1:8000
+# 6. Run the production-like ASGI dev server (binds to localhost only)
+./scripts/dev.sh
 ```
 
 Open <http://127.0.0.1:8000/>, sign in. Admin lives at `/admin/`.
+
+The script collects versioned assets, then runs Uvicorn with reload enabled.
+Using the same ASGI path as production means local browser checks exercise
+compression, cache headers, and routing instead of Django `runserver`'s
+development-only static handler.
 
 ### Importing a documentation manifest
 

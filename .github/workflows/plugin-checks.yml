@@ -28,6 +28,19 @@ on:
         required: false
         type: string
         default: '["3.12", "3.13", "3.14"]'
+      plugin-reference:
+        description: >-
+          Manifest reference, for example example_notes.plugin:plugin. When set
+          with django-app, the host-owned golden-path check replaces a copied
+          scripts/check.sh.
+        required: false
+        type: string
+        default: ""
+      django-app:
+        description: Django application label and src package directory.
+        required: false
+        type: string
+        default: ""
 
 env:
   HOST_REPOSITORY: joeseverino/severino-hq
@@ -78,11 +91,23 @@ jobs:
         with:
           enable-cache: true
       - name: Verify package and host contract
-        # scripts/check.sh absorbs everything package-specific, which is why no
-        # package name appears in this file.
         env:
           HQ_ROOT: host
-        run: ./scripts/check.sh
+          PLUGIN_REFERENCE: ${{ inputs.plugin-reference }}
+          DJANGO_APP: ${{ inputs.django-app }}
+        run: |
+          if [ -n "$PLUGIN_REFERENCE" ] && [ -n "$DJANGO_APP" ]; then
+            host/scripts/check-plugin.sh \
+              --plugin-root . \
+              --plugin-reference "$PLUGIN_REFERENCE" \
+              --django-app "$DJANGO_APP"
+          elif [ -z "$PLUGIN_REFERENCE" ] && [ -z "$DJANGO_APP" ]; then
+            echo "::warning::Using legacy plugin-owned scripts/check.sh; pass plugin-reference and django-app to use the host contract."
+            ./scripts/check.sh
+          else
+            echo "::error::plugin-reference and django-app must be supplied together"
+            exit 2
+          fi
 
   secret-scan:
     name: Secret scan

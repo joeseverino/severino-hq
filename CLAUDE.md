@@ -2,6 +2,10 @@
 
 Loaded automatically for every Claude Code session in this repo.
 
+Read `AGENTS.md` first. It is the shared engineering contract, architecture
+map, public/private boundary, quality bar, and definition of done. This file
+adds Claude-specific operational guidance only.
+
 ---
 
 ## Deploy

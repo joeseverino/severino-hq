@@ -19,6 +19,12 @@ PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 PLUGIN_WORKFLOW = re.compile(r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$")
+CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
+PYTHON_PATH = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
+PYTHON_REFERENCE = re.compile(
+    r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*$"
+)
+URL_PREFIX = re.compile(r"^(?:[A-Za-z0-9_-]+/)+$")
 
 
 @dataclass(frozen=True)
@@ -92,6 +98,10 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
         raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     if not PLUGIN_ID.fullmatch(manifest.id):
         raise ImproperlyConfigured(f"Invalid HQ plugin id {manifest.id!r}.")
+    if not manifest.name.strip() or not manifest.version.strip():
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} must declare a name and version."
+        )
     if not PLUGIN_DISTRIBUTION.fullmatch(manifest.distribution):
         raise ImproperlyConfigured(
             f"Invalid HQ plugin distribution {manifest.distribution!r}."
@@ -113,6 +123,38 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} must declare url_prefix and urlconf together."
         )
+    if manifest.url_prefix and not URL_PREFIX.fullmatch(manifest.url_prefix):
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}."
+        )
+    if manifest.urlconf and not PYTHON_PATH.fullmatch(manifest.urlconf):
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}."
+        )
+    for app in manifest.django_apps:
+        if not PYTHON_PATH.fullmatch(app):
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} has invalid Django app {app!r}."
+            )
+    for field in (
+        "dashboard_provider",
+        "overview_provider",
+        "attention_provider",
+        "capability_provider",
+        "search_provider",
+        "health_provider",
+    ):
+        provider = getattr(manifest, field)
+        if provider and not PYTHON_REFERENCE.fullmatch(provider):
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} has invalid {field} {provider!r}."
+            )
+    if len(manifest.token_authenticated_routes) != len(
+        set(manifest.token_authenticated_routes)
+    ):
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} repeats a token-authenticated route."
+        )
     for route in manifest.token_authenticated_routes:
         if not manifest.url_prefix:
             raise ImproperlyConfigured(
@@ -127,9 +169,73 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
                 "must be a non-empty path relative to its url_prefix."
             )
     for item in manifest.navigation:
-        if not item.namespace or not item.route:
+        if (
+            not item.label.strip()
+            or not item.namespace
+            or not item.route
+            or not isinstance(item.order, int)
+        ):
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} has an incomplete navigation item."
+            )
+    declared_capabilities = (
+        *manifest.operator_capabilities,
+        *manifest.mcp_read_capabilities,
+        *manifest.mcp_write_capabilities,
+    )
+    for capability in declared_capabilities:
+        if not CAPABILITY_NAME.fullmatch(capability):
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} declares invalid capability {capability!r}."
+            )
+    for label, capabilities in (
+        ("operator", manifest.operator_capabilities),
+        ("mcp_read", manifest.mcp_read_capabilities),
+        ("mcp_write", manifest.mcp_write_capabilities),
+    ):
+        if len(capabilities) != len(set(capabilities)):
+            raise ImproperlyConfigured(
+                f"Plugin {manifest.id!r} repeats a capability in {label}."
+            )
+    operator = set(manifest.operator_capabilities)
+    mcp_only = (
+        set(manifest.mcp_read_capabilities) | set(manifest.mcp_write_capabilities)
+    ) - operator
+    if mcp_only:
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} grants MCP capabilities its operator does not "
+            f"hold: {', '.join(sorted(mcp_only))}."
+        )
+
+
+def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
+    """Reject collisions Django would otherwise resolve by ordering."""
+
+    for label, values in (
+        ("distribution", [plugin.distribution for plugin in plugins]),
+        ("Django app", [app for plugin in plugins for app in plugin.django_apps]),
+        (
+            "URL prefix",
+            [plugin.url_prefix for plugin in plugins if plugin.url_prefix],
+        ),
+    ):
+        duplicates = sorted({value for value in values if values.count(value) > 1})
+        if duplicates:
+            raise ImproperlyConfigured(
+                f"Duplicate plugin {label}: {', '.join(duplicates)}."
+            )
+
+    prefixes = sorted(
+        plugin.url_prefix for plugin in plugins if plugin.url_prefix
+    )
+    for index, prefix in enumerate(prefixes):
+        nested = next(
+            (candidate for candidate in prefixes[index + 1 :] if candidate.startswith(prefix)),
+            None,
+        )
+        if nested:
+            raise ImproperlyConfigured(
+                f"Plugin URL prefixes overlap: {prefix!r} and {nested!r}."
             )
 
 
@@ -145,6 +251,7 @@ def installed_plugins() -> tuple[PluginManifest, ...]:
         ids.add(manifest.id)
         plugins.append(manifest)
     installed = tuple(sorted(plugins, key=lambda item: item.id))
+    _validate_composition(installed)
     from .plugin_admission import enforce_plugin_admission
 
     enforce_plugin_admission(installed)

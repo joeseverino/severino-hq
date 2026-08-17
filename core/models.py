@@ -30,6 +30,7 @@ class AuditLog(models.Model):
         UPLOADED = "uploaded", "Uploaded"
         EXPORTED = "exported", "Exported"
         IMPORTED = "imported", "Imported"
+        FAILED = "failed", "Failed"
         SETTINGS_CHANGED = "settings_changed", "Settings changed"
         VIEWED = "viewed", "Viewed"
 
@@ -44,6 +45,10 @@ class AuditLog(models.Model):
     object_type = models.CharField(max_length=64, blank=True)
     object_id = models.CharField(max_length=64, blank=True)
     object_repr = models.CharField(max_length=200, blank=True)
+    # Stable application-operation identity. Domain status tables may retain
+    # this value without importing or foreign-keying the host audit model, and
+    # operators can follow one action across web/API/MCP adapters directly.
+    operation_id = models.CharField(max_length=128, blank=True, db_index=True)
     message = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)

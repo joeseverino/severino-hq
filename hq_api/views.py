@@ -1,9 +1,9 @@
-"""Version 1 of the machine-client transport.
+"""Versioned machine-client transport over the shared capability registry.
 
 This adapter adds no capability, no domain model, and no business rule. Every
 command it runs is already in HQ's registry, which is what keeps the web UI,
 the CLI, MCP and a Shortcut from drifting into four behaviours. A phone cannot
-develop its own idea of what a workout is.
+develop its own idea of what a domain record is.
 
 The version is in the path, not a header: a Shortcut on a phone you have not
 opened in six months is a normal state, and a URL that quietly changed meaning
@@ -16,15 +16,28 @@ import json
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from application.capabilities import describe_capabilities, execute_capability
+from application.capabilities import (
+    authorize_capability,
+    capability_registry,
+    describe_capabilities,
+    execute_capability,
+)
 from application.security import AuthorizationError
 
+from .idempotency import (
+    IdempotencyConflict,
+    InvalidIdempotencyKey,
+    execute_once,
+    request_fingerprint,
+    validate_key,
+)
 from .security import TokenError, api_principal, granted, is_configured, verify
 
-API_VERSION = 1
+CURRENT_API_VERSION = 2
 
 REALM = 'Bearer realm="Severino HQ"'
 
@@ -36,6 +49,19 @@ CAPABILITY_STATUS = {
     "forbidden": 403,
     "operation_failed": 409,
 }
+
+
+def _reject_json_constant(value: str):
+    raise ValueError(f"{value} is not valid JSON")
+
+
+def _strict_json_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"Duplicate JSON field {key!r}")
+        value[key] = item
+    return value
 
 
 def _json(payload: dict[str, Any], *, status: int = 200) -> HttpResponse:
@@ -76,6 +102,43 @@ def _principal(request):
     return api_principal(claims), claims
 
 
+def _request_schema(spec: dict[str, Any]) -> dict[str, Any]:
+    # Pydantic emits local refs such as ``#/$defs/Record``. Once the command
+    # schema is nested under ``payload`` those refs still resolve from the
+    # document root, so hoist its definitions into the envelope root instead
+    # of publishing a schema that only looks valid for flat commands.
+    input_schema = {
+        key: value for key, value in spec["input_schema"].items() if key != "$defs"
+    }
+    properties: dict[str, Any] = {
+        "payload": input_schema,
+        "expected_updated_at": {"type": "string", "format": "date-time"},
+    }
+    required = []
+    target = spec.get("target")
+    if target:
+        properties["target"] = (
+            {
+                "oneOf": [
+                    {"type": "integer"},
+                    {"type": "string", "pattern": r"^-?[0-9]+$"},
+                ]
+            }
+            if target == "integer"
+            else {"type": "string", "minLength": 1}
+        )
+        required.append("target")
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": required,
+    }
+    if definitions := spec["input_schema"].get("$defs"):
+        schema["$defs"] = definitions
+    return schema
+
+
 def _endpoint(methods: tuple[str, ...]):
     """Authenticate, then put every failure in the same envelope.
 
@@ -94,11 +157,13 @@ def _endpoint(methods: tuple[str, ...]):
                     status=503,
                 )
             if request.method not in methods:
-                return _fail(
+                response = _fail(
                     f"{request.method} is not allowed here.",
                     code="method_not_allowed",
                     status=405,
                 )
+                response["Allow"] = ", ".join(methods)
+                return response
             try:
                 principal, claims = _principal(request)
             except TokenError as exc:
@@ -107,7 +172,11 @@ def _endpoint(methods: tuple[str, ...]):
                 return _fail(str(exc), code=exc.code, status=403)
             request.principal = principal
             request.token_claims = claims
-            return view(request, *args, **kwargs)
+            response = view(request, *args, **kwargs)
+            if kwargs.get("version") == 1:
+                response["Deprecation"] = "true"
+                response["Link"] = '</api/v2/>; rel="successor-version"'
+            return response
 
         wrapper.__name__ = view.__name__
         wrapper.__doc__ = view.__doc__
@@ -117,13 +186,14 @@ def _endpoint(methods: tuple[str, ...]):
 
 
 @_endpoint(("GET",))
-def root(request):
+def root(request, version: int):
     """What this is, and what the presented credential may actually do."""
 
     return _ok(
         {
             "service": "severino-hq",
-            "api_version": API_VERSION,
+            "api_version": version,
+            "current_api_version": CURRENT_API_VERSION,
             "resource": settings.SEVERINO_API_RESOURCE,
             "actor": request.principal.actor,
             "granted": sorted(granted(request.token_claims)),
@@ -132,7 +202,7 @@ def root(request):
 
 
 @_endpoint(("GET",))
-def capabilities(request):
+def capabilities(request, version: int):
     """Every capability HQ has, flagged by whether this token may run it.
 
     The whole registry is returned, not just the permitted slice: a client
@@ -146,7 +216,14 @@ def capabilities(request):
         {
             "schema_version": described["schema_version"],
             "capabilities": [
-                {**spec, "permitted": set(spec["required_capabilities"]) <= held}
+                {
+                    **spec,
+                    "permitted": set(spec["required_capabilities"]) <= held,
+                    "idempotency_key_required": (
+                        version >= 2 and spec["effect"] != "read"
+                    ),
+                    "request_schema": _request_schema(spec),
+                }
                 for spec in described["capabilities"]
             ],
         }
@@ -154,20 +231,37 @@ def capabilities(request):
 
 
 @_endpoint(("POST",))
-def execute(request, name: str):
-    """Run one HQ capability. This is what a Shortcut actually calls.
+def execute(request, name: str, version: int):
+    """Run one HQ capability, replaying machine writes by idempotency key."""
 
-    No idempotency key. The one write this exists for -- an import -- is
-    already idempotent by content hash in the domain, so a Shortcut retried on
-    a dropped connection reports a duplicate rather than creating one. A key
-    here would be a second mechanism guarding something already guarded.
-    """
+    if version >= 2 and request.content_type != "application/json":
+        return _fail(
+            "Content-Type must be application/json.",
+            code="unsupported_media_type",
+            status=415,
+        )
 
-    if not request.body:
+    try:
+        body = request.body
+    except RequestDataTooBig:
+        return _fail(
+            "Request body exceeds this deployment's safety limit.",
+            code="request_too_large",
+            status=413,
+        )
+
+    if not body:
         payload: dict[str, Any] = {}
     else:
         try:
-            payload = json.loads(request.body)
+            if version >= 2:
+                payload = json.loads(
+                    body,
+                    parse_constant=_reject_json_constant,
+                    object_pairs_hook=_strict_json_object,
+                )
+            else:
+                payload = json.loads(body)
         except (ValueError, UnicodeDecodeError):
             return _fail(
                 "Request body is not valid JSON.", code="invalid_json", status=400
@@ -177,26 +271,104 @@ def execute(request, name: str):
             "Request body must be a JSON object.", code="invalid_json", status=400
         )
 
-    command = payload.get("payload") or {}
+    unknown = payload.keys() - {"payload", "target", "expected_updated_at"}
+    if version >= 2 and unknown:
+        return _fail(
+            f"Unknown request fields: {', '.join(sorted(unknown))}.",
+            code="invalid_input",
+            status=400,
+        )
+
+    command = payload.get("payload", {}) if version >= 2 else payload.get("payload") or {}
     if not isinstance(command, dict):
         return _fail(
             "payload must be a JSON object.", code="invalid_input", status=400
         )
+    target = payload.get("target")
+    if version >= 2 and target is not None and (
+        isinstance(target, bool) or not isinstance(target, (str, int))
+    ):
+        return _fail(
+            "target must be a string or integer.", code="invalid_input", status=400
+        )
+    expected_updated_at = payload.get("expected_updated_at")
+    if (
+        version >= 2
+        and expected_updated_at is not None
+        and not isinstance(expected_updated_at, str)
+    ):
+        return _fail(
+            "expected_updated_at must be a string.",
+            code="invalid_input",
+            status=400,
+        )
 
-    result = execute_capability(
-        name,
-        command,
-        principal=request.principal,
-        target=payload.get("target"),
-        expected_updated_at=payload.get("expected_updated_at"),
-    )
-    if not result.get("ok", False):
+    def run() -> tuple[dict[str, Any], int]:
+        result = execute_capability(
+            name,
+            command,
+            principal=request.principal,
+            target=target,
+            expected_updated_at=expected_updated_at,
+        )
+        if result.get("ok", False):
+            return (
+                {
+                    "ok": True,
+                    "data": {key: value for key, value in result.items() if key != "ok"},
+                },
+                200,
+            )
         error = result.get("error", {})
         code = error.get("code", "operation_failed")
+        detail = {
+            "code": code,
+            "message": error.get(
+                "message", "The capability could not be executed."
+            ),
+        }
+        if error.get("details") is not None:
+            detail["details"] = error["details"]
+        return {"ok": False, "error": detail}, CAPABILITY_STATUS.get(code, 400)
+
+    spec = capability_registry().get(name)
+    if spec is None or spec.effect == "read":
+        response_payload, status = run()
+        return _json(response_payload, status=status)
+
+    # Reject authority before reserving a retry key. A denied request has not
+    # begun an operation and must not poison that key if the client's grant is
+    # corrected later.
+    try:
+        authorize_capability(spec, request.principal)
+    except AuthorizationError as exc:
+        return _fail(str(exc), code=exc.code, status=403)
+
+    key = request.headers.get("Idempotency-Key", "")
+    if version >= 2 and not key:
         return _fail(
-            error.get("message", "The capability could not be executed."),
-            code=code,
-            status=CAPABILITY_STATUS.get(code, 400),
-            details=error.get("details"),
+            "Idempotency-Key is required for capabilities that change state.",
+            code="idempotency_key_required",
+            status=400,
         )
-    return _ok({key: value for key, value in result.items() if key != "ok"})
+    if not key:
+        response_payload, status = run()
+        return _json(response_payload, status=status)
+
+    try:
+        key = validate_key(key)
+        response_payload, status, replayed = execute_once(
+            actor=request.principal.actor,
+            key=key,
+            request_sha256=request_fingerprint(name, payload, api_version=version),
+            operation=run,
+        )
+    except InvalidIdempotencyKey as exc:
+        return _fail(str(exc), code="invalid_idempotency_key", status=400)
+    except IdempotencyConflict as exc:
+        return _fail(str(exc), code="idempotency_conflict", status=409)
+
+    response = _json(response_payload, status=status)
+    if replayed:
+        response["Idempotency-Replayed"] = "true"
+    return response

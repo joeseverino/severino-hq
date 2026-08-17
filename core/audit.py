@@ -36,19 +36,40 @@ class OperationContext:
     interface: str
     actor: str
     operation: str
+    operation_id: str = ""
 
 
 @contextmanager
-def operation_context(*, interface: str, actor: str, operation: str):
+def operation_context(
+    *, interface: str, actor: str, operation: str, operation_id: str = ""
+):
     """Attach adapter-neutral attribution to audit events in this operation."""
 
     token = _operation_context.set(
-        OperationContext(interface=interface, actor=actor, operation=operation)
+        OperationContext(
+            interface=interface,
+            actor=actor,
+            operation=operation,
+            operation_id=operation_id,
+        )
     )
     try:
         yield
     finally:
         _operation_context.reset(token)
+
+
+@contextmanager
+def audit_operation(*, operation: str, principal=None, operation_id: str = ""):
+    """Attribute a plugin operation without restating adapter fallbacks."""
+
+    with operation_context(
+        interface=getattr(principal, "interface", None) or "cli",
+        actor=getattr(principal, "actor", None) or "local-operator",
+        operation=operation,
+        operation_id=operation_id,
+    ):
+        yield
 
 
 def register_audit(model, type_label: str) -> None:
@@ -79,6 +100,12 @@ def audited_models() -> Iterable[tuple[type, str]]:
     return tuple(_AUDITED_MODELS.items())
 
 
+def audit_events():
+    """Queryable audit history without exposing the host model as plugin API."""
+
+    return AuditLog.objects.all()
+
+
 def record_event(
     *,
     action: str,
@@ -87,8 +114,15 @@ def record_event(
     message: str = "",
     metadata: dict | None = None,
     user=None,
+    required: bool = False,
 ) -> AuditLog:
-    """Write an AuditLog row. Safe to call from views, signals, or commands."""
+    """Write an audit row, optionally failing the surrounding transaction.
+
+    Signals and informational events remain best-effort so an unavailable
+    audit sink cannot make unrelated reads or housekeeping fail. Mutating
+    application services can pass ``required=True`` when committed state
+    without its audit record would violate their contract.
+    """
 
     user = user or get_current_user()
     if user is not None and not getattr(user, "is_authenticated", False):
@@ -122,9 +156,31 @@ def record_event(
             object_type=object_type,
             object_id=object_id,
             object_repr=object_repr,
+            operation_id=context.operation_id if context is not None else "",
             message=message,
             metadata=event_metadata,
         )
     except Exception:  # noqa: BLE001
         logger.exception("Failed to write AuditLog entry")
+        if required:
+            raise
         return None  # type: ignore[return-value]
+
+
+def record_operation(
+    operation: str,
+    message: str,
+    *,
+    action: str = AuditLog.Action.UPDATED,
+    metadata: dict | None = None,
+    required: bool = False,
+) -> AuditLog:
+    """Record one summary event for a bulk or multi-row operation."""
+
+    return record_event(
+        action=action,
+        type_label=operation,
+        message=message,
+        metadata=metadata,
+        required=required,
+    )

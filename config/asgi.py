@@ -6,13 +6,22 @@ import os
 from django.conf import settings
 from django.core.asgi import get_asgi_application
 from starlette.applications import Starlette
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Mount
-from starlette.staticfiles import StaticFiles
+
+from core.static import CachedStaticFiles
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_application = get_asgi_application()
-static_application = StaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
+static_application = GZipMiddleware(
+    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
+    minimum_size=500,
+)
+compressed_django_application = GZipMiddleware(
+    django_application,
+    minimum_size=1000,
+)
 
 from hq_mcp.security import MCPBoundary  # noqa: E402
 from hq_mcp.server import mcp  # noqa: E402
@@ -38,7 +47,7 @@ application = Starlette(
         # Serve collected assets on the native async path. WhiteNoise remains
         # the WSGI fallback, but its synchronous iterator never reaches Uvicorn.
         Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
-        Mount("/", app=django_application),
+        Mount("/", app=compressed_django_application),
     ],
     lifespan=lifespan,
 )

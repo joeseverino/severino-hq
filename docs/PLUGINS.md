@@ -11,7 +11,7 @@ entry point with `SEVERINO_HQ_PLUGINS`, using comma-separated
 executed automatically.
 
 ```python
-from application.plugins import NavigationItem, PluginManifest
+from hq_sdk.plugin import NavigationItem, PluginManifest
 
 plugin = PluginManifest(
     id="example.notes",
@@ -40,6 +40,46 @@ Set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the package in
 the deployment image, and run its migrations. `python manage.py plugins` emits
 the effective, machine-readable inventory and validates compatibility.
 
+## The golden path
+
+A plugin imports host behavior only through `hq_sdk`. Its repository owns the
+domain; the SDK owns integration mechanics:
+
+| Need | Import from |
+| --- | --- |
+| Manifest and navigation | `hq_sdk.plugin` |
+| Capabilities, principals, strict JSON commands | `hq_sdk.capabilities` |
+| Capability-gated Django views | `hq_sdk.web` |
+| Audit attribution and summary events | `hq_sdk.audit` |
+| Tables, forms, UI projections, global search | matching `hq_sdk.*` module |
+| Synthetic siblings and style checks | `hq_sdk.testing` |
+
+Imports from `application`, `core`, or another host application are unsupported:
+they couple a private plugin to public implementation details. Run
+`python -m hq_sdk.validation src` locally to enforce the boundary.
+
+Capability input models should inherit `StrictCommand`; unknown JSON keys then
+fail at the boundary instead of being silently discarded. Class-based views
+inherit `CapabilityRequiredMixin` and declare `required_capability`; function
+views use `@capability_required(...)`. Bulk work uses `audit_operation` plus
+`record_operation`, so adapter and actor attribution are consistent without a
+domain-owned wrapper.
+
+Private repositories call the reusable `plugin-checks.yml` workflow with only:
+
+```yaml
+with:
+  plugin-reference: example_notes.plugin:plugin
+  django-app: example_notes
+```
+
+The host-owned check syncs and lints the package, enforces SDK-only imports,
+runs Django checks, migration drift checks, and plugin tests, then builds the
+wheel and installs it with `--no-deps` into a clean host environment. That last
+step exactly reproduces production's dependency boundary and catches a missing
+host pin before composition. Existing plugin-owned `scripts/check.sh` remains
+a temporary compatibility path while repositories migrate.
+
 ## Cordon admission
 
 Production loading is fail-closed. When plugins are enabled with `DJANGO_DEBUG`
@@ -61,6 +101,15 @@ The lock is evidence of a specific artifact under a specific policy. It is not
 a claim that arbitrary plugin code or future versions are safe. A changed
 wheel, version, workflow, policy, host API, or enabled inventory requires a new
 approval and image build.
+
+Admission tests one extension against its pinned host contract. Composition CI
+then runs Django's checks and the complete test suite from the assembled image,
+with every admitted wheel installed together. The two gates answer different
+questions: admission proves an artifact is independently acceptable;
+composition proves the accepted set is one coherent application. Duplicate
+routes or capabilities, missing host-owned runtime dependencies, migration
+conflicts, and tests that assume no sibling exists fail before publication and
+deployment.
 
 ## Composition
 
@@ -94,6 +143,30 @@ compatible within a version; removals or semantic changes require the next API
 version. Plugin identifiers are stable, reverse-DNS-style names and must not be
 reused.
 
+### Public host, private first-party domains
+
+HQ publishes the generic SDK and composition mechanism; a private first-party
+package owns its domain language, models, migrations, fixtures, repository
+identity, and business rules. The host must not import a private package by
+name or commit the production extension inventory. It learns the admitted set
+only from deployment-supplied composition metadata and verifies that set
+against its signed lock. Public tests use synthetic extensions, while the
+assembled private image runs the real suites together.
+
+This boundary also prevents premature abstractions. Code moves into HQ only
+when it is genuinely host policy or a reusable primitive—authorization,
+capability execution, audit attribution, table behavior, UI vocabulary,
+composition, or testing infrastructure. Domain-specific calculations stay in
+their private package even if the host is their only current consumer.
+
+Capability providers fail closed too. HQ validates every contributed
+`CapabilitySpec` before describing or invoking the registry: names, effects,
+required permissions, target kinds, command JSON Schema, duplicate names, and
+the handler call signature are all part of the host contract. MCP grants must
+also be a subset of the plugin's operator grants. A typo therefore prevents a
+composition from passing its checks instead of becoming a production-only
+request failure or an accidental authority gap.
+
 ## Shared UI contract
 
 Installable modules inherit HQ's design system and should not ship a parallel
@@ -105,8 +178,8 @@ templates:
 | `base.html` | Authenticated shell, navigation, messages, static assets, and security metadata |
 | `partials/_page_head.html` | Page title, lede, and optional primary action |
 | `partials/_kpi_grid.html` | Responsive linked or static KPI collection |
-| `partials/_timeline.html` | Chronological linked events from `application.ui.Timeline` |
-| `partials/_stacked_bar_chart.html` | Accessible chart from `application.ui.StackedBarChart` |
+| `partials/_timeline.html` | Chronological linked events from `hq_sdk.ui.Timeline` |
+| `partials/_stacked_bar_chart.html` | Accessible chart from `hq_sdk.ui.StackedBarChart` |
 | `partials/_empty_state.html` | Consistent empty state and optional action |
 | `partials/_form_field.html` | Label, control, help text, and validation errors |
 | `partials/_pagination.html` | Query-preserving paginated navigation |

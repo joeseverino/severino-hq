@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
+import httpx
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
+
+from core.static import CachedStaticFiles
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
@@ -13,8 +19,34 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         static_route, django_route = application.routes[-2:]
         self.assertEqual(static_route.path, "/static")
-        self.assertIsInstance(static_route.app, StaticFiles)
+        self.assertIsInstance(static_route.app, GZipMiddleware)
+        self.assertIsInstance(static_route.app.app, StaticFiles)
+        self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
+        self.assertIsInstance(django_route.app, GZipMiddleware)
+
+    def test_versioned_static_assets_are_compressed_and_immutable(self):
+        async def request(root):
+            app = GZipMiddleware(CachedStaticFiles(directory=root), minimum_size=500)
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                return await client.get(
+                    "/bundle.css?v=content-hash",
+                    headers={"Accept-Encoding": "gzip"},
+                )
+
+        with TemporaryDirectory() as directory:
+            Path(directory, "bundle.css").write_text("a" * 2000, encoding="utf-8")
+            response = async_to_sync(request)(directory)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-encoding"], "gzip")
+        self.assertEqual(
+            response.headers["cache-control"],
+            "public, max-age=31536000, immutable",
+        )
 
     def test_mcp_services_do_not_access_django_models(self):
         """Keep MCP as an adapter over application-owned behavior and projections."""

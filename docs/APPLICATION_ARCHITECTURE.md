@@ -138,6 +138,14 @@ The generic executor is not generic database access. It can invoke only
 allowlisted operations in the registry, and every operation still crosses the
 typed principal, capability check, and application transaction.
 
+The machine HTTP adapter adds durable retry semantics around that executor.
+Every state-changing capability requires an actor-scoped idempotency key; the
+canonical request hash and exact response commit in the same transaction as the
+domain operation. A dropped response or process restart can therefore be
+retried without repeating a non-idempotent plugin write. This transport guard
+does not replace domain idempotency, which continues to protect the same use
+case when invoked through web, MCP, or CLI.
+
 ## Source-of-truth map
 
 "Single source of truth" is scoped by domain. Pretending one database owns

@@ -4,10 +4,11 @@ import json
 from io import StringIO
 from decimal import Decimal
 from datetime import date, datetime, timezone
+from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -25,7 +26,12 @@ from docs_index.models import DocumentationRecord
 from .documentation import sync_documentation
 from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
 from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
-from .capabilities import describe_capabilities, execute_capability
+from .capabilities import (
+    CapabilitySpec,
+    capability_specs,
+    describe_capabilities,
+    execute_capability,
+)
 from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from .projects import ConflictError, ProjectCommand, refresh_project, save_project
 from .security import (
@@ -48,6 +54,45 @@ class CapabilityTests(TestCase):
         )
         self.assertEqual(project["effect"], "remote_write")
         self.assertIn("name", project["input_schema"]["properties"])
+
+    def test_plugin_capabilities_fail_fast_on_an_unknown_effect(self):
+        malformed = CapabilitySpec(
+            "example.bad",
+            "Bad effect",
+            "maybe_writes",
+            "example.write",
+            ProjectCommand,
+            save_project,
+        )
+        with (
+            mock.patch(
+                "application.capabilities.plugin_capability_specs",
+                return_value=(malformed,),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "invalid effect"),
+        ):
+            capability_specs()
+
+    def test_plugin_capabilities_fail_fast_on_a_wrong_handler_contract(self):
+        def wrong_handler(command):
+            return command
+
+        malformed = CapabilitySpec(
+            "example.bad",
+            "Bad handler",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            wrong_handler,
+        )
+        with (
+            mock.patch(
+                "application.capabilities.plugin_capability_specs",
+                return_value=(malformed,),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "host call contract"),
+        ):
+            capability_specs()
 
     def test_mcp_writes_fail_closed_by_default(self):
         with self.assertRaisesRegex(AuthorizationError, "write_projects"):
