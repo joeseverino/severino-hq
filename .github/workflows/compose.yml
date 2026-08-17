@@ -23,6 +23,18 @@ on:
   workflow_run:
     workflows: [ci]
     types: [completed]
+  # `workflow_run` does not fire for a run that was itself triggered by
+  # `pull_request` -- GitHub declines to let pull-request code start a
+  # default-branch workflow, which is the right call and also means the
+  # composition cannot be reached that way. Removing the branch filter above
+  # was therefore necessary and not sufficient; this is the trigger that fires.
+  #
+  # It starts as soon as the pull request does, so it can outrun the host image
+  # it needs. "Resolve the host image" waits for that image rather than
+  # assuming it, which is a wait measured against the same commit both
+  # workflows agree on.
+  pull_request:
+    branches: [main]
   repository_dispatch:
     types: [extension-admitted]
   workflow_dispatch:
@@ -58,10 +70,16 @@ env:
 jobs:
   compose:
     name: Compose admitted extensions
-    # A failed host build must not be composed onto.
+    # A failed host build must not be composed onto. And a fork's pull request
+    # is not composed at all: reading the extensions' admission artifacts needs
+    # a secret a fork cannot have, so it would fail on the download step with a
+    # permissions error that looks like a broken pipeline rather than a fork
+    # doing exactly what forks are supposed to do.
     if: >-
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion == 'success') &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.publish.outputs.image }}
@@ -171,9 +189,31 @@ jobs:
         # hand and no way for the composition to be built on a stale host.
         run: |
           set -euo pipefail
-          ref="${{ github.event.workflow_run.head_sha || github.event.client_payload.host_sha || github.sha }}"
+          ref="${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.event.client_payload.host_sha || github.sha }}"
           image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
-          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          # On a pull request this workflow and the host build start together,
+          # so the image may not exist yet. Waited for rather than assumed:
+          # failing instantly here would report "no such image" for a build that
+          # is simply still running, which is the least useful true statement
+          # available. 20 minutes is well past a host build and well short of
+          # the job timeout.
+          digest=""
+          for attempt in $(seq 1 60); do
+            if digest=$(docker buildx imagetools inspect "$image" \
+                          --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
+              [ -n "$digest" ] && break
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              echo "waiting for the host image $image to be published..."
+            fi
+            sleep 20
+          done
+          if [ -z "$digest" ]; then
+            echo "::error title=Host image never appeared::$image was not published \
+          within 20 minutes. The host build for this commit failed or was skipped; \
+          the composition has nothing to compose onto."
+            exit 1
+          fi
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "host image: ${image%:*}@$digest"
 
