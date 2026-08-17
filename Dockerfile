@@ -51,8 +51,17 @@ EXPOSE 8000
 
 COPY --chown=severino:severino entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
+# The proxy in front of this speaks HTTP/1.1 upstream and holds a connection
+# open for 90 seconds. uvicorn's default is to hang up after 5, so a request
+# arriving on a connection idle for longer finds it already closed, and the
+# proxy reports what it saw:
+#
+#   upstream prematurely closed connection while reading response header
+#
+# Held above the proxy's 90s deliberately: whichever side hangs up first
+# decides, and it should be the one that knows a request is not in flight.
 CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
-     "--no-proxy-headers", "--access-log"]
+     "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request, sys; \
