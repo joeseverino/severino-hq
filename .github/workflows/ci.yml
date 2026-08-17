@@ -211,7 +211,22 @@ jobs:
   build:
     name: build
     needs: [lint, test, security]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Also on pull requests, and that is the point. The composition -- the only
+    # environment that runs this application the way production does, with
+    # DEBUG off and the extensions loaded -- can only be built on top of a host
+    # image. While this job ran on main alone, there was no host image for a
+    # pull request, so the composition could not be checked until after the
+    # merge that created it. Three separate failures reached main that way, each
+    # costing a merge and a rebuild to find something a pull request could have
+    # told us.
+    #
+    # Same-repository pull requests only: a fork's token cannot write packages,
+    # and handing one the ability to push an image under this name is not a
+    # thing to arrange by accident.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -224,12 +239,27 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
         id: build
+        env:
+          # The commit the composition will look for. On a pull request
+          # `GITHUB_SHA` is the merge commit, while the `workflow_run` event
+          # that starts the composition reports `head_sha` -- the branch tip.
+          # Tagging by the merge commit would publish an image the composition
+          # then could not find, and the failure would read as "no such image"
+          # rather than "these two disagree about which commit this is".
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository }}"
-          TAG="sha-${GITHUB_SHA::12}"
-          docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          TAG="sha-${HEAD_SHA::12}"
+          docker build -t "$IMAGE:$TAG" .
           docker push "$IMAGE:$TAG"
-          docker push "$IMAGE:latest"
+          # `latest` follows main and nothing else. A pull request builds an
+          # image so it can be composed and checked; it does not get to move
+          # the tag that says what the host currently is.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            docker tag "$IMAGE:$TAG" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
           echo "image=$IMAGE:$TAG" >> "$GITHUB_OUTPUT"
 
   scan:

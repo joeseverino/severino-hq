@@ -12,10 +12,17 @@ on:
   # After the host image exists, never in parallel with it being built. On a
   # plain push this raced the build and resolved a tag that was not published
   # yet.
+  #
+  # No branch filter, deliberately. This used to be `branches: [main]`, so the
+  # composition -- the only place this application is assembled the way
+  # production assembles it, DEBUG off and the extensions loaded -- was first
+  # built from a commit that had already been merged. Three failures reached
+  # main that way, each costing a merge and a rebuild to learn something a pull
+  # request could have said. A pull request now composes and verifies; it does
+  # not publish and it does not deploy.
   workflow_run:
     workflows: [ci]
     types: [completed]
-    branches: [main]
   repository_dispatch:
     types: [extension-admitted]
   workflow_dispatch:
@@ -30,12 +37,21 @@ permissions:
   packages: write
 
 concurrency:
-  # Never two compositions at once: they would race for the same image tag and
-  # the deploy that finished second would silently win.
-  group: composition
+  # Never two compositions at once *for the same target*: they would race for
+  # the same image tag and the deploy that finished second would silently win.
+  # Keyed by the branch being composed, so a pull request's composition neither
+  # queues behind main's nor delays it -- they build different tags and only
+  # one of them can deploy.
+  group: composition-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 env:
+  # Whether this composition is entitled to publish and deploy. A pull request
+  # composes and verifies and stops there; only main, an extension's admission
+  # dispatch, or a hand-run rebuild goes further. Decided once here rather than
+  # re-derived at each step, because the two places that must agree about it
+  # are the publish step and the deploy job.
+  IS_RELEASE: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
   CORDON_COMMIT: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
   PYTHONUNBUFFERED: "1"
 
@@ -198,13 +214,18 @@ jobs:
           exit-code: "1"
 
       - name: Authenticate to GHCR
+        if: env.IS_RELEASE == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A pull request has already had the only thing it was here for: the
+      # image was built and its suite was run inside it. Publishing is what
+      # makes an image deployable, so a pull request does not.
       - name: Publish by digest
+        if: env.IS_RELEASE == 'true'
         id: publish
         run: |
           image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
@@ -215,6 +236,19 @@ jobs:
   deploy:
     name: Deploy composition
     needs: compose
+    # Belt and braces with the publish step above: that one produces nothing
+    # for a pull request, and this one refuses to run for it at all. Either
+    # alone would do; both, because a self-hosted runner executing code from an
+    # unmerged branch is the failure you do not get to fix afterwards.
+    # Spelled out rather than reading the IS_RELEASE env above: a job-level
+    # `if` cannot see the `env` context. Same condition, and the pair are kept
+    # adjacent in review by both carrying this note.
+    if: >-
+      needs.compose.result == 'success' &&
+      ((github.event_name == 'workflow_run' &&
+        github.event.workflow_run.head_branch == 'main') ||
+       github.event_name == 'repository_dispatch' ||
+       github.event_name == 'workflow_dispatch')
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. NEVER trigger a self-hosted job from pull_request.
     runs-on: [self-hosted, severino-hq]
