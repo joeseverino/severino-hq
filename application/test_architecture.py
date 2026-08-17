@@ -175,13 +175,22 @@ class StyleContractTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[1]
         allowed = ("docs/diagrams/", "docs/images/", "static/img/")
         suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.split("\0")
+        # This suite also runs inside the composed image, which is the source
+        # tree without the checkout that produced it -- no .git, and no git
+        # binary either. There is nothing to guard there: what is in the image
+        # is already decided, and this asks what would be pushed. So it is
+        # skipped rather than failed, and still runs everywhere the answer can
+        # change.
+        try:
+            tracked = subprocess.run(
+                ["git", "ls-files", "-z"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.split("\0")
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            self.skipTest("not a git checkout; nothing here can be pushed")
         strays = [
             name
             for name in tracked

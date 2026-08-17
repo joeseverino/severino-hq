@@ -46,7 +46,15 @@ class PluginContractTests(TestCase):
         installed_plugins.cache_clear()
         env = mock.patch.dict(
             os.environ,
-            {"SEVERINO_HQ_PLUGINS": "example.plugin:manifest"},
+            {
+                "SEVERINO_HQ_PLUGINS": "example.plugin:manifest",
+                # This manifest is a fixture, so it has no signed approval and
+                # cannot be in the admission lock. Stated rather than
+                # inherited: admission is off under DEBUG and on otherwise, and
+                # this suite also runs inside the composed image, which runs it
+                # with DEBUG off.
+                "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+            },
             clear=False,
         )
         importer = mock.patch("application.plugins._import", return_value=manifest)
