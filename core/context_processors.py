@@ -73,6 +73,7 @@ def _asset_version() -> str:
 def site(request):
     return {
         "SITE_NAME": getattr(settings, "SEVERINO_SITE_NAME", "Severino HQ"),
+        "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "hq.jseverino.com"),
         "ASSET_VERSION": _asset_version(),
     }
 
