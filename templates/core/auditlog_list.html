@@ -13,7 +13,7 @@
     {% for ev in events %}
       <tr>
         <td class="select-column"><input type="checkbox" data-row-select value="{{ ev.pk }}" aria-label="Select audit event {{ ev.pk }}"></td>
-        <td class="muted">{{ ev.created_at }}</td>
+        <td class="muted"><a href="{% url 'core:audit_detail' ev.pk %}">{{ ev.created_at }}</a></td>
         <td>{{ ev.user.get_username|default:"system" }}</td>
         <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
         <td>{% if ev.object_type %}<code>{{ ev.object_type }}</code>{% if ev.object_id %} #{{ ev.object_id }}{% endif %}{% endif %}<br><span class="muted">{{ ev.object_repr }}</span></td>

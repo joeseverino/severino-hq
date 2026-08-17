@@ -34,6 +34,7 @@ from assets.models import Asset
 from content.models import ContentItem
 from core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
 from core.logging import JsonFormatter, reset_request_id, set_request_id
+from core.audit import operation_context
 from core.models import AuditLog
 from core.oidc import HQOIDCAuthenticationBackend
 from docs_index.models import DocumentationRecord
@@ -832,6 +833,116 @@ class AuditLogTests(TestCase):
         event = AuditLog.objects.first()
         self.assertEqual(event.object_type, "Project")
         self.assertEqual(event.action, AuditLog.Action.CREATED)
+
+
+class AuditChangeTests(TestCase):
+    """An update has to say what changed, or it is only saying that it did."""
+
+    def test_an_update_records_which_fields_moved_and_to_what(self):
+        project = Project.objects.create(name="Before", status=Project.Status.IDEA)
+        project.name = "After"
+        project.status = Project.Status.ACTIVE
+        project.save()
+
+        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
+        changes = event.metadata["changes"]
+        self.assertEqual(changes["name"], ["Before", "After"])
+        self.assertEqual(changes["status"], ["idea", "active"])
+
+    def test_a_save_that_changed_nothing_is_not_an_event(self):
+        # Django writes every column on every save, so a form re-submitted
+        # unchanged used to leave a row saying "Updated" and meaning nothing.
+        project = Project.objects.create(name="Steady", status=Project.Status.IDEA)
+        before = AuditLog.objects.count()
+
+        project.save()
+
+        self.assertEqual(AuditLog.objects.count(), before)
+
+    def test_a_second_save_diffs_against_the_first_not_the_original(self):
+        project = Project.objects.create(name="One", status=Project.Status.IDEA)
+        project.name = "Two"
+        project.save()
+        project.name = "Three"
+        project.save()
+
+        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
+        self.assertEqual(event.metadata["changes"]["name"], ["Two", "Three"])
+
+    def test_values_that_are_not_json_survive_the_round_trip(self):
+        # A Decimal, a date and a UUID are none of the things JSON has. Left
+        # as they are the row fails to write, `record_event` swallows it, and
+        # the change is lost with nothing saying so.
+        expense = Expense.objects.create(
+            date=date.today(), vendor="V", item="I", total_cost=Decimal("1.00")
+        )
+        expense.total_cost = Decimal("2.50")
+        expense.save()
+
+        event = AuditLog.objects.filter(
+            action=AuditLog.Action.UPDATED, object_type="Expense"
+        ).first()
+        self.assertIsNotNone(event, "the row must be written, not swallowed")
+        self.assertEqual(event.metadata["changes"]["total_cost"], ["1.00", "2.50"])
+
+    def test_a_redacted_field_reports_the_change_without_the_value(self):
+        from core.audit import REDACTED, _changes
+
+        changes = _changes(
+            {"token": "old-secret"}, {"token": "new-secret"}, frozenset({"token"})
+        )
+
+        # That it rotated is worth recording. What it rotated to is not.
+        self.assertEqual(changes["token"], [REDACTED, REDACTED])
+
+
+class AuditDetailPageTests(_AuthedTestCase):
+    """Every row leads somewhere, and what it leads to answers the question."""
+
+    def test_an_event_shows_the_fields_that_moved(self):
+        project = Project.objects.create(name="Before", status=Project.Status.IDEA)
+        project.name = "After"
+        project.save()
+        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
+
+        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+
+        self.assertContains(page, "What changed")
+        self.assertContains(page, "Before")
+        self.assertContains(page, "After")
+
+    def test_an_event_links_to_the_rest_of_its_operation(self):
+        # The point of operation_id: one action touching several rows is one
+        # thing that happened, not four events that share a timestamp.
+        with operation_context(
+            interface="cli", actor="op", operation="test.bulk", operation_id="op-1"
+        ):
+            Project.objects.create(name="One", status=Project.Status.IDEA)
+            Project.objects.create(name="Two", status=Project.Status.IDEA)
+        event = AuditLog.objects.filter(operation_id="op-1").first()
+
+        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+
+        self.assertContains(page, "Rest of this operation")
+
+    def test_an_event_shows_what_else_happened_to_the_same_object(self):
+        project = Project.objects.create(name="Tracked", status=Project.Status.IDEA)
+        project.name = "Renamed"
+        project.save()
+        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
+
+        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+
+        self.assertContains(page, "Everything else to this object")
+
+    def test_the_detail_page_needs_a_session(self):
+        project = Project.objects.create(name="Private", status=Project.Status.IDEA)
+        event = AuditLog.objects.filter(object_id=str(project.pk)).first()
+        self.client.logout()
+
+        response = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+
+        self.assertEqual(response.status_code, 302)
 
 
 class ReceiptFileProtectionTests(_AuthedTestCase):

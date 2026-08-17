@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Audit event · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Audit event" lede="One recorded action, in full: who, what moved, and what else the same operation touched." %}
+
+<section class="card">
+  <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.object_type }}{% endif %}</h2></div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <tbody>
+        <tr><th>When</th><td>{{ event.created_at|date:"M j, Y H:i:s" }}</td></tr>
+        <tr><th>Who</th><td>{{ event.user|default:"system" }}</td></tr>
+        <tr><th>Action</th><td>{{ event.get_action_display }}</td></tr>
+        {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.object_type }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
+        {% if event.operation_id %}<tr><th>Operation</th><td><code>{{ event.operation_id }}</code></td></tr>{% endif %}
+        {% if event.message %}<tr><th>Message</th><td>{{ event.message }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if changes %}
+<section class="card">
+  <div class="section-head"><h2>What changed</h2><span class="count">{{ changes|length }}</span></div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        {% for change in changes %}
+        <tr>
+          <th>{{ change.field }}</th>
+          <td>{{ change.before|default_if_none:"—" }}</td>
+          <td>{{ change.after|default_if_none:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if extra %}
+<section class="card">
+  <div class="section-head"><h2>Recorded with it</h2></div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <tbody>
+        {% for key, value in extra.items %}
+        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if siblings %}
+<section class="card">
+  <div class="section-head"><h2>Rest of this operation</h2><span class="count">{{ siblings|length }}</span></div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <thead><tr><th>When</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for row in siblings %}
+        <tr>
+          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"H:i:s" }}</a></td>
+          <td>{{ row.get_action_display }}</td>
+          <td>{{ row.object_repr|default:row.object_type|default:"—" }}</td>
+          <td>{{ row.message|default:"—"|truncatewords:12 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if history %}
+<section class="card">
+  <div class="section-head"><h2>Everything else to this object</h2><span class="count">{{ history|length }}</span></div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <thead><tr><th>When</th><th>Action</th><th>Who</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for row in history %}
+        <tr>
+          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"M j, H:i" }}</a></td>
+          <td>{{ row.get_action_display }}</td>
+          <td>{{ row.user|default:"system" }}</td>
+          <td>{{ row.message|default:"—"|truncatewords:12 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<p class="section-foot"><a href="{% url 'core:audit_list' %}">Back to the audit log &rarr;</a></p>
+{% endblock %}
