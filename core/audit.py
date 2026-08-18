@@ -254,14 +254,22 @@ def record_operation(
     *,
     action: str = AuditLog.Action.UPDATED,
     metadata: dict | None = None,
+    facets=(),
     required: bool = False,
 ) -> AuditLog:
-    """Record one summary event for a bulk or multi-row operation."""
+    """Record one summary event for a bulk or multi-row operation.
+
+    ``facets`` is the typed form and the one to prefer: a bulk operation is
+    exactly the event whose "how much changed" should be comparable with every
+    other one. ``metadata`` remains for facts no facet covers, and still wins
+    on a key collision, as it does in ``record_event``.
+    """
 
     return record_event(
         action=action,
         type_label=operation,
         message=message,
         metadata=metadata,
+        facets=facets,
         required=required,
     )

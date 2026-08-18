@@ -12,48 +12,43 @@ adds Claude-specific operational guidance only.
 
 **Landing on `main` IS the deploy.** Nothing is run by hand.
 
-```
-push/merge to main → ci (build + scan the host image)
-                   → compose (host + every admitted extension → one image)
-                   → deploy (self-hosted runner on the homelab, health-gated,
-                             rolls back to the previous image on failure)
-```
-
-`compose` is triggered by `ci` completing successfully on `main`, never in
-parallel with it. The image entrypoint re-runs `migrate` and `collectstatic`
-on every boot, so there is no manual migration step.
-
-**An extension merge deploys too, without anything being run by hand.** It
-cannot signal the host directly — that would mean giving a private repository a
-long-lived token that can start builds in a public one — so `compose` runs on a
-schedule and rebuilds only when the composition's inputs actually changed:
+| I changed | Do this | It is live when |
+| --- | --- | --- |
+| the host (this repo) | merge to `main` | the `deploy` job of **Compose and deploy extensions** is green |
+| an extension (private repo) | merge it there | same job, within ~15 min |
+| nothing — I want a rebuild | run **Compose and deploy extensions** (`workflow_dispatch`) | same job |
 
 ```
-merge to an extension → its own CI admits the wheel
-                      → compose (scheduled, ≤15 min) notices new wheel digests
-                      → deploy
+host merge      → ci (build + scan host image) → compose → deploy
+extension merge → its CI admits the wheel      → compose (scheduled) → deploy
 ```
 
-Every run fingerprints `host image + wheel digests + admission policy` and
-publishes it as a `composition:fp-…` tag. A scheduled run whose fingerprint is
-already published stops before building, so the schedule costs one cheap
-resolution per tick and deploys only when there is something to deploy. It also
-self-heals: a trigger that is missed is picked up on the next tick.
+Five rules that cover every case:
 
-To deploy an extension immediately rather than waiting, run the **Compose and
-deploy extensions** workflow (`workflow_dispatch`) — a hand-run rebuild ignores
-the fingerprint and always rebuilds.
+1. **`ci` green is not live.** It has only built the host image. Production runs
+   the *composed* image. Only the `deploy` job means live.
+2. **Extensions cannot trigger this repo.** That would need a private repo to
+   hold a token that starts builds in a public one. The schedule is the path.
+3. **compose rebuilds only when inputs change** — host image, wheel digests,
+   admission policy, hashed into a `composition:fp-…` tag. A hand-run rebuild
+   ignores that and always rebuilds.
+4. **Missed triggers self-heal** on the next tick. Never a stuck release.
+5. **No manual migration.** The entrypoint re-runs `migrate` and
+   `collectstatic` on every boot.
 
-If the user says "push it", "ship it", or "deploy it" after a code change:
+If the user says "push it" / "ship it" / "deploy it": commit + push (or PR and
+merge — `main` is protected), then `gh run watch`. Confirm the `deploy` job
+succeeded before reporting anything as deployed.
 
-1. `git commit` + `git push` (or open a PR and merge it — `main` is protected)
-2. Watch the pipeline: `gh run watch`, or `gh run list --branch main --limit 3`
-3. It is live when the `deploy` job in **Compose and deploy extensions** is
-   green — not when `ci` is green, which has only built the host image
+### When a deploy looks broken, check in this order
 
-Step 1 alone is not "live", but neither is anything you type: what makes it
-live is the pipeline finishing. Confirm the deploy job succeeded before
-reporting a change as deployed.
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Extension CI: `ModuleNotFoundError` for something the host has | the extension is pinned to an older host commit | there should be **no `HQ_COMMIT` variable** — `hq-ref` falls back to `main`. Deleting it is the fix, not bumping it |
+| compose sits in "Resolve the host image", then fails | the host `ci` for that commit failed, so the image was never published | fix the host build. compose checks the host's conclusion every 2 min and stops early, naming it |
+| Merged an extension, nothing deployed | waiting for the next scheduled tick | wait ≤15 min, or run compose by hand |
+| `Deploy composition` skipped | nothing was published — a PR, or a scheduled run whose fingerprint already exists | expected, not a failure |
+| `security` job fails on a dependency you didn't touch | a new advisory published against a pinned transitive dep | `uv pip compile requirements.in --output-file requirements.txt --generate-hashes --python-version 3.12 --universal --upgrade-package <name>` |
 
 ### `hq deploy` is legacy. Do not run it.
 
@@ -127,6 +122,22 @@ Do not generate a generic tutorial when a runbook exists. See the user-global
 No local venv is checked in. Either use Docker (`docker compose up`) or set
 up a venv per the README. `manage.py check` won't run from the host
 unless you've installed Django locally.
+
+## This repo is public. The extensions it composes are not.
+
+Everything here is a public artifact: code, comments, commit messages, PR
+prose, workflow files, docs. Before pushing, check the whole diff — not just
+the code — for anything naming a private extension or its domain:
+
+```bash
+git log origin/main..HEAD -p | grep -inE "<extension names>|<domain terms>"
+```
+
+Write examples as `<extension>.<work>` or `example_notes`, never the real
+name. The composed set lives in the `COMPOSITION_EXTENSIONS` repository
+variable precisely so it is never committed here; `composition/extensions.json`
+documents only its shape. If you catch a leak before pushing, rewrite the
+commit — after pushing it is public and a force-push is not redaction.
 
 ## Conventions
 

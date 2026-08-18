@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
 
+# Re-exported: expenses imports it from here, and moving the rule should not
+# make every caller move with it. The rule itself lives in application.money,
+# which extensions can reach through hq_sdk and a domain app cannot.
+from application.money import quantize_money
 from core.models import TimestampedModel
 
 
@@ -33,10 +37,6 @@ ASSET_CATEGORY_CHOICES = [
     ("training", "Training"),
     ("other", "Other"),
 ]
-
-
-def quantize_money(value: Decimal) -> Decimal:
-    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class Asset(TimestampedModel):
