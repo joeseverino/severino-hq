@@ -6,3 +6,7 @@ whitenoise>=6.12.0
 # Extension wheels install with --no-deps, so every library an extension
 # imports is pinned here or the composed image does not have it.
 defusedxml>=0.7,<0.8
+# Both already resolved transitively; declared directly because an extension
+# imports them and a transitive pin can disappear when its parent changes.
+cryptography>=45,<51
+httpx>=0.28,<1
