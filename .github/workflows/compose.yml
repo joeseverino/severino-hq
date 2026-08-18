@@ -35,8 +35,25 @@ on:
   # workflows agree on.
   pull_request:
     branches: [main]
+  # Kept for an extension that is given a credential to announce itself, and
+  # for a hand-sent signal. Nothing sends this today -- which is exactly why
+  # the schedule below exists, and why this listener alone was worse than
+  # useless: it made the pipeline look wired while an extension merge quietly
+  # reached nothing.
   repository_dispatch:
     types: [extension-admitted]
+  # An extension's own merge cannot trigger this: sending a signal from one
+  # repository to another needs a credential, and giving a private repository a
+  # long-lived token that can start builds in a public one is a worse trade
+  # than waiting a few minutes. So the host asks instead of being told.
+  #
+  # A scheduled run rebuilds nothing unless the composition's inputs actually
+  # changed -- see "Decide whether anything changed" -- so this costs one cheap
+  # resolution per tick and deploys only when there is something to deploy. It
+  # also self-heals: any trigger that is ever missed is picked up by the next
+  # tick rather than waiting for somebody to notice.
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       reason:
@@ -66,7 +83,7 @@ env:
   # dispatch, or a hand-run rebuild goes further. Decided once here rather than
   # re-derived at each step, because the two places that must agree about it
   # are the publish step and the deploy job.
-  IS_RELEASE: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
+  IS_RELEASE: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
   CORDON_COMMIT: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
   PYTHONUNBUFFERED: "1"
 
@@ -241,7 +258,55 @@ jobs:
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "host image: ${image%:*}@$digest"
 
+      - name: Decide whether anything changed
+        id: fingerprint
+        run: |
+          set -euo pipefail
+          # What a composition IS: this host image, these wheels, this policy.
+          # Two runs agreeing on all three would produce the same image, so
+          # there is nothing to build and nothing to deploy.
+          fingerprint=$(printf '%s\n%s\n%s\n' \
+            "${{ steps.host.outputs.image }}" \
+            "${{ steps.compose.outputs.digests }}" \
+            "${{ steps.compose.outputs.policy_sha256 }}" \
+            | sha256sum | cut -c1-32)
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
+          tag="ghcr.io/${{ github.repository }}/composition:fp-$fingerprint"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          # Recorded as a tag rather than a file or a variable: the registry
+          # already holds the only copy of the truth that matters, and a tag
+          # that exists is proof the exact same composition was published.
+          if docker buildx imagetools inspect "$tag" >/dev/null 2>&1; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "composition fp-$fingerprint is already published."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "composition fp-$fingerprint has not been built before."
+          fi
+
+      - name: Nothing to do
+        # Only a scheduled run stops here. Every other trigger rebuilds even
+        # when the inputs match, because a hand-run rebuild asking for exactly
+        # that is the one case where "nothing changed" is not an answer.
+        if: >-
+          github.event_name == 'schedule' &&
+          steps.fingerprint.outputs.changed == 'false'
+        run: |
+          {
+            echo "### Composition already current"
+            echo
+            echo "Host image, extension wheels and admission policy are unchanged"
+            echo "since \`fp-${{ steps.fingerprint.outputs.fingerprint }}\` was published."
+            echo "Nothing was built and nothing was deployed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build composed image
+        # Skipped only by a scheduled run that found nothing to do.
+        if: >-
+          github.event_name != 'schedule' ||
+          steps.fingerprint.outputs.changed == 'true'
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
@@ -253,6 +318,10 @@ jobs:
             -t ghcr.io/${{ github.repository }}/composition:${{ github.sha }} .
 
       - name: Verify the composition as one application
+        # Skipped only by a scheduled run that found nothing to do.
+        if: >-
+          github.event_name != 'schedule' ||
+          steps.fingerprint.outputs.changed == 'true'
         # Per-plugin admission proves each wheel against the host in isolation.
         # This second layer is deliberately after assembly: only the real image
         # can expose duplicate routes/capabilities, migration conflicts, missing
@@ -270,6 +339,10 @@ jobs:
             "$image" manage.py test --verbosity 1
 
       - name: Scan composed image
+        # Skipped only by a scheduled run that found nothing to do.
+        if: >-
+          github.event_name != 'schedule' ||
+          steps.fingerprint.outputs.changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
@@ -278,7 +351,10 @@ jobs:
           exit-code: "1"
 
       - name: Authenticate to GHCR
-        if: env.IS_RELEASE == 'true'
+        if: >-
+          env.IS_RELEASE == 'true' &&
+          (github.event_name != 'schedule' ||
+           steps.fingerprint.outputs.changed == 'true')
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
@@ -289,11 +365,19 @@ jobs:
       # image was built and its suite was run inside it. Publishing is what
       # makes an image deployable, so a pull request does not.
       - name: Publish by digest
-        if: env.IS_RELEASE == 'true'
+        if: >-
+          env.IS_RELEASE == 'true' &&
+          (github.event_name != 'schedule' ||
+           steps.fingerprint.outputs.changed == 'true')
         id: publish
         run: |
           image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
           docker push "$image"
+          # The fingerprint tag is what the next scheduled run reads to decide
+          # there is nothing to do. Pushed after the image itself, so a failed
+          # push never leaves a claim that this composition was published.
+          docker tag "$image" "${{ steps.fingerprint.outputs.tag }}"
+          docker push "${{ steps.fingerprint.outputs.tag }}"
           digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
@@ -307,12 +391,18 @@ jobs:
     # Spelled out rather than reading the IS_RELEASE env above: a job-level
     # `if` cannot see the `env` context. Same condition, and the pair are kept
     # adjacent in review by both carrying this note.
+    # `needs.compose.outputs.image` carries the whole answer to "was anything
+    # published?": it is empty for a pull request, and empty for a scheduled
+    # run that found the composition already current. Requiring it here means
+    # this job cannot be handed an empty image to deploy, whatever the trigger.
     if: >-
       needs.compose.result == 'success' &&
+      needs.compose.outputs.image != '' &&
       ((github.event_name == 'workflow_run' &&
         github.event.workflow_run.head_branch == 'main') ||
        github.event_name == 'repository_dispatch' ||
-       github.event_name == 'workflow_dispatch')
+       github.event_name == 'workflow_dispatch' ||
+       github.event_name == 'schedule')
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. NEVER trigger a self-hosted job from pull_request.
     runs-on: [self-hosted, severino-hq]
