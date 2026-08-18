@@ -1,5 +1,15 @@
 /* Severino HQ — internal ops console. */
 
+/* Cascade layers, declared once and in priority order. Everything below sits
+   in one of them, so which rule wins is decided by the layer it is in rather
+   than by how many classes its selector happens to name. A component can be
+   written with a single class and still beat a base element rule, which is
+   what keeps a 2,000-line stylesheet from turning into a specificity contest
+   as it grows. */
+@layer tokens, base, components;
+
+@layer tokens {
+
 :root {
   color-scheme: light;
   accent-color: #1f4d57;
@@ -37,6 +47,16 @@
   --series-5: #e87ba4;
   --radius: 8px;
   --radius-sm: 5px;
+  /* Every square control in the header bar -- the collapsed search button and
+     the sections toggle -- so the two cannot drift apart by being sized in
+     two places. */
+  --control-size: 34px;
+  /* Fluid sizes. These scale with the viewport instead of stepping at a
+     breakpoint, so the page has no width at which padding or a heading jumps.
+     Each replaces a rule that existed only to restate the same value smaller. */
+  --content-pad: clamp(14px, 2.2vw, 28px);
+  --font-h1: clamp(19px, 0.55vw + 17.2px, 22px);
+  --font-h2: clamp(12px, 0.18vw + 11.4px, 13px);
   /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a
      grid; `--stack-gap` separates stacked page sections. Sections used to carry
      ad-hoc margins (0, 16, 18, 24) so the rhythm changed depending on which
@@ -76,6 +96,10 @@
   --shadow: 0 1px 2px rgba(20, 20, 30, .04), 0 2px 8px rgba(20, 20, 30, .04);
 }
 
+}
+
+@layer base {
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
@@ -96,11 +120,16 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 
 /* ── Header ─────────────────────────────────────────────────────── */
 
+/* One row, always. The sections are the header's job; the search field is the
+   part that gives way. It collapses to a button that expands back over the nav
+   on focus, so a cramped header costs a click rather than a second row -- and
+   the nav is never handed less room than its own content, which is what let a
+   whole section paint underneath the search field and disappear. */
 .site-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(160px, 210px) auto;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 18px;
+  gap: 10px 14px;
   padding: 10px 28px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -125,7 +154,12 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
      clicks. Grouping keeps the bar short enough that one row is enough. */
   flex-wrap: nowrap;
   gap: 2px;
-  min-width: 0;
+  /* Never squeezed below its own content. With `min-width: 0` the header could
+     hand the nav less room than it needs, and because `overflow` must stay
+     visible there was nothing to clip or scroll -- the tail simply painted
+     underneath the search field, so a whole section vanished with no
+     affordance. Refusing to shrink makes the header wrap instead. */
+  flex: 0 1 auto;
   /* Must stay visible: an overflow scroll container clips absolutely
      positioned descendants, which silently swallowed the group dropdowns. */
   overflow: visible;
@@ -169,7 +203,8 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 }
 .nav-group-panel a { padding: 6px 9px; border-radius: var(--radius-sm); font-size: 13px; }
 
-.global-search { min-width: 0; position: relative; }
+/* Gives way before the sections do. See the collapsed state further down. */
+.global-search { flex: 0 1 210px; min-width: 150px; margin-left: auto; position: relative; }
 .search-icon {
   position: absolute;
   top: 50%;
@@ -180,14 +215,15 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
   stroke-width: 2;
   stroke-linecap: round;
   pointer-events: none;
-  /* Hidden where the field is wide enough to speak for itself: its own
-     placeholder already says what it is, and an icon beside the word is one
-     more thing to read. */
-  opacity: 0;
+  opacity: 1;
 }
 .global-search input {
   width: 100%;
-  padding: 5px 9px;
+  /* Same height as every other control in the bar, from one token, so the
+     search field, the account chip and the sections toggle line up whatever
+     state the header is in. */
+  height: var(--control-size);
+  padding: 0 10px 0 30px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -201,10 +237,66 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
   background: var(--surface);
 }
 
+/* Collapsed search. Below this width the field cannot keep its own room and
+   the sections' both, and the sections win: the field becomes a button the
+   width of its icon, and expands back over the nav when focused. Clicking the
+   button focuses the input, which is what triggers the expansion -- no script,
+   and nothing to get stuck open, because losing focus restores it.
+
+   The breakpoint only chooses an affordance. Whichever side of it the viewport
+   falls on, every section is present and the search still works, so a value
+   that drifts as sections are added costs a click and never a surface. */
+@media (max-width: 1280px) {
+  .global-search {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: var(--control-size);
+  }
+  /* Centred on the button, not inset from its edge: collapsed, the icon is the
+     whole control rather than an ornament beside a field. */
+  .search-icon { left: 50%; transform: translate(-50%, -50%); }
+  .global-search input {
+    /* An input carries an intrinsic minimum width from its `size`, which is
+       wider than this button. Without this it overflowed its own form by 7px,
+       so the control read as a different size to the ones beside it and the
+       centred icon sat left of the box it was centred in. */
+    min-width: 0;
+    width: 100%;
+    height: var(--control-size);
+    padding: 0;
+    /* Transparent text, not `display: none`: the input has to stay in the
+       layout and stay focusable for a click on the icon to open it. */
+    color: transparent;
+    cursor: pointer;
+  }
+  .global-search input::placeholder { color: transparent; }
+  .global-search:focus-within {
+    /* Over the nav, not beside it. Widening in flow would push the sections
+       along and re-create the squeeze this exists to avoid. */
+    position: absolute;
+    right: var(--content-pad);
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(320px, 78vw);
+    z-index: 12;
+  }
+  .global-search:focus-within input {
+    color: var(--ink);
+    cursor: auto;
+    box-shadow: var(--shadow);
+  }
+  .global-search:focus-within .search-icon {
+    left: 11px;
+    transform: translateY(-50%);
+  }
+  .global-search:focus-within input { padding: 0 10px 0 30px; }
+  .global-search:focus-within input::placeholder { color: var(--muted); }
+}
+
 .inline { display: inline-flex; align-items: center; gap: 6px; }
 
 /* User menu — account actions tucked behind the username to save nav space */
-.user-menu { position: relative; justify-self: end; }
+.user-menu { position: relative; flex: 0 0 auto; }
 .user-menu > summary {
   display: inline-flex;
   align-items: center;
@@ -219,6 +311,7 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
   white-space: nowrap;
   cursor: pointer;
   list-style: none;
+  min-height: var(--control-size);
 }
 .user-menu > summary::-webkit-details-marker { display: none; }
 .user-menu > summary:hover,
@@ -280,7 +373,11 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
    work. A single wide table -- the eight-week split matrix on a phone -- was
    otherwise able to widen the whole document behind its own card's scroller,
    which reads as the page drifting rather than as a table that scrolls. */
-.content { max-width: 1180px; margin: 0 auto; padding: 28px; overflow-x: clip; }
+}
+
+@layer components {
+
+.content { max-width: 1180px; margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
@@ -288,8 +385,8 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
    would quietly override. */
 .content > * + *:not(dialog) { margin-top: var(--stack-gap); }
 
-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.012em; font-weight: 650; }
-h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+h1 { font-size: var(--font-h1); margin: 0 0 4px; letter-spacing: -.012em; font-weight: 650; }
+h2 { font-size: var(--font-h2); margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 
 .page-lede { color: var(--muted); font-size: 13.5px; margin: 0 0 24px; }
@@ -841,8 +938,6 @@ a.kpi:hover { background: var(--surface-2); }
 /* A module band with one entry should read as a tile, not a full-bleed banner
    carrying a single number across the whole page. Sized to its contents, it
    lines up with the tiles above it; past the page width it wraps and fills. */
-.plugin-kpi-grid { width: fit-content; max-width: 100%; }
-.plugin-kpi-grid .kpi { flex-basis: 200px; }
 
 /* Chart tooltip. Fixed to the viewport and inert to the pointer, so it can
    never sit between the cursor and the mark it is describing. */
@@ -1052,15 +1147,22 @@ a.kpi:hover { background: var(--surface-2); }
    column means their heights are whatever the data made them, so one column
    ends early and the page carries the difference as a hole. Columns balance
    themselves; a card just has to not be split across the break. */
-.card-columns { columns: 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+/* At most two columns, each at least this wide: the browser drops to one when
+   the space is not there, so no breakpoint has to say when. */
+.card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
-@media (max-width: 720px) { .card-columns { columns: 1; } }
+/* The rail sits beside the main column while both fit and drops beneath it
+   when they do not. Flex wrapping decides that from the content's own minimum
+   widths, so the point at which it happens moves with the content instead of
+   being asserted at a fixed viewport width. */
 .dashboard-command {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--layout-gap);
   margin-bottom: var(--stack-gap);
 }
+.command-main { flex: 3 1 420px; }
+.command-side { flex: 1 1 240px; }
 .command-main,
 .command-side {
   display: grid;
@@ -1496,110 +1598,22 @@ a.kpi:hover { background: var(--surface-2); }
 }
 
 @media (max-width: 900px) {
-  .content { padding: 22px 18px; }
-  .dashboard-command { grid-template-columns: 1fr; }
   .domain-workspace { grid-template-columns: minmax(0, 1fr); }
   .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 14px 16px; }
   .kv dt { margin-top: 8px; font-size: 12px; }
   .kv dt:first-of-type { margin-top: 0; }
 }
 
-/* The nav row is deliberately nowrap, so it cannot shrink: below roughly 830px
-   the four grid tracks no longer fit and the nav ran straight over the search
-   field. Give the nav its own row here rather than at the phone breakpoint --
-   overlapping labels are worse than a second row. */
-@media (max-width: 860px) {
-  .split { grid-template-columns: minmax(0, 1fr); }
-  .site-header {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    padding: 10px 14px;
-  }
-  .brand { font-size: 14px; }
-  /* Wraps rather than scrolls. A horizontal scroller here is an overflow
-     container, and an overflow container clips absolutely positioned
-     descendants -- which put every dropdown panel off-screen to the right and
-     made the sections unreachable by touch. Wrapping keeps the whole bar on
-     screen and leaves nothing to clip. */
-  .primary-nav {
-    order: 3;
-    width: 100%;
-    flex-wrap: wrap;
-    overflow: visible;
-    gap: 2px 4px;
-    margin: 2px 0 0;
-    padding: 0;
-  }
-  .primary-nav a { white-space: nowrap; padding: 7px 10px; font-size: 13.5px; }
+/* Sections behind one control. Below this width the bar cannot hold every
+   section beside the brand and the account chip, and a second row is not the
+   answer -- it spends chrome on every page before any of them begins. The
+   collapsed search above buys the headroom that keeps this width low; past it
+   the sections move into a panel that opens on tap.
 
-  /* The panel joins the flow instead of floating over it. On a phone there is
-     no room to overlay, and a panel that pushes the page down cannot end up
-     covering the controls beneath it and swallowing their taps. */
-  .nav-group { position: static; }
-  .nav-group[open] { width: 100%; }
-  /* Absolute positioning previously took a closed panel out of flow, so nothing
-     ever had to hide it. In flow it keeps its box: every closed section stacked
-     invisibly on top of the open one, and a tap landed on whichever panel
-     happened to be uppermost -- usually the wrong section's link. */
-  .nav-group:not([open]) .nav-group-panel { display: none; }
-  .nav-group-panel {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    margin-top: 4px;
-    box-shadow: none;
-    border-radius: var(--radius-sm);
-  }
-  /* Search collapses to the size of its own icon and sits next to the account
-     button, instead of taking a full row of a screen that has few rows to
-     spare. Tapping it is what opens it -- it grows leftward into the space
-     beside the brand, because it is the last thing before the account button
-     and that is the only direction free. */
-  .global-search {
-    order: 1;
-    margin-left: auto;
-    flex: 0 0 auto;
-    width: 38px;
-    transition: width .16s ease;
-  }
-  .global-search:focus-within { width: min(62vw, 280px); }
-  .search-icon { opacity: 1; }
-  .global-search:focus-within .search-icon { opacity: 0; }
-  /* Collapsed, the field is the tap target under the icon and shows nothing
-     else; open, it behaves as it always has. */
-  .global-search input { padding-inline: 9px; }
-  .global-search:not(:focus-within) input { color: transparent; }
-  .global-search:not(:focus-within) input::placeholder { color: transparent; }
-  .user-menu { order: 2; margin-left: 8px; justify-self: auto; }
-}
-
-@media (max-width: 640px) {
-  .content { padding: 16px 14px; }
-  h1 { font-size: 19px; }
-  h2 { font-size: 12px; }
-
-  /* The header needs four rows on a phone -- brand, search, and the nav over
-     two lines -- which is 169px of a ~900px viewport held permanently by
-     `position: sticky`. It scrolls away here instead: the nav is one swipe
-     back, and the page gets the fifth of its height that was being spent on
-     chrome. Tightened as well, so the four rows cost less while on screen. */
-  /* Sticky again. It was made static to reclaim a fifth of a phone screen from
-     chrome, and that reasoning ended when the nav collapsed: the bar is one
-     short row now, so it costs little to keep and the sections menu is
-     reachable without scrolling back up. Sticky also establishes the
-     containing block the menu panel hangs off. */
-  .site-header { position: sticky; top: 0; z-index: 10; padding: 8px 12px; gap: 6px 10px; }
-
-  /* Six sections do not fit one row on a phone, and wrapping spent two rows of
-     chrome before any page began -- three once Life and Fitness are installed.
-     `:target` collapses them behind one control with no script and no widget
-     whose hiding a browser might reimplement.
-
-     The header carries the id, not the nav: the browser scrolls a target into
-     view, and targeting the nav pushed the header off the top of the screen
-     the moment the menu opened. Targeting the header scrolls to the top of the
-     page, which is where it already was. */
+   `:target` rather than script or a `details` widget: nothing hides the nav by
+   default, so a stylesheet that fails to load leaves every section plainly
+   visible instead of none of them. */
+@media (max-width: 1080px) {
   .nav-toggle-open { display: inline-flex; }
   .site-header:target .nav-toggle-open { display: none; }
   .nav-toggle-close { display: none; }
@@ -1613,12 +1627,15 @@ a.kpi:hover { background: var(--surface-2); }
   .site-header:target ~ .nav-backdrop {
     display: block; position: fixed; inset: 0; z-index: 9;
   }
+  /* Matches the collapsed search button and the account chip exactly. It was
+     the one control in the bar drawn on `--surface` with a shadow, which read
+     as a different kind of thing sitting beside them. */
   .nav-toggle { align-items: center; justify-content: center;
-    inline-size: 34px; block-size: 34px; order: 4;
+    inline-size: var(--control-size); block-size: var(--control-size); order: 4;
     border: 1px solid var(--line); border-radius: var(--radius-sm);
-    background: var(--surface); color: var(--ink-2); box-shadow: var(--shadow-sm);
+    background: var(--surface-2); color: var(--ink-2);
   }
-  .nav-toggle:hover { background: var(--surface-2); text-decoration: none; }
+  .nav-toggle:hover { background: var(--surface); text-decoration: none; }
   .primary-nav { display: none; }
   .site-header:target .primary-nav {
     display: flex;
@@ -1641,7 +1658,75 @@ a.kpi:hover { background: var(--surface-2); }
   .site-header:target .primary-nav > a,
   .site-header:target .primary-nav .nav-group > summary { padding: 9px 10px; font-size: 14px; }
 
-  .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
+  /* A section's own links fly out beside the list, not inside it. Opening one
+     in place pushed every section below it down the panel, so reaching the
+     next section meant first closing the one that had opened on the way past.
+     The list is anchored to the right edge, so the room is to its left. */
+  .site-header:target .primary-nav .nav-group-panel {
+    top: -5px;
+    right: calc(100% + 6px);
+    left: auto;
+    min-width: 168px;
+  }
+
+}
+
+/* The nav row is deliberately nowrap, so it cannot shrink: below roughly 830px
+   the four grid tracks no longer fit and the nav ran straight over the search
+   field. Give the nav its own row here rather than at the phone breakpoint --
+   overlapping labels are worse than a second row. */
+@media (max-width: 860px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .site-header { gap: 8px 12px; padding: 10px 14px; }
+  .brand { font-size: 14px; }
+  /* The sections live in the toggle's panel from 1080px down, so the bar stays
+     a single row here and needs no wrapping rules of its own. */
+  .primary-nav a { white-space: nowrap; padding: 7px 10px; font-size: 13.5px; }
+
+  /* The panel joins the flow instead of floating over it. On a phone there is
+     no room to overlay, and a panel that pushes the page down cannot end up
+     covering the controls beneath it and swallowing their taps. */
+  .nav-group { position: static; }
+  .nav-group[open] { width: 100%; }
+  /* Absolute positioning previously took a closed panel out of flow, so nothing
+     ever had to hide it. In flow it keeps its box: every closed section stacked
+     invisibly on top of the open one, and a tap landed on whichever panel
+     happened to be uppermost -- usually the wrong section's link. */
+  .nav-group:not([open]) .nav-group-panel { display: none; }
+  .nav-group-panel {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    margin-top: 4px;
+    box-shadow: none;
+    border-radius: var(--radius-sm);
+  }
+  .user-menu { order: 2; }
+}
+
+@media (max-width: 640px) {
+
+  /* The header needs four rows on a phone -- brand, search, and the nav over
+     two lines -- which is 169px of a ~900px viewport held permanently by
+     `position: sticky`. It scrolls away here instead: the nav is one swipe
+     back, and the page gets the fifth of its height that was being spent on
+     chrome. Tightened as well, so the four rows cost less while on screen. */
+  /* Sticky again. It was made static to reclaim a fifth of a phone screen from
+     chrome, and that reasoning ended when the nav collapsed: the bar is one
+     short row now, so it costs little to keep and the sections menu is
+     reachable without scrolling back up. Sticky also establishes the
+     containing block the menu panel hangs off. */
+  .site-header { position: sticky; top: 0; z-index: 10; padding: 8px 12px; gap: 6px 10px; }
+
+  /* Six sections do not fit one row on a phone, and wrapping spent two rows of
+     chrome before any page began -- three once Life and Fitness are installed.
+     `:target` collapses them behind one control with no script and no widget
+     whose hiding a browser might reimplement.
+
+     The header carries the id, not the nav: the browser scrolls a target into
+     view, and targeting the nav pushed the header off the top of the screen
+     the moment the menu opened. Targeting the header scrolls to the top of the
+     page, which is where it already was. */
 
   /* The chart floor was zeroed here for phones. It is gone altogether now —
      it never fit a half-width card either — so there is nothing to override. */
@@ -1681,8 +1766,6 @@ a.kpi:hover { background: var(--surface-2); }
   .kpi { flex-basis: calc(50% - 1px); padding: 11px 13px; }
   .kpi .value { font-size: 20px; }
   /* Nothing to line up with on a phone -- the band takes the column. */
-  .plugin-kpi-grid { width: auto; }
-  .plugin-kpi-grid .kpi { flex-basis: calc(50% - 1px); }
 
   .ops-grid { grid-template-columns: 1fr; gap: 12px; }
   .two-col { grid-template-columns: minmax(0, 1fr); gap: 12px; }
@@ -1698,16 +1781,14 @@ a.kpi:hover { background: var(--surface-2); }
 
   .btn, button { padding: 8px 14px; font-size: 14px; min-height: 38px; }
   .btn.ghost { min-height: 0; }
-  .user-menu > summary, .user-menu-panel button { min-height: 0; }
+  .user-menu > summary { min-height: var(--control-size); }
+  .user-menu-panel button { min-height: 0; }
 
   .data-table th, .data-table td { padding: 8px 10px; font-size: 13px; }
 
   .site-footer { padding: 22px 16px; }
 }
 
-@media (max-width: 420px) {
-  .kpi { flex-basis: calc(50% - 1px); }
-}
 
 /* ── Renewal timeline ───────────────────────────────────────────────
    A countdown list. The number leads because "how long have I got" is the
@@ -2169,4 +2250,6 @@ a.kpi:hover { background: var(--surface-2); }
     font-size: 8pt;
     color: #333;
   }
+}
+
 }
