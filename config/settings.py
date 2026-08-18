@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import tempfile
 from pathlib import Path
 
 from django.utils.csp import CSP
@@ -149,6 +150,7 @@ INSTALLED_APPS = [
     "control_plane",
     "search_index",
     "hq_api",
+    "jobs",
 ] + installed_plugin_apps()
 
 MIDDLEWARE = [
@@ -208,6 +210,30 @@ DATABASES = {
                 "PRAGMA foreign_keys=ON;"
             ),
             "transaction_mode": "IMMEDIATE",
+            # How long a writer waits for another writer before giving up.
+            # WAL lets readers carry on through a write, but writers are still
+            # one at a time, and a job importing an archive holds the write
+            # lock in bursts while somebody is browsing the site. The default
+            # is five seconds and then a 500 on an unrelated page; waiting is
+            # the correct behaviour, since the other writer is about to finish.
+            "timeout": 30,
+        },
+        "TEST": {
+            # A file, not the in-memory database Django would otherwise use.
+            # In-memory SQLite shares connections through a cache whose
+            # locking is not WAL's, so a background job writing during a test
+            # fails with "database table is locked" -- an error production
+            # cannot produce. A file gives the suite the same journal mode,
+            # lock and timeout as the running host, for a couple of seconds.
+            #
+            # In the temporary directory rather than beside the real database:
+            # `data/` is a mounted volume in production and does not exist in
+            # the composed image, where the suite runs as its own admission
+            # gate. Only being a file matters, not where the file is.
+            "NAME": os.environ.get(
+                "SEVERINO_TEST_DATABASE_PATH",
+                str(Path(tempfile.gettempdir()) / "severino-test.sqlite3"),
+            ),
         },
     }
 }
@@ -400,6 +426,11 @@ LOGGING = {
 # ----- App-specific ------------------------------------------------------------
 
 SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
+# The canonical name of this platform, for anything that leaves it -- a printed
+# page, an exported file. Deliberately not derived from the request: a brief
+# printed from a laptop is the same document as one printed from the server,
+# and it should not tell a reader to visit a host they cannot reach.
+SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
 SEVERINO_FISCAL_YEAR_START_MONTH = int(
     os.environ.get("SEVERINO_FISCAL_YEAR_START_MONTH", "1")
 )

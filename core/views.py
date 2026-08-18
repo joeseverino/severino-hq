@@ -13,7 +13,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import formats
-from django.views.generic import ListView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView
 
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_dashboard_cards, plugin_health
@@ -274,3 +274,57 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user")
         return self.apply_table_query(qs)
+
+
+class AuditLogDetailView(LoginRequiredMixin, DetailView):
+    """One event, in full, and what sits either side of it.
+
+    The list can only ever show a line per event. What an audit trail is
+    actually consulted for is the question behind the line -- which field
+    moved, what the value was before, what else the same action touched -- and
+    none of that fits in a row. So every row leads here.
+    """
+
+    model = AuditLog
+    template_name = "core/auditlog_detail.html"
+    context_object_name = "event"
+
+    def get_queryset(self):
+        return AuditLog.objects.select_related("user")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        event = self.object
+
+        # Field-level changes, as rows rather than as a blob of JSON.
+        changes = event.metadata.get("changes") or {}
+        context["changes"] = [
+            {"field": field, "before": pair[0], "after": pair[1]}
+            for field, pair in sorted(changes.items())
+            if isinstance(pair, list) and len(pair) == 2
+        ]
+        # Everything else in the metadata, minus what is already rendered.
+        context["extra"] = {
+            key: value for key, value in sorted(event.metadata.items())
+            if key != "changes"
+        }
+
+        # The rest of the same operation -- what `operation_id` is for. One
+        # action can touch many rows, and matching them up by timestamp alone
+        # is guesswork.
+        if event.operation_id:
+            context["siblings"] = (
+                AuditLog.objects.filter(operation_id=event.operation_id)
+                .exclude(pk=event.pk)
+                .select_related("user")[:50]
+            )
+        # Everything else that ever happened to this object.
+        if event.object_type and event.object_id:
+            context["history"] = (
+                AuditLog.objects.filter(
+                    object_type=event.object_type, object_id=event.object_id
+                )
+                .exclude(pk=event.pk)
+                .select_related("user")[:20]
+            )
+        return context

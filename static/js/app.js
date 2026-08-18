@@ -239,3 +239,55 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
       });
   });
 })();
+
+// Job progress. A job runs off the request thread, so the page that started
+// it has to ask how it is going.
+//
+// Polling rather than a socket: one small question every couple of seconds,
+// for a minute or two, a few times a week. A persistent connection would be a
+// second transport to run and secure for a question that fits in a query.
+(() => {
+  const panel = document.querySelector(".job-progress[data-job]");
+  if (!panel) return;
+
+  const bar = panel.querySelector("[data-job-bar]");
+  const note = panel.querySelector("[data-job-note]");
+  const state = panel.querySelector("[data-job-state]");
+  // Backs off when the tab is hidden: a phone left on this page overnight
+  // should not spend the night asking.
+  const interval = () => (document.hidden ? 15000 : 2000);
+  let stop = false;
+
+  const tick = async () => {
+    if (stop) return;
+    try {
+      const response = await fetch(panel.dataset.job, {
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        const job = await response.json();
+        state.textContent = job.label;
+        if (job.note) note.textContent = job.note;
+        if (job.percent === null) {
+          panel.querySelector(".job-bar").classList.add("job-bar-unknown");
+        } else {
+          panel.querySelector(".job-bar").classList.remove("job-bar-unknown");
+          bar.style.setProperty("--at", `${job.percent}%`);
+        }
+        panel.dataset.state = job.state;
+        if (!job.live) {
+          stop = true;
+          // One reload, so the surface renders the outcome its own way. The
+          // partial does not know what a finished job has to say.
+          window.location.reload();
+          return;
+        }
+      }
+    } catch {
+      // A failed poll is not a failed job. Keep asking: the usual cause is
+      // the container being restarted under us, and it will answer again.
+    }
+    window.setTimeout(tick, interval());
+  };
+  window.setTimeout(tick, interval());
+})();

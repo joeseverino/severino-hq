@@ -47,6 +47,9 @@ on:
 permissions:
   contents: read
   packages: write
+  # Read-only, and only so "Resolve the host image" can ask whether the host
+  # build it is waiting for has already failed.
+  actions: read
 
 concurrency:
   # Never two compositions at once *for the same target*: they would race for
@@ -185,6 +188,8 @@ jobs:
 
       - name: Resolve the host image
         id: host
+        env:
+          GH_TOKEN: ${{ github.token }}
         # Derived from the commit being composed, so there is no pin to bump by
         # hand and no way for the composition to be built on a stale host.
         run: |
@@ -205,6 +210,25 @@ jobs:
             fi
             if [ "$attempt" -eq 1 ]; then
               echo "waiting for the host image $image to be published..."
+            fi
+            # Every two minutes, ask whether there is still a build to wait for.
+            # A host build that already failed will never publish, so waiting
+            # the full twenty minutes reports a timeout instead of the failure
+            # that caused it -- and holds this branch's composition slot while
+            # the corrected commit queues behind it.
+            if [ $((attempt % 6)) -eq 0 ]; then
+              host_ci=$(gh api \
+                "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$ref&per_page=30" \
+                --jq '[.workflow_runs[] | select(.name == "ci") | .conclusion]
+                      | map(select(. != null)) | first' 2>/dev/null || true)
+              case "$host_ci" in
+                failure|cancelled|timed_out)
+                  echo "::error title=Host build $host_ci::The host build for \
+          ${ref:0:12} concluded '$host_ci', so $image will never be published. \
+          Fix the host build; the composition has nothing to compose onto."
+                  exit 1
+                  ;;
+              esac
             fi
             sleep 20
           done

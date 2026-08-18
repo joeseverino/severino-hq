@@ -35,6 +35,7 @@ urlpatterns = [
     path("infrastructure/", include("control_plane.urls")),
     path("audit/", include("core.urls")),
     path("api/", include("hq_api.urls")),
+    path("jobs/", include("jobs.urls")),
 ]
 
 urlpatterns.extend(plugin_urlpatterns())

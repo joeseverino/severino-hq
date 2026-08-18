@@ -602,8 +602,13 @@ def line_chart(
         ):
             stamps.pop()
         stamps.append(last_day)
+    # Day and month where the chart covers less than a year, month and year
+    # where it covers more. "Sep 15" across six years of history reads as a
+    # single year, which hides the thing the chart is for.
+    span_days = (last_day - first_day).days
+    stamp = "%b %Y" if span_days > 400 else "%b %-d"
     categories = tuple(
-        ChartCategory(place_x(day), f"{day:%b %-d}") for day in stamps
+        ChartCategory(place_x(day), f"{day:{stamp}}") for day in stamps
     )
 
     dated: dict = {}
