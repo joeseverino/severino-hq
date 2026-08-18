@@ -1246,6 +1246,12 @@ a.kpi:hover { background: var(--surface-2); }
 
 .form { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; max-width: 800px; box-shadow: var(--shadow-sm); }
 .field { margin-bottom: 14px; }
+/* A control inside a table cell or a row, where the gap that separates stacked
+   form fields is just a taller row. `.field` has to stay the wrapper — the
+   control styling hangs off `.field select`, so dropping it to kill the margin
+   drops the border and padding with it and the control falls back to the
+   browser's own. Same modifier convention as .kv.compact and .empty.compact. */
+.field.compact { margin-bottom: 0; }
 .field label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 13.5px; }
 .field input[type=text], .field input[type=url], .field input[type=number], .field input[type=password], .field input[type=email], .field input[type=date], .field input[type=file], .field select, .field textarea {
   width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; font-size: 13.5px; background: #fff;
