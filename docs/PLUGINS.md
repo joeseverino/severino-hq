@@ -114,9 +114,38 @@ deployment.
 ## Composition
 
 Production runs **one image carrying every admitted plugin**. Plugins do not
-build or deploy images: each verifies and admits itself, publishes its signed
-bundle, and triggers the host's composition workflow. When a plugin shipped its
-own image, deploying one replaced the others and silently dropped them.
+build or deploy images: each verifies and admits itself and publishes its signed
+bundle, and the host composes them. When a plugin shipped its own image,
+deploying one replaced the others and silently dropped them.
+
+A plugin cannot trigger the composition. Signalling one repository from another
+needs a credential, and a private repository holding a long-lived token that can
+start builds in this public one is a worse trade than a few minutes of latency.
+So the host asks rather than being told: **the composition workflow runs on a
+schedule and rebuilds only when its inputs changed.**
+
+What a composition is made of — host image digest, plugin wheel digests, and the
+admission policy — is hashed into a fingerprint and published as a
+`composition:fp-…` tag beside the image. A scheduled run whose fingerprint is
+already published stops before building, so a tick with nothing to do costs one
+resolution and deploys nothing. The registry holds that state because it already
+holds the only copy that matters.
+
+```
+merge a plugin → its CI admits the wheel and publishes the bundle
+               → the host's scheduled composition sees new wheel digests
+               → build → verify → scan → publish → deploy
+```
+
+Only scheduled runs stop early. Running **Compose and deploy extensions**
+by hand (`workflow_dispatch`) always rebuilds, which is how you deploy a plugin
+immediately instead of waiting for the next tick.
+
+The workflow also listens for a `repository_dispatch` of type
+`extension-admitted`, for a plugin that is ever given a credential to announce
+itself. **Nothing sends it today.** It is kept because the schedule makes it
+safe to have an unused fast path — a missed signal is picked up on the next tick
+rather than leaving production a release behind.
 
 The composition workflow is the only path to production. It verifies each
 signature itself, against the identity built from the declared repository and

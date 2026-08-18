@@ -203,11 +203,24 @@ Either pattern, the app itself never binds to a public interface.
 
 ### A.6 Updates
 
-The live homelab updates through the gated CI/CD pipeline (a push to `main`
-builds a Trivy-scanned GHCR image that a self-hosted runner pulls — see the
-README's *How changes reach HQ*). Migrations and `collectstatic` run on
-container boot via `entrypoint.sh`. The equivalent **manual** steps, for a
-standalone or first-time deploy, are:
+The live homelab updates through the gated CI/CD pipeline. A push to `main`
+builds and scans the **host** image; the **Compose and deploy extensions**
+workflow then builds one image from that host plus every admitted extension, and
+a self-hosted runner deploys it health-gated with rollback. Production runs the
+composed image (`…/composition:…`), never the host image on its own. Migrations
+and `collectstatic` run on container boot via `entrypoint.sh`.
+
+An extension merge deploys too, without anything being run by hand: the
+composition workflow runs on a schedule and rebuilds when the extension wheel
+digests change. See [`PLUGINS.md`](PLUGINS.md#composition). To deploy an
+extension immediately, run that workflow by hand (`workflow_dispatch`).
+
+> **`hq deploy` is legacy — do not run it.** It predates composition and
+> deploys the *host-only* image, which takes every extension off production
+> until the next composition. To rebuild by hand, run **Compose and deploy
+> extensions**; to roll back, re-run it at the commit you want.
+
+The equivalent **manual** steps, for a standalone or first-time deploy, are:
 
 ```bash
 git pull
