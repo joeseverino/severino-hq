@@ -1491,8 +1491,16 @@ a.kpi:hover { background: var(--surface-2); }
      heading empty and put a band of nothing between the head and the first
      card -- a phone is the surface with the least room to spend on that. It
      sits against the top instead, level with the heading, and the lede runs
-     its full width underneath both. */
-  .page-head { align-items: flex-start; gap: 8px 12px; }
+     its full width underneath both.
+
+     `flex-wrap` keeps that true only while it fits. `.page-actions` does not
+     shrink and its children do not wrap their text, so a head carrying three
+     controls had no way to give the title room: at 390px the heading was
+     squeezed to 27px, printing "Fina" with the lede running one word per line
+     down the left edge, 292px of head before the first card. Wrapping moves
+     the controls to their own line exactly when they cannot fit beside the
+     title, so the single-action case above is unchanged. */
+  .page-head { align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
   .page-head > div:first-child { flex: 1 1 60%; min-width: 0; }
   .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .domain-stack-head,
