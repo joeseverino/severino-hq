@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import shlex
 from typing import Any, Iterable
 
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, Sum
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,19 @@ class TableToggle:
     label: str
 
 
+@dataclass(frozen=True)
+class TableTotal:
+    """A column to sum, and where the sum belongs.
+
+    ``column`` is the field being totalled and doubles as the key a template
+    looks the value up by, so a totals row lands under the column it totals
+    rather than being positioned by hand.
+    """
+
+    column: str
+    label: str = "Total"
+
+
 class TableListMixin:
     """Apply one stable URL/query contract to a Django ``ListView``."""
 
@@ -38,6 +51,7 @@ class TableListMixin:
     table_filters: tuple[TableFilter, ...] = ()
     table_sorts: tuple[TableSort, ...] = ()
     table_toggles: tuple[TableToggle, ...] = ()
+    table_totals: tuple[TableTotal, ...] = ()
     table_default_sort = ""
     table_search_placeholder = "Search…"
 
@@ -149,7 +163,34 @@ class TableListMixin:
             "querystring": query_params.urlencode(),
         }
 
+    def table_totals_for(self, queryset) -> dict[str, Any]:
+        """Sum the declared columns over the whole filtered set.
+
+        Over the queryset, deliberately, and never over the page. A total that
+        silently describes the twenty rows currently visible is worse than no
+        total: it is a number that changes when you paginate and looks like a
+        fact about the filter.
+        """
+        if not self.table_totals or queryset is None:
+            return {}
+        sums = queryset.aggregate(
+            **{f"total_{index}": Sum(spec.column)
+               for index, spec in enumerate(self.table_totals)}
+        )
+        return {
+            spec.column: {
+                "label": spec.label,
+                "value": sums.get(f"total_{index}"),
+            }
+            for index, spec in enumerate(self.table_totals)
+        }
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["table"] = self.table_context()
+        # `object_list` is the filtered, ordered queryset before the paginator
+        # slices it, which is exactly the set a total should describe.
+        context["table_totals"] = self.table_totals_for(
+            getattr(self, "object_list", None)
+        )
         return context

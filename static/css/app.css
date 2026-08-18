@@ -67,6 +67,11 @@
   --at: 0%;
   /* Where a chart's plot begins, as a share of its width; set per chart. */
   --gutter: 0%;
+  /* How much of a whole one segment of an allocation is, as a share. Set per
+     segment for the same reason `--at` is set per label: it is computed from
+     the data, so the template supplies the number and this file decides what a
+     share looks like. Declared here so it is part of the contract. */
+  --part: 0%;
   --shadow-sm: 0 1px 1px rgba(20, 20, 30, .03);
   --shadow: 0 1px 2px rgba(20, 20, 30, .04), 0 2px 8px rgba(20, 20, 30, .04);
 }
@@ -308,6 +313,12 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
 
+/* ── Sections menu ──────────────────────────────────────────────── */
+/* Both controls belong to the phone layout only. Nothing here hides the nav:
+   the collapse is added by the narrow breakpoint, so every wider screen -- and
+   any screen whose stylesheet failed to load -- gets the links unconditionally. */
+.nav-toggle, .nav-backdrop { display: none; }
+
 /* ── Buttons ────────────────────────────────────────────────────── */
 
 .btn, button {
@@ -362,7 +373,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 }
 /* The bar chart has no cap and stretches to its card, so its frame must not
    have one either, or the same fault appears the other way round. */
-.chart-frame:has(> .bar-chart) { max-width: none; }
+.chart-frame:has(> .bar-chart), .chart-frame:has(> .line-chart) { max-width: none; }
 /* A crowded axis in a card too narrow to hold it. The template says the axis
    is crowded -- it counted the labels; the container query says the card is
    narrow -- only the browser knows that. Neither could decide it alone, and
@@ -476,12 +487,27 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 /* A line chart is the same drawing box as a bar chart, so it borrows the
    sizing rather than restating it -- two charts stacked in a column have to
    share an axis position, and two rules that nearly agree is how they stop. */
+/* Filled to its card, for the reason the bar chart above was: the cap existed
+   to stop a wide card upscaling type inside the drawing, and a line chart's
+   axis is HTML over the top, so there is no type in there to upscale. What is
+   left inside is geometry, which is what SVG is for.
+   `preserveAspectRatio="none"` in the template stretches it, so the stroke has
+   to be pinned -- otherwise a 2px line thickens with the card and the trend
+   dashes stretch into a different dash. The dots are circles and do go slightly
+   oval at full width; at r=2.5 across ninety points that reads as a dot, and
+   the alternative was ~480px of empty card, which reads as a bug. */
 .line-chart {
   display: block;
   width: 100%;
-  max-width: var(--chart-max);
-  height: auto;
+  /* Shorter than the 260 the viewBox implies. Stretched to a full card the
+     drawing no longer needs the height to stay legible, and a chart that fills
+     a screen on its own pushes the thing it describes below the fold. */
+  height: 220px;
 }
+.line-chart .chart-line,
+.line-chart .chart-trend,
+.line-chart .chart-grid,
+.line-chart .chart-mark { vector-effect: non-scaling-stroke; }
 .chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 /* Strokes, not fills: `.chart-series-N` sets `fill`, which draws a line's path
    as a filled blob rather than a line. The dots keep using the fill classes. */
@@ -575,6 +601,15 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .sort-indicator { color: var(--muted-2); font-size: 11px; }
 [aria-sort="ascending"] .sort-indicator, [aria-sort="descending"] .sort-indicator { color: var(--accent); }
 .data-table tbody tr:last-child td { border-bottom: 0; }
+/* A totals row. Ruled off from the rows above it and weighted, because it is a
+   conclusion about them rather than another one of them -- and in a table it
+   is the only way to get a total to land under the column it totals. */
+.data-table tfoot td {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface-2);
+  font-weight: 650;
+}
 .data-table tbody tr:hover { background: var(--surface-2); }
 .data-table .select-column { width: 38px; text-align: center; padding-inline: 8px; }
 /* Measurements, right-aligned on a fixed digit width so a column of them can
@@ -647,6 +682,79 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
   background: var(--surface-2);
   border-color: #c4c4c0;
   text-decoration: none;
+}
+
+/* ── Allocation ─────────────────────────────────────────────────── */
+/* Parts of one whole, as a single row rather than a chart. A pie needs a
+   legend to be read at all and a stacked bar chart brings an axis with it;
+   this answers "what is this made of" at a glance and takes one line of a
+   card doing it. Segments carry `.chart-series-N`, which already sets
+   `background` as well as `fill`, so a proportion and a plotted series of the
+   same thing are the same colour without a second palette to keep in step. */
+.allocation {
+  display: flex;
+  block-size: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-tint);
+  margin: 14px 0 12px;
+}
+/* Width arrives as a value, not as presentation: same contract as the chart
+   axis's `--at`, so the template supplies a share and this file decides what
+   a share looks like. */
+.allocation > span { display: block; block-size: 100%; inline-size: var(--part, 0%); min-inline-size: 2px; }
+/* A legend that is also the navigation. The parts of a total are exactly the
+   things you want to open, so making the key clickable removes a row of tiles
+   that said the same words a second time. */
+.allocation-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; font-size: 13px; }
+/* Stacked, for a narrow column. Wrapped inline the entries break at arbitrary
+   points and the amounts stop lining up, which is most of what a legend of
+   numbers is for. */
+.allocation-legend.stacked { flex-direction: column; gap: 9px; }
+.allocation-legend.stacked > * { justify-content: flex-start; }
+.allocation-legend.stacked b { min-inline-size: 5.5em; }
+.allocation-legend > * { display: inline-flex; align-items: baseline; gap: 8px; color: inherit; }
+.allocation-legend a:hover { color: var(--accent); }
+.allocation-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; flex: none; align-self: center; }
+.allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
+.allocation-legend span { color: var(--muted); }
+
+/* Supporting figures under a hero, where a KPI tile would be a bordered card
+   inside a card. Label under value, so three of them read as one row of facts
+   rather than as more legend entries. */
+.figure-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+}
+.figure-stats > span { display: inline-flex; flex-direction: column; gap: 3px; }
+.figure-stats b { font-size: 15.5px; font-weight: 650; font-feature-settings: "tnum"; }
+.figure-stats i {
+  font-style: normal; color: var(--muted); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .055em; font-weight: 600;
+}
+
+/* One number a page is built around, where a KPI tile would make it one of
+   four equals. Tabular so it does not reflow as it changes. */
+.figure-hero {
+  font-size: clamp(32px, 4.4vw, 44px);
+  font-weight: 660;
+  letter-spacing: -.022em;
+  line-height: 1.05;
+  font-feature-settings: "tnum";
+  margin: 0;
+}
+.figure-hero-note { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); font-feature-settings: "tnum"; }
+
+/* Columns a phone can lose. A five-column table stacked into label/value rows
+   becomes five lines per record -- thirty lines for six accounts, which is how
+   a compact table turns into a wall. Dropping the columns that merely identify
+   a row keeps it a table, and the row still says which account it is. */
+@media (max-width: 640px) {
+  .data-table .optional-col { display: none; }
 }
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
@@ -1476,10 +1584,63 @@ a.kpi:hover { background: var(--surface-2); }
      `position: sticky`. It scrolls away here instead: the nav is one swipe
      back, and the page gets the fifth of its height that was being spent on
      chrome. Tightened as well, so the four rows cost less while on screen. */
-  .site-header { position: static; padding: 8px 12px; gap: 6px 10px; }
-  .brand { font-size: 13.5px; }
-  .primary-nav { gap: 2px; margin: 0; }
-  .primary-nav a, .nav-group > summary { font-size: 12.5px; padding: 6px 8px; }
+  /* Sticky again. It was made static to reclaim a fifth of a phone screen from
+     chrome, and that reasoning ended when the nav collapsed: the bar is one
+     short row now, so it costs little to keep and the sections menu is
+     reachable without scrolling back up. Sticky also establishes the
+     containing block the menu panel hangs off. */
+  .site-header { position: sticky; top: 0; z-index: 10; padding: 8px 12px; gap: 6px 10px; }
+
+  /* Six sections do not fit one row on a phone, and wrapping spent two rows of
+     chrome before any page began -- three once Life and Fitness are installed.
+     `:target` collapses them behind one control with no script and no widget
+     whose hiding a browser might reimplement.
+
+     The header carries the id, not the nav: the browser scrolls a target into
+     view, and targeting the nav pushed the header off the top of the screen
+     the moment the menu opened. Targeting the header scrolls to the top of the
+     page, which is where it already was. */
+  .nav-toggle-open { display: inline-flex; }
+  .site-header:target .nav-toggle-open { display: none; }
+  .nav-toggle-close { display: none; }
+  .site-header:target .nav-toggle-close { display: inline-flex; }
+  /* Under the header, over the page, and only while open. It has to be below
+     the header's own z-index: the header is a stacking context, so a control
+     inside it can never be raised above a backdrop that sits higher -- and a
+     backdrop covering the toggle means the button that closes the menu is not
+     clickable, only the sheet on top of it. Below the header, tapping the
+     toggle closes it deliberately and tapping anywhere else closes it too. */
+  .site-header:target ~ .nav-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 9;
+  }
+  .nav-toggle { align-items: center; justify-content: center;
+    inline-size: 34px; block-size: 34px; order: 4;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink-2); box-shadow: var(--shadow-sm);
+  }
+  .nav-toggle:hover { background: var(--surface-2); text-decoration: none; }
+  .primary-nav { display: none; }
+  .site-header:target .primary-nav {
+    display: flex;
+    position: absolute;
+    top: calc(100% - 2px);
+    right: 12px;
+    z-index: 20;
+    min-width: 190px;
+    width: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    margin: 0;
+    padding: 5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(20, 20, 30, .12);
+  }
+  .site-header:target .primary-nav > a,
+  .site-header:target .primary-nav .nav-group > summary { padding: 9px 10px; font-size: 14px; }
+
   .global-search input[type=search] { padding: 7px 10px; font-size: 13px; }
 
   /* The chart floor was zeroed here for phones. It is gone altogether now —
@@ -1500,8 +1661,14 @@ a.kpi:hover { background: var(--surface-2); }
      down the left edge, 292px of head before the first card. Wrapping moves
      the controls to their own line exactly when they cannot fit beside the
      title, so the single-action case above is unchanged. */
-  .page-head { align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
-  .page-head > div:first-child { flex: 1 1 60%; min-width: 0; }
+  .page-head { align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; justify-content: space-between; }
+  .page-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+  /* `margin-left: auto` eats every pixel of free space, and in a wrapping row
+     that is enough on its own to push the controls onto a line of their own --
+     even when they would have fitted beside the title. `space-between` puts
+     them at the same edge without claiming the gap, so a short title and two
+     controls stay on one line and only genuinely-too-wide heads wrap. */
+  .page-head .page-actions { margin-left: 0; }
   .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .domain-stack-head,
   .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
@@ -1648,7 +1815,8 @@ a.kpi:hover { background: var(--surface-2); }
    been converted. */
 @media (max-width: 640px) {
   .data-table.stacks thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .data-table.stacks, .data-table.stacks tbody, .data-table.stacks tr, .data-table.stacks td { display: block; width: 100%; }
+  .data-table.stacks, .data-table.stacks tbody, .data-table.stacks tfoot,
+  .data-table.stacks tr, .data-table.stacks td { display: block; width: 100%; }
   .data-table.stacks tr {
     border: 1px solid var(--line);
     border-radius: var(--radius);
