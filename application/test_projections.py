@@ -343,14 +343,20 @@ class DashboardProjectionTests(TestCase):
         )
 
         with (
-            patch("application.dashboard.get_unread_count", return_value=0),
+            patch("application.attention.get_unread_count", return_value=0),
             CaptureQueriesContext(connection) as queries,
         ):
             operating_snapshot()
 
+        # The snapshot now assembles the whole page -- KPIs, the composed queue,
+        # the card row and the recent lists -- in one call, so this budget
+        # covers all of it rather than a part. Six of these are a section's
+        # reading answered once for its card and once for the KPI block; on
+        # local SQLite that is measured in microseconds, and the duplication is
+        # visible here rather than hidden behind a cache that could go stale.
         self.assertLessEqual(
             len(queries),
-            20,
+            30,
             "Dashboard query budget exceeded:\n"
             + "\n".join(query["sql"] for query in queries),
         )
@@ -362,13 +368,17 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        with patch("application.dashboard.get_unread_count", return_value=2):
+        with patch("application.attention.get_unread_count", return_value=2):
             snapshot = operating_snapshot()
 
         json.dumps(snapshot)
-        items = {item["code"]: item for item in snapshot["priority"]}
-        self.assertEqual(items["projects_output"]["count"], 1)
-        self.assertEqual(items["unread_contacts"]["count"], 2)
+        # Keyed by the domain that raised it. Entries no longer carry a
+        # hand-assigned code, because nothing needs one: the link an entry
+        # points at travels with the entry.
+        items = {item["source_id"]: item for item in snapshot["priority"]}
+        self.assertEqual(items["hq.projects"]["count"], 1)
+        self.assertEqual(items["hq.contacts"]["count"], 2)
+        self.assertTrue(items["hq.projects"]["url"])
         self.assertEqual(
             snapshot["priority_count"],
             sum(item["count"] for item in snapshot["priority"]),
@@ -401,7 +411,7 @@ class DashboardProjectionTests(TestCase):
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
-            patch("application.dashboard.get_unread_count", return_value=0),
+            patch("application.attention.get_unread_count", return_value=0),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
@@ -411,7 +421,7 @@ class DashboardProjectionTests(TestCase):
         # expenses fall inside, while the future expense remains excluded.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
-            patch("application.dashboard.get_unread_count", return_value=0),
+            patch("application.attention.get_unread_count", return_value=0),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
