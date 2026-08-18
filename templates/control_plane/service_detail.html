@@ -25,19 +25,38 @@ not restated here.
 {% endif %}
 
 <div class="control-summary">
+  {% comment %}
+  The headline is the value, not the word "Declared". Each row comes from the
+  provider's own readout, so a new provider describes itself here without this
+  template learning anything about it.
+  {% endcomment %}
   {% for facet in service.facets %}
     <div class="control-metric">
       <span class="control-label">{{ facet.label }}</span>
-      <strong>{% if facet.present %}Declared{% else %}Not declared{% endif %}</strong>
       {% if facet.present %}
-        <span>
-          {% for claim in facet.claims %}
-            <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>
-            <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>{% if not forloop.last %}<br>{% endif %}
+        {% for claim in facet.claims %}
+          {% for reading in claim.readings %}
+            {% if forloop.parentloop.first and forloop.first %}
+              <strong>{{ reading.value }}</strong>
+              {% if reading.drifted %}<span class="pill pill-serious">Drifted — declared {{ reading.desired }}</span>{% endif %}
+            {% else %}
+              <span class="readout"><span class="readout-label">{{ reading.label }}</span> {{ reading.value }}{% if reading.drifted %} <span class="pill pill-serious">declared {{ reading.desired }}</span>{% endif %}</span>
+            {% endif %}
+          {% empty %}
+            <strong>Declared</strong>
           {% endfor %}
-        </span>
+          <span class="readout">
+            <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>
+            <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>
+            <a class="subtle-link" href="{{ claim.edit_url }}">Edit</a>
+          </span>
+        {% endfor %}
       {% else %}
-        <span>No enabled resource supplies this.</span>
+        <strong class="control-unknown">Not declared</strong>
+        <span>Nothing supplies this for {{ service.hostname }}.</span>
+        {% for kind in facet.declarable %}
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ kind }} &rarr;</a></span>
+        {% endfor %}
       {% endif %}
     </div>
   {% endfor %}

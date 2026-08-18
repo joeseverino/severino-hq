@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %} · Severino HQ{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label|lower }}{% endif %}</h1>
+    <p class="page-lede">{{ summary }}</p>
+  </div>
+</div>
+
+{% comment %}
+Every field below is generated from the provider's pydantic model, and that same
+model validates the submission. Nothing here knows what kind of resource this is.
+{% endcomment %}
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+  {% if identity.non_field_errors %}<div class="msg msg-error">{{ identity.non_field_errors }}</div>{% endif %}
+  {% if spec.non_field_errors %}<div class="msg msg-error">{{ spec.non_field_errors }}</div>{% endif %}
+
+  {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+
+  {% for field in spec %}{% include "partials/_form_field.html" %}{% endfor %}
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>
+    <a class="btn" href="{% if resource %}{% url 'control_plane:detail' resource.key %}{% else %}{% url 'control_plane:list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+
+<p class="muted">
+  HQ applies this at the provider within about a minute, then shows you what it
+  actually found there.
+</p>
+{% endblock %}

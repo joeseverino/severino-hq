@@ -10,12 +10,13 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 
-from control_plane.models import ManagedResource, OperationRequest
+from control_plane.models import ManagedResource, OperationRequest, TopologySnapshot
 from control_plane.providers import (
     PROVIDERS,
     controller_action_policy,
     validate_spec,
 )
+from control_plane.topology import desired_fingerprint
 from core.audit import operation_context
 
 from .security import Capability, Principal
@@ -75,7 +76,6 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "id": str(resource.id),
         "key": resource.key,
         "kind": resource.kind,
-        "declaration_source": resource.declaration_source,
         "enabled": resource.enabled,
         "generation": resource.generation,
         "observed_generation": resource.observed_generation,
@@ -303,6 +303,18 @@ def save_managed_resource(
         resource.kind = command.kind
         resource.spec = validated_spec
         resource.enabled = command.enabled
+        # Fingerprinted here as well as on topology import, through the one
+        # function that knows desired state includes what references resolve to.
+        # Without this an HQ edit would leave the old fingerprint in place, and
+        # the next import would read the difference as the topology having moved.
+        resource.desired_fingerprint = desired_fingerprint(
+            resource.kind,
+            resource.spec,
+            resource.enabled,
+            topology=TopologySnapshot.objects.filter(pk="topology")
+            .values_list("payload", flat=True)
+            .first(),
+        )
         if not created and changed:
             resource.generation += 1
         resource.full_clean()

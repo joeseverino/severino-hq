@@ -66,16 +66,55 @@ def _normalise(hostname: str) -> str:
 
 
 @dataclass(frozen=True)
+class Reading:
+    """One fact about a resource: what HQ asked for, and what was found.
+
+    ``desired`` is blank where the operator authors nothing -- a certificate's
+    expiry is discovered, never declared. ``observed`` is blank until a
+    controller has looked. They are carried together because the whole question
+    a service page answers is whether they agree.
+    """
+
+    label: str
+    desired: str = ""
+    observed: str = ""
+
+    @property
+    def drifted(self) -> bool:
+        return bool(self.desired and self.observed and self.desired != self.observed)
+
+    @property
+    def value(self) -> str:
+        """The one thing to show when there is only room for one.
+
+        What is true beats what was asked for. An operator reading a service
+        page wants the world, and falls back to the declaration only where the
+        world has not been looked at yet.
+        """
+
+        return self.observed or self.desired
+
+
+@dataclass(frozen=True)
 class Claim:
     """One resource's participation in one service, already resolved."""
 
     resource_key: str
     kind: str
     health: dict[str, str]
+    readings: tuple[Reading, ...] = ()
 
     @property
     def url(self) -> str:
         return reverse("control_plane:detail", kwargs={"key": self.resource_key})
+
+    @property
+    def edit_url(self) -> str:
+        return reverse("control_plane:edit", kwargs={"key": self.resource_key})
+
+    @property
+    def drifted(self) -> bool:
+        return any(reading.drifted for reading in self.readings)
 
 
 @dataclass(frozen=True)
@@ -89,6 +128,26 @@ class Facet:
     @property
     def present(self) -> bool:
         return bool(self.claims)
+
+    @property
+    def declarable(self) -> tuple[str, ...]:
+        """Provider kinds that could supply this facet for a name that lacks it.
+
+        Read from the registry rather than listed here, so the offer to add one
+        appears for a provider declared long after this was written. Only kinds
+        that can be seeded from a hostname: a certificate is chosen from those
+        that already exist, not created by naming a service.
+        """
+
+        return tuple(
+            sorted(
+                kind
+                for kind, provider in PROVIDERS.items()
+                if provider.facet == self.id
+                and not provider.covers
+                and provider.seed is not None
+            )
+        )
 
     @property
     def state(self) -> str:
@@ -223,7 +282,12 @@ def service_catalog() -> tuple[Service, ...]:
             # resource's own health is where it is reported. It must not take
             # every other name on the board down with it.
             continue
-        claim = Claim(resource.key, resource.kind, resource_health(resource))
+        claim = Claim(
+            resource.key,
+            resource.kind,
+            resource_health(resource),
+            _readings(provider, resource),
+        )
         if provider.covers:
             covering.append((provider.facet, frozenset(hostnames), claim))
             continue
@@ -332,6 +396,28 @@ def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]
             "topology."
         )
     return tuple(faults)
+
+
+def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
+    """What this resource actually does, as its own provider describes it.
+
+    Read from the authored spec rather than the resolved one: these are shown
+    beside "what was found", and resolution is HQ's own work. Comparing a
+    resolved value against an observation would report drift between two things
+    the operator never wrote.
+    """
+
+    if provider.readout is None:
+        return ()
+    try:
+        rows = provider.readout(resource.spec, resource.status or {})
+    except (KeyError, TypeError, ValueError):
+        return ()
+    return tuple(
+        Reading(label=label, desired=str(desired or ""), observed=str(observed or ""))
+        for label, desired, observed in rows
+        if desired or observed
+    )
 
 
 def _locate(address: str, topology: dict[str, Any] | None) -> Origin:

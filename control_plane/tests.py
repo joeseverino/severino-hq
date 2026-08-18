@@ -36,7 +36,7 @@ from .providers import (
     describe_providers,
     validate_resolved_certificate,
 )
-from .topology import TopologyError, import_topology
+from .topology import TopologyError, import_topology, resolve_certificate
 
 
 def certificate_spec():
@@ -147,170 +147,172 @@ def topology_payload():
     }
 
 
-class TopologyMaterializationTests(TestCase):
-    def test_import_materializes_and_updates_declared_resources(self):
+class TopologyOwnershipTests(TestCase):
+    """The topology describes the world; HQ decides what should be true of it."""
+
+    def _hq_authored_certificate(self):
+        return ManagedResource.objects.create(
+            key="jseverino-wildcard",
+            kind="tls.certificate",
+            spec=certificate_spec(),
+        )
+
+    def test_a_declared_resource_block_is_refused_rather_than_ignored(self):
+        """Dropping it silently is what let an HQ edit look like it worked.
+
+        The operator would go on believing the document governed these, and the
+        next sync would revert whatever they changed in HQ -- minutes later,
+        with nothing connecting the two events.
+        """
         payload = topology_payload()
         payload["managed_resources"] = [
             {
                 "key": "hq-dns",
                 "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "hq.jseverino.com",
-                    "answer": "192.168.1.233",
-                },
-                "enabled": True,
+                "spec": {"domain": "hq.example.com", "answer": "10.0.0.10"},
             }
         ]
 
-        import_topology(payload)
-        resource = ManagedResource.objects.get(key="hq-dns")
-        self.assertEqual(resource.declaration_source, "topology")
+        with self.assertRaisesRegex(TopologyError, "HQ owns managed resources"):
+            import_topology(payload)
+
+        self.assertFalse(ManagedResource.objects.exists())
+        self.assertFalse(TopologySnapshot.objects.exists())
+
+    def test_the_error_names_what_to_remove(self):
+        payload = topology_payload()
+        payload["managed_resources"] = [
+            {"key": "hq-dns", "kind": "adguard.rewrite", "spec": {}},
+            {"key": "hq-proxy", "kind": "npm.proxy_host", "spec": {}},
+        ]
+
+        with self.assertRaisesRegex(TopologyError, "hq-dns, hq-proxy"):
+            import_topology(payload)
+
+    def test_import_declares_no_resources_at_all(self):
+        import_topology(topology_payload())
+
+        self.assertTrue(TopologySnapshot.objects.exists())
+        self.assertFalse(ManagedResource.objects.exists())
+
+    def test_an_hq_edit_survives_the_next_import(self):
+        """The whole point of the ownership change, asserted directly."""
+        resource = ManagedResource.objects.create(
+            key="hq-dns",
+            kind="adguard.rewrite",
+            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
+        )
+
+        import_topology(topology_payload())
+
+        resource.refresh_from_db()
+        self.assertTrue(resource.enabled)
+        self.assertEqual(resource.spec["answer"], "10.0.0.10")
+
+    def test_a_first_fingerprint_adopts_without_queueing_work(self):
+        """Otherwise the first import after this change reconciles everything.
+
+        Every existing resource predates fingerprinting by HQ, so all of them
+        would look changed at once and each would queue an operation against a
+        provider for a difference that does not exist.
+        """
+        resource = self._hq_authored_certificate()
+        self.assertEqual(resource.desired_fingerprint, "")
+
+        import_topology(topology_payload())
+
+        resource.refresh_from_db()
+        self.assertTrue(resource.desired_fingerprint)
         self.assertEqual(resource.generation, 1)
 
-        payload["managed_resources"][0]["spec"]["answer"] = "192.168.1.234"
+    def test_a_dependency_change_advances_a_reference_backed_resource(self):
+        """The authored spec is byte-identical; what it resolves to is not.
+
+        A certificate declares one topology reference. Change the consumers
+        behind it and the controller has different work to do, while the spec
+        HQ holds has not moved at all.
+        """
+        resource = self._hq_authored_certificate()
+        payload = topology_payload()
         import_topology(payload)
         resource.refresh_from_db()
-        self.assertEqual(resource.spec["answer"], "192.168.1.234")
-        self.assertEqual(resource.generation, 2)
-
-    def test_reimport_is_idempotent_and_preserves_timestamps(self):
-        payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "hq.jseverino.com",
-                    "answer": "192.168.1.233",
-                },
-            }
-        ]
-        first_snapshot = import_topology(payload)
-        first_resource = ManagedResource.objects.get(key="hq-dns")
-
-        import_topology(payload)
-        snapshot = TopologySnapshot.objects.get(pk="topology")
-        resource = ManagedResource.objects.get(key="hq-dns")
-
-        self.assertEqual(resource.generation, 1)
-        self.assertEqual(resource.updated_at, first_resource.updated_at)
-        self.assertEqual(snapshot.updated_at, first_snapshot.updated_at)
-
-    def test_dependency_change_advances_reference_backed_resource_generation(self):
-        payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "jseverino-wildcard",
-                "kind": "tls.certificate",
-                "spec": certificate_spec(),
-            }
-        ]
-        import_topology(payload)
+        settled = resource.generation
 
         payload["dependencies"][0]["attributes"]["discover_covered_hosts"] = True
         payload["dependencies"][0]["attributes"]["verify_domains"] = []
         import_topology(payload)
 
-        resource = ManagedResource.objects.get(key="jseverino-wildcard")
-        self.assertEqual(resource.generation, 2)
+        resource.refresh_from_db()
+        self.assertEqual(resource.generation, settled + 1)
 
-    def test_removal_disables_resource_and_advances_generation(self):
-        payload = topology_payload()
-        payload["managed_resources"] = [
+    def test_reimporting_an_unchanged_topology_changes_nothing(self):
+        resource = self._hq_authored_certificate()
+        first = import_topology(topology_payload())
+        resource.refresh_from_db()
+        settled, stamped = resource.generation, resource.updated_at
+
+        import_topology(topology_payload())
+
+        snapshot = TopologySnapshot.objects.get(pk="topology")
+        resource.refresh_from_db()
+        self.assertEqual(resource.generation, settled)
+        self.assertEqual(resource.updated_at, stamped)
+        self.assertEqual(snapshot.updated_at, first.updated_at)
+
+    def test_a_stored_snapshot_predating_the_change_still_resolves(self):
+        """Snapshots written before this change still carry the old block.
+
+        Validating a stored payload as strictly as an authored one would fail
+        certificate resolution for every resource, on the strength of a block
+        nothing reads any more.
+        """
+        legacy = topology_payload()
+        legacy["managed_resources"] = [
             {
                 "key": "hq-dns",
                 "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "hq.jseverino.com",
-                    "answer": "192.168.1.233",
-                },
+                "spec": {"domain": "hq.example.com", "answer": "10.0.0.10"},
             }
         ]
-        import_topology(payload)
-        payload["managed_resources"] = []
-
-        import_topology(payload)
-        resource = ManagedResource.objects.get(key="hq-dns")
-
-        self.assertFalse(resource.enabled)
-        self.assertEqual(resource.generation, 2)
-
-    def test_manual_ownership_collision_rolls_back_entire_import(self):
-        ManagedResource.objects.create(
-            key="manual-resource",
-            kind="adguard.rewrite",
-            spec={
-                "domain": "manual.jseverino.com",
-                "answer": "192.168.1.10",
-            },
+        TopologySnapshot.objects.create(
+            id="topology", schema_version=3, checksum="legacy", payload=legacy
         )
+
+        resolved = resolve_certificate("pki:jseverino-wildcard")
+
+        self.assertEqual(resolved["certificate_name"], "jseverino")
+
+    def test_a_resolution_driven_change_records_sync_provenance(self):
+        """A generation advanced by an import was not the operator's doing.
+
+        It is the one way a resource changes without anyone editing it, so the
+        audit trail has to name the import rather than leave the change looking
+        like it came from a person.
+        """
+        resource = self._hq_authored_certificate()
         payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "created-before-collision",
-                "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "new.jseverino.com",
-                    "answer": "192.168.1.11",
-                },
-            },
-            {
-                "key": "manual-resource",
-                "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "manual.jseverino.com",
-                    "answer": "192.168.1.12",
-                },
-            },
-        ]
-
-        with self.assertRaisesRegex(TopologyError, "cannot take ownership"):
-            import_topology(payload)
-
-        self.assertFalse(
-            ManagedResource.objects.filter(key="created-before-collision").exists()
-        )
-        self.assertFalse(TopologySnapshot.objects.exists())
-        manual = ManagedResource.objects.get(key="manual-resource")
-        self.assertEqual(manual.spec["answer"], "192.168.1.10")
-
-    def test_materialization_records_sync_provenance(self):
-        payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "hq.jseverino.com",
-                    "answer": "192.168.1.233",
-                },
-            }
-        ]
+        import_topology(payload)
+        payload["dependencies"][0]["attributes"]["discover_covered_hosts"] = True
+        payload["dependencies"][0]["attributes"]["verify_domains"] = []
 
         import_topology(payload)
 
         event = AuditLog.objects.filter(
-            object_type="Managed resource",
-            object_repr="hq-dns",
+            object_type="Managed resource", object_repr=resource.key
         ).latest("created_at")
         self.assertEqual(event.metadata["interface"], "sync")
         self.assertEqual(event.metadata["actor"], "topology-sync")
-        self.assertEqual(
-            event.metadata["operation"], "infrastructure.topology.import"
-        )
+        self.assertEqual(event.metadata["operation"], "infrastructure.topology.import")
 
     def test_sync_schedules_each_pending_generation_once(self):
+        resource = ManagedResource.objects.create(
+            key="hq-dns",
+            kind="adguard.rewrite",
+            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
+        )
+        resource.generation = 2
+        resource.save(update_fields=("generation", "updated_at"))
         payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "spec": {
-                    "domain": "hq.jseverino.com",
-                    "answer": "192.168.1.233",
-                },
-            }
-        ]
 
         first = sync_topology(payload, principal=cli_principal())
         second = sync_topology(payload, principal=cli_principal())
@@ -319,7 +321,7 @@ class TopologyMaterializationTests(TestCase):
         self.assertFalse(second["scheduled"][0]["queued"])
         self.assertEqual(OperationRequest.objects.count(), 1)
 
-        resource = ManagedResource.objects.get(key="hq-dns")
+        resource.refresh_from_db()
         resource.observed_generation = resource.generation
         resource.save(update_fields=("observed_generation", "updated_at"))
         converged = sync_topology(payload, principal=cli_principal())

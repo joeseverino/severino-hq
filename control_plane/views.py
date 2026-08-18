@@ -6,12 +6,15 @@ from datetime import datetime, timedelta, timezone
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
 from application.infrastructure import (
+    ManagedResourceCommand,
     OperationCommand,
     PolicyError,
     certificate_renewal_allowed,
@@ -20,14 +23,17 @@ from application.infrastructure import (
     request_certificate_renewal,
     request_reconcile,
     resource_health,
+    save_managed_resource,
     serialize_resource,
     serialize_public_status,
 )
+from application.provider_forms import ResourceIdentityForm, spec_form_class
 from application.security import web_principal
 from application.services import find_service, service_catalog
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    PROVIDERS,
     SERVICE_FACETS,
     controller_action_policy,
     describe_providers,
@@ -50,6 +56,126 @@ def _web_operation(request, resource, action):
         principal=web_principal(request.user),
         current_key=resource.key,
     )
+
+
+class ResourceFormView(LoginRequiredMixin, View):
+    """Declare or amend one resource, on a form its provider generates.
+
+    The write goes through ``save_managed_resource`` -- the same use case the
+    API and the MCP call -- so the capability check, the spec validation, the
+    generation bump and the audit record are the ones that already existed. This
+    view supplies a form and a redirect and decides nothing else.
+    """
+
+    template_name = "control_plane/resource_form.html"
+
+    def _existing(self, key):
+        return get_object_or_404(ManagedResource, key=key) if key else None
+
+    def _kind(self, request, resource):
+        if resource:
+            return resource.kind
+        return request.GET.get("kind") or request.POST.get("kind") or ""
+
+    def get(self, request, key=None):
+        resource = self._existing(key)
+        kind = self._kind(request, resource)
+        if kind not in PROVIDERS:
+            return render(
+                request,
+                "control_plane/resource_kind.html",
+                {"providers": describe_providers()["providers"]},
+            )
+        hostname = request.GET.get("hostname", "").strip()
+        seed = PROVIDERS[kind].seed
+        return render(
+            request,
+            self.template_name,
+            {
+                "kind": kind,
+                "resource": resource,
+                "label": PROVIDERS[kind].label or kind,
+                "summary": PROVIDERS[kind].summary,
+                "identity": ResourceIdentityForm(
+                    initial=(
+                        {"key": resource.key, "enabled": resource.enabled}
+                        if resource
+                        else {"key": _suggested_key(hostname, kind)}
+                    )
+                ),
+                "spec": spec_form_class(kind)(
+                    initial=(
+                        resource.spec
+                        if resource
+                        else (seed(hostname) if seed and hostname else None)
+                    )
+                ),
+            },
+        )
+
+    def post(self, request, key=None):
+        resource = self._existing(key)
+        kind = self._kind(request, resource)
+        if kind not in PROVIDERS:
+            raise Http404("Unknown provider kind.")
+        identity = ResourceIdentityForm(request.POST)
+        spec = spec_form_class(kind)(request.POST)
+        if identity.is_valid() and spec.is_valid():
+            try:
+                result = save_managed_resource(
+                    ManagedResourceCommand(
+                        key=identity.cleaned_data["key"],
+                        kind=kind,
+                        spec=spec.spec,
+                        enabled=identity.cleaned_data["enabled"],
+                    ),
+                    principal=web_principal(request.user),
+                    current_key=resource.key if resource else None,
+                )
+            except (PolicyError, DjangoValidationError) as exc:
+                identity.add_error(None, _readable_error(exc))
+            else:
+                saved = result["resource"]["key"]
+                messages.success(
+                    request,
+                    f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
+                    "HQ will apply it at the provider within about a minute.",
+                )
+                return redirect("control_plane:detail", key=saved)
+        return render(
+            request,
+            self.template_name,
+            {
+                "kind": kind,
+                "resource": resource,
+                "label": PROVIDERS[kind].label or kind,
+                "summary": PROVIDERS[kind].summary,
+                "identity": identity,
+                "spec": spec,
+            },
+        )
+
+
+def _suggested_key(hostname: str, kind: str) -> str:
+    """A name that says what this is, offered rather than imposed.
+
+    Onboarding a service should not stop to ask what to call three rows in a
+    table the operator did not know existed. The field stays editable, because
+    the key is stable and permanent and sometimes the obvious name is taken.
+    """
+
+    if not hostname:
+        return ""
+    facet = PROVIDERS[kind].facet or kind
+    # Dots become separators before slugify sees them. Left alone, slugify
+    # deletes them, and "app.example.com" suggests the key "appexamplecom" --
+    # a permanent, unreadable name for the sake of one substitution.
+    return slugify(f"{hostname}-{facet}".replace(".", "-"))[:180]
+
+
+def _readable_error(exc) -> str:
+    messages_found = getattr(exc, "messages", None)
+    return " ".join(messages_found) if messages_found else str(exc)
 
 
 class ServiceListView(LoginRequiredMixin, TemplateView):

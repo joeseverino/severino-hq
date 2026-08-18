@@ -11,20 +11,20 @@ from core.models import TimestampedModel
 
 
 class ManagedResource(TimestampedModel):
-    class DeclarationSource(models.TextChoices):
-        MANUAL = "manual", "Manual"
-        TOPOLOGY = "topology", "Topology"
+    """Desired state HQ authors, and the last thing a controller observed of it.
+
+    There is no field recording who declared this. There was one, distinguishing
+    a resource materialised from the topology document from one entered by hand,
+    and it stopped meaning anything the moment HQ became the only author. A
+    column with one reachable value is a question the model appears to answer
+    and does not.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.SlugField(max_length=180, unique=True)
     kind = models.CharField(max_length=64)
     spec = models.JSONField(default=dict)
     enabled = models.BooleanField(default=True)
-    declaration_source = models.CharField(
-        max_length=20,
-        choices=DeclarationSource.choices,
-        default=DeclarationSource.MANUAL,
-    )
     desired_fingerprint = models.CharField(max_length=64, blank=True, default="")
     generation = models.PositiveIntegerField(default=1)
     observed_generation = models.PositiveIntegerField(default=0)

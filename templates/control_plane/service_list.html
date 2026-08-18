@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Services · {{ SITE_NAME }}{% endblock %}
 {% block content %}
-{% url 'control_plane:list' as resources_url %}
-{% include "partials/_page_head.html" with title="Services" lede="Every hostname HQ declares, and what has to be true for it to answer. Derived from the resources behind it — nothing on this page is stored." action_url=resources_url action_label="Resources" %}
+{% url 'control_plane:create' as resources_url %}
+{% include "partials/_page_head.html" with title="Services" action_primary=True lede="Every hostname HQ manages, and whether its DNS, ingress and certificate are all in place." action_url=resources_url action_label="Add" %}
 
 {% comment %}
 Columns come from SERVICE_FACETS, not from this markup. A provider that declares
@@ -44,7 +44,7 @@ template changing.
           <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
         </tr>
       {% empty %}
-        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="No resource declares a hostname yet, so there is nothing to compose into a service." action_url=resources_url action_label="Open the resource registry" %}</td></tr>
+        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." action_url=resources_url action_label="Add your first one" %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

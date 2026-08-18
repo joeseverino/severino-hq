@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
@@ -193,12 +195,19 @@ class CloudflareDNSRecordSpec(ProviderModel):
 @dataclass(frozen=True)
 class ProviderSpec:
     kind: str
+    # What this is called in a sentence, and what it does in one line. Both are
+    # read by people: "adguard.rewrite" is the identifier, not the name, and a
+    # page that offers it as a choice has to say what choosing it means.
     summary: str
     spec_type: type
     resolved_type: type | None = None
     resolver: Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
+    # Declared after the positional fields, and always passed by keyword: the
+    # existing entries pass resolved_type and resolver positionally, so a new
+    # field inserted above them silently rebinds both.
+    label: str = ""
 
     # ----- Service participation ---------------------------------------------
     #
@@ -219,6 +228,21 @@ class ProviderSpec:
     # Where a request for these hostnames is finally served, as "host:port".
     # Only an ingress provider has one.
     origin: Callable[[dict[str, Any]], str] | None = None
+    # The inverse of ``hostnames``: the spec fields that follow from being told
+    # a hostname. Onboarding a service asks for the name once and seeds every
+    # provider that declares a facet for it, so the operator types it once
+    # rather than once per resource -- and a provider added later joins that
+    # flow by saying which of its fields the name fills in.
+    seed: Callable[[str], dict[str, Any]] | None = None
+    # What this resource actually does, as (label, desired, observed) rows.
+    # A service page showed "Declared" in the largest type on the card while the
+    # row beneath it held `answer: 10.0.0.10` -- the least useful fact rendered
+    # loudest, and the useful one not rendered at all. Desired and observed sit
+    # side by side because the interesting case is when they differ, and either
+    # may be blank: a certificate has no authored expiry, only a found one.
+    readout: Callable[
+        [dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]
+    ] | None = None
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
@@ -313,41 +337,131 @@ def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return () if spec["record_type"] == "TXT" else (spec["name"],)
 
 
+def _rewrite_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
+
+
+def _proxy_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    desired = (
+        f"{spec.get('forward_scheme', '')}://{spec.get('forward_host', '')}"
+        f":{spec.get('forward_port', '')}"
+    )
+    return (
+        ("Forwards to", desired, status.get("forward", "")),
+        ("TLS", "forced" if spec.get("force_ssl") else "optional", ""),
+    )
+
+
+def _expiry(stamp: str) -> str:
+    """An expiry a person can act on: the date, and how long that leaves.
+
+    The raw ISO timestamp is what the provider reports and the wrong thing to
+    print. "2026-10-23T22:00:38+00:00" has to be read and subtracted from today
+    before it means anything, and the number it resolves to -- how many days are
+    left -- is the entire reason anyone looks at it.
+    """
+
+    try:
+        expires = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError):
+        return stamp or ""
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    days = math.ceil((expires - datetime.now(timezone.utc)).total_seconds() / 86400)
+    if days < 0:
+        return f"{expires:%-d %b %Y} — expired"
+    return f"{expires:%-d %b %Y} · {days} day{'' if days == 1 else 's'}"
+
+
+def _certificate_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    verified = status.get("verified_domains") or ()
+    return (
+        ("Issuer", "", status.get("issuer", "")),
+        ("Expires", "", _expiry(status.get("not_after", ""))),
+        ("Verified names", "", str(len(verified)) if verified else ""),
+    )
+
+
+def _dns_record_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    desired = f"{spec.get('record_type', '')} {spec.get('content', '')}".strip()
+    return (("Record", desired, status.get("content", "")),)
+
+
+def _rewrite_seed(hostname: str) -> dict[str, Any]:
+    return {"domain": hostname}
+
+
+def _proxy_seed(hostname: str) -> dict[str, Any]:
+    return {"domain_names": [hostname]}
+
+
+def _dns_record_seed(hostname: str) -> dict[str, Any]:
+    # The registrable domain, guessed from the last two labels. A seed, not a
+    # decision: it is offered in an editable field because a zone is not always
+    # the last two labels, and being wrong here is visible and one keystroke to
+    # correct.
+    labels = hostname.split(".")
+    zone = ".".join(labels[-2:]) if len(labels) > 2 else hostname
+    return {"name": hostname, "zone": zone}
+
+
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
-        "Renew and distribute a certificate to declared TLS consumers.",
+        "Keeps a certificate renewed and installed on everything that serves "
+        "these names.",
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
+        label="TLS certificate",
         facet="certificate",
+        readout=_certificate_readout,
         hostnames=_certificate_hostnames,
         covers=True,
     ),
     ProviderSpec(
         "npm.proxy_host",
-        "Reconcile an Nginx Proxy Manager proxy host.",
+        "Sends a hostname to something running on your network, over HTTPS. "
+        "Created in Nginx Proxy Manager if it is not there yet.",
         NPMProxyHostSpec,
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
+        label="Proxy host",
         facet="proxy",
         hostnames=_proxy_hostnames,
         origin=_proxy_origin,
+        seed=_proxy_seed,
+        readout=_proxy_readout,
     ),
     ProviderSpec(
         "adguard.rewrite",
-        "Reconcile an internal AdGuard DNS rewrite.",
+        "Makes a hostname resolve to an IP on your network. Created in AdGuard "
+        "if it is not there yet.",
         AdGuardRewriteSpec,
+        label="Internal DNS record",
         facet="dns",
         hostnames=_rewrite_hostnames,
+        seed=_rewrite_seed,
+        readout=_rewrite_readout,
     ),
     ProviderSpec(
         "cloudflare.dns_record",
-        "Reconcile a public Cloudflare DNS record.",
+        "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
+        label="Public DNS record",
         public_effect=True,
         facet="dns",
         hostnames=_dns_record_hostnames,
+        seed=_dns_record_seed,
+        readout=_dns_record_readout,
     ),
 )
 
@@ -410,6 +524,7 @@ def describe_providers() -> dict[str, Any]:
         "providers": [
             {
                 "kind": provider.kind,
+                "label": provider.label or provider.kind,
                 "summary": provider.summary,
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,

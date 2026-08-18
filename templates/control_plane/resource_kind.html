@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Add infrastructure · Severino HQ{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="What do you want to add?" lede="HQ creates it at the provider and keeps it that way." %}
+
+{% comment %}
+Listed from the provider registry, so a provider added to it appears here with
+its own name and description — no edit to this page.
+{% endcomment %}
+<div class="control-summary">
+  {% for provider in providers %}
+    <a class="control-card kind-choice" href="{% url 'control_plane:create' %}?kind={{ provider.kind }}">
+      <strong>{{ provider.label }}</strong>
+      <span class="kind-choice-summary">{{ provider.summary }}</span>
+      {% if provider.public_effect %}
+        <span class="pill pill-attention">Visible on the internet</span>
+      {% endif %}
+      <code class="kind-choice-id">{{ provider.kind }}</code>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -4,9 +4,11 @@
 <div class="page-head">
   <div>
     <h1>Infrastructure</h1>
-    <p class="muted">Desired state, drift, and verified operations. Provider credentials never enter HQ.</p>
+    <p class="muted">Everything HQ keeps configured for you, and what it last found at the provider.</p>
   </div>
   <div class="page-actions">
+    <a class="btn primary" href="{% url 'control_plane:create' %}">Add</a>
+    <a class="btn" href="{% url 'control_plane:services' %}">Services</a>
     <a class="btn" href="{% url 'control_plane:providers' %}">Provider schemas</a>
   </div>
 </div>

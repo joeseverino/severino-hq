@@ -442,8 +442,22 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .control-summary > *, .two-col > * { min-width: 0; }
 .control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
 .control-metric { display: flex; flex-direction: column; gap: 5px; }
-.control-metric strong { font-size: 18px; }
+.control-metric strong { font-size: 18px; overflow-wrap: anywhere; }
 .control-metric > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+/* A supporting row inside a control metric. Several stack under one headline,
+   so they carry their own muted styling rather than relying on the
+   :last-child rule above, which dresses exactly one caption and left every
+   earlier row rendered as body copy. */
+.readout { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.readout-label { color: var(--ink-2); font-weight: 600; }
+/* A provider offered as a starting point, laid out in the same card grid.
+   align-items keeps every child its own width: stretched, a pill spans the card
+   and reads as a banner rather than a tag. */
+.kind-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; text-decoration: none; }
+.kind-choice strong { color: var(--ink); font-size: 16px; font-weight: 650; }
+.kind-choice-summary { color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
+.kind-choice-id { color: var(--muted); font-size: 11.5px; margin-top: auto; }
+.kind-choice:hover { border-color: var(--ink-2); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, not <text> inside it.
 
