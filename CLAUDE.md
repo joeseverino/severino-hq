@@ -23,6 +23,27 @@ push/merge to main → ci (build + scan the host image)
 parallel with it. The image entrypoint re-runs `migrate` and `collectstatic`
 on every boot, so there is no manual migration step.
 
+**An extension merge deploys too, without anything being run by hand.** It
+cannot signal the host directly — that would mean giving a private repository a
+long-lived token that can start builds in a public one — so `compose` runs on a
+schedule and rebuilds only when the composition's inputs actually changed:
+
+```
+merge to an extension → its own CI admits the wheel
+                      → compose (scheduled, ≤15 min) notices new wheel digests
+                      → deploy
+```
+
+Every run fingerprints `host image + wheel digests + admission policy` and
+publishes it as a `composition:fp-…` tag. A scheduled run whose fingerprint is
+already published stops before building, so the schedule costs one cheap
+resolution per tick and deploys only when there is something to deploy. It also
+self-heals: a trigger that is missed is picked up on the next tick.
+
+To deploy an extension immediately rather than waiting, run the **Compose and
+deploy extensions** workflow (`workflow_dispatch`) — a hand-run rebuild ignores
+the fingerprint and always rebuilds.
+
 If the user says "push it", "ship it", or "deploy it" after a code change:
 
 1. `git commit` + `git push` (or open a PR and merge it — `main` is protected)
