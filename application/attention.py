@@ -33,6 +33,7 @@ from projects.models import Project
 from receipts.models import Receipt
 
 from .infrastructure import resource_health
+from .services import service_catalog
 from .ui import Insight
 
 # Reconciliation states that mean the declared world and the real one disagree.
@@ -245,3 +246,31 @@ def infrastructure() -> tuple[Insight, ...]:
             )
         )
     return tuple(items)
+
+
+def services() -> tuple[Insight, ...]:
+    """One entry per hostname whose wiring is incomplete.
+
+    Wiring only, and deliberately no overlap with ``infrastructure`` above.
+    Whether a declared resource reconciled is reported there, per resource;
+    saying it again here would put one problem in the queue twice under two
+    names and make the count of things needing attention wrong.
+
+    What is left is what no single resource can see: a name something answers
+    for with no certificate covering it, an ingress pointing at a host HQ does
+    not know, two declarations of the same kind contradicting each other.
+    """
+
+    return tuple(
+        Insight(
+            status="attention",
+            eyebrow="Services",
+            title=f"{service.hostname} is incompletely wired",
+            value=str(len(service.faults)),
+            body=" ".join(service.faults),
+            action="Open service",
+            url=service.url,
+        )
+        for service in service_catalog()
+        if service.faults
+    )

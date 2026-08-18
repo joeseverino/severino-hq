@@ -354,9 +354,16 @@ class DashboardProjectionTests(TestCase):
         # reading answered once for its card and once for the KPI block; on
         # local SQLite that is measured in microseconds, and the duplication is
         # visible here rather than hidden behind a cache that could go stale.
+        #
+        # Six more are the service view, which is a join rather than a table:
+        # resources, the topology snapshot and published projects, derived once
+        # for the queue and once for the card. The same trade, made the same
+        # way. A cache is what would make this number lie -- the last one tried
+        # here served a stale count to a test, which then passed while asserting
+        # the wrong answer.
         self.assertLessEqual(
             len(queries),
-            30,
+            34,
             "Dashboard query budget exceeded:\n"
             + "\n".join(query["sql"] for query in queries),
         )

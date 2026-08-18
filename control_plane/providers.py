@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -124,12 +125,36 @@ class ResolvedTLSCertificateSpec(ProviderModel):
         return self
 
 
-def certificate_covers(domain: str, names: set[str]) -> bool:
+def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
+    """Whether a set of declared names, wildcards included, answers for one name.
+
+    Written for certificates and used by anything that has to ask the same
+    question -- the service view matches a hostname against a certificate's
+    names exactly this way, and a second implementation of wildcard matching is
+    a second chance to get it subtly wrong.
+    """
+
     normalized = domain.lower().rstrip(".")
     if normalized in names:
         return True
     _, separator, parent = normalized.partition(".")
     return bool(separator and f"*.{parent}" in names)
+
+
+# The facets a service is assembled from, in the order a request meets them: a
+# name has to resolve, something has to answer for it, and the TLS it answers
+# with has to cover it.
+#
+# Declared here beside the providers rather than wherever services are composed,
+# because a provider names the facet it supplies. A provider added later joins
+# the service view by declaring one, and nothing else holds a list of what can
+# participate.
+SERVICE_FACETS: tuple[tuple[str, str], ...] = (
+    ("dns", "DNS"),
+    ("proxy", "Ingress"),
+    ("certificate", "Certificate"),
+)
+SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 
 
 class NPMProxyHostSpec(ProviderModel):
@@ -174,6 +199,38 @@ class ProviderSpec:
     resolver: Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
+
+    # ----- Service participation ---------------------------------------------
+    #
+    # A service is a hostname and everything that has to be true for it to
+    # answer. A provider joins that view by naming the facet it supplies and
+    # saying how to read the hostnames out of a *resolved* spec. A provider that
+    # names neither simply does not appear there, so nothing needs an exclusion
+    # list to keep it out.
+    facet: str = ""
+    hostnames: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    # Whether this provider *covers* hostnames rather than declaring them.
+    # Declaring brings a service into existence -- something has to name it
+    # before it is a thing at all. Covering answers for a set that may include
+    # wildcards, so it attaches to services declared elsewhere and never invents
+    # one: treated as a declaration, a wildcard certificate would conjure a
+    # service literally called "*.example.com".
+    covers: bool = False
+    # Where a request for these hostnames is finally served, as "host:port".
+    # Only an ingress provider has one.
+    origin: Callable[[dict[str, Any]], str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.facet and self.facet not in SERVICE_FACET_IDS:
+            raise ValueError(
+                f"Provider {self.kind!r} declares unknown service facet "
+                f"{self.facet!r}; expected one of {sorted(SERVICE_FACET_IDS)}."
+            )
+        if (self.covers or self.hostnames or self.origin) and not self.facet:
+            raise ValueError(
+                f"Provider {self.kind!r} describes hostnames but names no "
+                "service facet, so nothing would ever read them."
+            )
 
     def schema(self) -> dict[str, Any]:
         return TypeAdapter(self.spec_type).json_schema()
@@ -228,6 +285,34 @@ def _resolve_npm(
     return {**authored, "certificate_id": certificate_id}
 
 
+# Each reads a *resolved* spec, which is why a certificate can answer at all:
+# authored, it declares only a topology reference, and the names it covers exist
+# solely on the far side of resolution.
+
+
+def _certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(spec.get("domains", ()))
+
+
+def _proxy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(spec["domain_names"])
+
+
+def _proxy_origin(spec: dict[str, Any]) -> str:
+    return f"{spec['forward_host']}:{spec['forward_port']}"
+
+
+def _rewrite_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (spec["domain"],)
+
+
+def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    # A TXT record carries policy -- an SPF entry, a validation challenge -- not
+    # a service. Naming one would put a hostname on the board that nothing is
+    # expected to serve, and then permanently report it as unserved.
+    return () if spec["record_type"] == "TXT" else (spec["name"],)
+
+
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
@@ -235,6 +320,9 @@ _PROVIDERS = (
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
+        facet="certificate",
+        hostnames=_certificate_hostnames,
+        covers=True,
     ),
     ProviderSpec(
         "npm.proxy_host",
@@ -242,17 +330,24 @@ _PROVIDERS = (
         NPMProxyHostSpec,
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
+        facet="proxy",
+        hostnames=_proxy_hostnames,
+        origin=_proxy_origin,
     ),
     ProviderSpec(
         "adguard.rewrite",
         "Reconcile an internal AdGuard DNS rewrite.",
         AdGuardRewriteSpec,
+        facet="dns",
+        hostnames=_rewrite_hostnames,
     ),
     ProviderSpec(
         "cloudflare.dns_record",
         "Reconcile a public Cloudflare DNS record.",
         CloudflareDNSRecordSpec,
         public_effect=True,
+        facet="dns",
+        hostnames=_dns_record_hostnames,
     ),
 )
 

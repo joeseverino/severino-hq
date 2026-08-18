@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Services · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% url 'control_plane:list' as resources_url %}
+{% include "partials/_page_head.html" with title="Services" lede="Every hostname HQ declares, and what has to be true for it to answer. Derived from the resources behind it — nothing on this page is stored." action_url=resources_url action_label="Resources" %}
+
+{% comment %}
+Columns come from SERVICE_FACETS, not from this markup. A provider that declares
+a new facet gets a column here and a panel on the detail page without either
+template changing.
+{% endcomment %}
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Service</th>
+        {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
+        <th>Origin</th>
+        <th>Project</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for service in services %}
+        <tr>
+          <td><a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a></td>
+          {% for facet in service.facets %}
+            <td>
+              {% for claim in facet.claims %}
+                <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>{% if not forloop.last %}<br>{% endif %}
+              {% empty %}
+                <span class="muted">—</span>
+              {% endfor %}
+            </td>
+          {% endfor %}
+          <td>
+            {% if service.origin %}
+              {% if service.origin.known %}{{ service.origin.label }}{% else %}<code>{{ service.origin.address }}</code> <span class="muted">unknown host</span>{% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>{% if service.project %}<a href="{{ service.project.url }}">{{ service.project.name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="No resource declares a hostname yet, so there is nothing to compose into a service." action_url=resources_url action_label="Open the resource registry" %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ service.hostname }} · Services{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ service.hostname }}</h1>
+    <p class="muted">
+      <span class="pill pill-{{ service.status }}">{{ service.status_label }}</span>
+      {% if service.project %} · Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:services' %}">All services</a>
+  </div>
+</div>
+
+{% comment %}
+Faults, not health. Each is a statement about how two declarations relate, so no
+single resource page can show it — which is the reason this page exists. Rendered
+through the host's own row primitive from Service.fault_rows, so the markup is
+not restated here.
+{% endcomment %}
+{% if service.faults %}
+  {% include "partials/_record_list.html" with rows=service.fault_rows label="Wiring faults" %}
+{% endif %}
+
+<div class="control-summary">
+  {% for facet in service.facets %}
+    <div class="control-metric">
+      <span class="control-label">{{ facet.label }}</span>
+      <strong>{% if facet.present %}Declared{% else %}Not declared{% endif %}</strong>
+      {% if facet.present %}
+        <span>
+          {% for claim in facet.claims %}
+            <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>
+            <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>{% if not forloop.last %}<br>{% endif %}
+          {% endfor %}
+        </span>
+      {% else %}
+        <span>No enabled resource supplies this.</span>
+      {% endif %}
+    </div>
+  {% endfor %}
+  <div class="control-metric">
+    <span class="control-label">Origin</span>
+    {% if not service.origin %}
+      <strong>Not routed</strong>
+      <span>Nothing declares where requests for this name are served.</span>
+    {% elif service.origin.known %}
+      <strong>{{ service.origin.label }}</strong>
+      <span>
+        Ingress forwards to <code>{{ service.origin.address }}</code>.
+        {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
+      </span>
+    {% else %}
+      <strong>Unknown host</strong>
+      <span>Ingress forwards to <code>{{ service.origin.address }}</code>, which no host in the topology claims.</span>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Resources behind this name</h2>
+<div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th>Resource</th><th>Kind</th><th>Supplies</th><th>Health</th></tr></thead>
+    <tbody>
+      {% for facet in service.facets %}
+        {% for claim in facet.claims %}
+          <tr>
+            <td><a href="{{ claim.url }}"><strong>{{ claim.resource_key }}</strong></a></td>
+            <td><code>{{ claim.kind }}</code></td>
+            <td>{{ facet.label }}</td>
+            <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
+          </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

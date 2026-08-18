@@ -6,10 +6,10 @@ from datetime import datetime, timedelta, timezone
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 
 from application.infrastructure import (
     OperationCommand,
@@ -24,9 +24,11 @@ from application.infrastructure import (
     serialize_public_status,
 )
 from application.security import web_principal
+from application.services import find_service, service_catalog
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    SERVICE_FACETS,
     controller_action_policy,
     describe_providers,
 )
@@ -48,6 +50,32 @@ def _web_operation(request, resource, action):
         principal=web_principal(request.user),
         current_key=resource.key,
     )
+
+
+class ServiceListView(LoginRequiredMixin, TemplateView):
+    """The hostname view of the same declarations the resource list shows."""
+
+    template_name = "control_plane/service_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["services"] = service_catalog()
+        # The column headers come from the providers, so a provider that
+        # declares a new facet gets a column without this template being touched.
+        context["facets"] = SERVICE_FACETS
+        return context
+
+
+class ServiceDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "control_plane/service_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        service = find_service(self.kwargs["hostname"])
+        if service is None:
+            raise Http404(f"No service is declared for {self.kwargs['hostname']}.")
+        context["service"] = service
+        return context
 
 
 class InfrastructureListView(LoginRequiredMixin, ListView):

@@ -185,11 +185,27 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.services",
+        label="Services",
+        # Ahead of Resources deliberately. A resource is a declaration a
+        # controller reconciles; a service is the thing an operator was actually
+        # thinking of when they opened this group. The registry stays one click
+        # further in, where the answer is "which declaration is wrong".
+        navigation=(
+            NavigationItem(
+                "Services", "control_plane:services", "control_plane", 130,
+                "Infrastructure",
+            ),
+        ),
+        attention_provider="application.attention:services",
+        cards_provider="application.sections:services",
+    ),
+    DomainDescriptor(
         id="hq.infrastructure",
         label="Infrastructure",
         navigation=(
             NavigationItem(
-                "Resources", "control_plane:list", "control_plane", 130,
+                "Resources", "control_plane:list", "control_plane", 131,
                 "Infrastructure",
             ),
         ),
@@ -199,7 +215,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.jobs",
         label="Jobs",
         navigation=(
-            NavigationItem("Jobs", "jobs:list", "jobs", 131, "Infrastructure"),
+            NavigationItem("Jobs", "jobs:list", "jobs", 132, "Infrastructure"),
         ),
     ),
     DomainDescriptor(

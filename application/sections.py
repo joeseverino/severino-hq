@@ -32,6 +32,8 @@ from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 
+from .services import service_reading
+
 Card = dict[str, Any]
 ZERO_MONEY = Decimal("0.00")
 
@@ -187,6 +189,31 @@ def expenses() -> tuple[Card, ...]:
         value=f"${reading['total']:,.2f}",
         url=reverse("expenses:list"),
         detail=f"${reading['deductible']:,.2f} deductible est.",
+    )
+
+
+# ----- Services --------------------------------------------------------------
+#
+# The reading itself lives beside its derivation in ``application.services``.
+# Every other section here reads one table and can state its own figures; a
+# service is a join across three, and splitting the count from the join would
+# put half of one answer in each file.
+
+
+def services() -> tuple[Card, ...]:
+    reading = service_reading()
+    if not reading["total"]:
+        return ()
+    return _card(
+        id="hq.services.total",
+        label="Services",
+        value=str(reading["total"]),
+        url=reverse("control_plane:services"),
+        detail=(
+            f"{reading['incomplete']} incompletely wired"
+            if reading["incomplete"]
+            else ""
+        ),
     )
 
 

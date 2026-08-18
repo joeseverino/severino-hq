@@ -14,6 +14,7 @@ from application.capabilities import (
 )
 from application import projects as project_service
 from application import infrastructure as infrastructure_service
+from application import services as service_view
 from application.security import mcp_principal
 from application.registry import audit_registry as audit_application_registry
 from application import read_models
@@ -104,6 +105,19 @@ def get_managed_resource(key: str) -> dict[str, Any]:
     """Get one managed resource with structured operation evidence."""
     try:
         return infrastructure_service.get_managed_resource(key)
+    except infrastructure_service.NotFoundError as exc:
+        raise NotFoundError(str(exc)) from exc
+
+
+def list_services() -> dict[str, Any]:
+    """List every declared hostname with the state of its DNS, ingress and TLS."""
+    return service_view.list_services()
+
+
+def get_service(hostname: str) -> dict[str, Any]:
+    """Get one hostname with the resources behind each part of its wiring."""
+    try:
+        return service_view.get_service(hostname)
     except infrastructure_service.NotFoundError as exc:
         raise NotFoundError(str(exc)) from exc
 
