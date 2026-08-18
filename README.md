@@ -127,9 +127,18 @@ runbook bodies and secrets never enter HQ.
 3.12/3.13/3.14, a `check --deploy` posture gate plus `pip-audit`, and a booted
 production-image readiness check that Trivy scans. On `main`, the same gated
 image is published to GHCR. Only on green does a **self-hosted runner on the
-homelab** pull the scanned image and restart the container — the runner dials
-out to GitHub, so nothing inbound is ever opened. A red commit physically cannot
-reach the box.
+homelab** deploy it — the runner dials out to GitHub, so nothing inbound is ever
+opened. A red commit physically cannot reach the box.
+
+What the box actually runs is one **composed** image: that scanned host plus
+every admitted extension, assembled and verified as a single application by
+[`.github/workflows/compose.yml`](.github/workflows/compose.yml). Extensions
+verify and admit themselves in their own repositories and publish signed
+bundles; they never build or deploy an image, and they cannot trigger the host.
+The composition runs on a schedule instead and rebuilds only when its inputs —
+host image, wheel digests, admission policy — actually change, so an extension
+release reaches production on its own without either repository holding a
+credential for the other. See [`docs/PLUGINS.md`](docs/PLUGINS.md#composition).
 
 ---
 
