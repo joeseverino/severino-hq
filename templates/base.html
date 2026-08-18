@@ -15,9 +15,38 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <header class="site-header">
+  <header class="site-header" id="sections">
     <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
     {% if user.is_authenticated %}
+      {% comment %}
+      The sections menu is a link and an `:target` rule, not a scripted or
+      `details`-based one. It fails safe: nothing hides the nav by default, so
+      a stylesheet that does not load, or a browser that disagrees about how a
+      widget hides its own content, leaves the links plainly visible. A
+      `details` wrapper forced open by CSS did the opposite -- Chrome moved
+      that hiding onto `::details-content`, the override stopped applying, and
+      the whole nav disappeared.
+      {% endcomment %}
+      {% comment %}
+      Two links in one place, swapped by `:target`: closed, the control points
+      at the menu; open, it points back out. One link cannot do both, because
+      CSS can style an anchor but not rewrite where it goes -- and a control
+      that only ever opens is a control that appears broken on the second tap.
+      {% endcomment %}
+      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections">
+        <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
+          <rect x="0" y="0" width="16" height="2" rx="1"/>
+          <rect x="0" y="5" width="16" height="2" rx="1"/>
+          <rect x="0" y="10" width="16" height="2" rx="1"/>
+        </svg>
+      </a>
+      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close sections">
+        <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
+          <rect x="0" y="0" width="16" height="2" rx="1"/>
+          <rect x="0" y="5" width="16" height="2" rx="1"/>
+          <rect x="0" y="10" width="16" height="2" rx="1"/>
+        </svg>
+      </a>
       <nav class="primary-nav">
         {% for entry in nav_entries %}
           {% if entry.kind == "group" %}
@@ -78,6 +107,13 @@
       </details>
     {% endif %}
   </header>
+    {% comment %}
+    Everything outside the panel, clickable only while the menu is open, so
+    tapping away closes it. A sibling rather than a child of the header: the
+    header sets `backdrop-filter`, which establishes a containing block, and a
+    fixed-position child of it is confined to the header's own box.
+    {% endcomment %}
+    <a class="nav-backdrop" href="#" tabindex="-1" aria-hidden="true"></a>
 
   <main class="content">
     {% if messages %}
