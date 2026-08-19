@@ -1,6 +1,7 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
 from __future__ import annotations
+from .projection import iso, page_size
 
 from typing import Any
 
@@ -19,17 +20,10 @@ SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
     DocumentationRecord.Sensitivity.INTERNAL,
 )
-MAX_PAGE_SIZE = 100
 
 
-def _page_size(limit: int) -> int:
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
-    return min(limit, MAX_PAGE_SIZE)
 
 
-def _iso(value) -> str | None:
-    return value.isoformat() if value else None
 
 
 def list_expenses(
@@ -70,7 +64,7 @@ def list_expenses(
                 else None
             ),
         }
-        for expense in queryset.order_by("-date", "-id")[: _page_size(limit)]
+        for expense in queryset.order_by("-date", "-id")[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 
@@ -89,17 +83,17 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
             "content_type": receipt.content_type,
             "size_bytes": receipt.size_bytes,
             "vendor": receipt.vendor,
-            "date": _iso(receipt.date),
+            "date": iso(receipt.date),
             "amount": str(receipt.amount),
             "related_expense_id": receipt.related_expense_id,
             "related_asset": (
                 receipt.related_asset.slug if receipt.related_asset else None
             ),
-            "uploaded_at": _iso(receipt.uploaded_at),
+            "uploaded_at": iso(receipt.uploaded_at),
         }
         for receipt in queryset.select_related("related_asset").order_by(
             "-uploaded_at"
-        )[: _page_size(limit)]
+        )[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 
@@ -135,7 +129,7 @@ def documentation_status() -> dict[str, Any]:
                 "obsidian_path": doc.obsidian_path,
                 "github_path": doc.github_path,
                 "external_url": doc.external_url,
-                "last_reviewed": _iso(doc.last_reviewed),
+                "last_reviewed": iso(doc.last_reviewed),
             }
             for doc in safe.order_by("doc_id")
         ],
@@ -158,7 +152,7 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
         }
         for event in AuditLog.objects.select_related("user")
         .fetch_mode(FETCH_RAISE)
-        .order_by("-created_at")[: _page_size(limit)]
+        .order_by("-created_at")[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 
@@ -183,7 +177,7 @@ def change_feed(*, since: int | None = None, limit: int = 100) -> dict[str, Any]
     events = list(
         AuditLog.objects.fetch_mode(FETCH_RAISE)
         .filter(pk__gt=since)
-        .order_by("pk")[: _page_size(limit)]
+        .order_by("pk")[: page_size(limit)]
     )
     cursor = events[-1].pk if events else since
     return {

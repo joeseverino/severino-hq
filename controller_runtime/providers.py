@@ -22,7 +22,12 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from control_plane.providers import certificate_covers
+from control_plane.providers import (
+    caa_parts,
+    certificate_covers,
+    normalized_record_content,
+    normalized_hostname,
+)
 
 
 class ProviderError(RuntimeError):
@@ -487,9 +492,7 @@ def _consumer_tls_endpoint(
             raise ProviderError("NPM origin verification endpoint is missing.")
         return hostname
     if kind in {"caddy", "cpanel"}:
-        transport = registry.get("ssh_transports", {}).get(
-            consumer["connection_ref"], {}
-        )
+        transport = _transport(registry, consumer["connection_ref"])
         hostname = transport.get("host")
         if not hostname:
             raise ProviderError(
@@ -602,6 +605,30 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
+def _transport(registry: dict[str, Any], connection_ref: str) -> dict[str, Any]:
+    """The endpoint for a declared SSH connection, from the rendered env.
+
+    The registry names the connection and the prefix its values arrive under;
+    the values themselves come from 1Password by way of
+    `render-controller-env.sh`, exactly like every other connection's
+    credentials.
+    """
+
+    connection = (registry.get("connections") or {}).get(connection_ref) or {}
+    if connection.get("projection") != "ssh_transport":
+        raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
+    prefix = connection["env_prefix"]
+    port = _required(prefix, "PORT")
+    if not port.isdigit() or not 1 <= int(port) <= 65535:
+        raise ProviderError(f"{prefix}_PORT is not a port number.")
+    return {
+        "host": _required(prefix, "HOST"),
+        "port": int(port),
+        "user": _required(prefix, "USER"),
+        "host_key": _required(prefix, "HOST_KEY"),
+    }
+
+
 def _certificate_registry(name: str) -> dict[str, Any]:
     path = Path(__file__).resolve().parents[1] / "config" / name
     try:
@@ -631,9 +658,7 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
 
 def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
     registry = _certificate_registry("controller-connections.json")
-    transport = registry.get("ssh_transports", {}).get(connection_ref)
-    if not isinstance(transport, dict):
-        raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
+    transport = _transport(registry, connection_ref)
     ssh_dir = Path(_required("HQ_CONTROLLER", "SSH_DIR"))
     command = [
         "ssh",
@@ -1161,14 +1186,6 @@ def _tls_renew(
     )
 
 
-def _public_dns_locked(
-    spec: dict[str, Any], *, apply: bool,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    del spec, apply
-    raise ProviderError("Public DNS mutation is not enabled in this controller.")
-
-
 def reconcile_uploaded_certificate(
     spec: dict[str, Any], *, apply: bool = True
 ) -> ProviderResult:
@@ -1435,9 +1452,357 @@ def list_npm() -> list[dict[str, Any]]:
     ]
 
 
+# ----- Cloudflare ------------------------------------------------------------
+#
+# The credential is deliberately narrow: it can read the zones on the account
+# and read and write their DNS records, and nothing else. Zone settings,
+# analytics and every account-level surface answer 403 to it. That is why the
+# zone provider declares no reconcile it could perform -- see the capability
+# registry -- and why nothing here reaches for a setting it cannot change.
+
+
+def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
+    """One Cloudflare call, with its envelope unwrapped and its errors kept.
+
+    Not routed through ``_request`` because Cloudflare says something useful in
+    the body of a 400 -- "Content for A record must be a valid IPv4 address",
+    "An identical record already exists" -- and the shared helper turns every
+    non-200 into the same sentence. A rejected DNS change that only says
+    "Provider request failed: HTTPError" is a support ticket to yourself.
+    """
+
+    url = f"{_required('CLOUDFLARE_DNS', 'URL').rstrip('/')}{path}"
+    headers = {
+        "Authorization": f"Bearer {_required('CLOUDFLARE_DNS', 'API_TOKEN')}",
+        "Accept": "application/json",
+    }
+    body = None
+    if payload is not None:
+        body = json.dumps(payload).encode()
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - URL is deployment config.
+            request, timeout=15, context=_tls_context()
+        ) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        raise ProviderError(
+            f"Cloudflare refused the request: {_cloudflare_errors(exc.read())}"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise ProviderError(
+            f"Cloudflare request failed: {type(exc).__name__}."
+        ) from exc
+    try:
+        parsed = json.loads(raw) if raw else {}
+    except json.JSONDecodeError as exc:
+        raise ProviderError("Cloudflare returned invalid JSON.") from exc
+    if not parsed.get("success", False):
+        raise ProviderError(
+            f"Cloudflare refused the request: {_cloudflare_errors(raw)}"
+        )
+    return parsed.get("result")
+
+
+def _cloudflare_errors(raw: bytes) -> str:
+    try:
+        parsed = json.loads(raw or b"{}")
+    except json.JSONDecodeError:
+        return "an unreadable error"
+    messages = [
+        str(error.get("message", "")).strip()
+        for error in parsed.get("errors") or ()
+        if str(error.get("message", "")).strip()
+    ]
+    return "; ".join(messages) or "no reason given"
+
+
+def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
+    """Every page of a list endpoint.
+
+    Cloudflare returns 100 records at most. A zone that outgrew one page would
+    otherwise have its tail silently reported as absent -- and "absent" is the
+    word this system acts on, so the reconciler would set about recreating
+    records that were there all along.
+    """
+
+    collected: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        separator = "&" if "?" in path else "?"
+        result = _cloudflare_request(f"{path}{separator}per_page=100&page={page}")
+        batch = result or []
+        collected.extend(batch)
+        if len(batch) < 100:
+            return collected
+        page += 1
+        if page > 50:
+            raise ProviderError("Cloudflare list did not terminate.")
+
+
+def _cloudflare_zones() -> list[dict[str, Any]]:
+    return _cloudflare_paged("/zones")
+
+
+_ZONE_IDS: dict[str, str] = {}
+
+
+def _cloudflare_zone_id(zone: str) -> str:
+    wanted = zone.strip().lower().rstrip(".")
+    if wanted in _ZONE_IDS:
+        return _ZONE_IDS[wanted]
+    for candidate in _cloudflare_zones():
+        name = str(candidate.get("name", "")).strip().lower()
+        if name:
+            _ZONE_IDS[name] = candidate["id"]
+    if wanted not in _ZONE_IDS:
+        raise ProviderError(
+            f"The Cloudflare credential cannot see a zone called {wanted!r}."
+        )
+    return _ZONE_IDS[wanted]
+
+
+def _cloudflare_records(zone_id: str) -> list[dict[str, Any]]:
+    return _cloudflare_paged(f"/zones/{zone_id}/dns_records")
+
+
+def _caa_data(content: str) -> dict[str, Any]:
+    """A CAA value in the three-field shape Cloudflare will accept.
+
+    Split by the same parser the spec validates with, so a value the form
+    accepted cannot be one this refuses.
+    """
+
+    parts = caa_parts(content)
+    if parts is None:
+        raise ProviderError(
+            'A CAA value must look like: 0 issue "letsencrypt.org".'
+        )
+    flags, tag, value = parts
+    return {"flags": flags, "tag": tag, "value": value}
+
+
+def _cloudflare_payload(spec: dict[str, Any]) -> dict[str, Any]:
+    record_type = str(spec["record_type"]).upper()
+    payload: dict[str, Any] = {
+        "type": record_type,
+        "name": normalized_hostname(spec["name"]),
+        "ttl": int(spec.get("ttl", 1) or 1),
+    }
+    if record_type == "CAA":
+        payload["data"] = _caa_data(str(spec["content"]))
+    else:
+        payload["content"] = normalized_record_content(record_type, str(spec["content"]))
+    if record_type == "MX":
+        payload["priority"] = int(spec.get("priority") or 0)
+    if record_type in {"A", "AAAA", "CNAME"}:
+        # Sent only for the types that can carry it. Cloudflare rejects the
+        # field outright on a TXT or MX record rather than ignoring it.
+        payload["proxied"] = bool(spec.get("proxied", False))
+    return payload
+
+
+def _record_matches(live: dict[str, Any], spec: dict[str, Any]) -> bool:
+    record_type = str(spec["record_type"]).upper()
+    if str(live.get("type", "")).upper() != record_type:
+        return False
+    if normalized_hostname(live.get("name", "")) != normalized_hostname(spec["name"]):
+        return False
+    return normalized_record_content(record_type, str(live.get("content", ""))) == normalized_record_content(
+        record_type, str(spec["content"])
+    )
+
+
+def _record_status(zone: str, live: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "zone": zone,
+        # Carried so the next reconciliation can find this exact record even if
+        # its name, type or value were all edited at once. Without it, an edit
+        # that changes the value looks like a brand new record and the old one
+        # is left behind, answering, with nothing in HQ pointing at it.
+        "record_id": live.get("id", ""),
+        "name": live.get("name", ""),
+        "record_type": str(live.get("type", "")).upper(),
+        "content": live.get("content", ""),
+        "priority": live.get("priority"),
+        "proxied": bool(live.get("proxied", False)),
+        "ttl": live.get("ttl", 1),
+    }
+
+
+def reconcile_cloudflare_record(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Make one public DNS record match its declaration.
+
+    Identity is the recorded Cloudflare record id where there is one, and the
+    name/type/value triple otherwise. That order matters: a zone apex commonly
+    holds several records of one type, so matching by name alone would edit
+    whichever of four CAA records happened to come back first.
+    """
+
+    zone = str(spec["zone"]).strip().lower().rstrip(".")
+    zone_id = _cloudflare_zone_id(zone)
+    records = _cloudflare_records(zone_id)
+    desired = _cloudflare_payload(spec)
+
+    record_id = str((observed or {}).get("record_id", "")).strip()
+    live = next((item for item in records if item.get("id") == record_id), None)
+    if live is None:
+        live = next(
+            (item for item in records if _record_matches(item, spec)), None
+        )
+
+    if live is None:
+        if apply:
+            live = _cloudflare_request(
+                f"/zones/{zone_id}/dns_records", method="POST", payload=desired
+            )
+        return ProviderResult(
+            changed=True,
+            status=_record_status(zone, live or {}),
+            conditions=[
+                _condition("Ready", True, "Created", "DNS record was created.")
+            ],
+            message="Public DNS record created.",
+        )
+
+    current = {
+        "type": str(live.get("type", "")).upper(),
+        "name": normalized_hostname(live.get("name", "")),
+        "ttl": int(live.get("ttl", 1) or 1),
+    }
+    if desired["type"] == "CAA":
+        current["data"] = {
+            key: (live.get("data") or {}).get(key)
+            for key in ("flags", "tag", "value")
+        }
+    else:
+        current["content"] = normalized_record_content(desired["type"], str(live.get("content", "")))
+    if desired["type"] == "MX":
+        current["priority"] = int(live.get("priority") or 0)
+    if "proxied" in desired:
+        current["proxied"] = bool(live.get("proxied", False))
+
+    if current == desired:
+        return ProviderResult(
+            changed=False,
+            status=_record_status(zone, live),
+            conditions=[
+                _condition("Ready", True, "Reconciled", "DNS record is current.")
+            ],
+            message="Public DNS record unchanged.",
+        )
+    if apply:
+        live = _cloudflare_request(
+            f"/zones/{zone_id}/dns_records/{live['id']}",
+            method="PUT",
+            payload=desired,
+        )
+    return ProviderResult(
+        changed=True,
+        status=_record_status(zone, live or {}),
+        conditions=[
+            _condition("Ready", True, "Reconciled", "DNS record was updated.")
+        ],
+        message="Public DNS record updated.",
+    )
+
+
+def delete_cloudflare_record(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Remove one record, treating an already-absent one as success.
+
+    Only ever the single record this declaration owns. Cloudflare deletes by id,
+    which is the one safe way to do this: a zone apex may hold nine records, and
+    a delete that matched on name would take the other eight with it.
+    """
+
+    zone = str(spec["zone"]).strip().lower().rstrip(".")
+    zone_id = _cloudflare_zone_id(zone)
+    records = _cloudflare_records(zone_id)
+
+    record_id = str((observed or {}).get("record_id", "")).strip()
+    live = next((item for item in records if item.get("id") == record_id), None)
+    if live is None:
+        live = next((item for item in records if _record_matches(item, spec)), None)
+    if live is None:
+        return ProviderResult(
+            changed=False,
+            status={"zone": zone, "name": spec.get("name", ""), "removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such record in Cloudflare.")
+            ],
+            message="Public DNS record was already absent.",
+        )
+    if apply:
+        _cloudflare_request(
+            f"/zones/{zone_id}/dns_records/{live['id']}", method="DELETE"
+        )
+    return ProviderResult(
+        changed=True,
+        status={"zone": zone, "name": spec.get("name", ""), "removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "DNS record was removed.")
+        ],
+        message="Public DNS record removed.",
+    )
+
+
+def _zone_locked(
+    spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    del spec, apply, observed
+    raise ProviderError(
+        "Declaring a domain records what HQ is responsible for. Changing the "
+        "zone itself needs a credential with Zone Settings:Edit, which this "
+        "controller does not hold."
+    )
+
+
+def list_cloudflare_zones() -> list[dict[str, Any]]:
+    """Every zone the credential can see, declared or not.
+
+    Reported in full deliberately: which of them HQ should manage is an
+    operator's decision, and it cannot be made on a screen that only lists the
+    ones already decided about.
+    """
+
+    connection_ref = _required("CLOUDFLARE_DNS", "CONNECTION_REF")
+    return [
+        {
+            "zone": zone["name"],
+            "connection_ref": connection_ref,
+            "status": zone.get("status", ""),
+            "plan": (zone.get("plan") or {}).get("name", ""),
+        }
+        for zone in _cloudflare_zones()
+        if zone.get("name")
+    ]
+
+
+def list_cloudflare_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for zone in _cloudflare_zones():
+        zone_name = zone.get("name")
+        if not zone_name:
+            continue
+        for live in _cloudflare_records(zone["id"]):
+            if not live.get("type") or not live.get("name"):
+                continue
+            records.append(_record_status(zone_name, live))
+    return records
+
+
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
     "npm.proxy_host": list_npm,
+    "cloudflare.zone": list_cloudflare_zones,
+    "cloudflare.dns_record": list_cloudflare_records,
 }
 
 
@@ -1470,7 +1835,9 @@ PROVIDER_ACTIONS = {
     ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
     ("npm.proxy_host", "delete"): delete_npm,
-    ("cloudflare.dns_record", "reconcile"): _public_dns_locked,
+    ("cloudflare.dns_record", "reconcile"): reconcile_cloudflare_record,
+    ("cloudflare.dns_record", "delete"): delete_cloudflare_record,
+    ("cloudflare.zone", "reconcile"): _zone_locked,
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
 }

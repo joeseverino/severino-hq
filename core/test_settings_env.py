@@ -20,6 +20,36 @@ from django.test import SimpleTestCase
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Names that switch the extension set on. Cleared from every subprocess below,
+# because these tests are about one thing -- whether settings can read the
+# mounted env file -- and inherit the caller's environment to prove it works
+# from a bare process.
+#
+# Left inherited, they made this file fail whenever it was run with extensions
+# installed, which is precisely the pass that is meant to catch problems before
+# a merge. A subprocess here starts with no DJANGO_DEBUG, so admission switches
+# itself on, looks for the signed lock a composed image would have supplied, and
+# refuses to start -- a true statement about a situation none of these tests are
+# describing. It is the failure mode `scripts/check.sh` warns about in its own
+# comments: a host test that quietly assumed nothing was installed.
+PLUGIN_ENV = (
+    "SEVERINO_HQ_PLUGINS",
+    "SEVERINO_HQ_PLUGIN_LOCK",
+    "SEVERINO_HQ_PLUGIN_POLICY_SHA256",
+    "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION",
+)
+
+
+def subprocess_env(*, drop: tuple[str, ...] = (), **overrides: str) -> dict[str, str]:
+    """The caller's environment, minus the extension set, plus overrides."""
+
+    removed = set(PLUGIN_ENV) | set(drop)
+    env = {
+        key: value for key, value in os.environ.items() if key not in removed
+    }
+    env.update(overrides)
+    return env
+
 
 class MountedAppEnvTests(SimpleTestCase):
     def test_settings_load_shell_quoted_env_file(self):
@@ -34,18 +64,15 @@ class MountedAppEnvTests(SimpleTestCase):
             env_path = fh.name
         self.addCleanup(os.unlink, env_path)
 
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if key
-            not in {
+        env = subprocess_env(
+            drop=(
                 "DJANGO_SECRET_KEY",
                 "DJANGO_DEBUG",
                 "DJANGO_ALLOWED_HOSTS",
                 "SEVERINO_SITE_NAME",
-            }
-        }
-        env["SEVERINO_APP_ENV_PATH"] = env_path
+            ),
+            SEVERINO_APP_ENV_PATH=env_path,
+        )
 
         script = "; ".join(
             [
@@ -74,9 +101,10 @@ class MountedAppEnvTests(SimpleTestCase):
             env_path = fh.name
         self.addCleanup(os.unlink, env_path)
 
-        env = dict(os.environ)
-        env["SEVERINO_APP_ENV_PATH"] = env_path
-        env["DJANGO_SECRET_KEY"] = "from-real-environment"
+        env = subprocess_env(
+            SEVERINO_APP_ENV_PATH=env_path,
+            DJANGO_SECRET_KEY="from-real-environment",
+        )
 
         result = subprocess.run(
             [sys.executable, "-c", "from config import settings; print(settings.SECRET_KEY)"],
@@ -89,9 +117,10 @@ class MountedAppEnvTests(SimpleTestCase):
         self.assertEqual(result.stdout.strip(), "from-real-environment")
 
     def test_fiscal_start_month_must_be_valid(self):
-        env = dict(os.environ)
-        env["DJANGO_SECRET_KEY"] = "test-secret"
-        env["SEVERINO_FISCAL_YEAR_START_MONTH"] = "13"
+        env = subprocess_env(
+            DJANGO_SECRET_KEY="test-secret",
+            SEVERINO_FISCAL_YEAR_START_MONTH="13",
+        )
 
         result = subprocess.run(
             [sys.executable, "-c", "from config import settings"],
@@ -108,9 +137,10 @@ class MountedAppEnvTests(SimpleTestCase):
         )
 
     def test_doc_review_interval_must_be_positive(self):
-        env = dict(os.environ)
-        env["DJANGO_SECRET_KEY"] = "test-secret"
-        env["SEVERINO_DOC_REVIEW_INTERVAL_DAYS"] = "0"
+        env = subprocess_env(
+            DJANGO_SECRET_KEY="test-secret",
+            SEVERINO_DOC_REVIEW_INTERVAL_DAYS="0",
+        )
 
         result = subprocess.run(
             [sys.executable, "-c", "from config import settings"],

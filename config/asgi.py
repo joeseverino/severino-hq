@@ -10,14 +10,19 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Mount
 
 from core.headers import LowercaseHeaders
+from core.network import TrustedNetworkASGI
 from core.static import CachedStaticFiles
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_application = get_asgi_application()
-static_application = GZipMiddleware(
-    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
-    minimum_size=500,
+# Wrapped, because this mount sits above the Django stack and so never reaches
+# the middleware that refuses untrusted callers everywhere else.
+static_application = TrustedNetworkASGI(
+    GZipMiddleware(
+        CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False),
+        minimum_size=500,
+    )
 )
 # LowercaseHeaders inside the compressor, not outside it: the compressor has to
 # see names it can match, and by the time the response leaves it the damage

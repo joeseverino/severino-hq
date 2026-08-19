@@ -6,6 +6,14 @@
     <h1>{{ service.hostname }}</h1>
     <p class="muted">
       <span class="pill pill-{{ service.status }}">{{ service.status_label }}</span>
+      {% comment %}
+      Named here rather than given rows of their own. A CNAME to a name HQ
+      already serves is the same service reached another way, and listed
+      separately it appeared on the board with its own health, its own
+      certificate and its own "not routed" — describing something that is not
+      separate from anything.
+      {% endcomment %}
+      {% if service.aliases %} · also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
       {% if service.project %} · Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
     </p>
   </div>
@@ -51,11 +59,31 @@ not restated here.
             <a class="subtle-link" href="{{ claim.edit_url }}">Edit</a>
           </span>
         {% endfor %}
+      {% elif service.origin.external and facet.routes %}
+        {% comment %}
+        Not a gap. A name resolving straight to something outside is already
+        routed, and nothing on this network should answer for it — the page
+        said "nothing supplies this" beside a card naming exactly what does,
+        and offered to add a proxy in front of a site that must not have one.
+        {% endcomment %}
+        {% comment %}
+        Deliberately not naming the operator again. Origin already does, and two
+        cards side by side both reading "Cloudflare Pages" is one fact charged
+        twice — this card's job is to say the facet is not missing.
+        {% endcomment %}
+        <strong class="control-unknown">Not needed</strong>
+        <span>Answered outside your network, so nothing here has to.</span>
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>
-        {% for kind in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ kind }} &rarr;</a></span>
+        {% comment %}
+        Named by the provider's own label. Offered as the bare kind, this read
+        "Add cloudflare.dns_record" — an identifier where a sentence belongs.
+        The hostname rides along, so the form opens already knowing which name
+        it is being asked about.
+        {% endcomment %}
+        {% for kind, label in facet.declarable %}
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
         {% endfor %}
       {% endif %}
     </div>
@@ -65,6 +93,17 @@ not restated here.
     {% if not service.origin %}
       <strong>Not routed</strong>
       <span>Nothing declares where requests for this name are served.</span>
+    {% elif service.origin.external %}
+      {% comment %}
+      A public record pointing straight at something is the routing. Reported as
+      "Not routed", the page said nothing declared where a name was served about
+      a name whose entire configuration was a statement of exactly that.
+      {% endcomment %}
+      <strong>{{ service.origin.operator }}</strong>
+      <span>
+        <code>{{ service.origin.address }}</code> — outside your network. HQ
+        publishes the name; nothing here manages what answers it yet.
+      </span>
     {% elif service.origin.known %}
       <strong>{{ service.origin.label }}</strong>
       <span>
@@ -93,7 +132,41 @@ not restated here.
           </tr>
         {% endfor %}
       {% endfor %}
+
     </tbody>
   </table>
 </div>
+
+{% comment %}
+The declarations behind the other names, folded away.
+
+Not in the cards above: a card describes what answers for *this* name, and an
+alias's CNAME put a second answer in the DNS box that read as two records
+competing for one name — HQ raised a wiring fault and called a working site
+incomplete. Dropped instead, which is where this started, the record appeared
+on no page at all.
+
+So: present, attached to the service it belongs to, and out of the way, because
+it is not what anyone opened this page to read.
+{% endcomment %}
+{% if service.alias_claims %}
+  <details class="control-diagnostics">
+    <summary>{{ service.alias_summary }}</summary>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Resource</th><th>Kind</th><th>For</th><th>Health</th></tr></thead>
+        <tbody>
+          {% for alias, claim in service.alias_claims %}
+            <tr>
+              <td><a href="{{ claim.url }}"><strong>{{ claim.resource_key }}</strong></a></td>
+              <td><code>{{ claim.kind }}</code></td>
+              <td>{{ alias }}</td>
+              <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+{% endif %}
 {% endblock %}

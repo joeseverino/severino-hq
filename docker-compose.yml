@@ -30,6 +30,17 @@ services:
     container_name: severino-hq
     network_mode: host
     restart: unless-stopped
+    # The process already runs as an unprivileged user and binds a high port,
+    # so it needs no Linux capabilities and no way to acquire more. Both are
+    # free here: nothing in the image asks for either, so dropping them changes
+    # what an exploited process could reach without changing what HQ can do.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # A runaway request loop should degrade HQ, not the DNS server and the
+    # reverse proxy sharing this VM.
+    pids_limit: 512
     environment:
       # Inside the container we always use these paths; the .env file may
       # override them for non-container deploys.

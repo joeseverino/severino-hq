@@ -10,6 +10,7 @@ from search_index.backends import SnippetParts, search_backend
 from application.search_contracts import SearchDefinition
 from search_index.registry import BY_SCOPE
 
+from .projection import page_size
 from .security import AuthorizationError, Capability, Principal
 
 MAX_SEARCH_RESULTS = 5000
@@ -61,9 +62,10 @@ def search_ids(
 ) -> list[str]:
     """Return relevance-ordered stable identifiers from the configured backend."""
     _authorize(scope, principal)
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
-    capped_limit = min(limit, MAX_SEARCH_RESULTS)
+    # Its own ceiling, the shared rule. Search caps lower than a listing does
+    # because relevance past a hundred hits is noise, but "a page must be at
+    # least one row" is not a different rule here than anywhere else.
+    capped_limit = page_size(limit, maximum=MAX_SEARCH_RESULTS)
     if _fts5_available():
         return search_backend.search(scope=scope, query=query, limit=capped_limit)
     return _fallback_ids(BY_SCOPE[scope], query, capped_limit)

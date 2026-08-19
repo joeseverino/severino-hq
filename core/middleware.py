@@ -39,6 +39,15 @@ class RequestContextMiddleware:
         try:
             response = self.get_response(request)
             response["X-Request-ID"] = request_id
+            # Django has settings for the other browser-boundary headers but
+            # not this one. HQ uses none of these APIs, and an operator console
+            # holding provider credentials has no reason to leave them
+            # available to anything that manages to run in the page.
+            response.setdefault(
+                "Permissions-Policy",
+                "geolocation=(), microphone=(), camera=(), usb=(), payment=(), "
+                "interest-cohort=()",
+            )
             if not request.path.startswith("/health/") or response.status_code >= 500:
                 _request_logger.info(
                     "request completed",

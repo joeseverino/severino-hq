@@ -64,6 +64,16 @@ class GeneratedFieldTests(TestCase):
 
     def test_an_omitted_optional_falls_back_to_the_model_default(self):
         """Sent as None it would be rejected; restated here it could drift."""
+        # The zone field offers the domains HQ knows about rather than free
+        # text, so one has to exist for the form to have a valid answer -- the
+        # same reason the page that offers this form is only reachable from a
+        # domain.
+        ManagedResource.objects.create(
+            key="example-com",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "cf-example"},
+            enabled=True,
+        )
         form = spec_form_class("cloudflare.dns_record")(
             {
                 "zone": "example.com",
@@ -263,12 +273,24 @@ class ResourceFormViewTests(TestCase):
             ManagedResource.objects.filter(key="app-example-com-dns-2").exists()
         )
 
-    def test_choosing_a_kind_lists_every_provider_from_the_registry(self):
+    def test_choosing_a_kind_lists_the_providers_that_stand_on_their_own(self):
+        """Every kind except those a provider says belong somewhere else.
+
+        A public DNS record is only meaningful inside a zone, and offered here
+        it would have to open by asking which domain -- the one question the
+        page it belongs on has already answered. The provider declares that, so
+        this page never grows a hand-maintained list of exclusions.
+        """
+
         response = self.client.get(reverse("control_plane:create"))
 
         self.assertEqual(response.status_code, 200)
-        for kind in PROVIDERS:
-            self.assertContains(response, kind)
+        for kind, provider in PROVIDERS.items():
+            with self.subTest(kind=kind):
+                if provider.created_from:
+                    self.assertNotContains(response, kind)
+                else:
+                    self.assertContains(response, kind)
 
     def test_a_hostname_seeds_the_fields_it_decides(self):
         """Onboarding asks for the name once, not once per resource."""

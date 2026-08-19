@@ -10,7 +10,13 @@
     <div class="msg msg-error">{{ form.non_field_errors }}</div>
   {% endif %}
 
+  {% comment %}
+  Reached on purpose, not by default. Under SSO the view redirects straight to
+  Pocket ID, so this page is what you get after signing out — where bouncing
+  would hand back the still-valid provider session and undo the sign-out.
+  {% endcomment %}
   {% if OIDC_ENABLED %}
+    {% if request.GET.signed_out %}<p class="muted">You are signed out.</p>{% endif %}
     <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with SSO</a></p>
   {% else %}
     <form method="post" action="">

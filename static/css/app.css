@@ -464,6 +464,47 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .kind-choice-summary { color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
 .kind-choice-id { color: var(--muted); font-size: 11.5px; margin-top: auto; }
 .kind-choice:hover { border-color: var(--ink-2); }
+/* Switching between domains. Links rather than a select, because the whole set
+   is small enough to show and a select would hide every other domain behind a
+   click and then need a second one to arrive anywhere. Wraps rather than
+   scrolls, so a narrow screen stacks them instead of hiding the tail. */
+.zone-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 var(--stack-gap);
+}
+.zone-switch a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.zone-switch a:hover { border-color: var(--ink-2); color: var(--ink); }
+.zone-switch a.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+.zone-switch-note { font-size: 11.5px; font-weight: 500; opacity: 0.75; }
+/* A record's value is data, not prose: an IPv4 address broken across lines to
+   fit a narrow column is unreadable, and the table already scrolls. */
+.zone-value { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; overflow-wrap: normal; }
+/* A status pill is a label, not a paragraph. Allowed to wrap inside a table
+   cell, "Not observed" broke across two lines and grew the row it sat in,
+   which on a list of thirty records is thirty ragged rows. The table already
+   scrolls horizontally, so the honest answer is to keep the label whole. */
+.data-table .pill { white-space: nowrap; }
+/* Two links in one cell need to read as two. Separated by whitespace alone
+   they rendered as "Edit Remove" -- one control with a strange name. */
+.row-actions { display: inline-flex; gap: 12px; white-space: nowrap; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, not <text> inside it.
 
@@ -2273,3 +2314,8 @@ a.kpi:hover { background: var(--surface-2); }
 }
 
 }
+/* The folded half of a zone. Its table keeps the same styling as the one above
+   it, so opening it reads as more of the same list rather than a new thing. */
+.zone-policy { margin-top: var(--stack-gap); }
+.zone-policy summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.zone-policy .table-scroll { margin-top: 10px; }

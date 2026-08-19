@@ -8,6 +8,7 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
 import httpx
 from starlette.middleware.gzip import GZipMiddleware
+from core.network import TrustedNetworkASGI
 from starlette.staticfiles import StaticFiles
 
 from core.static import CachedStaticFiles
@@ -19,9 +20,13 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         static_route, django_route = application.routes[-2:]
         self.assertEqual(static_route.path, "/static")
-        self.assertIsInstance(static_route.app, GZipMiddleware)
-        self.assertIsInstance(static_route.app.app, StaticFiles)
-        self.assertIsInstance(static_route.app.app, CachedStaticFiles)
+        # Outermost, because this mount is above the Django stack and would
+        # otherwise be the one thing an untrusted caller could still fetch.
+        self.assertIsInstance(static_route.app, TrustedNetworkASGI)
+        compressed = static_route.app.app
+        self.assertIsInstance(compressed, GZipMiddleware)
+        self.assertIsInstance(compressed.app, StaticFiles)
+        self.assertIsInstance(compressed.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
         self.assertIsInstance(django_route.app, GZipMiddleware)
 
@@ -148,6 +153,81 @@ class StyleContractTests(SimpleTestCase):
         # A fallback (var(--x, #fff)) is still a typo worth catching, so the
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
+
+    def test_no_tracked_file_names_a_reachable_endpoint(self):
+        """Addresses, ports and account names are deployment facts, not source.
+
+        This repository is public, so an endpoint committed here is published
+        whether or not anything treats it as a secret. Deployment facts belong
+        in 1Password and reach the controller through the env the connection
+        registry already renders; what stays here is the shape.
+
+        Asked of git rather than the filesystem, because the question is what
+        would be pushed. A working tree holds plenty that is nobody's business
+        and is correctly ignored.
+        """
+
+        import re
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        # Bound before the attempt: skipTest raises, so the loop below is
+        # unreachable when git is absent -- but that is a fact about skipTest,
+        # not one visible here.
+        tracked: list[str] = []
+        try:
+            tracked = subprocess.run(
+                # Tracked *and* new-but-not-ignored, so a file is checked by
+                # the commit that first adds it rather than the one after.
+                ["git", "ls-files", "-z", "--cached", "--others",
+                 "--exclude-standard"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.split("\0")
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            self.skipTest("no git checkout to ask")
+
+        # Documentation and private ranges are examples, not places. Anything
+        # outside them is somewhere a packet can actually go.
+        reserved = re.compile(
+            r"^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|255\.|"
+            r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
+            r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
+            r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|"
+            r"1\.1\.1\.1|8\.8\.8\.8)"
+        )
+        address = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
+        # Long enough to be key material rather than a fixture. A real
+        # ed25519 public key is 68 base64 characters; tests legitimately use
+        # short stand-ins, and failing on those would teach people to weaken
+        # the check rather than fix a leak.
+        host_key = re.compile(r"ssh-(?:ed25519|rsa) AAAA[A-Za-z0-9+/]{32,}")
+        # Lockfiles and pinned action SHAs are hashes, not hosts.
+        skip = ("package-lock.json", "requirements.txt", ".github/")
+
+        findings = []
+        for name in tracked:
+            if not name or name.startswith(skip) or name.endswith(skip):
+                continue
+            if any(part in name for part in skip):
+                continue
+            path = root / name
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for candidate in address.findall(text):
+                octets = candidate.split(".")
+                if any(int(part) > 255 for part in octets):
+                    continue  # a version string, not an address
+                if not reserved.match(candidate):
+                    findings.append(f"{name}: {candidate}")
+            if host_key.search(text):
+                findings.append(f"{name}: ssh host key")
+
+        self.assertEqual(findings, [], f"reachable endpoints in tracked files: {findings}")
 
     def test_images_live_where_images_belong(self):
         """A screenshot taken while debugging is not an asset of this project.

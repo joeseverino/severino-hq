@@ -6,12 +6,23 @@ unset CDPATH
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-if [ -x .venv/bin/python ]; then
+# CHECK_PYTHON overrides the interpreter. The composed pass needs one that has
+# the extensions importable, and this repository's own venv deliberately does
+# not: the extensions are private and are never a dependency of the host. The
+# interpreter that has them is whichever venv installed them -- `hq dev` already
+# knows which, and passes it here.
+if [ -n "${CHECK_PYTHON:-}" ]; then
+    python=$CHECK_PYTHON
+elif [ -x .venv/bin/python ]; then
     python=.venv/bin/python
 elif command -v python3 >/dev/null 2>&1; then
     python=$(command -v python3)
 else
     echo "Python is required. Follow README.md#local-development." >&2
+    exit 2
+fi
+if [ ! -x "$python" ] && ! command -v "$python" >/dev/null 2>&1; then
+    echo "CHECK_PYTHON=$python is not executable." >&2
     exit 2
 fi
 
@@ -44,7 +55,12 @@ echo "[check] Complete test suite"
 # passed with it disabled cleared this gate and CI before failing inside the
 # composition, where the fix costs a rebuild instead of a rerun.
 echo "[check] Complete test suite (DEBUG off, as production runs it)"
-env -u DJANGO_DEBUG \
+# The host alone, which is what this pass is for -- the composed run is the one
+# below. The extension set is cleared rather than inherited: exported by
+# whoever last started a dev server, it turned this into a half-composed run
+# that then failed on admission, because DEBUG is unset one line up and
+# admission switches itself on with it.
+env -u DJANGO_DEBUG -u SEVERINO_HQ_PLUGINS \
     DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
     DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
     "$python" manage.py test --noinput
@@ -65,9 +81,27 @@ env -u DJANGO_DEBUG \
 # Without them it is skipped, so public CI and a fresh checkout are unaffected.
 if [ -n "${SEVERINO_HQ_PLUGINS:-}" ]; then
     echo "[check] Complete test suite (composed with the supplied plugin set)"
+    # Admission off for this pass, and only this pass.
+    #
+    # Admission proves an extension wheel was built and signed by the workflow
+    # that claims it. That is a supply-chain question, it is answered by cosign
+    # during compose, and its evidence is a signed lock file which only compose
+    # produces. Demanded here it cannot be satisfied from a checkout, and it is
+    # not asked at the right moment either.
+    #
+    # Without this the pass below never ran at all: DEBUG is unset one line up,
+    # so admission switched itself on, went looking for that lock, and raised
+    # while `config.settings` was still importing -- before a single test could
+    # execute. A gate whose whole purpose is to catch host-and-extension
+    # problems before the merge button silently caught nothing.
+    #
+    # What this pass is actually for is the other question: does the host still
+    # work with every domain installed. Query budgets, navigation, dashboards.
+    # None of that depends on who signed the wheel.
     env -u DJANGO_DEBUG \
         DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
         DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
+        SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0 \
         "$python" manage.py test --noinput
 else
     echo "[check] Composed suite skipped (no SEVERINO_HQ_PLUGINS supplied)"

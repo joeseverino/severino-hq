@@ -9,16 +9,52 @@
 </div>
 
 <section class="control-card">
-  <p>
-    This removes the record itself, not just HQ's note of it. The controller
-    deletes it at the provider, and HQ forgets this declaration once the
-    provider confirms it is gone.
-  </p>
+  {% comment %}
+  Two different acts share this page. Removing a record deletes it where it
+  actually lives; removing a domain only ends HQ's responsibility for one it
+  never created. Saying the first about the second would promise a deletion
+  nobody wants and that will not happen.
+  {% endcomment %}
+  {% if declaration_only %}
+    <p>
+      This ends HQ's responsibility for {{ resource.key }}. Nothing is deleted
+      at the provider — HQ did not create it, and it carries on exactly as it
+      is. Any record declarations HQ holds inside it are released too, so HQ
+      stops writing to a domain it is no longer responsible for.
+    </p>
+  {% else %}
+    <p>
+      This removes the record itself, not just HQ's note of it. The controller
+      deletes it at the provider, and HQ forgets this declaration once the
+      provider confirms it is gone.
+    </p>
+  {% endif %}
+  {% comment %}
+  What this one costs, said by the provider. "Are you sure" about a table of
+  fields is a question whose honest answer depends entirely on which record it
+  is, and this page was asking it without that.
+  {% endcomment %}
+  {% if removal_note %}<p class="msg msg-warning">{{ removal_note }}</p>{% endif %}
+  {% comment %}
+  What this is, then the tuning underneath. Every field at equal weight put
+  "Hsts subdomains: No" and "Access list: 0" — defaults nobody chose — among the
+  four rows that say what is about to be deleted.
+  {% endcomment %}
   <dl class="kv compact">
-    {% for label, value in resource.spec.items %}
+    {% for label, value in spec_rows.primary %}
       <dt>{{ label }}</dt><dd><code>{{ value }}</code></dd>
     {% endfor %}
   </dl>
+  {% if spec_rows.advanced %}
+    <details class="control-diagnostics">
+      <summary>Its other settings ({{ spec_rows.advanced|length }})</summary>
+      <dl class="kv compact">
+        {% for label, value in spec_rows.advanced %}
+          <dt>{{ label }}</dt><dd><code>{{ value }}</code></dd>
+        {% endfor %}
+      </dl>
+    </details>
+  {% endif %}
 
   {% if removal_allowed %}
     <form method="post" class="form">
@@ -29,7 +65,7 @@
         <p class="help">Recorded on the operation and in the audit log.</p>
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">Remove it</button>
+        <button type="submit" class="primary">{% if declaration_only %}Stop managing it{% else %}Remove it{% endif %}</button>
         <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Keep it</a>
       </div>
     </form>

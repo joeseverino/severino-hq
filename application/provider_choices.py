@@ -14,9 +14,12 @@ late-bound way a domain points at its attention provider.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
-from control_plane.models import ManagedResource, TopologySnapshot
+from control_plane.models import ManagedResource, ProviderInventory, TopologySnapshot
+from control_plane.providers import DNS_RECORD_TYPES
 
 
 def proxy_choices() -> dict[str, tuple[tuple[str, str], ...]]:
@@ -142,3 +145,77 @@ def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
             if "(cpanel)" not in label
         )
     }
+
+
+def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
+    """The zones a record could belong to, declared ones first.
+
+    Not restricted to declared domains, deliberately. Restricting it reads as
+    the stricter, safer choice and is neither: adopting a record from a zone
+    that has not been declared yet produces a resource whose own zone is missing
+    from the menu, so the next person to open its edit form is told their
+    unmodified record is invalid. A menu that cannot describe what already
+    exists is a worse failure than one that offers a zone nobody declared.
+
+    Undeclared zones are labelled rather than hidden, which is the nudge without
+    the dead end.
+    """
+
+    declared = {
+        resource.spec.get("zone", "")
+        for resource in ManagedResource.objects.filter(
+            kind="cloudflare.zone", enabled=True
+        )
+        if resource.spec.get("zone")
+    }
+    seen = {
+        str(record.get("zone", ""))
+        for snapshot in ProviderInventory.objects.filter(kind="cloudflare.zone")
+        for record in snapshot.records
+        if record.get("zone")
+    }
+    options = [(zone, zone) for zone in sorted(declared)]
+    options.extend(
+        (zone, f"{zone} — not managed by HQ yet")
+        for zone in sorted(seen - declared)
+    )
+    return {
+        "zone": tuple(options),
+        # Named rather than lettered. Rendered from the annotation alone the
+        # menu reads "A / AAAA / CNAME / TXT / MX / CAA", which is a quiz for
+        # anyone who does not already know the answer -- and the registry
+        # already carries a sentence about each one.
+        "record_type": tuple(
+            (record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES
+        ),
+    }
+
+
+def zone() -> dict[str, tuple[tuple[str, str], ...]]:
+    """The provider connections that could hold a zone.
+
+    Read from the controller connection registry rather than from a list kept
+    here, so adding a second Cloudflare account is a registry entry and not a
+    code change. The registry is the same file the controller resolves
+    credentials from, so a connection offered here is one that actually exists.
+    """
+
+    return {"connection_ref": tuple(_dns_connections())}
+
+
+def _dns_connections():
+    registry_path = (
+        Path(__file__).resolve().parents[1] / "config" / "controller-connections.json"
+    )
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # The form is still usable without the menu; refusing to render the page
+        # because a config file is unreadable would be a worse failure than
+        # asking the operator to type the reference.
+        return
+    for ref, connection in sorted((registry.get("connections") or {}).items()):
+        provider = connection.get("provider", "")
+        if not provider.startswith("cloudflare"):
+            continue
+        yield (ref, f"{ref} ({provider})")

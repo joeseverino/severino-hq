@@ -493,7 +493,7 @@ class ProviderContractTests(TestCase):
             principal=cli_principal(),
         )
         self.assertTrue(disabled["ok"])
-        with self.assertRaisesRegex(PolicyError, "Public DNS"):
+        with self.assertRaisesRegex(PolicyError, "public DNS"):
             save_managed_resource(
                 ManagedResourceCommand(
                     key="public-hq",
@@ -665,25 +665,28 @@ class OperationPolicyTests(TestCase):
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_locked_reconcile_capability_cannot_queue_work(self):
+        """A domain is the locked capability now that DNS records apply.
+
+        Declaring one records which zones HQ is responsible for. Reconciling it
+        would mean changing the zone's own settings, which needs a credential
+        this controller deliberately does not hold -- so asking for it must be
+        refused rather than queued for a worker that could only fail.
+        """
+
         save_managed_resource(
             ManagedResourceCommand(
-                key="future-public-hq",
-                kind="cloudflare.dns_record",
-                spec={
-                    "zone": "jseverino.com",
-                    "name": "hq.jseverino.com",
-                    "record_type": "A",
-                    "content": "192.0.2.1",
-                },
+                key="a-domain",
+                kind="cloudflare.zone",
+                spec={"zone": "example.com", "connection_ref": "cf-example"},
             ),
             principal=cli_principal(),
         )
 
-        with self.assertRaisesRegex(PolicyError, "Public DNS reconciliation"):
+        with self.assertRaisesRegex(PolicyError, "Zone Settings"):
             request_reconcile(
-                OperationCommand(idempotency_key="public-dns-locked"),
+                OperationCommand(idempotency_key="zone-locked"),
                 principal=cli_principal(),
-                current_key="future-public-hq",
+                current_key="a-domain",
             )
         self.assertFalse(OperationRequest.objects.exists())
 

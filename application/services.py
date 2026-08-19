@@ -43,26 +43,34 @@ from control_plane.models import ManagedResource, TopologySnapshot
 from control_plane.providers import (
     PROVIDERS,
     SERVICE_FACETS,
-    ProviderResolutionContext,
     certificate_covers,
-    resolve_provider_spec,
+    names_a_host,
+    normalized_hostname,
 )
 from projects.models import Project
 
-from .infrastructure import NotFoundError, resource_health
+from .infrastructure import NotFoundError, resolved_spec, resource_health
 from .ui import ListRow
 
 
-def _normalise(hostname: str) -> str:
-    """One spelling of a name, so two declarations of it meet.
+# One spelling of a name, shared with every other surface that joins on one.
+# See ``control_plane.providers.normalized_hostname``: this module had its own
+# copy, the domain view had another, and they agreed by coincidence.
+_normalise = normalized_hostname
 
-    A rewrite, a proxy host and a certificate are authored by hand in three
-    places and will not agree on case or on the trailing dot. Names that differ
-    only in those would otherwise appear as separate services, each missing
-    whatever the other one had.
+
+def _lower_first(text: str) -> str:
+    """A label as it reads mid-sentence, leaving an acronym alone.
+
+    "Proxy host" belongs lowercase after "Add"; "TLS certificate" does not, and
+    lowering its first letter produced "tLS certificate". Only the first word is
+    inspected, because that is the only one being changed.
     """
 
-    return hostname.strip().lower().rstrip(".")
+    first = text.partition(" ")[0]
+    if not text or first.isupper():
+        return text
+    return text[:1].lower() + text[1:]
 
 
 @dataclass(frozen=True)
@@ -130,23 +138,52 @@ class Facet:
         return bool(self.claims)
 
     @property
-    def declarable(self) -> tuple[str, ...]:
-        """Provider kinds that could supply this facet for a name that lacks it.
+    def declarable(self) -> tuple[tuple[str, str], ...]:
+        """``(kind, label)`` for each provider that could supply this facet.
 
         Read from the registry rather than listed here, so the offer to add one
         appears for a provider declared long after this was written. Only kinds
-        that can be seeded from a hostname: a certificate is chosen from those
-        that already exist, not created by naming a service.
+        that can be seeded from a hostname.
+
+        A certificate is offered too, which it was not: the exclusion was
+        written when every certificate predated HQ owning them, and choosing
+        from what exists was the only sensible act. It stops being sensible the
+        first time a domain arrives that no wildcard covers -- and this offer is
+        only ever rendered for a facet nothing supplies, so a name already
+        covered is never invited to grow a certificate of its own.
+
+        The label comes with it because the page offered "Add
+        cloudflare.dns_record" -- the identifier, which names the provider
+        correctly and the offer not at all. Every provider already says what it
+        is called in a sentence.
         """
 
         return tuple(
             sorted(
-                kind
+                # Only the first letter is lowered. Lowercasing the whole
+                # label turned "Internal DNS record" into "internal dns
+                # record" and shouted at nobody about the acronym.
+                (kind, _lower_first(provider.label or kind))
                 for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id
-                and not provider.covers
-                and provider.seed is not None
+                if provider.facet == self.id and provider.seed is not None
             )
+        )
+
+    @property
+    def routes(self) -> bool:
+        """Whether providers of this facet exist to say where a name is served.
+
+        Read from the registry: a provider that declares an ``origin`` hook is
+        one whose job includes answering "and then what serves it". Used to tell
+        a facet that is genuinely missing from one that cannot apply, because a
+        name resolving straight to something outside is already routed and needs
+        nothing on this network to answer for it.
+        """
+
+        return any(
+            provider.origin is not None
+            for provider in PROVIDERS.values()
+            if provider.facet == self.id
         )
 
     @property
@@ -176,6 +213,30 @@ class Origin:
     container: str = ""
 
     @property
+    def external(self) -> bool:
+        """Whether this is served somewhere HQ does not reach.
+
+        A proxy forwards to ``host:port`` by construction; a DNS record names a
+        target with no port. So an address with no port came from the record
+        itself, which means the name is answered outside this network -- a
+        Pages site, a mail host, someone else's server.
+
+        Worth separating from "unknown host", which is the same missing lookup
+        with a very different meaning: an ingress pointing at an address no host
+        claims is a thing HQ cannot describe and probably should.
+        """
+
+        return not self.known and ":" not in self.address
+
+    @property
+    def operator(self) -> str:
+        """What a person calls whoever serves this, read off the name itself."""
+
+        from .known_hosts import operator
+
+        return operator(self.address) if self.external else ""
+
+    @property
     def known(self) -> bool:
         """Whether the address belongs to something in the topology.
 
@@ -200,6 +261,26 @@ class Service:
     origin: Origin | None = None
     project: dict[str, str] | None = None
     faults: tuple[str, ...] = ()
+    # Other names that reach this same service, folded in rather than listed
+    # separately. See ``_aliases``.
+    aliases: tuple[str, ...] = ()
+    # ``(alias, claim)`` for the declarations that make those other names work.
+    # Beside the service, never merged into its facets: merged, two CNAMEs read
+    # as two records competing for one name.
+    alias_claims: tuple[tuple[str, "Claim"], ...] = ()
+
+    @property
+    def alias_summary(self) -> str:
+        """What to call the folded-away records, in the reader's terms.
+
+        "Records behind the other names" is a description of the data structure
+        rather than of anything an operator has. There is almost always exactly
+        one alias, and its name is the useful word.
+        """
+
+        if len(self.aliases) == 1:
+            return f"Records for {self.aliases[0]}"
+        return f"Records for {len(self.aliases)} other names"
 
     @property
     def url(self) -> str:
@@ -210,6 +291,21 @@ class Service:
         return tuple(claim for facet in self.facets for claim in facet.claims)
 
     @property
+    def declared_claims(self) -> tuple[Claim, ...]:
+        """Claims that name this service, rather than merely answering for it.
+
+        A wildcard certificate covers a name without anyone having declared it,
+        so this is what separates "somebody built this" from "something happens
+        to reach it".
+        """
+
+        return tuple(
+            claim
+            for claim in self.claims
+            if not (PROVIDERS.get(claim.kind) and PROVIDERS[claim.kind].covers)
+        )
+
+    @property
     def status(self) -> str:
         """Worst news first, with a live failure outranking a wiring gap.
 
@@ -218,6 +314,17 @@ class Service:
         an outage, so they are not the same colour.
         """
 
+        if not self.declared_claims:
+            # Nothing declares this name, which is not health. Reported as
+            # "Wired", it was the most confident statement on a page about a
+            # service that did not exist.
+            #
+            # Covering claims do not count. A wildcard certificate answers for
+            # a name without anyone having declared it, so a hostname nobody
+            # has built anything for still arrives here holding one -- and
+            # "this name has TLS" is true and is not the same as "this name
+            # works".
+            return "unknown"
         states = {facet.state for facet in self.facets}
         if "serious" in states:
             return "serious"
@@ -238,6 +345,8 @@ class Service:
 
         if self.status == "serious":
             return "Degraded"
+        if self.status == "unknown":
+            return "Nothing declared"
         if self.status == "good":
             return "Wired"
         return "Incomplete" if self.faults else "Unverified"
@@ -261,8 +370,16 @@ class Service:
 # ----- Derivation ------------------------------------------------------------
 
 
-def service_catalog() -> tuple[Service, ...]:
-    """Every hostname HQ declares, assembled from the resources that name it."""
+def _declarations():
+    """Every enabled declaration, sorted into what it names and what it covers.
+
+    Shared by the catalogue and by a name nobody has declared anything for yet,
+    so a prospective service is assembled from exactly the same reading of the
+    world. Built only for the catalogue, a prospect was handed an empty covering
+    list and reported "no certificate" for a name a wildcard already covered --
+    a page that existed to say what was still needed, understating what was
+    already there.
+    """
 
     topology = _topology()
     declared: dict[str, dict[str, list[Claim]]] = {}
@@ -275,7 +392,14 @@ def service_catalog() -> tuple[Service, ...]:
             continue
         spec = _resolved(resource, topology)
         try:
-            hostnames = tuple(_normalise(name) for name in provider.hostnames(spec))
+            # Filtered once here rather than per provider, because "is this a
+            # name something can answer at" is a property of the name and not
+            # of whichever provider published it.
+            hostnames = tuple(
+                name
+                for name in (_normalise(n) for n in provider.hostnames(spec))
+                if names_a_host(name)
+            )
             origin = provider.origin(spec) if provider.origin else ""
         except (KeyError, TypeError, ValueError):
             # A spec HQ cannot read is a problem with that resource, and the
@@ -298,9 +422,65 @@ def service_catalog() -> tuple[Service, ...]:
             if origin:
                 origins.setdefault(hostname, origin)
 
+    aliases = _aliases(declared, origins)
+    alias_claims: dict[str, list[tuple[str, Claim]]] = {}
+    for alias, target in aliases.items():
+        # Kept beside the service rather than merged into it. Merged, the two
+        # CNAMEs looked like two records fighting over one name -- HQ raised
+        # "only one of them can be the answer" and called a working site
+        # incomplete. They are not competing: one is another name for the other,
+        # and its record belongs to the alias, not to the name it points at.
+        #
+        # Dropped entirely, which is what happened first, the CNAME that makes
+        # www work appeared on no service page at all: a real resource, still
+        # reconciled, invisible everywhere it mattered.
+        for claims in declared.pop(alias, {}).values():
+            for claim in claims:
+                alias_claims.setdefault(target, []).append((alias, claim))
+        origins.pop(alias, None)
+    return declared, covering, origins, aliases, alias_claims, topology
+
+
+def _aliases(declared, origins) -> dict[str, str]:
+    """``{alias: target}`` for names that are another service under a second name.
+
+    A CNAME to a name HQ already serves is not a second service. It is the same
+    service reachable another way -- ``www.example.com`` pointing at
+    ``example.com`` is one site, and listing it separately puts a second row on
+    the board with its own health, its own certificate and its own "not routed",
+    describing something that is not separate from anything.
+
+    Only within what HQ declares. A CNAME to somewhere outside is a name HQ
+    publishes and does not otherwise know about, which is a service of its own
+    by every definition that matters here.
+    """
+
+    found: dict[str, str] = {}
+    for hostname in declared:
+        target = _normalise(origins.get(hostname, ""))
+        if not target or ":" in target:
+            # A proxy origin, which is where a name is *served*, not another
+            # name for it.
+            continue
+        if target != hostname and target in declared:
+            found[hostname] = target
+    return found
+
+
+def service_catalog() -> tuple[Service, ...]:
+    """Every hostname HQ declares, assembled from the resources that name it."""
+
+    declared, covering, origins, aliases, alias_claims, topology = _declarations()
     projects = _published_projects()
+    by_target: dict[str, list[str]] = {}
+    for alias, target in sorted(aliases.items()):
+        by_target.setdefault(target, []).append(alias)
     return tuple(
-        _assemble(hostname, facets, covering, origins.get(hostname, ""), projects, topology)
+        _assemble(
+            hostname, facets, covering, origins.get(hostname, ""), projects,
+            topology, tuple(by_target.get(hostname, ())),
+            tuple(alias_claims.get(hostname, ())),
+        )
         for hostname, facets in sorted(declared.items())
     )
 
@@ -309,6 +489,35 @@ def find_service(hostname: str) -> Service | None:
     wanted = _normalise(hostname)
     return next(
         (service for service in service_catalog() if service.hostname == wanted), None
+    )
+
+
+def service_or_prospect(hostname: str) -> Service:
+    """The service for this name, or the empty shape of one not declared yet.
+
+    Publishing something meant creating a resource before there was anywhere to
+    stand: the picker asked which kind of thing to add, then the form asked for
+    the hostname, and only after saving did a page exist that knew what else the
+    name still needed -- so the second resource meant typing the name again.
+
+    A service with nothing behind it is a coherent thing to look at. Every facet
+    reads "not declared" and offers what could supply it, seeded with the name,
+    which is exactly the page an operator wants before they have built anything.
+    Nothing is stored to make one: ask for a name and this describes it, whether
+    or not anything answers for it yet.
+    """
+
+    wanted = _normalise(hostname)
+    declared, covering, origins, aliases, alias_claims, topology = _declarations()
+    return _assemble(
+        wanted,
+        declared.get(wanted, {}),
+        covering,
+        origins.get(wanted, ""),
+        _published_projects(),
+        topology,
+        tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
+        tuple(alias_claims.get(wanted, ())),
     )
 
 
@@ -329,6 +538,8 @@ def _assemble(
     origin_address: str,
     projects: dict[str, dict[str, str]],
     topology: dict[str, Any] | None,
+    aliases: tuple[str, ...] = (),
+    alias_claims: tuple[tuple[str, "Claim"], ...] = (),
 ) -> Service:
     facets = tuple(
         Facet(
@@ -348,6 +559,8 @@ def _assemble(
     return Service(
         hostname=hostname,
         facets=facets,
+        aliases=aliases,
+        alias_claims=alias_claims,
         origin=origin,
         project=projects.get(hostname),
         faults=_faults(facets, origin),
@@ -491,24 +704,9 @@ def _topology() -> dict[str, Any] | None:
     )
 
 
-def _resolved(resource: ManagedResource, topology: dict[str, Any] | None) -> dict[str, Any]:
-    """The spec as a controller would see it, falling back to the authored one.
-
-    A certificate declares only a topology reference; the names it covers exist
-    only after resolving that. Where resolution cannot happen -- no snapshot
-    imported, a dangling reference -- the authored spec stands in and the
-    certificate covers nothing. That surfaces as an uncovered name, which is
-    exactly true: HQ cannot demonstrate that anything covers it.
-    """
-
-    try:
-        return resolve_provider_spec(
-            resource.kind,
-            resource.spec,
-            context=ProviderResolutionContext(topology=topology),
-        )
-    except (KeyError, TypeError, ValueError):
-        return resource.spec
+# Shared with the domain view, so two projections of the same declaration
+# cannot disagree about which names a certificate covers.
+_resolved = resolved_spec
 
 
 # ----- Machine-readable projection -------------------------------------------

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Publish a service · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Publish a service" lede="Name it, and HQ shows you everything it still needs." %}
+
+{% comment %}
+One question, because the name is the only thing HQ cannot work out. What a
+service needs — a DNS record, something to answer for it, a certificate that
+covers it — is declared by the providers, and the page this leads to offers
+each of them already filled in with the name.
+{% endcomment %}
+<form method="post" class="form">
+  {% csrf_token %}
+  <div class="field">
+    <label for="hostname">Hostname</label>
+    <input type="text" name="hostname" id="hostname" autofocus
+           placeholder="app.example.com" spellcheck="false" required>
+    <p class="help">The name people will use. HQ works out the rest from there.</p>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="primary">Continue</button>
+    <a class="btn" href="{% url 'control_plane:services' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

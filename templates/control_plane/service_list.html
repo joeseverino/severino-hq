@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Services · {{ SITE_NAME }}{% endblock %}
 {% block content %}
-{% url 'control_plane:create' as resources_url %}
-{% include "partials/_page_head.html" with title="Services" action_primary=True lede="Every hostname HQ manages, and whether its DNS, ingress and certificate are all in place." action_url=resources_url action_label="Add" %}
+{% comment %}
+"Add" on a board of services means adding a service. It pointed at the resource
+picker, which asks which kind of thing to declare — a different question, and
+the one that made publishing a name start in the wrong place.
+{% endcomment %}
+{% url 'control_plane:service_start' as start_url %}
+{% include "partials/_page_head.html" with title="Services" action_primary=True lede="Every hostname HQ manages, and whether its DNS, ingress and certificate are all in place." action_url=start_url action_label="Publish a service" %}
 
 {% comment %}
 Columns come from SERVICE_FACETS, not from this markup. A provider that declares
@@ -23,7 +28,10 @@ template changing.
     <tbody>
       {% for service in services %}
         <tr>
-          <td><a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a></td>
+          <td>
+            <a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a>
+            {% if service.aliases %}<br><span class="muted">also {% for alias in service.aliases %}{{ alias }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          </td>
           {% for facet in service.facets %}
             <td>
               {% for claim in facet.claims %}
@@ -44,7 +52,7 @@ template changing.
           <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
         </tr>
       {% empty %}
-        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." action_url=resources_url action_label="Add your first one" %}</td></tr>
+        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." action_url=start_url action_label="Publish your first one" %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -90,16 +98,5 @@ template changing.
   </div>
 {% endif %}
 
-{% comment %}
-Staleness is stated because everything above it is a claim about a moment. A
-provider the controller could not reach still shows its last sweep, and saying
-how old that is stops it reading as current.
-{% endcomment %}
-{% if inventory %}
-  <p class="muted">
-    {% for snapshot in inventory %}
-      {{ snapshot.label }}: {% if snapshot.reachable %}{{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked {{ snapshot.observed_at|timesince }} ago{% else %}unreachable ({{ snapshot.error }}){% endif %}{% if not forloop.last %} · {% endif %}
-    {% endfor %}
-  </p>
-{% endif %}
+{% include "partials/_sweep_freshness.html" with inventory=inventory %}
 {% endblock %}

@@ -25,10 +25,10 @@ from .inventory import (
     adopt,
     adopt_service,
     inventory_state,
-    record_inventory,
     unmanaged,
     unmanaged_services,
 )
+from .sweep import record_sweep
 from .infrastructure import NotFoundError
 from .security import cli_principal
 
@@ -64,11 +64,11 @@ class RecordingTests(TestCase):
         A cache that only ever grows reports things that are gone, which is the
         one failure a staleness-aware store must not have.
         """
-        record_inventory(
+        record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
             principal=cli_principal(),
         )
-        record_inventory(
+        record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
 
@@ -77,7 +77,7 @@ class RecordingTests(TestCase):
         )
 
     def test_an_unreachable_provider_is_recorded_as_unreachable(self):
-        record_inventory(
+        record_sweep(
             {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
             principal=cli_principal(),
         )
@@ -88,7 +88,7 @@ class RecordingTests(TestCase):
 
     def test_a_kind_this_hq_does_not_know_is_ignored_not_rejected(self):
         """A controller ahead of this HQ must not take the whole sweep down."""
-        result = record_inventory(
+        result = record_sweep(
             {
                 "invented.kind": {"ok": True, "records": [{}]},
                 "adguard.rewrite": {"ok": True, "records": [A_REWRITE]},
@@ -99,7 +99,7 @@ class RecordingTests(TestCase):
         self.assertEqual(result["recorded"], ["adguard.rewrite"])
 
     def test_state_reports_what_each_provider_last_said(self):
-        record_inventory(
+        record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
             principal=cli_principal(),
         )
@@ -112,7 +112,7 @@ class RecordingTests(TestCase):
 
 class UnmanagedTests(TestCase):
     def setUp(self):
-        record_inventory(
+        record_sweep(
             a_sweep(
                 **{
                     "adguard.rewrite": [A_REWRITE, ANOTHER],
@@ -176,7 +176,7 @@ class UnmanagedTests(TestCase):
 
 class AdoptionTests(TestCase):
     def setUp(self):
-        record_inventory(
+        record_sweep(
             a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}),
             principal=cli_principal(),
         )
@@ -270,7 +270,7 @@ class AdoptionWebTests(TestCase):
             username="operator", password="test-only-password"
         )
         self.client.force_login(self.user)
-        record_inventory(
+        record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
 
@@ -308,12 +308,21 @@ class ProviderRecordContractTests(TestCase):
     """Every provider that can be adopted must be able to read its own records."""
 
     def test_a_listable_provider_can_rebuild_a_spec_from_a_record(self):
+        """Anything adoptable must say how to tell one of its records apart.
+
+        This asserted ``hostnames``, which was the same thing while every
+        provider held exactly one record per name. A zone holds several for one
+        name and a domain declares no hostname at all, so the question the test
+        was always asking -- "what makes this record itself" -- is now answered
+        by ``identity``, falling back to the hostnames where they still say it.
+        """
+
         for kind, provider in PROVIDERS.items():
             if provider.from_record is None:
                 continue
             with self.subTest(kind=kind):
-                self.assertIsNotNone(
-                    provider.hostnames,
+                self.assertTrue(
+                    provider.identity is not None or provider.hostnames is not None,
                     f"{kind} can be adopted but has no identity to match on",
                 )
 
@@ -331,7 +340,7 @@ class AdoptServiceTests(TestCase):
     """A hostname is one decision, even when it is several records."""
 
     def setUp(self):
-        record_inventory(
+        record_sweep(
             a_sweep(
                 **{
                     "adguard.rewrite": [

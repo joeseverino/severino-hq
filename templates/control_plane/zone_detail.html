@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ zone.zone }} · Domains{% endblock %}
+{% block content %}
+
+{% url 'control_plane:create' as create_url %}
+{% include "partials/_page_head.html" with title=zone.zone lede="Every record published in this domain, and what the domain currently says about itself." %}
+
+{% comment %}
+Rendered as links rather than a select, because there is no submit step to
+explain and the whole set is visible at a glance. A select would hide three of
+four domains behind a click and then need a second one to go anywhere.
+{% endcomment %}
+{% if zones|length > 1 %}
+  <nav class="zone-switch" aria-label="Domains">
+    {% for other in zones %}
+      <a href="{{ other.url }}"{% if other.zone == zone.zone %} class="active" aria-current="page"{% endif %}>
+        {{ other.zone }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
+      </a>
+    {% endfor %}
+  </nav>
+{% endif %}
+
+{% if not public_dns_enabled %}
+  <section class="msg msg-info">
+    <p>
+      <strong>Changing public DNS is switched off in this deployment.</strong>
+      Everything below is what Cloudflare currently holds. HQ will not create,
+      change or remove any of it until
+      <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> is set.
+    </p>
+  </section>
+{% endif %}
+
+{% if not zone.managed %}
+  <section class="msg msg-warning">
+    <p>
+      <strong>HQ is not managing {{ zone.zone }} yet.</strong>
+      Its records are listed below because the Cloudflare credential can see
+      them, but HQ holds no declaration for this domain and will not change
+      anything in it.
+    </p>
+    <form method="post" action="{% url 'zones:adopt' zone.zone %}">
+      {% csrf_token %}
+      <input type="hidden" name="token" value="{{ zone.adopt_token }}">
+      <button type="submit" class="primary">Manage this domain</button>
+    </form>
+  </section>
+{% endif %}
+
+<div class="control-summary">
+  {% comment %}
+  Each card is contributed by whatever owns the knowledge behind it — the
+  service catalogue, the certificate registry, the records themselves. This
+  template knows there are cards, not what they are made of, so an insight
+  added later renders without an edit here.
+
+  The value is the link. Rendered as a value plus a separate "Open it →", every
+  card carried a second line of vague instruction to say what the first line
+  already named.
+  {% endcomment %}
+  {% for insight in zone.insights %}
+    <div class="control-metric">
+      <span class="control-label">{{ insight.label }}</span>
+      <strong{% if insight.concern %} class="control-warn"{% endif %}>
+        {% if insight.url %}
+          {% comment %}
+          The dialog is an enhancement over a real link, never a replacement:
+          the href reaches a page that answers the same question, so the card
+          still works if the dialog does not open.
+          {% endcomment %}
+          <a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value }}</a>
+        {% else %}{{ insight.value }}{% endif %}
+      </strong>
+      {% if insight.concern %}<span class="readout"><span class="pill pill-attention">Needs attention</span></span>{% endif %}
+      {% if insight.detail %}<span>{{ insight.detail }}</span>{% endif %}
+    </div>
+    {% if insight.rows %}
+      {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% comment %}
+Written out rather than using _page_head.html, which carries exactly one action
+and this heading has two. Split into a heading block and an actions block
+beneath it, the buttons dropped to their own line and left the heading sitting
+beside empty space — a head is one row.
+{% endcomment %}
+<div class="page-head page-head-compact">
+  <div>
+    <h2>Records</h2>
+    <p class="page-lede">{{ records_lede }}</p>
+  </div>
+  {% comment %}
+  No "adopt" button. A record in a domain HQ was made responsible for is HQ's,
+  and the sweep takes it on within the minute — see
+  ``zones.adopt_discovered_records``. Offered here, it asked a question whose
+  answer was always yes and reported outstanding work nobody meant to do.
+  {% endcomment %}
+  {% if zone.managed and public_dns_enabled %}
+    <div class="page-actions">
+      <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
+    </div>
+  {% endif %}
+</div>
+
+{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled %}
+
+{% comment %}
+Verification strings and issuance rules, folded away. A domain apex answers
+"where does traffic go" underneath four CAA records and three ownership proofs,
+and sorted with the rest they came first — the least interesting rows in the
+zone at the top of the page.
+{% endcomment %}
+{% if zone.policy %}
+  <details class="control-diagnostics zone-policy">
+    <summary>Policy and verification records ({{ zone.policy|length }})</summary>
+    {% include "control_plane/_zone_records.html" with rows=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
+  </details>
+{% endif %}
+
+{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind %}
+{% endblock %}
