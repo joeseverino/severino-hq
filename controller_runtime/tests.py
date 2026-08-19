@@ -768,6 +768,7 @@ class WorkerTests(TestCase):
                 ("npm.proxy_host", "reconcile"),
                 ("tls.certificate", "reconcile"),
                 ("tls.certificate", "renew"),
+                ("tls.uploaded_certificate", "reconcile"),
             ),
         )
 

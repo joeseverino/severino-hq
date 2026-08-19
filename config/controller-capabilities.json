@@ -49,6 +49,14 @@
           "reason": "Public DNS reconciliation is not enabled."
         }
       }
+    },
+    "tls.uploaded_certificate": {
+      "actions": {
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        }
+      }
     }
   }
 }

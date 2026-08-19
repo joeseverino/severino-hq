@@ -21,6 +21,15 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% for field in spec.primary %}{% include "partials/_form_field.html" %}{% endfor %}
 
   {% comment %}
+  Material the operator has to supply, on the same page as the rest of it. A
+  resource that cannot work without this should not be creatable without it.
+  {% endcomment %}
+  {% if material %}
+    {% if material.non_field_errors %}<div class="msg msg-error">{{ material.non_field_errors }}</div>{% endif %}
+    {% for field in material %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% endif %}
+
+  {% comment %}
   Everything the model already has a good answer for sits one disclosure away,
   and only when editing. Creating asks what HQ cannot work out for itself and
   stops: a name it can derive from the hostname, and a switch to pause

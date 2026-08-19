@@ -1135,6 +1135,66 @@ def _public_dns_locked(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
     raise ProviderError("Public DNS mutation is not enabled in this controller.")
 
 
+def reconcile_uploaded_certificate(
+    spec: dict[str, Any], *, apply: bool = True
+) -> ProviderResult:
+    """Install a certificate HQ was given rather than one it issued.
+
+    Deployment is identical -- a proxy does not care which authority signed the
+    thing it serves -- so this reuses the same path as a renewal and differs
+    only in where the material came from. It is never renewed here: the CA is
+    air-gapped, and the certificate's expiry is reported so an operator knows
+    when to generate the next one.
+    """
+
+    material = spec.get("material") or {}
+    fullchain = material.get("fullchain") or ""
+    private_key = material.get("private_key") or ""
+    if not fullchain or not private_key:
+        raise ProviderError(
+            "HQ did not supply the stored certificate. Upload it again."
+        )
+    domains = list(material.get("domains") or ())
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status={"certificate_name": spec["certificate_name"], "domains": domains},
+            conditions=[
+                _condition("Ready", True, "Planned", "Would install the certificate.")
+            ],
+            message="Would install the stored certificate.",
+        )
+    deployment = _deploy_certificate(
+        {
+            "certificate_name": spec["certificate_name"],
+            "domains": domains,
+            "consumers": spec["consumers"],
+        },
+        fullchain.encode(),
+        private_key.encode(),
+    )
+    observed = {
+        key: value
+        for key, value in deployment.items()
+        # The deployment report carries an npm certificate identity; nothing
+        # secret-bearing may enter HQ, and the status guard rejects the whole
+        # report if it does.
+        if "private" not in key and "key" not in key
+    }
+    return ProviderResult(
+        changed=True,
+        status={
+            "certificate_name": spec["certificate_name"],
+            "domains": domains,
+            **observed,
+        },
+        conditions=[
+            _condition("Ready", True, "Installed", "Stored certificate installed.")
+        ],
+        message="Stored certificate installed.",
+    )
+
+
 def delete_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
     """Remove the rewrite, and treat an already-absent one as success.
 
@@ -1288,6 +1348,7 @@ def inventory() -> dict[str, Any]:
 
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
     ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
     ("npm.proxy_host", "delete"): delete_npm,

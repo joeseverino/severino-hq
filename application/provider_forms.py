@@ -319,3 +319,26 @@ def _reported(exc: Exception) -> tuple[tuple[str, str], ...]:
         location = ".".join(str(part) for part in item.get("loc", ()))
         reported.append((location, item.get("msg", "Invalid value.")))
     return tuple(reported) or (("", str(exc)),)
+
+
+class CertificateUploadForm(forms.Form):
+    """The two files ``cert-gen`` produced, pasted in.
+
+    Pasted rather than uploaded because that is what the operator already has:
+    the runbook ends with opening fullchain.pem and copying it into a web form.
+    A file input would be tidier and would mean finding the directory again.
+    """
+
+    fullchain = forms.CharField(
+        label="Certificate",
+        widget=forms.Textarea(attrs={"rows": 8, "spellcheck": "false"}),
+        help_text="The contents of fullchain.pem — the certificate and its CA chain.",
+    )
+    private_key = forms.CharField(
+        label="Private key",
+        widget=forms.Textarea(attrs={"rows": 8, "spellcheck": "false"}),
+        help_text=(
+            "The contents of the .key file. Encrypted before it is stored, and "
+            "never shown again or returned by any API."
+        ),
+    )

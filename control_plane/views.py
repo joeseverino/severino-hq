@@ -35,9 +35,21 @@ from application.inventory import (
     inventory_state,
     unmanaged_services,
 )
-from application.provider_forms import ResourceIdentityForm, spec_form_class
+from application.certificates import (
+    CertificateError,
+    UploadCertificateCommand,
+    store_certificate,
+)
+from application.plugins import _import
+from application.provider_forms import (
+    CertificateUploadForm,
+    ResourceIdentityForm,
+    spec_form_class,
+)
 from application.security import web_principal
 from application.services import find_service, service_catalog
+
+from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
@@ -96,6 +108,8 @@ class ResourceFormView(LoginRequiredMixin, View):
             )
         hostname = request.GET.get("hostname", "").strip()
         seed = PROVIDERS[kind].seed
+        material_class = _material_form(kind) if not resource else None
+        material = material_class() if material_class else None
         return render(
             request,
             self.template_name,
@@ -121,6 +135,10 @@ class ResourceFormView(LoginRequiredMixin, View):
                         else (seed(hostname) if seed and hostname else None)
                     )
                 ),
+                # Collected here rather than on a page of its own. A resource
+                # that is not usable without material should not be creatable
+                # without it.
+                "material": material,
             },
         )
 
@@ -133,7 +151,13 @@ class ResourceFormView(LoginRequiredMixin, View):
         spec = spec_form_class(kind, lock_identity=bool(resource))(
             request.POST, initial=resource.spec if resource else None
         )
-        if (identity is None or identity.is_valid()) and spec.is_valid():
+        material_class = _material_form(kind) if not resource else None
+        material = material_class(request.POST) if material_class else None
+        if (
+            (identity is None or identity.is_valid())
+            and spec.is_valid()
+            and (material is None or material.is_valid())
+        ):
             try:
                 result = save_managed_resource(
                     ManagedResourceCommand(
@@ -154,6 +178,16 @@ class ResourceFormView(LoginRequiredMixin, View):
                 spec.add_error(None, _readable_error(exc))
             else:
                 saved = result["resource"]["key"]
+                if material is not None:
+                    try:
+                        _store_material(kind, saved, material.cleaned_data, request)
+                    except (CertificateError, secrets.SecretsUnavailable) as exc:
+                        # The declaration exists and the material does not, so
+                        # say which half landed rather than reporting success.
+                        messages.error(request, str(exc))
+                        return redirect(
+                            "control_plane:upload_certificate", key=saved
+                        )
                 messages.success(
                     request,
                     f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
@@ -170,6 +204,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "summary": PROVIDERS[kind].summary,
                 "identity": identity,
                 "spec": spec,
+                "material": material,
             },
         )
 
@@ -189,6 +224,17 @@ def _suggested_key(hostname: str, kind: str) -> str:
     # deletes them, and "app.example.com" suggests the key "appexamplecom" --
     # a permanent, unreadable name for the sake of one substitution.
     return slugify(f"{hostname}-{facet}".replace(".", "-"))[:180]
+
+
+def _material_form(kind: str):
+    reference = PROVIDERS[kind].material_form
+    return _import(reference) if reference else None
+
+
+def _store_material(kind: str, key: str, cleaned: dict, request) -> None:
+    _import(PROVIDERS[kind].material_handler)(
+        key, cleaned, principal=web_principal(request.user)
+    )
 
 
 def _derived_key(kind: str, spec: dict) -> str:
@@ -242,6 +288,58 @@ class AdoptView(LoginRequiredMixin, View):
             "Nothing changed at the provider.",
         )
         return redirect("control_plane:service", hostname=result["hostname"])
+
+
+class CertificateUploadView(LoginRequiredMixin, View):
+    """Take a certificate generated elsewhere and hold it for installation."""
+
+    template_name = "control_plane/certificate_upload.html"
+
+    def get(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "form": CertificateUploadForm(),
+                "store_ready": secrets.available(),
+                "material": getattr(resource, "material", None),
+            },
+        )
+
+    def post(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        form = CertificateUploadForm(request.POST)
+        if form.is_valid():
+            try:
+                stored = store_certificate(
+                    UploadCertificateCommand(
+                        key=resource.key,
+                        fullchain=form.cleaned_data["fullchain"],
+                        private_key=form.cleaned_data["private_key"],
+                    ),
+                    principal=web_principal(request.user),
+                )
+            except (CertificateError, secrets.SecretsUnavailable, PolicyError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Stored a certificate covering {', '.join(stored['domains'])}. "
+                    "HQ installs it on the next controller pass.",
+                )
+                return redirect("control_plane:detail", key=resource.key)
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "form": form,
+                "store_ready": secrets.available(),
+                "material": getattr(resource, "material", None),
+            },
+        )
 
 
 class ResourceRemoveView(LoginRequiredMixin, View):

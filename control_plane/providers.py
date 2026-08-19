@@ -101,10 +101,10 @@ class TLSCertificateSpec(ProviderModel):
     topology_ref: str = Field(
         default="",
         pattern=r"^(pki:[a-z0-9][a-z0-9-]*)?$",
-        title="Existing certificate",
+        title="Described in the topology",
         description=(
-            "One your topology already describes. Leave unset to define a new "
-            "one below."
+            "Set on certificates that predate HQ owning them. A new certificate "
+            "is defined here instead and leaves this empty."
         ),
     )
     certificate_name: str = Field(
@@ -311,6 +311,36 @@ class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
     certificate_id: int | None = Field(default=None, ge=1)
 
 
+class UploadedCertificateSpec(ProviderModel):
+    """A certificate generated elsewhere, that HQ installs and keeps.
+
+    Separate from ``tls.certificate`` because the lifecycle is different, not
+    because the certificate is. This one cannot be renewed by HQ -- the CA that
+    signs it is deliberately air-gapped -- so it has no renewal window and no
+    automatic renew action, and pretending otherwise would put a countdown on a
+    thing HQ cannot act on.
+    """
+
+    certificate_name: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[a-z0-9][a-z0-9.-]*$",
+        title="Name",
+        description="What to call it at the providers it gets installed on.",
+    )
+    install_on: list[str] = Field(
+        min_length=1,
+        title="Install it on",
+        description="Where to deploy it. It can be added to more later.",
+    )
+
+
+class ResolvedUploadedCertificateSpec(ProviderModel):
+    certificate_name: str = Field(min_length=1, max_length=160)
+    install_on: list[str] = Field(min_length=1)
+    consumers: list[TLSConsumer] = Field(min_length=1)
+
+
 class AdGuardRewriteSpec(ProviderModel):
     domain: str = Field(
         min_length=1,
@@ -397,6 +427,13 @@ class ProviderSpec:
     # rather than once per resource -- and a provider added later joins that
     # flow by saying which of its fields the name fills in.
     seed: Callable[[str], dict[str, Any]] | None = None
+    # Some resources are not complete without material the operator has to
+    # supply -- an uploaded certificate is only a name and a list of targets
+    # until the certificate itself arrives. Declared as a form and a handler so
+    # the same page collects both: asked for separately, creating one produced
+    # an empty declaration and a second page to go and find.
+    material_form: str = ""
+    material_handler: str = ""
     # Fields that are routine tuning rather than part of the question being
     # asked. Split on required-ness instead, a spec whose validity comes from a
     # cross-field rule has no required fields at all, and its form rendered
@@ -565,6 +602,52 @@ def _resolve_tls(
     }
 
 
+def _resolve_uploaded(
+    authored: dict[str, Any], context: ProviderResolutionContext
+) -> dict[str, Any]:
+    """Turn chosen install targets into full consumer declarations.
+
+    Same learning as an inline certificate: how a target receives one is a
+    property of the target, already written on the dependencies that describe
+    how it receives the certificates it has.
+    """
+
+    payload = context.topology
+    if payload is None:
+        raise ValueError("Installing a certificate requires the topology snapshot.")
+    profiles = _tls_consumer_profiles(payload)
+    consumers = []
+    for connection_ref in authored["install_on"]:
+        profile = profiles.get(connection_ref)
+        if profile is None:
+            raise ValueError(
+                f"Nothing in the topology describes how {connection_ref!r} "
+                "receives a certificate, so HQ cannot install one there."
+            )
+        if profile["kind"] == "cpanel":
+            raise ValueError(
+                "A certificate HQ did not issue cannot be installed on shared "
+                "hosting: cPanel will not accept one signed by a private CA."
+            )
+        consumer = {
+            "topology_ref": profile["from"],
+            "kind": profile["kind"],
+            "connection_ref": connection_ref,
+            "name": f"{authored['certificate_name']}-{profile['kind']}",
+            "verify_domains": [],
+        }
+        if profile["kind"] == "caddy":
+            consumer["certificate_directory"] = profile["certificate_directory"]
+        else:
+            consumer["discover_covered_hosts"] = False
+        consumers.append(consumer)
+    return {
+        "certificate_name": authored["certificate_name"],
+        "install_on": authored["install_on"],
+        "consumers": consumers,
+    }
+
+
 def _resolve_npm(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
@@ -662,6 +745,23 @@ def _dns_record_readout(
     return (("Record", desired, status.get("content", "")),)
 
 
+def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    # The names come from the certificate itself, which HQ read when it was
+    # uploaded and recorded on the resource's status. Nothing is declared here,
+    # so before the first observation this covers nothing -- which is true.
+    return ()
+
+
+def _uploaded_certificate_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    return (
+        ("Name", spec.get("certificate_name", ""), ""),
+        ("Expires", "", _expiry(status.get("not_after", ""))),
+        ("Installed on", ", ".join(spec.get("install_on", ())), ""),
+    )
+
+
 def _rewrite_from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {"domain": record["domain"], "answer": record["answer"]}
 
@@ -723,11 +823,32 @@ _PROVIDERS = (
         _resolve_tls,
         label="TLS certificate",
         choices="application.provider_choices:certificate_choices",
-        advanced_fields=("renewal_window_days",),
+        # topology_ref is not offered when adding one. It exists because every
+        # certificate here predates HQ owning them, and "add the certificate you
+        # already have" is not a thing anyone wants to do -- it is already
+        # managed. Adding means defining a new one; the reference stays visible
+        # on the resources that use it.
+        advanced_fields=("topology_ref", "renewal_window_days"),
         facet="certificate",
         readout=_certificate_readout,
         hostnames=_certificate_hostnames,
         covers=True,
+    ),
+    ProviderSpec(
+        "tls.uploaded_certificate",
+        "Installs a certificate you generated yourself, and keeps it so you can "
+        "add it to another service without regenerating it.",
+        UploadedCertificateSpec,
+        ResolvedUploadedCertificateSpec,
+        _resolve_uploaded,
+        label="Uploaded certificate",
+        choices="application.provider_choices:uploaded_certificate_choices",
+        material_form="application.provider_forms:CertificateUploadForm",
+        material_handler="application.certificates:store_uploaded_material",
+        facet="certificate",
+        hostnames=_uploaded_certificate_hostnames,
+        covers=True,
+        readout=_uploaded_certificate_readout,
     ),
     ProviderSpec(
         "npm.proxy_host",

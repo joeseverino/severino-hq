@@ -117,3 +117,28 @@ def _certificates(payload: dict[str, Any]):
             f"pki:{identifier}",
             f"{entry.get('certificate_name') or identifier} — {covers}",
         )
+
+
+def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+    """The same install targets an issued certificate can go to.
+
+    Deploying is deploying: a proxy does not care which authority signed the
+    thing it is asked to serve, so the targets are read back from use exactly
+    the same way.
+    """
+
+    payload = (
+        TopologySnapshot.objects.filter(pk="topology")
+        .values_list("payload", flat=True)
+        .first()
+    )
+    # Shared hosting is excluded: cPanel will not accept a certificate signed by
+    # a private CA, and resolution refuses one. Offering it would put an answer
+    # in the menu that fails only after being chosen.
+    return {
+        "install_on": tuple(
+            (ref, label)
+            for ref, label in _install_targets(payload or {})
+            if "(cpanel)" not in label
+        )
+    }

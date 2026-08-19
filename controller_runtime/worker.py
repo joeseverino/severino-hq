@@ -92,6 +92,19 @@ def _report(
     )
 
 
+# Kinds whose work needs material HQ is holding rather than credentials the
+# controller has. Fetched separately from the contract so it stays out of
+# anything that merely describes a resource.
+_MATERIAL_KINDS = frozenset({"tls.uploaded_certificate"})
+
+
+def _with_material(resource: dict[str, Any]) -> dict[str, Any]:
+    if resource["kind"] not in _MATERIAL_KINDS:
+        return resource
+    material = _manage("material", "--resource", resource["key"])
+    return {**resource, "spec": {**resource["spec"], "material": material}}
+
+
 def _report_inventory(controller_id: str) -> None:
     """Tell HQ what the providers hold, before doing anything about it.
 
@@ -162,6 +175,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
     generation = resource["generation"]
     try:
         preflight()
+        resource = _with_material(resource)
         result = execute(resource, operation["action"])
     except ProviderError as exc:
         message = str(exc)

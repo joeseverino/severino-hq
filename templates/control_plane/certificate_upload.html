@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Certificate for {{ resource.key }} · Severino HQ{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Certificate for {{ resource.key }}</h1>
+    <p class="page-lede">
+      Generated on your Mac against the offline CA. HQ installs it wherever this
+      resource says, and keeps it so adding it to another service later is a click.
+    </p>
+  </div>
+</div>
+
+{% if material %}
+  <section class="control-card">
+    <h2>Held now</h2>
+    <dl class="kv compact">
+      <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
+      <dt>Expires</dt><dd>{{ material.not_after|date:"j M Y" }} · {{ material.not_after|timeuntil }} left</dd>
+      <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16" }}…</code></dd>
+    </dl>
+    <p class="muted">Uploading again replaces it. The key itself is never shown.</p>
+  </section>
+{% endif %}
+
+{% if not store_ready %}
+  {% comment %}
+  Refused rather than degraded. Storing a private key in the clear because a
+  setting was missing is the one outcome nobody would have chosen.
+  {% endcomment %}
+  <p class="msg msg-error">
+    HQ has no secret store key configured, so it will not accept a private key.
+    Set <code>SEVERINO_SECRET_STORE_KEY</code> in the app environment first.
+  </p>
+{% else %}
+  <form method="post" class="form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+    {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="primary">Store it</button>
+      <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Cancel</a>
+    </div>
+  </form>
+
+  <p class="muted">
+    HQ checks the pair matches and has not expired before storing anything. The
+    key is encrypted at rest and never leaves HQ except to the controller that
+    installs it.
+  </p>
+{% endif %}
+{% endblock %}

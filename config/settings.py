@@ -321,6 +321,12 @@ SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = int(
 if SEVERINO_API_IDEMPOTENCY_TTL_SECONDS < 60:
     raise RuntimeError("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS must be at least 60.")
 
+# Encrypts the few secrets an operator deliberately hands to HQ -- today, the
+# private key of an internally signed certificate that has to reach a proxy.
+# Unset, HQ refuses to hold one rather than storing it in the clear; see
+# core.secrets. Not a provider credential: those stay outside the web container.
+SEVERINO_SECRET_STORE_KEY = env_secret("SEVERINO_SECRET_STORE_KEY")
+
 # Private MCP endpoint. All three settings are enforced by the ASGI boundary;
 # empty hosts or a short/empty token disable MCP fail-closed.
 SEVERINO_MCP_TOKEN = env_secret("SEVERINO_MCP_TOKEN")

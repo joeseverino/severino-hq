@@ -83,6 +83,41 @@ class ProviderInventory(TimestampedModel):
         return f"{self.kind} ({len(self.records)} records)"
 
 
+class CertificateMaterial(TimestampedModel):
+    """A certificate an operator generated elsewhere, held so it can be reused.
+
+    The one secret HQ keeps on purpose. An internally signed certificate is
+    produced on an air-gapped machine and has to reach a proxy somehow; without
+    this, that is a copy and paste into a provider's web form, and installing it
+    somewhere else later means another trip to the offline CA.
+
+    Sealed with a key that is not in this database -- see ``core.secrets`` -- and
+    never returned by any serializer. The controller reads it through its own
+    bridge command, so it does not ride along in the contract that every other
+    resource's export prints.
+    """
+
+    resource = models.OneToOneField(
+        ManagedResource, on_delete=models.CASCADE, related_name="material"
+    )
+    sealed_fullchain = models.TextField()
+    sealed_private_key = models.TextField()
+    # Held in the clear because they are printed, not protected: an operator has
+    # to see which certificate this is and when it stops working, and both are
+    # readable by anyone who can already connect to the service it secures.
+    fingerprint_sha256 = models.CharField(max_length=95, blank=True)
+    # The names the certificate actually carries, read out of it at upload. The
+    # deploy path needs them to know which proxy hosts to rebind, and the
+    # service view needs them to know what this covers -- neither is declared,
+    # both are facts about the artifact.
+    domains = models.JSONField(default=list, blank=True)
+    not_after = models.DateTimeField(null=True, blank=True)
+    subject = models.CharField(max_length=500, blank=True)
+
+    def __str__(self) -> str:
+        return f"material for {self.resource_id}"
+
+
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
         RECONCILE = "reconcile", "Reconcile"
