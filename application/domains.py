@@ -153,6 +153,18 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         attention_provider="application.attention:contacts",
     ),
     DomainDescriptor(
+        id="hq.zones",
+        label="Domains",
+        # Under Web, not Infrastructure. Web is the public site and what it
+        # publishes, and a zone is exactly that. The declarations behind it are
+        # infrastructure resources and stay listed there; this is where the
+        # records themselves are read and changed, which is a different job done
+        # on a different day.
+        navigation=(
+            NavigationItem("Domains", "zones:index", "zones", 112, "Web"),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.expenses",
         label="Expenses",
         navigation=(

@@ -22,15 +22,23 @@ class ControllerConnectionRegistryTests(TestCase):
             {"source": "field", "label": "website"},
         )
 
-    def test_ssh_transports_are_pinned_and_have_distinct_identities(self):
-        transports = self.registry["ssh_transports"]
+    def test_ssh_connections_declare_a_prefix_and_carry_no_endpoint(self):
+        """The registry says how a transport is wired, never where it goes."""
 
-        self.assertEqual(set(transports), {"edge", "namecheap-cpanel"})
-        for connection_ref, transport in transports.items():
+        ssh = {
+            ref: connection
+            for ref, connection in self.registry["connections"].items()
+            if connection["projection"] == "ssh_transport"
+        }
+
+        self.assertEqual(set(ssh), {"edge", "namecheap-cpanel"})
+        for connection_ref, connection in ssh.items():
             with self.subTest(connection_ref=connection_ref):
-                self.assertGreater(transport["port"], 0)
-                self.assertTrue(transport["user"])
-                self.assertRegex(transport["host_key"], r"^ssh-ed25519 ")
+                self.assertRegex(connection["env_prefix"], r"^[A-Z][A-Z0-9_]*$")
+        self.assertNotIn("ssh_transports", self.registry)
+        # The projection may name a *field* called host_key; what must never
+        # appear is key material or an address.
+        self.assertNotIn("ssh-ed25519", json.dumps(self.registry))
 
 
 class ProviderAdapterTests(TestCase):
@@ -550,22 +558,38 @@ class ProviderAdapterTests(TestCase):
                 }
             )
 
-    def test_public_dns_fails_closed(self):
-        with self.assertRaisesRegex(providers.ProviderError, "not enabled"):
-            providers.execute(
-                {"kind": "cloudflare.dns_record", "spec": {}}, "reconcile"
-            )
+    def test_changing_a_zone_itself_fails_closed(self):
+        """Public DNS records apply now; the zone's own settings do not.
+
+        The credential can read the zones and read and write their records, and
+        answers 403 to everything else. So a request to reconcile the zone must
+        fail here, in the controller, rather than reaching Cloudflare to be
+        refused there.
+        """
+
+        with self.assertRaisesRegex(providers.ProviderError, "Zone Settings"):
+            providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
     @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
     @mock.patch.dict(
-        "os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True
+        "os.environ",
+        {
+            "NPM_URL": "https://npm-origin.example",
+            "EDGE_HOST": "192.0.2.20",
+            "EDGE_PORT": "22",
+            "EDGE_USER": "controller",
+            "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
+        },
+        clear=True,
     )
     def test_tls_observer_reports_consumer_drift_and_public_artifact(
         self, observe, registry
     ):
         registry.return_value = {
-            "ssh_transports": {"edge": {"host": "192.0.2.20"}}
+            "connections": {
+                "edge": {"projection": "ssh_transport", "env_prefix": "EDGE"}
+            }
         }
         observe.side_effect = [
             {
@@ -620,9 +644,21 @@ class ProviderAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "CPANEL_HOST": "192.0.2.10",
+            "CPANEL_PORT": "22",
+            "CPANEL_USER": "controller",
+            "CPANEL_HOST_KEY": "ssh-ed25519 AAAA",
+        },
+        clear=True,
+    )
     def test_cpanel_tls_observation_bypasses_public_proxy(self, observe, registry):
         registry.return_value = {
-            "ssh_transports": {"cpanel": {"host": "192.0.2.10"}}
+            "connections": {
+                "cpanel": {"projection": "ssh_transport", "env_prefix": "CPANEL"}
+            }
         }
         observe.return_value = {
             "domain": "quiz.example.test",
@@ -944,6 +980,12 @@ class WorkerTests(TestCase):
             (
                 ("adguard.rewrite", "delete"),
                 ("adguard.rewrite", "reconcile"),
+                # A public DNS record applies and deletes. The zone it lives in
+                # is deliberately absent: its only action is locked, because
+                # changing a zone's settings needs a credential the controller
+                # does not hold.
+                ("cloudflare.dns_record", "delete"),
+                ("cloudflare.dns_record", "reconcile"),
                 ("npm.proxy_host", "delete"),
                 ("npm.proxy_host", "reconcile"),
                 ("tls.certificate", "reconcile"),
@@ -1037,3 +1079,329 @@ class WorkerTests(TestCase):
 
         preflight.assert_called_once_with()
         execute.assert_called_once()
+
+
+CLOUDFLARE_ENV = {
+    "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
+    "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
+    "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-example",
+}
+
+ZONE = {"id": "zone1", "name": "example.com", "status": "active", "plan": {"name": "Free"}}
+
+
+def live(record_id, rtype, name, content, **extra):
+    """A record shaped exactly as Cloudflare returns one.
+
+    The field set was read off the real API rather than assumed: `priority` is
+    present and null except on MX, CAA carries a formatted `content` *and* a
+    `data` object, and a proxied record always reports ttl 1.
+    """
+
+    record = {
+        "id": record_id,
+        "type": rtype,
+        "name": name,
+        "content": content,
+        "proxied": extra.get("proxied", False),
+        "ttl": extra.get("ttl", 1),
+        "priority": extra.get("priority"),
+        "data": extra.get("data"),
+    }
+    return record
+
+
+@mock.patch.dict("os.environ", CLOUDFLARE_ENV, clear=True)
+class CloudflareAdapterTests(TestCase):
+    """The code that actually changes public DNS.
+
+    Every case here is one where getting it wrong is expensive and quiet: a
+    record edited into existence twice, a sibling deleted along with its
+    neighbour, or a record that reports as drifted against itself and is
+    rewritten on every pass forever.
+    """
+
+    def setUp(self):
+        # Module-level cache of zone name -> id. Harmless in a controller run
+        # that lasts a second; between tests it would carry one case's zones
+        # into the next.
+        providers._ZONE_IDS.clear()
+
+    def _calls(self, request):
+        return [call.args[0] for call in request.call_args_list]
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_missing_record_is_created(self, request):
+        request.side_effect = [[ZONE], [], live("new1", "A", "app.example.com", "203.0.113.1")]
+
+        result = providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "app.example.com",
+            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
+        })
+
+        self.assertTrue(result.changed)
+        created = request.call_args_list[-1]
+        self.assertEqual(created.kwargs["method"], "POST")
+        self.assertEqual(created.kwargs["payload"]["type"], "A")
+        self.assertEqual(created.kwargs["payload"]["content"], "203.0.113.1")
+        self.assertEqual(result.status["record_id"], "new1")
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_matching_record_is_left_alone(self, request):
+        request.side_effect = [
+            [ZONE],
+            [live("r1", "A", "app.example.com", "203.0.113.1")],
+        ]
+
+        result = providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "app.example.com",
+            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
+        })
+
+        self.assertFalse(result.changed)
+        # Two reads and no write. A reconciler that rewrites an already-correct
+        # record burns an API call per pass and hides real changes in the log.
+        self.assertEqual(request.call_count, 2)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_changed_value_updates_that_record_in_place(self, request):
+        request.side_effect = [
+            [ZONE],
+            [live("r1", "A", "app.example.com", "203.0.113.1")],
+            live("r1", "A", "app.example.com", "203.0.113.9"),
+        ]
+
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com", "name": "app.example.com",
+                "record_type": "A", "content": "203.0.113.9", "proxied": False, "ttl": 1,
+            },
+            observed={"record_id": "r1"},
+        )
+
+        self.assertTrue(result.changed)
+        written = request.call_args_list[-1]
+        self.assertEqual(written.kwargs["method"], "PUT")
+        self.assertIn("/dns_records/r1", written.args[0])
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_retargeting_a_record_moves_it_rather_than_cloning_it(self, request):
+        """The bug class that made renaming create a second record.
+
+        Name and value both change at once, so nothing matches by content. The
+        record id HQ was last seen holding is the only thing that still
+        identifies it -- without that this becomes a create, and the old record
+        keeps answering with nothing in HQ pointing at it.
+        """
+
+        request.side_effect = [
+            [ZONE],
+            [live("r1", "A", "old.example.com", "203.0.113.1")],
+            live("r1", "A", "new.example.com", "203.0.113.7"),
+        ]
+
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com", "name": "new.example.com",
+                "record_type": "A", "content": "203.0.113.7", "proxied": False, "ttl": 1,
+            },
+            observed={"record_id": "r1"},
+        )
+
+        self.assertTrue(result.changed)
+        written = request.call_args_list[-1]
+        self.assertEqual(written.kwargs["method"], "PUT")
+        self.assertIn("/dns_records/r1", written.args[0])
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_one_of_nine_records_on_a_name_is_the_one_edited(self, request):
+        """A zone apex holds many records. Matching by name would pick a coin toss."""
+
+        siblings = [
+            live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"',
+                 data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"}),
+            live("c2", "CAA", "example.com", '0 issuewild "letsencrypt.org"',
+                 data={"flags": 0, "tag": "issuewild", "value": "letsencrypt.org"}),
+            live("m1", "MX", "example.com", "mx01.example.net", priority=10),
+            live("m2", "MX", "example.com", "mx02.example.net", priority=20),
+        ]
+        request.side_effect = [[ZONE], siblings, live("m2", "MX", "example.com", "mx03.example.net", priority=20)]
+
+        providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com", "name": "example.com",
+                "record_type": "MX", "content": "mx03.example.net",
+                "priority": 20, "proxied": False, "ttl": 1,
+            },
+            observed={"record_id": "m2"},
+        )
+
+        self.assertIn("/dns_records/m2", request.call_args_list[-1].args[0])
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_caa_is_sent_as_three_fields_not_as_a_string(self, request):
+        """Cloudflare returns CAA as one string and accepts it only as data."""
+
+        request.side_effect = [[ZONE], [], live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"')]
+
+        providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "example.com",
+            "record_type": "CAA", "content": '0 issue "letsencrypt.org"',
+            "proxied": False, "ttl": 1,
+        })
+
+        payload = request.call_args_list[-1].kwargs["payload"]
+        self.assertEqual(payload["data"], {"flags": 0, "tag": "issue", "value": "letsencrypt.org"})
+        self.assertNotIn("content", payload)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_an_mx_carries_its_priority_and_an_address_record_does_not(self, request):
+        request.side_effect = [[ZONE], [], live("m1", "MX", "example.com", "mx.example.net", priority=10)]
+        providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "example.com",
+            "record_type": "MX", "content": "mx.example.net",
+            "priority": 10, "proxied": False, "ttl": 1,
+        })
+        self.assertEqual(request.call_args_list[-1].kwargs["payload"]["priority"], 10)
+
+        providers._ZONE_IDS.clear()
+        request.reset_mock()
+        request.side_effect = [[ZONE], [], live("a1", "A", "app.example.com", "203.0.113.1")]
+        providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "app.example.com",
+            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
+        })
+        payload = request.call_args_list[-1].kwargs["payload"]
+        self.assertNotIn("priority", payload)
+        # proxied is only sent for the types that can carry it; Cloudflare
+        # rejects the field outright on a TXT or MX record.
+        self.assertIn("proxied", payload)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_txt_value_matches_whether_or_not_it_was_typed_quoted(self, request):
+        """Cloudflare stores TXT quoted and returns it quoted, always."""
+
+        request.side_effect = [
+            [ZONE],
+            [live("t1", "TXT", "example.com", '"v=spf1 -all"')],
+        ]
+
+        result = providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "example.com",
+            "record_type": "TXT", "content": "v=spf1 -all", "proxied": False, "ttl": 1,
+        })
+
+        self.assertFalse(result.changed)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_name_typed_in_capitals_is_not_permanent_drift(self, request):
+        """Cloudflare lowercases names, so sending the typed case never matches."""
+
+        request.side_effect = [
+            [ZONE],
+            [live("a1", "A", "app.example.com", "203.0.113.1")],
+        ]
+
+        result = providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "APP.example.com",
+            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
+        })
+
+        self.assertFalse(result.changed)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_caa_value_with_extra_spaces_is_not_permanent_drift(self, request):
+        request.side_effect = [
+            [ZONE],
+            [live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"',
+                  data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"})],
+        ]
+
+        result = providers.reconcile_cloudflare_record({
+            "zone": "example.com", "name": "example.com",
+            "record_type": "CAA", "content": '0  issue   "letsencrypt.org"',
+            "proxied": False, "ttl": 1,
+        })
+
+        self.assertFalse(result.changed)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_delete_removes_only_the_record_it_owns(self, request):
+        siblings = [
+            live("t1", "TXT", "example.com", '"one"'),
+            live("t2", "TXT", "example.com", '"two"'),
+            live("t3", "TXT", "example.com", '"three"'),
+        ]
+        request.side_effect = [[ZONE], siblings, None]
+
+        result = providers.delete_cloudflare_record(
+            {"zone": "example.com", "name": "example.com",
+             "record_type": "TXT", "content": '"two"'},
+            observed={"record_id": "t2"},
+        )
+
+        self.assertTrue(result.changed)
+        deleted = request.call_args_list[-1]
+        self.assertEqual(deleted.kwargs["method"], "DELETE")
+        self.assertIn("/dns_records/t2", deleted.args[0])
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_deleting_something_already_gone_is_success(self, request):
+        """Deletion has to be idempotent: the queue retries a delete that
+        applied and then failed to report, and a second attempt finding nothing
+        has achieved exactly what was asked."""
+
+        request.side_effect = [[ZONE], []]
+
+        result = providers.delete_cloudflare_record(
+            {"zone": "example.com", "name": "gone.example.com",
+             "record_type": "A", "content": "203.0.113.1"},
+        )
+
+        self.assertFalse(result.changed)
+        self.assertEqual(request.call_count, 2)
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_a_zone_the_credential_cannot_see_is_named(self, request):
+        request.side_effect = [[ZONE]]
+
+        with self.assertRaisesRegex(providers.ProviderError, "elsewhere.example"):
+            providers.reconcile_cloudflare_record({
+                "zone": "elsewhere.example", "name": "app.elsewhere.example",
+                "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
+            })
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_every_page_of_a_long_zone_is_read(self, request):
+        """Cloudflare returns 100 records at most.
+
+        A zone that outgrew one page would have its tail reported as absent, and
+        absent is the word this system acts on -- the reconciler would set about
+        recreating records that were there all along.
+        """
+
+        first = [live(f"r{i}", "A", f"h{i}.example.com", "203.0.113.1") for i in range(100)]
+        second = [live("r100", "A", "h100.example.com", "203.0.113.1")]
+        request.side_effect = [[ZONE], first, second]
+
+        records = providers.list_cloudflare_records()
+
+        self.assertEqual(len(records), 101)
+        self.assertIn("page=2", self._calls(request)[-1])
+
+    @mock.patch("controller_runtime.providers._cloudflare_request")
+    def test_the_inventory_reports_what_hq_can_express(self, request):
+        request.side_effect = [
+            [ZONE],
+            [ZONE],
+            [live("m1", "MX", "example.com", "mx.example.net", priority=10)],
+        ]
+
+        zones = providers.list_cloudflare_zones()
+        records = providers.list_cloudflare_records()
+
+        self.assertEqual(zones[0]["zone"], "example.com")
+        self.assertEqual(zones[0]["connection_ref"], "cloudflare-dns-example")
+        self.assertEqual(records[0]["record_id"], "m1")
+        self.assertEqual(records[0]["priority"], 10)
+        self.assertEqual(records[0]["zone"], "example.com")

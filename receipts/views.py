@@ -6,7 +6,6 @@ media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 
 from __future__ import annotations
 
-import mimetypes
 from pathlib import Path
 
 from django.contrib import messages
@@ -39,6 +38,10 @@ from application.tables import TableListMixin, TableSort, TableToggle
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm
+from .validation import (
+    ALLOWED_RECEIPT_CONTENT_TYPES,
+    INLINE_SAFE_CONTENT_TYPES,
+)
 from .models import Receipt
 
 
@@ -207,14 +210,20 @@ class ReceiptFileView(LoginRequiredMixin, View):
             message=f"Receipt file viewed: {receipt.original_filename}",
         )
 
-        content_type = (
-            receipt.content_type
-            or mimetypes.guess_type(receipt.original_filename or path.name)[0]
-            or "application/octet-stream"
-        )
+        # Never guessed from the filename, which the uploader chooses. The
+        # stored type is used only if it is one this app agreed to accept;
+        # anything else, including a blank left by an older upload, is served
+        # as an opaque byte stream.
+        stored = (receipt.content_type or "").strip().lower()
+        allowed = stored in ALLOWED_RECEIPT_CONTENT_TYPES
+        content_type = stored if allowed else "application/octet-stream"
         response = FileResponse(
             path.open("rb"),
             content_type=content_type,
+            # Rendered in place only for the formats meant to be looked at.
+            # Downloading the rest costs a click and removes the question of
+            # what a browser might decide to do with it.
+            as_attachment=content_type not in INLINE_SAFE_CONTENT_TYPES,
             filename=receipt.original_filename or path.name,
         )
         response["X-Content-Type-Options"] = "nosniff"

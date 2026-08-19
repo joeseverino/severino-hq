@@ -21,19 +21,39 @@
     <tbody>
       {% for resource in resources %}
         <tr>
-          <td><a href="{% url 'control_plane:detail' resource.key %}"><strong>{{ resource.key }}</strong></a></td>
+          <td>
+            <a href="{% url 'control_plane:detail' resource.key %}"><strong>{{ resource.key }}</strong></a>
+            {% comment %}
+            Enough to recognise it, not the whole value. A DMARC record ran to
+            three wrapped lines and made every row beside it ragged; the full
+            value is one click away on the resource itself.
+            {% endcomment %}
+            {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
+          </td>
           <td><code>{{ resource.kind }}</code></td>
           <td>
             {% if not resource.enabled %}
               <span class="pill">Disabled</span>
+            {% elif resource.declaration_only %}
+              {% comment %}
+              Nothing to converge. Reported as "Pending", a domain waited
+              forever for a controller action it does not have.
+              {% endcomment %}
+              <span class="pill pill-active">Declared</span>
             {% elif resource.observed_generation == resource.generation %}
               <span class="pill pill-active">In sync</span>
             {% else %}
               <span class="pill pill-paused">Pending</span>
             {% endif %}
           </td>
-          <td><span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span></td>
-          <td class="muted">{{ resource.last_observed_at|default:"Never" }}</td>
+          <td>
+            {% if resource.declaration_only %}
+              <span class="muted">—</span>
+            {% else %}
+              <span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span>
+            {% endif %}
+          </td>
+          <td class="muted">{% if resource.declaration_only %}—{% else %}{{ resource.last_observed_at|default:"Never" }}{% endif %}</td>
         </tr>
       {% empty %}
         <tr><td colspan="5" class="muted">No managed resources declared yet.</td></tr>

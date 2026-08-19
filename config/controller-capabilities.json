@@ -45,8 +45,20 @@
     "cloudflare.dns_record": {
       "actions": {
         "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        },
+        "delete": {
+          "mode": "apply",
+          "automatic": false
+        }
+      }
+    },
+    "cloudflare.zone": {
+      "actions": {
+        "reconcile": {
           "mode": "locked",
-          "reason": "Public DNS reconciliation is not enabled."
+          "reason": "Zone settings need a credential with Zone Settings:Edit, which the DNS token deliberately does not carry. Declaring a domain records what HQ is responsible for; it does not yet change anything about the zone itself."
         }
       }
     },

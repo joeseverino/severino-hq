@@ -3,17 +3,31 @@
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
+from django.views.generic import RedirectView
 
-from core.views import DashboardView, SearchView, health_live, health_ready
+from core.views import (
+    DashboardView,
+    SearchView,
+    ThrottledLoginView,
+    health_live,
+    health_ready,
+)
 from application.plugins import plugin_urlpatterns
 
 urlpatterns = [
     path("health/live/", health_live, name="health_live"),
     path("health/ready/", health_ready, name="health_ready"),
+    # Django admin ships its own sign-in form. Routed to the login HQ
+    # controls so there is exactly one sign-in path, with one set of rules.
+    path(
+        "admin/login/",
+        RedirectView.as_view(url="/accounts/login/", query_string=True),
+        name="admin_login_redirect",
+    ),
     path("admin/", admin.site.urls),
     path(
         "accounts/login/",
-        auth_views.LoginView.as_view(template_name="auth/login.html"),
+        ThrottledLoginView.as_view(),
         name="login",
     ),
     path(
@@ -32,6 +46,7 @@ urlpatterns = [
     path("receipts/", include("receipts.urls")),
     path("reports/", include("reports.urls")),
     path("contacts/", include("contacts.urls")),
+    path("domains/", include("control_plane.zone_urls")),
     path("infrastructure/", include("control_plane.urls")),
     path("audit/", include("core.urls")),
     path("api/", include("hq_api.urls")),

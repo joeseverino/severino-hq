@@ -3,13 +3,14 @@ from __future__ import annotations
 import uuid
 import math
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils.text import slugify
+from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -25,9 +26,12 @@ from application.infrastructure import (
     request_reconcile,
     request_removal,
     resource_health,
+    resolved_spec,
     save_managed_resource,
     serialize_resource,
     serialize_public_status,
+    suggest_key,
+    topology_payload,
 )
 from application.inventory import (
     AdoptServiceCommand,
@@ -47,13 +51,17 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import web_principal
-from application.services import find_service, service_catalog
+from application.services import (
+    service_catalog,
+    service_or_prospect,
+)
 
 from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
     PROVIDERS,
+    normalized_hostname,
     SERVICE_FACETS,
     controller_action_policy,
     describe_providers,
@@ -104,10 +112,17 @@ class ResourceFormView(LoginRequiredMixin, View):
             return render(
                 request,
                 "control_plane/resource_kind.html",
-                {"providers": describe_providers()["providers"]},
+                {
+                    # Only the kinds that stand on their own. One that declares
+                    # a surface of its own is created from there, where the
+                    # context it needs is already established.
+                    "providers": [
+                        provider
+                        for provider in describe_providers()["providers"]
+                        if not provider["created_from"]
+                    ]
+                },
             )
-        hostname = request.GET.get("hostname", "").strip()
-        seed = PROVIDERS[kind].seed
         material_class = _material_form(kind) if not resource else None
         material = material_class() if material_class else None
         return render(
@@ -129,16 +144,14 @@ class ResourceFormView(LoginRequiredMixin, View):
                     else None
                 ),
                 "spec": spec_form_class(kind, lock_identity=bool(resource))(
-                    initial=(
-                        resource.spec
-                        if resource
-                        else (seed(hostname) if seed and hostname else None)
-                    )
+                    initial=_initial_spec(request, kind, resource)
                 ),
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
                 # without it.
                 "material": material,
+                "cancel_url": _cancel_url(request, kind, resource),
+                "apply_note": _apply_note(kind),
             },
         )
 
@@ -193,7 +206,11 @@ class ResourceFormView(LoginRequiredMixin, View):
                     f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
                     "HQ will apply it at the provider within about a minute.",
                 )
-                return redirect("control_plane:detail", key=saved)
+                # Back where the operator was working. Publishing a service
+                # takes two or three declarations, and landing on each one's
+                # own page after saving it made the next step a navigation
+                # problem -- the service page is the thing being built.
+                return redirect(_after_save(request, kind, resource, saved))
         return render(
             request,
             self.template_name,
@@ -209,21 +226,195 @@ class ResourceFormView(LoginRequiredMixin, View):
         )
 
 
-def _suggested_key(hostname: str, kind: str) -> str:
-    """A name that says what this is, offered rather than imposed.
+def _spec_value(value: Any) -> str:
+    """One spec field as a person reads it.
 
-    Onboarding a service should not stop to ask what to call three rows in a
-    table the operator did not know existed. The field stays editable, because
-    the key is stable and permanent and sometimes the obvious name is taken.
+    A list rendered straight into a template comes out as its Python repr, so
+    the last thing shown before a destructive action was
+    ``['private.jseverino.com']`` -- brackets, quotes and all.
     """
 
-    if not hostname:
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    return str(value)
+
+
+def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
+    """A spec as an operator reads it, split the way the form splits it.
+
+    Three things this fixes, all of them seen on the confirmation page shown
+    before a destructive action:
+
+    - Raw field names. It listed "record_type" and "ttl" -- the same failure
+      that once asked an operator for a "Topology ref". The titles already
+      exist on the model.
+    - Unset optionals. A field nobody filled in rendered as "None", which is
+      Python's word for it and nobody else's.
+    - Every tuning knob at equal weight. Fifteen rows, of which "Hsts
+      subdomains: False" and "Access list: 0" are defaults nobody chose, buried
+      the four that say what this actually is. The provider already declares
+      which of its fields are routine; this is the same split the form makes.
+    """
+
+    provider = PROVIDERS[resource.kind]
+    fields = provider.spec_type.model_fields
+    primary: list[tuple[str, str]] = []
+    advanced: list[tuple[str, str]] = []
+    for name, value in resource.spec.items():
+        if value is None:
+            continue
+        label = (
+            fields[name].title or name.replace("_", " ").capitalize()
+            if name in fields
+            else name
+        )
+        row = (label, _spec_value(value))
+        (advanced if name in provider.advanced_fields else primary).append(row)
+    return {"primary": tuple(primary), "advanced": tuple(advanced)}
+
+
+def _service_links(resource) -> tuple[tuple[str, str], ...]:
+    """``(hostname, url)`` for every service this resource takes part in.
+
+    The page named the resource by its key and nothing else, so the hostname --
+    the single most identifying fact about a DNS record -- appeared only inside
+    a collapsed disclosure. And there was no way from here to the service page,
+    which is where the rest of what serves that name lives and where the next
+    thing is added.
+    """
+
+    provider = PROVIDERS[resource.kind]
+    if provider.hostnames is None:
+        return ()
+    try:
+        names = provider.hostnames(resolved_spec(resource, topology_payload()))
+    except (KeyError, TypeError, ValueError):
+        return ()
+    return tuple(
+        (
+            name,
+            reverse("control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}),
+        )
+        for name in names
+        # A wildcard covers names rather than naming one, and there is no
+        # service page for "*.example.com" to link to.
+        if "*" not in name
+    )
+
+
+def _apply_note(kind: str) -> str:
+    """What actually happens after saving, which is not the same for every kind.
+
+    The form promised every resource would be applied at the provider within
+    about a minute. That is true of most of them and false of any whose actions
+    are locked -- a domain declaration records what HQ is responsible for and
+    changes nothing, so the page was making a promise the capability registry
+    already contradicted. The registry's own reason is the honest answer, and it
+    is written once, there.
+    """
+
+    applies, explanation = controller_action_policy(
+        kind, OperationRequest.Action.RECONCILE
+    )
+    if applies:
+        return (
+            "HQ applies this at the provider within about a minute, then shows "
+            "you what it actually found there."
+        )
+    return explanation
+
+
+def _readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
+    """``(label, desired, observed)`` as the provider describes itself.
+
+    The same hook the service page and the domain page read, so one resource
+    describes itself identically wherever it appears.
+    """
+
+    provider = PROVIDERS[resource.kind]
+    if provider.readout is None:
+        return ()
+    try:
+        return tuple(provider.readout(resource.spec, resource.status or {}))
+    except (KeyError, TypeError, ValueError):
+        return ()
+
+
+def _removal_note(resource) -> str:
+    """What this particular removal costs, if the provider says."""
+
+    note = PROVIDERS[resource.kind].removal_note
+    if note is None:
         return ""
-    facet = PROVIDERS[kind].facet or kind
-    # Dots become separators before slugify sees them. Left alone, slugify
-    # deletes them, and "app.example.com" suggests the key "appexamplecom" --
-    # a permanent, unreadable name for the sake of one substitution.
-    return slugify(f"{hostname}-{facet}".replace(".", "-"))[:180]
+    try:
+        return note(resource.spec)
+    except (KeyError, TypeError, ValueError):
+        # A confirmation page that cannot render is worse than one missing a
+        # sentence, and this is the page an operator uses to stop.
+        return ""
+
+
+def _after_save(request, kind: str, resource, saved: str) -> str:
+    """Where saving lands: back at whatever this was being added to.
+
+    Same rule as Cancel, and for the same reason -- the surface an operator came
+    from is the one that knows what is still missing.
+    """
+
+    if resource is None:
+        origin = _cancel_url(request, kind, None)
+        if origin != reverse("control_plane:list"):
+            return origin
+    return reverse("control_plane:detail", kwargs={"key": saved})
+
+
+def _cancel_url(request, kind: str, resource) -> str:
+    """Where "Cancel" belongs: back where the operator came from.
+
+    Editing returns to the resource. Creating returns to the surface that
+    offered it, which the provider names -- so a record added from a domain
+    goes back to that domain rather than to the resource registry, a page in a
+    different section listing something else entirely.
+    """
+
+    if resource:
+        return reverse("control_plane:detail", kwargs={"key": resource.key})
+    if PROVIDERS[kind].created_from == "zone":
+        zone = request.GET.get("zone", "").strip()
+        if zone:
+            return reverse("zones:detail", kwargs={"zone": zone})
+        return reverse("zones:index")
+    hostname = normalized_hostname(request.GET.get("hostname", ""))
+    if hostname:
+        return reverse("control_plane:service", kwargs={"hostname": hostname})
+    return reverse("control_plane:list")
+
+
+def _initial_spec(request, kind: str, resource) -> dict | None:
+    """What the form says before anybody types in it.
+
+    Editing starts from the declaration. Creating starts from wherever the
+    operator came from, and that context arrives as query parameters naming spec
+    fields: a service page knows the hostname, a zone page knows the domain.
+    Filtered against the model's own fields, so the URL cannot introduce a value
+    the spec has no place for, and a provider joins this flow by having the
+    field rather than by this view being taught about it.
+    """
+
+    if resource:
+        return resource.spec
+    provider = PROVIDERS[kind]
+    initial: dict = {}
+    hostname = request.GET.get("hostname", "").strip()
+    if provider.seed and hostname:
+        initial.update(provider.seed(hostname))
+    for name in provider.spec_type.model_fields:
+        value = request.GET.get(name, "").strip()
+        if value:
+            initial[name] = value
+    return initial or None
 
 
 def _material_form(kind: str):
@@ -241,24 +432,24 @@ def _derived_key(kind: str, spec: dict) -> str:
     """A name for a declaration the operator did not want to name.
 
     Asked for one, the form stopped to demand an identifier for a row in a table
-    nobody had mentioned yet. The hostname the spec already carries is a better
-    name than anything that would have been typed, and the provider says how to
-    read it out.
+    nobody had mentioned yet. The provider says what its own records should be
+    called, and the same function answers here, at adoption, and during
+    onboarding -- these disagreed once, and the form suggested a key built from
+    a hostname the record did not have.
     """
 
-    provider = PROVIDERS[kind]
-    hostnames = provider.hostnames(spec) if provider.hostnames else ()
-    base = _suggested_key(hostnames[0], kind) if hostnames else slugify(kind)
-    if not ManagedResource.objects.filter(key=base).exists():
-        return base
-    for suffix in range(2, 100):
-        candidate = f"{base[:176]}-{suffix}"
-        if not ManagedResource.objects.filter(key=candidate).exists():
-            return candidate
-    return base
+    return suggest_key(kind, spec)
 
 
 def _readable_error(exc) -> str:
+    """What to show an operator when a use case refuses.
+
+    Django collects several messages on one ValidationError, and str() of that
+    renders the list with its brackets and quotes intact. Shared with the domain
+    views, which had their own copy: two readers of the same exception would
+    show the same refusal differently depending on which page you were on.
+    """
+
     messages_found = getattr(exc, "messages", None)
     return " ".join(messages_found) if messages_found else str(exc)
 
@@ -358,6 +549,8 @@ class ResourceRemoveView(LoginRequiredMixin, View):
         allowed, explanation = controller_action_policy(
             resource.kind, OperationRequest.Action.DELETE
         )
+        if PROVIDERS[resource.kind].declaration_only:
+            allowed, explanation = True, ""
         return render(
             request,
             self.template_name,
@@ -366,6 +559,13 @@ class ResourceRemoveView(LoginRequiredMixin, View):
                 "label": PROVIDERS[resource.kind].label or resource.kind,
                 "removal_allowed": allowed,
                 "removal_explanation": explanation,
+                # Said by the provider, because what breaks depends on which
+                # record this is: removing one of four CAA records is
+                # housekeeping, and removing the last MX record stops the
+                # domain receiving mail.
+                "removal_note": _removal_note(resource),
+                "spec_rows": _spec_rows(resource),
+                "declaration_only": PROVIDERS[resource.kind].declaration_only,
             },
         )
 
@@ -383,6 +583,23 @@ class ResourceRemoveView(LoginRequiredMixin, View):
         except PolicyError as exc:
             messages.error(request, str(exc))
             return redirect("control_plane:detail", key=key)
+        if "forgotten" in result:
+            # Nothing was queued because nothing exists at the provider that HQ
+            # made. Saying "queued removal" here would promise a deletion that
+            # is neither happening nor wanted.
+            released = len(result["released"])
+            messages.success(
+                request,
+                f"HQ is no longer responsible for “{result['forgotten']}”"
+                + (
+                    f", and has released {released} record declaration"
+                    f"{'' if released == 1 else 's'} in it"
+                    if released
+                    else ""
+                )
+                + ". Nothing changed at the provider.",
+            )
+            return redirect("control_plane:list")
         verb = "Queued" if result["queued"] else "Already queued"
         messages.success(
             request,
@@ -414,15 +631,40 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
 
 
 class ServiceDetailView(LoginRequiredMixin, TemplateView):
+    """One hostname, whether or not anything has been declared for it yet.
+
+    A name with nothing behind it used to 404, which made this page unreachable
+    at exactly the moment it is most useful: before anything exists. Publishing
+    something therefore began at the resource picker, where an operator chose a
+    kind of thing and typed a hostname, and only after saving did a page appear
+    that knew what the name still needed -- so the second resource meant typing
+    the name a second time.
+    """
+
     template_name = "control_plane/service_detail.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        service = find_service(self.kwargs["hostname"])
-        if service is None:
-            raise Http404(f"No service is declared for {self.kwargs['hostname']}.")
-        context["service"] = service
+        context["service"] = service_or_prospect(self.kwargs["hostname"])
         return context
+
+
+class ServiceStartView(LoginRequiredMixin, View):
+    """Ask for a hostname, then stand on its page.
+
+    The whole of "publish a service" is knowing the name. Everything after it
+    is already offered, seeded, by the page that name leads to.
+    """
+
+    def get(self, request):
+        return render(request, "control_plane/service_start.html", {})
+
+    def post(self, request):
+        hostname = normalized_hostname(request.POST.get("hostname", ""))
+        if not hostname or " " in hostname or "." not in hostname:
+            messages.error(request, "Enter a hostname, like app.example.com.")
+            return redirect("control_plane:service_start")
+        return redirect("control_plane:service", hostname=hostname)
 
 
 class InfrastructureListView(LoginRequiredMixin, ListView):
@@ -434,6 +676,16 @@ class InfrastructureListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         for resource in context["resources"]:
             resource.control_health = resource_health(resource)
+            # What it is, in the provider's own words. A list of keys alone
+            # said "jseverino-com-caa-2" twenty times over -- names HQ invented,
+            # each describing nothing.
+            rows = _readout_rows(resource)
+            resource.summary = rows[0][1] or rows[0][2] if rows else ""
+            # Nothing to converge, so nothing is ever pending. A domain records
+            # a responsibility and has no controller action at all; reported as
+            # "Pending" and "Never observed" it described a resource waiting
+            # forever for something that is never coming.
+            resource.declaration_only = PROVIDERS[resource.kind].declaration_only
         context["operations"] = OperationRequest.objects.select_related("resource")[:12]
         context["provider_catalog"] = describe_providers()
         return context
@@ -465,6 +717,22 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             if self.object.generation == self.object.observed_generation
             else "pending"
         )
+        # What this resource does, said by its own provider. The page used to
+        # carry a hand-written card per kind, reaching into spec.forward_host
+        # and spec.answer -- the one thing nothing outside a provider is allowed
+        # to do, and the reason a provider added later had no detail card at all.
+        context["label"] = PROVIDERS[self.object.kind].label or self.object.kind
+        context["service_links"] = _service_links(self.object)
+        # A resource with a removal in flight is on its way out. Offering Edit
+        # and Reconcile unchanged invited an operator to work on something that
+        # is about to stop existing, and to queue a convergence that races the
+        # deletion already waiting for the same controller.
+        context["removal_pending"] = self.object.operations.filter(
+            action=OperationRequest.Action.DELETE,
+            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
+        ).exists()
+        context["readout_rows"] = _readout_rows(self.object)
+        context["spec_rows"] = _spec_rows(self.object)
         context["days_left"] = None
         context["renewal_at"] = None
         not_after = self.object.status.get("not_after")
@@ -522,29 +790,38 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ReconcileView(LoginRequiredMixin, View):
+# What each controller verb is called in a sentence. One entry per verb, in one
+# place, because the alternative was one view class per verb: "reconcile" and
+# "renew" had a class each, identical but for this word, and the next verb the
+# credential allows -- purging a cache, rotating a key -- would have been a
+# third copy of the same eleven lines.
+OPERATION_PHRASE = {
+    OperationRequest.Action.RECONCILE: "reconciliation",
+    OperationRequest.Action.RENEW: "certificate renewal",
+    OperationRequest.Action.DELETE: "removal",
+}
+
+
+class OperationView(LoginRequiredMixin, View):
+    """Ask the controller for one action on one resource.
+
+    The action comes from the URL rather than from the class, so adding a verb
+    is a route and a phrase rather than another view that does what this one
+    already does.
+    """
+
+    action = OperationRequest.Action.RECONCILE
+
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         try:
-            result = _web_operation(request, resource, "reconcile")
+            result = _web_operation(request, resource, self.action)
         except PolicyError as exc:
             messages.error(request, str(exc))
             return redirect("control_plane:detail", key=key)
         verb = "Queued" if result["queued"] else "Already queued"
-        messages.success(request, f"{verb} reconciliation for “{resource.key}”.")
-        return redirect("control_plane:detail", key=key)
-
-
-class RenewCertificateView(LoginRequiredMixin, View):
-    def post(self, request, key):
-        resource = get_object_or_404(ManagedResource, key=key)
-        try:
-            result = _web_operation(request, resource, "renew")
-        except PolicyError as exc:
-            messages.error(request, str(exc))
-            return redirect("control_plane:detail", key=key)
-        verb = "Queued" if result["queued"] else "Already queued"
-        messages.success(request, f"{verb} certificate renewal for “{resource.key}”.")
+        phrase = OPERATION_PHRASE.get(self.action, self.action)
+        messages.success(request, f"{verb} {phrase} for “{resource.key}”.")
         return redirect("control_plane:detail", key=key)
 
 

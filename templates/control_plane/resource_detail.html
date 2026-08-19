@@ -7,6 +7,15 @@
     <p class="muted"><code>{{ resource.kind }}</code></p>
   </div>
   <div class="page-actions">
+    {% comment %}
+    Nothing to act on while a removal is in flight. Shown unchanged, the page
+    invited an operator to edit something about to stop existing, and to queue a
+    convergence racing the deletion already waiting for the same controller.
+    {% endcomment %}
+    {% if removal_pending %}
+      <span class="pill pill-attention">Removal in progress</span>
+      <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
+    {% else %}
     <a class="btn" href="{% url 'control_plane:edit' resource.key %}">Edit</a>
     <a class="btn" href="{% url 'control_plane:remove' resource.key %}">Remove</a>
     {% if resource.kind == "tls.uploaded_certificate" %}
@@ -29,6 +38,7 @@
         {% csrf_token %}
         <button type="submit" class="primary" {% if not renewal_allowed %}disabled title="{{ renewal_explanation }}"{% endif %}>Request renewal</button>
       </form>
+    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -103,24 +113,56 @@
       </table>
     </section>
   </div>
-{% elif resource.kind == "npm.proxy_host" %}
+{% else %}
+  {% comment %}
+  One card for every kind that is not a certificate, rendered from what the
+  provider says about itself rather than from markup that knows what a proxy
+  host is. There were two hand-written cards here — one reaching into
+  spec.domain_names and spec.forward_host, one into spec.answer — and a
+  provider added afterwards got no card at all, because nobody remembered to
+  come back and write a third.
+
+  The certificate keeps its own section above: renewal, topology and consumers
+  are machinery, not a description, and no readout expresses them.
+  {% endcomment %}
   <section class="control-card">
-    <h2>Nginx Proxy Host</h2>
-    <dl class="kv compact">
-      <dt>Domains</dt><dd>{% for domain in resource.spec.domain_names %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
-      <dt>Upstream</dt><dd><code>{{ resource.spec.forward_scheme }}://{{ resource.spec.forward_host }}:{{ resource.spec.forward_port }}</code></dd>
-      <dt>Certificate</dt><dd>{{ resource.spec.certificate_resource|default:"None" }}</dd>
-      <dt>Live status</dt><dd>{{ resource.status.https_status|default:"Not observed" }}</dd>
-    </dl>
-  </section>
-{% elif resource.kind == "adguard.rewrite" %}
-  <section class="control-card">
-    <h2>AdGuard DNS Rewrite</h2>
-    <dl class="kv compact">
-      <dt>Domain</dt><dd><code>{{ resource.spec.domain }}</code></dd>
-      <dt>Desired answer</dt><dd><code>{{ resource.spec.answer }}</code></dd>
-      <dt>Observed answer</dt><dd><code>{{ resource.status.answer|default:"Not observed" }}</code></dd>
-    </dl>
+    <h2>{{ label }}</h2>
+    {% comment %}
+    The names this serves, and the way through to them. The page identified a
+    record only by the key HQ invented for it, so the hostname appeared nowhere
+    outside a collapsed disclosure — and the service page, where the rest of
+    what answers for that name lives, could only be reached by typing its URL.
+    {% endcomment %}
+    {% if service_links %}
+      <p class="muted">
+        Serves
+        {% for hostname, url in service_links %}<a href="{{ url }}">{{ hostname }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+    {% if readout_rows %}
+      <dl class="kv compact">
+        {% for row_label, desired, observed in readout_rows %}
+          <dt>{{ row_label }}</dt>
+          <dd>
+            <code>{{ observed|default:desired|default:"—" }}</code>
+            {% if desired and observed and desired != observed %}
+              <span class="pill pill-serious">declared {{ desired }}</span>
+            {% endif %}
+          </dd>
+        {% endfor %}
+      </dl>
+    {% endif %}
+    <details class="control-diagnostics">
+      <summary>Every field of this declaration</summary>
+      <dl class="kv compact">
+        {% for row_label, value in spec_rows.primary %}
+          <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+        {% endfor %}
+        {% for row_label, value in spec_rows.advanced %}
+          <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+        {% endfor %}
+      </dl>
+    </details>
   </section>
 {% endif %}
 

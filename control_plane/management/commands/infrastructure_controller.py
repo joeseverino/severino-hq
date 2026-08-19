@@ -16,7 +16,7 @@ from application.controller import (
 )
 from application.connections import preflight_connections
 from application.certificates import CertificateError, material_for
-from application.inventory import record_inventory
+from application.sweep import record_sweep
 from application.security import cli_principal
 from application.infrastructure import controller_contract
 from control_plane.models import ManagedResource
@@ -98,7 +98,7 @@ class Command(BaseCommand):
                 except CertificateError as exc:
                     raise ValueError(str(exc)) from exc
             elif options["action"] == "inventory":
-                result = record_inventory(
+                result = record_sweep(
                     json.loads(options["payload"]),
                     principal=cli_principal(),
                     controller_id=options["controller_id"],

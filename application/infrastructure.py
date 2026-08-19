@@ -13,12 +13,15 @@ from django.db import transaction
 from control_plane.models import ManagedResource, OperationRequest, TopologySnapshot
 from control_plane.providers import (
     PROVIDERS,
+    resolve_provider_spec,
     controller_action_policy,
+    enabled_controller_actions,
     validate_spec,
 )
 from control_plane.topology import desired_fingerprint
 from core.audit import operation_context
 
+from .projection import page_size
 from .security import Capability, Principal
 
 
@@ -46,13 +49,91 @@ class OperationCommand:
 
 def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
     """List canonical public infrastructure state without provider credentials."""
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
+    # The shared bound, not a fourth spelling of it. Written out here with the
+    # ceiling as a literal, this module would have kept its own limit on the day
+    # the shared one moved.
     items = [
         serialize_resource(resource)
-        for resource in ManagedResource.objects.all()[: min(limit, 100)]
+        for resource in ManagedResource.objects.all()[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
+
+
+def topology_payload() -> dict[str, Any] | None:
+    """The imported topology snapshot, or None when nothing has been imported."""
+
+    return (
+        TopologySnapshot.objects.filter(pk="topology")
+        .values_list("payload", flat=True)
+        .first()
+    )
+
+
+def resolved_spec(
+    resource: ManagedResource, topology: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The spec as a controller would see it, falling back to the authored one.
+
+    A certificate declares only a topology reference; the names it covers exist
+    only after resolving that. Where resolution cannot happen -- no snapshot
+    imported, a dangling reference -- the authored spec stands in and the
+    certificate covers nothing. That surfaces as an uncovered name, which is
+    exactly true: HQ cannot demonstrate that anything covers it.
+
+    One implementation. The service view and the domain view each had their own,
+    and a projection that resolved a spec differently from the one beside it
+    would disagree about which names a certificate covers -- while both claimed
+    to be reading the same declaration.
+    """
+
+    from control_plane.providers import ProviderResolutionContext
+
+    try:
+        return resolve_provider_spec(
+            resource.kind,
+            resource.spec,
+            context=ProviderResolutionContext(topology=topology),
+        )
+    except (KeyError, TypeError, ValueError):
+        return resource.spec
+
+
+def suggest_key(kind: str, spec: dict[str, Any]) -> str:
+    """A free, readable key for a declaration nobody wanted to name.
+
+    One implementation, because there were three: the create form derived a key
+    one way, adoption another, and the onboarding flow a third. They agreed
+    while every provider had one record per hostname and diverged the moment one
+    did not -- the form suggesting a key built from a hostname that a TXT record
+    does not have.
+
+    The provider says what to call its own records. The hostname and facet are
+    the fallback, which is what every provider that has exactly one record per
+    name would have said anyway.
+    """
+
+    from django.utils.text import slugify
+
+    provider = PROVIDERS[kind]
+    if provider.key_hint is not None:
+        hint = provider.key_hint(spec)
+    else:
+        hostnames = provider.hostnames(spec) if provider.hostnames else ()
+        hint = f"{hostnames[0]}-{provider.facet or kind}" if hostnames else kind
+    # Dots become separators before slugify sees them. Left alone, slugify
+    # deletes them, and "app.example.com" suggests the key "appexamplecom" --
+    # a permanent, unreadable name for the sake of one substitution.
+    base = slugify(hint.replace(".", "-"))[:180] or slugify(kind)
+    if not ManagedResource.objects.filter(key=base).exists():
+        return base
+    # Several records for one name is normal -- a zone apex has nine -- and
+    # stopping to ask for a name that is merely taken is not worth the
+    # interruption.
+    for suffix in range(2, 100):
+        candidate = f"{base[:176]}-{suffix}"
+        if not ManagedResource.objects.filter(key=candidate).exists():
+            return candidate
+    return base
 
 
 def get_managed_resource(key: str) -> dict[str, Any]:
@@ -248,6 +329,25 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     }
 
 
+def _can_change_the_public_internet(kind: str) -> bool:
+    """Whether declaring this could actually alter something publicly visible.
+
+    The switch this guards exists because public DNS is the one surface where a
+    mistake is immediately everybody's problem. It is not a reason to refuse
+    every resource that happens to be publicly visible: a domain declaration
+    records which zones HQ is responsible for and has no reconcile a controller
+    could run -- gating it prevented the operator from saying what HQ owns while
+    preventing no change to anything.
+
+    So the question is not "is this public" but "could the controller act on
+    it". A provider whose every action is locked cannot, by construction.
+    """
+
+    return any(
+        action_kind == kind for action_kind, _ in enabled_controller_actions()
+    )
+
+
 @transaction.atomic
 def save_managed_resource(
     command: ManagedResourceCommand,
@@ -262,11 +362,14 @@ def save_managed_resource(
     if (
         command.enabled
         and provider.public_effect
+        and _can_change_the_public_internet(command.kind)
         and not getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
     ):
         raise PolicyError(
-            "Public DNS resources may be declared only while disabled; "
-            "public DNS reconciliation is not enabled."
+            "Changing public DNS is switched off in this deployment. Set "
+            "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS to allow it, or save "
+            "this resource disabled to record the declaration without acting "
+            "on it."
         )
 
     operation = (
@@ -413,6 +516,65 @@ def request_reconcile(
 
 
 @transaction.atomic
+def _contained_keys(resource: ManagedResource) -> list[str]:
+    """The declarations this one holds, as the provider describes the tie.
+
+    Named by the provider rather than matched here, so the second kind with
+    anything inside it is a registry entry and not another branch in this
+    function.
+    """
+
+    relation = PROVIDERS[resource.kind].contains
+    if relation is None:
+        return []
+    kind, their_field, my_field = relation
+    value = str(resource.spec.get(my_field, "")).strip().lower()
+    if not value:
+        return []
+    return list(
+        ManagedResource.objects.filter(
+            kind=kind, **{f"spec__{their_field}__iexact": value}
+        ).values_list("key", flat=True)
+    )
+
+
+@transaction.atomic
+def _forget_declaration(
+    resource: ManagedResource, command: OperationCommand, *, principal: Principal
+) -> dict[str, Any]:
+    """Stop being responsible for something HQ never created.
+
+    Nothing is queued and nothing is deleted at the provider, because there is
+    nothing there that HQ made. A domain exists whether or not HQ has heard of
+    it; the declaration only ever recorded that HQ was made responsible for it,
+    so removing the declaration is the whole of the operation.
+
+    The declarations *inside* it go too. Left behind, HQ would keep reconciling
+    records in a domain it is no longer responsible for -- still writing to a
+    zone the operator had just said was not its business, which is the one
+    outcome this has to avoid. They are forgotten rather than deleted: the
+    records stay exactly as they are at the provider, which is what stepping
+    back means.
+    """
+
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="infrastructure.resource.forget",
+    ):
+        contained = _contained_keys(resource)
+        ManagedResource.objects.filter(key__in=contained).delete()
+        key = resource.key
+        resource.delete()
+        return {
+            "ok": True,
+            "queued": False,
+            "forgotten": key,
+            "released": contained,
+            "reason": command.reason,
+        }
+
+
 def request_removal(
     command: OperationCommand,
     *,
@@ -435,6 +597,8 @@ def request_removal(
     del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
+    if PROVIDERS[resource.kind].declaration_only:
+        return _forget_declaration(resource, command, principal=principal)
     allowed, explanation = controller_action_policy(
         resource.kind, OperationRequest.Action.DELETE
     )

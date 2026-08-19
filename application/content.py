@@ -15,6 +15,7 @@ from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 from .security import Capability, Principal
+from .projection import iso
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -49,8 +50,6 @@ class ContentCommand:
     related_documentation: tuple[str, ...] = ()
 
 
-def _iso(value) -> str | None:
-    return value.isoformat() if value else None
 
 
 def serialize_content(item: ContentItem) -> dict[str, Any]:
@@ -64,9 +63,9 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
         "published_url": item.published_url,
         "wordpress_post_id": item.wordpress_post_id,
         "wordpress_slug": item.wordpress_slug,
-        "published_at": _iso(item.published_at),
+        "published_at": iso(item.published_at),
         "notes": item.notes,
-        "updated_at": _iso(item.updated_at),
+        "updated_at": iso(item.updated_at),
         "relationships": {
             "projects": list(
                 item.related_projects.order_by("slug").values_list("slug", flat=True)

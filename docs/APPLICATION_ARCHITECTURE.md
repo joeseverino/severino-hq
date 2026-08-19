@@ -339,6 +339,24 @@ service view, the generated create-and-edit forms, adoption — is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
+**Identity is declared separately from hostnames**, and the distinction is not
+academic. While every provider held exactly one record per name — an AdGuard
+rewrite, an NPM proxy host — "the same hostname" and "the same record" were the
+same statement, and identity was simply the hostname. A DNS zone breaks that: an
+apex routinely carries several TXT records, several CAA records and two MX
+records, all on one name. Identified by hostname they collapse into one, and
+adoption keeps whichever the provider happened to list first. The types that
+carry policy rather than address also declare no hostname at all, so they would
+report as having no identity and stay permanently invisible to the screen built
+to find unmanaged records. A provider that holds more than one record per name
+therefore says what makes each of them itself, and what it *serves* is answered
+separately — for many record types, nothing.
+
+Which surface offers creating a resource is likewise declared, not hardcoded: a
+kind that is only meaningful inside something else names that surface, so the
+generic "what do you want to add?" page never accumulates a hand-maintained list
+of the kinds it is supposed to leave out.
+
 Three verbs exist beyond reconciliation. **Delete** removes the record at the
 provider and only then lets HQ forget its declaration, because the thing
 described lives elsewhere and dropping the row alone would abandon it. **Rename**
@@ -347,6 +365,26 @@ holding: without it, a changed hostname created a second record beside the one
 it meant to move. **Adopt** takes a record the provider already holds and writes
 its live settings into a new declaration, so the first reconciliation after
 adopting changes nothing.
+
+Two surfaces read those declarations, and neither stores anything. A **service**
+is one hostname and everything that has to be true for it to answer, which is
+the question asked when something is broken. A **domain** is one zone and
+everything published in it, which is a different question with a different
+answer: a DMARC policy, a CAA restriction and an MX record are not services and
+never appear on that board, yet getting them wrong is how mail stops arriving
+and how anyone in the world becomes able to obtain a certificate for the domain.
+Both are derived from the same declarations plus the last provider sweep, so
+they cannot disagree — being the thing that cannot disagree is the whole point,
+and it is why there is no Service model and no Zone model.
+
+What a domain page reports about a zone is stated descriptively rather than as
+drift. HQ holds a credential that can read and write DNS records and nothing
+else, so it cannot change a zone's TLS posture and does not get to have an
+opinion about it. "DMARC: p=none" is true and useful; flagging it as drift would
+invent a policy nobody declared and that nothing could enforce. The one
+exception is a record that is wrong by its own definition rather than by a
+policy — a left-over ACME challenge outlived the issuance it existed for, and is
+garbage whoever you ask.
 
 Certificates arrive two ways. HQ issues one from Let's Encrypt over DNS-01 and
 keeps it renewed and deployed. Or an operator generates one against the offline
@@ -378,9 +416,17 @@ existing lineage without contacting ACME. For NPM, one managed certificate is
 uploaded once and every enabled proxy host covered by its SANs is discovered,
 rebound, reloaded, and live-verified. TLS renewal issues through DNS-01 only
 when necessary, snapshots the rollback artifact, deploys to all consumers, and
-verifies one fingerprint everywhere before reporting success. Public DNS
-remains locked. Short-lived NPM tokens stay in memory and reports are rejected
+verifies one fingerprint everywhere before reporting success. Public DNS records
+reconcile and delete; the zone they live in is declaration-only, because
+changing a zone's own settings needs a credential the controller deliberately
+does not hold. Short-lived NPM tokens stay in memory and reports are rejected
 if they contain secret-bearing keys.
+
+Public DNS is additionally gated by a deployment switch, and the switch governs
+*acting* rather than *being publicly visible*: a declaration whose every
+controller action is locked cannot change anything, so refusing it would have
+prevented an operator recording which domains HQ is responsible for while
+preventing no change to anything at all.
 
 HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
 D1-backed contact form. It is never projected into the controller or reused for

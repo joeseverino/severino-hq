@@ -22,8 +22,8 @@ from projects.models import PROJECT_CATEGORY_CHOICES, Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
 from .security import Capability, Principal
+from .projection import iso, page_size
 
-MAX_PAGE_SIZE = 100
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
     DocumentationRecord.Sensitivity.INTERNAL,
@@ -57,14 +57,8 @@ class ProjectCommand:
     notes: str = ""
 
 
-def _page_size(limit: int) -> int:
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
-    return min(limit, MAX_PAGE_SIZE)
 
 
-def _iso(value) -> str | None:
-    return value.isoformat() if value else None
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
@@ -77,8 +71,8 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
         "technologies": project.tech_list,
         "repository_url": project.repository_url,
         "public_url": project.public_url,
-        "last_push_at": _iso(project.last_push_at),
-        "updated_at": _iso(project.updated_at),
+        "last_push_at": iso(project.last_push_at),
+        "updated_at": iso(project.updated_at),
     }
     if relationships:
         result["relationships"] = {
@@ -117,7 +111,7 @@ def list_projects(
         )
     items = [
         serialize_project(project)
-        for project in qs.order_by("slug")[: _page_size(limit)]
+        for project in qs.order_by("slug")[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 

@@ -20,6 +20,7 @@ bug that made HSTS switch itself off.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,9 +35,16 @@ from .security import Capability, Principal
 
 @dataclass(frozen=True)
 class Unmanaged:
-    """One record a provider holds that no HQ declaration accounts for."""
+    """One record a provider holds that no HQ declaration accounts for.
+
+    ``identity`` is what makes it that record; ``hostnames`` is what it serves.
+    They are the same for a rewrite or a proxy host and deliberately different
+    for a DNS record, which may be one of nine on a single name and may serve
+    nothing at all.
+    """
 
     kind: str
+    identity: tuple[str, ...]
     hostnames: tuple[str, ...]
     spec: dict[str, Any]
     observed_at: Any
@@ -48,6 +56,19 @@ class Unmanaged:
     @property
     def hostname(self) -> str:
         return self.hostnames[0] if self.hostnames else ""
+
+    @property
+    def token(self) -> str:
+        """A short, stable handle for this exact record, safe to put in a URL.
+
+        Derived rather than stored because nothing persists an unmanaged record
+        -- it exists only in the last sweep. Hashed rather than joined because
+        an identity contains a DNS value, and a TXT record's value is neither
+        short nor URL-safe.
+        """
+
+        joined = "\x1f".join((self.kind, *self.identity))
+        return hashlib.sha256(joined.encode()).hexdigest()[:16]
 
     @property
     def readout(self) -> tuple[tuple[str, str], ...]:
@@ -103,14 +124,23 @@ def record_inventory(
             },
         )
         stored.append(kind)
-    return {"ok": True, "recorded": stored, "observed_at": observed_at.isoformat()}
+
+    # Adoption is not done here. A record in a domain HQ has been made
+    # responsible for is HQ's, but which records those are is `zones`' to say,
+    # and reaching for it from inside the sweep made the two modules import
+    # each other. `application.sweep` composes the pair instead.
+    return {
+        "ok": True,
+        "recorded": stored,
+        "observed_at": observed_at.isoformat(),
+    }
 
 
-def _identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
-    """The hostnames a spec claims, normalised, as its identity.
+def _service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
+    """The hostnames a spec claims, normalised.
 
-    The same function the providers use for the service view, so "already
-    managed" means exactly what "the same service" means everywhere else.
+    The same function the providers use for the service view, so a name here
+    means exactly what "the same service" means everywhere else.
     """
 
     provider = PROVIDERS[kind]
@@ -122,6 +152,25 @@ def _identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
         )
     except (KeyError, TypeError, ValueError):
         return ()
+
+
+def _identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
+    """What makes a live record and a declaration the same thing.
+
+    Falls back to the hostnames, which is what identity meant when every
+    provider had one record per name. A provider that can hold several records
+    for a single name says so itself -- see ``ProviderSpec.identity`` -- because
+    hostname identity would silently merge them and adopt whichever the provider
+    listed first.
+    """
+
+    provider = PROVIDERS[kind]
+    if provider.identity is not None:
+        try:
+            return tuple(provider.identity(spec))
+        except (KeyError, TypeError, ValueError):
+            return ()
+    return _service_hostnames(kind, spec)
 
 
 def unmanaged() -> tuple[Unmanaged, ...]:
@@ -158,12 +207,13 @@ def unmanaged() -> tuple[Unmanaged, ...]:
             found.append(
                 Unmanaged(
                     kind=snapshot.kind,
-                    hostnames=identity,
+                    identity=identity,
+                    hostnames=_service_hostnames(snapshot.kind, spec),
                     spec=spec,
                     observed_at=snapshot.observed_at,
                 )
             )
-    return tuple(sorted(found, key=lambda item: (item.hostname, item.kind)))
+    return tuple(sorted(found, key=lambda item: (item.identity, item.kind)))
 
 
 @dataclass(frozen=True)
@@ -211,8 +261,18 @@ class UnmanagedService:
 
 
 def unmanaged_services() -> tuple[UnmanagedService, ...]:
+    """Unmanaged records grouped by the service they serve.
+
+    Records that serve no hostname are deliberately absent. A DMARC policy and a
+    CAA record are real, unmanaged and worth adopting, but they are not services
+    and grouping them here would file every one of them under a service whose
+    name is the empty string.
+    """
+
     grouped: dict[str, list[Unmanaged]] = {}
     for item in unmanaged():
+        if not item.hostname:
+            continue
         grouped.setdefault(item.hostname, []).append(item)
     return tuple(
         UnmanagedService(hostname=hostname, items=tuple(items))
@@ -220,16 +280,21 @@ def unmanaged_services() -> tuple[UnmanagedService, ...]:
     )
 
 
-def find_unmanaged(kind: str, hostname: str) -> Unmanaged | None:
+def find_unmanaged(
+    kind: str, hostname: str = "", *, token: str = ""
+) -> Unmanaged | None:
+    """One unmanaged record, found by exact identity or by the name it serves.
+
+    Both, because both questions are asked. "Adopt this service" means every
+    record behind a hostname; "adopt this record" means one row of a zone, which
+    may share its hostname with eight others and may serve nothing at all.
+    """
+
+    candidates = [item for item in unmanaged() if item.kind == kind]
+    if token:
+        return next((item for item in candidates if item.token == token), None)
     wanted = hostname.strip().lower().rstrip(".")
-    return next(
-        (
-            item
-            for item in unmanaged()
-            if item.kind == kind and wanted in item.hostnames
-        ),
-        None,
-    )
+    return next((item for item in candidates if wanted in item.hostnames), None)
 
 
 @dataclass(frozen=True)
@@ -271,7 +336,10 @@ def adopt_service(
         )
     adopted = [
         adopt(
-            AdoptCommand(kind=item.kind, hostname=item.hostname),
+            # By token, not by hostname: a service may be served by several
+            # records of one kind, and adopting by name would adopt the first
+            # one repeatedly and silently skip the rest.
+            AdoptCommand(kind=item.kind, token=item.token),
             principal=principal,
         )["resource"]["key"]
         for item in found.items
@@ -282,8 +350,12 @@ def adopt_service(
 @dataclass(frozen=True)
 class AdoptCommand:
     kind: str
-    hostname: str
+    hostname: str = ""
     key: str = ""
+    # Set when adopting one specific record rather than everything a hostname
+    # answers with. Takes precedence: it identifies exactly one row, where a
+    # hostname may match several.
+    token: str = ""
 
 
 def adopt(
@@ -309,10 +381,11 @@ def adopt(
     del expected_updated_at
     from .infrastructure import ManagedResourceCommand, NotFoundError, save_managed_resource
 
-    found = find_unmanaged(command.kind, command.hostname)
+    found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
+        subject = command.hostname or command.token or "that record"
         raise NotFoundError(
-            f"No unmanaged {command.kind} was last seen for {command.hostname!r}. "
+            f"No unmanaged {command.kind} was last seen for {subject!r}. "
             "It may have been adopted already, or removed at the provider."
         )
     return save_managed_resource(
@@ -327,21 +400,11 @@ def adopt(
 
 
 def suggested_key(item: Unmanaged) -> str:
-    """A free key derived from the hostname and the facet it supplies."""
+    """A free key an operator would recognise on a list of declarations."""
 
-    from django.utils.text import slugify
+    from .infrastructure import suggest_key
 
-    facet = PROVIDERS[item.kind].facet or item.kind
-    base = slugify(f"{item.hostname}-{facet}".replace(".", "-"))[:180]
-    if not ManagedResource.objects.filter(key=base).exists():
-        return base
-    # Adopting several records for one hostname is normal, and stopping to ask
-    # for a name that is merely already taken is not worth an interruption.
-    for suffix in range(2, 100):
-        candidate = f"{base[:176]}-{suffix}"
-        if not ManagedResource.objects.filter(key=candidate).exists():
-            return candidate
-    return base
+    return suggest_key(item.kind, item.spec)
 
 
 def inventory_state() -> tuple[dict[str, Any], ...]:

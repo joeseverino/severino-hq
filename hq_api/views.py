@@ -180,6 +180,12 @@ def _endpoint(methods: tuple[str, ...]):
 
         wrapper.__name__ = view.__name__
         wrapper.__doc__ = view.__doc__
+        # A fact a test can read, rather than one a reviewer has to notice.
+        # `/api/` is exempt from the login *redirect*, so a view added here
+        # without this decorator is not merely unprotected by convention -- it
+        # is served to anyone who asks. `core.test_security` walks these routes
+        # and fails if one lacks the mark.
+        wrapper.__hq_authenticated__ = True
         return wrapper
 
     return decorate

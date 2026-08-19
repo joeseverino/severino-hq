@@ -30,6 +30,27 @@
         "source": "field",
         "id": "credential"
       }
+    },
+    "ssh_transport": {
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "HOST": {
+        "source": "field",
+        "label": "host"
+      },
+      "PORT": {
+        "source": "field",
+        "label": "port"
+      },
+      "USER": {
+        "source": "field",
+        "label": "user"
+      },
+      "HOST_KEY": {
+        "source": "field",
+        "label": "host_key"
+      }
     }
   },
   "connections": {
@@ -47,20 +68,16 @@
       "provider": "cloudflare_dns",
       "projection": "api_token",
       "env_prefix": "CLOUDFLARE_DNS"
-    }
-  },
-  "ssh_transports": {
+    },
     "edge": {
-      "host": "100.85.1.19",
-      "port": 7722,
-      "user": "hq-controller",
-      "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPACQdOoik854h6jq2Qmwh+sOrAvKOurHKwoqlT4ADhM"
+      "provider": "ssh",
+      "projection": "ssh_transport",
+      "env_prefix": "EDGE"
     },
     "namecheap-cpanel": {
-      "host": "162.213.251.72",
-      "port": 21098,
-      "user": "jsevphha",
-      "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOAwA3q6b0DtuLdPSvh0P5zEc4Dt20gqEsRekbngYmO0"
+      "provider": "ssh",
+      "projection": "ssh_transport",
+      "env_prefix": "NAMECHEAP_CPANEL"
     }
   }
 }

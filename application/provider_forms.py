@@ -25,6 +25,7 @@ Two rules keep this honest:
 
 from __future__ import annotations
 
+import types
 import typing
 from typing import Any
 
@@ -107,11 +108,41 @@ class ProviderSpecForm(forms.Form):
 
     advanced_names: tuple[str, ...] = ()
 
+    # The model's own fields, so the form can tell a default from an answer.
+    provider_fields: dict = {}
+
+    def _is_routine(self, field) -> bool:
+        """Whether this field is still just a default nobody chose.
+
+        A knob is routine while it holds the answer the model would have given
+        anyway. Once somebody has set it, it is part of what this resource *is*
+        and belongs with the question rather than behind a disclosure.
+
+        This is what made editing a certificate look empty. A certificate that
+        exists only as a topology reference carries that reference in an
+        advanced field, so the form opened on blank "define a new one" boxes
+        with the one field that actually described it folded out of sight --
+        a page that appeared to say the certificate had no configuration at all.
+        """
+
+        if field.name not in self.advanced_names:
+            return False
+        model_field = self.provider_fields.get(field.name)
+        default = (
+            model_field.get_default(call_default_factory=True)
+            if model_field is not None
+            else None
+        )
+        value = self.initial.get(field.name, default)
+        if value in (None, "", [], ()):
+            return True
+        return value == default
+
     @property
     def primary(self):
-        """The fields that make up the question being asked."""
+        """The question being asked, plus any knob somebody has answered."""
 
-        return [field for field in self if field.name not in self.advanced_names]
+        return [field for field in self if not self._is_routine(field)]
 
     @property
     def advanced(self):
@@ -122,10 +153,11 @@ class ProviderSpecForm(forms.Form):
         knobs in front of the four that matter.
 
         Shown rather than hidden, because a default is only a good answer until
-        the day it is not.
+        the day it is not -- and once it is not, the field comes out from behind
+        the disclosure, because it is no longer routine.
         """
 
-        return [field for field in self if field.name in self.advanced_names]
+        return [field for field in self if self._is_routine(field)]
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -164,10 +196,18 @@ def identity_fields(kind: str) -> tuple[str, ...]:
     Read from ``seed`` rather than declared again, because seed already states
     exactly which fields a hostname decides. Only its keys are used, which is
     why a sentinel is safe to pass.
+
+    A covering provider is excluded. A certificate is not found at its provider
+    by a name it carries -- it is a lineage HQ issues and re-issues, and editing
+    which names it covers is exactly how that is done. Warning that the change
+    "renames the record and the old name stops resolving" would describe a
+    provider that does not work that way, about an edit that is the point.
     """
 
     provider = PROVIDERS[kind]
-    return tuple(provider.seed("hostname.invalid")) if provider.seed else ()
+    if provider.covers or provider.seed is None:
+        return ()
+    return tuple(provider.seed("hostname.invalid"))
 
 
 def spec_form_class(
@@ -228,15 +268,37 @@ def spec_form_class(
         {
             "provider_kind": kind,
             "advanced_names": provider.advanced_fields,
+            "provider_fields": dict(provider.spec_type.model_fields),
             **fields,
         },
     )
 
 
+def _optional_inner(annotation: Any) -> Any:
+    """``int | None`` is a union, not an int.
+
+    Every optional field before this one happened to be a string, where falling
+    through to a text box was accidentally correct. The first optional integer
+    was rendered as text, and submitting it empty sent "" to a model that would
+    accept an integer or nothing at all -- so the field could not be left blank
+    and could not be filled in with anything the model liked either.
+    """
+
+    if typing.get_origin(annotation) in (typing.Union, types.UnionType):
+        named = [
+            argument
+            for argument in typing.get_args(annotation)
+            if argument is not type(None)
+        ]
+        if len(named) == 1:
+            return named[0]
+    return annotation
+
+
 def _field_for(field: Any) -> forms.Field:
     """One pydantic field, as the input that best collects it."""
 
-    annotation = field.annotation
+    annotation = _optional_inner(field.annotation)
     origin = typing.get_origin(annotation)
     limits = _limits(field.metadata)
     required = field.is_required()

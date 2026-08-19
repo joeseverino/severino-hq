@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Domains · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Domains" lede="The domains HQ can see, and what it publishes in them." %}
+
+{% comment %}
+This page only renders while no domain is managed -- once one is, there is
+somewhere to go and going there beats listing it. So the copy speaks to the
+one situation it is ever seen in.
+{% endcomment %}
+{% if zones %}
+  <p class="page-lede">
+    HQ is not managing any domain yet. These are the zones the Cloudflare
+    credential can see. Managing one records what HQ is responsible for; it
+    changes nothing at Cloudflare.
+  </p>
+  <div class="control-summary">
+    {% for zone in zones %}
+      <div class="control-metric">
+        <span class="control-label">{{ zone.zone }}</span>
+        <strong>{{ zone.records|length }} record{{ zone.records|length|pluralize }}</strong>
+        <span class="readout">
+          <a class="subtle-link" href="{{ zone.url }}">See what it publishes &rarr;</a>
+        </span>
+        <form method="post" action="{% url 'zones:adopt' zone.zone %}">
+          {% csrf_token %}
+          <input type="hidden" name="token" value="{{ zone.adopt_token }}">
+          <button type="submit" class="primary">Manage this domain</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  {% include "partials/_empty_state.html" with message="No domains have been seen yet. The controller reports what the Cloudflare credential can reach on its next sweep." %}
+{% endif %}
+
+{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" %}
+{% endblock %}

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
@@ -356,6 +357,110 @@ class AdGuardRewriteSpec(ProviderModel):
     )
 
 
+@dataclass(frozen=True)
+class DNSRecordType:
+    """One record type, and everything the rest of HQ needs to know about it.
+
+    Record types differ in ways that reach every layer: whether the name is
+    expected to answer, whether Cloudflare will proxy it, what the value even
+    means, and what stops working when it is removed. Stated once here, those
+    differences are read by the service view, the form, the reconciler and the
+    removal page. Spelled inline instead, each of them grew its own tuple of
+    type names and they drifted apart the first time one was extended.
+    """
+
+    id: str
+    label: str
+    # Whether a record of this type brings a service into existence. An address
+    # record answers "where does this name point"; every other type states a
+    # fact *about* a name without promising that anything serves it. Listing a
+    # DMARC policy as a service would put a hostname on the board that nothing
+    # is expected to answer, and then report it as unserved forever.
+    declares_service: bool
+    # What the value is called, and what a correct one looks like. The form is
+    # generated from the model, so a type-specific prompt has to come from here
+    # rather than from a single field description that is wrong for five types.
+    value_label: str
+    value_help: str
+    # Cloudflare only proxies address records. Offering the toggle elsewhere
+    # invites a change the API rejects a minute later, in a job result.
+    proxyable: bool = False
+    # What breaks if this record goes away. Public DNS is destructive in a way
+    # an internal rewrite is not: an internal rewrite that disappears makes one
+    # name stop resolving on the LAN, and a missing MX silently bounces mail.
+    removal_impact: str = ""
+    # Whether this type states policy or proves ownership rather than sending
+    # anything anywhere. A zone's day-to-day question is where traffic goes, and
+    # a domain apex answers it under four CAA records and three verification
+    # strings -- so these are listed apart, folded away, rather than first.
+    secondary: bool = False
+
+
+DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
+    DNSRecordType(
+        "A", "A — IPv4 address", True,
+        "IPv4 address", "For example 203.0.113.10.",
+        proxyable=True,
+        removal_impact="This name stops resolving, so anything served at it goes dark.",
+    ),
+    DNSRecordType(
+        "AAAA", "AAAA — IPv6 address", True,
+        "IPv6 address", "For example 2001:db8::10.",
+        proxyable=True,
+        removal_impact="This name stops resolving over IPv6.",
+    ),
+    DNSRecordType(
+        "CNAME", "CNAME — alias to another name", True,
+        "Target hostname", "The name this one is an alias for.",
+        proxyable=True,
+        removal_impact="This name stops resolving, so anything served at it goes dark.",
+    ),
+    DNSRecordType(
+        "TXT", "TXT — text record", False,
+        "Text value",
+        "Quoted text. Carries policy such as SPF, or a verification challenge.",
+        removal_impact=(
+            "If this carries SPF, DMARC or a domain verification, removing it "
+            "weakens mail authentication or un-verifies the domain."
+        ),
+        secondary=True,
+    ),
+    DNSRecordType(
+        "MX", "MX — mail exchanger", False,
+        "Mail server hostname", "The host that accepts mail for this domain.",
+        removal_impact="Mail for this domain stops being delivered.",
+    ),
+    DNSRecordType(
+        "CAA", "CAA — permitted certificate authority", False,
+        "CAA value",
+        'Flags, tag and value — for example: 0 issue "letsencrypt.org".',
+        removal_impact=(
+            "Removing the last CAA record lets any certificate authority in the "
+            "world issue for this domain."
+        ),
+        secondary=True,
+    ),
+)
+
+DNS_RECORD_TYPES_BY_ID = {record_type.id: record_type for record_type in DNS_RECORD_TYPES}
+
+# Declared statically so the annotation is a real type, and checked against the
+# registry below so the two cannot drift.
+DNSRecordTypeId = Literal["A", "AAAA", "CNAME", "TXT", "MX", "CAA"]
+
+if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
+    raise ValueError(
+        "DNS record type registry and its annotation disagree; a type was "
+        "added to one and not the other."
+    )
+
+# One expression, used to validate a CAA value and to take it apart. Written
+# twice they drifted immediately: the validator accepted a spelling the
+# canonicaliser could not parse, so the value passed the form and then never
+# matched itself at the provider.
+_CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
+
+
 class CloudflareDNSRecordSpec(ProviderModel):
     zone: str = Field(
         min_length=1, max_length=253,
@@ -367,21 +472,92 @@ class CloudflareDNSRecordSpec(ProviderModel):
         title="Hostname",
         description="The full name being published, e.g. app.example.com.",
     )
-    record_type: Literal["A", "AAAA", "CNAME", "TXT"] = Field(title="Record type")
+    record_type: DNSRecordTypeId = Field(title="Record type")
     content: str = Field(
-        min_length=1,
-        title="Points at",
-        description="An IP for A and AAAA, a hostname for CNAME, text for TXT.",
+        min_length=1, max_length=2048,
+        title="Value",
+        description=(
+            "What this record says, and it depends on the type chosen above: "
+            "an IP address for A and AAAA, a hostname for CNAME and MX, quoted "
+            'text for TXT, and for CAA something like 0 issue "letsencrypt.org".'
+        ),
+    )
+    priority: int | None = Field(
+        default=None, ge=0, le=65535,
+        title="Priority",
+        description="MX only. Lower numbers are tried first.",
     )
     proxied: bool = Field(
         default=False,
         title="Proxy through Cloudflare",
-        description="Hides the origin address and puts Cloudflare in the path.",
+        description=(
+            "Address records only. On, Cloudflare answers and your address is "
+            "never published — caching, WAF and its certificate in front. Off, "
+            "the record hands out your address and visitors reach it directly. "
+            "Left off by default because it is a real change in who serves the "
+            "name, not a default worth assuming."
+        ),
     )
     ttl: int = Field(
         default=1, ge=1, le=86400,
         title="TTL",
         description="Seconds resolvers may cache this. 1 means automatic.",
+    )
+
+    @model_validator(mode="after")
+    def type_shape(self):
+        """Reject at the form what Cloudflare would reject a minute later.
+
+        Every rule here is one the API enforces anyway. Enforcing them at the
+        edge turns a failed job into a red field next to the answer that caused
+        it, which is the difference between a correction and an investigation.
+        """
+
+        record_type = DNS_RECORD_TYPES_BY_ID[self.record_type]
+        if self.priority is not None and self.record_type != "MX":
+            raise ValueError("priority applies only to MX records")
+        if self.record_type == "MX" and self.priority is None:
+            raise ValueError("an MX record needs a priority")
+        if self.proxied and not record_type.proxyable:
+            raise ValueError(
+                f"Cloudflare cannot proxy a {self.record_type} record"
+            )
+        if self.proxied and self.ttl != 1:
+            # Cloudflare drives the TTL of a proxied record itself and returns 1
+            # for it regardless of what was sent. Storing anything else would
+            # make every reconciliation report drift against a value the
+            # provider will never agree to.
+            raise ValueError("a proxied record must leave TTL automatic (1)")
+        if self.record_type == "CAA" and not re.match(_CAA_VALUE_PARTS, self.content):
+            raise ValueError(
+                'a CAA value looks like: 0 issue "letsencrypt.org"'
+            )
+        return self
+
+
+class CloudflareZoneSpec(ProviderModel):
+    """A domain HQ is responsible for, and the connection that serves it.
+
+    Declaring one is what makes a zone HQ's business. The credential can see
+    every zone on the account, which is not the same as HQ having been asked to
+    manage them: a parked domain and a live one look identical to a token, and
+    only an operator knows which is which.
+
+    It carries no settings yet. Zone posture -- TLS mode, minimum version, HSTS
+    -- is the natural next field set here, and is deliberately absent until the
+    controller holds a credential that could reconcile it. Declaring desired
+    state nothing can act on is how a control plane starts lying.
+    """
+
+    zone: str = Field(
+        min_length=1, max_length=253,
+        title="Domain",
+        description="The domain itself, e.g. example.com.",
+    )
+    connection_ref: str = Field(
+        min_length=1, max_length=160,
+        title="Served by",
+        description="The provider connection that holds this zone.",
     )
 
 
@@ -470,6 +646,62 @@ class ProviderSpec:
     readout: Callable[
         [dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]
     ] | None = None
+    # ----- Identity ----------------------------------------------------------
+    #
+    # How to tell that a live record and a declaration are the same thing.
+    #
+    # This defaults to ``hostnames`` and for two providers that is exactly
+    # right: an AdGuard rewrite and an NPM proxy host are each the only record
+    # their name can have, so "same name" and "same record" mean the same thing.
+    #
+    # They stop meaning the same thing the moment a provider holds several
+    # records for one name. A zone apex routinely carries three TXT records,
+    # four CAA records, two MX records and a CNAME -- nine distinct records, one
+    # hostname. Identified by hostname they collapse into one, and adoption
+    # picks whichever the provider happened to list first. Worse, the types that
+    # carry policy rather than address deliberately declare no hostname at all,
+    # so they would report as having no identity and be permanently invisible to
+    # the one screen built to find unmanaged things.
+    identity: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    # A readable key to suggest when adopting. Defaults to the hostname and the
+    # facet, which is meaningless for a record that has no hostname: every TXT
+    # record in a zone would be offered the same empty name.
+    key_hint: Callable[[dict[str, Any]], str] | None = None
+    # The surface that offers creating one, when it is not the registry's own
+    # "what do you want to add?" page. A public DNS record is only meaningful
+    # inside a zone: offered from the generic page it has to open by asking
+    # which domain, which is the one question the page it belongs on has
+    # already answered. Declared here rather than excluded there, so the picker
+    # never grows a hand-maintained list of the kinds it is meant to leave out.
+    created_from: str = ""
+    # What stops working if this particular resource is removed, in a sentence.
+    # Read by the confirmation page, which otherwise asks "are you sure" about a
+    # row of fields -- and the honest answer to that depends entirely on which
+    # row it is. Deleting one of four CAA records is housekeeping; deleting the
+    # last MX record stops the domain receiving mail.
+    removal_note: Callable[[dict[str, Any]], str] | None = None
+    # Whether this declaration describes something HQ made at a provider, or
+    # only records a responsibility HQ was given.
+    #
+    # Removal assumes the first, correctly for almost everything: a rewrite, a
+    # proxy host and a DNS record all exist somewhere else, so forgetting the
+    # row alone would abandon them. A domain is the exception. HQ did not create
+    # the zone and deleting it would be absurd; being responsible for it is the
+    # entire content of the declaration, so ceasing to be responsible is the
+    # entire content of removing it. Left as the default, there was no way to
+    # stop managing a domain at all -- removal was refused because the
+    # controller implements no delete, which was true and beside the point.
+    declaration_only: bool = False
+    # What this declaration holds, as ``(kind, their_field, my_field)``.
+    #
+    # A domain holds the records published in it, and ceasing to be responsible
+    # for the domain has to release them -- left behind, HQ would keep
+    # reconciling records in a zone the operator had just said was not its
+    # business. Which resources those are is provider knowledge: stated in the
+    # use case instead, a generic "forget this declaration" path had the string
+    # "cloudflare.dns_record" written into it, and the second provider with
+    # anything inside it would have added an ``elif``.
+    contains: tuple[str, str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
@@ -683,8 +915,13 @@ def _rewrite_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
 def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     # A TXT record carries policy -- an SPF entry, a validation challenge -- not
     # a service. Naming one would put a hostname on the board that nothing is
-    # expected to serve, and then permanently report it as unserved.
-    return () if spec["record_type"] == "TXT" else (spec["name"],)
+    # expected to serve, and then permanently report it as unserved. The same is
+    # true of MX and CAA, which is why the answer comes from the record-type
+    # registry rather than from a list of exceptions maintained here.
+    record_type = DNS_RECORD_TYPES_BY_ID.get(spec["record_type"])
+    if record_type is None or not record_type.declares_service:
+        return ()
+    return (spec["name"],)
 
 
 def _rewrite_readout(
@@ -706,7 +943,7 @@ def _proxy_readout(
     )
 
 
-def _expiry(stamp: str) -> str:
+def expiry_phrase(stamp: str) -> str:
     """An expiry a person can act on: the date, and how long that leaves.
 
     The raw ISO timestamp is what the provider reports and the wrong thing to
@@ -733,16 +970,226 @@ def _certificate_readout(
     verified = status.get("verified_domains") or ()
     return (
         ("Issuer", "", status.get("issuer", "")),
-        ("Expires", "", _expiry(status.get("not_after", ""))),
+        ("Expires", "", expiry_phrase(status.get("not_after", ""))),
         ("Verified names", "", str(len(verified)) if verified else ""),
     )
+
+
+def _dns_record_origin(spec: dict[str, Any]) -> str:
+    """Where a record sends the name, when the record itself is the answer.
+
+    An internal name is routed by a proxy, so the proxy declares the origin. A
+    public name pointed straight at something -- a CNAME to a Pages site, an A
+    record to a host -- is routed by the record, and nothing else in HQ was
+    saying so: the service page reported "Not routed. Nothing declares where
+    requests for this name are served" about a name whose whole configuration
+    was a statement of exactly that.
+
+    Only address types answer. A TXT or CAA record routes nothing.
+    """
+
+    record_type = DNS_RECORD_TYPES_BY_ID.get(str(spec.get("record_type", "")).upper())
+    if record_type is None or not record_type.declares_service:
+        return ""
+    return str(spec.get("content", "")).strip()
+
+
+def _dns_record_value(spec: dict[str, Any]) -> str:
+    """The record as one line, the way a zone file would state it."""
+
+    parts = [str(spec.get("record_type", "")).strip()]
+    if spec.get("priority") is not None:
+        parts.append(str(spec["priority"]))
+    parts.append(str(spec.get("content", "")).strip())
+    return " ".join(part for part in parts if part)
 
 
 def _dns_record_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    desired = f"{spec.get('record_type', '')} {spec.get('content', '')}".strip()
-    return (("Record", desired, status.get("content", "")),)
+    rows = [("Record", _dns_record_value(spec), status.get("content", ""))]
+    if spec.get("proxied"):
+        # Worth its own row: a proxied record resolves to Cloudflare rather than
+        # to the address authored here, so an operator comparing this page
+        # against `dig` sees two different answers and needs to know why.
+        rows.append(("Proxied", "Through Cloudflare", ""))
+    return tuple(rows)
+
+
+def _dns_record_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """A Cloudflare record, as the spec that would reproduce it exactly.
+
+    Adoption is only safe if the declaration starts out equal to the world, so
+    every field the reconciler sends is captured here -- including the ones an
+    operator would never think to set. ``priority`` is read back only for MX
+    because Cloudflare reports 0 for types that do not have one, and storing
+    that would fail the spec's own validation on the next edit.
+    """
+
+    spec = {
+        "zone": record.get("zone", ""),
+        "name": record.get("name", ""),
+        "record_type": record.get("record_type", ""),
+        "content": record.get("content", ""),
+        "proxied": bool(record.get("proxied", False)),
+        "ttl": int(record.get("ttl", 1) or 1),
+    }
+    if record.get("record_type") == "MX":
+        spec["priority"] = int(record.get("priority", 0) or 0)
+    return spec
+
+
+def _dns_record_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    """What makes this record itself and not its neighbour.
+
+    Cloudflare's own record id would be the obvious answer and is the wrong one
+    here: a declaration authored in HQ has never had one, so identity has to be
+    something both a live record and a freshly typed form can produce. The tuple
+    a zone file would use -- name, type, value -- is that, and it is unique
+    because Cloudflare rejects an exact duplicate of all three.
+    """
+
+    name = normalized_hostname(spec.get("name", ""))
+    zone = normalized_hostname(spec.get("zone", ""))
+    record_type = str(spec.get("record_type", "")).strip().upper()
+    content = normalized_record_content(record_type, str(spec.get("content", "")))
+    if not (zone and name and record_type and content):
+        return ()
+    return (zone, name, record_type, content)
+
+
+def names_a_host(name: str) -> bool:
+    """Whether a DNS name could ever be something that answers.
+
+    A label beginning with an underscore is reserved by RFC 8552 for metadata
+    about a domain rather than for a host in it: ``_dmarc``, ``_domainkey``,
+    ``_acme-challenge``, ``_sip._tcp``. Nothing is ever served there, and no
+    name of that shape can be a service however it is published.
+
+    The record type alone could not tell. TXT records were excluded because
+    they carry policy, which caught ``_dmarc`` -- and missed
+    ``sig1._domainkey``, a DKIM delegation published as a CNAME. The type said
+    "an address, so a service"; the name says it is a signing key.
+    """
+
+    return not any(label.startswith("_") for label in str(name).split("."))
+
+
+def normalized_hostname(name: str) -> str:
+    """One spelling of a DNS name: lowercase, trimmed, no trailing dot.
+
+    The single implementation. Three modules had their own -- the service view,
+    the domain view and this one -- and they agreed only by coincidence. A name
+    is the join between every surface HQ has: a rewrite, a proxy host, a
+    certificate and a DNS record are authored in four places and will not agree
+    on case or on the trailing dot, and two that differ only in those would
+    appear as separate services with each missing what the other had.
+    """
+
+    return str(name).strip().lower().rstrip(".")
+
+
+def caa_parts(content: str) -> tuple[int, str, str] | None:
+    """A CAA value as its three parts, or None if it is not one.
+
+    Cloudflare returns a CAA record as one formatted string and accepts it only
+    as three fields. HQ stores the string, because that is what a zone file shows
+    and what an operator recognises, and splits it here -- once, rather than in
+    the validator, the canonicaliser and the controller separately, which is
+    where the spellings they each accepted began to disagree.
+    """
+
+    parsed = re.match(_CAA_VALUE_PARTS, str(content))
+    if not parsed:
+        return None
+    return int(parsed.group(1)), parsed.group(2), parsed.group(3)
+
+
+def normalized_record_content(record_type: str, content: str) -> str:
+    """One spelling of a value, so desired and observed can be compared.
+
+    Declared here, beside the record-type registry, and imported by the
+    controller rather than reimplemented there. Two copies of this is not a
+    tidiness problem: identity uses it to decide whether a live record is one HQ
+    already declares, and the reconciler uses it to decide whether that record
+    needs changing. If the two ever disagreed, HQ would adopt a record and then
+    immediately rewrite it.
+
+    Every rule is one Cloudflare imposes, and each is a way for a record to
+    report as drifted against itself:
+
+    - a TXT value comes back quoted whether or not it was sent that way;
+    - a hostname is case-insensitive and comes back lowercased;
+    - a CAA value is re-emitted with single spaces.
+    """
+
+    value = str(content).strip()
+    if record_type == "TXT" and not (value.startswith('"') and value.endswith('"')):
+        value = f'"{value}"'
+    if record_type in {"CNAME", "MX"}:
+        value = value.lower().rstrip(".")
+    if record_type == "CAA":
+        parts = caa_parts(value)
+        if parts:
+            flags, tag, target = parts
+            value = f'{flags} {tag} "{target}"'
+    return value
+
+
+def _dns_record_key_hint(spec: dict[str, Any]) -> str:
+    """A name an operator would recognise on a list of declarations.
+
+    The record type is in it because a name usually has more than one record and
+    "jseverino-com" would collide with itself four times over on a zone apex.
+    """
+
+    name = normalized_hostname(spec.get("name", ""))
+    record_type = str(spec.get("record_type", "")).strip().lower()
+    return f"{name}-{record_type}"
+
+
+def _dns_record_removal_note(spec: dict[str, Any]) -> str:
+    record_type = DNS_RECORD_TYPES_BY_ID.get(
+        str(spec.get("record_type", "")).upper()
+    )
+    return record_type.removal_impact if record_type else ""
+
+
+def _zone_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    zone = normalized_hostname(spec.get("zone", ""))
+    return (zone,) if zone else ()
+
+
+def _zone_key_hint(spec: dict[str, Any]) -> str:
+    return normalized_hostname(spec.get("zone", ""))
+
+
+def _zone_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What is true of this domain right now, stated without judgement.
+
+    Every row is an observation. HQ has no credential that could change any of
+    them yet, and a control plane that flags drift against a policy it cannot
+    enforce is just an opinion with a red pill next to it. When zone posture
+    becomes declarable these become desired-vs-observed like every other row.
+    """
+
+    return (
+        ("Records", "", str(status.get("record_count", "")) if status else ""),
+        ("Mail (MX)", "", status.get("mx_summary", "")),
+        ("SPF", "", status.get("spf_summary", "")),
+        ("DMARC", "", status.get("dmarc_summary", "")),
+        ("Certificate authorities (CAA)", "", status.get("caa_summary", "")),
+        ("Served by", spec.get("connection_ref", ""), ""),
+    )
+
+
+def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "zone": record.get("zone", ""),
+        "connection_ref": record.get("connection_ref", ""),
+    }
 
 
 def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -757,7 +1204,7 @@ def _uploaded_certificate_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     return (
         ("Name", spec.get("certificate_name", ""), ""),
-        ("Expires", "", _expiry(status.get("not_after", ""))),
+        ("Expires", "", expiry_phrase(status.get("not_after", ""))),
         ("Installed on", ", ".join(spec.get("install_on", ())), ""),
     )
 
@@ -803,6 +1250,17 @@ def _proxy_seed(hostname: str) -> dict[str, Any]:
     return {"domain_names": [hostname]}
 
 
+def _certificate_seed(hostname: str) -> dict[str, Any]:
+    """A new certificate, started from the name that needs one.
+
+    Only the names it covers: what to call its lineage and where to install it
+    are decisions nobody can read off a hostname, and guessing either would put
+    an answer in the form that looks considered and is not.
+    """
+
+    return {"domains": [hostname]}
+
+
 def _dns_record_seed(hostname: str) -> dict[str, Any]:
     # The registrable domain, guessed from the last two labels. A seed, not a
     # decision: it is offered in an editable field because a zone is not always
@@ -832,6 +1290,7 @@ _PROVIDERS = (
         facet="certificate",
         readout=_certificate_readout,
         hostnames=_certificate_hostnames,
+        seed=_certificate_seed,
         covers=True,
     ),
     ProviderSpec(
@@ -858,6 +1317,11 @@ _PROVIDERS = (
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
         label="Proxy host",
+        removal_note=lambda spec: (
+            "Every name this answers for stops being served: "
+            + ", ".join(spec.get("domain_names", ()))
+            + "."
+        ),
         choices="application.provider_choices:proxy_choices",
         required_on_create=("certificate_resource",),
         advanced_fields=(
@@ -885,6 +1349,10 @@ _PROVIDERS = (
         "if it is not there yet.",
         AdGuardRewriteSpec,
         label="Internal DNS record",
+        removal_note=lambda spec: (
+            f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
+            "anything reached by that name goes dark inside the network."
+        ),
         facet="dns",
         hostnames=_rewrite_hostnames,
         seed=_rewrite_seed,
@@ -896,12 +1364,36 @@ _PROVIDERS = (
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         label="Public DNS record",
-        advanced_fields=("proxied", "ttl"),
+        advanced_fields=("priority", "ttl"),
         public_effect=True,
         facet="dns",
         hostnames=_dns_record_hostnames,
         seed=_dns_record_seed,
         readout=_dns_record_readout,
+        from_record=_dns_record_from_record,
+        choices="application.provider_choices:dns_record",
+        identity=_dns_record_identity,
+        key_hint=_dns_record_key_hint,
+        origin=_dns_record_origin,
+        created_from="zone",
+        removal_note=_dns_record_removal_note,
+    ),
+    ProviderSpec(
+        "cloudflare.zone",
+        "A domain HQ is responsible for. Declaring one is what puts its "
+        "records under HQ's management; the credential can see every zone on "
+        "the account, which is not the same as being asked to manage them.",
+        CloudflareZoneSpec,
+        label="Domain",
+        public_effect=True,
+        hostnames=None,
+        readout=_zone_readout,
+        from_record=_zone_from_record,
+        choices="application.provider_choices:zone",
+        identity=_zone_identity,
+        key_hint=_zone_key_hint,
+        declaration_only=True,
+        contains=("cloudflare.dns_record", "zone", "zone"),
     ),
 )
 
@@ -968,6 +1460,10 @@ def describe_providers() -> dict[str, Any]:
                 "summary": provider.summary,
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,
+                # Part of the contract, not a detail of one page: anything that
+                # offers "add a resource" has to know which kinds stand on their
+                # own and which only make sense inside something else.
+                "created_from": provider.created_from,
                 "controller": capabilities[provider.kind],
                 "spec_schema": provider.schema(),
             }

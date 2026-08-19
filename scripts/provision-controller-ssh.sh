@@ -7,6 +7,7 @@ set -eu
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly registry="${app_dir}/config/controller-connections.json"
 readonly ssh_dir="${app_dir}/secrets/ssh"
+readonly env_file="${app_dir}/secrets/severino_controller_env"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "provision-controller-ssh.sh must run as root." >&2
@@ -15,23 +16,31 @@ fi
 
 jq -e '
     .schema_version == 1
-    and (.ssh_transports | type == "object")
+    and (.connections | type == "object")
     and all(
-        .ssh_transports | to_entries[];
+        [.connections | to_entries[] | select(.value.projection == "ssh_transport")][];
         (.key | test("^[a-z0-9][a-z0-9-]*$"))
-        and (.value.host | type == "string" and length > 0)
-        and (.value.port | type == "number" and . >= 1 and . <= 65535)
-        and (.value.user | test("^[a-z_][a-z0-9_-]*$"))
-        and (.value.host_key | test("^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$"))
+        and (.value.env_prefix | test("^[A-Z][A-Z0-9_]*$"))
     )
 ' "${registry}" >/dev/null
+
+# Endpoints come from 1Password through the rendered controller environment.
+if [ ! -s "${env_file}" ]; then
+    echo "Controller environment is missing." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null  # rendered at deploy time, not in the repo
+. "${env_file}"
 
 umask 077
 install -d -o root -g root -m 0700 "${ssh_dir}"
 temporary="$(mktemp "${ssh_dir}/.known_hosts.XXXXXX")"
 trap 'rm -f "${temporary}"' EXIT HUP INT TERM
 
-for connection_ref in $(jq -r '.ssh_transports | keys[]' "${registry}"); do
+for connection_ref in $(
+    jq -r '.connections | to_entries[]
+           | select(.value.projection == "ssh_transport") | .key' "${registry}"
+); do
     identity="${ssh_dir}/${connection_ref}"
     if [ ! -f "${identity}" ]; then
         ssh-keygen -q -t ed25519 -N '' \
@@ -43,9 +52,24 @@ for connection_ref in $(jq -r '.ssh_transports | keys[]' "${registry}"); do
     chmod 0600 "${identity}"
     chmod 0644 "${identity}.pub"
 
-    host="$(jq -r --arg ref "${connection_ref}" '.ssh_transports[$ref].host' "${registry}")"
-    port="$(jq -r --arg ref "${connection_ref}" '.ssh_transports[$ref].port' "${registry}")"
-    host_key="$(jq -r --arg ref "${connection_ref}" '.ssh_transports[$ref].host_key' "${registry}")"
+    prefix="$(
+        jq -r --arg ref "${connection_ref}" \
+            '.connections[$ref].env_prefix' "${registry}"
+    )"
+    host=""
+    port=""
+    host_key=""
+    eval "host=\${${prefix}_HOST:-}"
+    eval "port=\${${prefix}_PORT:-}"
+    eval "host_key=\${${prefix}_HOST_KEY:-}"
+    if [ -z "${host}" ] || [ -z "${port}" ] || [ -z "${host_key}" ]; then
+        echo "${prefix}_HOST, ${prefix}_PORT and ${prefix}_HOST_KEY are required." >&2
+        exit 1
+    fi
+    case "${host_key}" in
+        "ssh-ed25519 "*) ;;
+        *) echo "${prefix}_HOST_KEY must be an ssh-ed25519 key." >&2; exit 1 ;;
+    esac
     printf '[%s]:%s %s\n' "${host}" "${port}" "${host_key}" >>"${temporary}"
 done
 

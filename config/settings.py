@@ -98,7 +98,9 @@ SECURE_REFERRER_POLICY = "same-origin"
 SECURE_PROXY_SSL_HEADER = (
     ("HTTP_X_FORWARDED_PROTO", "https") if env_bool("DJANGO_BEHIND_TLS_PROXY") else None
 )
-SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
+# A year, on by default. HQ is HTTPS-only behind the proxy, and the header
+# costs nothing until a browser has already reached it over TLS once.
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "31536000"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS")
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 
@@ -125,6 +127,48 @@ SECURE_CSP = {
     "form-action": [CSP.SELF],
     "frame-ancestors": [CSP.NONE],
 }
+
+# ----- Who may reach HQ at all ------------------------------------------------
+
+# HQ answers the private LAN, the tailnet, and loopback (the container
+# healthcheck). Defaults are in `core.network`; both lists are overridable for
+# a deployment whose network does not look like this one.
+SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool(
+    "SEVERINO_ENFORCE_TRUSTED_NETWORK", default=True
+)
+# Tailscale hands out addresses from the carrier-grade NAT range; RFC 1918 and
+# loopback cover the LAN, Docker's bridge networks and the healthcheck. Spelled
+# out as the default rather than left to configuration, so a deployment that
+# sets nothing is still closed to the public internet.
+SEVERINO_TRUSTED_NETWORKS = env_list(
+    "SEVERINO_TRUSTED_NETWORKS",
+    default=[
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",  # Tailscale (CGNAT)
+        "fd7a:115c:a1e0::/48",  # Tailscale (IPv6 ULA)
+        "fc00::/7",  # unique local addresses
+    ],
+)
+# Whose `X-Forwarded-For` HQ believes. Narrower than the networks above on
+# purpose: this is not "who may connect", it is "who may *name someone else*",
+# which is a far stronger claim to accept. The TLS proxy is on the LAN; a
+# tailnet peer is a client, not infrastructure, and must not be able to
+# nominate the address HQ judges it by.
+SEVERINO_TRUSTED_PROXIES = env_list(
+    "SEVERINO_TRUSTED_PROXIES",
+    default=["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+)
+
+# Sign-in throttling for the break-glass password path. Read back out of the
+# audit log by `core.throttle`; see that module for why there is no counter.
+SEVERINO_LOGIN_MAX_ATTEMPTS = int(os.environ.get("SEVERINO_LOGIN_MAX_ATTEMPTS", "5"))
+SEVERINO_LOGIN_WINDOW_SECONDS = int(
+    os.environ.get("SEVERINO_LOGIN_WINDOW_SECONDS", "900")
+)
 
 # ----- Apps --------------------------------------------------------------------
 
@@ -154,6 +198,9 @@ INSTALLED_APPS = [
 ] + installed_plugin_apps()
 
 MIDDLEWARE = [
+    # Before everything. An address that may not talk to HQ should not reach
+    # the session store, the login form, or the audit log.
+    "core.network.TrustedNetworkMiddleware",
     "core.middleware.RequestContextMiddleware",
     "django.middleware.security.SecurityMiddleware",
     # WhiteNoise serves /static/ in production (DEBUG=0). Must come immediately
@@ -253,7 +300,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/accounts/login/"
+# The marker matters. Without it, signing out under SSO-only redirects
+# straight back into a still-valid Pocket ID session and signs the operator
+# back in -- a sign-out button that visibly does nothing.
+LOGOUT_REDIRECT_URL = "/accounts/login/?signed_out=1"
 
 # Paths that are public (everything else requires login).
 LOGIN_EXEMPT_URL_NAMES = {
@@ -274,13 +324,34 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
     "/api/",
 )
 
-AUTHENTICATION_BACKENDS = [
-    "core.oidc.HQOIDCAuthenticationBackend",
-    "django.contrib.auth.backends.ModelBackend",
-]
-
-# Pocket ID / OIDC SSO. Password login remains available as a break-glass path.
+# Pocket ID / OIDC SSO is how a person signs in.
 SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
+
+# The password form exists only where SSO does not.
+#
+# Derived rather than configured, because the two set independently is how a
+# deployment ends up with single sign-on and a password door open beside it.
+#
+# With this off there is no password to guess, so brute force and credential
+# stuffing stop being reachable rather than being rate-limited. Pocket ID holds
+# the only credential, where the passkey, the MFA policy and revocation already
+# live.
+#
+# The override is the break-glass path for the day SSO itself is what is
+# broken: set it, restart, and the form is back. Deliberate, and it lands in
+# the audit log the moment it is used.
+SEVERINO_PASSWORD_LOGIN_ENABLED = env_bool(
+    "SEVERINO_PASSWORD_LOGIN_ENABLED", default=not SEVERINO_OIDC_ENABLED
+)
+
+# The backend is removed, not merely unused: the guarantee has to hold for
+# any caller of `authenticate()`, not only for the login view.
+AUTHENTICATION_BACKENDS = ["core.oidc.HQOIDCAuthenticationBackend"] + (
+    ["django.contrib.auth.backends.ModelBackend"]
+    if SEVERINO_PASSWORD_LOGIN_ENABLED
+    else []
+)
+
 SEVERINO_OIDC_ALLOWED_EMAILS = {
     email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")
 }

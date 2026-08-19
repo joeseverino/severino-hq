@@ -30,27 +30,43 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% endif %}
 
   {% comment %}
-  Everything the model already has a good answer for sits one disclosure away,
-  and only when editing. Creating asks what HQ cannot work out for itself and
-  stops: a name it can derive from the hostname, and a switch to pause
+  Everything the model already has a good answer for sits one disclosure away.
+
+  The tuning knobs are offered when creating as well as when editing, which they
+  were not: a field that is optional to the model can still be required by it in
+  combination -- an MX record must carry a priority -- and hiding those on the
+  create form made such a record impossible to add. The operator chose the type,
+  submitted, and was told about a field the page had never shown them.
+
+  The identity fields stay edit-only, because that original reasoning does hold
+  for them: a name HQ derives from the record itself, and a switch to pause
   something that does not exist yet, are not questions worth interrupting for.
   {% endcomment %}
-  {% if resource %}
+  {% if spec.advanced or resource %}
     <details class="control-diagnostics"{% if spec.errors or identity.errors %} open{% endif %}>
       <summary>Options</summary>
       {% for field in spec.advanced %}{% include "partials/_form_field.html" %}{% endfor %}
-      {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+      {% if resource %}
+        {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+      {% endif %}
     </details>
   {% endif %}
 
   <div class="form-actions">
     <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>
-    <a class="btn" href="{% if resource %}{% url 'control_plane:detail' resource.key %}{% else %}{% url 'control_plane:list' %}{% endif %}">Cancel</a>
+    {% comment %}
+    Back where the operator started. Cancelling out of "add a record" landed on
+    the resource registry -- a different page, in a different section, listing
+    something other than what they were looking at a moment ago.
+    {% endcomment %}
+    <a class="btn" href="{{ cancel_url }}">Cancel</a>
   </div>
 </form>
 
-<p class="muted">
-  HQ applies this at the provider within about a minute, then shows you what it
-  actually found there.
-</p>
+{% comment %}
+Said by the capability registry rather than by this page. Stated here as a flat
+promise, it was false for every kind whose actions are locked -- which is the
+one case where an operator most needs to know that saving changes nothing.
+{% endcomment %}
+<p class="muted">{{ apply_note }}</p>
 {% endblock %}

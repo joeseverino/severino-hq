@@ -5,13 +5,17 @@ from __future__ import annotations
 from datetime import date, datetime
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView
 from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -27,6 +31,77 @@ from contacts.d1 import (
     search_submissions,
 )
 from .models import AuditLog
+
+
+class ThrottledLoginView(LoginView):
+    """The password form, with a cost attached to guessing at it.
+
+    Refused *before* the credentials are checked. Validating first and
+    discarding the result would still answer the attacker's actual question --
+    response timing, and the difference between "no such user" and "locked",
+    both leak whether a guess was close -- and would spend a password hash per
+    attempt doing it, which is the expensive operation an attacker wants to
+    provoke.
+
+    The message names no account and no address. It says the door is shut and
+    when it reopens, which is everything a locked-out operator needs and
+    nothing an attacker can use to tell whether they found a real username.
+    """
+
+    template_name = "auth/login.html"
+
+    @property
+    def sso_only(self) -> bool:
+        return settings.SEVERINO_OIDC_ENABLED and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
+
+    def get(self, request, *args, **kwargs):
+        """Go straight to Pocket ID rather than asking which door to use.
+
+        Strictly less friction than the button it replaces: signing in is
+        already a redirect to the identity provider, and stopping to confirm
+        that is a click that decides nothing.
+
+        Except after signing out, where bouncing would immediately return the
+        still-valid provider session and make the sign-out look broken. There,
+        the page is shown so leaving is possible.
+        """
+
+        if self.sso_only and "signed_out" not in request.GET:
+            target = reverse("oidc_authentication_init")
+            nxt = request.GET.get("next")
+            # Checked here even though the provider library checks it again
+            # before use. A destination is only carried forward if it points
+            # back at this host, so nothing downstream has to be trusted to
+            # notice that it does not.
+            if nxt and url_has_allowed_host_and_scheme(
+                nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(f"{target}?next={quote(nxt)}")
+            return redirect(target)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        from .network import client_ip
+        from .throttle import lockout
+
+        if self.sso_only:
+            # There is no backend to check it against, so this could only ever
+            # fail -- but failing here means it is never carried further, and
+            # the attempt is answered the same way whatever was submitted.
+            return HttpResponseForbidden("Password sign-in is disabled.")
+
+        state = lockout(request.POST.get("username", ""), client_ip(request))
+        if not state.locked:
+            return super().post(request, *args, **kwargs)
+        form = self.get_form()
+        form.errors.pop("__all__", None)
+        form.add_error(
+            None,
+            "Too many failed sign-in attempts. Try again in "
+            f"{state.minutes_remaining} minute"
+            f"{'s' if state.minutes_remaining != 1 else ''}.",
+        )
+        return self.render_to_response(self.get_context_data(form=form), status=429)
 
 
 def health_live(request):
@@ -60,7 +135,17 @@ def health_ready(request):
     checks["storage"] = all(
         path.is_dir() and os.access(path, os.W_OK) for path in writable_paths
     )
-    checks.update({f"plugin:{key}": value for key, value in plugin_health().items()})
+    # Aggregated for anonymous callers, itemised for signed-in ones.
+    #
+    # This endpoint answers without a credential, because a container
+    # healthcheck cannot sign in. A probe only needs to know whether HQ can
+    # serve traffic at all; which extension is unhealthy is an operator's
+    # question, and is answered to operators.
+    plugins = plugin_health()
+    if plugins:
+        checks["plugins"] = all(plugins.values())
+        if getattr(request.user, "is_authenticated", False):
+            checks.update({f"plugin:{key}": value for key, value in plugins.items()})
     ready = all(checks.values())
     return JsonResponse(
         {"status": "ok" if ready else "unavailable", "checks": checks},

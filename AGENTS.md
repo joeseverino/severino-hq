@@ -9,6 +9,21 @@ authoritative for human and agentic development in this public repository.
 2. Read the nearest code and tests before changing an interface.
 3. Run `./scripts/check.sh` before handing work back.
 
+`check.sh` runs the suite three ways: with `DEBUG` on, with it off as production
+runs it, and — when an extension set is supplied — with every extension
+installed. That third pass is the one that catches what CI cannot, because the
+host and its extensions first meet during compose, long after the merge button.
+Supply it an interpreter that has them importable, which this repository's own
+venv deliberately does not:
+
+```sh
+CHECK_PYTHON=/path/to/venv/bin/python \
+SEVERINO_HQ_PLUGINS=… PYTHONPATH=… ./scripts/check.sh
+```
+
+`hq dev` already computes both values. Without them the pass is skipped, so
+public CI and a fresh checkout are unaffected.
+
 Local development uses `./scripts/dev.sh`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled. `hq dev` remains a local
 convenience when the Severino tools CLI is available.

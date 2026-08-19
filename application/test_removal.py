@@ -66,23 +66,29 @@ class RemovalRequestTests(TestCase):
         self.assertTrue(result["queued"])
 
     def test_removal_is_refused_where_the_controller_cannot_do_it(self):
-        """Cloudflare's actions are locked, so nothing may queue one."""
+        """A certificate declares no delete, so nothing may queue one.
+
+        The rule is not about any particular provider: a resource whose kind
+        declares no such action must be refused here rather than queued for a
+        worker that would find no handler for it.
+
+        The example has moved twice as the registry grew -- a public DNS record
+        gained a delete, and a domain turned out not to need one, because
+        removing it ends a responsibility rather than destroying anything. What
+        is being tested has not moved.
+        """
+
         ManagedResource.objects.create(
-            key="public-dns",
-            kind="cloudflare.dns_record",
-            spec={
-                "zone": "example.com",
-                "name": "app.example.com",
-                "record_type": "A",
-                "content": "203.0.113.10",
-            },
+            key="a-certificate",
+            kind="tls.certificate",
+            spec={"topology_ref": "pki:example"},
         )
 
         with self.assertRaises(PolicyError):
             request_removal(
                 OperationCommand(idempotency_key="remove-1"),
                 principal=cli_principal(),
-                current_key="public-dns",
+                current_key="a-certificate",
             )
 
     def test_asking_twice_queues_one_operation(self):

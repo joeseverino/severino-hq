@@ -1,0 +1,34 @@
+{% comment %}
+Sweep freshness — how old the provider readings on this page are.
+
+  {% include "partials/_sweep_freshness.html" with inventory=inventory %}
+  {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind %}
+
+Every surface that shows what a provider holds has to say this, because
+everything above it is a claim about a moment: a provider the controller could
+not reach still shows its last sweep, and not saying how old it is lets a stale
+list read as current.
+
+Three pages had their own wording for it, and two of them named Cloudflare in
+the markup — which is the one thing a template must not do here, since the
+provider already says what it is called. `snapshot.label` comes from the
+registry, so a provider added later names itself.
+
+`only_kind` narrows it to one provider for a page that shows one provider's
+records; without it, every sweep is listed.
+{% endcomment %}
+{% if inventory %}
+  <p class="muted">
+    {% for snapshot in inventory %}
+      {% if not only_kind or snapshot.kind == only_kind %}
+        {{ snapshot.label }}:
+        {% if snapshot.reachable %}
+          {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked {{ snapshot.observed_at|timesince }} ago
+        {% else %}
+          unreachable ({{ snapshot.error }})
+        {% endif %}
+        {% if not forloop.last and not only_kind %} · {% endif %}
+      {% endif %}
+    {% endfor %}
+  </p>
+{% endif %}

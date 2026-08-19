@@ -15,8 +15,8 @@ from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from projects.models import Project
 from .security import Capability, Principal
+from .projection import iso, page_size
 
-MAX_PAGE_SIZE = 100
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
     DocumentationRecord.Sensitivity.INTERNAL,
@@ -48,14 +48,8 @@ class AssetCommand:
     related_projects: tuple[str, ...] = ()
 
 
-def _page_size(limit: int) -> int:
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
-    return min(limit, MAX_PAGE_SIZE)
 
 
-def _iso(value) -> str | None:
-    return value.isoformat() if value else None
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
@@ -65,15 +59,15 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
         "vendor": asset.vendor,
         "category": asset.category,
         "status": asset.status,
-        "purchase_date": _iso(asset.purchase_date),
+        "purchase_date": iso(asset.purchase_date),
         "total_cost": str(asset.total_cost),
         "business_use_percentage": asset.business_use_percentage,
         "estimated_deductible_amount": str(asset.estimated_deductible_amount),
         "payment_method": asset.payment_method,
         "serial_number": asset.serial_number,
-        "warranty_date": _iso(asset.warranty_date),
+        "warranty_date": iso(asset.warranty_date),
         "notes": asset.notes,
-        "updated_at": _iso(asset.updated_at),
+        "updated_at": iso(asset.updated_at),
     }
     if relationships:
         result["relationships"] = {
@@ -110,7 +104,7 @@ def list_assets(
             | Q(vendor__icontains=query)
         )
     items = [
-        serialize_asset(asset) for asset in qs.order_by("slug")[: _page_size(limit)]
+        serialize_asset(asset) for asset in qs.order_by("slug")[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 
