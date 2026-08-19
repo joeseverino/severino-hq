@@ -1229,6 +1229,83 @@ def reconcile_uploaded_certificate(
     )
 
 
+def delete_uploaded_certificate(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Remove an installed certificate, or refuse and say who has to do it.
+
+    Only Nginx Proxy Manager can be undone from here. A Caddy target receives a
+    certificate over an SSH forced command that implements ``deploy`` and
+    nothing else, so removing one means editing the remote side -- and a delete
+    that reported success while leaving a file on a host would take HQ's
+    declaration with it and lose the only record that the file is there.
+
+    Refused whole rather than done partly, for the same reason.
+    """
+
+    elsewhere = sorted(
+        consumer["name"] for consumer in spec["consumers"] if consumer["kind"] != "npm"
+    )
+    if elsewhere:
+        raise ProviderError(
+            "HQ can only remove this from Nginx Proxy Manager. Take it off "
+            + ", ".join(elsewhere)
+            + " by hand first, then remove those targets from this resource."
+        )
+
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
+    wanted = {
+        f"Severino HQ - {consumer['name']}" for consumer in spec["consumers"]
+    }
+    matches = [
+        item for item in certificates if item.get("nice_name") in wanted
+    ]
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such certificate in NPM.")
+            ],
+            message="Certificate was already absent from NPM.",
+        )
+
+    # A certificate still bound to a proxy host cannot be deleted without taking
+    # TLS down on it. Naming the hosts is the actionable part: the operator has
+    # to point them at something else first.
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    identifiers = {item["id"] for item in matches}
+    still_bound = sorted(
+        name
+        for host in hosts
+        if host.get("certificate_id") in identifiers
+        for name in host.get("domain_names", [])
+    )
+    if still_bound:
+        raise ProviderError(
+            "Still serving " + ", ".join(still_bound) + ". Point those at "
+            "another certificate before removing this one."
+        )
+    if apply:
+        for item in matches:
+            _request(
+                f"{base_url}/nginx/certificates/{item['id']}",
+                method="DELETE",
+                headers=headers,
+            )
+    return ProviderResult(
+        changed=True,
+        status={"removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "Certificate removed from NPM.")
+        ],
+        message="Certificate removed from NPM.",
+    )
+
+
 def delete_adguard(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
@@ -1389,6 +1466,7 @@ def inventory() -> dict[str, Any]:
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
     ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
+    ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
     ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
     ("npm.proxy_host", "delete"): delete_npm,

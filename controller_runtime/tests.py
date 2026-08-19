@@ -472,6 +472,84 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(update.args[0].endswith("/nginx/proxy-hosts/4"))
         self.assertEqual(update.kwargs["payload"]["domain_names"], ["new.example"])
 
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm.example.test",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_removing_a_certificate_still_serving_a_host_is_refused(self, request):
+        """Deleting it would take TLS down on whatever is bound to it.
+
+        Naming the hosts is the actionable half: they have to be pointed at
+        something else first.
+        """
+        request.side_effect = [
+            {"token": "short-lived"},
+            [{"id": 3, "nice_name": "Severino HQ - newhost-npm"}],
+            [{"id": 9, "domain_names": ["newhost.example"], "certificate_id": 3}],
+        ]
+
+        with self.assertRaisesRegex(providers.ProviderError, "newhost.example"):
+            providers.delete_uploaded_certificate(
+                {
+                    "certificate_name": "newhost",
+                    "consumers": [{"kind": "npm", "name": "newhost-npm"}],
+                }
+            )
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm.example.test",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_an_unbound_certificate_is_removed(self, request):
+        request.side_effect = [
+            {"token": "short-lived"},
+            [{"id": 3, "nice_name": "Severino HQ - newhost-npm"}],
+            [{"id": 9, "domain_names": ["other.example"], "certificate_id": 7}],
+            None,
+        ]
+
+        result = providers.delete_uploaded_certificate(
+            {
+                "certificate_name": "newhost",
+                "consumers": [{"kind": "npm", "name": "newhost-npm"}],
+            }
+        )
+
+        self.assertTrue(result.changed)
+        removal = request.call_args_list[-1]
+        self.assertTrue(removal.args[0].endswith("/nginx/certificates/3"))
+        self.assertEqual(removal.kwargs["method"], "DELETE")
+
+    def test_removing_from_a_target_hq_cannot_reach_is_refused_whole(self):
+        """A partial delete would drop HQ's record of a file still on a host.
+
+        The Caddy transport implements deploy and nothing else, so there is no
+        remove to call -- and reporting success would forget the only pointer to
+        what was left behind.
+        """
+        with self.assertRaisesRegex(providers.ProviderError, "by hand"):
+            providers.delete_uploaded_certificate(
+                {
+                    "certificate_name": "newhost",
+                    "consumers": [
+                        {"kind": "npm", "name": "newhost-npm"},
+                        {"kind": "caddy", "name": "newhost-caddy"},
+                    ],
+                }
+            )
+
     def test_public_dns_fails_closed(self):
         with self.assertRaisesRegex(providers.ProviderError, "not enabled"):
             providers.execute(
@@ -870,6 +948,7 @@ class WorkerTests(TestCase):
                 ("npm.proxy_host", "reconcile"),
                 ("tls.certificate", "reconcile"),
                 ("tls.certificate", "renew"),
+                ("tls.uploaded_certificate", "delete"),
                 ("tls.uploaded_certificate", "reconcile"),
             ),
         )
