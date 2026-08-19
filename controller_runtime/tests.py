@@ -746,7 +746,10 @@ class WorkerTests(TestCase):
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
         self.assertEqual(
-            manage.call_args_list[0].args,
+            manage.call_args_list[0].args[0], "inventory"
+        )
+        self.assertEqual(
+            manage.call_args_list[1].args,
             ("schedule", "--controller-id", "test"),
         )
         self.assertIn("adguard.rewrite:reconcile", arguments)
@@ -798,6 +801,8 @@ class WorkerTests(TestCase):
     @mock.patch("controller_runtime.worker._manage")
     def test_provider_failure_is_reported_without_secret(self, manage, execute, _):
         manage.side_effect = [
+            # The inventory sweep runs first on every apply pass.
+            {"ok": True, "recorded": []},
             {"ok": True, "scheduled": []},
             {
                 "operation": {"id": "operation-1", "action": "reconcile"},
@@ -814,7 +819,7 @@ class WorkerTests(TestCase):
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = json.loads(manage.call_args_list[2].args[-1])
+        report_payload = json.loads(manage.call_args_list[3].args[-1])
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
 
@@ -825,6 +830,8 @@ class WorkerTests(TestCase):
         self, manage, execute, preflight
     ):
         manage.side_effect = [
+            # The inventory sweep runs first on every apply pass.
+            {"ok": True, "recorded": []},
             {"ok": True, "scheduled": []},
             {
                 "operation": {"id": "operation-1", "action": "reconcile"},

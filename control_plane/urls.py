@@ -13,6 +13,7 @@ urlpatterns = [
     path("services/", views.ServiceListView.as_view(), name="services"),
     path("new/", views.ResourceFormView.as_view(), name="create"),
     path("services/<str:hostname>/", views.ServiceDetailView.as_view(), name="service"),
+    path("adopt/<str:hostname>/", views.AdoptView.as_view(), name="adopt"),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),
     path("<slug:key>/edit/", views.ResourceFormView.as_view(), name="edit"),
     path("<slug:key>/remove/", views.ResourceRemoveView.as_view(), name="remove"),

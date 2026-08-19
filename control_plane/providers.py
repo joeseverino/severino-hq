@@ -247,6 +247,12 @@ class ProviderSpec:
     # rather than once per resource -- and a provider added later joins that
     # flow by saying which of its fields the name fills in.
     seed: Callable[[str], dict[str, Any]] | None = None
+    # Turns a record the provider already holds into the spec that would
+    # reproduce it. This is what makes adoption safe: the declaration starts out
+    # equal to the world, so the first reconciliation after adopting changes
+    # nothing. Built from the same field set the reconciler sends, so a setting
+    # HQ can express is a setting adoption captures.
+    from_record: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     # What this resource actually does, as (label, desired, observed) rows.
     # A service page showed "Declared" in the largest type on the card while the
     # row beneath it held `answer: 10.0.0.10` -- the least useful fact rendered
@@ -408,6 +414,39 @@ def _dns_record_readout(
     return (("Record", desired, status.get("content", "")),)
 
 
+def _rewrite_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {"domain": record["domain"], "answer": record["answer"]}
+
+
+def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """An NPM proxy host, as the spec that would reproduce it exactly.
+
+    ``certificate_resource`` is deliberately blank: it names an HQ resource, and
+    the provider has only a numeric certificate id which HQ may not manage. The
+    reconciler keeps whatever certificate the host already has when this is
+    empty, so adopting does not detach one.
+    """
+
+    return {
+        "domain_names": list(record["domain_names"]),
+        "forward_scheme": record["forward_scheme"],
+        "forward_host": record["forward_host"],
+        "forward_port": record["forward_port"],
+        "certificate_resource": "",
+        "force_ssl": bool(record.get("ssl_forced")),
+        "http2": bool(record.get("http2_support")),
+        "websocket": bool(record.get("allow_websocket_upgrade")),
+        "caching_enabled": bool(record.get("caching_enabled")),
+        "block_exploits": bool(record.get("block_exploits")),
+        "access_list_id": record.get("access_list_id") or 0,
+        "advanced_config": record.get("advanced_config") or "",
+        "hsts_enabled": bool(record.get("hsts_enabled")),
+        "hsts_subdomains": bool(record.get("hsts_subdomains")),
+        "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
+        "serving": bool(record.get("enabled", True)),
+    }
+
+
 def _rewrite_seed(hostname: str) -> dict[str, Any]:
     return {"domain": hostname}
 
@@ -452,6 +491,7 @@ _PROVIDERS = (
         hostnames=_proxy_hostnames,
         origin=_proxy_origin,
         seed=_proxy_seed,
+        from_record=_proxy_from_record,
         readout=_proxy_readout,
     ),
     ProviderSpec(
@@ -463,6 +503,7 @@ _PROVIDERS = (
         facet="dns",
         hostnames=_rewrite_hostnames,
         seed=_rewrite_seed,
+        from_record=_rewrite_from_record,
         readout=_rewrite_readout,
     ),
     ProviderSpec(

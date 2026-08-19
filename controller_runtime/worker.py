@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-from .providers import ProviderError, execute, preflight
+from .providers import ProviderError, execute, inventory, preflight
 from control_plane.providers import (
     controller_capability_registry,
     enabled_controller_actions,
@@ -92,6 +92,28 @@ def _report(
     )
 
 
+def _report_inventory(controller_id: str) -> None:
+    """Tell HQ what the providers hold, before doing anything about it.
+
+    Best effort on purpose. This is a convenience -- it powers a page that lists
+    what exists and offers to adopt it -- and it must never be the reason an
+    operation the operator actually asked for goes unclaimed. A provider that is
+    down already reports itself unreachable inside ``inventory``; this catch is
+    for the bridge, so a failure to record cannot take out the pass.
+    """
+
+    try:
+        _manage(
+            "inventory",
+            "--controller-id",
+            controller_id,
+            "--payload",
+            json.dumps(inventory(), separators=(",", ":")),
+        )
+    except (BridgeError, ProviderError, OSError, ValueError):
+        pass
+
+
 def run_once(controller_id: str, *, apply: bool) -> int:
     if not apply:
         peek_args = ["peek"]
@@ -125,6 +147,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         )
         return 0
 
+    _report_inventory(controller_id)
     _manage("schedule", "--controller-id", controller_id)
     claim_args = ["claim", "--controller-id", controller_id]
     for kind, action in supported_capabilities():

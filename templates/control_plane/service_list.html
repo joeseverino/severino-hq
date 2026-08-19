@@ -49,4 +49,57 @@ template changing.
     </tbody>
   </table>
 </div>
+
+{% if unmanaged %}
+  <h2>Not managed by HQ</h2>
+  <p class="muted">
+    These exist at the provider but HQ has no declaration for them. Adopting one
+    records it exactly as it is configured now — nothing changes at the provider.
+  </p>
+  {% comment %}
+  One row per hostname, with the same columns as the table above. Listed per
+  record instead, a service with a DNS entry and a proxy appeared as two
+  adjacent rows of the same name and took two clicks to onboard.
+  {% endcomment %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Hostname</th>
+          {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for service in unmanaged %}
+          <tr>
+            <td><strong>{{ service.hostname }}</strong></td>
+            {% for id, label, value in service.facets %}
+              <td>{% if value %}<code>{{ value }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+            {% endfor %}
+            <td>
+              <form method="post" action="{% url 'control_plane:adopt' service.hostname %}">
+                {% csrf_token %}
+                <button type="submit">Adopt</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+{% comment %}
+Staleness is stated because everything above it is a claim about a moment. A
+provider the controller could not reach still shows its last sweep, and saying
+how old that is stops it reading as current.
+{% endcomment %}
+{% if inventory %}
+  <p class="muted">
+    {% for snapshot in inventory %}
+      {{ snapshot.label }}: {% if snapshot.reachable %}{{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked {{ snapshot.observed_at|timesince }} ago{% else %}unreachable ({{ snapshot.error }}){% endif %}{% if not forloop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+{% endif %}
 {% endblock %}

@@ -15,6 +15,8 @@ from application.controller import (
     schedule_automatic_operations,
 )
 from application.connections import preflight_connections
+from application.inventory import record_inventory
+from application.security import cli_principal
 from application.infrastructure import controller_contract
 from control_plane.models import ManagedResource
 
@@ -36,6 +38,10 @@ class Command(BaseCommand):
         subparsers.add_parser("preflight")
         schedule = subparsers.add_parser("schedule")
         schedule.add_argument("--controller-id", required=True)
+
+        inventory = subparsers.add_parser("inventory")
+        inventory.add_argument("--controller-id", required=True)
+        inventory.add_argument("--payload", required=True)
 
         report = subparsers.add_parser("report")
         report.add_argument("--controller-id", required=True)
@@ -79,6 +85,12 @@ class Command(BaseCommand):
                 }
                 if not result["ok"]:
                     raise ValueError(json.dumps(result, sort_keys=True))
+            elif options["action"] == "inventory":
+                result = record_inventory(
+                    json.loads(options["payload"]),
+                    principal=cli_principal(),
+                    controller_id=options["controller_id"],
+                )
             elif options["action"] == "schedule":
                 result = schedule_automatic_operations(options["controller_id"])
             else:

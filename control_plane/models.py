@@ -55,6 +55,34 @@ class TopologySnapshot(TimestampedModel):
         return f"{self.id} v{self.schema_version}"
 
 
+class ProviderInventory(TimestampedModel):
+    """What a provider actually holds, as a controller last saw it.
+
+    A cache, and named to stay one. HQ must not become a second copy of AdGuard
+    or Nginx Proxy Manager -- those own their own state, and a stored mirror is
+    wrong the moment anything changes outside HQ. Nothing reconciles from this
+    and nothing is derived from it that outlives the next sweep; it exists so an
+    operator can see what is out there and adopt it.
+
+    ``observed_at`` is the point. A row here is only a claim about a moment, and
+    a surface showing it has to be able to say how old that moment is.
+    """
+
+    kind = models.CharField(primary_key=True, max_length=64)
+    records = models.JSONField(default=list, blank=True)
+    reachable = models.BooleanField(default=True)
+    error = models.CharField(max_length=500, blank=True)
+    observed_at = models.DateTimeField()
+    controller_id = models.CharField(max_length=160, blank=True)
+
+    class Meta:
+        ordering = ("kind",)
+        verbose_name_plural = "provider inventories"
+
+    def __str__(self) -> str:
+        return f"{self.kind} ({len(self.records)} records)"
+
+
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
         RECONCILE = "reconcile", "Reconcile"

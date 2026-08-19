@@ -450,6 +450,12 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    earlier row rendered as body copy. */
 .readout { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .readout-label { color: var(--ink-2); font-weight: 600; }
+/* Inside a table, a readout keeps its line. `.table-scroll td` breaks words so
+   a long cell wraps rather than widening the page -- right for prose, wrong for
+   an address: on a phone "192.168.1.233" became a column one digit wide and
+   thirteen lines tall. The wrapper already scrolls, so the honest answer is to
+   let the row be as wide as it is and let the reader swipe. */
+td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A provider offered as a starting point, laid out in the same card grid.
    align-items keeps every child its own width: stretched, a pill spans the card
    and reads as a banner rather than a tag. */

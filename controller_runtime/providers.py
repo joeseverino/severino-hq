@@ -1213,6 +1213,79 @@ def delete_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
     )
 
 
+def list_adguard() -> list[dict[str, Any]]:
+    base_url = _required("ADGUARD", "URL").rstrip("/")
+    records = _request(f"{base_url}/control/rewrite/list", headers=_adguard_headers())
+    return [
+        {
+            "domain": item["domain"],
+            "answer": item["answer"],
+            "enabled": item.get("enabled", True),
+        }
+        for item in records
+        if item.get("domain") and item.get("answer")
+    ]
+
+
+def list_npm() -> list[dict[str, Any]]:
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    records = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    # Only the fields HQ can express, plus the identity. The rest is NPM's
+    # business, and copying a whole provider object into HQ would make this an
+    # inventory of NPM rather than a list of what HQ could manage.
+    fields = (
+        "domain_names",
+        "forward_scheme",
+        "forward_host",
+        "forward_port",
+        "ssl_forced",
+        "http2_support",
+        "allow_websocket_upgrade",
+        "caching_enabled",
+        "block_exploits",
+        "access_list_id",
+        "advanced_config",
+        "hsts_enabled",
+        "hsts_subdomains",
+        "trust_forwarded_proto",
+        "enabled",
+    )
+    return [
+        {field: record.get(field) for field in fields}
+        for record in records
+        if record.get("domain_names")
+    ]
+
+
+PROVIDER_INVENTORY = {
+    "adguard.rewrite": list_adguard,
+    "npm.proxy_host": list_npm,
+}
+
+
+def inventory() -> dict[str, Any]:
+    """Everything each provider holds, whether or not HQ declared it.
+
+    The reconcilers already fetch these lists in full and keep only the one
+    record they were asked about. Reporting the rest costs nothing extra at the
+    provider and is the difference between HQ knowing about the resources it
+    created and HQ knowing what is actually out there.
+
+    One unreachable provider reports as unreachable rather than failing the
+    sweep. Losing the whole inventory because a single service is restarting
+    would make the least reliable provider decide whether HQ can see any of them.
+    """
+
+    found: dict[str, Any] = {}
+    for kind, lister in PROVIDER_INVENTORY.items():
+        try:
+            found[kind] = {"ok": True, "records": lister()}
+        except (ProviderError, OSError, ValueError, KeyError) as exc:
+            found[kind] = {"ok": False, "records": [], "error": str(exc)}
+    return found
+
+
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
     ("adguard.rewrite", "delete"): delete_adguard,

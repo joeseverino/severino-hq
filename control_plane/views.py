@@ -15,6 +15,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 
 from application.infrastructure import (
     ManagedResourceCommand,
+    NotFoundError,
     OperationCommand,
     PolicyError,
     certificate_renewal_allowed,
@@ -27,6 +28,12 @@ from application.infrastructure import (
     save_managed_resource,
     serialize_resource,
     serialize_public_status,
+)
+from application.inventory import (
+    AdoptServiceCommand,
+    adopt_service,
+    inventory_state,
+    unmanaged_services,
 )
 from application.provider_forms import ResourceIdentityForm, spec_form_class
 from application.security import web_principal
@@ -181,6 +188,33 @@ def _readable_error(exc) -> str:
     return " ".join(messages_found) if messages_found else str(exc)
 
 
+class AdoptView(LoginRequiredMixin, View):
+    """Bring something the provider already holds under HQ's management.
+
+    One click, no form. The spec is read back out of the live record, so the
+    declaration starts equal to the world and the first reconciliation changes
+    nothing -- which is the only reason adopting is safe to do without asking
+    the operator to confirm every field first.
+    """
+
+    def post(self, request, hostname):
+        try:
+            result = adopt_service(
+                AdoptServiceCommand(hostname=hostname),
+                principal=web_principal(request.user),
+            )
+        except (NotFoundError, PolicyError, DjangoValidationError) as exc:
+            messages.error(request, _readable_error(exc))
+            return redirect("control_plane:services")
+        adopted = ", ".join(result["adopted"])
+        messages.success(
+            request,
+            f"Adopted {hostname} as {adopted}, exactly as configured now. "
+            "Nothing changed at the provider.",
+        )
+        return redirect("control_plane:service", hostname=result["hostname"])
+
+
 class ResourceRemoveView(LoginRequiredMixin, View):
     """Ask first, then queue removal of the record itself.
 
@@ -242,6 +276,13 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being touched.
         context["facets"] = SERVICE_FACETS
+        # Everything the providers hold that no declaration accounts for. Shown
+        # beside the managed services rather than on a page of its own: a
+        # hostname HQ does not manage is still a hostname that is serving, and
+        # hiding it is how a console ends up describing only the tidy half of
+        # the estate.
+        context["unmanaged"] = unmanaged_services()
+        context["inventory"] = inventory_state()
         return context
 
 
