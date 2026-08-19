@@ -155,12 +155,20 @@ everything would make the system less honest, not more unified.
 |---|---|---|
 | Authored documentation | Obsidian vault | Validated metadata, relationships, and vault pointers |
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
-| Credentials and tokens | 1Password | Nothing secret; only runtime access |
+| Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Infrastructure identities and dependencies | Severino Labs topology | Trusted checksummed snapshot + stable references |
+| Desired infrastructure state | HQ database | The only copy; the topology no longer declares it |
+| What a provider actually holds | The provider | A timestamped cache, never reconciled from |
 | Provider authored/resolved contracts | Provider definition registry | No parallel resolver schema |
 | Controller actions and automation | Validated controller capability document | Queued operations and observations |
+
+The one exception to "nothing secret" is a certificate an operator generated
+themselves and asked HQ to install. It is sealed with a key held outside the
+database, refused outright when that key is absent, read only by the controller
+through its own bridge command, and absent from every serializer. Provider
+credentials remain outside the web container entirely.
 
 The vault emits a validated manifest; HQ never walks the vault and never stores
 Markdown bodies. The MCP does not become a database or a second rules engine.
@@ -308,13 +316,42 @@ edges. HQ imports the complete sensitive topology into a trusted, checksummed
 server-side snapshot. Managed resources reference topology identities; they do
 not duplicate hosts, certificate SANs, or consumer topology.
 
+**HQ owns desired state.** The topology document described what exists and also
+declared what should be configured, so every import re-materialised the managed
+resources and an edit made in HQ was reverted minutes later by the next sync. A
+`managed_resources` block is now refused on import, by name, rather than quietly
+dropped. One tie remains deliberately: a certificate's authored spec is a single
+topology reference, so importing re-fingerprints resolved desired state and
+advances the generation of anything whose resolution moved.
+
 HQ stores typed operational intent, resource generations, public observations,
 and audited operation requests. Each provider definition owns its authored
 schema, reference resolver, and resolved runtime schema. Topology supplies the
 trusted graph; it contains no TLS-specific resolver logic. Web, MCP, scheduler,
-and controller contracts consume the same resolved provider output. HQ does not
-store provider credentials or private keys. Every interface invokes the same
-application capabilities.
+and controller contracts consume the same resolved provider output. HQ stores no
+provider credentials. Every interface invokes the same application capabilities.
+
+A provider definition also declares how it participates in the surfaces above
+it: which facet of a service it supplies, how to read hostnames out of a
+resolved spec, how to describe itself in one line, and how to rebuild a spec
+from a record the provider already holds. Everything derived from that — the
+service view, the generated create-and-edit forms, adoption — is written once
+and names no provider, so a provider added to the registry appears on all of it
+without another file being edited.
+
+Three verbs exist beyond reconciliation. **Delete** removes the record at the
+provider and only then lets HQ forget its declaration, because the thing
+described lives elsewhere and dropping the row alone would abandon it. **Rename**
+is possible because the contract carries what the provider was last seen
+holding: without it, a changed hostname created a second record beside the one
+it meant to move. **Adopt** takes a record the provider already holds and writes
+its live settings into a new declaration, so the first reconciliation after
+adopting changes nothing.
+
+Certificates arrive two ways. HQ issues one from Let's Encrypt over DNS-01 and
+keeps it renewed and deployed. Or an operator generates one against the offline
+CA — which HQ cannot do, and does not pretend to, because the root key never
+leaves that machine — and hands HQ the result to install and hold.
 
 Controllers claim operations with an expiring lease and receive a minimal,
 versioned, desired-only JSON contract. A controller resolves runtime connection

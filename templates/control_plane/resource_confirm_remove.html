@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Remove {{ resource.key }} · Severino HQ{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Remove {{ resource.key }}?</h1>
+    <p class="page-lede">{{ label }}</p>
+  </div>
+</div>
+
+<section class="control-card">
+  <p>
+    This removes the record itself, not just HQ's note of it. The controller
+    deletes it at the provider, and HQ forgets this declaration once the
+    provider confirms it is gone.
+  </p>
+  <dl class="kv compact">
+    {% for label, value in resource.spec.items %}
+      <dt>{{ label }}</dt><dd><code>{{ value }}</code></dd>
+    {% endfor %}
+  </dl>
+
+  {% if removal_allowed %}
+    <form method="post" class="form">
+      {% csrf_token %}
+      <div class="field">
+        <label for="reason">Why (optional)</label>
+        <input type="text" name="reason" id="reason" maxlength="300">
+        <p class="help">Recorded on the operation and in the audit log.</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Remove it</button>
+        <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Keep it</a>
+      </div>
+    </form>
+  {% else %}
+    <p class="msg msg-error">{{ removal_explanation }}</p>
+    <p><a class="btn" href="{% url 'control_plane:detail' resource.key %}">Back</a></p>
+  {% endif %}
+</section>
+{% endblock %}

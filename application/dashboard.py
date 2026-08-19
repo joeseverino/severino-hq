@@ -1,175 +1,83 @@
-"""Canonical operating snapshot for HQ delivery adapters."""
+"""Canonical operating snapshot for HQ delivery adapters.
+
+Assembly only. Every figure, row and queue entry below is a section's own
+answer, asked once and named here for transport -- this module imports no
+model and decides no number. It previously queried eight of them directly,
+which meant a change to what a section counts had to be made here as well as
+wherever the section itself counted it.
+"""
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
-from django.conf import settings
-from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from assets.models import Asset
-from contacts.d1 import D1Error, get_unread_count
-from content.models import ContentItem
-from control_plane.models import ManagedResource
-from docs_index.models import DocumentationRecord
-from expenses.models import Expense
-from projects.models import Project
-from receipts.models import Receipt
-
-from .infrastructure import resource_health
+from . import sections
+from .attention import contacts_state
+from .domains import domain_attention_items, domain_dashboard_cards
 from .read_models import recent_activity
 
-ZERO_MONEY = Decimal("0.00")
 
+def work_queue() -> list[dict[str, Any]]:
+    """The composed queue, flattened for transport.
 
-def _project(project: Project) -> dict[str, Any]:
-    return {
-        "slug": project.slug,
-        "name": project.name,
-        "category": project.category,
-        "category_label": project.get_category_display(),
-        "repository_url": project.repository_url,
-        "public_url": project.public_url,
-        "updated_at": project.updated_at.isoformat(),
-    }
+    Projected from ``domain_attention_items`` rather than assembled here: the
+    domains own what needs doing, and this is only the shape it travels in.
+    ``url`` rides along so no consumer needs a table to turn an entry back into
+    a link.
+    """
 
-
-def _content(item: ContentItem) -> dict[str, Any]:
-    return {
-        "slug": item.slug,
-        "title": item.title,
-        "content_type_label": item.get_content_type_display(),
-        "published_url": item.published_url,
-        "published_at": item.published_at.isoformat() if item.published_at else None,
-        "updated_at": item.updated_at.isoformat(),
-    }
-
-
-def _documentation(record: DocumentationRecord) -> dict[str, Any]:
-    return {
-        "doc_id": record.doc_id,
-        "title": record.title,
-        "last_reviewed": record.last_reviewed.isoformat() if record.last_reviewed else None,
-    }
+    return [
+        {
+            "source_id": entry["source_id"],
+            "source": entry["source"],
+            "label": entry["item"].title,
+            "detail": entry["item"].body,
+            "count": entry["item"].magnitude or 1,
+            "status": entry["item"].status,
+            "url": entry["item"].url,
+        }
+        for entry in domain_attention_items()
+    ]
 
 
 def operating_snapshot() -> dict[str, Any]:
     """Return the one canonical KPI, work-queue, and activity projection."""
-    try:
-        unread_contacts_count = get_unread_count()
-        contacts_status = "ok"
-    except D1Error:
-        unread_contacts_count = 0
-        contacts_status = "unavailable"
-    today = timezone.localdate()
-    fiscal_start_month = getattr(settings, "SEVERINO_FISCAL_YEAR_START_MONTH", 1)
-    year_start = today.replace(month=fiscal_start_month, day=1)
-    if year_start > today:
-        year_start = year_start.replace(year=today.year - 1)
-    expenses = Expense.objects.filter(date__range=(year_start, today)).aggregate(
-        total=Sum("total_cost"),
-        deductible=Sum("estimated_deductible_amount"),
-        count=Count("id"),
-    )
-
-    docs_needing_review = DocumentationRecord.objects.needing_review()
-
-    active_projects = Project.objects.filter(status=Project.Status.ACTIVE)
-    project_health = active_projects.annotate(
-        content_count=Count("content_items", distinct=True),
-        doc_count=Count("documentation_records", distinct=True),
-    )
-    projects_needing_output = project_health.filter(
-        Q(content_count=0) | Q(doc_count=0)
-    )
-    published_content = ContentItem.objects.filter(
-        status=ContentItem.Status.PUBLISHED
-    )
-    draft_content = ContentItem.objects.filter(status=ContentItem.Status.DRAFT)
-
-    docs_needing_review_count = docs_needing_review.count()
-    projects_needing_output_count = projects_needing_output.count()
-    draft_content_count = draft_content.count()
-
-    receipts_unlinked = Receipt.objects.filter(
-        related_expense__isnull=True,
-        related_asset__isnull=True,
-    ).count()
-    expenses_without_receipts = (
-        Expense.objects.annotate(receipt_count=Count("receipts"))
-        .filter(receipt_count=0)
-        .count()
-    )
-    assets_missing_purchase = (
-        Asset.objects.filter(status=Asset.Status.ACTIVE)
-        .filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
-        .count()
-    )
-    content_without_docs = (
-        ContentItem.objects.annotate(doc_count=Count("related_documentation"))
-        .filter(doc_count=0)
-        .count()
-    )
-
-    priority = [
-        *[
-            {
-                "code": "infrastructure",
-                "resource_key": resource.key,
-                "label": (
-                    f"{resource.key}: {health['message']}"
-                    if health["message"]
-                    else f"{resource.key} needs infrastructure attention"
-                ),
-                "count": 1,
-                "severity": "critical" if health["state"] == "degraded" else "warning",
-            }
-            for resource in ManagedResource.objects.filter(enabled=True)
-            if (health := resource_health(resource))["state"]
-            in {"degraded", "pending", "unknown"}
-        ],
-        {"code": "docs_review", "label": "Docs need review", "count": docs_needing_review_count},
-        {"code": "draft_content", "label": "Draft content", "count": draft_content_count},
-        {"code": "unread_contacts", "label": "Unread contact submissions", "count": unread_contacts_count},
-        {"code": "projects_output", "label": "Active projects need output", "count": projects_needing_output_count},
-        {"code": "receipts_unlinked", "label": "Receipts need links", "count": receipts_unlinked},
-        {"code": "expenses_receipts", "label": "Expenses need receipts", "count": expenses_without_receipts},
-        {"code": "assets_purchase", "label": "Assets missing purchase info", "count": assets_missing_purchase},
-        {"code": "content_docs", "label": "Content needs docs", "count": content_without_docs},
-    ]
+    unread_contacts_count, contacts_status = contacts_state()
+    projects = sections.projects_reading()
+    content = sections.content_reading()
+    documentation = sections.documentation_reading()
+    expenses = sections.expenses_reading()
+    priority = work_queue()
 
     return {
         "generated_at": timezone.now().isoformat(),
         "upstreams": {"contacts": contacts_status},
-        "year": today.year,
+        "year": expenses["year"],
+        # Every figure here is a section's own answer, asked once above. This
+        # block names them for transport; it does not decide any of them.
         "kpis": {
-            "active_projects": active_projects.count(),
-            "projects_needing_output": projects_needing_output_count,
-            "draft_content": draft_content_count,
-            "published_content": published_content.count(),
-            "docs_needing_review": docs_needing_review_count,
-            "expenses_total": str(expenses["total"] or ZERO_MONEY),
-            "expenses_count": expenses["count"] or 0,
-            "deductible_total": str(expenses["deductible"] or ZERO_MONEY),
+            "active_projects": projects["active"],
+            "projects_needing_output": projects["needing_output"],
+            "draft_content": content["drafts"],
+            "published_content": content["published"],
+            "docs_needing_review": documentation["needing_review"],
+            "unread_contacts": unread_contacts_count,
+            "expenses_total": str(expenses["total"]),
+            "expenses_count": expenses["count"],
+            "deductible_total": str(expenses["deductible"]),
         },
+        # Every domain's headline reading, host and extension alike, already in
+        # the order the nav presents them. Carried here so a delivery adapter
+        # asks for the dashboard once rather than assembling it from two calls.
+        "cards": list(domain_dashboard_cards()),
         "priority": priority,
         "priority_count": sum(item["count"] for item in priority),
-        "priority_group_count": sum(bool(item["count"]) for item in priority),
-        "active_projects": [
-            _project(project) for project in active_projects.order_by("-updated_at")[:4]
-        ],
-        "draft_content": [
-            _content(item) for item in draft_content.order_by("-updated_at")[:4]
-        ],
-        "recent_published": [
-            _content(item)
-            for item in published_content.order_by("-published_at", "-updated_at")[:4]
-        ],
-        "docs_needing_review": [
-            _documentation(record)
-            for record in docs_needing_review.order_by("last_reviewed")[:4]
-        ],
+        "priority_group_count": len(priority),
+        "active_projects": sections.recent_active_projects(),
+        "draft_content": sections.recent_draft_content(),
+        "recent_published": sections.recently_published(),
+        "docs_needing_review": sections.docs_awaiting_review(),
         "recent_activity": recent_activity(limit=8)["items"],
     }

@@ -37,6 +37,12 @@ class Insight:
     body: str
     action: str = ""
     url: str = ""
+    # How many things this insight stands for, when it stands for a countable
+    # backlog. ``value`` is a display string and may be a balance or a distance,
+    # so a surface that totals a queue cannot infer a quantity from it. Left
+    # unset, the insight counts as the single thing it describes -- which is
+    # what an alert is.
+    magnitude: int | None = None
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:

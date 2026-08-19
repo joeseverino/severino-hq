@@ -1039,11 +1039,20 @@ class NavigationTests(TestCase):
         self.assertEqual(active, ["Expenses"])
 
     def test_the_section_holding_the_page_is_marked_even_with_no_entry(self):
-        # The create page has no nav entry; its section must still show.
+        # The create page has no nav entry; its section must still show. Which
+        # group that is comes from the registry rather than being restated here,
+        # so regrouping a section stays a one-line change in one file.
+        from application.domains import domain_navigation
+
+        holder = next(
+            item.group for item in domain_navigation() if item.route == "expenses:list"
+        )
         entries = self._entries(reverse("expenses:create"))
         groups = {entry["label"]: entry for entry in entries if entry["kind"] == "group"}
-        self.assertTrue(groups["Finance"]["active"])
-        self.assertFalse(groups["Business"]["active"])
+        self.assertTrue(groups[holder]["active"])
+        self.assertEqual(
+            [label for label, entry in groups.items() if entry["active"]], [holder]
+        )
 
     def test_system_sorts_after_every_section_that_holds_work(self):
         entries = self._entries(reverse("dashboard"))

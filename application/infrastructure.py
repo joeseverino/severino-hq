@@ -10,12 +10,13 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 
-from control_plane.models import ManagedResource, OperationRequest
+from control_plane.models import ManagedResource, OperationRequest, TopologySnapshot
 from control_plane.providers import (
     PROVIDERS,
     controller_action_policy,
     validate_spec,
 )
+from control_plane.topology import desired_fingerprint
 from core.audit import operation_context
 
 from .security import Capability, Principal
@@ -75,7 +76,6 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "id": str(resource.id),
         "key": resource.key,
         "kind": resource.kind,
-        "declaration_source": resource.declaration_source,
         "enabled": resource.enabled,
         "generation": resource.generation,
         "observed_generation": resource.observed_generation,
@@ -238,6 +238,12 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             "enabled": resource.enabled,
             "topology_ref": resource.spec.get("topology_ref"),
             "spec": spec,
+            # What the provider was last seen holding for this resource. A
+            # provider finds its own record by hostname, so renaming one is
+            # only possible for a controller that knows the previous name --
+            # without this it searches for the new name, does not find it, and
+            # creates a second record beside the one it meant to move.
+            "observed": serialize_public_status(resource.status),
         },
     }
 
@@ -303,6 +309,18 @@ def save_managed_resource(
         resource.kind = command.kind
         resource.spec = validated_spec
         resource.enabled = command.enabled
+        # Fingerprinted here as well as on topology import, through the one
+        # function that knows desired state includes what references resolve to.
+        # Without this an HQ edit would leave the old fingerprint in place, and
+        # the next import would read the difference as the topology having moved.
+        resource.desired_fingerprint = desired_fingerprint(
+            resource.kind,
+            resource.spec,
+            resource.enabled,
+            topology=TopologySnapshot.objects.filter(pk="topology")
+            .values_list("payload", flat=True)
+            .first(),
+        )
         if not created and changed:
             resource.generation += 1
         resource.full_clean()
@@ -328,8 +346,9 @@ def _queue_operation(
     *,
     principal: Principal,
     action: str,
+    require_enabled: bool = True,
 ) -> dict[str, Any]:
-    if not resource.enabled:
+    if require_enabled and not resource.enabled:
         raise PolicyError(f"Managed resource {resource.key!r} is disabled.")
     allowed, explanation = controller_action_policy(resource.kind, action)
     if not allowed:
@@ -390,6 +409,51 @@ def request_reconcile(
             command,
             principal=principal,
             action=OperationRequest.Action.RECONCILE,
+        )
+
+
+@transaction.atomic
+def request_removal(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Queue removal of the thing this declaration describes.
+
+    Deliberately not a plain row delete. The record lives at a provider, not in
+    HQ, so forgetting the declaration would abandon the rewrite or proxy host
+    rather than remove it -- and nothing would be left pointing at the orphan.
+    HQ drops its own row only once a controller reports the provider is clear.
+
+    Removal is queued even for a disabled resource: disabling stops HQ
+    reconciling a declaration, which is exactly the state something is left in
+    just before an operator decides to be rid of it.
+    """
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    allowed, explanation = controller_action_policy(
+        resource.kind, OperationRequest.Action.DELETE
+    )
+    if not allowed:
+        raise PolicyError(explanation)
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="infrastructure.resource.remove",
+    ):
+        # Bypasses the enabled check in _queue_operation on purpose: that guard
+        # exists to stop HQ converging a paused declaration, and removal is the
+        # opposite of converging it.
+        return _queue_operation(
+            resource,
+            command,
+            principal=principal,
+            action=OperationRequest.Action.DELETE,
+            require_enabled=False,
         )
 
 

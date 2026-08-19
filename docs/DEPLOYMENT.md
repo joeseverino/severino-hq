@@ -66,6 +66,26 @@ The file is never mounted into the HQ web container, provider variables do not
 enter the long-running web process or container configuration, and provider
 passwords are never copied into the `severino-hq env` item.
 
+### `SEVERINO_SECRET_STORE_KEY`
+
+One field on the `severino-hq env` item, and the only secret HQ holds rather
+than reads. It seals a certificate the operator generated against the offline CA
+and asked HQ to install — the leaf and its key, the same pair that would
+otherwise be pasted into a provider's web form by hand. Provider credentials are
+unaffected and stay outside the web container.
+
+Any value of 32 characters or more works; the Fernet key is derived from it, so
+the entry is an ordinary long secret rather than something with a format to get
+right. Generate it with the 1Password app's own generator so the value never
+reaches a shell history.
+
+Unset, HQ refuses to accept a private key and says so on the page. It never
+falls back to storing one in the clear.
+
+Rotating it makes anything already sealed unreadable, and unsealing reports that
+rather than returning an empty secret. Rotate only when you are willing to
+re-upload every stored certificate.
+
 Connection projections are declared once in
 `config/controller-connections.json`. Both secret rendering and runtime
 forwarding derive their variable names from that registry; a new credential

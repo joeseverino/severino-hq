@@ -334,25 +334,81 @@ class ChartAxisSpanTests(TestCase):
         self.assertTrue(any("202" in label for label in labels), labels)
 
 
+# What the host's own dashboard is allowed to cost, and what each installed
+# extension may add on top. Two numbers because the dashboard composes every
+# domain: a single fixed budget is wrong by construction the moment an extension
+# is installed, and it failed exactly that way in the composed image while
+# passing everywhere else.
+HOST_QUERY_BUDGET = 34
+PER_EXTENSION_QUERY_BUDGET = 10
+
+
 class DashboardProjectionTests(TestCase):
+    @staticmethod
+    def _snapshot_queries():
+        with (
+            patch("application.attention.get_unread_count", return_value=0),
+            CaptureQueriesContext(connection) as queries,
+        ):
+            operating_snapshot()
+        return queries
+
     def test_snapshot_stays_within_its_query_budget(self):
+        """HQ's own cost, measured without whatever happens to be installed.
+
+        Extensions are patched out rather than tolerated. The number this
+        guards is what the host spends assembling its own page, and letting an
+        installed extension move it means the guard reports on the environment
+        instead of on the code.
+        """
         Project.objects.create(
             name="Query budget",
             slug="query-budget",
             status=Project.Status.ACTIVE,
         )
 
-        with (
-            patch("application.dashboard.get_unread_count", return_value=0),
-            CaptureQueriesContext(connection) as queries,
-        ):
-            operating_snapshot()
+        # The snapshot assembles the whole page -- KPIs, the composed queue, the
+        # card row and the recent lists -- in one call, so this covers all of it
+        # rather than a part. Six are a section's reading answered once for its
+        # card and once for the KPI block. Six more are the service view, which
+        # is a join rather than a table: resources, the topology snapshot and
+        # published projects, derived once for the queue and once for the card.
+        # On local SQLite that is microseconds, and the duplication is visible
+        # here rather than hidden behind a cache that could go stale -- the last
+        # cache tried here served a stale count to a test, which then passed
+        # while asserting the wrong answer.
+        with patch("application.domains.extension_domains", return_value=()):
+            queries = self._snapshot_queries()
 
+        # Counts only. This assertion runs in the composed image too, where the
+        # captured SQL names the private extensions' tables and columns -- and
+        # a failing public CI job prints its message into a world-readable log.
         self.assertLessEqual(
             len(queries),
-            20,
-            "Dashboard query budget exceeded:\n"
-            + "\n".join(query["sql"] for query in queries),
+            HOST_QUERY_BUDGET,
+            f"Host dashboard used {len(queries)} queries against a budget of "
+            f"{HOST_QUERY_BUDGET}. Run this locally to see them.",
+        )
+
+    def test_each_installed_extension_costs_a_bounded_amount(self):
+        """The composed page has to stay affordable as domains are added.
+
+        Trivially true with none installed, which is the point: the same
+        assertion is meaningful in the composed image and silent in host-only
+        CI, instead of a fixed number that is simply wrong in one of them.
+        """
+        from application.domains import extension_domains
+
+        installed = len(extension_domains())
+        allowed = HOST_QUERY_BUDGET + installed * PER_EXTENSION_QUERY_BUDGET
+
+        used = len(self._snapshot_queries())
+
+        self.assertLessEqual(
+            used,
+            allowed,
+            f"Composed dashboard used {used} queries; {installed} extension(s) "
+            f"allow {allowed}. Run this locally to see them.",
         )
 
     def test_snapshot_is_json_safe_and_owns_priority_counts(self):
@@ -362,13 +418,17 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        with patch("application.dashboard.get_unread_count", return_value=2):
+        with patch("application.attention.get_unread_count", return_value=2):
             snapshot = operating_snapshot()
 
         json.dumps(snapshot)
-        items = {item["code"]: item for item in snapshot["priority"]}
-        self.assertEqual(items["projects_output"]["count"], 1)
-        self.assertEqual(items["unread_contacts"]["count"], 2)
+        # Keyed by the domain that raised it. Entries no longer carry a
+        # hand-assigned code, because nothing needs one: the link an entry
+        # points at travels with the entry.
+        items = {item["source_id"]: item for item in snapshot["priority"]}
+        self.assertEqual(items["hq.projects"]["count"], 1)
+        self.assertEqual(items["hq.contacts"]["count"], 2)
+        self.assertTrue(items["hq.projects"]["url"])
         self.assertEqual(
             snapshot["priority_count"],
             sum(item["count"] for item in snapshot["priority"]),
@@ -401,7 +461,7 @@ class DashboardProjectionTests(TestCase):
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
-            patch("application.dashboard.get_unread_count", return_value=0),
+            patch("application.attention.get_unread_count", return_value=0),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
@@ -411,7 +471,7 @@ class DashboardProjectionTests(TestCase):
         # expenses fall inside, while the future expense remains excluded.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
-            patch("application.dashboard.get_unread_count", return_value=0),
+            patch("application.attention.get_unread_count", return_value=0),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)

@@ -181,6 +181,11 @@ class StyleContractTests(SimpleTestCase):
         # is already decided, and this asks what would be pushed. So it is
         # skipped rather than failed, and still runs everywhere the answer can
         # change.
+        # Bound before the attempt: skipTest raises, so the read below is
+        # unreachable when git is absent -- but that is a fact about skipTest,
+        # not one visible in this function, and reading a name that only some
+        # branches assign is worth not writing either way.
+        tracked: list[str] = []
         try:
             tracked = subprocess.run(
                 ["git", "ls-files", "-z"],

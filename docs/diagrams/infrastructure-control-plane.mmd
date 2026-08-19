@@ -6,21 +6,23 @@ flowchart TB
         secrets["Severino HQ Production<br/>runtime credentials"]
     end
 
-    topology --> snapshot[("Trusted topology snapshot<br/>validated + checksummed")]
+    topology --> snapshot[("Trusted topology snapshot<br/>validated + checksummed<br/>declares no desired state")]
     snapshot --> resolver["Provider-owned resolution<br/>authored → runtime schema"]
     operator --> services["HQ application services"]
     resolver --> services
 
-    services --> desired[("Managed resources<br/>desired generation + health")]
+    services --> desired[("Managed resources<br/>desired generation + health<br/>HQ is the only author")]
     services --> queue[("Operation queue<br/>idempotency + lease")]
+    services --> material[("Sealed certificate material<br/>operator-supplied · key held outside the DB")]
 
-    queue <-->|"minimal resolved contract<br/>public result"| controller["Privileged homelab controller<br/>systemd · exact scanned image"]
+    queue <-->|"minimal resolved contract<br/>+ last observed state<br/>public result"| controller["Privileged homelab controller<br/>systemd · exact scanned image"]
+    material -. "only on install, via its own bridge command" .-> controller
     secrets -. "short-lived runtime projection" .-> controller
 
     subgraph outcomes["Capability-declared provider actions"]
         direction LR
-        internal["Automatic reconcile<br/>AdGuard · NPM"]
-        tls["Automatic certificate policy<br/>observe · renew · rollback"]
+        internal["Reconcile · rename · delete<br/>AdGuard · NPM"]
+        tls["Certificate policy<br/>issue · install · renew · rollback"]
         publicdns["Public DNS<br/>locked until enabled"]
     end
 
@@ -31,7 +33,12 @@ flowchart TB
     tls --> dns01["Cloudflare DNS-01"]
 
     controller -->|"status + conditions"| desired
-    desired --> ui["HQ<br/>health · drift · downloads · audit"]
+    controller -->|"full provider inventory<br/>every sweep"| inventory[("Provider inventory<br/>a cache, never reconciled from")]
+    inventory -->|"what HQ does not manage"| adopt["Adopt<br/>captures live settings verbatim"]
+    adopt --> desired
+
+    desired --> ui["HQ<br/>services · health · drift · downloads · audit"]
+    inventory --> ui
 
     classDef anchor stroke-width:2px;
     class services,controller,ui anchor;

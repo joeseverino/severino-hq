@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %} · Severino HQ{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %}</h1>
+    <p class="page-lede">{{ summary }}</p>
+  </div>
+</div>
+
+{% comment %}
+Every field below is generated from the provider's pydantic model, and that same
+model validates the submission. Nothing here knows what kind of resource this is.
+{% endcomment %}
+<form method="post" class="form">
+  {% csrf_token %}
+  {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+  {% if identity.non_field_errors %}<div class="msg msg-error">{{ identity.non_field_errors }}</div>{% endif %}
+  {% if spec.non_field_errors %}<div class="msg msg-error">{{ spec.non_field_errors }}</div>{% endif %}
+
+  {% for field in spec.primary %}{% include "partials/_form_field.html" %}{% endfor %}
+
+  {% comment %}
+  Material the operator has to supply, on the same page as the rest of it. A
+  resource that cannot work without this should not be creatable without it.
+  {% endcomment %}
+  {% if material %}
+    {% if material.non_field_errors %}<div class="msg msg-error">{{ material.non_field_errors }}</div>{% endif %}
+    {% for field in material %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% endif %}
+
+  {% comment %}
+  Everything the model already has a good answer for sits one disclosure away,
+  and only when editing. Creating asks what HQ cannot work out for itself and
+  stops: a name it can derive from the hostname, and a switch to pause
+  something that does not exist yet, are not questions worth interrupting for.
+  {% endcomment %}
+  {% if resource %}
+    <details class="control-diagnostics"{% if spec.errors or identity.errors %} open{% endif %}>
+      <summary>Options</summary>
+      {% for field in spec.advanced %}{% include "partials/_form_field.html" %}{% endfor %}
+      {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+    </details>
+  {% endif %}
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>
+    <a class="btn" href="{% if resource %}{% url 'control_plane:detail' resource.key %}{% else %}{% url 'control_plane:list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+
+<p class="muted">
+  HQ applies this at the provider within about a minute, then shows you what it
+  actually found there.
+</p>
+{% endblock %}

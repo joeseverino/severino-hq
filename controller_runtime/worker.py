@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-from .providers import ProviderError, execute, preflight
+from .providers import ProviderError, execute, inventory, preflight
 from control_plane.providers import (
     controller_capability_registry,
     enabled_controller_actions,
@@ -92,6 +92,50 @@ def _report(
     )
 
 
+# Kinds whose work needs material HQ is holding rather than credentials the
+# controller has. Fetched separately from the contract so it stays out of
+# anything that merely describes a resource.
+_MATERIAL_KINDS = frozenset({"tls.uploaded_certificate"})
+
+
+def _with_material(resource: dict[str, Any]) -> dict[str, Any]:
+    if resource["kind"] not in _MATERIAL_KINDS:
+        return resource
+    material = _manage("material", "--resource", resource["key"])
+    return {**resource, "spec": {**resource["spec"], "material": material}}
+
+
+def _report_inventory(controller_id: str) -> None:
+    """Tell HQ what the providers hold, before doing anything about it.
+
+    Best effort on purpose. This is a convenience -- it powers a page that lists
+    what exists and offers to adopt it -- and it must never be the reason an
+    operation the operator actually asked for goes unclaimed. A provider that is
+    down already reports itself unreachable inside ``inventory``; this catch is
+    for the bridge, so a failure to record cannot take out the pass.
+    """
+
+    try:
+        _manage(
+            "inventory",
+            "--controller-id",
+            controller_id,
+            "--payload",
+            json.dumps(inventory(), separators=(",", ":")),
+        )
+    except (BridgeError, ProviderError, OSError, ValueError) as exc:
+        # Swallowed, but not silently: stdout is the run's JSON result and is
+        # parsed, so this goes to stderr and lands in the journal. A sweep that
+        # quietly stopped reporting would leave the adoption page looking
+        # settled while going stale, which is the failure worth noticing.
+        # The type, not the message -- a provider error can name a host or a
+        # path, and this line is the one that gets copied into a paste.
+        print(
+            f"inventory report skipped: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+
+
 def run_once(controller_id: str, *, apply: bool) -> int:
     if not apply:
         peek_args = ["peek"]
@@ -125,6 +169,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         )
         return 0
 
+    _report_inventory(controller_id)
     _manage("schedule", "--controller-id", controller_id)
     claim_args = ["claim", "--controller-id", controller_id]
     for kind, action in supported_capabilities():
@@ -139,6 +184,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
     generation = resource["generation"]
     try:
         preflight()
+        resource = _with_material(resource)
         result = execute(resource, operation["action"])
     except ProviderError as exc:
         message = str(exc)

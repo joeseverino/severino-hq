@@ -39,15 +39,31 @@ Trusted, installable modules use the domain-neutral, versioned
 [`plugin contract`](docs/PLUGINS.md); a generic conformance plugin proves the
 contract in public CI without coupling HQ to any private module.
 
-Infrastructure follows the same rule: Severino Labs emits one validated
-topology inventory, HQ derives desired resources and dependency-aware status,
-and the homelab controller reconciles only explicitly enabled capabilities.
-Provider credentials and private keys never enter HQ persistence or the web
-process.
+Infrastructure follows the same rule. Severino Labs emits one validated topology
+inventory of what exists; HQ authors what should be configured and is the only
+thing that does. The homelab controller reconciles only explicitly enabled
+capabilities, reports back both observed state and the full provider inventory,
+and holds every provider credential — those never enter HQ persistence or the
+web process.
 
-![Infrastructure control plane — topology flows into HQ desired state and a capability-filtered homelab controller reconciles providers](docs/diagrams/infrastructure-control-plane.png)
+Because the controller reports everything a provider holds rather than only the
+records HQ created, HQ can show what it does not manage and adopt it, capturing
+the live settings verbatim so the first reconciliation after adopting changes
+nothing.
+
+![Infrastructure control plane — HQ authors desired state, a capability-filtered homelab controller reconciles providers and reports back both observed state and full inventory](docs/diagrams/infrastructure-control-plane.png)
 
 <sup>Diagram source: [`docs/diagrams/infrastructure-control-plane.mmd`](docs/diagrams/infrastructure-control-plane.mmd),
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
+
+A provider is declared once, as a pydantic model plus a short statement of how
+it participates. Its schema, its validation, the controller's contract, the
+generated create-and-edit forms, the service view, and adoption are all derived
+from that one declaration.
+
+![Provider registry — one declaration derives the schema, validation, controller contract, forms, service view, and adoption](docs/diagrams/provider-registry.png)
+
+<sup>Diagram source: [`docs/diagrams/provider-registry.mmd`](docs/diagrams/provider-registry.mmd),
 pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
 
 ## Modules
@@ -62,9 +78,12 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 7. Receipts — uploaded outside app code, served only via auth-protected view.
 8. Reports / Exports — KPI page + CSV exports + year-summary JSON & Markdown.
 9. Audit Log — every important create/update/delete/login/upload/export.
-10. Infrastructure — desired state, topology-derived dependencies, drift,
-    certificate health/downloads, and audited reconciliation.
-11. MCP-ready — stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
+10. Services — every hostname, and whether its DNS, ingress and certificate are
+    in place, composed from the resources behind it rather than stored.
+11. Infrastructure — desired state HQ authors and edits, what the providers
+    actually hold, adoption of what they hold and HQ does not, drift,
+    certificate issuance and installation, and audited reconciliation.
+12. MCP-ready — stable IDs/slugs, JSON exports with relationships, AI-readable Markdown.
 
 ---
 

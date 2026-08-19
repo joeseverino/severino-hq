@@ -96,6 +96,17 @@
       item. Production mounts the rendered file through
       `SEVERINO_APP_ENV_FILE_HOST` and the entrypoint sources it; the on-host
       `.env` contains no secrets (only the two `*_FILE_HOST` paths).
+- [ ] HQ stores exactly one class of secret: a certificate an operator generated
+      themselves and asked HQ to install. It is sealed with
+      `SEVERINO_SECRET_STORE_KEY`, which lives on the env item and not in the
+      database; storing is refused outright when that key is absent, never
+      downgraded to plaintext. The material is read only by the controller,
+      through a bridge command of its own so it does not ride in the contract
+      that `export` prints, and it appears in no serializer, no API response,
+      and not in the reply to the upload that supplied it.
+- [ ] Provider credentials remain outside the web container entirely. The
+      controller report guard still rejects any status carrying a key named
+      `private`, `secret`, `token`, `password`, or `credential`.
 - [ ] The 1Password service account can read only the dedicated production
       vault. Its auth token is stored as a host-bound encrypted systemd
       credential; it is not readable by the service account from that vault.

@@ -16,7 +16,7 @@ from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView
 
 from application.dashboard import operating_snapshot
-from application.plugins import plugin_dashboard_cards, plugin_health
+from application.plugins import plugin_health
 from application.search import global_search
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
@@ -78,11 +78,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         except D1Error:
             recent_contacts = []
         snapshot = operating_snapshot()
-        unread_contacts_count = next(
-            item["count"]
-            for item in snapshot["priority"]
-            if item["code"] == "unread_contacts"
-        )
         for project in snapshot["active_projects"]:
             project["updated_at"] = datetime.fromisoformat(project["updated_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
@@ -95,28 +90,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 record["last_reviewed"] = date.fromisoformat(record["last_reviewed"])
         for event in snapshot["recent_activity"]:
             event["created_at"] = datetime.fromisoformat(event["created_at"])
-        routes = {
-            "docs_review": f"{reverse('docs_index:list')}?needs_review=1",
-            "draft_content": f"{reverse('content:list')}?status=draft",
-            "unread_contacts": f"{reverse('contacts:list')}?status=unread",
-            "projects_output": f"{reverse('projects:list')}?needs_output=1",
-            "receipts_unlinked": f"{reverse('receipts:list')}?unlinked=1",
-            "expenses_receipts": f"{reverse('expenses:list')}?no_receipts=1",
-            "assets_purchase": f"{reverse('assets:list')}?missing_purchase=1",
-            "content_docs": f"{reverse('content:list')}?no_docs=1",
-        }
-        action_queue = []
-        for item in snapshot["priority"]:
-            rendered = dict(item)
-            rendered["href"] = (
-                reverse(
-                    "control_plane:detail",
-                    kwargs={"key": item["resource_key"]},
-                )
-                if item["code"] == "infrastructure"
-                else routes[item["code"]]
-            )
-            action_queue.append(rendered)
+        # No mapping step: every queue entry already carries the link to the
+        # filtered list that shows it, supplied by the domain that raised it.
+        action_queue = snapshot["priority"]
 
         # Live infra status is NOT computed here — HQ links out to Uptime Kuma
         # on the VPS rather than duplicating a status checker.
@@ -190,7 +166,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             content_rows=content_rows,
             published_rows=published_rows,
             docs_rows=docs_rows,
-            unread_contacts_count=unread_contacts_count,
+            unread_contacts_count=snapshot["kpis"]["unread_contacts"],
             active_project_count=snapshot["kpis"]["active_projects"],
             active_projects=snapshot["active_projects"],
             project_opportunities_count=snapshot["kpis"]["projects_needing_output"],
@@ -209,7 +185,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             action_queue_count=snapshot["priority_count"],
             action_queue_group_count=snapshot["priority_group_count"],
             this_year=snapshot["year"],
-            plugin_dashboard_cards=plugin_dashboard_cards(),
+            dashboard_cards=snapshot["cards"],
         )
         return ctx
 

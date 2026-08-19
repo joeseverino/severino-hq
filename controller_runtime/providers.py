@@ -157,12 +157,24 @@ def _adguard_headers() -> dict[str, str]:
     return {"Authorization": f"Basic {encoded}"}
 
 
-def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def reconcile_adguard(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     base_url = _required("ADGUARD", "URL").rstrip("/")
     headers = _adguard_headers()
     rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
     desired = {"domain": spec["domain"], "answer": spec["answer"]}
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
+    if not matches:
+        # Nothing answers to the desired name. If HQ was last seen holding a
+        # different one, this is a rename rather than a new rewrite, and
+        # AdGuard's update takes exactly that shape: the record as it is, and
+        # the record as it should be. Creating instead would leave the old name
+        # resolving forever with nothing in HQ pointing at it.
+        previous = (observed or {}).get("domain")
+        if previous and previous != spec["domain"]:
+            matches = [item for item in rewrites if item.get("domain") == previous]
     if len(matches) > 1:
         raise ProviderError("AdGuard contains duplicate rewrites for the domain.")
     if len(matches) == 1 and all(
@@ -193,9 +205,33 @@ def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderRe
                 payload=desired,
             )
         changed = True
+    # AdGuard reports whether a rewrite is switched on, and HQ does not set it:
+    # the add and update payloads carry only domain and answer, so claiming to
+    # manage it would mean asserting a field this code never sends. It is
+    # observed and reported instead -- a rewrite that exists but is switched off
+    # does not resolve, and reporting that as Ready was HQ stating something
+    # untrue about the world rather than merely knowing less than it could.
+    live = matches[0] if matches else {}
+    switched_off = live.get("enabled") is False
+    status = {**desired, "enabled": live.get("enabled", True)}
+    if switched_off:
+        return ProviderResult(
+            changed=changed,
+            status=status,
+            conditions=[
+                _condition(
+                    "Degraded",
+                    True,
+                    "Disabled",
+                    "The rewrite exists in AdGuard but is switched off, so the "
+                    "name does not resolve. Re-enable it in AdGuard.",
+                )
+            ],
+            message="AdGuard rewrite is present but disabled.",
+        )
     return ProviderResult(
         changed=changed,
-        status=desired,
+        status=status,
         conditions=[
             _condition("Ready", True, "Reconciled", "AdGuard rewrite is current.")
         ],
@@ -299,7 +335,10 @@ def preflight() -> list[dict[str, Any]]:
     ]
 
 
-def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def reconcile_npm(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     base_url = _npm_api_url(_required("NPM", "URL"))
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
@@ -307,6 +346,16 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
     matches = [
         host for host in hosts if sorted(host.get("domain_names", [])) == domains
     ]
+    if not matches:
+        # A renamed proxy host: the one that exists still answers to the names
+        # HQ last saw, and NPM updates it in place by id.
+        previous = sorted((observed or {}).get("domain_names") or ())
+        if previous and previous != domains:
+            matches = [
+                host
+                for host in hosts
+                if sorted(host.get("domain_names", [])) == previous
+            ]
     if len(matches) > 1:
         raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
 
@@ -322,11 +371,15 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
         "certificate_id": spec.get("certificate_id") or 0,
         "ssl_forced": spec["force_ssl"],
         "http2_support": spec["http2"],
-        "hsts_enabled": False,
-        "hsts_subdomains": False,
+        # Read from the spec, not asserted. This payload replaces the whole
+        # object, so a constant here is not "leave it alone" -- it is "set it to
+        # this", every pass, whatever the operator did in NPM.
+        "hsts_enabled": spec["hsts_enabled"],
+        "hsts_subdomains": spec["hsts_subdomains"],
+        "trust_forwarded_proto": spec["trust_forwarded_proto"],
         "advanced_config": spec["advanced_config"],
         "locations": [],
-        "enabled": True,
+        "enabled": spec["serving"],
         "meta": {},
     }
     if matches:
@@ -1087,11 +1140,17 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
-def _tls_reconcile(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _tls_reconcile(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     return apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
 
 
-def _tls_renew(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _tls_renew(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     if apply:
         return renew_tls(spec)
     return ProviderResult(
@@ -1102,14 +1161,315 @@ def _tls_renew(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
     )
 
 
-def _public_dns_locked(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _public_dns_locked(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     del spec, apply
     raise ProviderError("Public DNS mutation is not enabled in this controller.")
 
 
+def reconcile_uploaded_certificate(
+    spec: dict[str, Any], *, apply: bool = True
+) -> ProviderResult:
+    """Install a certificate HQ was given rather than one it issued.
+
+    Deployment is identical -- a proxy does not care which authority signed the
+    thing it serves -- so this reuses the same path as a renewal and differs
+    only in where the material came from. It is never renewed here: the CA is
+    air-gapped, and the certificate's expiry is reported so an operator knows
+    when to generate the next one.
+    """
+
+    material = spec.get("material") or {}
+    fullchain = material.get("fullchain") or ""
+    private_key = material.get("private_key") or ""
+    if not fullchain or not private_key:
+        raise ProviderError(
+            "HQ did not supply the stored certificate. Upload it again."
+        )
+    domains = list(material.get("domains") or ())
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status={"certificate_name": spec["certificate_name"], "domains": domains},
+            conditions=[
+                _condition("Ready", True, "Planned", "Would install the certificate.")
+            ],
+            message="Would install the stored certificate.",
+        )
+    deployment = _deploy_certificate(
+        {
+            "certificate_name": spec["certificate_name"],
+            "domains": domains,
+            "consumers": spec["consumers"],
+        },
+        fullchain.encode(),
+        private_key.encode(),
+    )
+    observed = {
+        key: value
+        for key, value in deployment.items()
+        # The deployment report carries an npm certificate identity; nothing
+        # secret-bearing may enter HQ, and the status guard rejects the whole
+        # report if it does.
+        if "private" not in key and "key" not in key
+    }
+    return ProviderResult(
+        changed=True,
+        status={
+            "certificate_name": spec["certificate_name"],
+            "domains": domains,
+            **observed,
+        },
+        conditions=[
+            _condition("Ready", True, "Installed", "Stored certificate installed.")
+        ],
+        message="Stored certificate installed.",
+    )
+
+
+def delete_uploaded_certificate(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Remove an installed certificate, or refuse and say who has to do it.
+
+    Only Nginx Proxy Manager can be undone from here. A Caddy target receives a
+    certificate over an SSH forced command that implements ``deploy`` and
+    nothing else, so removing one means editing the remote side -- and a delete
+    that reported success while leaving a file on a host would take HQ's
+    declaration with it and lose the only record that the file is there.
+
+    Refused whole rather than done partly, for the same reason.
+    """
+
+    elsewhere = sorted(
+        consumer["name"] for consumer in spec["consumers"] if consumer["kind"] != "npm"
+    )
+    if elsewhere:
+        raise ProviderError(
+            "HQ can only remove this from Nginx Proxy Manager. Take it off "
+            + ", ".join(elsewhere)
+            + " by hand first, then remove those targets from this resource."
+        )
+
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
+    wanted = {
+        f"Severino HQ - {consumer['name']}" for consumer in spec["consumers"]
+    }
+    matches = [
+        item for item in certificates if item.get("nice_name") in wanted
+    ]
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such certificate in NPM.")
+            ],
+            message="Certificate was already absent from NPM.",
+        )
+
+    # A certificate still bound to a proxy host cannot be deleted without taking
+    # TLS down on it. Naming the hosts is the actionable part: the operator has
+    # to point them at something else first.
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    identifiers = {item["id"] for item in matches}
+    still_bound = sorted(
+        name
+        for host in hosts
+        if host.get("certificate_id") in identifiers
+        for name in host.get("domain_names", [])
+    )
+    if still_bound:
+        raise ProviderError(
+            "Still serving " + ", ".join(still_bound) + ". Point those at "
+            "another certificate before removing this one."
+        )
+    if apply:
+        for item in matches:
+            _request(
+                f"{base_url}/nginx/certificates/{item['id']}",
+                method="DELETE",
+                headers=headers,
+            )
+    return ProviderResult(
+        changed=True,
+        status={"removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "Certificate removed from NPM.")
+        ],
+        message="Certificate removed from NPM.",
+    )
+
+
+def delete_adguard(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Remove the rewrite, and treat an already-absent one as success.
+
+    Deletion has to be idempotent because the operation queue is: a delete that
+    applied and then failed to report is retried, and a second attempt finding
+    nothing there has achieved exactly what was asked.
+    """
+
+    base_url = _required("ADGUARD", "URL").rstrip("/")
+    headers = _adguard_headers()
+    rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
+    matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"domain": spec["domain"], "removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such rewrite in AdGuard.")
+            ],
+            message="AdGuard rewrite was already absent.",
+        )
+    if apply:
+        for match in matches:
+            # The live record, not the desired one: AdGuard identifies a rewrite
+            # by the pair, and a spec whose answer has drifted would not match.
+            _request(
+                f"{base_url}/control/rewrite/delete",
+                method="POST",
+                headers=headers,
+                payload={"domain": match["domain"], "answer": match["answer"]},
+            )
+    return ProviderResult(
+        changed=True,
+        status={"domain": spec["domain"], "removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "AdGuard rewrite was removed.")
+        ],
+        message="AdGuard rewrite removed.",
+    )
+
+
+def delete_npm(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Remove the proxy host matching this exact domain set."""
+
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    domains = sorted(spec["domain_names"])
+    matches = [
+        host for host in hosts if sorted(host.get("domain_names", [])) == domains
+    ]
+    if len(matches) > 1:
+        raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"domain_names": domains, "removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such proxy host in NPM.")
+            ],
+            message="NPM proxy host was already absent.",
+        )
+    if apply:
+        _request(
+            f"{base_url}/nginx/proxy-hosts/{matches[0]['id']}",
+            method="DELETE",
+            headers=headers,
+        )
+    return ProviderResult(
+        changed=True,
+        status={"domain_names": domains, "removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "NPM proxy host was removed.")
+        ],
+        message="NPM proxy host removed.",
+    )
+
+
+def list_adguard() -> list[dict[str, Any]]:
+    base_url = _required("ADGUARD", "URL").rstrip("/")
+    records = _request(f"{base_url}/control/rewrite/list", headers=_adguard_headers())
+    return [
+        {
+            "domain": item["domain"],
+            "answer": item["answer"],
+            "enabled": item.get("enabled", True),
+        }
+        for item in records
+        if item.get("domain") and item.get("answer")
+    ]
+
+
+def list_npm() -> list[dict[str, Any]]:
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    records = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    # Only the fields HQ can express, plus the identity. The rest is NPM's
+    # business, and copying a whole provider object into HQ would make this an
+    # inventory of NPM rather than a list of what HQ could manage.
+    fields = (
+        "domain_names",
+        "forward_scheme",
+        "forward_host",
+        "forward_port",
+        "ssl_forced",
+        "http2_support",
+        "allow_websocket_upgrade",
+        "caching_enabled",
+        "block_exploits",
+        "access_list_id",
+        "advanced_config",
+        "hsts_enabled",
+        "hsts_subdomains",
+        "trust_forwarded_proto",
+        "enabled",
+    )
+    return [
+        {field: record.get(field) for field in fields}
+        for record in records
+        if record.get("domain_names")
+    ]
+
+
+PROVIDER_INVENTORY = {
+    "adguard.rewrite": list_adguard,
+    "npm.proxy_host": list_npm,
+}
+
+
+def inventory() -> dict[str, Any]:
+    """Everything each provider holds, whether or not HQ declared it.
+
+    The reconcilers already fetch these lists in full and keep only the one
+    record they were asked about. Reporting the rest costs nothing extra at the
+    provider and is the difference between HQ knowing about the resources it
+    created and HQ knowing what is actually out there.
+
+    One unreachable provider reports as unreachable rather than failing the
+    sweep. Losing the whole inventory because a single service is restarting
+    would make the least reliable provider decide whether HQ can see any of them.
+    """
+
+    found: dict[str, Any] = {}
+    for kind, lister in PROVIDER_INVENTORY.items():
+        try:
+            found[kind] = {"ok": True, "records": lister()}
+        except (ProviderError, OSError, ValueError, KeyError) as exc:
+            found[kind] = {"ok": False, "records": [], "error": str(exc)}
+    return found
+
+
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
+    ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
+    ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
+    ("npm.proxy_host", "delete"): delete_npm,
     ("cloudflare.dns_record", "reconcile"): _public_dns_locked,
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
@@ -1126,4 +1486,6 @@ def execute(
         raise ProviderError(
             f"Unsupported provider/action: {identity[0]}/{identity[1]}."
         ) from exc
-    return handler(resource["spec"], apply=apply)
+    return handler(
+        resource["spec"], apply=apply, observed=resource.get("observed") or {}
+    )

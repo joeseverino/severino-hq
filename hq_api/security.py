@@ -36,7 +36,28 @@ INTERFACE = "api"
 logger = logging.getLogger("severino.api")
 
 
-class TokenError(Exception):
+class ClientReason(Exception):
+    """An error carrying a sentence written for the caller.
+
+    ``str(exception)`` is not that sentence. It is whatever the exception
+    happens to hold -- a path, a query, a driver's own words -- and returning it
+    from an API is how internal detail escapes one accident at a time. Static
+    analysis reads it as stack-trace exposure for exactly that reason, and is
+    right to: the guarantee cannot be "we only raise these types here", because
+    that is true right up until someone catches a broader one.
+
+    So the message a client sees is an attribute, set deliberately at the raise
+    site. An exception that does not carry one has nothing to say publicly.
+    """
+
+    code = "error"
+
+    def __init__(self, reason: str = "", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class TokenError(ClientReason):
     """A presented token is absent, malformed, expired, or not addressed to us."""
 
     code = "invalid_token"

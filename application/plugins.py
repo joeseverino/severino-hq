@@ -284,15 +284,6 @@ def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
     )
 
 
-def plugin_navigation() -> tuple[NavigationItem, ...]:
-    return tuple(
-        sorted(
-            (item for plugin in installed_plugins() for item in plugin.navigation),
-            key=lambda item: (item.order, item.label),
-        )
-    )
-
-
 def _provided(attribute: str) -> tuple[Any, ...]:
     values = []
     for plugin in installed_plugins():
@@ -352,6 +343,31 @@ def plugin_dashboard_cards() -> tuple[dict[str, Any], ...]:
     )
 
 
+def gather_cards(
+    sources: Iterable[tuple[str, str]],
+) -> tuple[dict[str, Any], ...]:
+    """Flatten and validate dashboard cards from any ``(id, provider)`` sources.
+
+    The counterpart to ``gather_attention``: one validator serves the host's own
+    sections and installed extensions, so a malformed card fails the same way
+    whoever produced it.
+    """
+
+    cards = tuple(
+        card
+        for _, reference in sources
+        if reference
+        for card in _import(reference)()
+    )
+    _validate_dashboard_cards(cards)
+    ids = [card["id"] for card in cards]
+    if len(ids) != len(set(ids)):
+        raise ImproperlyConfigured(
+            "Duplicate dashboard card id across HQ sections and extensions."
+        )
+    return cards
+
+
 def plugin_overviews() -> tuple[dict[str, Any], ...]:
     """Typed rich overviews with attribution owned by the host registry."""
     sections = []
@@ -400,38 +416,36 @@ def _validate_dashboard_cards(cards: Iterable[dict[str, Any]]) -> None:
 ATTENTION_ORDER = ("serious", "attention")
 
 
-def plugin_attention_items() -> tuple[dict[str, Any], ...]:
-    """What every installed extension believes needs a decision now.
+def gather_attention(
+    sources: Iterable[tuple[str, str, str]],
+) -> tuple[dict[str, Any], ...]:
+    """Collect, validate, attribute and order attention items from any sources.
 
-    Each entry carries its source so a composing surface can say where the item
-    came from without the extension having to restate its own name. Items are
-    returned already ordered by severity: the ordering is a property of the
-    status vocabulary, so every surface that renders them agrees on urgency
-    rather than each re-sorting to its own taste.
+    ``sources`` is ``(id, label, provider_reference)`` per contributor, which is
+    all this needs to know -- so the host's own sections and installed
+    extensions are gathered by one implementation rather than two that could
+    drift on what "urgent" means or on which statuses count.
 
-    Takes no exclusions on purpose. An earlier signature let a composer drop a
-    domain here and substitute that domain's `DomainOverview` -- which is a
-    display surface, and truncates. The queue is the one place a `serious` item
-    is guaranteed to appear, so nothing may quietly remove a domain from it.
-    A composer that also renders per-domain panels should group these by
-    `source_id` rather than fetch the same question from a second channel.
+    Each entry carries its source so a composing surface can say where an item
+    came from without the contributor restating its own name. Ordering is a
+    property of the status vocabulary rather than of the caller, so every
+    surface that renders these agrees on urgency instead of re-sorting to taste.
     """
+
     gathered: list[dict[str, Any]] = []
-    for plugin in installed_plugins():
-        if not plugin.attention_provider:
+    for source_id, label, reference in sources:
+        if not reference:
             continue
-        for item in _import(plugin.attention_provider)():
+        for item in _import(reference)():
             status = getattr(item, "status", None)
             if status not in STATUS_VALUES:
                 raise ImproperlyConfigured(
-                    f"{plugin.id!r} produced an attention item with status "
+                    f"{source_id!r} produced an attention item with status "
                     f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
                 )
             if status not in ATTENTION_ORDER:
                 continue
-            gathered.append(
-                {"item": item, "source": plugin.name, "source_id": plugin.id}
-            )
+            gathered.append({"item": item, "source": label, "source_id": source_id})
     return tuple(
         sorted(
             gathered,
@@ -441,6 +455,27 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
                 entry["item"].title,
             ),
         )
+    )
+
+
+def plugin_attention_items() -> tuple[dict[str, Any], ...]:
+    """What every installed extension believes needs a decision now.
+
+    Extensions only. This is the SDK surface a composing extension uses to
+    render its sibling domains; HQ's own dashboard composes *every* domain and
+    calls ``application.domains.domain_attention_items`` instead.
+
+    Takes no exclusions on purpose. An earlier signature let a composer drop a
+    domain here and substitute that domain's `DomainOverview` -- which is a
+    display surface, and truncates. The queue is the one place a `serious` item
+    is guaranteed to appear, so nothing may quietly remove a domain from it.
+    A composer that also renders per-domain panels should group these by
+    `source_id` rather than fetch the same question from a second channel.
+    """
+
+    return gather_attention(
+        (plugin.id, plugin.name, plugin.attention_provider)
+        for plugin in installed_plugins()
     )
 
 

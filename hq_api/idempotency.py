@@ -18,11 +18,19 @@ from .models import IdempotencyRecord
 KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
-class InvalidIdempotencyKey(ValueError):
+class _KeyProblem(ValueError):
+    """Carries a client-facing sentence rather than relying on ``str``."""
+
+    def __init__(self, reason: str = "", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class InvalidIdempotencyKey(_KeyProblem):
     pass
 
 
-class IdempotencyConflict(ValueError):
+class IdempotencyConflict(_KeyProblem):
     pass
 
 

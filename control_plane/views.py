@@ -6,12 +6,16 @@ from datetime import datetime, timedelta, timezone
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 
 from application.infrastructure import (
+    ManagedResourceCommand,
+    NotFoundError,
     OperationCommand,
     PolicyError,
     certificate_renewal_allowed,
@@ -19,14 +23,38 @@ from application.infrastructure import (
     operation_summary,
     request_certificate_renewal,
     request_reconcile,
+    request_removal,
     resource_health,
+    save_managed_resource,
     serialize_resource,
     serialize_public_status,
 )
+from application.inventory import (
+    AdoptServiceCommand,
+    adopt_service,
+    inventory_state,
+    unmanaged_services,
+)
+from application.certificates import (
+    CertificateError,
+    UploadCertificateCommand,
+    store_certificate,
+)
+from application.plugins import _import
+from application.provider_forms import (
+    CertificateUploadForm,
+    ResourceIdentityForm,
+    spec_form_class,
+)
 from application.security import web_principal
+from application.services import find_service, service_catalog
+
+from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    PROVIDERS,
+    SERVICE_FACETS,
     controller_action_policy,
     describe_providers,
 )
@@ -48,6 +76,353 @@ def _web_operation(request, resource, action):
         principal=web_principal(request.user),
         current_key=resource.key,
     )
+
+
+class ResourceFormView(LoginRequiredMixin, View):
+    """Declare or amend one resource, on a form its provider generates.
+
+    The write goes through ``save_managed_resource`` -- the same use case the
+    API and the MCP call -- so the capability check, the spec validation, the
+    generation bump and the audit record are the ones that already existed. This
+    view supplies a form and a redirect and decides nothing else.
+    """
+
+    template_name = "control_plane/resource_form.html"
+
+    def _existing(self, key):
+        return get_object_or_404(ManagedResource, key=key) if key else None
+
+    def _kind(self, request, resource):
+        if resource:
+            return resource.kind
+        return request.GET.get("kind") or request.POST.get("kind") or ""
+
+    def get(self, request, key=None):
+        resource = self._existing(key)
+        kind = self._kind(request, resource)
+        if kind not in PROVIDERS:
+            return render(
+                request,
+                "control_plane/resource_kind.html",
+                {"providers": describe_providers()["providers"]},
+            )
+        hostname = request.GET.get("hostname", "").strip()
+        seed = PROVIDERS[kind].seed
+        material_class = _material_form(kind) if not resource else None
+        material = material_class() if material_class else None
+        return render(
+            request,
+            self.template_name,
+            {
+                "kind": kind,
+                "resource": resource,
+                "label": PROVIDERS[kind].label or kind,
+                "summary": PROVIDERS[kind].summary,
+                # Only when editing. Creating something asks what HQ cannot
+                # know and nothing else: a name it can derive, and a pause
+                # switch for a thing that does not exist yet, are not questions.
+                "identity": (
+                    ResourceIdentityForm(
+                        initial={"key": resource.key, "enabled": resource.enabled}
+                    )
+                    if resource
+                    else None
+                ),
+                "spec": spec_form_class(kind, lock_identity=bool(resource))(
+                    initial=(
+                        resource.spec
+                        if resource
+                        else (seed(hostname) if seed and hostname else None)
+                    )
+                ),
+                # Collected here rather than on a page of its own. A resource
+                # that is not usable without material should not be creatable
+                # without it.
+                "material": material,
+            },
+        )
+
+    def post(self, request, key=None):
+        resource = self._existing(key)
+        kind = self._kind(request, resource)
+        if kind not in PROVIDERS:
+            raise Http404("Unknown provider kind.")
+        identity = ResourceIdentityForm(request.POST) if resource else None
+        spec = spec_form_class(kind, lock_identity=bool(resource))(
+            request.POST, initial=resource.spec if resource else None
+        )
+        material_class = _material_form(kind) if not resource else None
+        material = material_class(request.POST) if material_class else None
+        if (
+            (identity is None or identity.is_valid())
+            and spec.is_valid()
+            and (material is None or material.is_valid())
+        ):
+            try:
+                result = save_managed_resource(
+                    ManagedResourceCommand(
+                        key=(
+                            identity.cleaned_data["key"] or resource.key
+                            if identity
+                            else _derived_key(kind, spec.spec)
+                        ),
+                        kind=kind,
+                        spec=spec.spec,
+                        # A thing being created is a thing you want applied.
+                        enabled=identity.cleaned_data["enabled"] if identity else True,
+                    ),
+                    principal=web_principal(request.user),
+                    current_key=resource.key if resource else None,
+                )
+            except (PolicyError, DjangoValidationError) as exc:
+                spec.add_error(None, _readable_error(exc))
+            else:
+                saved = result["resource"]["key"]
+                if material is not None:
+                    try:
+                        _store_material(kind, saved, material.cleaned_data, request)
+                    except (CertificateError, secrets.SecretsUnavailable) as exc:
+                        # The declaration exists and the material does not, so
+                        # say which half landed rather than reporting success.
+                        messages.error(request, str(exc))
+                        return redirect(
+                            "control_plane:upload_certificate", key=saved
+                        )
+                messages.success(
+                    request,
+                    f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
+                    "HQ will apply it at the provider within about a minute.",
+                )
+                return redirect("control_plane:detail", key=saved)
+        return render(
+            request,
+            self.template_name,
+            {
+                "kind": kind,
+                "resource": resource,
+                "label": PROVIDERS[kind].label or kind,
+                "summary": PROVIDERS[kind].summary,
+                "identity": identity,
+                "spec": spec,
+                "material": material,
+            },
+        )
+
+
+def _suggested_key(hostname: str, kind: str) -> str:
+    """A name that says what this is, offered rather than imposed.
+
+    Onboarding a service should not stop to ask what to call three rows in a
+    table the operator did not know existed. The field stays editable, because
+    the key is stable and permanent and sometimes the obvious name is taken.
+    """
+
+    if not hostname:
+        return ""
+    facet = PROVIDERS[kind].facet or kind
+    # Dots become separators before slugify sees them. Left alone, slugify
+    # deletes them, and "app.example.com" suggests the key "appexamplecom" --
+    # a permanent, unreadable name for the sake of one substitution.
+    return slugify(f"{hostname}-{facet}".replace(".", "-"))[:180]
+
+
+def _material_form(kind: str):
+    reference = PROVIDERS[kind].material_form
+    return _import(reference) if reference else None
+
+
+def _store_material(kind: str, key: str, cleaned: dict, request) -> None:
+    _import(PROVIDERS[kind].material_handler)(
+        key, cleaned, principal=web_principal(request.user)
+    )
+
+
+def _derived_key(kind: str, spec: dict) -> str:
+    """A name for a declaration the operator did not want to name.
+
+    Asked for one, the form stopped to demand an identifier for a row in a table
+    nobody had mentioned yet. The hostname the spec already carries is a better
+    name than anything that would have been typed, and the provider says how to
+    read it out.
+    """
+
+    provider = PROVIDERS[kind]
+    hostnames = provider.hostnames(spec) if provider.hostnames else ()
+    base = _suggested_key(hostnames[0], kind) if hostnames else slugify(kind)
+    if not ManagedResource.objects.filter(key=base).exists():
+        return base
+    for suffix in range(2, 100):
+        candidate = f"{base[:176]}-{suffix}"
+        if not ManagedResource.objects.filter(key=candidate).exists():
+            return candidate
+    return base
+
+
+def _readable_error(exc) -> str:
+    messages_found = getattr(exc, "messages", None)
+    return " ".join(messages_found) if messages_found else str(exc)
+
+
+class AdoptView(LoginRequiredMixin, View):
+    """Bring something the provider already holds under HQ's management.
+
+    One click, no form. The spec is read back out of the live record, so the
+    declaration starts equal to the world and the first reconciliation changes
+    nothing -- which is the only reason adopting is safe to do without asking
+    the operator to confirm every field first.
+    """
+
+    def post(self, request, hostname):
+        try:
+            result = adopt_service(
+                AdoptServiceCommand(hostname=hostname),
+                principal=web_principal(request.user),
+            )
+        except (NotFoundError, PolicyError, DjangoValidationError) as exc:
+            messages.error(request, _readable_error(exc))
+            return redirect("control_plane:services")
+        adopted = ", ".join(result["adopted"])
+        messages.success(
+            request,
+            f"Adopted {hostname} as {adopted}, exactly as configured now. "
+            "Nothing changed at the provider.",
+        )
+        return redirect("control_plane:service", hostname=result["hostname"])
+
+
+class CertificateUploadView(LoginRequiredMixin, View):
+    """Take a certificate generated elsewhere and hold it for installation."""
+
+    template_name = "control_plane/certificate_upload.html"
+
+    def get(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "form": CertificateUploadForm(),
+                "store_ready": secrets.available(),
+                "material": getattr(resource, "material", None),
+            },
+        )
+
+    def post(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        form = CertificateUploadForm(request.POST)
+        if form.is_valid():
+            try:
+                stored = store_certificate(
+                    UploadCertificateCommand(
+                        key=resource.key,
+                        fullchain=form.cleaned_data["fullchain"],
+                        private_key=form.cleaned_data["private_key"],
+                    ),
+                    principal=web_principal(request.user),
+                )
+            except (CertificateError, secrets.SecretsUnavailable, PolicyError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Stored a certificate covering {', '.join(stored['domains'])}. "
+                    "HQ installs it on the next controller pass.",
+                )
+                return redirect("control_plane:detail", key=resource.key)
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "form": form,
+                "store_ready": secrets.available(),
+                "material": getattr(resource, "material", None),
+            },
+        )
+
+
+class ResourceRemoveView(LoginRequiredMixin, View):
+    """Ask first, then queue removal of the record itself.
+
+    Not a row delete. What this describes lives at a provider, so dropping the
+    declaration alone would leave the rewrite or proxy host in place with
+    nothing in HQ pointing at it. HQ forgets its row only once a controller
+    reports the provider is clear.
+    """
+
+    template_name = "control_plane/resource_confirm_remove.html"
+
+    def get(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        allowed, explanation = controller_action_policy(
+            resource.kind, OperationRequest.Action.DELETE
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "label": PROVIDERS[resource.kind].label or resource.kind,
+                "removal_allowed": allowed,
+                "removal_explanation": explanation,
+            },
+        )
+
+    def post(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        try:
+            result = request_removal(
+                OperationCommand(
+                    idempotency_key=f"web:{request.user.pk}:{uuid.uuid4()}",
+                    reason=request.POST.get("reason", "").strip(),
+                ),
+                principal=web_principal(request.user),
+                current_key=resource.key,
+            )
+        except PolicyError as exc:
+            messages.error(request, str(exc))
+            return redirect("control_plane:detail", key=key)
+        verb = "Queued" if result["queued"] else "Already queued"
+        messages.success(
+            request,
+            f"{verb} removal of “{resource.key}”. HQ forgets it once the "
+            "controller confirms the provider is clear.",
+        )
+        return redirect("control_plane:detail", key=key)
+
+
+class ServiceListView(LoginRequiredMixin, TemplateView):
+    """The hostname view of the same declarations the resource list shows."""
+
+    template_name = "control_plane/service_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["services"] = service_catalog()
+        # The column headers come from the providers, so a provider that
+        # declares a new facet gets a column without this template being touched.
+        context["facets"] = SERVICE_FACETS
+        # Everything the providers hold that no declaration accounts for. Shown
+        # beside the managed services rather than on a page of its own: a
+        # hostname HQ does not manage is still a hostname that is serving, and
+        # hiding it is how a console ends up describing only the tidy half of
+        # the estate.
+        context["unmanaged"] = unmanaged_services()
+        context["inventory"] = inventory_state()
+        return context
+
+
+class ServiceDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "control_plane/service_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        service = find_service(self.kwargs["hostname"])
+        if service is None:
+            raise Http404(f"No service is declared for {self.kwargs['hostname']}.")
+        context["service"] = service
+        return context
 
 
 class InfrastructureListView(LoginRequiredMixin, ListView):

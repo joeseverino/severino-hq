@@ -4,9 +4,14 @@
 <div class="page-head">
   <div>
     <h1>{{ resource.key }}</h1>
-    <p class="muted"><code>{{ resource.kind }}</code> · Declared by {{ resource.get_declaration_source_display }}</p>
+    <p class="muted"><code>{{ resource.kind }}</code></p>
   </div>
   <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:edit' resource.key %}">Edit</a>
+    <a class="btn" href="{% url 'control_plane:remove' resource.key %}">Remove</a>
+    {% if resource.kind == "tls.uploaded_certificate" %}
+      <a class="btn primary" href="{% url 'control_plane:upload_certificate' resource.key %}">{% if resource.material %}Replace certificate{% else %}Upload certificate{% endif %}</a>
+    {% endif %}
     <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
     {% if resource.kind == "tls.certificate" %}
       {% if resource.status.certificate_pem %}

@@ -9,36 +9,20 @@
   </div>
 </div>
 
+{% comment %}
+One row. Every card comes from a domain in application.domains -- the host's own
+sections and installed extensions alike -- so adding a section never means
+editing this markup, and a section with nothing to report contributes no tile
+rather than a zero. The queue total leads, because it is the only figure here
+that summarises every domain at once.
+{% endcomment %}
 <section class="kpi-grid">
   <div class="kpi {% if not action_queue_count %}is-zero{% endif %}">
     <span class="label">Open items</span>
     <span class="value">{{ action_queue_count }}</span>
     <span class="muted">{{ action_queue_group_count }} area{{ action_queue_group_count|pluralize }}</span>
   </div>
-  <div class="kpi {% if not active_project_count %}is-zero{% endif %}">
-    <span class="label">Active projects</span>
-    <span class="value">{{ active_project_count }}</span>
-    {% if project_opportunities_count %}<span class="muted">{{ project_opportunities_count }} need output</span>{% endif %}
-  </div>
-  <div class="kpi {% if not draft_content_count %}is-zero{% endif %}">
-    <span class="label">Draft content</span>
-    <span class="value">{{ draft_content_count }}</span>
-    {% if published_content_count %}<span class="muted">{{ published_content_count }} published</span>{% endif %}
-  </div>
-  <div class="kpi {% if not docs_needing_review_count %}is-zero{% endif %}">
-    <span class="label">Docs to review</span>
-    <span class="value">{{ docs_needing_review_count }}</span>
-  </div>
-  <div class="kpi {% if not expenses_ytd_count %}is-zero{% endif %}">
-    <span class="label">Expenses {{ this_year }}</span>
-    <span class="value">${{ expenses_ytd_total|floatformat:2|intcomma }}</span>
-    <span class="muted">${{ deductible_ytd_total|floatformat:2|intcomma }} deductible est.</span>
-  </div>
-</section>
-
-{% if plugin_dashboard_cards %}
-<section class="kpi-grid plugin-kpi-grid" aria-label="Installed modules">
-  {% for card in plugin_dashboard_cards %}
+  {% for card in dashboard_cards %}
     <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
       <span class="label">{{ card.label }}</span>
       <span class="value">{{ card.value }}</span>
@@ -46,7 +30,6 @@
     </a>
   {% endfor %}
 </section>
-{% endif %}
 
 <section class="dashboard-command">
   <div class="command-main">
@@ -73,7 +56,7 @@
           {% for item in action_queue %}
             {% if item.count %}
               <li>
-                <a href="{{ item.href }}">
+                <a href="{{ item.url }}">
                   <strong>{{ item.count }}</strong>
                   <span>{{ item.label }}</span>
                 </a>

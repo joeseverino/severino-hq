@@ -49,6 +49,30 @@ env -u DJANGO_DEBUG \
     DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
     "$python" manage.py test --noinput
 
+# And once more with whatever the caller has installed, if anything.
+#
+# Compose is where the host and its extensions first meet, and it runs long
+# after the merge button. Every host test that quietly assumed nothing was
+# installed has passed here, passed CI, and failed there -- most recently a
+# dashboard query budget that is correct for the host alone and cannot be for a
+# page that composes every installed domain. The fix always costs a rebuild
+# rather than a rerun, which is why it feels like the plugin workflow is the
+# problem when the problem is that nothing ran this combination sooner.
+#
+# The set comes from the environment and is never named here: this repository is
+# public and the extensions it composes are not. Supply PYTHONPATH and
+# SEVERINO_HQ_PLUGINS -- `hq dev` already builds both -- and this pass runs.
+# Without them it is skipped, so public CI and a fresh checkout are unaffected.
+if [ -n "${SEVERINO_HQ_PLUGINS:-}" ]; then
+    echo "[check] Complete test suite (composed with the supplied plugin set)"
+    env -u DJANGO_DEBUG \
+        DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
+        DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
+        "$python" manage.py test --noinput
+else
+    echo "[check] Composed suite skipped (no SEVERINO_HQ_PLUGINS supplied)"
+fi
+
 echo "[check] Patch integrity"
 git diff --check
 

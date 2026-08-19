@@ -24,10 +24,13 @@ def sync_topology(payload: object, *, principal: Principal) -> dict[str, Any]:
     """Materialize topology declarations and schedule pending generations."""
     snapshot = import_topology(payload)
     scheduled: list[dict[str, Any]] = []
-    resources = ManagedResource.objects.filter(
-        declaration_source=ManagedResource.DeclarationSource.TOPOLOGY,
-        enabled=True,
-    ).exclude(generation=models.F("observed_generation"))
+    # Every enabled resource, not a topology-declared subset: the import no
+    # longer declares any, and what it can still change is what a reference
+    # resolves to. Anything left with unobserved desired state needs the
+    # controller, however that state came to differ.
+    resources = ManagedResource.objects.filter(enabled=True).exclude(
+        generation=models.F("observed_generation")
+    )
     for resource in resources.order_by("key"):
         result = request_reconcile(
             OperationCommand(

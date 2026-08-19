@@ -19,9 +19,9 @@ from .plugins import (
     describe_plugins,
     installed_plugins,
     plugin_capabilities,
-    plugin_navigation,
     plugin_token_authenticated_prefixes,
 )
+from .domains import domain_navigation
 from .ui import Insight, Kpi
 
 
@@ -81,7 +81,9 @@ class PluginContractTests(TestCase):
         env, importer = self.load()
         with env, importer:
             self.assertEqual(installed_plugins(), (VALID,))
-            self.assertEqual(plugin_navigation(), VALID.navigation)
+            # Into the one bar the host actually renders, beside its own
+            # sections -- not into a plugin-only projection nothing draws.
+            self.assertLessEqual(set(VALID.navigation), set(domain_navigation()))
             self.assertEqual(
                 plugin_capabilities("operator"),
                 frozenset({"notes.read", "notes.write"}),

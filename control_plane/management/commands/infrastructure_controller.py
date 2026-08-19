@@ -15,6 +15,9 @@ from application.controller import (
     schedule_automatic_operations,
 )
 from application.connections import preflight_connections
+from application.certificates import CertificateError, material_for
+from application.inventory import record_inventory
+from application.security import cli_principal
 from application.infrastructure import controller_contract
 from control_plane.models import ManagedResource
 
@@ -36,6 +39,13 @@ class Command(BaseCommand):
         subparsers.add_parser("preflight")
         schedule = subparsers.add_parser("schedule")
         schedule.add_argument("--controller-id", required=True)
+
+        material = subparsers.add_parser("material")
+        material.add_argument("--resource", required=True)
+
+        inventory = subparsers.add_parser("inventory")
+        inventory.add_argument("--controller-id", required=True)
+        inventory.add_argument("--payload", required=True)
 
         report = subparsers.add_parser("report")
         report.add_argument("--controller-id", required=True)
@@ -79,6 +89,20 @@ class Command(BaseCommand):
                 }
                 if not result["ok"]:
                     raise ValueError(json.dumps(result, sort_keys=True))
+            elif options["action"] == "material":
+                # Its own command rather than a field on the contract: `export`
+                # prints a contract, and a stored private key must not be one
+                # keystroke away from a terminal that was only being inspected.
+                try:
+                    result = material_for(options["resource"])
+                except CertificateError as exc:
+                    raise ValueError(str(exc)) from exc
+            elif options["action"] == "inventory":
+                result = record_inventory(
+                    json.loads(options["payload"]),
+                    principal=cli_principal(),
+                    controller_id=options["controller_id"],
+                )
             elif options["action"] == "schedule":
                 result = schedule_automatic_operations(options["controller_id"])
             else:
