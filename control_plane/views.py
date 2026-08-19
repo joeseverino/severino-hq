@@ -103,7 +103,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                         else {"key": _suggested_key(hostname, kind)}
                     )
                 ),
-                "spec": spec_form_class(kind)(
+                "spec": spec_form_class(kind, lock_identity=bool(resource))(
                     initial=(
                         resource.spec
                         if resource
@@ -119,7 +119,9 @@ class ResourceFormView(LoginRequiredMixin, View):
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
         identity = ResourceIdentityForm(request.POST)
-        spec = spec_form_class(kind)(request.POST)
+        spec = spec_form_class(kind, lock_identity=bool(resource))(
+            request.POST, initial=resource.spec if resource else None
+        )
         if identity.is_valid() and spec.is_valid():
             try:
                 result = save_managed_resource(

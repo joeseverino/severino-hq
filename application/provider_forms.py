@@ -122,8 +122,32 @@ class ProviderSpecForm(forms.Form):
         return cleaned
 
 
-def spec_form_class(kind: str) -> type[ProviderSpecForm]:
+def identity_fields(kind: str) -> tuple[str, ...]:
+    """The spec fields that decide which record this is at the provider.
+
+    A provider matches its own records by hostname, never by HQ's key --
+    AdGuard finds the rewrite whose ``domain`` equals the spec's, NPM the host
+    whose ``domain_names`` match. So changing one of these does not rename
+    anything: reconciliation looks for the new name, does not find it, and
+    creates it, leaving the old record in place and serving. Neither provider
+    has a delete path here, so nothing can clean that up afterwards.
+
+    Read from ``seed`` rather than declared again, because seed already states
+    exactly which fields a hostname decides. Only its keys are used, which is
+    why a sentinel is safe to pass.
+    """
+
+    provider = PROVIDERS[kind]
+    return tuple(provider.seed("hostname.invalid")) if provider.seed else ()
+
+
+def spec_form_class(
+    kind: str, *, lock_identity: bool = False
+) -> type[ProviderSpecForm]:
     """Build the form for one provider kind.
+
+    ``lock_identity`` is for editing an existing record: see
+    ``identity_fields`` for why those cannot be changed in place.
 
     Not cached. Building it is a dict comprehension over a handful of fields,
     and a cache keyed on kind is wrong the moment a test registers a provider --
@@ -135,6 +159,19 @@ def spec_form_class(kind: str) -> type[ProviderSpecForm]:
         name: _field_for(field)
         for name, field in provider.spec_type.model_fields.items()
     }
+    if lock_identity:
+        for name in identity_fields(kind):
+            if name not in fields:
+                continue
+            # Django's ``disabled`` ignores submitted data and keeps the initial
+            # value, so this holds against a crafted POST as well as a stray
+            # click -- which matters, because the damage is silent and permanent.
+            fields[name].disabled = True
+            fields[name].help_text = (
+                "Fixed after creation. The provider identifies this record by "
+                "this value, so changing it would create a second record and "
+                "leave the current one in place."
+            )
     return type(
         f"{provider.spec_type.__name__}Form",
         (ProviderSpecForm,),

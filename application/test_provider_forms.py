@@ -126,6 +126,59 @@ class ProviderOnboardingTests(TestCase):
         self.assertEqual(fields, ["answer", "domain"])
 
 
+class IdentityFieldTests(TestCase):
+    """A provider finds its own record by hostname, so a hostname cannot move.
+
+    AdGuard matches the rewrite whose ``domain`` equals the spec's; NPM matches
+    the host whose ``domain_names`` match. Change one and reconciliation looks
+    for the new name, does not find it, and creates it -- leaving the old record
+    in place and serving. Neither has a delete path, so nothing cleans that up.
+    """
+
+    def test_identity_is_read_from_what_a_hostname_seeds(self):
+        from .provider_forms import identity_fields
+
+        self.assertEqual(identity_fields("adguard.rewrite"), ("domain",))
+        self.assertEqual(identity_fields("npm.proxy_host"), ("domain_names",))
+        # A certificate is not addressed by hostname, so it locks nothing.
+        self.assertEqual(identity_fields("tls.certificate"), ())
+
+    def test_creating_leaves_the_hostname_editable(self):
+        self.assertFalse(spec_form_class("adguard.rewrite")().fields["domain"].disabled)
+
+    def test_editing_holds_the_hostname_against_a_crafted_post(self):
+        """Disabled fields ignore submitted data, which is the point.
+
+        A validation error would be enough for a stray click. This has to hold
+        against a hand-made request too, because the damage is silent, happens
+        at the provider, and cannot be undone from HQ.
+        """
+        form = spec_form_class("adguard.rewrite", lock_identity=True)(
+            {"domain": "attacker.example.com", "answer": "10.0.0.11"},
+            initial=REWRITE,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.spec["domain"], "app.example.com")
+        self.assertEqual(form.spec["answer"], "10.0.0.11")
+
+    def test_the_edit_page_locks_it_and_says_why(self):
+        user = get_user_model().objects.create_user(
+            username="operator", password="test-only-password"
+        )
+        self.client.force_login(user)
+        ManagedResource.objects.create(
+            key="app-dns", kind="adguard.rewrite", spec=REWRITE
+        )
+
+        response = self.client.get(
+            reverse("control_plane:edit", kwargs={"key": "app-dns"})
+        )
+
+        self.assertContains(response, "disabled")
+        self.assertContains(response, "would create a second record")
+
+
 class ResourceFormViewTests(TestCase):
     """The web write goes through the same use case the API and MCP call."""
 
