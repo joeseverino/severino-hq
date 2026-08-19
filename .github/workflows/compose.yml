@@ -120,6 +120,34 @@ jobs:
           fi
           jq -r '.extensions | length as $n | "composing \($n) extension(s)"' composition-set.json
 
+      - name: Mask the extension names for the rest of the job
+        # This step prints a count and nothing else, which was enough while it
+        # was the only step that mentioned them. It is not: later steps shell
+        # out to gh, pip, and Django, and those echo repository names, wheel
+        # filenames, app labels and — when a test fails — table and column
+        # names. This repository is public and so are its logs.
+        #
+        # Masking once here covers every later step, including output from
+        # commands nobody has written yet. Auditing each one forever is the
+        # alternative, and it already failed: a query-budget assertion printed
+        # the composed schema into a world-readable log.
+        #
+        # Every spelling, because the same extension appears as a repository
+        # path, a bare name, a Python package and a table prefix.
+        run: |
+          set -euo pipefail
+          jq -r '
+            .extensions[]
+            | .id, .repository,
+              (.repository | split("/") | last)
+          ' composition-set.json \
+            | tr -d '\r' | sed '/^$/d' | sort -u \
+            | while read -r name; do
+                echo "::add-mask::${name}"
+                echo "::add-mask::${name//-/_}"
+                echo "::add-mask::${name//_/-}"
+              done
+
       - name: Download admitted artifacts
         env:
           # Fine-grained token with read access to the private extension repos'
