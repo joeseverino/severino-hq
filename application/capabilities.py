@@ -35,6 +35,7 @@ from .infrastructure import (
     OperationCommand,
     request_certificate_renewal,
     request_reconcile,
+    request_removal,
     save_managed_resource,
 )
 from .projects import ProjectCommand, save_project, upsert_project
@@ -281,6 +282,15 @@ _SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_reconcile,
+        "key",
+    ),
+    CapabilitySpec(
+        "infrastructure.resource.remove",
+        "Remove the record this declaration describes, then forget it.",
+        "destructive",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        request_removal,
         "key",
     ),
     CapabilitySpec(

@@ -4,17 +4,34 @@
   "capabilities": {
     "adguard.rewrite": {
       "actions": {
-        "reconcile": {"mode": "apply", "automatic": true}
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        },
+        "delete": {
+          "mode": "apply",
+          "automatic": false
+        }
       }
     },
     "npm.proxy_host": {
       "actions": {
-        "reconcile": {"mode": "apply", "automatic": true}
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        },
+        "delete": {
+          "mode": "apply",
+          "automatic": false
+        }
       }
     },
     "tls.certificate": {
       "actions": {
-        "reconcile": {"mode": "apply", "automatic": true},
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        },
         "renew": {
           "mode": "apply",
           "automatic": true,

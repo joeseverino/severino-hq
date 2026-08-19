@@ -340,8 +340,9 @@ def _queue_operation(
     *,
     principal: Principal,
     action: str,
+    require_enabled: bool = True,
 ) -> dict[str, Any]:
-    if not resource.enabled:
+    if require_enabled and not resource.enabled:
         raise PolicyError(f"Managed resource {resource.key!r} is disabled.")
     allowed, explanation = controller_action_policy(resource.kind, action)
     if not allowed:
@@ -402,6 +403,51 @@ def request_reconcile(
             command,
             principal=principal,
             action=OperationRequest.Action.RECONCILE,
+        )
+
+
+@transaction.atomic
+def request_removal(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Queue removal of the thing this declaration describes.
+
+    Deliberately not a plain row delete. The record lives at a provider, not in
+    HQ, so forgetting the declaration would abandon the rewrite or proxy host
+    rather than remove it -- and nothing would be left pointing at the orphan.
+    HQ drops its own row only once a controller reports the provider is clear.
+
+    Removal is queued even for a disabled resource: disabling stops HQ
+    reconciling a declaration, which is exactly the state something is left in
+    just before an operator decides to be rid of it.
+    """
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    allowed, explanation = controller_action_policy(
+        resource.kind, OperationRequest.Action.DELETE
+    )
+    if not allowed:
+        raise PolicyError(explanation)
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="infrastructure.resource.remove",
+    ):
+        # Bypasses the enabled check in _queue_operation on purpose: that guard
+        # exists to stop HQ converging a paused declaration, and removal is the
+        # opposite of converging it.
+        return _queue_operation(
+            resource,
+            command,
+            principal=principal,
+            action=OperationRequest.Action.DELETE,
+            require_enabled=False,
         )
 
 

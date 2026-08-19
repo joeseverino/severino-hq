@@ -89,6 +89,112 @@ class ProviderAdapterTests(TestCase):
         clear=True,
     )
     @mock.patch("controller_runtime.providers._request")
+    def test_adguard_reports_a_rewrite_that_is_switched_off(self, request):
+        """Present but disabled does not resolve, and Ready would be a lie.
+
+        HQ does not set this field -- add and update carry only domain and
+        answer -- so the honest position is to observe it and say so, rather
+        than report a name as healthy while it answers nothing.
+        """
+        request.return_value = [
+            {"domain": "hq.example", "answer": "192.0.2.10", "enabled": False}
+        ]
+
+        result = providers.reconcile_adguard(
+            {"domain": "hq.example", "answer": "192.0.2.10"}
+        )
+
+        self.assertEqual(result.conditions[0]["type"], "Degraded")
+        self.assertIs(result.status["enabled"], False)
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_adguard_delete_removes_the_live_pair(self, request):
+        """AdGuard identifies a rewrite by domain *and* answer.
+
+        Deleting with the desired answer would miss a record whose answer has
+        drifted, silently leaving it in place.
+        """
+        request.side_effect = [
+            [{"domain": "hq.example", "answer": "192.0.2.99", "enabled": True}],
+            None,
+        ]
+
+        result = providers.delete_adguard({"domain": "hq.example", "answer": "192.0.2.10"})
+
+        self.assertTrue(result.changed)
+        deletion = request.call_args_list[-1]
+        self.assertTrue(deletion.args[0].endswith("/control/rewrite/delete"))
+        self.assertEqual(
+            deletion.kwargs["payload"],
+            {"domain": "hq.example", "answer": "192.0.2.99"},
+        )
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_adguard_delete_is_idempotent(self, request):
+        """A retried delete finding nothing there has done what was asked.
+
+        The queue retries, so a delete that applied and then failed to report
+        runs again. Treating an absent record as failure would leave the
+        operation stuck forever on work that is already complete.
+        """
+        request.return_value = []
+
+        result = providers.delete_adguard({"domain": "gone.example", "answer": "x"})
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.conditions[0]["type"], "Ready")
+        self.assertEqual(request.call_count, 1)
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_adguard_delete_plans_without_touching_anything(self, request):
+        request.return_value = [
+            {"domain": "hq.example", "answer": "192.0.2.10", "enabled": True}
+        ]
+
+        result = providers.delete_adguard(
+            {"domain": "hq.example", "answer": "192.0.2.10"}, apply=False
+        )
+
+        self.assertTrue(result.changed)
+        self.assertEqual(request.call_count, 1)
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
     def test_adguard_update_uses_the_provider_contract(self, request):
         request.side_effect = [
             [{"domain": "hq.example", "answer": "192.0.2.9", "enabled": True}],
@@ -187,8 +293,82 @@ class ProviderAdapterTests(TestCase):
                     "block_exploits": True,
                     "access_list_id": 0,
                     "advanced_config": "",
+                    "hsts_enabled": False,
+                    "hsts_subdomains": False,
+                    "trust_forwarded_proto": False,
+                    "serving": True,
                 }
             )
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm.example.test",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_npm_delete_targets_the_host_with_that_exact_domain_set(self, request):
+        request.side_effect = [
+            {"token": "short-lived"},
+            [
+                {"id": 7, "domain_names": ["other.example"]},
+                {"id": 9, "domain_names": ["hq.example"]},
+            ],
+            None,
+        ]
+
+        result = providers.delete_npm({"domain_names": ["hq.example"]})
+
+        self.assertTrue(result.changed)
+        deletion = request.call_args_list[-1]
+        self.assertTrue(deletion.args[0].endswith("/nginx/proxy-hosts/9"))
+        self.assertEqual(deletion.kwargs["method"], "DELETE")
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm.example.test",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_npm_reconcile_no_longer_asserts_hsts_off(self, request):
+        """The payload replaces the whole object, so an unsent field is not spared.
+
+        HSTS was pinned False here, which meant enabling it in NPM survived
+        until the next pass and then quietly switched itself back off.
+        """
+        request.side_effect = [{"token": "short-lived"}, [], None]
+
+        providers.reconcile_npm(
+            {
+                "domain_names": ["hq.example"],
+                "forward_scheme": "http",
+                "forward_host": "192.0.2.10",
+                "forward_port": 8000,
+                "force_ssl": False,
+                "http2": True,
+                "websocket": False,
+                "caching_enabled": False,
+                "block_exploits": True,
+                "access_list_id": 0,
+                "advanced_config": "",
+                "hsts_enabled": True,
+                "hsts_subdomains": True,
+                "trust_forwarded_proto": True,
+                "serving": True,
+            }
+        )
+
+        sent = request.call_args_list[-1].kwargs["payload"]
+        self.assertTrue(sent["hsts_enabled"])
+        self.assertTrue(sent["hsts_subdomains"])
+        self.assertTrue(sent["trust_forwarded_proto"])
 
     def test_public_dns_fails_closed(self):
         with self.assertRaisesRegex(providers.ProviderError, "not enabled"):
@@ -579,12 +759,28 @@ class WorkerTests(TestCase):
         self.assertEqual(
             worker.supported_capabilities(),
             (
+                ("adguard.rewrite", "delete"),
                 ("adguard.rewrite", "reconcile"),
+                ("npm.proxy_host", "delete"),
                 ("npm.proxy_host", "reconcile"),
                 ("tls.certificate", "reconcile"),
                 ("tls.certificate", "renew"),
             ),
         )
+
+    def test_removal_is_never_scheduled_automatically(self):
+        """The scheduler converges declarations. It must not decide to delete.
+
+        Reconciliation moves the world toward what HQ says and is safe to run
+        unattended. Removal takes down something that is currently serving, and
+        an automatic one would mean a bad declaration could delete a live record
+        with nobody having asked for it.
+        """
+        from control_plane.providers import enabled_controller_actions
+
+        automatic = enabled_controller_actions(automatic_only=True)
+
+        self.assertEqual([a for _, a in automatic if a == "delete"], [])
 
     def test_every_declared_controller_action_has_exactly_one_dispatch(self):
         from control_plane.providers import controller_capability_registry

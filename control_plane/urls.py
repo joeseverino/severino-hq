@@ -15,6 +15,7 @@ urlpatterns = [
     path("services/<str:hostname>/", views.ServiceDetailView.as_view(), name="service"),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),
     path("<slug:key>/edit/", views.ResourceFormView.as_view(), name="edit"),
+    path("<slug:key>/remove/", views.ResourceRemoveView.as_view(), name="remove"),
     path("<slug:key>/reconcile/", views.ReconcileView.as_view(), name="reconcile"),
     path(
         "<slug:key>/renew/",

@@ -22,6 +22,7 @@ from application.infrastructure import (
     operation_summary,
     request_certificate_renewal,
     request_reconcile,
+    request_removal,
     resource_health,
     save_managed_resource,
     serialize_resource,
@@ -178,6 +179,56 @@ def _suggested_key(hostname: str, kind: str) -> str:
 def _readable_error(exc) -> str:
     messages_found = getattr(exc, "messages", None)
     return " ".join(messages_found) if messages_found else str(exc)
+
+
+class ResourceRemoveView(LoginRequiredMixin, View):
+    """Ask first, then queue removal of the record itself.
+
+    Not a row delete. What this describes lives at a provider, so dropping the
+    declaration alone would leave the rewrite or proxy host in place with
+    nothing in HQ pointing at it. HQ forgets its row only once a controller
+    reports the provider is clear.
+    """
+
+    template_name = "control_plane/resource_confirm_remove.html"
+
+    def get(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        allowed, explanation = controller_action_policy(
+            resource.kind, OperationRequest.Action.DELETE
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "resource": resource,
+                "label": PROVIDERS[resource.kind].label or resource.kind,
+                "removal_allowed": allowed,
+                "removal_explanation": explanation,
+            },
+        )
+
+    def post(self, request, key):
+        resource = get_object_or_404(ManagedResource, key=key)
+        try:
+            result = request_removal(
+                OperationCommand(
+                    idempotency_key=f"web:{request.user.pk}:{uuid.uuid4()}",
+                    reason=request.POST.get("reason", "").strip(),
+                ),
+                principal=web_principal(request.user),
+                current_key=resource.key,
+            )
+        except PolicyError as exc:
+            messages.error(request, str(exc))
+            return redirect("control_plane:detail", key=key)
+        verb = "Queued" if result["queued"] else "Already queued"
+        messages.success(
+            request,
+            f"{verb} removal of “{resource.key}”. HQ forgets it once the "
+            "controller confirms the provider is clear.",
+        )
+        return redirect("control_plane:detail", key=key)
 
 
 class ServiceListView(LoginRequiredMixin, TemplateView):

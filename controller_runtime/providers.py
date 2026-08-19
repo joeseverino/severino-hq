@@ -193,9 +193,33 @@ def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderRe
                 payload=desired,
             )
         changed = True
+    # AdGuard reports whether a rewrite is switched on, and HQ does not set it:
+    # the add and update payloads carry only domain and answer, so claiming to
+    # manage it would mean asserting a field this code never sends. It is
+    # observed and reported instead -- a rewrite that exists but is switched off
+    # does not resolve, and reporting that as Ready was HQ stating something
+    # untrue about the world rather than merely knowing less than it could.
+    live = matches[0] if matches else {}
+    switched_off = live.get("enabled") is False
+    status = {**desired, "enabled": live.get("enabled", True)}
+    if switched_off:
+        return ProviderResult(
+            changed=changed,
+            status=status,
+            conditions=[
+                _condition(
+                    "Degraded",
+                    True,
+                    "Disabled",
+                    "The rewrite exists in AdGuard but is switched off, so the "
+                    "name does not resolve. Re-enable it in AdGuard.",
+                )
+            ],
+            message="AdGuard rewrite is present but disabled.",
+        )
     return ProviderResult(
         changed=changed,
-        status=desired,
+        status=status,
         conditions=[
             _condition("Ready", True, "Reconciled", "AdGuard rewrite is current.")
         ],
@@ -322,11 +346,15 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
         "certificate_id": spec.get("certificate_id") or 0,
         "ssl_forced": spec["force_ssl"],
         "http2_support": spec["http2"],
-        "hsts_enabled": False,
-        "hsts_subdomains": False,
+        # Read from the spec, not asserted. This payload replaces the whole
+        # object, so a constant here is not "leave it alone" -- it is "set it to
+        # this", every pass, whatever the operator did in NPM.
+        "hsts_enabled": spec["hsts_enabled"],
+        "hsts_subdomains": spec["hsts_subdomains"],
+        "trust_forwarded_proto": spec["trust_forwarded_proto"],
         "advanced_config": spec["advanced_config"],
         "locations": [],
-        "enabled": True,
+        "enabled": spec["serving"],
         "meta": {},
     }
     if matches:
@@ -1107,9 +1135,89 @@ def _public_dns_locked(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
     raise ProviderError("Public DNS mutation is not enabled in this controller.")
 
 
+def delete_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+    """Remove the rewrite, and treat an already-absent one as success.
+
+    Deletion has to be idempotent because the operation queue is: a delete that
+    applied and then failed to report is retried, and a second attempt finding
+    nothing there has achieved exactly what was asked.
+    """
+
+    base_url = _required("ADGUARD", "URL").rstrip("/")
+    headers = _adguard_headers()
+    rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
+    matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"domain": spec["domain"], "removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such rewrite in AdGuard.")
+            ],
+            message="AdGuard rewrite was already absent.",
+        )
+    if apply:
+        for match in matches:
+            # The live record, not the desired one: AdGuard identifies a rewrite
+            # by the pair, and a spec whose answer has drifted would not match.
+            _request(
+                f"{base_url}/control/rewrite/delete",
+                method="POST",
+                headers=headers,
+                payload={"domain": match["domain"], "answer": match["answer"]},
+            )
+    return ProviderResult(
+        changed=True,
+        status={"domain": spec["domain"], "removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "AdGuard rewrite was removed.")
+        ],
+        message="AdGuard rewrite removed.",
+    )
+
+
+def delete_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+    """Remove the proxy host matching this exact domain set."""
+
+    base_url = _npm_api_url(_required("NPM", "URL"))
+    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
+    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    domains = sorted(spec["domain_names"])
+    matches = [
+        host for host in hosts if sorted(host.get("domain_names", [])) == domains
+    ]
+    if len(matches) > 1:
+        raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
+    if not matches:
+        return ProviderResult(
+            changed=False,
+            status={"domain_names": domains, "removed": True},
+            conditions=[
+                _condition("Ready", True, "Absent", "No such proxy host in NPM.")
+            ],
+            message="NPM proxy host was already absent.",
+        )
+    if apply:
+        _request(
+            f"{base_url}/nginx/proxy-hosts/{matches[0]['id']}",
+            method="DELETE",
+            headers=headers,
+        )
+    return ProviderResult(
+        changed=True,
+        status={"domain_names": domains, "removed": True},
+        conditions=[
+            _condition("Ready", True, "Removed", "NPM proxy host was removed.")
+        ],
+        message="NPM proxy host removed.",
+    )
+
+
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
+    ("npm.proxy_host", "delete"): delete_npm,
     ("cloudflare.dns_record", "reconcile"): _public_dns_locked,
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,

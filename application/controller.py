@@ -286,6 +286,28 @@ def report_operation(
     else:
         resource_fields = ("conditions", "updated_at")
     resource.save(update_fields=resource_fields)
+
+    if report.success and operation.action == OperationRequest.Action.DELETE:
+        # The declaration outlived the thing it described. Keeping it would put
+        # a row on the board for something that is no longer anywhere, and the
+        # next reconcile would recreate what was just removed.
+        #
+        # Serialized before the row goes, because the caller is owed the same
+        # answer shape for a delete as for anything else. The operations are
+        # removed explicitly rather than by loosening the foreign key: PROTECT
+        # is what stops an accidental delete elsewhere taking history with it,
+        # and this is the one place the removal is deliberate. The audit trail
+        # is unaffected -- it is written separately, and outlives both.
+        answer = {
+            "ok": True,
+            "operation": serialize_operation(operation),
+            "resource": serialize_resource(resource),
+            "removed": True,
+        }
+        OperationRequest.objects.filter(resource=resource).delete()
+        resource.delete()
+        return answer
+
     return {
         "ok": True,
         "operation": serialize_operation(operation),

@@ -22,6 +22,7 @@ from application.infrastructure import (
     ManagedResourceCommand,
     OperationCommand,
     PolicyError,
+    controller_contract,
     request_certificate_renewal,
     request_reconcile,
     save_managed_resource,
@@ -33,6 +34,7 @@ from core.models import AuditLog
 
 from .models import ManagedResource, OperationRequest, TopologySnapshot
 from .providers import (
+    NPMProxyHostSpec,
     describe_providers,
     validate_resolved_certificate,
 )
@@ -145,6 +147,43 @@ def topology_payload():
         ],
         "managed_resources": [],
     }
+
+
+class ControllerContractCompletenessTests(TestCase):
+    """A spec stored before a field existed still reaches the controller whole.
+
+    The controller indexes spec fields directly, so a missing key is a crash
+    mid-reconciliation rather than a default. Specs are stored as JSON and were
+    written by older versions of the model, so the only thing standing between
+    an added field and a broken production reconcile is that the contract
+    validates through pydantic on the way out.
+    """
+
+    def test_a_spec_missing_a_newly_added_field_is_filled_by_the_contract(self):
+        resource = ManagedResource.objects.create(
+            key="legacy-proxy",
+            kind="npm.proxy_host",
+            # Exactly what production held before hsts and serving existed.
+            spec={
+                "domain_names": ["app.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "10.0.0.10",
+                "forward_port": 8000,
+                "certificate_resource": "",
+                "force_ssl": True,
+                "http2": True,
+                "websocket": False,
+                "caching_enabled": False,
+                "block_exploits": True,
+                "access_list_id": 0,
+                "advanced_config": "",
+            },
+        )
+
+        spec = controller_contract(resource)["resource"]["spec"]
+
+        for field in NPMProxyHostSpec.model_fields:
+            self.assertIn(field, spec, f"{field} would KeyError in the controller")
 
 
 class TopologyOwnershipTests(TestCase):

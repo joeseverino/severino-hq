@@ -8,6 +8,7 @@
   </div>
   <div class="page-actions">
     <a class="btn" href="{% url 'control_plane:edit' resource.key %}">Edit</a>
+    <a class="btn" href="{% url 'control_plane:remove' resource.key %}">Remove</a>
     <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
     {% if resource.kind == "tls.certificate" %}
       {% if resource.status.certificate_pem %}

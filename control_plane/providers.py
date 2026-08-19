@@ -172,6 +172,19 @@ class NPMProxyHostSpec(ProviderModel):
     block_exploits: bool = True
     access_list_id: int = Field(default=0, ge=0)
     advanced_config: str = ""
+    # Settings the reconciler used to assert rather than read. It sends the
+    # whole proxy-host object on every pass, so a field absent from this model
+    # was not left alone -- it was overwritten with a constant. HSTS was pinned
+    # off, which meant turning it on in Nginx Proxy Manager survived until the
+    # next reconciliation and then silently switched itself back off.
+    hsts_enabled: bool = False
+    hsts_subdomains: bool = False
+    trust_forwarded_proto: bool = False
+    # Whether the host serves at all. Named apart from ``ManagedResource.enabled``
+    # deliberately: that one decides whether HQ reconciles this declaration,
+    # this one is a property of the declaration itself. Collapsing them would
+    # mean pausing HQ's management of a host also took the host down.
+    serving: bool = True
 
 
 class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
