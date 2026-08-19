@@ -12,6 +12,7 @@ from pathlib import Path
 import secrets
 import socket
 import ssl
+import logging
 import subprocess
 import tarfile
 import tempfile
@@ -28,6 +29,9 @@ from control_plane.providers import (
     normalized_record_content,
     normalized_hostname,
 )
+
+
+logger = logging.getLogger("severino.controller")
 
 
 class ProviderError(RuntimeError):
@@ -273,7 +277,7 @@ def preflight() -> list[dict[str, Any]]:
     acme_dir = Path(_required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
         raise ProviderError("ACME state directory is not writable.")
-    _run(["certbot", "--version"])
+    _run(["certbot", "--version"], step="certbot preflight")
     adguard_url = _required("ADGUARD", "URL").rstrip("/")
     _request(
         f"{adguard_url}/control/status",
@@ -640,7 +644,22 @@ def _certificate_registry(name: str) -> dict[str, Any]:
     return registry
 
 
-def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
+def _run(
+    command: list[str], *, input_bytes: bytes | None = None, step: str = "command"
+) -> bytes:
+    """Run a subprocess, saying which step failed rather than which module ran it.
+
+    Every caller here used to report the same sentence, so a failure anywhere
+    -- certbot, openssl, or an SSH call to a host -- surfaced as "Certificate
+    controller command failed." A DNS reconcile that never touches a
+    certificate reported a certificate error, and the search started in the
+    wrong place. `step` names the thing that actually failed.
+
+    The subprocess's own output is logged, never returned: it carries paths and
+    remote messages that belong in an operator's log rather than in a provider
+    result that reaches an API client.
+    """
+
     try:
         result = subprocess.run(
             command,
@@ -650,9 +669,18 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
             timeout=180,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ProviderError("Certificate controller command could not complete.") from exc
+        raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
-        raise ProviderError("Certificate controller command failed.")
+        logger.warning(
+            "controller step failed",
+            extra={
+                "event": "controller.step.failed",
+                "step": step,
+                "exit_code": result.returncode,
+                "stderr": result.stderr.decode("utf-8", "replace")[:2000],
+            },
+        )
+        raise ProviderError(f"{step} failed.")
     return result.stdout
 
 
@@ -683,7 +711,9 @@ def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> b
         f'{transport["user"]}@{transport["host"]}',
         operation,
     ]
-    return _run(command, input_bytes=payload)
+    return _run(
+        command, input_bytes=payload, step=f"SSH {operation} for {connection_ref}"
+    )
 
 
 def _certificate_bundle(fullchain: bytes, private_key: bytes) -> bytes:
@@ -720,8 +750,14 @@ def _validate_certificate(
         key_path = Path(directory) / "privkey.pem"
         cert_path.write_bytes(fullchain)
         key_path.write_bytes(private_key)
-        cert_pub = _run(["openssl", "x509", "-in", str(cert_path), "-pubkey", "-noout"])
-        key_pub = _run(["openssl", "pkey", "-in", str(key_path), "-pubout"])
+        cert_pub = _run(
+            ["openssl", "x509", "-in", str(cert_path), "-pubkey", "-noout"],
+            step="reading the certificate",
+        )
+        key_pub = _run(
+            ["openssl", "pkey", "-in", str(key_path), "-pubout"],
+            step="reading the private key",
+        )
         if cert_pub != key_pub:
             raise ProviderError("Certificate and private key do not match.")
         fingerprint = _run(
