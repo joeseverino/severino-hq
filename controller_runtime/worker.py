@@ -123,8 +123,17 @@ def _report_inventory(controller_id: str) -> None:
             "--payload",
             json.dumps(inventory(), separators=(",", ":")),
         )
-    except (BridgeError, ProviderError, OSError, ValueError):
-        pass
+    except (BridgeError, ProviderError, OSError, ValueError) as exc:
+        # Swallowed, but not silently: stdout is the run's JSON result and is
+        # parsed, so this goes to stderr and lands in the journal. A sweep that
+        # quietly stopped reporting would leave the adoption page looking
+        # settled while going stale, which is the failure worth noticing.
+        # The type, not the message -- a provider error can name a host or a
+        # path, and this line is the one that gets copied into a paste.
+        print(
+            f"inventory report skipped: {type(exc).__name__}",
+            file=sys.stderr,
+        )
 
 
 def run_once(controller_id: str, *, apply: bool) -> int:
