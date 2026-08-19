@@ -84,8 +84,90 @@ TLSConsumer = Annotated[
 
 
 class TLSCertificateSpec(ProviderModel):
-    topology_ref: str = Field(pattern=r"^pki:[a-z0-9][a-z0-9-]*$")
-    renewal_window_days: int = Field(default=30, ge=1, le=60)
+    """One certificate HQ issues, deploys and keeps renewed.
+
+    Either it names a certificate the topology already describes, or it defines
+    one here. Both, because the first is how every certificate got here and the
+    second is the only way a new domain ever gets one: with only the reference,
+    "Add TLS certificate" offered a menu of certificates that already existed
+    and no way to want a different one.
+
+    Titles and descriptions live on the model because the form is generated from
+    it. Left off, every field was labelled by its own variable name, and an
+    operator was asked for a "Topology ref" -- which names the field correctly
+    and the question not at all.
+    """
+
+    topology_ref: str = Field(
+        default="",
+        pattern=r"^(pki:[a-z0-9][a-z0-9-]*)?$",
+        title="Existing certificate",
+        description=(
+            "One your topology already describes. Leave unset to define a new "
+            "one below."
+        ),
+    )
+    certificate_name: str = Field(
+        default="",
+        max_length=160,
+        pattern=r"^[a-z0-9][a-z0-9-]*$|^$",
+        title="New certificate name",
+        description="Lowercase, no spaces. Names the certificate's own lineage.",
+    )
+    domains: list[str] = Field(
+        default_factory=list,
+        title="Names it should cover",
+        description=(
+            "One per line. Wildcards are fine. Every zone must be one the "
+            "Cloudflare token can edit, or issuance fails before it starts."
+        ),
+    )
+    install_on: list[str] = Field(
+        default_factory=list,
+        title="Install it on",
+        description=(
+            "Where the issued certificate gets deployed. Settings for each are "
+            "taken from how that target already serves your other certificates."
+        ),
+    )
+
+    renewal_window_days: int = Field(
+        default=30,
+        ge=1,
+        le=60,
+        title="Renew when this many days remain",
+        description=(
+            "HQ renews automatically — this only decides how early. It also "
+            "renews immediately if a consumer is found serving the wrong "
+            "certificate."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def one_shape_or_the_other(self):
+        defining = bool(self.certificate_name or self.domains or self.install_on)
+        if self.topology_ref and defining:
+            raise ValueError(
+                "Name an existing certificate or define a new one, not both."
+            )
+        if not self.topology_ref and not defining:
+            raise ValueError(
+                "Choose an existing certificate, or give a name, its domains "
+                "and where to install it."
+            )
+        if defining:
+            missing = [
+                label
+                for label, value in (
+                    ("a name", self.certificate_name),
+                    ("its domains", self.domains),
+                    ("somewhere to install it", self.install_on),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError("A new certificate still needs " + ", ".join(missing) + ".")
+        return self
 
 
 class ResolvedTLSCertificateSpec(ProviderModel):
@@ -160,18 +242,56 @@ SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 
 
 class NPMProxyHostSpec(ProviderModel):
-    domain_names: list[str] = Field(min_length=1)
-    forward_scheme: Literal["http", "https"]
-    forward_host: str = Field(min_length=1, max_length=255)
-    forward_port: int = Field(ge=1, le=65535)
-    certificate_resource: str = ""
-    force_ssl: bool = True
-    http2: bool = True
-    websocket: bool = False
-    caching_enabled: bool = False
-    block_exploits: bool = True
-    access_list_id: int = Field(default=0, ge=0)
-    advanced_config: str = ""
+    domain_names: list[str] = Field(
+        min_length=1,
+        title="Hostnames",
+        description="One per line. Every name this proxy should answer for.",
+    )
+    forward_scheme: Literal["http", "https"] = Field(
+        title="Reach it over",
+        description="How the proxy talks to your service, not how visitors do.",
+    )
+    forward_host: str = Field(
+        min_length=1, max_length=255,
+        title="Send traffic to",
+        description="The address of the service itself, usually an internal IP.",
+    )
+    forward_port: int = Field(ge=1, le=65535, title="Port")
+    certificate_resource: str = Field(
+        default="",
+        title="Certificate",
+        description=(
+            "Which certificate secures these names. Required when forcing "
+            "HTTPS, which Nginx Proxy Manager cannot do without one."
+        ),
+    )
+    force_ssl: bool = Field(
+        default=True,
+        title="Force HTTPS",
+        description="Redirect anyone arriving over plain HTTP.",
+    )
+    http2: bool = Field(default=True, title="HTTP/2")
+    websocket: bool = Field(
+        default=False,
+        title="Allow websockets",
+        description="Needed for live updates, terminals and chat.",
+    )
+    caching_enabled: bool = Field(default=False, title="Cache assets")
+    block_exploits: bool = Field(
+        default=True,
+        title="Block common exploits",
+        description="Nginx Proxy Manager's built-in request filtering.",
+    )
+    access_list_id: int = Field(
+        default=0, ge=0,
+        title="Access list",
+        description="An Nginx Proxy Manager access list id. 0 means none.",
+    )
+    advanced_config: str = Field(
+        default="",
+        title="Extra nginx configuration",
+        description="Passed through as-is. Leave blank unless you need it.",
+    )
     # Settings the reconciler used to assert rather than read. It sends the
     # whole proxy-host object on every pass, so a field absent from this model
     # was not left alone -- it was overwritten with a constant. HSTS was pinned
@@ -192,17 +312,47 @@ class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
 
 
 class AdGuardRewriteSpec(ProviderModel):
-    domain: str = Field(min_length=1, max_length=253)
-    answer: str = Field(min_length=1, max_length=253)
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name that should resolve on your network.",
+    )
+    answer: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Points at",
+        description="The address this hostname resolves to, usually an IP.",
+    )
 
 
 class CloudflareDNSRecordSpec(ProviderModel):
-    zone: str = Field(min_length=1, max_length=253)
-    name: str = Field(min_length=1, max_length=253)
-    record_type: Literal["A", "AAAA", "CNAME", "TXT"]
-    content: str = Field(min_length=1)
-    proxied: bool = False
-    ttl: int = Field(default=1, ge=1, le=86400)
+    zone: str = Field(
+        min_length=1, max_length=253,
+        title="Zone",
+        description="The domain this record belongs to, e.g. example.com.",
+    )
+    name: str = Field(
+        min_length=1, max_length=253,
+        title="Hostname",
+        description="The full name being published, e.g. app.example.com.",
+    )
+    record_type: Literal["A", "AAAA", "CNAME", "TXT"] = Field(title="Record type")
+    content: str = Field(
+        min_length=1,
+        title="Points at",
+        description="An IP for A and AAAA, a hostname for CNAME, text for TXT.",
+    )
+    proxied: bool = Field(
+        default=False,
+        title="Proxy through Cloudflare",
+        description="Hides the origin address and puts Cloudflare in the path.",
+    )
+    ttl: int = Field(
+        default=1, ge=1, le=86400,
+        title="TTL",
+        description="Seconds resolvers may cache this. 1 means automatic.",
+    )
 
 
 @dataclass(frozen=True)
@@ -247,6 +397,27 @@ class ProviderSpec:
     # rather than once per resource -- and a provider added later joins that
     # flow by saying which of its fields the name fills in.
     seed: Callable[[str], dict[str, Any]] | None = None
+    # Fields that are routine tuning rather than part of the question being
+    # asked. Split on required-ness instead, a spec whose validity comes from a
+    # cross-field rule has no required fields at all, and its form rendered
+    # empty. Required-ness describes the model; this describes the conversation,
+    # and only the provider knows which of its own knobs are which.
+    advanced_fields: tuple[str, ...] = ()
+    # Fields that are optional to the model but unanswerable-by-default when
+    # the record does not exist yet. An NPM proxy keeps whatever certificate it
+    # already has when this is blank, which is a sensible default for an edit
+    # and a guaranteed failure on create: the reconciler refuses to create an
+    # HTTPS host with no certificate to bind, a minute later, in a job result.
+    required_on_create: tuple[str, ...] = ()
+    # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
+    # fields whose valid answers are a matter of live data rather than of type.
+    # A topology reference is the case that forced it: rendered from the
+    # annotation alone it is a blank text box that only works if you already
+    # know the exact slug to type into it, which is not a form, it is a quiz.
+    #
+    # Late-bound as a string, the same way domains reference their providers, so
+    # this module keeps declaring and stays free of database access.
+    choices: str = ""
     # Turns a record the provider already holds into the spec that would
     # reproduce it. This is what makes adoption safe: the declaration starts out
     # equal to the world, so the first reconciliation after adopting changes
@@ -288,6 +459,81 @@ class ProviderResolutionContext:
     resource_status: Callable[[str, str], dict[str, Any] | None] | None = None
 
 
+def _tls_consumer_profiles(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """How each target is configured to receive a certificate, learned from use.
+
+    A Caddy host wants its certificate in a particular directory; a cPanel
+    account is reached through a particular connection. Those are properties of
+    the target, not of any one certificate, and the topology already states them
+    on every ``consumes`` dependency. Reading them back means defining a new
+    certificate does not ask an operator to restate deployment mechanics they
+    have already described once and would only get wrong from memory.
+    """
+
+    profiles: dict[str, dict[str, Any]] = {}
+    for dependency in payload.get("dependencies", ()):
+        if dependency.get("relation") != "consumes":
+            continue
+        attributes = dict(dependency.get("attributes") or {})
+        connection_ref = attributes.get("connection_ref")
+        if not connection_ref or "kind" not in attributes:
+            continue
+        profiles.setdefault(
+            connection_ref, {**attributes, "from": dependency.get("from", "")}
+        )
+    return profiles
+
+
+def _resolve_inline_tls(
+    authored: dict[str, Any], payload: dict[str, Any]
+) -> dict[str, Any]:
+    profiles = _tls_consumer_profiles(payload)
+    consumers = []
+    for connection_ref in authored["install_on"]:
+        profile = profiles.get(connection_ref)
+        if profile is None:
+            raise ValueError(
+                f"Nothing in the topology describes how {connection_ref!r} "
+                "receives a certificate, so HQ cannot install one there."
+            )
+        consumer = {
+            "topology_ref": profile["from"],
+            "kind": profile["kind"],
+            "connection_ref": connection_ref,
+            # Named after this certificate rather than the one the profile was
+            # learned from, or two certificates would collide at the target.
+            "name": f"{authored['certificate_name']}-{profile['kind']}",
+            "verify_domains": [],
+        }
+        if profile["kind"] == "caddy":
+            consumer["certificate_directory"] = profile["certificate_directory"]
+        elif profile["kind"] == "npm":
+            consumer["discover_covered_hosts"] = profile.get(
+                "discover_covered_hosts", False
+            )
+        elif profile["kind"] == "cpanel":
+            # Only the names this certificate actually covers; the profile's own
+            # install domains belong to the certificate it was learned from.
+            covered = set(authored["domains"])
+            consumer["install_domains"] = [
+                domain
+                for domain in authored["domains"]
+                if certificate_covers(domain, covered) and "*" not in domain
+            ]
+            if not consumer["install_domains"]:
+                raise ValueError(
+                    "A cPanel target needs at least one non-wildcard name to "
+                    "install against."
+                )
+        consumers.append(consumer)
+    return {
+        "certificate_name": authored["certificate_name"],
+        "domains": authored["domains"],
+        "consumers": consumers,
+        "renewal_window_days": authored["renewal_window_days"],
+    }
+
+
 def _resolve_tls(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
@@ -295,6 +541,8 @@ def _resolve_tls(
     topology_ref = authored["topology_ref"]
     if payload is None:
         raise ValueError("TLS resolution requires the trusted topology snapshot.")
+    if not topology_ref:
+        return _resolve_inline_tls(authored, payload)
     certificate_id = topology_ref.removeprefix("pki:")
     certificate = next(
         (entry for entry in payload["pki"] if entry["id"] == certificate_id), None
@@ -468,12 +716,14 @@ def _dns_record_seed(hostname: str) -> dict[str, Any]:
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
-        "Keeps a certificate renewed and installed on everything that serves "
-        "these names.",
+        "Issues a certificate from Let's Encrypt and keeps it renewed and "
+        "installed on everything that serves these names. Nothing to upload.",
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
         label="TLS certificate",
+        choices="application.provider_choices:certificate_choices",
+        advanced_fields=("renewal_window_days",),
         facet="certificate",
         readout=_certificate_readout,
         hostnames=_certificate_hostnames,
@@ -487,6 +737,20 @@ _PROVIDERS = (
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
         label="Proxy host",
+        choices="application.provider_choices:proxy_choices",
+        required_on_create=("certificate_resource",),
+        advanced_fields=(
+            "http2",
+            "websocket",
+            "caching_enabled",
+            "block_exploits",
+            "access_list_id",
+            "advanced_config",
+            "hsts_enabled",
+            "hsts_subdomains",
+            "trust_forwarded_proto",
+            "serving",
+        ),
         facet="proxy",
         hostnames=_proxy_hostnames,
         origin=_proxy_origin,
@@ -511,6 +775,7 @@ _PROVIDERS = (
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         label="Public DNS record",
+        advanced_fields=("proxied", "ttl"),
         public_effect=True,
         facet="dns",
         hostnames=_dns_record_hostnames,

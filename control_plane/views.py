@@ -104,12 +104,15 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "resource": resource,
                 "label": PROVIDERS[kind].label or kind,
                 "summary": PROVIDERS[kind].summary,
-                "identity": ResourceIdentityForm(
-                    initial=(
-                        {"key": resource.key, "enabled": resource.enabled}
-                        if resource
-                        else {"key": _suggested_key(hostname, kind)}
+                # Only when editing. Creating something asks what HQ cannot
+                # know and nothing else: a name it can derive, and a pause
+                # switch for a thing that does not exist yet, are not questions.
+                "identity": (
+                    ResourceIdentityForm(
+                        initial={"key": resource.key, "enabled": resource.enabled}
                     )
+                    if resource
+                    else None
                 ),
                 "spec": spec_form_class(kind, lock_identity=bool(resource))(
                     initial=(
@@ -126,24 +129,29 @@ class ResourceFormView(LoginRequiredMixin, View):
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
-        identity = ResourceIdentityForm(request.POST)
+        identity = ResourceIdentityForm(request.POST) if resource else None
         spec = spec_form_class(kind, lock_identity=bool(resource))(
             request.POST, initial=resource.spec if resource else None
         )
-        if identity.is_valid() and spec.is_valid():
+        if (identity is None or identity.is_valid()) and spec.is_valid():
             try:
                 result = save_managed_resource(
                     ManagedResourceCommand(
-                        key=identity.cleaned_data["key"],
+                        key=(
+                            identity.cleaned_data["key"] or resource.key
+                            if identity
+                            else _derived_key(kind, spec.spec)
+                        ),
                         kind=kind,
                         spec=spec.spec,
-                        enabled=identity.cleaned_data["enabled"],
+                        # A thing being created is a thing you want applied.
+                        enabled=identity.cleaned_data["enabled"] if identity else True,
                     ),
                     principal=web_principal(request.user),
                     current_key=resource.key if resource else None,
                 )
             except (PolicyError, DjangoValidationError) as exc:
-                identity.add_error(None, _readable_error(exc))
+                spec.add_error(None, _readable_error(exc))
             else:
                 saved = result["resource"]["key"]
                 messages.success(
@@ -181,6 +189,27 @@ def _suggested_key(hostname: str, kind: str) -> str:
     # deletes them, and "app.example.com" suggests the key "appexamplecom" --
     # a permanent, unreadable name for the sake of one substitution.
     return slugify(f"{hostname}-{facet}".replace(".", "-"))[:180]
+
+
+def _derived_key(kind: str, spec: dict) -> str:
+    """A name for a declaration the operator did not want to name.
+
+    Asked for one, the form stopped to demand an identifier for a row in a table
+    nobody had mentioned yet. The hostname the spec already carries is a better
+    name than anything that would have been typed, and the provider says how to
+    read it out.
+    """
+
+    provider = PROVIDERS[kind]
+    hostnames = provider.hostnames(spec) if provider.hostnames else ()
+    base = _suggested_key(hostnames[0], kind) if hostnames else slugify(kind)
+    if not ManagedResource.objects.filter(key=base).exists():
+        return base
+    for suffix in range(2, 100):
+        candidate = f"{base[:176]}-{suffix}"
+        if not ManagedResource.objects.filter(key=candidate).exists():
+            return candidate
+    return base
 
 
 def _readable_error(exc) -> str:

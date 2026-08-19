@@ -34,6 +34,8 @@ from django.core.validators import RegexValidator
 
 from control_plane.providers import PROVIDERS, validate_spec
 
+from .plugins import _import
+
 # Constraint attributes carried by annotated-types objects in a pydantic field's
 # metadata. Read by name rather than by isinstance so a constraint class this
 # does not import still contributes what it has.
@@ -80,7 +82,12 @@ class ResourceIdentityForm(forms.Form):
 
     key = forms.SlugField(
         max_length=180,
-        help_text="HQ's name for this declaration. Stable — operations refer to it.",
+        required=False,
+        label="Name in HQ",
+        help_text=(
+            "Optional. Left blank, HQ names it after the hostname. Stable once "
+            "set — operations refer to it."
+        ),
     )
     enabled = forms.BooleanField(
         required=False,
@@ -97,6 +104,28 @@ class ProviderSpecForm(forms.Form):
     """Rendered from a provider model, and validated by that same model."""
 
     provider_kind = ""
+
+    advanced_names: tuple[str, ...] = ()
+
+    @property
+    def primary(self):
+        """The fields that make up the question being asked."""
+
+        return [field for field in self if field.name not in self.advanced_names]
+
+    @property
+    def advanced(self):
+        """Routine tuning, one disclosure away.
+
+        A certificate asks which certificate; how many days before expiry to
+        start renewing is not part of that question. A proxy host had eight such
+        knobs in front of the four that matter.
+
+        Shown rather than hidden, because a default is only a good answer until
+        the day it is not.
+        """
+
+        return [field for field in self if field.name in self.advanced_names]
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -159,6 +188,27 @@ def spec_form_class(
         name: _field_for(field)
         for name, field in provider.spec_type.model_fields.items()
     }
+    for name, options in _live_choices(provider).items():
+        if name not in fields:
+            continue
+        original = fields[name]
+        # Offered rather than typed. An empty list means the thing this field
+        # has to name does not exist yet, and the field says so instead of
+        # presenting an empty menu that cannot be satisfied.
+        many = isinstance(original, NameList)
+        field_class = forms.MultipleChoiceField if many else forms.ChoiceField
+        fields[name] = field_class(
+            choices=options,
+            required=original.required,
+            label=original.label,
+            widget=forms.CheckboxSelectMultiple if many else None,
+            help_text=original.help_text
+            or (
+                ""
+                if options
+                else "Nothing to choose yet — none have been described to HQ."
+            ),
+        )
     if lock_identity:
         for name in identity_fields(kind):
             if name not in fields:
@@ -175,7 +225,11 @@ def spec_form_class(
     return type(
         f"{provider.spec_type.__name__}Form",
         (ProviderSpecForm,),
-        {"provider_kind": kind, **fields},
+        {
+            "provider_kind": kind,
+            "advanced_names": provider.advanced_fields,
+            **fields,
+        },
     )
 
 
@@ -187,10 +241,20 @@ def _field_for(field: Any) -> forms.Field:
     limits = _limits(field.metadata)
     required = field.is_required()
     options: dict[str, Any] = {"required": required}
-    if not required and field.default is not None:
-        options["initial"] = field.default
+    # ``field.default`` is a sentinel for a field declared with default_factory,
+    # and rendering it put the literal string "PydanticUndefined" in the box.
+    # get_default runs the factory, which is the actual default.
+    default = field.get_default(call_default_factory=True) if not required else None
+    if default not in (None, ""):
+        options["initial"] = default
     if field.description:
         options["help_text"] = field.description
+    # The model's own title, so a field is labelled by the question it asks
+    # rather than by the variable that holds the answer. Django would otherwise
+    # prettify the attribute name, which turned `topology_ref` into
+    # "Topology ref" -- an accurate name for the field and no help at all.
+    if field.title:
+        options["label"] = field.title
 
     if origin is typing.Literal:
         return forms.ChoiceField(
@@ -215,6 +279,23 @@ def _field_for(field: Any) -> forms.Field:
         ),
         **options,
     )
+
+
+def _live_choices(provider: Any) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Options a provider says come from live data, resolved late.
+
+    A failure here must not take the form down: the page is how an operator
+    fixes things, and refusing to render it because a lookup failed is the
+    least useful moment to fail. An empty list renders as "nothing to choose
+    yet", which is both true and actionable.
+    """
+
+    if not provider.choices:
+        return {}
+    try:
+        return _import(provider.choices)() or {}
+    except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
+        return {}
 
 
 def _limits(metadata: Any) -> dict[str, Any]:

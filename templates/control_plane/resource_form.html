@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label|lower }}{% endif %}</h1>
+    <h1>{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %}</h1>
     <p class="page-lede">{{ summary }}</p>
   </div>
 </div>
@@ -18,9 +18,21 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% if identity.non_field_errors %}<div class="msg msg-error">{{ identity.non_field_errors }}</div>{% endif %}
   {% if spec.non_field_errors %}<div class="msg msg-error">{{ spec.non_field_errors }}</div>{% endif %}
 
-  {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% for field in spec.primary %}{% include "partials/_form_field.html" %}{% endfor %}
 
-  {% for field in spec %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% comment %}
+  Everything the model already has a good answer for sits one disclosure away,
+  and only when editing. Creating asks what HQ cannot work out for itself and
+  stops: a name it can derive from the hostname, and a switch to pause
+  something that does not exist yet, are not questions worth interrupting for.
+  {% endcomment %}
+  {% if resource %}
+    <details class="control-diagnostics"{% if spec.errors or identity.errors %} open{% endif %}>
+      <summary>Options</summary>
+      {% for field in spec.advanced %}{% include "partials/_form_field.html" %}{% endfor %}
+      {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+    </details>
+  {% endif %}
 
   <div class="form-actions">
     <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>

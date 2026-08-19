@@ -189,15 +189,22 @@ class ResourceFormViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_declaring_a_resource_writes_desired_state(self):
+        """Creating asks what HQ cannot know, and derives the rest.
+
+        No key, and no "should this be reconciled" -- a name can be worked out
+        from the hostname, and a thing being created is a thing you want applied.
+        """
         response = self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", "key": "app-dns", "enabled": "on", **REWRITE},
+            {"kind": "adguard.rewrite", **REWRITE},
         )
 
-        resource = ManagedResource.objects.get(key="app-dns")
+        resource = ManagedResource.objects.get()
         self.assertRedirects(
-            response, reverse("control_plane:detail", kwargs={"key": "app-dns"})
+            response,
+            reverse("control_plane:detail", kwargs={"key": resource.key}),
         )
+        self.assertEqual(resource.key, "app-example-com-dns")
         self.assertEqual(resource.spec, REWRITE)
         self.assertTrue(resource.enabled)
 
@@ -205,34 +212,32 @@ class ResourceFormViewTests(TestCase):
         """Otherwise the next topology import reads the blank as a change."""
         self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", "key": "app-dns", "enabled": "on", **REWRITE},
+            {"kind": "adguard.rewrite", **REWRITE},
         )
 
-        self.assertTrue(ManagedResource.objects.get(key="app-dns").desired_fingerprint)
+        self.assertTrue(ManagedResource.objects.get().desired_fingerprint)
 
     def test_editing_advances_the_generation_so_the_controller_reapplies(self):
         self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", "key": "app-dns", "enabled": "on", **REWRITE},
+            {"kind": "adguard.rewrite", **REWRITE},
         )
-        before = ManagedResource.objects.get(key="app-dns").generation
+        created = ManagedResource.objects.get()
 
         self.client.post(
-            reverse("control_plane:edit", kwargs={"key": "app-dns"}),
-            {"key": "app-dns", "enabled": "on", **REWRITE, "answer": "10.0.0.11"},
+            reverse("control_plane:edit", kwargs={"key": created.key}),
+            {"key": created.key, "enabled": "on", **REWRITE, "answer": "10.0.0.11"},
         )
 
-        resource = ManagedResource.objects.get(key="app-dns")
+        resource = ManagedResource.objects.get()
         self.assertEqual(resource.spec["answer"], "10.0.0.11")
-        self.assertEqual(resource.generation, before + 1)
+        self.assertEqual(resource.generation, created.generation + 1)
 
     def test_an_invalid_spec_writes_nothing_and_says_why(self):
         response = self.client.post(
             reverse("control_plane:create"),
             {
                 "kind": "adguard.rewrite",
-                "key": "app-dns",
-                "enabled": "on",
                 "domain": "app.example.com",
                 "answer": "",
             },
@@ -242,18 +247,24 @@ class ResourceFormViewTests(TestCase):
         self.assertContains(response, "This field is required")
         self.assertFalse(ManagedResource.objects.exists())
 
-    def test_a_duplicate_key_is_reported_rather_than_raised(self):
+    def test_a_taken_name_is_worked_around_rather_than_refused(self):
+        """The name is HQ's own bookkeeping, so a clash is not the operator's problem.
+
+        Refused, this stopped a create to demand a different value for a field
+        that had not been shown and does not matter.
+        """
         ManagedResource.objects.create(
-            key="app-dns", kind="adguard.rewrite", spec=REWRITE
+            key="app-example-com-dns", kind="adguard.rewrite", spec=REWRITE
         )
 
-        response = self.client.post(
+        self.client.post(
             reverse("control_plane:create"),
-            {"kind": "adguard.rewrite", "key": "app-dns", "enabled": "on", **REWRITE},
+            {"kind": "adguard.rewrite", **REWRITE, "answer": "10.0.0.99"},
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(ManagedResource.objects.filter(key="app-dns").count(), 1)
+        self.assertTrue(
+            ManagedResource.objects.filter(key="app-example-com-dns-2").exists()
+        )
 
     def test_choosing_a_kind_lists_every_provider_from_the_registry(self):
         response = self.client.get(reverse("control_plane:create"))
@@ -270,9 +281,9 @@ class ResourceFormViewTests(TestCase):
         )
 
         self.assertContains(response, "app.example.com")
-        # And suggests a key, so nothing stops to invent a name for a row the
-        # operator did not know existed.
-        self.assertContains(response, "app-example-com-dns")
+        # And no key field at all: HQ derives one, so creating never stops to
+        # invent a name for a row the operator did not know existed.
+        self.assertNotContains(response, "Name in HQ")
 
     def test_the_form_requires_a_signed_in_operator(self):
         self.client.logout()
