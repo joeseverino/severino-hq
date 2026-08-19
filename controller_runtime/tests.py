@@ -370,6 +370,108 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(sent["hsts_subdomains"])
         self.assertTrue(sent["trust_forwarded_proto"])
 
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_adguard_renames_the_record_it_was_last_seen_holding(self, request):
+        """A changed hostname moves the record rather than adding a second one.
+
+        Without the previously observed state the controller searches for the
+        new name, does not find it, and creates it -- leaving the old name
+        resolving forever with nothing in HQ pointing at it, and no delete path
+        that knows it exists.
+        """
+        request.side_effect = [
+            [{"domain": "old.example", "answer": "192.0.2.10", "enabled": True}],
+            None,
+        ]
+
+        result = providers.reconcile_adguard(
+            {"domain": "new.example", "answer": "192.0.2.10"},
+            observed={"domain": "old.example", "answer": "192.0.2.10"},
+        )
+
+        self.assertTrue(result.changed)
+        update = request.call_args_list[-1]
+        self.assertTrue(update.args[0].endswith("/control/rewrite/update"))
+        self.assertEqual(
+            update.kwargs["payload"],
+            {
+                "target": {"domain": "old.example", "answer": "192.0.2.10"},
+                "update": {"domain": "new.example", "answer": "192.0.2.10"},
+            },
+        )
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "ADGUARD_URL": "https://adguard.example",
+            "ADGUARD_USERNAME": "controller",
+            "ADGUARD_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_a_name_never_seen_before_is_created_not_renamed(self, request):
+        """Only a *changed* name is a rename. A new resource is still a create."""
+        request.side_effect = [[], None]
+
+        providers.reconcile_adguard(
+            {"domain": "new.example", "answer": "192.0.2.10"}, observed={}
+        )
+
+        self.assertTrue(request.call_args_list[-1].args[0].endswith("/rewrite/add"))
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm.example.test",
+            "NPM_USERNAME": "controller@example.com",
+            "NPM_PASSWORD": "secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._request")
+    def test_npm_renames_in_place_by_id(self, request):
+        request.side_effect = [
+            {"token": "short-lived"},
+            [{"id": 4, "domain_names": ["old.example"], "certificate_id": 2}],
+            None,
+        ]
+
+        providers.reconcile_npm(
+            {
+                "domain_names": ["new.example"],
+                "forward_scheme": "http",
+                "forward_host": "192.0.2.10",
+                "forward_port": 8000,
+                "force_ssl": True,
+                "http2": True,
+                "websocket": False,
+                "caching_enabled": False,
+                "block_exploits": True,
+                "access_list_id": 0,
+                "advanced_config": "",
+                "hsts_enabled": False,
+                "hsts_subdomains": False,
+                "trust_forwarded_proto": False,
+                "serving": True,
+            },
+            observed={"domain_names": ["old.example"]},
+        )
+
+        update = request.call_args_list[-1]
+        self.assertTrue(update.args[0].endswith("/nginx/proxy-hosts/4"))
+        self.assertEqual(update.kwargs["payload"]["domain_names"], ["new.example"])
+
     def test_public_dns_fails_closed(self):
         with self.assertRaisesRegex(providers.ProviderError, "not enabled"):
             providers.execute(

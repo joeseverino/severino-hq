@@ -157,12 +157,24 @@ def _adguard_headers() -> dict[str, str]:
     return {"Authorization": f"Basic {encoded}"}
 
 
-def reconcile_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def reconcile_adguard(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     base_url = _required("ADGUARD", "URL").rstrip("/")
     headers = _adguard_headers()
     rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
     desired = {"domain": spec["domain"], "answer": spec["answer"]}
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
+    if not matches:
+        # Nothing answers to the desired name. If HQ was last seen holding a
+        # different one, this is a rename rather than a new rewrite, and
+        # AdGuard's update takes exactly that shape: the record as it is, and
+        # the record as it should be. Creating instead would leave the old name
+        # resolving forever with nothing in HQ pointing at it.
+        previous = (observed or {}).get("domain")
+        if previous and previous != spec["domain"]:
+            matches = [item for item in rewrites if item.get("domain") == previous]
     if len(matches) > 1:
         raise ProviderError("AdGuard contains duplicate rewrites for the domain.")
     if len(matches) == 1 and all(
@@ -323,7 +335,10 @@ def preflight() -> list[dict[str, Any]]:
     ]
 
 
-def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def reconcile_npm(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     base_url = _npm_api_url(_required("NPM", "URL"))
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
@@ -331,6 +346,16 @@ def reconcile_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult
     matches = [
         host for host in hosts if sorted(host.get("domain_names", [])) == domains
     ]
+    if not matches:
+        # A renamed proxy host: the one that exists still answers to the names
+        # HQ last saw, and NPM updates it in place by id.
+        previous = sorted((observed or {}).get("domain_names") or ())
+        if previous and previous != domains:
+            matches = [
+                host
+                for host in hosts
+                if sorted(host.get("domain_names", [])) == previous
+            ]
     if len(matches) > 1:
         raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
 
@@ -1115,11 +1140,17 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
-def _tls_reconcile(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _tls_reconcile(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     return apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
 
 
-def _tls_renew(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _tls_renew(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     if apply:
         return renew_tls(spec)
     return ProviderResult(
@@ -1130,7 +1161,10 @@ def _tls_renew(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
     )
 
 
-def _public_dns_locked(spec: dict[str, Any], *, apply: bool) -> ProviderResult:
+def _public_dns_locked(
+    spec: dict[str, Any], *, apply: bool,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     del spec, apply
     raise ProviderError("Public DNS mutation is not enabled in this controller.")
 
@@ -1195,7 +1229,10 @@ def reconcile_uploaded_certificate(
     )
 
 
-def delete_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def delete_adguard(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     """Remove the rewrite, and treat an already-absent one as success.
 
     Deletion has to be idempotent because the operation queue is: a delete that
@@ -1236,7 +1273,10 @@ def delete_adguard(spec: dict[str, Any], *, apply: bool = True) -> ProviderResul
     )
 
 
-def delete_npm(spec: dict[str, Any], *, apply: bool = True) -> ProviderResult:
+def delete_npm(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
     """Remove the proxy host matching this exact domain set."""
 
     base_url = _npm_api_url(_required("NPM", "URL"))
@@ -1368,4 +1408,6 @@ def execute(
         raise ProviderError(
             f"Unsupported provider/action: {identity[0]}/{identity[1]}."
         ) from exc
-    return handler(resource["spec"], apply=apply)
+    return handler(
+        resource["spec"], apply=apply, observed=resource.get("observed") or {}
+    )

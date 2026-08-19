@@ -238,6 +238,12 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             "enabled": resource.enabled,
             "topology_ref": resource.spec.get("topology_ref"),
             "spec": spec,
+            # What the provider was last seen holding for this resource. A
+            # provider finds its own record by hostname, so renaming one is
+            # only possible for a controller that knows the previous name --
+            # without this it searches for the new name, does not find it, and
+            # creates a second record beside the one it meant to move.
+            "observed": serialize_public_status(resource.status),
         },
     }
 

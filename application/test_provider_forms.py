@@ -146,23 +146,21 @@ class IdentityFieldTests(TestCase):
     def test_creating_leaves_the_hostname_editable(self):
         self.assertFalse(spec_form_class("adguard.rewrite")().fields["domain"].disabled)
 
-    def test_editing_holds_the_hostname_against_a_crafted_post(self):
-        """Disabled fields ignore submitted data, which is the point.
+    def test_a_hostname_can_be_changed_now_that_renaming_works(self):
+        """It was held fixed while a change orphaned the old record.
 
-        A validation error would be enough for a stray click. This has to hold
-        against a hand-made request too, because the damage is silent, happens
-        at the provider, and cannot be undone from HQ.
+        The controller is handed the previously observed state, so it updates
+        the record that exists rather than creating one beside it.
         """
         form = spec_form_class("adguard.rewrite", lock_identity=True)(
-            {"domain": "attacker.example.com", "answer": "10.0.0.11"},
+            {"domain": "renamed.example.com", "answer": "10.0.0.11"},
             initial=REWRITE,
         )
 
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.spec["domain"], "app.example.com")
-        self.assertEqual(form.spec["answer"], "10.0.0.11")
+        self.assertEqual(form.spec["domain"], "renamed.example.com")
 
-    def test_the_edit_page_locks_it_and_says_why(self):
+    def test_the_edit_page_warns_that_the_old_name_stops_resolving(self):
         user = get_user_model().objects.create_user(
             username="operator", password="test-only-password"
         )
@@ -175,8 +173,7 @@ class IdentityFieldTests(TestCase):
             reverse("control_plane:edit", kwargs={"key": "app-dns"})
         )
 
-        self.assertContains(response, "disabled")
-        self.assertContains(response, "would create a second record")
+        self.assertContains(response, "old name stops resolving")
 
 
 class ResourceFormViewTests(TestCase):

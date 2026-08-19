@@ -213,14 +213,14 @@ def spec_form_class(
         for name in identity_fields(kind):
             if name not in fields:
                 continue
-            # Django's ``disabled`` ignores submitted data and keeps the initial
-            # value, so this holds against a crafted POST as well as a stray
-            # click -- which matters, because the damage is silent and permanent.
-            fields[name].disabled = True
+            # No longer disabled. The controller is handed what the provider was
+            # last seen holding, so it finds the existing record by its old name
+            # and updates that one in place -- a real rename rather than a
+            # second record beside the first. The warning stays because the
+            # change reaches a live name on the next pass.
             fields[name].help_text = (
-                "Fixed after creation. The provider identifies this record by "
-                "this value, so changing it would create a second record and "
-                "leave the current one in place."
+                "Changing this renames the record at the provider on the next "
+                "pass. The old name stops resolving."
             )
     return type(
         f"{provider.spec_type.__name__}Form",
