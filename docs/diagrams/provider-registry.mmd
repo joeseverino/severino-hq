@@ -1,0 +1,34 @@
+flowchart LR
+    model["Provider definition<br/>one pydantic model + one declaration"]
+
+    subgraph declared["What a provider says about itself"]
+        direction TB
+        shape["Field types · bounds · defaults<br/>titles · descriptions"]
+        facet["Which facet of a service it supplies"]
+        reads["How to read hostnames out of a spec"]
+        writes["How to seed one from a hostname"]
+        back["How to rebuild a spec from a live record"]
+        speaks["How to describe itself in one line"]
+    end
+
+    model --> declared
+
+    schema["JSON Schema<br/>published by the API"]
+    validate["Validation<br/>every write, every interface"]
+    contract["Controller contract<br/>resolved desired state"]
+    forms["Generated create + edit forms"]
+    service["Service view<br/>one hostname, every part of it"]
+    adopt["Adoption<br/>capture what already exists"]
+
+    declared --> schema
+    declared --> validate
+    declared --> contract
+    declared --> forms
+    declared --> service
+    declared --> adopt
+
+    note["A provider added to the registry reaches<br/>all six without another file being edited"]
+    adopt -.- note
+
+    classDef anchor stroke-width:2px;
+    class model,declared anchor;
