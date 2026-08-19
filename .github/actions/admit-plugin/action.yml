@@ -32,10 +32,12 @@ inputs:
     required: true
   hq-commit:
     description: >-
-      Immutable 40-character host commit this admission is built against.
-      Normally the caller's HQ_COMMIT repository variable. A tag or branch is
-      rejected.
-    required: true
+      Immutable 40-character host commit this admission is built against. A tag
+      or branch is rejected. Leave empty -- which is what an extension with no
+      HQ_COMMIT variable passes -- and the host's current main is resolved to
+      its own commit and used, so the admission still records an exact one.
+    required: false
+    default: ""
   workflow-path:
     description: >-
       Path of the CALLING workflow file inside the calling repository. This is
@@ -49,12 +51,42 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Require immutable deployment inputs
+    - name: Resolve the host commit this admission is built against
+      id: host
       shell: bash
       env:
         HQ_COMMIT: ${{ inputs.hq-commit }}
+        HOST_REPOSITORY: ${{ github.action_repository }}
+        GH_TOKEN: ${{ github.token }}
       run: |
-        [[ "$HQ_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+        # Pinning to an exact host commit is the point: the wheel is built
+        # against that source and the admission records which. What was not
+        # the point was requiring the *caller* to supply it, because the
+        # supported configuration is to have no HQ_COMMIT variable at all --
+        # deleting it is the documented fix when an extension goes stale. The
+        # checks job already handled that with `vars.HQ_COMMIT || 'main'`; this
+        # one did not, so every extension with the correct configuration failed
+        # its first step with an empty string and no message.
+        #
+        # Resolved here rather than in each caller, so the three extensions do
+        # not each carry a copy of it, and so an empty value still produces an
+        # immutable admission rather than a branch name.
+        set -euo pipefail
+        if [[ -n "$HQ_COMMIT" ]]; then
+          if [[ ! "$HQ_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::hq-commit must be a 40-character commit sha, not a tag or branch."
+            exit 1
+          fi
+          resolved="$HQ_COMMIT"
+        else
+          resolved="$(gh api "repos/${HOST_REPOSITORY}/commits/main" --jq .sha)"
+          if [[ ! "$resolved" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not resolve ${HOST_REPOSITORY} main to a commit."
+            exit 1
+          fi
+          echo "Building against ${HOST_REPOSITORY} main at ${resolved}."
+        fi
+        echo "sha=${resolved}" >> "$GITHUB_OUTPUT"
 
     - name: Check out the plugin
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -63,7 +95,7 @@ runs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         repository: joeseverino/severino-hq
-        ref: ${{ inputs.hq-commit }}
+        ref: ${{ steps.host.outputs.sha }}
         path: host
 
     - name: Check out exact Cordon verifier
