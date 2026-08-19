@@ -167,9 +167,9 @@ def _endpoint(methods: tuple[str, ...]):
             try:
                 principal, claims = _principal(request)
             except TokenError as exc:
-                return _fail(str(exc), code=exc.code, status=401)
+                return _fail(exc.reason, code=exc.code, status=401)
             except AuthorizationError as exc:
-                return _fail(str(exc), code=exc.code, status=403)
+                return _fail(exc.reason, code=exc.code, status=403)
             request.principal = principal
             request.token_claims = claims
             response = view(request, *args, **kwargs)
@@ -342,7 +342,7 @@ def execute(request, name: str, version: int):
     try:
         authorize_capability(spec, request.principal)
     except AuthorizationError as exc:
-        return _fail(str(exc), code=exc.code, status=403)
+        return _fail(exc.reason, code=exc.code, status=403)
 
     key = request.headers.get("Idempotency-Key", "")
     if version >= 2 and not key:
@@ -364,9 +364,9 @@ def execute(request, name: str, version: int):
             operation=run,
         )
     except InvalidIdempotencyKey as exc:
-        return _fail(str(exc), code="invalid_idempotency_key", status=400)
+        return _fail(exc.reason, code="invalid_idempotency_key", status=400)
     except IdempotencyConflict as exc:
-        return _fail(str(exc), code="idempotency_conflict", status=409)
+        return _fail(exc.reason, code="idempotency_conflict", status=409)
 
     response = _json(response_payload, status=status)
     if replayed:

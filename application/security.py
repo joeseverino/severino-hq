@@ -33,7 +33,13 @@ class Capability(StrEnum):
 
 
 class AuthorizationError(PermissionError):
+    """Refused for want of a capability. Its message is written for the caller."""
+
     code = "forbidden"
+
+    def __init__(self, reason: str = "", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
 
 
 # Stable core contract retained for callers constructing explicit principals.
