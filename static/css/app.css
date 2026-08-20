@@ -2438,3 +2438,8 @@ a.kpi:hover { background: var(--surface-2); }
 .mail-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm); margin: 0 0 var(--stack-gap); }
 .mail-editor h3 { margin: 0 0 12px; font-size: 15px; }
 .mail-editor .form { max-width: 620px; }
+
+/* A record shown inside help text is one long unbreakable token; on a phone it
+   ran past the content column, which clips rather than scrolls, so the end of
+   the policy was simply not there. */
+.help code, .mail-record-value { overflow-wrap: anywhere; }
