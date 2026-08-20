@@ -28,7 +28,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import PROVIDERS, SERVICE_FACETS
+from control_plane.providers import PROVIDERS, service_facets
 
 from .security import Capability, Principal
 
@@ -256,7 +256,7 @@ class UnmanagedService:
                 label,
                 by_facet.get(facet_id, (("", ""),))[0][1],
             )
-            for facet_id, label in SERVICE_FACETS
+            for facet_id, label in service_facets()
         )
 
 

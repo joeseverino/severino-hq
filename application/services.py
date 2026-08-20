@@ -42,8 +42,8 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, TopologySnapshot
 from control_plane.providers import (
     PROVIDERS,
-    SERVICE_FACETS,
     certificate_covers,
+    service_facets,
     names_a_host,
     normalized_hostname,
 )
@@ -568,7 +568,7 @@ def _assemble(
                 and certificate_covers(hostname, names)
             ),
         )
-        for facet_id, label in SERVICE_FACETS
+        for facet_id, label in service_facets()
     )
     origin = _locate(origin_address, topology) if origin_address else None
     return Service(
@@ -608,12 +608,16 @@ def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]
             )
 
     # These two rules are statements about particular facets, so they name them.
-    # Indexing rather than getting is safe because ``_assemble`` builds a Facet
-    # for every entry in SERVICE_FACETS whether or not anything supplies it -- a
-    # missing key here would mean the facet had been removed from the vocabulary
-    # entirely, at which point failing loudly is the correct outcome.
-    serves = by_id["proxy"].present
-    if serves and not by_id["certificate"].present:
+    # A facet no provider supplies is not assembled, so a rule about it simply
+    # does not apply -- which is the right answer for a question HQ cannot ask
+    # rather than a fault to report.
+    proxy = by_id.get("proxy")
+    certificate = by_id.get("certificate")
+    if proxy is None or certificate is None:
+        return tuple(faults)
+
+    serves = proxy.present
+    if serves and not certificate.present:
         faults.append(
             "Something answers for this name but no declared certificate covers "
             "it, so HQ cannot show it is served over TLS."

@@ -512,8 +512,14 @@ class ProviderFacetContractTests(TestCase):
         self.assertIn("new.example.com", hostnames)
 
     def test_the_facet_order_is_declared_once(self):
-        """Templates render columns from SERVICE_FACETS, so nothing restates it."""
-        catalog_order = [facet for facet, _ in SERVICE_FACETS]
+        """Templates render columns from SERVICE_FACETS, so nothing restates it.
+
+        Filtered to the facets some provider supplies, in the catalogue's order:
+        a facet can be declared before the provider that fills it exists, and
+        until then it is not a column with nothing in it.
+        """
+        supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+        catalog_order = [facet for facet, _ in SERVICE_FACETS if facet in supplyable]
 
         healthy(
             ManagedResource.objects.create(
