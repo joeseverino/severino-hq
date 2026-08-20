@@ -39,7 +39,11 @@ from urllib.parse import urlparse
 
 from django.urls import reverse
 
-from control_plane.models import ManagedResource, TopologySnapshot
+from control_plane.models import (
+    ManagedResource,
+    ProviderInventory,
+    TopologySnapshot,
+)
 from control_plane.providers import (
     PROVIDERS,
     certificate_covers,
@@ -132,6 +136,12 @@ class Facet:
     id: str
     label: str
     claims: tuple[Claim, ...] = ()
+    # What HQ can see supplying this that no declaration accounts for. A facet
+    # has three states, not two, and collapsing the middle one is what made a
+    # fully working service read "Not declared -- add a container stack" beside
+    # a card naming the container it was already running in. "Nothing supplies
+    # this" was false, and the offer it led with was to build a second one.
+    observed: "Running | None" = None
 
     @property
     def present(self) -> bool:
@@ -202,6 +212,66 @@ class Facet:
         if "degraded" in states:
             return "serious"
         return "attention" if states - {"healthy"} else "good"
+
+
+@dataclass(frozen=True)
+class Running:
+    """A container a controller last saw, described as a person would read it.
+
+    Built from the sweep rather than from a declaration, so every field here is
+    something that was true at ``observed_at`` and may not be now. The page says
+    when, because a container list with no timestamp invites being read as live.
+    """
+
+    name: str
+    host: str
+    stack: str
+    image: str
+    state: str
+    status: str
+    ports: tuple[int, ...]
+    connection_ref: str
+    observed_at: Any
+
+    @classmethod
+    def of(cls, record: dict[str, Any], observed_at: Any) -> "Running":
+        return cls(
+            name=str(record.get("name", "")),
+            host=str(record.get("host", "")),
+            stack=str(record.get("stack", "")),
+            image=str(record.get("image", "")),
+            state=str(record.get("state", "")),
+            status=str(record.get("status", "")),
+            ports=tuple(
+                int(port) for port in record.get("ports") or () if str(port).isdigit()
+            ),
+            connection_ref=str(record.get("connection_ref", "")),
+            observed_at=observed_at,
+        )
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "running"
+
+    @property
+    def published(self) -> str:
+        return ", ".join(str(port) for port in self.ports)
+
+    @property
+    def image_label(self) -> str:
+        """The image, short enough to read in a card.
+
+        A digest-pinned image is a seventy-character line whose last twelve
+        characters are the only part that distinguishes two of them, and printed
+        whole it pushed every other fact on the card out of view. The repository
+        and the head of the digest is what an operator compares.
+        """
+
+        repository, marker, digest = self.image.partition("@")
+        if not marker:
+            return self.image
+        _, _, hexadecimal = digest.partition(":")
+        return f"{repository}@{hexadecimal[:12]}"
 
 
 @dataclass(frozen=True)
@@ -556,6 +626,7 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
 ) -> Service:
+    origin = _locate(origin_address, topology) if origin_address else None
     facets = tuple(
         Facet(
             id=facet_id,
@@ -567,10 +638,10 @@ def _assemble(
                 if covered_facet == facet_id
                 and certificate_covers(hostname, names)
             ),
+            observed=_observed(facet_id, origin),
         )
         for facet_id, label in service_facets()
     )
-    origin = _locate(origin_address, topology) if origin_address else None
     return Service(
         hostname=hostname,
         facets=facets,
@@ -580,6 +651,31 @@ def _assemble(
         project=projects.get(hostname),
         faults=_faults(facets, origin),
     )
+
+
+def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
+    """What HQ found supplying this facet without having been told.
+
+    Only the runtime facet can answer today, and only because the origin has
+    already done the work: a proxy forwards to an address and a port, and the
+    container inventory says which container on that machine is listening. Both
+    facts existed and nothing joined them, so the page asked to declare
+    something it could already name.
+
+    Never a Claim. HQ does not manage this, cannot reconcile it, and a card that
+    blurred the two would offer an Edit link that edits nothing.
+    """
+
+    if facet_id != "runtime" or origin is None or not origin.container:
+        return None
+    for snapshot in ProviderInventory.objects.filter(kind="portainer.stack"):
+        for record in snapshot.records:
+            if (
+                record.get("host") == origin.host
+                and record.get("name") == origin.container
+            ):
+                return Running.of(record, snapshot.observed_at)
+    return None
 
 
 def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]:
@@ -653,12 +749,15 @@ def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
 
 
 def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
-    """Match a forwarding address to a topology host, and if certain, a container.
+    """Match a forwarding address to a machine, and if certain, a container.
 
-    The container is named only when exactly one on that host claims the port. A
-    topology records ports as prose -- "80, 443, 81" -- so taking the first match
-    is a guess, and a guess printed beside four facts reads as a fifth fact.
-    Silence is the honest answer when two containers could both be it.
+    The topology maps an address to a machine; the container inventory says what
+    is listening on it. Two sources because they answer different questions, and
+    only one of them is observed: which machine an IP is has to be authored,
+    while what is running on it is a fact a sweep can go and get.
+
+    The container is named only when exactly one claims the port. Ambiguity is
+    reported as silence -- a guess printed beside four facts reads as a fifth.
     """
 
     host_address, _, port = address.rpartition(":")
@@ -671,20 +770,48 @@ def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
         }
         if host_address not in known:
             continue
-        claimed = [
-            container.get("id", "")
-            for container in host.get("containers", ())
-            if port
-            and re.search(
-                rf"(?<!\d){re.escape(port)}(?!\d)", str(container.get("ports", ""))
-            )
-        ]
+        host_id = host.get("id", "")
+        claimed = _listening(host_id, port)
+        if not claimed:
+            # Nothing has swept this machine, so fall back to what the topology
+            # says is on it. Ports there are prose -- "80, 443, 81" -- which is
+            # why this is the fallback and not the answer.
+            claimed = [
+                container.get("id", "")
+                for container in host.get("containers", ())
+                if port
+                and re.search(
+                    rf"(?<!\d){re.escape(port)}(?!\d)",
+                    str(container.get("ports", "")),
+                )
+            ]
         return Origin(
             address=address,
-            host=host.get("id", ""),
+            host=host_id,
             container=claimed[0] if len(claimed) == 1 else "",
         )
     return Origin(address=address)
+
+
+def _listening(host: str, port: str) -> list[str]:
+    """Containers a controller last saw publishing one port on one machine.
+
+    Structured ports, so "8081" cannot match "18081" and a container publishing
+    three ports is found by any of them -- neither of which a regular expression
+    over prose can promise.
+    """
+
+    if not host or not port.isdigit():
+        return []
+    wanted = int(port)
+    return sorted(
+        str(record.get("name", ""))
+        for snapshot in ProviderInventory.objects.filter(kind="portainer.stack")
+        for record in snapshot.records
+        if record.get("host") == host
+        and wanted in (record.get("ports") or [])
+        and record.get("name")
+    )
 
 
 def _published_projects() -> dict[str, dict[str, str]]:

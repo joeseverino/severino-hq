@@ -74,6 +74,25 @@ not restated here.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
         <span>{{ service.origin.operator }} answers this name directly, so there is nothing to proxy.</span>
+      {% elif facet.observed %}
+        {% comment %}
+        Found, not declared. This card used to read "Not declared — nothing
+        supplies this" directly above one naming the container the service was
+        running in, and offered to add a second. Everything below is a fact from
+        the last sweep, so it carries its age and never an Edit link: HQ does not
+        manage this and must not imply it could.
+        {% endcomment %}
+        <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
+        <span class="readout">
+          <span class="readout-label">Container</span> <code>{{ facet.observed.name }}</code> on {{ facet.observed.host }}
+        </span>
+        {% if facet.observed.image %}<span class="readout"><span class="readout-label">Image</span> <code>{{ facet.observed.image_label }}</code></span>{% endif %}
+        {% if facet.observed.published %}<span class="readout"><span class="readout-label">Publishes</span> {{ facet.observed.published }}</span>{% endif %}
+        {% if facet.observed.status %}<span class="readout"><span class="readout-label">Status</span> {{ facet.observed.status }}</span>{% endif %}
+        <span class="readout muted">Not managed by HQ · seen {{ facet.observed.observed_at|timesince }} ago</span>
+        {% for kind, label in facet.declarable %}
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a></span>
+        {% endfor %}
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>
