@@ -243,6 +243,7 @@ class Zone:
     reachable: bool = True
     # Set only while the domain is undeclared, and the handle adoption uses.
     adopt_token: str = ""
+    pinned: bool = False
 
     @property
     def managed(self) -> bool:
@@ -349,7 +350,7 @@ def _sort_key(record: ZoneRecord) -> tuple:
     return (len(labels), record.name, record.record_type, record.content)
 
 
-def zone_catalog() -> tuple[Zone, ...]:
+def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     """Every domain HQ has been told about, declared or merely seen.
 
     Undeclared zones are included so that adopting one is possible from the same
@@ -422,9 +423,13 @@ def zone_catalog() -> tuple[Zone, ...]:
                 observed_at=record_snapshot.observed_at if record_snapshot else None,
                 reachable=record_snapshot.reachable if record_snapshot else True,
                 adopt_token="" if resource else zone_tokens.get(name, ""),
+                pinned=name in pinned,
             )
         )
-    return tuple(zones)
+    # Pinned first, then alphabetical within each half. Sorted here rather than
+    # in the view so every surface that lists domains agrees on the order
+    # without restating the rule.
+    return tuple(sorted(zones, key=lambda zone: (not zone.pinned, zone.zone)))
 
 
 def find_zone(zone: str) -> Zone | None:

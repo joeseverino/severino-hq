@@ -3,7 +3,29 @@
 {% block content %}
 
 {% url 'control_plane:create' as create_url %}
-{% include "partials/_page_head.html" with title=zone.zone lede="Every record published in this domain, and what the domain currently says about itself." %}
+{% comment %}
+Written out rather than included so the star sits on the title's row. Starring
+a domain decides which one `/domains/` opens: the catalog sorts pinned first,
+and that page goes to the first managed domain.
+{% endcomment %}
+<div class="page-head">
+  <div>
+    <h1>{{ zone.zone }}</h1>
+    <p class="page-lede">Every record published in this domain, and what the domain currently says about itself.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{% url 'zones:pin' zone.zone %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button type="submit" class="btn{% if zone.pinned %} pinned{% endif %}"
+              title="{% if zone.pinned %}Opens by default. Click to unstar.{% else %}Star this domain so Domains opens here.{% endif %}"
+              aria-pressed="{% if zone.pinned %}true{% else %}false{% endif %}">
+        <span aria-hidden="true">{% if zone.pinned %}★{% else %}☆{% endif %}</span>
+        {% if zone.pinned %}Opens by default{% else %}Open this by default{% endif %}
+      </button>
+    </form>
+  </div>
+</div>
 
 {% comment %}
 Rendered as links rather than a select, because there is no submit step to
@@ -14,7 +36,7 @@ four domains behind a click and then need a second one to go anywhere.
   <nav class="zone-switch" aria-label="Domains">
     {% for other in zones %}
       <a href="{{ other.url }}"{% if other.zone == zone.zone %} class="active" aria-current="page"{% endif %}>
-        {{ other.zone }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
+        {% if other.pinned %}<span aria-hidden="true">★</span> {% endif %}{{ other.zone }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
       </a>
     {% endfor %}
   </nav>

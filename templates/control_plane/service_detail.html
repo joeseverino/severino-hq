@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load nav_tags %}
 {% block title %}{{ service.hostname }} · Services{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -56,7 +57,7 @@ not restated here.
           <span class="readout">
             <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>
             <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>
-            <a class="subtle-link" href="{{ claim.edit_url }}">Edit</a>
+            <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
           </span>
         {% endfor %}
       {% elif service.origin.external and facet.routes %}
@@ -72,7 +73,7 @@ not restated here.
         twice — this card's job is to say the facet is not missing.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
-        <span>Answered outside your network, so nothing here has to.</span>
+        <span>{{ service.origin.operator }} answers this name directly, so there is nothing to proxy.</span>
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>
@@ -99,11 +100,17 @@ not restated here.
       "Not routed", the page said nothing declared where a name was served about
       a name whose entire configuration was a statement of exactly that.
       {% endcomment %}
+      {% comment %}
+      A statement, not a disclaimer. This is a working arrangement: something
+      else serves the content and HQ publishes the record that sends people
+      there. Written as "outside your network … managed at the provider" it
+      read as a limitation being apologised for, about the half of it HQ
+      actually runs.
+      {% endcomment %}
       <strong>{{ service.origin.operator }}</strong>
       <span>
-        <code>{{ service.origin.address }}</code> — outside your network. HQ
-        publishes the name that points here; what answers is managed at the
-        provider.
+        Serves this name from <code>{{ service.origin.address }}</code>.
+        HQ publishes the DNS record that points here.
       </span>
     {% elif service.origin.known %}
       <strong>{{ service.origin.label }}</strong>

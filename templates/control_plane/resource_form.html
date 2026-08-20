@@ -18,6 +18,20 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% if identity.non_field_errors %}<div class="msg msg-error">{{ identity.non_field_errors }}</div>{% endif %}
   {% if spec.non_field_errors %}<div class="msg msg-error">{{ spec.non_field_errors }}</div>{% endif %}
 
+  {% comment %}
+  What the thing already is, before what can be changed about it. Read from the
+  provider's own readout, so this is the same description the resource page and
+  the service page give -- not a second one written here.
+  {% endcomment %}
+  {% if facts %}
+    <dl class="kv compact form-facts">
+      {% for label, desired, observed in facts %}
+        <dt>{{ label }}</dt>
+        <dd><code>{{ observed|default:desired|default:"—" }}</code></dd>
+      {% endfor %}
+    </dl>
+  {% endif %}
+
   {% for field in spec.primary %}{% include "partials/_form_field.html" %}{% endfor %}
 
   {% comment %}

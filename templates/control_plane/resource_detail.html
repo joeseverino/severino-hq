@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load nav_tags %}
 {% block title %}{{ resource.key }} · Infrastructure{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,29 +17,52 @@
       <span class="pill pill-attention">Removal in progress</span>
       <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
     {% else %}
-    <a class="btn" href="{% url 'control_plane:edit' resource.key %}">Edit</a>
-    <a class="btn" href="{% url 'control_plane:remove' resource.key %}">Remove</a>
-    {% if resource.kind == "tls.uploaded_certificate" %}
-      <a class="btn primary" href="{% url 'control_plane:upload_certificate' resource.key %}">{% if resource.material %}Replace certificate{% else %}Upload certificate{% endif %}</a>
-    {% endif %}
-    <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
-    {% if resource.kind == "tls.certificate" %}
-      {% if resource.status.certificate_pem %}
-        <a class="btn" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
-      {% else %}
-        <button type="button" disabled title="Available after the controller verifies a deployed certificate.">Public certificate pending verification</button>
-      {% endif %}
-    {% endif %}
+    {% comment %}
+    Reconcile leads: it is the thing an operator comes here to do, and the one
+    that acts on the world rather than on the declaration.
+    {% endcomment %}
     <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
       {% csrf_token %}
       <button type="submit" {% if not reconcile_allowed %}disabled title="{{ reconcile_explanation }}"{% endif %}>Reconcile</button>
     </form>
+    {% url 'control_plane:edit' resource.key as edit_url %}
+    <a class="btn" href="{{ edit_url|returning_to:request.get_full_path }}">Edit</a>
+    {% if resource.kind == "tls.uploaded_certificate" %}
+      <a class="btn primary" href="{% url 'control_plane:upload_certificate' resource.key %}">{% if resource.material %}Replace certificate{% else %}Upload certificate{% endif %}</a>
+    {% endif %}
     {% if resource.kind == "tls.certificate" %}
       <form action="{% url 'control_plane:renew' resource.key %}" method="post">
         {% csrf_token %}
         <button type="submit" class="primary" {% if not renewal_allowed %}disabled title="{{ renewal_explanation }}"{% endif %}>Request renewal</button>
       </form>
     {% endif %}
+
+    {% comment %}
+    Everything you might want, behind one control, so the things you came to do
+    stay on one line. Wrapping these onto a second row gave a download the same
+    weight as Remove; hiding them entirely would lose them. A `details` needs no
+    script, so the menu opens whether or not anything else on the page works.
+    {% endcomment %}
+    <details class="overflow-menu" data-menu>
+      <summary title="More actions" aria-label="More actions"><span aria-hidden="true">···</span></summary>
+      <div class="overflow-menu-panel">
+        {% comment %}
+        Removal lives here rather than in the row: it is the rarest thing anyone
+        does to a resource and the only one that cannot be undone, so it does
+        not need to sit a stray tap away from Reconcile.
+        {% endcomment %}
+        <a href="{% url 'control_plane:remove' resource.key %}">Remove</a>
+        <a href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
+        {% comment %}
+        Only when there is something to download. A menu lists what can be done;
+        an entry saying a thing cannot be done yet is a status report filed in
+        the wrong place, and it sat between two working links looking like one.
+        {% endcomment %}
+        {% if resource.kind == "tls.certificate" and resource.status.certificate_pem %}
+          <a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+        {% endif %}
+      </div>
+    </details>
     {% endif %}
   </div>
 </div>

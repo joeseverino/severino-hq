@@ -65,3 +65,37 @@ class AuditLog(models.Model):
         who = self.user.username if self.user_id else "system"
         target = f" {self.object_type}#{self.object_id}" if self.object_type else ""
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
+
+
+class Pin(models.Model):
+    """Something an operator wants to see first.
+
+    Deliberately not a field on the thing pinned. A domain's declaration is
+    what HQ asks the controller to make true, and an operator's preference
+    about ordering is not part of that -- stored there it would bump the
+    generation, queue a reconcile, and make "I look at this one most" into a
+    change to the world.
+
+    Generic on purpose: a pin is a (kind, key) pair, so services, records and
+    anything else that later wants the same affordance uses this table rather
+    than growing a second one shaped identically.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins"
+    )
+    target_kind = models.CharField(max_length=64)
+    target_key = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "target_kind", "target_key"), name="unique_pin"
+            )
+        ]
+        indexes = [models.Index(fields=("user", "target_kind"))]
+        ordering = ("target_key",)
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.target_kind}:{self.target_key}"

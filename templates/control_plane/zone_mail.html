@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load nav_tags %}
+{% block title %}Email · {{ zone.zone }}{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Email for {{ zone.zone }}</h1>
+    <p class="page-lede">Who receives it, who may send it, what signs it, and what happens to anything that proves none of that.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ zone.url }}">Back to the domain</a>
+  </div>
+</div>
+
+{% comment %}
+Ordered the way mail flows rather than the way the records are stored. These
+say where the domain stands and nothing else: the records themselves live in
+the editor below, because a card that names its answer and then lists the same
+hostnames underneath says everything twice and is twice as tall for it.
+{% endcomment %}
+<div class="mail-stages">
+  {% for section in mail.sections %}
+    <section class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
+      <div class="mail-stage-head">
+        <span class="control-label">{{ section.label }}</span>
+        <strong>{{ section.answer }}</strong>
+      </div>
+      <p class="mail-stage-question">{{ section.question }}</p>
+      <p class="muted">{{ section.detail }}</p>
+      {% if section.concern %}
+        <p class="mail-stage-warning"><span class="pill pill-attention">Needs attention</span> {{ section.concern }}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>
+
+<h2>Change it</h2>
+
+{% comment %}
+One block per stage, each posting only its own records. Separate forms rather
+than one: they publish to different records, and a single Save rewriting all
+four would turn a typo in a DKIM selector into a mail outage.
+{% endcomment %}
+
+<section class="mail-editor">
+  <h3>Who may send as this domain</h3>
+  <form method="post" class="form">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="spf">
+    <div class="field">
+      <label>Allowed senders</label>
+      <div class="name-list" data-name-list>
+        {% for term in spf.terms %}
+          {% if term.mechanism != "all" %}
+            <div class="name-list-row">
+              <input type="text" name="rule" value="{{ term }}" spellcheck="false" autocapitalize="off">
+              <button type="button" class="btn ghost" data-name-list-remove>Remove</button>
+            </div>
+          {% endif %}
+        {% endfor %}
+        <div class="name-list-row">
+          <input type="text" name="rule" value="" spellcheck="false" autocapitalize="off" placeholder="include:example.com">
+          <button type="button" class="btn ghost" data-name-list-remove>Remove</button>
+        </div>
+        <button type="button" class="btn name-list-add" data-name-list-add>Add another</button>
+      </div>
+      <p class="help">
+        Usually <code>include:</code> and a provider that sends on your behalf.
+        Each of those costs a DNS lookup, and past {{ spf_limit }} receivers stop
+        evaluating and the policy quietly stops applying — this one uses {{ spf.lookups }}.
+      </p>
+    </div>
+
+    <div class="field">
+      <label>Anything else</label>
+      <div class="policy-choices">
+        {% for choice in spf_defaults %}
+          <label class="policy-choice">
+            <input type="radio" name="default" value="{{ choice.value }}"{% if choice.value == spf_default %} checked{% endif %}>
+            <span class="policy-choice-body">
+              <span class="policy-choice-label">{{ choice.label }}</span>
+              <span class="policy-choice-consequence">{{ choice.consequence }}</span>
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <p class="help field-effect">Saving rewrites the SPF record. HQ applies it within about a minute.</p>
+    <div class="form-actions"><button type="submit" class="primary">Save senders</button></div>
+  </form>
+</section>
+
+{% if mail.dmarc_record %}
+  <section class="mail-editor">
+    <h3>What happens to mail that fails</h3>
+    <form method="post" class="form mail-policy-form">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="dmarc">
+      {% for tag in policy_tags %}
+        <div class="field">
+          <label>{{ tag.label }}</label>
+          {% if tag.kind == "choice" %}
+            <div class="policy-choices">
+              {% for choice in tag.choices %}
+                <label class="policy-choice">
+                  <input type="radio" name="{{ tag.id }}" value="{{ choice.value }}"
+                         {% if choice.value == mail.dmarc_tags|dictkey:tag.id %}checked{% endif %}>
+                  <span class="policy-choice-body">
+                    <span class="policy-choice-label">{{ choice.label }}</span>
+                    <span class="policy-choice-consequence">{{ choice.consequence }}</span>
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+          {% else %}
+            {% comment %}
+            A tag the record leaves out is still in force at its default, so the
+            box shows that rather than empty.
+            {% endcomment %}
+            <input type="text" name="{{ tag.id }}"
+                   value="{{ mail.dmarc_tags|dictkey:tag.id|default:tag.default }}"
+                   spellcheck="false" autocapitalize="off">
+          {% endif %}
+          {% if tag.help %}<p class="help">{{ tag.help }}</p>{% endif %}
+        </div>
+      {% endfor %}
+
+      {% comment %}
+      The record itself, never hidden. Everything above is a reading of this
+      string, and an operator checking HQ against an external tool needs to see
+      what will actually be published.
+      {% endcomment %}
+      <p class="help">Publishes as <code>{{ mail.dmarc_record.content }}</code></p>
+      <p class="help field-effect">Saving rewrites the DNS record. HQ applies it within about a minute.</p>
+      <div class="form-actions"><button type="submit" class="primary">Save policy</button></div>
+    </form>
+  </section>
+{% endif %}
+
+{% comment %}
+Receiving and signing are lists of records rather than a policy with choices,
+and both are dictated by the mail provider — so they are here to be corrected,
+not designed. Adding or removing one is a record, through the domain's own
+"Add record".
+{% endcomment %}
+{% for section in mail.sections %}
+  {% if section.records and section.id == "receiving" or section.records and section.id == "signing" %}
+    <section class="mail-editor">
+      <h3>{% if section.id == "receiving" %}Where mail is delivered{% else %}What signs it{% endif %}</h3>
+      <ul class="mail-records">
+        {% for record in section.records %}
+          <li>
+            <code>{{ record.name }}</code>
+            {% if record.priority is not None %}<span class="pill">priority {{ record.priority }}</span>{% endif %}
+            <span class="mail-record-value">{{ record.content }}</span>
+            {% if record.resource_key %}
+              {% url 'control_plane:edit' record.resource_key as record_edit %}
+              <a class="subtle-link" href="{{ record_edit }}?next={{ request.get_full_path|urlencode }}">Change</a>
+            {% else %}
+              <span class="pill pill-attention">Not declared in HQ</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="help">
+        {% if section.id == "receiving" %}
+          Set by whoever hosts your mailboxes. Change these only when moving provider.
+        {% else %}
+          Issued by the mail provider. HQ publishes the records; the keys are theirs to rotate.
+        {% endif %}
+      </p>
+    </section>
+  {% endif %}
+{% endfor %}
+{% endblock %}

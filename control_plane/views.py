@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -52,6 +53,7 @@ from application.provider_forms import (
 )
 from application.security import web_principal
 from application.services import (
+    alias_target,
     service_catalog,
     service_or_prospect,
 )
@@ -152,6 +154,12 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "material": material,
                 "cancel_url": _cancel_url(request, kind, resource),
                 "apply_note": _apply_note(kind),
+                # What this resource already is, when editing one. A form whose
+                # fields are mostly derived elsewhere shows empty boxes and
+                # nothing else -- an edit page for a certificate said nothing
+                # about the names it covers or where it is installed, which is
+                # the whole of what a person came to check.
+                "facts": _readout_rows(resource) if resource else (),
             },
         )
 
@@ -363,6 +371,9 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
     from is the one that knows what is still missing.
     """
 
+    returning = _return_to(request)
+    if returning:
+        return returning
     if resource is None:
         origin = _cancel_url(request, kind, None)
         if origin != reverse("control_plane:list"):
@@ -370,15 +381,41 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
     return reverse("control_plane:detail", kwargs={"key": saved})
 
 
+def _return_to(request) -> str:
+    """The page that sent the operator here, if it said so and is ours.
+
+    A form is reached from wherever the thing being edited appears -- a
+    service, a domain, a list -- and returning to the resource instead put the
+    operator somewhere they had not been, several clicks from the page they
+    were working on. The origin is carried explicitly rather than guessed from
+    Referer, which is absent, stale or forged often enough not to navigate by.
+
+    Checked before use: an unvalidated redirect target taken from a query
+    string is an open redirect regardless of how friendly the link looked.
+    """
+
+    candidate = request.GET.get("next", "").strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ""
+
+
 def _cancel_url(request, kind: str, resource) -> str:
     """Where "Cancel" belongs: back where the operator came from.
 
-    Editing returns to the resource. Creating returns to the surface that
-    offered it, which the provider names -- so a record added from a domain
-    goes back to that domain rather than to the resource registry, a page in a
-    different section listing something else entirely.
+    The page that linked here wins, because it is the only one that actually
+    knows. Failing that, editing returns to the resource and creating returns
+    to the surface the provider says offered it -- so a record added from a
+    domain goes back to that domain rather than to the resource registry.
     """
 
+    returning = _return_to(request)
+    if returning:
+        return returning
     if resource:
         return reverse("control_plane:detail", kwargs={"key": resource.key})
     if PROVIDERS[kind].created_from == "zone":
@@ -390,6 +427,27 @@ def _cancel_url(request, kind: str, resource) -> str:
     if hostname:
         return reverse("control_plane:service", kwargs={"hostname": hostname})
     return reverse("control_plane:list")
+
+
+def _derived_spec(resource) -> dict:
+    """Spec values another source still supplies, so a form can show them.
+
+    Only fields the declaration has left empty: anything authored already wins,
+    and nothing here can quietly replace an operator's answer.
+    """
+
+    try:
+        resolved = resolved_spec(resource, topology_payload())
+    except Exception:  # noqa: BLE001 - a form must render without the topology
+        return {}
+    if not isinstance(resolved, dict):
+        return {}
+    fields = PROVIDERS[resource.kind].spec_type.model_fields
+    return {
+        name: value
+        for name, value in resolved.items()
+        if name in fields and value not in (None, "", [], ())
+    }
 
 
 def _initial_spec(request, kind: str, resource) -> dict | None:
@@ -404,7 +462,13 @@ def _initial_spec(request, kind: str, resource) -> dict | None:
     """
 
     if resource:
-        return resource.spec
+        # A field the declaration leaves blank because something else still
+        # answers it is shown holding that answer, so the form states what is
+        # true rather than an empty box beside a page saying otherwise. Saving
+        # writes it in, which is how a derived value becomes an authored one --
+        # the same adoption every record goes through, and equally a no-op the
+        # first time.
+        return {**_derived_spec(resource), **resource.spec}
     provider = PROVIDERS[kind]
     initial: dict = {}
     hostname = request.GET.get("hostname", "").strip()
@@ -642,6 +706,19 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "control_plane/service_detail.html"
+
+    def get(self, request, *args, **kwargs):
+        """An alias goes to the service it is an alias of.
+
+        Rendered here, the page could only report that nothing supplied a name
+        whose record is declared, healthy and listed on the domain page -- HQ
+        contradicting itself about its own data.
+        """
+
+        canonical = alias_target(kwargs["hostname"])
+        if canonical:
+            return redirect("control_plane:service", hostname=canonical)
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

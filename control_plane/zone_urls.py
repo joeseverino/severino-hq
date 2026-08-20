@@ -17,6 +17,8 @@ urlpatterns = [
     # does not -- the same reason the service routes use it.
     path("<str:zone>/", zone_views.ZoneDetailView.as_view(), name="detail"),
     path("<str:zone>/adopt/", zone_views.ZoneAdoptView.as_view(), name="adopt"),
+    path("<str:zone>/pin/", zone_views.ZonePinView.as_view(), name="pin"),
+    path("<str:zone>/mail/", zone_views.ZoneMailView.as_view(), name="mail"),
     # No route for adopting records. Taking on a domain takes on what is in it,
     # and every sweep takes on whatever appeared since -- so there is no moment
     # at which an operator needs to ask for it. Two views and two URLs existed

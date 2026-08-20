@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views import View
 
 from application.infrastructure import NotFoundError, PolicyError
@@ -22,7 +23,24 @@ from application.inventory import AdoptCommand, adopt, inventory_state
 from application.security import web_principal
 
 from .views import _readable_error
+from application.pins import DOMAIN, pinned, toggle
+from application.mail_policy import (
+    DMARC_TAGS,
+    SPF_LOOKUP_LIMIT,
+    SPF_DEFAULTS,
+    SpfTerm,
+    compose_dmarc,
+    compose_spf,
+    mail_overview,
+    parse_spf,
+)
+from application.infrastructure import (
+    ManagedResourceCommand,
+    save_managed_resource,
+)
+from control_plane.models import ManagedResource
 from application.zones import (
+    find_zone,
     RECORD_KIND,
     ZONE_KIND,
     adopt_zone_records,
@@ -58,13 +76,15 @@ def _records_lede(zone) -> str:
 class ZoneIndexView(LoginRequiredMixin, View):
     """Straight to a domain when there is one to go to.
 
-    A list page listing one item is a click that teaches nothing. The index only
-    renders when there is a real decision to make -- no domain declared yet, so
-    the page's job is to show what could be.
+    A list page is a stop on the way to the page an operator actually wanted;
+    the domain tabs already switch between them, so listing them again is a
+    click that teaches nothing. Which domain this lands on is the operator's
+    to decide -- the catalog puts pinned domains first, so starring one makes
+    it the one this opens.
     """
 
     def get(self, request):
-        zones = zone_catalog()
+        zones = zone_catalog(pinned=pinned(request.user, DOMAIN))
         managed = [zone for zone in zones if zone.managed]
         if managed:
             return redirect("zones:detail", zone=managed[0].zone)
@@ -75,6 +95,123 @@ class ZoneIndexView(LoginRequiredMixin, View):
         )
 
 
+def _spf_default(value: str) -> str:
+    """The qualifier on the policy's `all` term, which decides everyone unlisted."""
+
+    for term in reversed(parse_spf(value).terms):
+        if term.mechanism == "all":
+            return term.qualifier
+    return "-"
+
+
+def _spf_value(zone) -> str:
+    for record in zone.records:
+        if record.record_type == "TXT" and "v=spf1" in record.content.lower():
+            return record.content
+    return ""
+
+
+class ZoneMailView(LoginRequiredMixin, View):
+    """Everything that decides a domain's mail, on one page.
+
+    Four records read separately mean nothing and read together are a policy:
+    who receives, who may send, what signs, and what happens when a message
+    proves none of it. The page is ordered the way mail actually flows.
+    """
+
+    def get(self, request, zone: str):
+        found = find_zone(zone)
+        if found is None:
+            raise Http404("No such domain.")
+        return render(
+            request,
+            "control_plane/zone_mail.html",
+            {
+                "zone": found,
+                "mail": mail_overview(found),
+                "policy_tags": DMARC_TAGS,
+                "spf": parse_spf(_spf_value(found)),
+                "spf_defaults": SPF_DEFAULTS,
+                "spf_limit": SPF_LOOKUP_LIMIT,
+                "spf_default": _spf_default(_spf_value(found)),
+            },
+        )
+
+    def _publish(self, request, zone, record, value: str, what: str):
+        """Write a composed policy back through the record's own use case."""
+
+        if record is None or not record.resource_key:
+            messages.error(request, f"No {what} record is declared here yet.")
+            return redirect("zones:mail", zone=zone.zone)
+        resource = ManagedResource.objects.get(key=record.resource_key)
+        try:
+            save_managed_resource(
+                ManagedResourceCommand(
+                    key=resource.key,
+                    kind=resource.kind,
+                    spec={**resource.spec, "content": f'"{value}"'},
+                    enabled=resource.enabled,
+                ),
+                principal=web_principal(request.user),
+                current_key=resource.key,
+            )
+        except (DjangoValidationError, PolicyError, NotFoundError, ValueError) as exc:
+            messages.error(request, _readable_error(exc))
+            return redirect("zones:mail", zone=zone.zone)
+        messages.success(
+            request, f"{what} saved. HQ publishes it within about a minute."
+        )
+        return redirect("zones:mail", zone=zone.zone)
+
+    def post(self, request, zone: str):
+        """Publish a policy composed from the choices, not typed as a string."""
+
+        found = find_zone(zone)
+        if found is None:
+            raise Http404("No such domain.")
+        overview = mail_overview(found)
+
+        if request.POST.get("section") == "spf":
+            terms = []
+            for rule in request.POST.getlist("rule"):
+                rule = rule.strip()
+                if not rule:
+                    continue
+                qualifier = rule[0] if rule[:1] in "+-~?" else "+"
+                body = rule[1:] if rule[:1] in "+-~?" else rule
+                mechanism, _, argument = body.partition(":")
+                terms.append(SpfTerm(qualifier, mechanism.lower(), argument))
+            terms.append(SpfTerm(request.POST.get("default", "-"), "all", ""))
+            spf_record = next(
+                (r for section in overview.sections if section.id == "sending"
+                 for r in section.records),
+                None,
+            )
+            return self._publish(
+                request, found, spf_record, compose_spf(tuple(terms)), "SPF"
+            )
+
+        # Unknown tags survive: the record belongs to the operator, and an
+        # editor that drops what it does not model deletes policy silently.
+        tags = dict(overview.dmarc_tags)
+        for tag in DMARC_TAGS:
+            tags[tag.id] = request.POST.get(tag.id, "").strip()
+        return self._publish(
+            request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC"
+        )
+
+
+class ZonePinView(LoginRequiredMixin, View):
+    """Star a domain so it sorts first, for this operator only."""
+
+    def post(self, request, zone: str):
+        name = normalized_hostname(zone)
+        if not name:
+            raise Http404("No such domain.")
+        toggle(request.user, DOMAIN, name)
+        return redirect(request.POST.get("next") or reverse("zones:index"))
+
+
 class ZoneDetailView(LoginRequiredMixin, View):
     """One domain: every record in it, and what the zone currently says."""
 
@@ -83,7 +220,7 @@ class ZoneDetailView(LoginRequiredMixin, View):
         # for the switcher. Each build reads every declaration, every stored
         # sweep and the whole unmanaged diff, so doing it twice doubled the cost
         # of the page to produce two identical answers.
-        zones = zone_catalog()
+        zones = zone_catalog(pinned=pinned(request.user, DOMAIN))
         wanted = normalized_hostname(zone)
         found = next((item for item in zones if item.zone == wanted), None)
         if found is None:

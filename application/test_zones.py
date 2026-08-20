@@ -1409,12 +1409,29 @@ class CertificateEditFormTests(TestCase):
 
         return spec_form_class("tls.certificate", lock_identity=True)(initial=initial)
 
-    def test_a_field_somebody_set_is_not_hidden_as_routine(self):
-        form = self._form(topology_ref="pki:wildcard", renewal_window_days=30)
+    def test_editing_does_not_ask_which_certificate_this_is(self):
+        """The question has an answer already, and no second answer is valid.
 
-        self.assertIn("topology_ref", [f.name for f in form.primary])
+        Offered on the edit form, the selector let an existing certificate be
+        told it was "a new certificate defined below" -- with the fields that
+        would define one folded out of sight, so the option named inputs the
+        page did not have. Which certificate this is belongs above the form,
+        as a fact.
+        """
+
+        form = self._form(topology_ref="pki:wildcard", renewal_window_days=30)
+        offered = [f.name for f in form.primary] + [f.name for f in form.advanced]
+
+        self.assertNotIn("topology_ref", offered)
+        self.assertIn("renewal_window_days", offered)
 
     def test_a_field_still_at_its_default_stays_folded_away(self):
+        """Nobody arrives at a certificate to adjust how early it renews.
+
+        HQ renews on its own, so the window is a knob rather than a question,
+        and it holds the answer the model would have given anyway.
+        """
+
         form = self._form(topology_ref="pki:wildcard", renewal_window_days=30)
 
         self.assertIn("renewal_window_days", [f.name for f in form.advanced])
@@ -1424,13 +1441,20 @@ class CertificateEditFormTests(TestCase):
 
         self.assertIn("renewal_window_days", [f.name for f in form.primary])
 
-    def test_adding_one_still_leads_with_the_question(self):
-        """Creating asks for a new certificate; the reference is for ones that
-        predate HQ owning them and stays out of the way."""
+    def test_adding_one_does_not_offer_the_reference_at_all(self):
+        """Creating asks for a new certificate, and only for that.
+
+        The reference names a certificate that already exists, so it answers a
+        different question than "add one". Behind a disclosure it was still
+        offered -- an empty box for a thing that cannot be created by naming
+        something already there -- so it is not among the fields at all.
+        """
 
         form = self._form()
+        offered = [f.name for f in form.primary] + [f.name for f in form.advanced]
 
-        self.assertIn("topology_ref", [f.name for f in form.advanced])
+        self.assertNotIn("topology_ref", offered)
+        self.assertIn("certificate_name", offered)
 
 
 class WhatCountsAsAServiceTests(TestCase):
@@ -1613,7 +1637,9 @@ class ExternallyAnsweredFacetTests(TestCase):
             f for f in service_or_prospect("example.com").facets if f.id == "proxy"
         )
 
-        self.assertContains(response, "Answered outside your network")
+        # The wording says who answers rather than where it is not: the card
+        # reports a working arrangement, not a gap.
+        self.assertContains(response, "answers this name directly")
         # Asserted on the facet rather than on the page, because the
         # certificate facet says the same sentence for its own good reason.
         self.assertFalse(ingress.present)

@@ -6,6 +6,7 @@ is public, and a fixture is documentation whether or not it was meant to be.
 
 from __future__ import annotations
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,7 +16,12 @@ from projects.models import Project
 
 from .attention import services as service_attention
 from .sections import services as service_cards
-from .services import find_service, service_catalog, service_reading
+from .services import (
+    alias_target,
+    find_service,
+    service_catalog,
+    service_reading,
+)
 
 TOPOLOGY = {
     "version": 3,
@@ -520,4 +526,41 @@ class ProviderFacetContractTests(TestCase):
         self.assertEqual(
             [facet.id for facet in find_service("app.example.com").facets],
             catalog_order,
+        )
+
+
+class AliasNavigationTests(TestCase):
+    """A second name for a service is not a service with nothing behind it."""
+
+    def setUp(self):
+        ManagedResource.objects.create(
+            key="site", kind="cloudflare.dns_record", enabled=True,
+            spec={"zone": "example.com", "name": "example.com", "record_type": "CNAME",
+                  "content": "example.pages.dev", "proxied": True, "ttl": 1},
+        )
+        ManagedResource.objects.create(
+            key="www", kind="cloudflare.dns_record", enabled=True,
+            spec={"zone": "example.com", "name": "www.example.com",
+                  "record_type": "CNAME", "content": "example.com",
+                  "proxied": True, "ttl": 1},
+        )
+
+    def test_an_alias_names_the_service_it_stands_for(self):
+        self.assertEqual(alias_target("www.example.com"), "example.com")
+
+    def test_a_real_service_is_not_an_alias(self):
+        self.assertEqual(alias_target("example.com"), "")
+
+    def test_the_alias_page_goes_to_the_service_rather_than_reporting_nothing(self):
+        """It reported "Nothing declared" for a name whose record is healthy."""
+
+        user = get_user_model().objects.create_user("op", password="x")
+        self.client.force_login(user)
+        response = self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": "www.example.com"})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            reverse("control_plane:service", kwargs={"hostname": "example.com"}),
         )
