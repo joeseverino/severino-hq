@@ -9,7 +9,18 @@ from pathlib import Path
 # These are implementation packages in the public host repository. Plugins get
 # their supported equivalents from hq_sdk; importing one of these makes a host
 # refactor a coordinated multi-repository migration.
-HOST_INTERNAL_PACKAGES = frozenset(
+#
+# Written out by hand, this list drifted: `jobs` was added to the host and never
+# added here, so a plugin importing `jobs.runner` was told the boundary passed.
+# A check that silently stops checking is worse than no check, because the
+# architecture test suite reports it as green.
+#
+# So the set is *derived* from the host tree and *floored* by this list. Union,
+# never replacement: a new host app is caught the day it appears, and a host
+# tree that cannot be read (an SDK installed without its host, a future
+# packaging change) still enforces everything known at the time this shipped.
+# The boundary can get stricter on its own. It cannot get weaker on its own.
+_FLOOR = frozenset(
     {
         "application",
         "assets",
@@ -20,15 +31,40 @@ HOST_INTERNAL_PACKAGES = frozenset(
         "controller_runtime",
         "core",
         "docs_index",
+        "example_hq_plugin",
         "expenses",
         "hq_api",
         "hq_mcp",
+        "jobs",
         "projects",
         "receipts",
         "reports",
         "search_index",
     }
 )
+
+# hq_sdk is the supported surface; it is the one host package a plugin may name.
+_SUPPORTED_FACADE = "hq_sdk"
+
+
+def _host_packages() -> frozenset[str]:
+    """Top-level packages of the host this SDK was installed from."""
+
+    root = Path(__file__).resolve().parent.parent
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return frozenset()
+    return frozenset(
+        entry.name
+        for entry in entries
+        if entry.is_dir()
+        and (entry / "__init__.py").exists()
+        and entry.name != _SUPPORTED_FACADE
+    )
+
+
+HOST_INTERNAL_PACKAGES = _FLOOR | _host_packages()
 
 
 def unsupported_hq_imports(source_root: str | Path) -> list[str]:
