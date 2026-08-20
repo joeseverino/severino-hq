@@ -28,8 +28,8 @@ from application.controller import (
     report_operation,
     schedule_automatic_operations,
 )
-from application.connections import preflight_connections
 from application.certificates import CertificateError, material_for
+from application.inventory import record_connections
 from application.sweep import record_sweep
 from application.security import cli_principal
 from application.infrastructure import controller_contract
@@ -83,25 +83,6 @@ def _export(options: dict) -> Any:
     return controller_contract(resource)
 
 
-def _preflight(options: dict) -> Any:
-    probes = preflight_connections()
-    result = {
-        "ok": all(probe.ok for probe in probes),
-        "connections": [
-            {
-                "connection_ref": probe.connection_ref,
-                "provider": probe.provider,
-                "ok": probe.ok,
-                "message": probe.message,
-            }
-            for probe in probes
-        ],
-    }
-    if not result["ok"]:
-        raise ValueError(json.dumps(result, sort_keys=True))
-    return result
-
-
 def _material(options: dict) -> Any:
     # Its own action rather than a field on the contract: `export` prints a
     # contract, and a stored private key must not be one keystroke away from a
@@ -114,6 +95,14 @@ def _material(options: dict) -> Any:
 
 def _inventory(options: dict) -> Any:
     return record_sweep(
+        json.loads(options["payload"]),
+        principal=cli_principal(),
+        controller_id=options["controller_id"],
+    )
+
+
+def _connections(options: dict) -> Any:
+    return record_connections(
         json.loads(options["payload"]),
         principal=cli_principal(),
         controller_id=options["controller_id"],
@@ -143,10 +132,10 @@ ACTIONS: tuple[Action, ...] = (
     Action("claim", ("controller_id", "lease_seconds", "capability"), _claim),
     Action("peek", ("capability",), _peek),
     Action("export", ("resource",), _export),
-    Action("preflight", (), _preflight),
     Action("schedule", ("controller_id",), _schedule),
     Action("material", ("resource",), _material),
     Action("inventory", ("controller_id", "payload"), _inventory),
+    Action("connections", ("controller_id", "payload"), _connections),
     Action("report", ("controller_id", "operation", "payload"), _report),
 )
 

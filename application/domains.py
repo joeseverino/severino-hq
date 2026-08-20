@@ -224,6 +224,20 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         attention_provider="application.attention:infrastructure",
     ),
     DomainDescriptor(
+        id="hq.connections",
+        label="Connections",
+        # Last in the group, and deliberately so. It answers "what can HQ reach
+        # at all" -- the question underneath every other page here, and the one
+        # asked least often, because the answer only changes when a credential
+        # does.
+        navigation=(
+            NavigationItem(
+                "Connections", "control_plane:connections", "control_plane", 133,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.jobs",
         label="Jobs",
         navigation=(

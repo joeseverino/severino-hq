@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Connections · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Connections" lede="Everything a controller can reach on your behalf, and what each one can act on." %}
+
+{% comment %}
+No add button, and there will not be one. A connection is a credential, and the
+only place one is created is the 1Password vault the controller reads. A form
+here would either take a secret into HQ — which is the one thing this design
+refuses — or write a second list that goes stale the first time the vault
+changes. What this page offers instead is the truth about what the controller
+found on its last pass.
+{% endcomment %}
+
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Connection</th>
+        <th>Kind</th>
+        <th>Endpoint</th>
+        <th>Reaches</th>
+        <th>Used for</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for connection in connections %}
+        <tr>
+          <td>
+            <strong>{{ connection.connection_ref }}</strong>
+            {% if connection.controller_id %}<br><span class="muted">via {{ connection.controller_id }}</span>{% endif %}
+          </td>
+          <td>{% if connection.provider %}<code>{{ connection.provider }}</code>{% else %}<span class="muted">unlabelled</span>{% endif %}</td>
+          <td>{% if connection.endpoint %}<code>{{ connection.endpoint }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>
+            {% for name in connection.reaches %}<code>{{ name }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td>
+            {% for label in connection.supplies %}{{ label }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td>
+            <span class="pill pill-{{ connection.status }}">{{ connection.status }}</span>
+            {% if connection.detail %}<br><span class="muted">{{ connection.detail }}</span>{% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6">{% include "partials/_empty_state.html" with compact=True message="No controller has reported yet. Connections appear here after the first sweep — nothing is entered by hand." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if observed_at %}
+  <p class="muted">Last reported {{ observed_at|timesince }} ago.</p>
+{% endif %}
+
+{% comment %}
+Named unlabelled rather than skipped. An item that predates the `provider` field
+is still a connection the controller opens; leaving it off this page would make
+the vault and this list disagree, which is exactly the drift the page exists to
+rule out.
+{% endcomment %}
+{% if unlabelled %}
+  <h2>Not yet classified</h2>
+  <p class="muted">
+    These work, and HQ cannot tell what they are for. Add a <code>provider</code>
+    field to the 1Password item — <code>portainer</code>, <code>adguard</code>,
+    <code>npm</code>, <code>cloudflare_dns</code> — and the next sweep will offer
+    it wherever it belongs.
+  </p>
+{% endif %}
+{% endblock %}

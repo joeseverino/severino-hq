@@ -44,6 +44,7 @@ from application.certificates import (
     UploadCertificateCommand,
     store_certificate,
 )
+from application.connections import connection_readings
 from application.plugins import _import
 from application.provider_forms import (
     CertificateUploadForm,
@@ -735,6 +736,30 @@ class ServiceStartView(LoginRequiredMixin, View):
             messages.error(request, "Enter a hostname, like app.example.com.")
             return redirect("control_plane:service_start")
         return redirect("control_plane:service", hostname=hostname)
+
+
+class ConnectionListView(LoginRequiredMixin, TemplateView):
+    """What HQ can reach, as the controllers last found it.
+
+    Read-only by construction. Every row here started as a 1Password item, and
+    the only way to change one is to change that item -- so this page reports
+    and never edits, which is what keeps it from becoming a second inventory.
+    """
+
+    template_name = "control_plane/connection_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        readings = connection_readings()
+        context["connections"] = readings
+        context["unlabelled"] = [item for item in readings if not item.provider]
+        # The oldest of them, because the page's honesty depends on the staler
+        # half: reporting the newest would describe a controller that is still
+        # sweeping as though every row were current.
+        context["observed_at"] = min(
+            (item.observed_at for item in readings), default=None
+        )
+        return context
 
 
 class InfrastructureListView(LoginRequiredMixin, ListView):

@@ -1,151 +1,113 @@
-"""Controller-only provider connections and non-mutating authentication probes."""
+"""What HQ can reach, and what each of those things can act on.
+
+A connection is a credential, and HQ holds none. It holds the *report* of one:
+the controller renders the vault into its own environment, asks each endpoint
+whether it still answers and what it can see, and sends that back. So this
+module reads a cache and never a secret, and the page it feeds is a view of the
+vault that cannot drift from it -- there is no second list to keep in step.
+
+The point of ``reaches`` is that it is the only place some facts exist at all.
+Nothing in HQ can know which machines a Portainer holds or which zones a token
+may edit; the credential that would have to carry out the work is the only thing
+that can say. Every menu asking "which machine" or "which domain" is derived
+from it, which is what makes adding a VPS a matter of registering it with
+Portainer rather than of editing anything here.
+"""
 
 from __future__ import annotations
 
-import base64
-import json
-import os
-import ssl
-import sys
 from dataclasses import dataclass
-from typing import Callable
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+from control_plane.models import ProviderConnection
+from control_plane.providers import PROVIDERS
 
 
 @dataclass(frozen=True)
-class ConnectionProbe:
+class ConnectionReading:
+    """One connection, with what HQ would use it for."""
+
     connection_ref: str
+    controller_id: str
     provider: str
-    ok: bool
-    message: str
+    endpoint: str
+    reaches: tuple[str, ...]
+    reachable: bool
+    probed: bool
+    detail: str
+    observed_at: object
+    # The kinds of thing this connection is what makes possible. Derived from
+    # the providers rather than stored, so a provider added tomorrow lists
+    # itself against the connections that could serve it.
+    supplies: tuple[str, ...]
+
+    @property
+    def status(self) -> str:
+        if not self.reachable:
+            return "unreachable"
+        return "reachable" if self.probed else "unprobed"
 
 
-def _controller_ssl_context():
-    ca_file = os.environ.get("SEVERINO_CONTROLLER_CA_FILE", "").strip()
-    return ssl.create_default_context(cafile=ca_file or None)
+def _supplies(provider: str) -> tuple[str, ...]:
+    """Which resource kinds this sort of connection can stand behind."""
 
-
-def _required(env: dict[str, str], name: str) -> str:
-    value = env.get(name, "").strip()
-    if not value:
-        raise ValueError(f"Controller environment is missing {name}.")
-    return value
-
-
-def _npm_probe(env: dict[str, str], open_url: Callable) -> ConnectionProbe:
-    connection_ref = _required(env, "NPM_CONNECTION_REF")
-    endpoint = _required(env, "NPM_URL").rstrip("/") + "/api/tokens"
-    body = json.dumps(
-        {
-            "identity": _required(env, "NPM_USERNAME"),
-            "secret": _required(env, "NPM_PASSWORD"),
-        }
-    ).encode()
-    request = Request(
-        endpoint,
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    with open_url(
-        request, timeout=10, context=_controller_ssl_context()
-    ) as response:
-        payload = json.load(response)
-    if not payload.get("token"):
-        raise ValueError("NPM authentication returned no token.")
-    return ConnectionProbe(connection_ref, "npm", True, "Authentication succeeded.")
-
-
-def _adguard_probe(env: dict[str, str], open_url: Callable) -> ConnectionProbe:
-    connection_ref = _required(env, "ADGUARD_CONNECTION_REF")
-    endpoint = _required(env, "ADGUARD_URL").rstrip("/") + "/control/status"
-    credentials = (
-        f"{_required(env, 'ADGUARD_USERNAME')}:"
-        f"{_required(env, 'ADGUARD_PASSWORD')}"
-    )
-    authorization = base64.b64encode(credentials.encode()).decode()
-    request = Request(
-        endpoint,
-        method="GET",
-        headers={"Authorization": f"Basic {authorization}"},
-    )
-    with open_url(
-        request, timeout=10, context=_controller_ssl_context()
-    ) as response:
-        payload = json.load(response)
-    if "dns_addresses" not in payload:
-        raise ValueError("AdGuard status response is not recognized.")
-    return ConnectionProbe(
-        connection_ref, "adguard", True, "Authentication succeeded."
+    if not provider:
+        return ()
+    return tuple(
+        sorted(
+            spec.label or kind
+            for kind, spec in PROVIDERS.items()
+            if provider in spec.connection_providers
+        )
     )
 
 
-def _cloudflare_dns_probe(env: dict[str, str], open_url: Callable) -> ConnectionProbe:
-    connection_ref = _required(env, "CLOUDFLARE_DNS_CONNECTION_REF")
-    endpoint = _required(env, "CLOUDFLARE_DNS_URL").rstrip("/")
-    headers = {
-        "Authorization": f"Bearer {_required(env, 'CLOUDFLARE_DNS_API_TOKEN')}"
-    }
-    request = Request(
-        f"{endpoint}/user/tokens/verify",
-        method="GET",
-        headers=headers,
-    )
-    with open_url(
-        request, timeout=10, context=_controller_ssl_context()
-    ) as response:
-        payload = json.load(response)
-    if not payload.get("success"):
-        raise ValueError("Cloudflare DNS token verification failed.")
-    return ConnectionProbe(
-        connection_ref, "cloudflare_dns", True, "Authentication succeeded."
+def connection_readings() -> tuple[ConnectionReading, ...]:
+    """Every connection every controller last reported."""
+
+    return tuple(
+        ConnectionReading(
+            connection_ref=row.connection_ref,
+            controller_id=row.controller_id,
+            provider=row.provider,
+            endpoint=row.endpoint,
+            reaches=tuple(row.reaches),
+            reachable=row.reachable,
+            probed=row.probed,
+            detail=row.detail,
+            observed_at=row.observed_at,
+            supplies=_supplies(row.provider),
+        )
+        for row in ProviderConnection.objects.all()
     )
 
 
-def preflight_connections(
-    env: dict[str, str] | None = None,
-    *,
-    open_url: Callable = urlopen,
-) -> list[ConnectionProbe]:
-    source = dict(os.environ if env is None else env)
-    probes = []
-    for provider, probe in (
-        ("adguard", _adguard_probe),
-        ("npm", _npm_probe),
-        ("cloudflare_dns", _cloudflare_dns_probe),
-    ):
-        try:
-            probes.append(probe(source, open_url))
-        except (ValueError, HTTPError, URLError, TimeoutError) as exc:
-            probes.append(
-                ConnectionProbe(
-                    source.get(f"{provider.upper()}_CONNECTION_REF", provider),
-                    provider,
-                    False,
-                    str(exc),
-                )
-            )
-    return probes
+def connections_for(provider: str) -> tuple[ProviderConnection, ...]:
+    """The connections that are one of these, reachable ones first.
+
+    Ordering is the whole contract: a menu built from this offers a working
+    credential before a broken one, and never silently omits the broken one --
+    an operator whose token expired needs to see the connection they already
+    have, marked, rather than an empty list that reads as "you never set it up".
+    """
+
+    return tuple(
+        sorted(
+            ProviderConnection.objects.filter(provider=provider),
+            key=lambda row: (not row.reachable, row.connection_ref),
+        )
+    )
 
 
-def main() -> int:
-    probes = preflight_connections()
-    payload = {
-        "ok": all(probe.ok for probe in probes),
-        "connections": [
-            {
-                "connection_ref": probe.connection_ref,
-                "provider": probe.provider,
-                "ok": probe.ok,
-                "message": probe.message,
-            }
-            for probe in probes
-        ],
-    }
-    print(json.dumps(payload, sort_keys=True))
-    return 0 if payload["ok"] else 1
+def reachable_through(provider: str) -> tuple[tuple[str, str], ...]:
+    """Everything the connections of one kind can act on, as (name, connection).
 
+    A machine behind two Portainers is listed once, under the first that can
+    reach it, because the question a form is asking is "where does this run",
+    not "by which route".
+    """
 
-if __name__ == "__main__":
-    sys.exit(main())
+    seen: dict[str, str] = {}
+    for connection in connections_for(provider):
+        for name in connection.reaches:
+            seen.setdefault(name, connection.connection_ref)
+    return tuple(sorted(seen.items()))

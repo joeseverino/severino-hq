@@ -83,6 +83,54 @@ class ProviderInventory(TimestampedModel):
         return f"{self.kind} ({len(self.records)} records)"
 
 
+class ProviderConnection(TimestampedModel):
+    """One endpoint a controller can reach, as that controller last found it.
+
+    HQ holds no credential and never will. What it holds is the fact that one
+    exists, what kind of thing it opens, and what that thing said when asked --
+    which is enough to offer it as an answer and to say when it stopped working.
+
+    The credential itself is a 1Password item, and that item is the only place a
+    connection is created. Everything here is downstream of it: the controller
+    renders the vault into its own environment, reads back what it was given,
+    and reports that. So a page listing connections cannot drift from the vault,
+    because it was never a second copy of it.
+
+    ``reaches`` is what the credential can act on -- the machines behind a
+    Portainer, the zones a DNS token may edit. It is why this is worth sweeping
+    rather than merely declaring: nothing in HQ can know it, and every menu that
+    asks "which machine" or "which domain" should be offering exactly this.
+
+    Keyed by controller as well as by ref, because two controllers render two
+    vaults and a ref means what its own vault says it means.
+    """
+
+    connection_ref = models.CharField(max_length=160)
+    controller_id = models.CharField(max_length=160, blank=True)
+    provider = models.CharField(max_length=64, blank=True)
+    endpoint = models.CharField(max_length=500, blank=True)
+    reaches = models.JSONField(default=list, blank=True)
+    reachable = models.BooleanField(default=True)
+    # Whether anything was asked at all. An unprobed connection is not a broken
+    # one, and showing the two the same way would make a working SSH transport
+    # look like an outage every time the page loaded.
+    probed = models.BooleanField(default=True)
+    detail = models.CharField(max_length=500, blank=True)
+    observed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("provider", "connection_ref")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("controller_id", "connection_ref"),
+                name="one_row_per_connection_per_controller",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.connection_ref
+
+
 class CertificateMaterial(TimestampedModel):
     """A certificate an operator generated elsewhere, held so it can be reused.
 

@@ -5,6 +5,15 @@
       "CONNECTION_REF": {
         "source": "connection_ref"
       },
+      "PASSWORD": {
+        "source": "field",
+        "id": "password"
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      },
       "URL": {
         "source": "url",
         "index": 0
@@ -12,23 +21,24 @@
       "USERNAME": {
         "source": "field",
         "id": "username"
-      },
-      "PASSWORD": {
-        "source": "field",
-        "id": "password"
       }
     },
     "api_token": {
+      "API_TOKEN": {
+        "source": "field",
+        "id": "credential"
+      },
       "CONNECTION_REF": {
         "source": "connection_ref"
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
       },
       "URL": {
         "source": "field",
         "label": "website"
-      },
-      "API_TOKEN": {
-        "source": "field",
-        "id": "credential"
       }
     },
     "ssh_transport": {
@@ -39,30 +49,40 @@
         "source": "field",
         "label": "host"
       },
+      "HOST_KEY": {
+        "source": "field",
+        "label": "host_key"
+      },
       "PORT": {
         "source": "field",
         "label": "port"
       },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      },
       "USER": {
         "source": "field",
         "label": "user"
-      },
-      "HOST_KEY": {
-        "source": "field",
-        "label": "host_key"
       }
     },
     "acme": {
       "CONNECTION_REF": {
         "source": "connection_ref"
       },
+      "DIRECTORY_URL": {
+        "source": "field",
+        "label": "website"
+      },
       "EMAIL": {
         "source": "field",
         "label": "email"
       },
-      "DIRECTORY_URL": {
+      "PROVIDER": {
         "source": "field",
-        "label": "website"
+        "label": "provider",
+        "optional": true
       }
     }
   }

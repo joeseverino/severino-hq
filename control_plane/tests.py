@@ -17,7 +17,6 @@ from application.controller import (
     report_operation,
     schedule_automatic_operations,
 )
-from application.connections import preflight_connections
 from application.infrastructure import (
     ManagedResourceCommand,
     OperationCommand,
@@ -376,49 +375,6 @@ class ProviderContractTests(TestCase):
         cpanel["install_domains"] = ["quiz.jseverino.net"]
 
         validate_resolved_certificate(spec)
-
-    def test_provider_preflight_authenticates_without_returning_secrets(self):
-        class Response:
-            def __init__(self, payload):
-                self.payload = payload
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return None
-
-            def read(self):
-                return json.dumps(self.payload).encode()
-
-        def open_url(request, timeout, context):
-            self.assertEqual(timeout, 10)
-            self.assertIsNotNone(context)
-            if request.full_url.endswith("/control/status"):
-                return Response({"dns_addresses": ["0.0.0.0"]})
-            if request.full_url.endswith("/user/tokens/verify"):
-                return Response({"success": True})
-            return Response({"token": "not-returned-by-probe"})
-
-        env = {
-            "ADGUARD_CONNECTION_REF": "homelab-adguard",
-            "ADGUARD_URL": "https://adguard.homelab",
-            "ADGUARD_USERNAME": "admin",
-            "ADGUARD_PASSWORD": "secret-a",
-            "NPM_CONNECTION_REF": "homelab-npm",
-            "NPM_URL": "https://proxy.homelab",
-            "NPM_USERNAME": "controller@example.com",
-            "NPM_PASSWORD": "secret-b",
-            "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
-            "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
-            "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
-        }
-        probes = preflight_connections(env, open_url=open_url)
-        rendered = repr(probes)
-        self.assertTrue(all(probe.ok for probe in probes))
-        self.assertNotIn("secret-a", rendered)
-        self.assertNotIn("secret-b", rendered)
-        self.assertNotIn("secret-c", rendered)
 
     def test_provider_catalog_is_stable_strict_and_marks_public_effects(self):
         self.assertEqual(describe_providers(), describe_providers())

@@ -268,6 +268,58 @@ def service_facets() -> tuple[tuple[str, str], ...]:
     return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
 
 
+class PortainerStackEnvVar(ProviderModel):
+    name: str = Field(min_length=1, max_length=200, title="Name")
+    value: str = Field(default="", max_length=4000, title="Value")
+
+
+class PortainerStackSpec(ProviderModel):
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Portainer",
+        description="Which Portainer holds the environment this runs in.",
+    )
+    host: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Runs on",
+        description="The machine this runs on, as the topology names it.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        title="Stack name",
+        description="Lowercase and hyphenated. Names the compose project.",
+    )
+    compose: str = Field(
+        min_length=1,
+        title="Compose file",
+        description="The docker compose definition, exactly as it would be on disk.",
+    )
+    environment: list[PortainerStackEnvVar] = Field(
+        default_factory=list,
+        title="Environment",
+        description="Values the compose file reads. Secrets belong in 1Password, not here.",
+    )
+    hostnames: list[str] = Field(
+        default_factory=list,
+        title="Serves",
+        description="The names this answers for, if any reach it from outside.",
+    )
+    port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        title="Answers on port",
+        description=(
+            "The port on the machine itself. Published ports are read back from "
+            "the running container; a container on the host network has to say."
+        ),
+    )
+
+
 class NPMProxyHostSpec(ProviderModel):
     domain_names: list[str] = Field(
         min_length=1,
@@ -669,6 +721,16 @@ class ProviderSpec:
     # and a guaranteed failure on create: the reconciler refuses to create an
     # HTTPS host with no certificate to bind, a minute later, in a job result.
     required_on_create: tuple[str, ...] = ()
+    # What sorts of connection stand behind this, matching what the controller
+    # calls them. This is the join between a declaration and the credentials
+    # that would carry it out: it tells a form which connections to offer, and
+    # the connections page what each one is for.
+    #
+    # Plural because one resource routinely needs two unrelated credentials. A
+    # managed certificate is issued through a DNS token and installed over SSH,
+    # and a single field would have had to pick one and be wrong about the
+    # other on the page whose whole job is saying what a credential is for.
+    connection_providers: tuple[str, ...] = ()
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
     # A topology reference is the case that forced it: rendered from the
@@ -978,6 +1040,65 @@ def _rewrite_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
     return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
+
+
+def _stack_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(spec.get("hostnames") or ())
+
+
+def _stack_origin(spec: dict[str, Any]) -> str:
+    """Where this answers, as the topology names the machine.
+
+    ``_locate`` matches a host by id as readily as by address, so a stack says
+    which machine it runs on and never repeats that machine's address. A stack
+    with no port answers nothing directly -- it is reached through whatever
+    fronts it -- and returning nothing is the honest form of that.
+    """
+
+    port = spec.get("port")
+    host = spec.get("host", "")
+    return f"{host}:{port}" if host and port else ""
+
+
+def _stack_seed(hostname: str) -> dict[str, Any]:
+    """A stack seeded from the name it will serve.
+
+    The name doubles as the stack's own, lowercased and hyphenated the way
+    compose projects are, so publishing a service does not ask for it twice.
+    """
+
+    label = re.sub(r"[^a-z0-9-]+", "-", hostname.lower()).strip("-")
+    return {"hostnames": [hostname], "name": label or "service"}
+
+
+def _stack_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    port = spec.get("port")
+    where = f"{spec.get('host', '')}:{port}" if port else spec.get("host", "")
+    return (
+        ("Runs on", where, status.get("origin", "")),
+        ("Stack", spec.get("name", ""), status.get("state", "")),
+    )
+
+
+def _stack_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """A declaration matching a container the controller already reported.
+
+    Adopting takes what is running rather than asking for it again: the stack
+    name, the machine, and the published port when the container has one. A
+    container on the host network publishes nothing, so its port stays for the
+    operator to supply -- nothing else knows it.
+    """
+
+    return {
+        "name": record.get("stack", ""),
+        "host": record.get("host", ""),
+        "port": record.get("port") or None,
+        "compose": record.get("compose", ""),
+        "hostnames": list(record.get("hostnames") or ()),
+        "connection_ref": record.get("connection_ref", ""),
+    }
 
 
 def _proxy_readout(
@@ -1351,6 +1472,7 @@ _PROVIDERS = (
         ResolvedTLSCertificateSpec,
         _resolve_tls,
         label="TLS certificate",
+        connection_providers=("cloudflare_dns", "ssh"),
         choices="application.provider_choices:certificate_choices",
         # topology_ref is not offered when adding one. It exists because every
         # certificate here predates HQ owning them, and "add the certificate you
@@ -1384,6 +1506,7 @@ _PROVIDERS = (
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
         label="Uploaded certificate",
+        connection_providers=("ssh",),
         choices="application.provider_choices:uploaded_certificate_choices",
         material_form="application.provider_forms:CertificateUploadForm",
         material_handler="application.certificates:store_uploaded_material",
@@ -1400,6 +1523,7 @@ _PROVIDERS = (
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
         label="Proxy host",
+        connection_providers=("npm",),
         removal_note=lambda spec: (
             "Every name this answers for stops being served: "
             + ", ".join(spec.get("domain_names", ()))
@@ -1427,11 +1551,36 @@ _PROVIDERS = (
         readout=_proxy_readout,
     ),
     ProviderSpec(
+        "portainer.stack",
+        "Runs a set of containers on one of your machines. Created in Portainer "
+        "if it is not there yet.",
+        PortainerStackSpec,
+        label="Container stack",
+        connection_providers=("portainer",),
+        # Which Portainer is folded away with the tuning. There is normally one,
+        # the menu selects it, and asking first makes the form open on the
+        # question an operator is least likely to have an opinion about.
+        advanced_fields=("connection_ref", "environment"),
+        removal_note=lambda spec: (
+            f"{spec.get('name', 'This stack')} stops running on "
+            f"{spec.get('host', 'its machine')}, and anything it serves goes "
+            "with it."
+        ),
+        facet="runtime",
+        hostnames=_stack_hostnames,
+        origin=_stack_origin,
+        seed=_stack_seed,
+        readout=_stack_readout,
+        from_record=_stack_from_record,
+        choices="application.provider_choices:container_stack",
+    ),
+    ProviderSpec(
         "adguard.rewrite",
         "Makes a hostname resolve to an IP on your network. Created in AdGuard "
         "if it is not there yet.",
         AdGuardRewriteSpec,
         label="Internal DNS record",
+        connection_providers=("adguard",),
         removal_note=lambda spec: (
             f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
             "anything reached by that name goes dark inside the network."
@@ -1447,6 +1596,7 @@ _PROVIDERS = (
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         label="Public DNS record",
+        connection_providers=("cloudflare_dns",),
         advanced_fields=("priority", "ttl"),
         public_effect=True,
         facet="dns",
@@ -1468,6 +1618,7 @@ _PROVIDERS = (
         "the account, which is not the same as being asked to manage them.",
         CloudflareZoneSpec,
         label="Domain",
+        connection_providers=("cloudflare_dns",),
         public_effect=True,
         hostnames=None,
         readout=_zone_readout,

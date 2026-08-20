@@ -27,7 +27,11 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
-from control_plane.models import ManagedResource, ProviderInventory
+from control_plane.models import (
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+)
 from control_plane.providers import PROVIDERS, service_facets
 
 from .security import Capability, Principal
@@ -132,6 +136,51 @@ def record_inventory(
     return {
         "ok": True,
         "recorded": stored,
+        "observed_at": observed_at.isoformat(),
+    }
+
+
+@transaction.atomic
+def record_connections(
+    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
+) -> dict[str, Any]:
+    """Store what one controller can currently reach, replacing its last answer.
+
+    Scoped to the controller that reported it, so a connection this one no
+    longer carries goes away without touching another controller's. A credential
+    revoked in 1Password stops being offered on the next sweep, which is the
+    whole point of holding this as an observation rather than as a list.
+    """
+
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    observed_at = timezone.now()
+    stored = []
+    for connection in payload:
+        connection_ref = str(connection.get("connection_ref", "")).strip()
+        if not connection_ref:
+            continue
+        ProviderConnection.objects.update_or_create(
+            controller_id=controller_id,
+            connection_ref=connection_ref,
+            defaults={
+                "provider": str(connection.get("provider", ""))[:64],
+                "endpoint": str(connection.get("endpoint", ""))[:500],
+                "reaches": [
+                    str(name) for name in connection.get("reaches") or [] if name
+                ],
+                "reachable": bool(connection.get("ok", True)),
+                "probed": bool(connection.get("probed", True)),
+                "detail": str(connection.get("detail", ""))[:500],
+                "observed_at": observed_at,
+            },
+        )
+        stored.append(connection_ref)
+    ProviderConnection.objects.filter(controller_id=controller_id).exclude(
+        connection_ref__in=stored
+    ).delete()
+    return {
+        "ok": True,
+        "recorded": sorted(stored),
         "observed_at": observed_at.isoformat(),
     }
 

@@ -12,6 +12,11 @@ urlpatterns = [
     # key. The hostname converter is <str:> rather than <slug:> because a
     # hostname has dots in it and a slug does not.
     path("services/", views.ServiceListView.as_view(), name="services"),
+    path(
+        "connections/",
+        views.ConnectionListView.as_view(),
+        name="connections",
+    ),
     # Before <str:hostname>, which would otherwise swallow "new" as a name.
     path("services/new/", views.ServiceStartView.as_view(), name="service_start"),
     path("new/", views.ResourceFormView.as_view(), name="create"),

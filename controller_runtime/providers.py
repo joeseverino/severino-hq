@@ -159,9 +159,14 @@ def _required(prefix: str, name: str) -> str:
     return value
 
 
-def _adguard_headers() -> dict[str, str]:
+def _adguard_url(connection_ref: str = "") -> str:
+    return _required(connection_prefix("adguard", connection_ref), "URL").rstrip("/")
+
+
+def _adguard_headers(connection_ref: str = "") -> dict[str, str]:
+    prefix = connection_prefix("adguard", connection_ref)
     encoded = base64.b64encode(
-        f"{_required('ADGUARD', 'USERNAME')}:{_required('ADGUARD', 'PASSWORD')}".encode()
+        f"{_required(prefix, 'USERNAME')}:{_required(prefix, 'PASSWORD')}".encode()
     ).decode()
     return {"Authorization": f"Basic {encoded}"}
 
@@ -170,7 +175,7 @@ def reconcile_adguard(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url = _required("ADGUARD", "URL").rstrip("/")
+    base_url = _adguard_url()
     headers = _adguard_headers()
     rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
     desired = {"domain": spec["domain"], "answer": spec["answer"]}
@@ -248,13 +253,20 @@ def reconcile_adguard(
     )
 
 
-def _npm_token(base_url: str) -> str:
+def _npm_url(connection_ref: str = "") -> str:
+    return _npm_api_url(
+        _required(connection_prefix("npm", connection_ref), "URL")
+    )
+
+
+def _npm_token(base_url: str, connection_ref: str = "") -> str:
+    prefix = connection_prefix("npm", connection_ref)
     result = _request(
         f"{base_url}/tokens",
         method="POST",
         payload={
-            "identity": _required("NPM", "USERNAME"),
-            "secret": _required("NPM", "PASSWORD"),
+            "identity": _required(prefix, "USERNAME"),
+            "secret": _required(prefix, "PASSWORD"),
         },
     )
     token = result.get("token", "") if isinstance(result, dict) else ""
@@ -274,77 +286,31 @@ def _npm_api_url(configured_url: str) -> str:
 
 
 def preflight() -> list[dict[str, Any]]:
+    """Every connection answered, or the first one that did not, loudly.
+
+    The same sweep `connections` reports to HQ, read as a gate: this runs before
+    an operation is claimed, and a credential that has stopped working should
+    stop the pass rather than surface a minute later as a failed job.
+    """
+
     acme_dir = Path(_required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
         raise ProviderError("ACME state directory is not writable.")
     _run(["certbot", "--version"], step="certbot preflight")
-    adguard_url = _required("ADGUARD", "URL").rstrip("/")
-    _request(
-        f"{adguard_url}/control/status",
-        headers=_adguard_headers(),
-    )
-    npm_url = _npm_api_url(_required("NPM", "URL"))
-    _npm_token(npm_url)
-    cloudflare_url = _required("CLOUDFLARE_DNS", "URL").rstrip("/")
-    cloudflare_headers = {
-        "Authorization": f"Bearer {_required('CLOUDFLARE_DNS', 'API_TOKEN')}"
-    }
-    verification = _request(
-        f"{cloudflare_url}/user/tokens/verify",
-        headers=cloudflare_headers,
-    )
-    if not isinstance(verification, dict) or not verification.get("success"):
-        raise ProviderError("Cloudflare DNS token verification failed.")
-    zones = _request(
-        f"{cloudflare_url}/zones?per_page=50",
-        headers=cloudflare_headers,
-    )
-    available_zones = {
-        zone.get("name")
-        for zone in zones.get("result", [])
-        if isinstance(zone, dict)
-    }
-    # Which zones *matter* is not the controller's to know. It held a literal
-    # list of one deployment's domains, so adding a domain meant editing the
-    # controller, and any other installation failed preflight on domains it had
-    # never heard of. The credential reports what it can reach; HQ declares
-    # which zones it is responsible for and is the only side able to compare
-    # the two.
-    # Which hosts a deployment reaches is its configuration, not the
-    # controller's, and the credentials it was handed already say which those
-    # are.
-    ssh_refs = ssh_connection_refs()
-    for ref in ssh_refs:
-        _ssh(ref, "preflight")
-    return [
-        {
-            "connection_ref": _required("ADGUARD", "CONNECTION_REF"),
-            "provider": "adguard",
-            "ok": True,
-        },
-        {
-            "connection_ref": _required("NPM", "CONNECTION_REF"),
-            "provider": "npm",
-            "ok": True,
-        },
-        {
-            "connection_ref": _required("CLOUDFLARE_DNS", "CONNECTION_REF"),
-            "provider": "cloudflare_dns",
-            "ok": True,
-            "zones": sorted(available_zones),
-        },
-        *(
-            {"connection_ref": ref, "provider": "ssh", "ok": True}
-            for ref in ssh_refs
-        ),
-    ]
+    probed = connections()
+    for connection in probed:
+        if not connection["ok"]:
+            raise ProviderError(
+                f"{connection['connection_ref']}: {connection['detail']}"
+            )
+    return probed
 
 
 def reconcile_npm(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
@@ -485,7 +451,7 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
     """Resolve a managed consumer's origin without changing TLS SNI."""
     kind = consumer["kind"]
     if kind == "npm":
-        hostname = urllib.parse.urlsplit(_required("NPM", "URL")).hostname
+        hostname = urllib.parse.urlsplit(_required(connection_prefix("npm"), "URL")).hostname
         if not hostname:
             raise ProviderError("NPM origin verification endpoint is missing.")
         return hostname
@@ -501,7 +467,7 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
 
 
 def _npm_covered_hosts(certificate_domains: list[str]) -> list[dict[str, Any]]:
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     names = set(certificate_domains)
@@ -617,6 +583,75 @@ def connection_prefixes() -> dict[str, str]:
         for name, value in os.environ.items()
         if name.endswith(suffix) and value
     }
+
+
+def connection_provider(connection_ref: str) -> str:
+    """What kind of thing one connection reaches.
+
+    The env prefix is the answer unless the 1Password item says otherwise, which
+    makes the long-standing convention -- `ADGUARD_URL` is AdGuard's URL -- the
+    rule rather than a coincidence every provider had to restate. Declaring it
+    on the item is what lets two of the same kind coexist: `PORTAINER_HOME` and
+    `PORTAINER_CLOUD` are both portainer, and neither has to be named here.
+    """
+
+    prefix = connection_prefixes().get(connection_ref, "")
+    if not prefix:
+        return ""
+    return os.environ.get(f"{prefix}_PROVIDER", "").strip() or prefix.lower()
+
+
+def connection_prefix(provider: str, connection_ref: str = "") -> str:
+    """The env prefix for one connection: the one named, or the only one.
+
+    A provider that takes a ``connection_ref`` resolves it here and reaches
+    exactly that endpoint, so a second Portainer is a second 1Password item and
+    nothing more. A provider whose spec names none gets the sole connection for
+    its kind; two of them is an error rather than a silent choice between them,
+    because guessing would reconcile the wrong estate.
+
+    Falls back to the provider's own name in upper case, which is the prefix a
+    deployment that has not yet labelled its connections is already using.
+    """
+
+    inventory = connection_prefixes()
+    if connection_ref:
+        prefix = inventory.get(connection_ref)
+        if not prefix:
+            raise ProviderError(
+                f"No connection named {connection_ref!r} was supplied to the "
+                "controller."
+            )
+        return prefix
+    candidates = sorted(
+        prefix
+        for ref, prefix in inventory.items()
+        if connection_provider(ref) == provider
+    )
+    if len(candidates) > 1:
+        raise ProviderError(
+            f"More than one connection is a {provider}; the resource has to "
+            "say which."
+        )
+    return candidates[0] if candidates else provider.upper()
+
+
+def provider_connection_refs(provider: str) -> tuple[str, ...]:
+    """Every connection that is one of these, as its own item declares.
+
+    What a sweep iterates. Two Portainers are two 1Password items and get swept
+    as two, so an estate grows by being given a credential rather than by being
+    named anywhere. Falls back to the conventional prefix for a deployment whose
+    items do not carry the field yet, which is one connection, the one it has.
+    """
+
+    declared = tuple(
+        sorted(ref for ref in connection_prefixes() if connection_provider(ref) == provider)
+    )
+    if declared:
+        return declared
+    conventional = os.environ.get(f"{provider.upper()}_CONNECTION_REF", "").strip()
+    return (conventional,) if conventional else ()
 
 
 def ssh_connection_refs() -> tuple[str, ...]:
@@ -821,7 +856,7 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     credentials = acme_dir / "cloudflare.ini"
     credentials.write_text(
         "dns_cloudflare_api_token = "
-        + _required("CLOUDFLARE_DNS", "API_TOKEN")
+        + _cloudflare_token()
         + "\n"
     )
     credentials.chmod(0o600)
@@ -906,7 +941,7 @@ def _npm_managed_certificate(
     fullchain: bytes,
     private_key: bytes,
 ) -> tuple[int, dict[str, str]]:
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     nice_name = f"Severino HQ - {consumer['name']}"
     certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
@@ -1344,7 +1379,7 @@ def delete_uploaded_certificate(
             + " by hand first, then remove those targets from this resource."
         )
 
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
     wanted = {
@@ -1407,7 +1442,7 @@ def delete_adguard(
     nothing there has achieved exactly what was asked.
     """
 
-    base_url = _required("ADGUARD", "URL").rstrip("/")
+    base_url = _adguard_url()
     headers = _adguard_headers()
     rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
     matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
@@ -1446,7 +1481,7 @@ def delete_npm(
 ) -> ProviderResult:
     """Remove the proxy host matching this exact domain set."""
 
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
@@ -1481,7 +1516,7 @@ def delete_npm(
 
 
 def list_adguard() -> list[dict[str, Any]]:
-    base_url = _required("ADGUARD", "URL").rstrip("/")
+    base_url = _adguard_url()
     records = _request(f"{base_url}/control/rewrite/list", headers=_adguard_headers())
     return [
         {
@@ -1495,7 +1530,7 @@ def list_adguard() -> list[dict[str, Any]]:
 
 
 def list_npm() -> list[dict[str, Any]]:
-    base_url = _npm_api_url(_required("NPM", "URL"))
+    base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     records = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     # Only the fields HQ can express, plus the identity. The rest is NPM's
@@ -1534,6 +1569,18 @@ def list_npm() -> list[dict[str, Any]]:
 # registry -- and why nothing here reaches for a setting it cannot change.
 
 
+def _cloudflare_url(connection_ref: str = "") -> str:
+    return _required(
+        connection_prefix("cloudflare_dns", connection_ref), "URL"
+    ).rstrip("/")
+
+
+def _cloudflare_token(connection_ref: str = "") -> str:
+    return _required(
+        connection_prefix("cloudflare_dns", connection_ref), "API_TOKEN"
+    )
+
+
 def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
     """One Cloudflare call, with its envelope unwrapped and its errors kept.
 
@@ -1544,9 +1591,9 @@ def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) 
     "Provider request failed: HTTPError" is a support ticket to yourself.
     """
 
-    url = f"{_required('CLOUDFLARE_DNS', 'URL').rstrip('/')}{path}"
+    url = f"{_cloudflare_url()}{path}"
     headers = {
-        "Authorization": f"Bearer {_required('CLOUDFLARE_DNS', 'API_TOKEN')}",
+        "Authorization": f"Bearer {_cloudflare_token()}",
         "Accept": "application/json",
     }
     body = None
@@ -1845,7 +1892,7 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
     ones already decided about.
     """
 
-    connection_ref = _required("CLOUDFLARE_DNS", "CONNECTION_REF")
+    connection_ref = _required(connection_prefix("cloudflare_dns"), "CONNECTION_REF")
     return [
         {
             "zone": zone["name"],
@@ -1871,12 +1918,479 @@ def list_cloudflare_records() -> list[dict[str, Any]]:
     return records
 
 
+# --- Portainer ---------------------------------------------------------------
+#
+# Portainer holds one credential and reaches every Docker host registered with
+# it, so a machine becomes available to HQ by being an environment there rather
+# than by anything here naming it.
+
+
+def _portainer_url(connection_ref: str = "") -> str:
+    base = _required(
+        connection_prefix("portainer", connection_ref), "URL"
+    ).rstrip("/")
+    return base if base.endswith("/api") else f"{base}/api"
+
+
+def _portainer_headers(connection_ref: str = "") -> dict[str, str]:
+    return {
+        "X-API-Key": _required(
+            connection_prefix("portainer", connection_ref), "API_TOKEN"
+        )
+    }
+
+
+def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
+    """Every Docker environment, with the machine each one is.
+
+    Portainer names its own local environment `local`, which is nobody's
+    hostname. The address it is reached at is the reliable identity: an agent
+    carries the machine's address in its URL, and a unix socket means the
+    machine Portainer is itself running on.
+    """
+
+    environments = _request(
+        f"{_portainer_url(connection_ref)}/endpoints",
+        headers=_portainer_headers(connection_ref),
+    )
+    resolved = []
+    for environment in environments or []:
+        url = str(environment.get("URL", ""))
+        address = urllib.parse.urlsplit(url).hostname if "://" in url else ""
+        resolved.append(
+            {
+                "id": environment.get("Id"),
+                "name": environment.get("Name", ""),
+                "address": address or "",
+                "local": not address,
+                "reachable": environment.get("Status") == 1,
+            }
+        )
+    return resolved
+
+
+def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str, Any]:
+    """The environment that is a given machine.
+
+    Matched on address, or on the environment's own name, or -- for the local
+    socket -- on the machine Portainer runs on, which the controller knows
+    because it is the machine it runs on too.
+    """
+
+    environments = _portainer_environments(connection_ref)
+    for environment in environments:
+        if environment["address"] and environment["address"] == host:
+            return environment
+        if environment["name"] == host:
+            return environment
+    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    for environment in environments:
+        if environment["local"] and local_host and local_host == host:
+            return environment
+    raise ProviderError(f"No Portainer environment is {host!r}.")
+
+
+def _portainer_stacks(
+    environment_id: int, connection_ref: str = ""
+) -> list[dict[str, Any]]:
+    stacks = _request(
+        f"{_portainer_url(connection_ref)}/stacks",
+        headers=_portainer_headers(connection_ref),
+    )
+    return [
+        stack
+        for stack in stacks or []
+        if stack.get("EndpointId") == environment_id
+    ]
+
+
+def _portainer_containers(
+    environment_id: int, connection_ref: str = ""
+) -> list[dict[str, Any]]:
+    return (
+        _request(
+            f"{_portainer_url(connection_ref)}/endpoints/{environment_id}"
+            "/docker/containers/json?all=1",
+            headers=_portainer_headers(connection_ref),
+        )
+        or []
+    )
+
+
+def _published(container: dict[str, Any]) -> tuple[list[int], int | None, bool]:
+    """Every port this answers on, the one that is unambiguous, and its reach.
+
+    A published port carries the address it was bound to. Bound to the loopback
+    it is reachable only from inside that machine, which is the difference
+    between a proxy in a container reaching it and returning 502.
+
+    The single port is named only when exactly one is published. A proxy
+    publishing 80, 81 and 443 has no one port, and picking the first would print
+    a guess beside facts.
+    """
+
+    ports: set[int] = set()
+    reachable = True
+    for port in container.get("Ports") or ():
+        public = port.get("PublicPort")
+        if not public:
+            continue
+        ports.add(int(public))
+        if str(port.get("IP", "")) in {"127.0.0.1", "::1"}:
+            reachable = False
+    listed = sorted(ports)
+    return listed, (listed[0] if len(listed) == 1 else None), reachable
+
+
+def _container_record(
+    container: dict[str, Any], host: str, connection_ref: str
+) -> dict[str, Any]:
+    """What Portainer knows about one container, in HQ's vocabulary."""
+
+    labels = container.get("Labels") or {}
+    ports, port, reachable = _published(container)
+    return {
+        "name": (container.get("Names") or ["/"])[0].lstrip("/"),
+        "stack": labels.get("com.docker.compose.project", ""),
+        "working_dir": labels.get("com.docker.compose.project.working_dir", ""),
+        "image": container.get("Image", ""),
+        "state": container.get("State", ""),
+        "status": container.get("Status", ""),
+        "ports": ports,
+        "port": port,
+        "reachable": reachable,
+        "host": host,
+        "connection_ref": connection_ref,
+    }
+
+
+def _stack_payload(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "Name": spec["name"],
+        "StackFileContent": spec["compose"],
+        "Env": [
+            {"name": item.get("name", ""), "value": item.get("value", "")}
+            for item in spec.get("environment") or ()
+        ],
+    }
+
+
+def reconcile_portainer(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    connection_ref = spec.get("connection_ref", "")
+    environment = _portainer_environment_for(spec["host"], connection_ref)
+    if not environment["reachable"]:
+        raise ProviderError(
+            f"Portainer cannot currently reach {spec['host']}."
+        )
+    existing = [
+        stack
+        for stack in _portainer_stacks(environment["id"], connection_ref)
+        if stack.get("Name") == spec["name"]
+    ]
+    if len(existing) > 1:
+        raise ProviderError("Portainer holds more than one stack of that name.")
+
+    changed = True
+    if existing:
+        stack = existing[0]
+        current = _request(
+            f"{_portainer_url(connection_ref)}/stacks/{stack['Id']}/file",
+            headers=_portainer_headers(connection_ref),
+        )
+        if (current or {}).get("StackFileContent") == spec["compose"]:
+            changed = False
+        elif apply:
+            _request(
+                f"{_portainer_url(connection_ref)}/stacks/{stack['Id']}"
+                f"?endpointId={environment['id']}",
+                method="PUT",
+                headers=_portainer_headers(connection_ref),
+                payload={**_stack_payload(spec), "PullImage": False},
+            )
+    elif apply:
+        _request(
+            f"{_portainer_url(connection_ref)}/stacks/create/standalone/string"
+            f"?endpointId={environment['id']}",
+            method="POST",
+            headers=_portainer_headers(connection_ref),
+            payload=_stack_payload(spec),
+        )
+
+    # What is actually running, which is the only thing worth reporting: a
+    # stack Portainer accepted and Docker then failed to start is not Ready.
+    containers = [
+        _container_record(container, spec["host"], connection_ref)
+        for container in _portainer_containers(environment["id"], connection_ref)
+        if (container.get("Labels") or {}).get("com.docker.compose.project")
+        == spec["name"]
+    ]
+    running = [item for item in containers if item["state"] == "running"]
+    unreachable = [item for item in containers if not item["reachable"]]
+    status = {
+        "environment": environment["name"],
+        "host": spec["host"],
+        "containers": containers,
+        "origin": f"{spec['host']}:{spec['port']}" if spec.get("port") else "",
+        "state": "running" if running and len(running) == len(containers) else "",
+    }
+
+    if apply and not containers:
+        return ProviderResult(
+            changed=changed,
+            status=status,
+            conditions=[
+                _condition(
+                    "Degraded", True, "NotRunning",
+                    "The stack exists in Portainer but no container from it is "
+                    "running.",
+                )
+            ],
+            message="Stack is declared but nothing is running.",
+        )
+    if unreachable:
+        names = ", ".join(sorted(item["name"] for item in unreachable))
+        return ProviderResult(
+            changed=changed,
+            status=status,
+            conditions=[
+                _condition(
+                    "Degraded", True, "BoundToLoopback",
+                    f"{names} publishes a port on the loopback address, so "
+                    "nothing outside that machine can reach it -- including a "
+                    "proxy running in a container on the same host.",
+                )
+            ],
+            message="Stack is running but is not reachable.",
+        )
+    return ProviderResult(
+        changed=changed,
+        status=status,
+        conditions=[
+            _condition("Ready", True, "Reconciled", "Stack is running.")
+        ],
+        message="Stack updated." if changed else "Stack unchanged.",
+    )
+
+
+def delete_portainer(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    connection_ref = spec.get("connection_ref", "")
+    environment = _portainer_environment_for(spec["host"], connection_ref)
+    existing = [
+        stack
+        for stack in _portainer_stacks(environment["id"], connection_ref)
+        if stack.get("Name") == spec["name"]
+    ]
+    if not existing:
+        return ProviderResult(
+            changed=False,
+            status={},
+            conditions=[
+                _condition("Ready", True, "Absent", "Stack is already gone.")
+            ],
+            message="Stack was already absent.",
+        )
+    if apply:
+        _request(
+            f"{_portainer_url(connection_ref)}/stacks/{existing[0]['Id']}"
+            f"?endpointId={environment['id']}",
+            method="DELETE",
+            headers=_portainer_headers(connection_ref),
+        )
+    return ProviderResult(
+        changed=True,
+        status={},
+        conditions=[_condition("Ready", True, "Deleted", "Stack removed.")],
+        message="Stack removed.",
+    )
+
+
+def list_portainer() -> list[dict[str, Any]]:
+    """Every container Portainer can see, on every machine it reaches.
+
+    Read from containers rather than stacks. A stack listing describes only what
+    Portainer itself created, and everything standing up today was started by
+    compose on the machine -- so a stack listing would report an estate of
+    nothing while seven containers ran.
+    """
+
+    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    records: list[dict[str, Any]] = []
+    for connection_ref in provider_connection_refs("portainer"):
+        for environment in _portainer_environments(connection_ref):
+            if not environment["reachable"]:
+                continue
+            # A local socket is the machine the controller runs on, which is the
+            # name the topology and every other resource already use for it.
+            host = (
+                local_host
+                if environment["local"] and local_host
+                else environment["name"]
+            )
+            for container in _portainer_containers(environment["id"], connection_ref):
+                records.append(_container_record(container, host, connection_ref))
+    return records
+
+
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
+    "portainer.stack": list_portainer,
 }
+
+
+# ----- Connections -----------------------------------------------------------
+#
+# What the controller can reach, and whether it still can. The rendered
+# environment is the inventory, so this enumerates itself: a 1Password item
+# becomes a row here, a probe and -- once HQ has been told -- a row on a page,
+# without anything in this file naming it.
+
+
+# A probe answers two questions in one call: whether the credential still works,
+# and what it reaches. The second is why the connection sweep is worth running
+# at all -- a Portainer knows which machines exist, a DNS token knows which zones
+# it may touch, and both are facts HQ can only get by asking. Reported as names
+# so every menu that offers "which machine" or "which domain" is derived from
+# the credential that would have to carry out the answer.
+
+
+def _probe_adguard(connection_ref: str) -> dict[str, Any]:
+    status = _request(
+        f"{_adguard_url(connection_ref)}/control/status",
+        headers=_adguard_headers(connection_ref),
+    )
+    if not isinstance(status, dict) or "dns_addresses" not in status:
+        raise ProviderError("AdGuard did not return a status.")
+    return {"detail": f"AdGuard {status.get('version', '')}".strip(), "reaches": []}
+
+
+def _probe_npm(connection_ref: str) -> dict[str, Any]:
+    _npm_token(_npm_url(connection_ref), connection_ref)
+    return {"detail": "Authenticated.", "reaches": []}
+
+
+def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
+    headers = {"Authorization": f"Bearer {_cloudflare_token(connection_ref)}"}
+    verification = _request(
+        f"{_cloudflare_url(connection_ref)}/user/tokens/verify", headers=headers
+    )
+    if not isinstance(verification, dict) or not verification.get("success"):
+        raise ProviderError("Cloudflare token verification failed.")
+    # Which zones *matter* is not the controller's to know. The credential
+    # reports what it can reach; HQ declares which zones it is responsible for
+    # and is the only side able to compare the two.
+    zones = _request(
+        f"{_cloudflare_url(connection_ref)}/zones?per_page=50", headers=headers
+    )
+    names = sorted(
+        zone["name"]
+        for zone in (zones or {}).get("result", [])
+        if isinstance(zone, dict) and zone.get("name")
+    )
+    return {"detail": f"{len(names)} zones.", "reaches": names}
+
+
+def _probe_portainer(connection_ref: str) -> dict[str, Any]:
+    environments = _portainer_environments(connection_ref)
+    reachable = [item for item in environments if item["reachable"]]
+    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    return {
+        "detail": (
+            f"{len(reachable)} of {len(environments)} environments reachable."
+        ),
+        "reaches": sorted(
+            local_host if item["local"] and local_host else item["name"]
+            for item in reachable
+        ),
+    }
+
+
+def _probe_ssh(connection_ref: str) -> dict[str, Any]:
+    _ssh(connection_ref, "preflight")
+    transport = _transport(connection_ref)
+    return {
+        "detail": f"{transport['user']}@{transport['host']}:{transport['port']}",
+        "reaches": [transport["host"]],
+    }
+
+
+_CONNECTION_PROBES = {
+    "adguard": _probe_adguard,
+    "npm": _probe_npm,
+    "cloudflare_dns": _probe_cloudflare_dns,
+    "portainer": _probe_portainer,
+}
+
+
+def _endpoint(prefix: str) -> str:
+    """Where a connection points, from whichever values its projection produced.
+
+    Never a secret: a URL and a host are what an operator needs to recognise
+    which of two connections they are looking at, and both are already visible
+    to anyone who can reach the thing at all.
+    """
+
+    for name in ("URL", "DIRECTORY_URL"):
+        url = os.environ.get(f"{prefix}_{name}", "").strip()
+        if url:
+            return url
+    host = os.environ.get(f"{prefix}_HOST", "").strip()
+    port = os.environ.get(f"{prefix}_PORT", "").strip()
+    return f"{host}:{port}" if host and port else host
+
+
+def connections() -> list[dict[str, Any]]:
+    """Every connection the environment carries, and whether it answers.
+
+    One failure is that connection's failure. Reported rather than raised so a
+    Cloudflare token that expired does not also make the two machines HQ can
+    still reach look like they have gone away -- the sweep is the only thing
+    that tells an operator which of the two happened.
+    """
+
+    ssh_refs = set(ssh_connection_refs())
+    reported: list[dict[str, Any]] = []
+    for connection_ref, prefix in sorted(connection_prefixes().items()):
+        provider = connection_provider(connection_ref)
+        probe = _CONNECTION_PROBES.get(provider)
+        if probe is None and connection_ref in ssh_refs:
+            # A transport, whatever its prefix happens to spell. The projection
+            # that produced a host and a user is what makes it one, so this
+            # stays true for a machine added under any name.
+            probe = _probe_ssh
+            provider = os.environ.get(f"{prefix}_PROVIDER", "").strip() or "ssh"
+        connection = {
+            "connection_ref": connection_ref,
+            "provider": provider,
+            "endpoint": _endpoint(prefix),
+            "probed": probe is not None,
+            "ok": True,
+            "detail": "",
+            "reaches": [],
+        }
+        if probe is None:
+            # Carried, usable, and not something this knows how to ask. Reported
+            # as unprobed rather than omitted: a connection HQ cannot see is one
+            # an operator will keep re-adding.
+            connection["detail"] = "No probe for this kind of connection."
+        else:
+            try:
+                result = probe(connection_ref)
+                connection["detail"] = result["detail"]
+                connection["reaches"] = result["reaches"]
+            except (ProviderError, OSError, ValueError, KeyError) as exc:
+                connection["ok"] = False
+                connection["detail"] = str(exc)
+        reported.append(connection)
+    return reported
 
 
 def inventory() -> dict[str, Any]:
@@ -1903,6 +2417,8 @@ def inventory() -> dict[str, Any]:
 
 PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("portainer.stack", "reconcile"): reconcile_portainer,
+    ("portainer.stack", "delete"): delete_portainer,
     ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
     ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
     ("adguard.rewrite", "delete"): delete_adguard,

@@ -72,6 +72,18 @@
           "automatic": false
         }
       }
+    },
+    "portainer.stack": {
+      "actions": {
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true
+        },
+        "delete": {
+          "mode": "apply",
+          "automatic": false
+        }
+      }
     }
   }
 }

@@ -23,7 +23,8 @@ cat >"${fixture_dir}/projections-only.json" <<'JSON'
     "api_token": {
       "CONNECTION_REF": {"source": "connection_ref"},
       "URL": {"source": "field", "label": "website"},
-      "API_TOKEN": {"source": "field", "id": "credential"}
+      "API_TOKEN": {"source": "field", "id": "credential"},
+      "PROVIDER": {"source": "field", "label": "provider", "optional": true}
     }
   }
 }
@@ -37,7 +38,8 @@ cat >"${fixture_dir}/with-connections.json" <<'JSON'
     "api_token": {
       "CONNECTION_REF": {"source": "connection_ref"},
       "URL": {"source": "field", "label": "website"},
-      "API_TOKEN": {"source": "field", "id": "credential"}
+      "API_TOKEN": {"source": "field", "id": "credential"},
+      "PROVIDER": {"source": "field", "label": "provider", "optional": true}
     }
   },
   "connections": {
@@ -138,7 +140,31 @@ write_op '[{"id":"item-1"},{"id":"item-2"}]' '{"fields":[
 check "duplicate connection_ref fails" "${fixture_dir}/projections-only.json" 1 \
     "More than one 1Password item declares"
 
-# 6. Items that are not provider connections are ignored, not fatal.
+# 6. An optional value the item does carry is rendered.
+write_op '[{"id":"item-1"}]' '{"fields":[
+  {"id":"a","label":"connection_ref","value":"example"},
+  {"id":"b","label":"projection","value":"api_token"},
+  {"id":"c","label":"env_prefix","value":"EXAMPLE"},
+  {"id":"e","label":"provider","value":"portainer"},
+  {"id":"credential","label":"credential","value":"test-token"},
+  {"id":"d","label":"website","value":"https://api.example.test"}
+]}'
+check "an optional field is rendered when present" "${fixture_dir}/projections-only.json" 0 \
+    'EXAMPLE_PROVIDER="portainer"'
+
+# 7. The same item without it renders the rest rather than failing. This is what
+#    lets a connection be classified one item at a time instead of all at once.
+write_op '[{"id":"item-1"}]' '{"fields":[
+  {"id":"a","label":"connection_ref","value":"example"},
+  {"id":"b","label":"projection","value":"api_token"},
+  {"id":"c","label":"env_prefix","value":"EXAMPLE"},
+  {"id":"credential","label":"credential","value":"test-token"},
+  {"id":"d","label":"website","value":"https://api.example.test"}
+]}'
+check "an absent optional field is not fatal" "${fixture_dir}/projections-only.json" 0 \
+    'EXAMPLE_API_TOKEN="test-token"'
+
+# 8. Items that are not provider connections are ignored, not fatal.
 write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"a","label":"username","value":"someone"}
 ]}'

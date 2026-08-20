@@ -964,6 +964,12 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 .pill-read { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
 .pill-replied { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
 .pill-spam { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
+/* A connection that was not asked is not a connection that failed, so unprobed
+   is neutral rather than the warning colour it would read as if it shared one
+   with unreachable. */
+.pill-reachable { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
+.pill-unreachable { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
+.pill-unprobed { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
 
 /* ── Contact submissions ────────────────────────────────────────── */
 

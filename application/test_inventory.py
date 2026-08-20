@@ -359,12 +359,19 @@ class AdoptServiceTests(TestCase):
         self.assertEqual(len(services[0].items), 2)
 
     def test_the_grouped_columns_match_the_service_view(self):
+        """Both tables render the same columns, so a row lines up with a row."""
+        from control_plane.providers import service_facets
+
         facets = unmanaged_services()[0].facets
 
-        self.assertEqual([facet_id for facet_id, _, _ in facets], ["dns", "proxy", "certificate"])
-        # A facet nothing supplies renders empty rather than being dropped, so
-        # the columns line up with the managed table beside it.
-        self.assertEqual(facets[2][2], "")
+        self.assertEqual(
+            [facet_id for facet_id, _, _ in facets],
+            [facet_id for facet_id, _ in service_facets()],
+        )
+        # A facet nothing supplies for *this* service renders empty rather than
+        # being dropped, so the columns still line up.
+        empty = dict((facet_id, value) for facet_id, _, value in facets)
+        self.assertEqual(empty["certificate"], "")
 
     def test_a_column_carries_the_value_and_not_its_label(self):
         """The heading already says DNS; "Answers with" in the cell is noise."""

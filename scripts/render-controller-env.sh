@@ -101,6 +101,15 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
             jq -r --arg projection "${projection}" --arg name "${env_name}" \
                 '.projections[$projection][$name].source' "${registry}"
         )"
+        # A value a connection may or may not carry. `provider` is the case: it
+        # classifies a connection so HQ can offer it for the right thing, and an
+        # item that predates the field is still a connection the controller can
+        # open. Required, adding the field would be a flag day across every item
+        # at once.
+        optional="$(
+            jq -r --arg projection "${projection}" --arg name "${env_name}" \
+                '.projections[$projection][$name].optional // false' "${registry}"
+        )"
         case "${source}" in
             connection_ref)
                 value="$(printf %s "${connection_ref}" | jq -Rr '@json')"
@@ -134,6 +143,9 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
                         | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
                             '[.fields[] | select(.[$selector_type] == $selector)] | length'
                 )"
+                if [ "${field_count}" -eq 0 ] && [ "${optional}" = "true" ]; then
+                    continue
+                fi
                 if [ "${field_count}" -ne 1 ]; then
                     echo "Connection ${connection_ref} must contain exactly one field ${selector_type}=${selector}; found ${field_count}." >&2
                     exit 1
@@ -150,6 +162,9 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
                 ;;
         esac
         if [ -z "${value}" ]; then
+            if [ "${optional}" = "true" ]; then
+                continue
+            fi
             echo "Connection ${connection_ref} is missing ${env_name}." >&2
             exit 1
         fi

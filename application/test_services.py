@@ -66,6 +66,12 @@ def healthy(resource: ManagedResource) -> ManagedResource:
     return resource
 
 
+def facet(service, facet_id):
+    """One facet of a service, by name rather than by position."""
+
+    return next(item for item in service.facets if item.id == facet_id)
+
+
 class ServiceCompositionTests(TestCase):
     """The join itself: three declarations meeting on one name."""
 
@@ -111,7 +117,7 @@ class ServiceCompositionTests(TestCase):
         self.assertEqual([service.hostname for service in catalog], ["app.example.com"])
         service = catalog[0]
         self.assertEqual(
-            {facet.id: [claim.resource_key for claim in facet.claims] for facet in service.facets},
+            {facet.id: [claim.resource_key for claim in facet.claims] for facet in service.facets if facet.claims},
             {"dns": ["app-dns"], "proxy": ["app-proxy"], "certificate": ["wildcard"]},
         )
         self.assertEqual(service.faults, ())
@@ -126,7 +132,7 @@ class ServiceCompositionTests(TestCase):
         """
         self._wire()
 
-        certificate = find_service("app.example.com").facets[2]
+        certificate = facet(find_service("app.example.com"), "certificate")
 
         self.assertEqual(certificate.id, "certificate")
         self.assertTrue(certificate.present)
@@ -167,8 +173,8 @@ class ServiceCompositionTests(TestCase):
         catalog = service_catalog()
 
         self.assertEqual(len(catalog), 1)
-        self.assertTrue(catalog[0].facets[0].present)
-        self.assertTrue(catalog[0].facets[1].present)
+        self.assertTrue(facet(catalog[0], "dns").present)
+        self.assertTrue(facet(catalog[0], "proxy").present)
 
     def test_a_disabled_resource_stops_supplying_its_facet(self):
         self._wire()
@@ -176,7 +182,7 @@ class ServiceCompositionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(service.facets[1].present)
+        self.assertFalse(facet(service, "proxy").present)
         self.assertIsNone(service.origin)
 
 
@@ -395,7 +401,7 @@ class ServiceResolutionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(service.facets[2].present)
+        self.assertFalse(facet(service, "certificate").present)
         self.assertIn("no declared certificate covers it", " ".join(service.faults))
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
