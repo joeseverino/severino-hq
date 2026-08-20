@@ -102,7 +102,8 @@ not restated here.
       <strong>{{ service.origin.operator }}</strong>
       <span>
         <code>{{ service.origin.address }}</code> — outside your network. HQ
-        publishes the name; nothing here manages what answers it yet.
+        publishes the name that points here; what answers is managed at the
+        provider.
       </span>
     {% elif service.origin.known %}
       <strong>{{ service.origin.label }}</strong>
