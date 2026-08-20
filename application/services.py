@@ -230,6 +230,7 @@ class Running:
     state: str
     status: str
     ports: tuple[int, ...]
+    network_mode: str
     connection_ref: str
     observed_at: Any
 
@@ -245,6 +246,7 @@ class Running:
             ports=tuple(
                 int(port) for port in record.get("ports") or () if str(port).isdigit()
             ),
+            network_mode=str(record.get("network_mode", "")),
             connection_ref=str(record.get("connection_ref", "")),
             observed_at=observed_at,
         )
@@ -255,7 +257,18 @@ class Running:
 
     @property
     def published(self) -> str:
-        return ", ".join(str(port) for port in self.ports)
+        """The ports this publishes, or why that cannot be answered.
+
+        A host-network container binds the machine's ports directly, so Docker
+        reports none and an empty list would read as "serves nothing" about the
+        container currently serving the page.
+        """
+
+        if self.ports:
+            return ", ".join(str(port) for port in self.ports)
+        if self.network_mode == "host":
+            return "on the host network"
+        return ""
 
     @property
     def image_label(self) -> str:

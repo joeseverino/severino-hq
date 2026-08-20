@@ -2054,6 +2054,12 @@ def _container_record(
         "stack": labels.get("com.docker.compose.project", ""),
         "working_dir": labels.get("com.docker.compose.project.working_dir", ""),
         "image": container.get("Image", ""),
+        # How it is attached, because it decides whether the ports below can
+        # mean anything. A container on the host network binds the machine's
+        # ports directly and Docker reports none for it, so an empty list is
+        # "cannot be known from here" rather than "publishes nothing" -- and
+        # only this field tells the two apart.
+        "network_mode": (container.get("HostConfig") or {}).get("NetworkMode", ""),
         "state": container.get("State", ""),
         "status": container.get("Status", ""),
         "ports": ports,
