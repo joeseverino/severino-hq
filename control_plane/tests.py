@@ -984,3 +984,43 @@ class InfrastructureViewsTests(TestCase):
         self.assertEqual(
             operation.result["status"]["expected_fingerprint_sha256"], "new"
         )
+
+
+class DnsRecordReadoutTests(TestCase):
+    """A record that matches the world must not report drift against itself."""
+
+    def test_a_matching_record_reports_no_drift(self):
+        from control_plane.providers import _dns_record_readout
+
+        spec = {
+            "zone": "example.com", "name": "example.com", "record_type": "CNAME",
+            "content": "example.pages.dev", "priority": None, "proxied": True, "ttl": 1,
+        }
+        status = {**spec, "record_id": "abc"}
+        label, desired, observed = _dns_record_readout(spec, status)[0]
+        self.assertEqual(desired, observed)
+
+    def test_a_changed_record_still_reports_drift(self):
+        from control_plane.providers import _dns_record_readout
+
+        spec = {"record_type": "CNAME", "content": "new.pages.dev", "priority": None}
+        status = {"record_type": "CNAME", "content": "old.pages.dev", "priority": None}
+        _, desired, observed = _dns_record_readout(spec, status)[0]
+        self.assertNotEqual(desired, observed)
+
+    def test_priority_is_compared_on_both_sides(self):
+        from control_plane.providers import _dns_record_readout
+
+        spec = {"record_type": "MX", "content": "mx.example.com", "priority": 10}
+        status = {**spec}
+        _, desired, observed = _dns_record_readout(spec, status)[0]
+        self.assertEqual(desired, observed)
+        self.assertIn("10", desired)
+
+    def test_an_unobserved_record_reports_nothing_rather_than_drift(self):
+        from control_plane.providers import _dns_record_readout
+
+        spec = {"record_type": "A", "content": "192.0.2.1", "priority": None}
+        _, desired, observed = _dns_record_readout(spec, {})[0]
+        self.assertEqual(observed, "")
+        self.assertTrue(desired)

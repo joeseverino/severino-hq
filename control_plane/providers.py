@@ -1007,7 +1007,12 @@ def _dns_record_value(spec: dict[str, Any]) -> str:
 def _dns_record_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    rows = [("Record", _dns_record_value(spec), status.get("content", ""))]
+    # Both sides through the same formatter. Compared against the bare
+    # `content`, the desired value -- which states the type, and a priority
+    # when there is one -- could never match what was read back, so every
+    # record reported drift against itself while its own health said Healthy.
+    observed = _dns_record_value(status) if status.get("content") else ""
+    rows = [("Record", _dns_record_value(spec), observed)]
     if spec.get("proxied"):
         # Worth its own row: a proxied record resolves to Cloudflare rather than
         # to the address authored here, so an operator comparing this page
