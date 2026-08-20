@@ -480,7 +480,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .readout-label { color: var(--ink-2); font-weight: 600; }
 /* Inside a table, a readout keeps its line. `.table-scroll td` breaks words so
    a long cell wraps rather than widening the page -- right for prose, wrong for
-   an address: on a phone "192.168.1.233" became a column one digit wide and
+   an address: on a phone a dotted-quad IP became a column one digit wide and
    thirteen lines tall. The wrapper already scrolls, so the honest answer is to
    let the row be as wide as it is and let the reader swipe. */
 td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }

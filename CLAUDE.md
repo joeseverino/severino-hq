@@ -69,19 +69,24 @@ workflow at the commit you want.
 [[Deploy Severino HQ]] (`rb-deploy-severino-hq`), reachable via the
 `severino-vault-mcp` MCP.
 
-## Frontmatter schema is shared with the MCP — don't hand-edit it
+## Frontmatter schema is shared with the vault engine — don't hand-edit it
 
 The frontmatter enum contract (doc_type / environment / status / sensitivity
-values, doc_id prefixes) is defined **once**, in the MCP's `schema.py`. HQ
-consumes it as `docs_index/schema.json`, which is **generated, not authored**:
+values, doc_id prefixes) is defined **once**, in `vault-engine`:
+`~/Documents/Code/Assets/vault-engine/src/vault_engine/schema.py`, which holds
+`LABS_PROFILE` and `EDUCATION_PROFILE`. The vault and edu MCPs are thin servers
+over that package — `severino-vault-mcp` has no `schema.py` of its own; its
+`tests/test_schema_contract.py` imports `from vault_engine.schema import
+LABS_PROFILE`. HQ consumes the contract as `docs_index/schema.json`, which is
+**generated, not authored**:
 
 ```bash
-hq schema            # regenerate docs_index/schema.json from the installed MCP
+hq schema            # regenerate docs_index/schema.json via `svmc schema --json`
 hq schema --check    # verify it's current (exit 1 on drift) — CI / pre-deploy
 ```
 
 Rules so the single source can't drift:
-- Never hand-edit `docs_index/schema.json`. Change `schema.py` in the MCP,
+- Never hand-edit `docs_index/schema.json`. Change `schema.py` in **vault-engine**,
   reinstall (`site reinstall-mcp`), then `hq schema`, then commit + deploy.
 - The manifest importer (`docs_index/importer.py`) validates against
   `docs_index/frontmatter_schema.py` (the committed JSON), **not** model
@@ -123,27 +128,36 @@ No local venv is checked in. Either use Docker (`docker compose up`) or set
 up a venv per the README. `manage.py check` won't run from the host
 unless you've installed Django locally.
 
-## This repo is public. The extensions it composes are not.
+## The host does not name its extensions
 
-Everything here is a public artifact: code, comments, commit messages, PR
-prose, workflow files, docs. Before pushing, check the whole diff — not just
-the code — for anything naming a private extension or its domain:
+See the section of the same name in `AGENTS.md` for why: a host that names an
+extension has taken a dependency on it, and the point of this design is that it
+has none. Everything here is part of the published artifact — code, comments,
+commit messages, PR prose, workflows, docs — so the constraint applies to prose
+as much as to imports. Write examples as `example_notes` or `<extension>.<work>`.
+
+`application/test_plugins.py` enforces it in the composed image, where the real
+extension set exists: one test keeps `composition/extensions.json` empty, and
+one walks the source tree for any installed extension's id, distribution, app or
+urlconf package. Both take their terms from runtime composition rather than from
+anything committed. Public CI cannot run them — it has no extensions — so run
+the composed pass locally when a change touches `hq_sdk`:
 
 ```bash
-git log origin/main..HEAD -p | grep -inE "<extension names>|<domain terms>"
+CHECK_PYTHON=.venv/bin/python PYTHONPATH=… SEVERINO_HQ_PLUGINS=… ./scripts/check.sh
 ```
 
-Write examples as `<extension>.<work>` or `example_notes`, never the real
-name. The composed set lives in the `COMPOSITION_EXTENSIONS` repository
-variable precisely so it is never committed here; `composition/extensions.json`
-documents only its shape. If you catch a leak before pushing, rewrite the
-commit — after pushing it is public and a force-push is not redaction.
+`hq dev` computes those two values. Fix a coupling before pushing rather than
+after: once published, a force-push does not unpublish.
 
 ## Conventions
 
 - Commit messages: terse `<area>: <what>` style (see `git log`).
 - No `Co-Authored-By: Claude` trailers on commits. Solo-authored repo.
-- No inline `style="…"` in templates — add a class to `app.css` instead.
+- No inline `style="…"` in templates — add a class to `app.css` instead. The
+  sole exception is a per-datum CSS custom property on a chart mark
+  (`style="--at: 62%"`), which a class cannot express; `core/tests.py` pins
+  `style-src` as the only CSP directive allowed to relax.
 - List-page tables must be wrapped in `<div class="table-scroll">` so they
   scroll horizontally on mobile instead of widening the page.
 - Detail views with `{% if rel.all %}` + `{% for x in rel.all %}` panels
