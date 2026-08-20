@@ -304,19 +304,12 @@ def preflight() -> list[dict[str, Any]]:
         for zone in zones.get("result", [])
         if isinstance(zone, dict)
     }
-    required_zones = {
-        "jseverino.com",
-        "jseverino.net",
-        "jseverino.org",
-        "joeseverino.com",
-    }
-    missing_zones = sorted(required_zones - available_zones)
-    if missing_zones:
-        raise ProviderError(
-            "Cloudflare DNS token cannot read required zones: "
-            + ", ".join(missing_zones)
-            + "."
-        )
+    # Which zones *matter* is not the controller's to know. It held a literal
+    # list of one deployment's domains, so adding a domain meant editing the
+    # controller, and any other installation failed preflight on domains it had
+    # never heard of. The credential reports what it can reach; HQ declares
+    # which zones it is responsible for and is the only side able to compare
+    # the two.
     _ssh("edge", "preflight")
     _ssh("namecheap-cpanel", "preflight")
     return [
@@ -334,6 +327,7 @@ def preflight() -> list[dict[str, Any]]:
             "connection_ref": _required("CLOUDFLARE_DNS", "CONNECTION_REF"),
             "provider": "cloudflare_dns",
             "ok": True,
+            "zones": sorted(available_zones),
         },
         {"connection_ref": "edge", "provider": "ssh", "ok": True},
         {

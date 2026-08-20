@@ -99,11 +99,11 @@ class DmarcExplanationTests(SimpleTestCase):
 
 class SpfTests(SimpleTestCase):
     def test_a_policy_is_read_as_its_terms(self):
-        policy = parse_spf('"v=spf1 include:icloud.com -all"')
+        policy = parse_spf('"v=spf1 include:mail.example.net -all"')
 
         self.assertTrue(policy.valid)
         self.assertEqual(policy.terms[0].mechanism, "include")
-        self.assertEqual(policy.terms[0].argument, "icloud.com")
+        self.assertEqual(policy.terms[0].argument, "mail.example.net")
 
     def test_the_last_word_decides_everyone_else(self):
         self.assertIn("rejected", parse_spf("v=spf1 include:a.example -all").default_result)
@@ -122,7 +122,7 @@ class SpfTests(SimpleTestCase):
         self.assertTrue(policy.over_limit)
 
     def test_a_policy_inside_the_limit_is_not_flagged(self):
-        policy = parse_spf("v=spf1 include:icloud.com -all")
+        policy = parse_spf("v=spf1 include:mail.example.net -all")
 
         self.assertLessEqual(policy.lookups, SPF_LOOKUP_LIMIT)
         self.assertFalse(policy.over_limit)
@@ -135,7 +135,7 @@ class SpfTests(SimpleTestCase):
         self.assertEqual(policy.lookups, 0)
 
     def test_a_round_trip_publishes_what_was_read(self):
-        original = "v=spf1 include:icloud.com -all"
+        original = "v=spf1 include:mail.example.net -all"
 
         self.assertEqual(compose_spf(parse_spf(original).terms), original)
 

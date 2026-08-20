@@ -432,6 +432,32 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     return tuple(sorted(zones, key=lambda zone: (not zone.pinned, zone.zone)))
 
 
+def unreachable_zones(reachable: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """Domains HQ is responsible for that a credential cannot actually read.
+
+    The controller reports what its token reaches; HQ knows which domains it
+    has been made responsible for. Neither side can answer this alone, and the
+    comparison used to be a literal list of one deployment's domains compiled
+    into the controller -- so adding a domain meant editing the controller, and
+    a different installation failed preflight over domains it had never heard
+    of.
+    """
+
+    seen = {str(name).strip().lower() for name in reachable}
+    if not seen:
+        return ()
+    return tuple(
+        sorted(
+            _normalise(str(resource.spec.get("zone", "")))
+            for resource in ManagedResource.objects.filter(
+                kind=ZONE_KIND, enabled=True
+            )
+            if resource.spec.get("zone")
+            and _normalise(str(resource.spec["zone"])) not in seen
+        )
+    )
+
+
 def find_zone(zone: str) -> Zone | None:
     wanted = _normalise(zone)
     return next((item for item in zone_catalog() if item.zone == wanted), None)

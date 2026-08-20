@@ -22,7 +22,7 @@ from application.infrastructure import NotFoundError, PolicyError
 from application.inventory import AdoptCommand, adopt, inventory_state
 from application.security import web_principal
 
-from .views import _readable_error
+from .views import _readable_error, safe_next
 from application.pins import DOMAIN, pinned, toggle
 from application.mail_policy import (
     DMARC_TAGS,
@@ -209,7 +209,9 @@ class ZonePinView(LoginRequiredMixin, View):
         if not name:
             raise Http404("No such domain.")
         toggle(request.user, DOMAIN, name)
-        return redirect(request.POST.get("next") or reverse("zones:index"))
+        # Checked, not trusted: a destination arriving in a form post is a
+        # request, and an unchecked one redirects wherever it likes.
+        return redirect(safe_next(request) or reverse("zones:index"))
 
 
 class ZoneDetailView(LoginRequiredMixin, View):

@@ -40,7 +40,12 @@ from .inventory import (
 from .sweep import record_sweep
 from .security import cli_principal
 from .services import service_catalog, service_or_prospect
-from .zones import adopt_zone_records, find_zone, zone_catalog
+from .zones import (
+    adopt_zone_records,
+    find_zone,
+    unreachable_zones,
+    zone_catalog,
+)
 
 # A ceiling, not a measurement. Raised deliberately when a page genuinely
 # needs another read; tripped accidentally when a property starts querying
@@ -1892,3 +1897,29 @@ class LabelAndDensityTests(TestCase):
 
         self.assertContains(response, "…")
         self.assertNotContains(response, "872342119743452993e40ddb97bc20d0")
+
+
+class CredentialCoverageTests(TestCase):
+    """A domain HQ owns that its credential cannot read is a real gap."""
+
+    def setUp(self):
+        for zone in ("example.com", "example.net"):
+            ManagedResource.objects.create(
+                key=zone.replace(".", "-"), kind=ZONE_KIND, enabled=True,
+                spec={"zone": zone, "connection_ref": "cf"},
+            )
+
+    def test_a_declared_domain_the_token_cannot_reach_is_named(self):
+        self.assertEqual(unreachable_zones(["example.com"]), ("example.net",))
+
+    def test_nothing_is_reported_when_the_token_reaches_them_all(self):
+        self.assertEqual(unreachable_zones(["example.com", "example.net"]), ())
+
+    def test_an_empty_report_is_not_read_as_everything_missing(self):
+        """A controller that reported no zones has told us nothing, not that
+        every domain is gone."""
+
+        self.assertEqual(unreachable_zones([]), ())
+
+    def test_extra_zones_the_credential_can_reach_are_not_a_problem(self):
+        self.assertEqual(unreachable_zones(["example.com", "example.net", "spare.test"]), ())

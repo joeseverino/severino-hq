@@ -381,6 +381,28 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
     return reverse("control_plane:detail", kwargs={"key": saved})
 
 
+def safe_next(request) -> str:
+    """A caller-supplied destination, but only if it points back at us.
+
+    Shared rather than repeated: the same "go back where I came from" appears
+    on forms, on toggles and on anything else that returns somewhere, and each
+    one written separately is one more chance to redirect wherever a query
+    string says. Checked in one place, every caller gets the check.
+    """
+
+    candidate = (
+        request.POST.get("next", "") if request.method == "POST" else ""
+    ) or request.GET.get("next", "")
+    candidate = candidate.strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ""
+
+
 def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
@@ -394,14 +416,7 @@ def _return_to(request) -> str:
     string is an open redirect regardless of how friendly the link looked.
     """
 
-    candidate = request.GET.get("next", "").strip()
-    if candidate and url_has_allowed_host_and_scheme(
-        candidate,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return candidate
-    return ""
+    return safe_next(request)
 
 
 def _cancel_url(request, kind: str, resource) -> str:
