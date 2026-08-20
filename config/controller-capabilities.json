@@ -1,6 +1,5 @@
 {
   "schema_version": 1,
-  "controller_id": "homelab-server",
   "capabilities": {
     "adguard.rewrite": {
       "actions": {

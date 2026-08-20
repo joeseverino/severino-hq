@@ -14,8 +14,6 @@ late-bound way a domain points at its attention provider.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from control_plane.models import ManagedResource, ProviderInventory, TopologySnapshot
@@ -194,28 +192,21 @@ def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
 def zone() -> dict[str, tuple[tuple[str, str], ...]]:
     """The provider connections that could hold a zone.
 
-    Read from the controller connection registry rather than from a list kept
-    here, so adding a second Cloudflare account is a registry entry and not a
-    code change. The registry is the same file the controller resolves
-    credentials from, so a connection offered here is one that actually exists.
+    Built from the connections HQ's own resources already name, rather than from
+    a committed list. The connection inventory belongs to 1Password, which HQ
+    has no access to, so a file here could only ever be a second copy that
+    drifts from the one the controller resolves.
+
+    Empty until the first resource names a connection, and the field stays
+    typeable -- an empty menu is a smaller failure than a menu that cannot
+    describe what already exists.
     """
 
-    return {"connection_ref": tuple(_dns_connections())}
-
-
-def _dns_connections():
-    registry_path = (
-        Path(__file__).resolve().parents[1] / "config" / "controller-connections.json"
+    declared = sorted(
+        {
+            resource.spec.get("connection_ref", "")
+            for resource in ManagedResource.objects.filter(enabled=True)
+            if resource.spec.get("connection_ref")
+        }
     )
-    try:
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        # The form is still usable without the menu; refusing to render the page
-        # because a config file is unreadable would be a worse failure than
-        # asking the operator to type the reference.
-        return
-    for ref, connection in sorted((registry.get("connections") or {}).items()):
-        provider = connection.get("provider", "")
-        if not provider.startswith("cloudflare"):
-            continue
-        yield (ref, f"{ref} ({provider})")
+    return {"connection_ref": tuple((ref, ref) for ref in declared)}

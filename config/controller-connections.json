@@ -51,33 +51,19 @@
         "source": "field",
         "label": "host_key"
       }
-    }
-  },
-  "connections": {
-    "homelab-adguard": {
-      "provider": "adguard",
-      "projection": "login",
-      "env_prefix": "ADGUARD"
     },
-    "homelab-npm": {
-      "provider": "npm",
-      "projection": "login",
-      "env_prefix": "NPM"
-    },
-    "cloudflare-dns-jseverino": {
-      "provider": "cloudflare_dns",
-      "projection": "api_token",
-      "env_prefix": "CLOUDFLARE_DNS"
-    },
-    "edge": {
-      "provider": "ssh",
-      "projection": "ssh_transport",
-      "env_prefix": "EDGE"
-    },
-    "namecheap-cpanel": {
-      "provider": "ssh",
-      "projection": "ssh_transport",
-      "env_prefix": "NAMECHEAP_CPANEL"
+    "acme": {
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "EMAIL": {
+        "source": "field",
+        "label": "email"
+      },
+      "DIRECTORY_URL": {
+        "source": "field",
+        "label": "website"
+      }
     }
   }
 }

@@ -22,23 +22,21 @@ class ControllerConnectionRegistryTests(TestCase):
             {"source": "field", "label": "website"},
         )
 
-    def test_ssh_connections_declare_a_prefix_and_carry_no_endpoint(self):
-        """The registry says how a transport is wired, never where it goes."""
+    def test_the_registry_describes_shapes_and_names_no_connection(self):
+        """The registry says how a connection is wired, never which exist.
 
-        ssh = {
-            ref: connection
-            for ref, connection in self.registry["connections"].items()
-            if connection["projection"] == "ssh_transport"
-        }
+        Which connections a deployment has is its own configuration, and it
+        lives in the vault the controller resolves credentials from. Committed
+        here it would be a second copy, in a public repository, that drifts.
+        """
 
-        self.assertEqual(set(ssh), {"edge", "namecheap-cpanel"})
-        for connection_ref, connection in ssh.items():
-            with self.subTest(connection_ref=connection_ref):
-                self.assertRegex(connection["env_prefix"], r"^[A-Z][A-Z0-9_]*$")
-        self.assertNotIn("ssh_transports", self.registry)
-        # The projection may name a *field* called host_key; what must never
-        # appear is key material or an address.
-        self.assertNotIn("ssh-ed25519", json.dumps(self.registry))
+        self.assertEqual(set(self.registry), {"schema_version", "projections"})
+
+        serialised = json.dumps(self.registry)
+        # A projection may name a *field* called host_key; what must never
+        # appear is key material, an address, or a host.
+        self.assertNotIn("ssh-ed25519", serialised)
+        self.assertNotRegex(serialised, r"\b\d{1,3}(\.\d{1,3}){3}\b")
 
 
 class ProviderAdapterTests(TestCase):
@@ -238,6 +236,18 @@ class ProviderAdapterTests(TestCase):
             "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
             "HQ_ACME_DIR": "/tmp",
             "HQ_CONTROLLER_SSH_DIR": "/tmp",
+            # Two SSH connections, recognised by the values their projection
+            # produces rather than by anything naming them here.
+            "EXAMPLE_EDGE_CONNECTION_REF": "example-edge",
+            "EXAMPLE_EDGE_HOST": "edge.example",
+            "EXAMPLE_EDGE_USER": "controller",
+            "EXAMPLE_EDGE_PORT": "22",
+            "EXAMPLE_EDGE_HOST_KEY": "example-host-key",
+            "EXAMPLE_SHARED_CONNECTION_REF": "example-shared",
+            "EXAMPLE_SHARED_HOST": "shared.example",
+            "EXAMPLE_SHARED_USER": "controller",
+            "EXAMPLE_SHARED_PORT": "22",
+            "EXAMPLE_SHARED_HOST_KEY": "example-host-key",
         },
         clear=True,
     )
@@ -576,10 +586,11 @@ class ProviderAdapterTests(TestCase):
         "os.environ",
         {
             "NPM_URL": "https://npm-origin.example",
-            "EDGE_HOST": "192.0.2.20",
-            "EDGE_PORT": "22",
-            "EDGE_USER": "controller",
-            "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
+            "EXAMPLE_EDGE_CONNECTION_REF": "example-edge",
+            "EXAMPLE_EDGE_HOST": "192.0.2.20",
+            "EXAMPLE_EDGE_PORT": "22",
+            "EXAMPLE_EDGE_USER": "controller",
+            "EXAMPLE_EDGE_HOST_KEY": "ssh-ed25519 AAAA",
         },
         clear=True,
     )
@@ -622,7 +633,7 @@ class ProviderAdapterTests(TestCase):
                     {
                         "kind": "caddy",
                         "name": "caddy",
-                        "connection_ref": "edge",
+                        "connection_ref": "example-edge",
                         "verify_domains": ["health.example"],
                     },
                 ],
@@ -647,10 +658,11 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict(
         "os.environ",
         {
-            "CPANEL_HOST": "192.0.2.10",
-            "CPANEL_PORT": "22",
-            "CPANEL_USER": "controller",
-            "CPANEL_HOST_KEY": "ssh-ed25519 AAAA",
+            "EXAMPLE_CPANEL_CONNECTION_REF": "example-cpanel",
+            "EXAMPLE_CPANEL_HOST": "192.0.2.10",
+            "EXAMPLE_CPANEL_PORT": "22",
+            "EXAMPLE_CPANEL_USER": "controller",
+            "EXAMPLE_CPANEL_HOST_KEY": "ssh-ed25519 AAAA",
         },
         clear=True,
     )
@@ -676,7 +688,7 @@ class ProviderAdapterTests(TestCase):
                     {
                         "kind": "cpanel",
                         "name": "cpanel",
-                        "connection_ref": "cpanel",
+                        "connection_ref": "example-cpanel",
                         "verify_domains": ["quiz.example.test"],
                     }
                 ],
@@ -687,11 +699,11 @@ class ProviderAdapterTests(TestCase):
             "quiz.example.test", connect_host="192.0.2.10"
         )
 
-    @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.homelab"}, clear=True)
+    @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
         self.assertEqual(
-            providers._consumer_tls_endpoint({"kind": "npm"}, {}),
-            "proxy.homelab",
+            providers._consumer_tls_endpoint({"kind": "npm"}),
+            "proxy.example",
         )
 
     @mock.patch("controller_runtime.providers.renew_tls")
@@ -819,7 +831,7 @@ class ProviderAdapterTests(TestCase):
         spec = {
             "domains": ["example.test"],
             "consumers": [
-                {"kind": "caddy", "connection_ref": "edge"},
+                {"kind": "caddy", "connection_ref": "example-edge"},
             ],
         }
 
@@ -887,7 +899,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_name": "example",
             "domains": ["example.test"],
             "renewal_window_days": 30,
-            "consumers": [{"kind": "caddy", "connection_ref": "edge"}],
+            "consumers": [{"kind": "caddy", "connection_ref": "example-edge"}],
         }
 
         result = providers.renew_tls(spec)
@@ -912,7 +924,7 @@ class ProviderAdapterTests(TestCase):
         spec = {
             "domains": ["example.test"],
             "consumers": [
-                {"kind": "caddy", "connection_ref": "edge"},
+                {"kind": "caddy", "connection_ref": "example-edge"},
             ],
         }
 

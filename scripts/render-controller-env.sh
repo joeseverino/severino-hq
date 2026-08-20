@@ -1,7 +1,15 @@
 #!/bin/sh
-# Resolve provider Login items by their stable connection_ref field.
-# Secret values are written only to stdout; callers must redirect to a
-# root-owned 0600 temporary file.
+# Resolve provider connections from 1Password into controller environment
+# variables. Secret values are written only to stdout; callers must redirect to
+# a root-owned 0600 temporary file.
+#
+# The vault is the inventory. An item declares what it is -- `connection_ref`,
+# `projection`, `env_prefix` -- and this reads them, so adding a provider
+# connection is creating an item and touches no file here. The registry holds
+# only the projections: the shapes a connection can take, which are generic.
+#
+# `connections` in the registry is still honoured for items that predate the
+# fields, and is the only reason this reads it at all.
 
 set -eu
 
@@ -13,12 +21,6 @@ readonly registry="${2:-${script_dir}/../config/controller-connections.json}"
 jq -e '
     .schema_version == 1
     and (.projections | type == "object")
-    and (.connections | type == "object")
-    and all(
-        .connections[];
-        (.env_prefix | test("^[A-Z][A-Z0-9_]*$"))
-        and (.projection | type == "string")
-    )
     and all(
         .projections[];
         type == "object"
@@ -36,43 +38,61 @@ jq -e '
             )
         )
     )
-    and (
-        [.connections[].projection] - (.projections | keys)
-        | length == 0
-    )
 ' \
     "${registry}" >/dev/null
 
-item_ids="$(op item list --vault "${vault}" --format json | jq -r '.[].id')"
+# One field off an item, by label, or empty.
+item_field() {
+    printf %s "$1" | jq -r --arg label "$2" \
+        '[.fields[] | select(.label == $label)][0].value // ""'
+}
 
-for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
-    match=""
-    match_count=0
-    for item_id in ${item_ids}; do
-        item="$(op item get "${item_id}" --vault "${vault}" --format json)"
-        item_ref="$(
-            printf %s "${item}" \
-                | jq -r '[.fields[] | select(.label == "connection_ref")][0].value // ""'
-        )"
-        if [ "${item_ref}" = "${connection_ref}" ]; then
-            match="${item}"
-            match_count=$((match_count + 1))
-        fi
-    done
+emitted_refs=""
+rendered=""
 
-    if [ "${match_count}" -ne 1 ]; then
-        echo "Expected exactly one 1Password item for connection_ref=${connection_ref}; found ${match_count}." >&2
+for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id'); do
+    item="$(op item get "${item_id}" --vault "${vault}" --format json)"
+    connection_ref="$(item_field "${item}" connection_ref)"
+    # Items without a connection_ref are not provider connections.
+    [ -n "${connection_ref}" ] || continue
+
+    case " ${emitted_refs} " in
+        *" ${connection_ref} "*)
+            echo "More than one 1Password item declares connection_ref=${connection_ref}." >&2
+            exit 1
+            ;;
+    esac
+    emitted_refs="${emitted_refs} ${connection_ref}"
+
+    projection="$(item_field "${item}" projection)"
+    prefix="$(item_field "${item}" env_prefix)"
+    if [ -z "${projection}" ] || [ -z "${prefix}" ]; then
+        projection="${projection:-$(
+            jq -r --arg ref "${connection_ref}" \
+                '.connections[$ref].projection // ""' "${registry}"
+        )}"
+        prefix="${prefix:-$(
+            jq -r --arg ref "${connection_ref}" \
+                '.connections[$ref].env_prefix // ""' "${registry}"
+        )}"
+    fi
+    if [ -z "${projection}" ] || [ -z "${prefix}" ]; then
+        echo "Connection ${connection_ref} declares no projection or env_prefix." >&2
+        exit 1
+    fi
+    case "${prefix}" in
+        [A-Z]*) ;;
+        *)
+            echo "Connection ${connection_ref} has an invalid env_prefix ${prefix}." >&2
+            exit 1
+            ;;
+    esac
+    if ! jq -e --arg projection "${projection}" \
+        '.projections | has($projection)' "${registry}" >/dev/null; then
+        echo "Connection ${connection_ref} names unknown projection ${projection}." >&2
         exit 1
     fi
 
-    prefix="$(
-        jq -r --arg ref "${connection_ref}" \
-            '.connections[$ref].env_prefix' "${registry}"
-    )"
-    projection="$(
-        jq -r --arg ref "${connection_ref}" \
-            '.connections[$ref].projection' "${registry}"
-    )"
     for env_name in $(
         jq -r --arg projection "${projection}" \
             '.projections[$projection] | keys[]' "${registry}"
@@ -91,7 +111,7 @@ for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
                         '.projections[$projection][$name].index' "${registry}"
                 )"
                 value="$(
-                    printf %s "${match}" \
+                    printf %s "${item}" \
                         | jq -r --argjson index "${index}" \
                             '.urls[$index].href // empty | @json'
                 )"
@@ -110,7 +130,7 @@ for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
                         "${registry}"
                 )"
                 field_count="$(
-                    printf %s "${match}" \
+                    printf %s "${item}" \
                         | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
                             '[.fields[] | select(.[$selector_type] == $selector)] | length'
                 )"
@@ -119,7 +139,7 @@ for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
                     exit 1
                 fi
                 value="$(
-                    printf %s "${match}" \
+                    printf %s "${item}" \
                         | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
                             '[.fields[] | select(.[$selector_type] == $selector)][0].value // empty | @json'
                 )"
@@ -133,6 +153,11 @@ for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
             echo "Connection ${connection_ref} is missing ${env_name}." >&2
             exit 1
         fi
-        printf '%s_%s=%s\n' "${prefix}" "${env_name}" "${value}"
+        rendered="${rendered}${prefix}_${env_name}=${value}
+"
     done
 done
+
+# Sorted so the rendered file is byte-identical when nothing has changed, which
+# is what lets the caller decide whether a restart is warranted.
+printf '%s' "${rendered}" | sort

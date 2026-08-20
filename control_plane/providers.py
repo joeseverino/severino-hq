@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -50,7 +51,6 @@ class ControllerProviderCapability(ProviderModel):
 
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
-    controller_id: str = Field(min_length=1, max_length=160)
     capabilities: dict[str, ControllerProviderCapability]
 
 
@@ -243,12 +243,29 @@ def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
 # because a provider names the facet it supplies. A provider added later joins
 # the service view by declaring one, and nothing else holds a list of what can
 # participate.
+# The order columns are rendered in, and the order a name is wired in: something
+# has to run before ingress can reach it, and ingress before a certificate
+# secures it.
 SERVICE_FACETS: tuple[tuple[str, str], ...] = (
+    ("runtime", "Runtime"),
     ("dns", "DNS"),
     ("proxy", "Ingress"),
     ("certificate", "Certificate"),
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
+
+
+def service_facets() -> tuple[tuple[str, str], ...]:
+    """The facets to render, in catalogue order.
+
+    A facet nothing supplies is a gap in HQ, not in the service, and a column
+    with nothing in it tells the operator to go fix something they cannot. So a
+    facet may be declared ahead of the provider that fills it and stays
+    invisible until that provider is registered.
+    """
+
+    supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+    return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
 
 
 class NPMProxyHostSpec(ProviderModel):
@@ -1483,10 +1500,22 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
     return registry
 
 
+def controller_id() -> str:
+    """Which controller this deployment runs.
+
+    An identity, not a policy: it names one installation, so it arrives from the
+    environment rather than from the committed contract beside it.
+    """
+
+    return os.environ.get("HQ_CONTROLLER_ID", "").strip() or "controller"
+
+
 def controller_capabilities() -> dict[str, Any]:
     """Return the one validated, JSON-safe controller contract."""
 
-    return controller_capability_registry().model_dump(mode="json")
+    contract = controller_capability_registry().model_dump(mode="json")
+    contract["controller_id"] = controller_id()
+    return contract
 
 
 def enabled_controller_actions(*, automatic_only: bool = False) -> tuple[tuple[str, str], ...]:

@@ -310,8 +310,12 @@ def preflight() -> list[dict[str, Any]]:
     # never heard of. The credential reports what it can reach; HQ declares
     # which zones it is responsible for and is the only side able to compare
     # the two.
-    _ssh("edge", "preflight")
-    _ssh("namecheap-cpanel", "preflight")
+    # Which hosts a deployment reaches is its configuration, not the
+    # controller's, and the credentials it was handed already say which those
+    # are.
+    ssh_refs = ssh_connection_refs()
+    for ref in ssh_refs:
+        _ssh(ref, "preflight")
     return [
         {
             "connection_ref": _required("ADGUARD", "CONNECTION_REF"),
@@ -329,12 +333,10 @@ def preflight() -> list[dict[str, Any]]:
             "ok": True,
             "zones": sorted(available_zones),
         },
-        {"connection_ref": "edge", "provider": "ssh", "ok": True},
-        {
-            "connection_ref": "namecheap-cpanel",
-            "provider": "ssh",
-            "ok": True,
-        },
+        *(
+            {"connection_ref": ref, "provider": "ssh", "ok": True}
+            for ref in ssh_refs
+        ),
     ]
 
 
@@ -479,9 +481,7 @@ def _observe_tls_domain(domain: str, *, connect_host: str | None = None) -> dict
     }
 
 
-def _consumer_tls_endpoint(
-    consumer: dict[str, Any], registry: dict[str, Any]
-) -> str | None:
+def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
     """Resolve a managed consumer's origin without changing TLS SNI."""
     kind = consumer["kind"]
     if kind == "npm":
@@ -490,7 +490,7 @@ def _consumer_tls_endpoint(
             raise ProviderError("NPM origin verification endpoint is missing.")
         return hostname
     if kind in {"caddy", "cpanel"}:
-        transport = _transport(registry, consumer["connection_ref"])
+        transport = _transport(consumer["connection_ref"])
         hostname = transport.get("host")
         if not hostname:
             raise ProviderError(
@@ -520,7 +520,6 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
     consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
-    registry = _certificate_registry("controller-connections.json")
     for consumer in spec["consumers"]:
         domains = list(consumer.get("verify_domains", []))
         if consumer["kind"] == "npm" and consumer.get("discover_covered_hosts"):
@@ -537,7 +536,7 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
         if not domains:
             unverified_consumers.append(consumer["name"])
             continue
-        connect_host = _consumer_tls_endpoint(consumer, registry)
+        connect_host = _consumer_tls_endpoint(consumer)
         for domain in domains:
             observed = _observe_tls_domain(domain, connect_host=connect_host)
             observed["consumer"] = consumer["name"]
@@ -603,19 +602,45 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
-def _transport(registry: dict[str, Any], connection_ref: str) -> dict[str, Any]:
-    """The endpoint for a declared SSH connection, from the rendered env.
+def connection_prefixes() -> dict[str, str]:
+    """Every connection the environment carries, as ref -> env prefix.
 
-    The registry names the connection and the prefix its values arrive under;
-    the values themselves come from 1Password by way of
-    `render-controller-env.sh`, exactly like every other connection's
-    credentials.
+    The rendered environment is the inventory. `render-controller-env.sh`
+    resolves each 1Password item into `<PREFIX>_CONNECTION_REF` alongside that
+    connection's values, so what the controller can reach is exactly what it was
+    given credentials for -- nothing here has to be told separately.
     """
 
-    connection = (registry.get("connections") or {}).get(connection_ref) or {}
-    if connection.get("projection") != "ssh_transport":
+    suffix = "_CONNECTION_REF"
+    return {
+        value: name[: -len(suffix)]
+        for name, value in os.environ.items()
+        if name.endswith(suffix) and value
+    }
+
+
+def ssh_connection_refs() -> tuple[str, ...]:
+    """Connections rendered through the ssh_transport projection.
+
+    Identified by the values that projection produces rather than by a declared
+    kind: a connection carrying a host and a user is one this can open.
+    """
+
+    return tuple(
+        sorted(
+            ref
+            for ref, prefix in connection_prefixes().items()
+            if os.environ.get(f"{prefix}_HOST") and os.environ.get(f"{prefix}_USER")
+        )
+    )
+
+
+def _transport(connection_ref: str) -> dict[str, Any]:
+    """The endpoint for an SSH connection, from the rendered environment."""
+
+    prefix = connection_prefixes().get(connection_ref)
+    if not prefix or not os.environ.get(f"{prefix}_HOST"):
         raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
-    prefix = connection["env_prefix"]
     port = _required(prefix, "PORT")
     if not port.isdigit() or not 1 <= int(port) <= 65535:
         raise ProviderError(f"{prefix}_PORT is not a port number.")
@@ -627,8 +652,22 @@ def _transport(registry: dict[str, Any], connection_ref: str) -> dict[str, Any]:
     }
 
 
+def controller_config_dir() -> Path:
+    """Where this deployment's controller registries live.
+
+    `SEVERINO_CONTROLLER_CONFIG_DIR` overrides the copy in the repository, so a
+    deployment's hosts, connections and ACME identity are supplied at runtime
+    rather than committed.
+    """
+
+    override = os.environ.get("SEVERINO_CONTROLLER_CONFIG_DIR", "").strip()
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[1] / "config"
+
+
 def _certificate_registry(name: str) -> dict[str, Any]:
-    path = Path(__file__).resolve().parents[1] / "config" / name
+    path = controller_config_dir() / name
     try:
         registry = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
@@ -679,8 +718,7 @@ def _run(
 
 
 def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
-    registry = _certificate_registry("controller-connections.json")
-    transport = _transport(registry, connection_ref)
+    transport = _transport(connection_ref)
     ssh_dir = Path(_required("HQ_CONTROLLER", "SSH_DIR"))
     command = [
         "ssh",
@@ -772,8 +810,13 @@ def _validate_certificate(
         return fingerprint
 
 
+# How long to wait for a DNS-01 challenge record to propagate. A tuning value,
+# not a deployment identity, so it has a default and an override rather than a
+# place in the vault.
+ACME_PROPAGATION_SECONDS = os.environ.get("ACME_PROPAGATION_SECONDS", "30")
+
+
 def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
-    registry = _certificate_registry("controller-certificates.json")["acme"]
     acme_dir = Path(_required("HQ", "ACME_DIR"))
     credentials = acme_dir / "cloudflare.ini"
     credentials.write_text(
@@ -788,14 +831,14 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         "--non-interactive",
         "--agree-tos",
         "--email",
-        registry["email"],
+        _required("ACME", "EMAIL"),
         "--server",
-        registry["directory_url"],
+        _required("ACME", "DIRECTORY_URL"),
         "--dns-cloudflare",
         "--dns-cloudflare-credentials",
         str(credentials),
         "--dns-cloudflare-propagation-seconds",
-        str(registry["dns_propagation_seconds"]),
+        ACME_PROPAGATION_SECONDS,
         "--config-dir",
         str(acme_dir / "config"),
         "--work-dir",
