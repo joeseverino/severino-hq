@@ -1405,3 +1405,30 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(records[0]["record_id"], "m1")
         self.assertEqual(records[0]["priority"], 10)
         self.assertEqual(records[0]["zone"], "example.com")
+
+
+class ControllerStepReportingTests(TestCase):
+    """A failure should name the step that failed, not the module that ran it."""
+
+    def test_a_failing_step_is_named(self):
+        from controller_runtime.providers import ProviderError, _run
+
+        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+            run.return_value = mock.Mock(returncode=1, stdout=b"", stderr=b"boom")
+            with self.assertRaises(ProviderError) as caught:
+                _run(["/bin/false"], step="SSH preflight for somewhere")
+        self.assertIn("SSH preflight for somewhere", str(caught.exception))
+        self.assertNotIn("Certificate", str(caught.exception))
+
+    def test_subprocess_output_never_reaches_the_result(self):
+        """Remote paths and messages belong in the log, not in a provider result."""
+
+        from controller_runtime.providers import ProviderError, _run
+
+        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+            run.return_value = mock.Mock(
+                returncode=1, stdout=b"", stderr=b"/home/someone/secret/path missing"
+            )
+            with self.assertRaises(ProviderError) as caught:
+                _run(["/bin/false"], step="a step")
+        self.assertNotIn("/home/someone", str(caught.exception))
