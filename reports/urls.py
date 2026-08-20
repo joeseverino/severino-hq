@@ -6,23 +6,11 @@ app_name = "reports"
 
 urlpatterns = [
     path("", views.ReportsView.as_view(), name="dashboard"),
-    path("export/expenses.csv", views.ExpensesCSVView.as_view(), name="expenses_csv"),
-    path("export/assets.csv", views.AssetsCSVView.as_view(), name="assets_csv"),
-    path("export/content.csv", views.ContentCSVView.as_view(), name="content_csv"),
-    path("export/projects.csv", views.ProjectsCSVView.as_view(), name="projects_csv"),
-    path(
-        "export/documentation.csv",
-        views.DocumentationCSVView.as_view(),
-        name="documentation_csv",
-    ),
-    path(
-        "export/year-summary.json",
-        views.YearSummaryJSONView.as_view(),
-        name="year_summary_json",
-    ),
-    path(
-        "export/year-summary.md",
-        views.YearSummaryMarkdownView.as_view(),
-        name="year_summary_md",
+    # Derived from the one declaration of what an export is, so a new report is
+    # a row in `EXPORTS` rather than a view, a route and a filename convention
+    # that have to be kept agreeing with each other.
+    *(
+        path(export.path, views.ExportView.as_view(export=export), name=export.name)
+        for export in views.EXPORTS
     ),
 ]

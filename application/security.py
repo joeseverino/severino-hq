@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from django.conf import settings
+from django.utils.http import url_has_allowed_host_and_scheme
 
 
 class Capability(StrEnum):
@@ -131,3 +132,36 @@ def mcp_principal() -> Principal:
     if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
         capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))
+
+
+def safe_next(request, *, fallback: str = "", scope: str = "") -> str:
+    """A caller-supplied destination, but only if it points back at us.
+
+    Shared rather than repeated: the same "go back where I came from" appears
+    on forms, on toggles and on anything else that returns somewhere, and each
+    one written separately is one more chance to redirect wherever a query
+    string says. Checked in one place, every caller gets the check -- adapters
+    and plugins alike, which is why it sits beside the principals rather than
+    in whichever app happened to need it first.
+
+    ``scope`` narrows the destination to a path prefix, for callers that return
+    somewhere within one section rather than anywhere on the host. ``fallback``
+    is what an absent or rejected destination becomes, so a caller can redirect
+    on the result unconditionally instead of re-deciding what "nowhere" means.
+    """
+
+    candidate = (
+        request.POST.get("next", "") if request.method == "POST" else ""
+    ) or request.GET.get("next", "")
+    candidate = candidate.strip()
+    if (
+        candidate
+        and (not scope or candidate.startswith(scope))
+        and url_has_allowed_host_and_scheme(
+            candidate,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+    ):
+        return candidate
+    return fallback

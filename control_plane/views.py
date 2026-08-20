@@ -11,7 +11,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -51,7 +50,7 @@ from application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
-from application.security import web_principal
+from application.security import safe_next, web_principal
 from application.services import (
     alias_target,
     service_catalog,
@@ -64,7 +63,7 @@ from .models import ManagedResource, OperationRequest
 from .providers import (
     PROVIDERS,
     normalized_hostname,
-    SERVICE_FACETS,
+    service_facets,
     controller_action_policy,
     describe_providers,
 )
@@ -381,28 +380,6 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
     return reverse("control_plane:detail", kwargs={"key": saved})
 
 
-def safe_next(request) -> str:
-    """A caller-supplied destination, but only if it points back at us.
-
-    Shared rather than repeated: the same "go back where I came from" appears
-    on forms, on toggles and on anything else that returns somewhere, and each
-    one written separately is one more chance to redirect wherever a query
-    string says. Checked in one place, every caller gets the check.
-    """
-
-    candidate = (
-        request.POST.get("next", "") if request.method == "POST" else ""
-    ) or request.GET.get("next", "")
-    candidate = candidate.strip()
-    if candidate and url_has_allowed_host_and_scheme(
-        candidate,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return candidate
-    return ""
-
-
 def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
@@ -697,8 +674,9 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["services"] = service_catalog()
         # The column headers come from the providers, so a provider that
-        # declares a new facet gets a column without this template being touched.
-        context["facets"] = SERVICE_FACETS
+        # declares a new facet gets a column without this template being
+        # touched -- and a facet no provider supplies yet gets none.
+        context["facets"] = service_facets()
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and

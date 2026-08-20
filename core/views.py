@@ -15,14 +15,13 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView
 
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
-from application.security import web_principal
+from application.security import safe_next, web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
 from contacts.d1 import (
@@ -68,14 +67,12 @@ class ThrottledLoginView(LoginView):
 
         if self.sso_only and "signed_out" not in request.GET:
             target = reverse("oidc_authentication_init")
-            nxt = request.GET.get("next")
             # Checked here even though the provider library checks it again
             # before use. A destination is only carried forward if it points
             # back at this host, so nothing downstream has to be trusted to
             # notice that it does not.
-            if nxt and url_has_allowed_host_and_scheme(
-                nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-            ):
+            nxt = safe_next(request)
+            if nxt:
                 return redirect(f"{target}?next={quote(nxt)}")
             return redirect(target)
         return super().get(request, *args, **kwargs)
