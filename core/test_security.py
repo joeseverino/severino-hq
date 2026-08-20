@@ -160,11 +160,22 @@ class LoginThrottleTests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_the_message_names_no_account(self):
+        """Scoped to the message, not the page.
+
+        Asserted against the whole body this was a coin flip: the page carries
+        a random CSRF token, and a token happening to contain the username as a
+        substring failed a test about what the message says. The subject is the
+        error text, so that is what is read.
+        """
+
         for _ in range(5):
             self._attempt()
-        body = self._attempt().content.decode().lower()
-        self.assertIn("too many failed", body)
-        self.assertNotIn("joe", body)
+        response = self._attempt()
+        message = " ".join(
+            str(error) for error in response.context["form"].non_field_errors()
+        ).lower()
+        self.assertIn("too many failed", message)
+        self.assertNotIn("joe", message)
 
     @override_settings(SEVERINO_LOGIN_MAX_ATTEMPTS=0)
     def test_the_throttle_can_be_switched_off_for_recovery(self):
