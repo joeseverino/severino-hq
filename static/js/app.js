@@ -2,10 +2,11 @@
 
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
-// than by remembering to extend a hardcoded query -- the nav dropdowns were
-// added and stayed open on outside clicks because this only knew about the
-// user menu.
-const DISMISSIBLE_MENUS = "details.user-menu, details.nav-group";
+// than by remembering to extend a hardcoded query. That query was extended
+// twice, once per menu somebody added and then found stayed open over the top
+// of the next one -- so a menu now says for itself that it dismisses, and the
+// third case fixed itself before anyone noticed it.
+const DISMISSIBLE_MENUS = "details[data-menu]";
 
 function closeMenus(except) {
   document.querySelectorAll(DISMISSIBLE_MENUS).forEach((menu) => {
@@ -291,3 +292,57 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   };
   window.setTimeout(tick, interval());
 })();
+
+
+// A list field's own controls. The rows are real inputs whether or not this
+// runs -- one spare row is always rendered -- so this only adds the
+// convenience of more rows and of dropping one without clearing it by hand.
+document.addEventListener("click", (event) => {
+  const add = event.target.closest("[data-name-list-add]");
+  if (add) {
+    const list = add.closest("[data-name-list]");
+    const rows = list.querySelectorAll(".name-list-row");
+    const last = rows[rows.length - 1];
+    const row = last.cloneNode(true);
+    row.querySelector("input").value = "";
+    last.after(row);
+    row.querySelector("input").focus();
+    return;
+  }
+  const remove = event.target.closest("[data-name-list-remove]");
+  if (!remove) return;
+  const list = remove.closest("[data-name-list]");
+  const row = remove.closest(".name-list-row");
+  // Never leave nothing to type in: the last row empties rather than going.
+  if (list.querySelectorAll(".name-list-row").length > 1) row.remove();
+  else row.querySelector("input").value = "";
+});
+
+
+// A form that is about to do something says so on the button that does it.
+// The consequence is declared by the provider and rendered onto the field, so
+// this reads it rather than knowing which fields matter.
+document.querySelectorAll("form.form").forEach((form) => {
+  const effects = form.querySelectorAll("[data-change-effect]");
+  if (!effects.length) return;
+  const submit = form.querySelector('button[type="submit"], .form-actions button');
+  if (!submit) return;
+  const original = submit.textContent.trim();
+  const initial = new Map();
+  const inputs = () =>
+    [...effects].flatMap((field) => [...field.querySelectorAll("input, textarea, select")]);
+  inputs().forEach((input, index) => initial.set(input, input.value));
+
+  const review = () => {
+    // Rows can be added and removed, so a changed *count* is a change even
+    // when every surviving row still holds what it held.
+    const current = inputs();
+    const changed =
+      current.length !== initial.size ||
+      current.some((input) => !initial.has(input) || initial.get(input) !== input.value);
+    submit.textContent = changed ? "Save and apply" : original;
+    form.classList.toggle("form-will-act", changed);
+  };
+  form.addEventListener("input", review);
+  form.addEventListener("click", () => setTimeout(review, 0));
+});

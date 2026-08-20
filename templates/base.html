@@ -52,7 +52,7 @@
           {% if entry.kind == "group" %}
             {% comment %}Shared name makes the groups a native exclusive
             accordion, so only one panel is open even before JS loads.{% endcomment %}
-            <details class="nav-group" name="nav-group">
+            <details class="nav-group" name="nav-group" data-menu>
               <summary{% if entry.active %} class="active"{% endif %}>
                 <span class="nav-group-label">
                   {{ entry.label }}
@@ -89,7 +89,7 @@
           aria-label="Search HQ"
         >
       </form>
-      <details class="user-menu">
+      <details class="user-menu" data-menu>
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">

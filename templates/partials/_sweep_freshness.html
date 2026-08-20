@@ -21,9 +21,19 @@ records; without it, every sweep is listed.
   <p class="muted">
     {% for snapshot in inventory %}
       {% if not only_kind or snapshot.kind == only_kind %}
-        {{ snapshot.label }}:
+        {% comment %}
+        The label names one of a thing ("Public DNS record"), which is the right
+        word beside a single resource and the wrong one in front of a count --
+        it read "Public DNS record: 33 records". A page scoped to one provider
+        has already said which provider it is about, so the count stands alone
+        there; only a list of several needs each one named.
+        {% endcomment %}
+        {% if not only_kind %}{{ snapshot.label }}:{% endif %}
         {% if snapshot.reachable %}
-          {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked {{ snapshot.observed_at|timesince }} ago
+          {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked
+          {% with age=snapshot.observed_at|timesince %}
+            {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
+          {% endwith %}
         {% else %}
           unreachable ({{ snapshot.error }})
         {% endif %}

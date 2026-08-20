@@ -1,3 +1,4 @@
+{% load nav_tags %}
 {% comment %}
 One table of DNS records, used for both halves of a zone: the records that send
 traffic somewhere, and the policy records folded away beneath them. Shared so
@@ -52,7 +53,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
             <td class="actions-col">
               {% if record.managed %}
                 <span class="row-actions">
-                  <a class="subtle-link" href="{{ record.edit_url }}">Edit</a>
+                  <a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">Edit</a>
                   <a class="subtle-link" href="{{ record.remove_url }}">Remove</a>
                 </span>
               {% endif %}

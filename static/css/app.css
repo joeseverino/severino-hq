@@ -401,7 +401,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 /* Never squeezed by the lede beside it. A flex item defaults to shrinking at
    its content, so a long lede wrapped "Download .md" onto two lines and left
    the two controls beside it different heights. */
-.page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+.page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge -- otherwise
@@ -429,10 +429,19 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
   font: inherit;
   font-size: 13.5px;
   font-weight: 500;
+  /* Stated rather than inherited, so a button holding an icon is exactly as
+     tall as one holding a word. Left to the content, a 16px glyph and a line
+     of 13.5px text computed different heights and the pair sat mismatched
+     wherever they appeared side by side. */
+  line-height: 1.45;
+  min-height: 34px;
   text-decoration: none;
   transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
   box-shadow: var(--shadow-sm);
 }
+/* An icon inside a button is a glyph, not a block: it must not stretch the
+   box or shrink when the row runs out of room. */
+.btn > svg, button > svg { flex: none; width: 1.15em; height: 1.15em; }
 .btn:hover, button:hover { border-color: #c4c4c0; background: var(--surface-2); text-decoration: none; }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
@@ -440,9 +449,28 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .btn:disabled, button:disabled { cursor: not-allowed; opacity: .52; }
 .control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .control-summary > *, .two-col > * { min-width: 0; }
-.control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
-.control-metric { display: flex; flex-direction: column; gap: 5px; }
-.control-metric strong { font-size: 18px; overflow-wrap: anywhere; }
+.control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
+/* Label and headline share a line when they fit: the label is three small
+   words and the value is usually two, so stacking them spent a whole row on
+   whitespace -- four cards deep on a phone that is most of a screen. Anything
+   further down (a caption, a readout, a pill) takes a full line of its own,
+   and a headline too long to sit beside its label wraps to one as well. */
+/* `space-between` rather than `margin-left: auto`, so the pairing survives a
+   long value. A short headline sits opposite its label; one too wide to share
+   the line wraps to its own and stays left-aligned there, because a lone item
+   on a `space-between` line starts at the beginning of it. Pushed right with
+   `auto` instead, a URL or a list of eight names wrapped *and* stayed
+   right-aligned, leaving a ragged column and a hole under the label. */
+.control-metric { display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 5px 12px; }
+.control-metric > .control-label { flex: 0 1 auto; }
+.control-metric > strong { text-align: left; }
+.control-metric > *:not(.control-label):not(strong) { flex: 1 1 100%; }
+/* Smaller than it was: at 18px a value like "CNAME name.pages.dev" could not
+   share a line with its label and dropped underneath, so the card grew a row
+   to say one thing. At 15px most values sit opposite the label and the card is
+   the height of what it contains. */
+.control-metric strong { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
 .control-metric > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 /* A supporting row inside a control metric. Several stack under one headline,
    so they carry their own muted styling rather than relying on the
@@ -1809,13 +1837,25 @@ a.kpi:hover { background: var(--surface-2); }
      title, so the single-action case above is unchanged. */
   .page-head { align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; justify-content: space-between; }
   .page-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+  /* The kind sits beside the name rather than under it, for the same reason:
+     two short strings, two rows. The lede keeps its own line. */
+  .page-head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+  .page-head > div:first-child > .page-lede { flex: 1 1 100%; }
   /* `margin-left: auto` eats every pixel of free space, and in a wrapping row
      that is enough on its own to push the controls onto a line of their own --
      even when they would have fitted beside the title. `space-between` puts
      them at the same edge without claiming the gap, so a short title and two
      controls stay on one line and only genuinely-too-wide heads wrap. */
-  .page-head .page-actions { margin-left: 0; }
-  .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  /* `flex-shrink: 0` is right beside a title with room to spare and wrong
+     when there is none: a row that cannot shrink never reaches the width at
+     which its children would wrap, so it stayed one line at its full
+     max-content width and `overflow-x: clip` on the content column quietly cut
+     the last control off. Allowed to shrink, it wraps instead. */
+  /* Right-aligned wherever it lands: beside the title when it fits, on its own
+     line when it does not. `flex-shrink: 1` is what lets it reach the width at
+     which its children wrap -- without it the row stayed at max-content and
+     `overflow-x: clip` on the content column cut the last control off. */
+  .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; flex-shrink: 1; }
   .domain-stack-head,
   .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
 
@@ -2319,3 +2359,87 @@ a.kpi:hover { background: var(--surface-2); }
 .zone-policy { margin-top: var(--stack-gap); }
 .zone-policy summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .zone-policy .table-scroll { margin-top: 10px; }
+
+/* A starred domain reads as chosen, not as merely another control. */
+.btn.pinned { border-color: var(--accent); color: var(--accent); }
+.zone-switch a > span[aria-hidden] { color: var(--accent); }
+
+/* Facts above a form: what the thing is, before what can be changed. */
+.form-facts { margin: 0 0 var(--stack-gap); padding: 10px 12px; background: var(--bg-tint); border-radius: var(--radius-sm); }
+
+/* Overflow menu: the actions worth having, without a second row of buttons.
+   The panel is the nav's dropdown -- same box, same shadow, same radius -- so
+   there is one dropdown in HQ rather than two that nearly match. */
+.overflow-menu { position: relative; display: flex; }
+.overflow-menu > summary {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 38px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-sm); cursor: pointer;
+  font-size: 13.5px; font-weight: 500; line-height: 1.45;
+  list-style: none;
+}
+.overflow-menu > summary::-webkit-details-marker { display: none; }
+.overflow-menu > summary:hover,
+.overflow-menu[open] > summary { border-color: #c4c4c0; background: var(--surface-2); }
+.overflow-menu-panel {
+  position: absolute; z-index: 40; top: calc(100% + 6px); right: 0;
+  min-width: 200px; max-width: min(320px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 5px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+/* The nav panel's own item metrics *and* its type: same colour, weight, size
+   and padding. Matching the box but not the text left two dropdowns that were
+   obviously different objects -- link-teal 400 at 13px beside muted 500 at
+   13.5px. Measured from the nav rather than guessed. */
+.overflow-menu-panel a,
+.overflow-menu-panel span {
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  font-size: 13.5px; font-weight: 500; color: var(--muted);
+  white-space: nowrap;
+}
+.overflow-menu-panel a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
+
+/* A list of names, as a list. */
+.name-list { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.name-list-row { display: flex; gap: 6px; width: 100%; }
+.name-list-row input { flex: 1 1 auto; min-width: 0; }
+.name-list-add { margin-top: 2px; }
+
+/* What a field will cause, said before it is caused. */
+.field-effect { color: var(--warn); font-weight: 500; }
+.form-will-act .form-actions button[type="submit"] { background: var(--accent-2); border-color: var(--accent-2); }
+
+/* Email policy: four stages, then the one decision worth making. */
+.mail-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.mail-stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
+.mail-stage-concern { border-color: var(--warn); }
+.mail-stage-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; }
+.mail-stage-head strong { font-size: 15px; overflow-wrap: anywhere; }
+.mail-stage-question { margin: 6px 0 2px; font-size: 13px; font-weight: 500; }
+.mail-stage-warning { margin: 8px 0 0; font-size: 13px; color: var(--warn); }
+.mail-records { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mail-records li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.mail-record-value { color: var(--muted); overflow-wrap: anywhere; }
+
+.policy-choices { display: flex; flex-direction: column; gap: 8px; }
+.policy-choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); }
+.policy-choice:hover { border-color: #c4c4c0; background: var(--surface-2); }
+.policy-choice:has(input:checked) { border-color: var(--accent); background: var(--bg-tint); }
+.policy-choice input { margin-top: 3px; flex: none; }
+.policy-choice-body { display: flex; flex-direction: column; gap: 2px; }
+.policy-choice-label { font-weight: 600; font-size: 14px; }
+.policy-choice-consequence { color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+.mail-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm); margin: 0 0 var(--stack-gap); }
+.mail-editor h3 { margin: 0 0 12px; font-size: 15px; }
+.mail-editor .form { max-width: 620px; }
+
+/* A record shown inside help text is one long unbreakable token; on a phone it
+   ran past the content column, which clips rather than scrolls, so the end of
+   the policy was simply not there. */
+.help code, .mail-record-value { overflow-wrap: anywhere; }

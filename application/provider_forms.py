@@ -43,16 +43,75 @@ from .plugins import _import
 _CONSTRAINTS = ("min_length", "max_length", "ge", "le", "pattern")
 
 
-class NameList(forms.Field):
-    """A list of names, entered one per line.
+class NameListWidget(forms.Widget):
+    """One input per name, with a row to add and a control to remove.
 
-    A `list[str]` needs a real widget. Rendered as a single comma-joined text
-    input, a certificate covering eight names becomes an unreadable line that
-    invites a typo in the middle of it, and the field is exactly where a typo
-    silently stops matching a hostname.
+    A textarea holds a list the way a paragraph holds a shopping list: the
+    items are there, but nothing about it says where one ends, and editing the
+    middle of eight lines is a text-editing exercise rather than a choice.
+    A name is the thing being edited, so it gets a field of its own.
+
+    Rows post under the same name and are read back with `getlist`, so the
+    field receives an actual list and no parsing rules live in two places.
+    Without scripting the existing rows still edit and the spare row still
+    adds -- only the extra add/remove convenience needs JavaScript.
     """
 
-    widget = forms.Textarea(attrs={"rows": 3, "spellcheck": "false"})
+    def value_from_datadict(self, data, files, name):
+        if hasattr(data, "getlist"):
+            return [item for item in data.getlist(name) if str(item).strip()]
+        return data.get(name)
+
+    def format_value(self, value):
+        if isinstance(value, (list, tuple)):
+            return [str(item) for item in value if str(item).strip()]
+        if value in (None, ""):
+            return []
+        return [line.strip() for line in str(value).splitlines() if line.strip()]
+
+    def render(self, name, value, attrs=None, renderer=None):
+        from django.utils.html import format_html, format_html_join
+        from django.utils.safestring import mark_safe
+
+        values = self.format_value(value)
+        rows = format_html_join(
+            "",
+            (
+                '<div class="name-list-row">'
+                '<input type="text" name="{}" value="{}" spellcheck="false"'
+                ' autocapitalize="off" autocorrect="off">'
+                '<button type="button" class="btn ghost" data-name-list-remove'
+                ' aria-label="Remove {}">Remove</button>'
+                "</div>"
+            ),
+            ((name, item, item) for item in values),
+        )
+        # Always one empty row, so adding a name needs no script and no
+        # thinking about where the cursor goes.
+        blank = format_html(
+            '<div class="name-list-row">'
+            '<input type="text" name="{}" value="" spellcheck="false"'
+            ' autocapitalize="off" autocorrect="off">'
+            '<button type="button" class="btn ghost" data-name-list-remove'
+            ' aria-label="Remove">Remove</button>'
+            "</div>",
+            name,
+        )
+        return mark_safe(
+            format_html(
+                '<div class="name-list" data-name-list>{}{}'
+                '<button type="button" class="btn name-list-add" data-name-list-add>'
+                "Add another</button></div>",
+                rows,
+                blank,
+            )
+        )
+
+
+class NameList(forms.Field):
+    """A list of names, one field per name."""
+
+    widget = NameListWidget
 
     def prepare_value(self, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
@@ -108,8 +167,34 @@ class ProviderSpecForm(forms.Form):
 
     advanced_names: tuple[str, ...] = ()
 
+    # ((group_id, field_names), ...) declared by the provider. Exactly one
+    # group describes any given resource.
+    alternative_groups: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
     # The model's own fields, so the form can tell a default from an answer.
     provider_fields: dict = {}
+
+    def _folded_alternative_names(self) -> frozenset[str]:
+        """Field names belonging to a branch this resource is not using.
+
+        The active branch is whichever one the resource actually has values
+        for; a resource being created has none, so the last group wins -- the
+        one that defines something new, which is the only thing "add" can mean.
+        """
+
+        if not self.alternative_groups:
+            return frozenset()
+        active = self.alternative_groups[-1][0]
+        for group_id, names in self.alternative_groups:
+            if any(self.initial.get(name) for name in names):
+                active = group_id
+                break
+        return frozenset(
+            name
+            for group_id, names in self.alternative_groups
+            if group_id != active
+            for name in names
+        )
 
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.
@@ -125,6 +210,13 @@ class ProviderSpecForm(forms.Form):
         a page that appeared to say the certificate had no configuration at all.
         """
 
+        if field.name in self._folded_alternative_names():
+            # The branch this resource is not defined by. Shown beside the one
+            # that defines it, its empty boxes read as facts -- a certificate
+            # described by the topology appeared to cover no names and be
+            # installed nowhere. Folded away, still reachable, never mistaken
+            # for the answer.
+            return True
         if field.name not in self.advanced_names:
             return False
         model_field = self.provider_fields.get(field.name)
@@ -157,7 +249,16 @@ class ProviderSpecForm(forms.Form):
         the disclosure, because it is no longer routine.
         """
 
-        return [field for field in self if self._is_routine(field)]
+        # The branch this resource is not defined by is not "routine tuning"
+        # -- it is a set of empty boxes describing a different way of making
+        # this thing. Offered behind a disclosure it is still the same
+        # confusion, one click further away, so it is not offered at all.
+        folded = self._folded_alternative_names()
+        return [
+            field
+            for field in self
+            if self._is_routine(field) and field.name not in folded
+        ]
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -249,7 +350,17 @@ def spec_form_class(
                 else "Nothing to choose yet — none have been described to HQ."
             ),
         )
+    for name, effect in provider.change_effects:
+        if name in fields:
+            fields[name].change_effect = effect
+
     if lock_identity:
+        # Which thing this is was decided when it was created. Asking again on
+        # an edit form offers an answer that cannot be given -- an existing
+        # certificate cannot become "a new certificate defined below" -- so
+        # these are dropped here and shown as facts above the form instead.
+        for name in provider.fixed_after_create:
+            fields.pop(name, None)
         for name in identity_fields(kind):
             if name not in fields:
                 continue
@@ -268,6 +379,7 @@ def spec_form_class(
         {
             "provider_kind": kind,
             "advanced_names": provider.advanced_fields,
+            "alternative_groups": provider.alternatives,
             "provider_fields": dict(provider.spec_type.model_fields),
             **fields,
         },

@@ -492,6 +492,21 @@ def find_service(hostname: str) -> Service | None:
     )
 
 
+def alias_target(hostname: str) -> str:
+    """The service this name is merely another name for, or "".
+
+    A CNAME to a name HQ already serves is not a service of its own, so its
+    claim is held by the name it points at. Asked about the alias directly,
+    the page that resulted had no claim to show and said nothing was declared
+    -- about a name whose record was listed as healthy one screen away. The
+    honest answer is not an empty page but the service it is an alias of.
+    """
+
+    wanted = _normalise(hostname)
+    _, _, _, aliases, _, _ = _declarations()
+    return aliases.get(wanted, "")
+
+
 def service_or_prospect(hostname: str) -> Service:
     """The service for this name, or the empty shape of one not declared yet.
 

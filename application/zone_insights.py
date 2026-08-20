@@ -192,6 +192,7 @@ def email(zone) -> ZoneInsight | None:
     if not (mail or spf or dmarc):
         return ZoneInsight(
             label="Email",
+            url=reverse("zones:mail", kwargs={"zone": zone.zone}),
             value="Not configured",
             detail=(
                 "No MX, SPF or DMARC record. This domain receives no mail, and "
@@ -211,6 +212,7 @@ def email(zone) -> ZoneInsight | None:
     )
     return ZoneInsight(
         label="Email",
+        url=reverse("zones:mail", kwargs={"zone": zone.zone}),
         value=_mail_host(mail) if mail else "Not received",
         detail=" ".join(sentences),
     )

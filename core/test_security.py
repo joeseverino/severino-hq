@@ -481,3 +481,38 @@ class ResponseHeaderTests(TestCase):
         self.assertIn("frame-ancestors 'none'", response["Content-Security-Policy"])
         self.assertIn("object-src 'none'", response["Content-Security-Policy"])
         self.assertIn("camera=()", response["Permissions-Policy"])
+
+
+class ReturnDestinationTests(TestCase):
+    """"Go back where I came from" must not mean "go anywhere you name"."""
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="z", kind="cloudflare.zone", enabled=True,
+            spec={"zone": "example.com", "connection_ref": "cf"},
+        )
+        user = get_user_model().objects.create_user("op", password="x" * 12)
+        self.client.force_login(user)
+
+    def test_a_destination_on_another_host_is_refused(self):
+        response = self.client.post(
+            "/domains/example.com/pin/", {"next": "https://example.net/phish"}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("example.net", response["Location"])
+
+    def test_a_protocol_relative_destination_is_refused(self):
+        """`//host` is a full URL wearing the costume of a path."""
+
+        response = self.client.post(
+            "/domains/example.com/pin/", {"next": "//example.net/phish"}
+        )
+        self.assertNotIn("example.net", response["Location"])
+
+    def test_a_local_destination_is_honoured(self):
+        response = self.client.post(
+            "/domains/example.com/pin/", {"next": "/domains/example.com/"}
+        )
+        self.assertEqual(response["Location"], "/domains/example.com/")

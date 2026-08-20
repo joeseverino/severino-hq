@@ -218,6 +218,47 @@ async (page) => {
       });
     });
 
+    // Controls sitting together at different heights. A row of buttons is
+    // read as one object, and one control four pixels shorter than its
+    // neighbours is the kind of thing that is obvious in a screenshot and
+    // invisible in a diff. It happens whenever a control is wrapped -- a
+    // button in a form, a summary in a details -- because the wrapper stretches
+    // and its child does not.
+    document.querySelectorAll('.page-actions, .form-actions, .filter-bar').forEach((row) => {
+      const controls = Array.from(row.children)
+        .map((child) => child.querySelector('button, summary, a.btn') || child)
+        .filter((el) => el.getBoundingClientRect().height > 0);
+      if (controls.length < 2) return;
+      const heights = controls.map((el) => round(el.getBoundingClientRect().height));
+      const spread = Math.max(...heights) - Math.min(...heights);
+      if (spread > 1) {
+        add('uneven-controls', {
+          row: row.className,
+          heights: heights.join(', '),
+          spread,
+        });
+      }
+    });
+
+    // Content wider than the box holding it, where the box hides the evidence.
+    // `overflow: clip` and `hidden` produce no scrollbar, so the last control
+    // in a row is simply cut in half and nothing anywhere reports it -- the
+    // scrollbar rule above cannot see this, which is exactly how a clipped
+    // action row reached production.
+    document.querySelectorAll('main, .page-head, .page-actions, .card').forEach((el) => {
+      const style = getComputedStyle(el);
+      const hides = ['clip', 'hidden'].includes(style.overflowX);
+      const over = el.scrollWidth - el.clientWidth;
+      if (!hides || over <= 1) return;
+      add('clipped-content', {
+        box: el.className || el.tagName.toLowerCase(),
+        overflow_x: style.overflowX,
+        content: el.scrollWidth,
+        box_size: el.clientWidth,
+        cut_off: over,
+      });
+    });
+
     // The operating system's grey tooltip where the app has its own.
     document.querySelectorAll('.card [title], figure [title]').forEach((el) => {
       add('native-tooltip', { tag: el.tagName.toLowerCase(), title: el.title });

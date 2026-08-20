@@ -243,6 +243,7 @@ class Zone:
     reachable: bool = True
     # Set only while the domain is undeclared, and the handle adoption uses.
     adopt_token: str = ""
+    pinned: bool = False
 
     @property
     def managed(self) -> bool:
@@ -349,7 +350,7 @@ def _sort_key(record: ZoneRecord) -> tuple:
     return (len(labels), record.name, record.record_type, record.content)
 
 
-def zone_catalog() -> tuple[Zone, ...]:
+def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     """Every domain HQ has been told about, declared or merely seen.
 
     Undeclared zones are included so that adopting one is possible from the same
@@ -422,9 +423,39 @@ def zone_catalog() -> tuple[Zone, ...]:
                 observed_at=record_snapshot.observed_at if record_snapshot else None,
                 reachable=record_snapshot.reachable if record_snapshot else True,
                 adopt_token="" if resource else zone_tokens.get(name, ""),
+                pinned=name in pinned,
             )
         )
-    return tuple(zones)
+    # Pinned first, then alphabetical within each half. Sorted here rather than
+    # in the view so every surface that lists domains agrees on the order
+    # without restating the rule.
+    return tuple(sorted(zones, key=lambda zone: (not zone.pinned, zone.zone)))
+
+
+def unreachable_zones(reachable: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """Domains HQ is responsible for that a credential cannot actually read.
+
+    The controller reports what its token reaches; HQ knows which domains it
+    has been made responsible for. Neither side can answer this alone, and the
+    comparison used to be a literal list of one deployment's domains compiled
+    into the controller -- so adding a domain meant editing the controller, and
+    a different installation failed preflight over domains it had never heard
+    of.
+    """
+
+    seen = {str(name).strip().lower() for name in reachable}
+    if not seen:
+        return ()
+    return tuple(
+        sorted(
+            _normalise(str(resource.spec.get("zone", "")))
+            for resource in ManagedResource.objects.filter(
+                kind=ZONE_KIND, enabled=True
+            )
+            if resource.spec.get("zone")
+            and _normalise(str(resource.spec["zone"])) not in seen
+        )
+    )
 
 
 def find_zone(zone: str) -> Zone | None:

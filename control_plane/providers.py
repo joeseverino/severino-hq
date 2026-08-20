@@ -102,10 +102,13 @@ class TLSCertificateSpec(ProviderModel):
     topology_ref: str = Field(
         default="",
         pattern=r"^(pki:[a-z0-9][a-z0-9-]*)?$",
-        title="Described in the topology",
+        title="Which certificate this is",
         description=(
-            "Set on certificates that predate HQ owning them. A new certificate "
-            "is defined here instead and leaves this empty."
+            "This certificate is defined in your topology: its name, the names "
+            "it covers and where it installs all come from there. HQ points at "
+            "that definition and keeps it issued, deployed and renewed. Leave "
+            "it alone unless this resource should track a different "
+            "certificate entirely."
         ),
     )
     certificate_name: str = Field(
@@ -117,10 +120,10 @@ class TLSCertificateSpec(ProviderModel):
     )
     domains: list[str] = Field(
         default_factory=list,
-        title="Names it should cover",
+        title="Domains",
         description=(
-            "One per line. Wildcards are fine. Every zone must be one the "
-            "Cloudflare token can edit, or issuance fails before it starts."
+            "Wildcards are fine. Each domain has to sit in a Cloudflare zone "
+            "HQ can edit — that is how it proves ownership to Let's Encrypt."
         ),
     )
     install_on: list[str] = Field(
@@ -136,22 +139,28 @@ class TLSCertificateSpec(ProviderModel):
         default=30,
         ge=1,
         le=60,
-        title="Renew when this many days remain",
+        title="Renew this many days early",
         description=(
-            "HQ renews automatically — this only decides how early. It also "
-            "renews immediately if a consumer is found serving the wrong "
-            "certificate."
+            "HQ renews on its own; this only decides how far ahead of expiry "
+            "it starts. It also renews immediately if a consumer is found "
+            "serving the wrong certificate."
         ),
     )
 
     @model_validator(mode="after")
     def one_shape_or_the_other(self):
-        defining = bool(self.certificate_name or self.domains or self.install_on)
+        # Domains are not part of the choice. What a certificate covers is
+        # desired state -- the thing an operator changes when a new domain
+        # arrives -- while how a target receives one describes the world and
+        # stays in the topology. Counting `domains` as "defining a new
+        # certificate" meant a certificate imported from the topology could
+        # never have a name added to it in HQ at all.
+        defining = bool(self.certificate_name or self.install_on)
         if self.topology_ref and defining:
             raise ValueError(
                 "Name an existing certificate or define a new one, not both."
             )
-        if not self.topology_ref and not defining:
+        if not self.topology_ref and not (defining or self.domains):
             raise ValueError(
                 "Choose an existing certificate, or give a name, its domains "
                 "and where to install it."
@@ -616,6 +625,27 @@ class ProviderSpec:
     # empty. Required-ness describes the model; this describes the conversation,
     # and only the provider knows which of its own knobs are which.
     advanced_fields: tuple[str, ...] = ()
+    # Groups of fields that are alternatives to one another, as
+    # ``((group_id, fields...), ...)``. A spec whose validator says "this or
+    # that, never both" rendered as one flat list of every field in both, so a
+    # certificate described by the topology showed empty "name it", "domains"
+    # and "install on" boxes beside the reference that actually defined it --
+    # a page that read as though the certificate covered nothing and was
+    # installed nowhere. Declaring the choice lets the form show the branch in
+    # use and fold the other away.
+    alternatives: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Fields that say *which* thing this is, and so cannot change once it
+    # exists. Offered on an edit form they invite an answer that makes no
+    # sense: an existing certificate was asked whether it would rather be "a
+    # new certificate defined below", with the fields that would define one
+    # folded out of sight. Shown as a fact instead, and dropped from the form.
+    fixed_after_create: tuple[str, ...] = ()
+    # What changing a field actually causes, as ``((field, sentence), ...)``.
+    # Saving a new name onto a certificate is not "saving": HQ notices the
+    # deployed certificate no longer covers what is declared and re-issues it
+    # within the minute. The page that takes the edit is the only place that
+    # can say so beforehand, and a provider is the only thing that knows.
+    change_effects: tuple[tuple[str, str], ...] = ()
     # Fields that are optional to the model but unanswerable-by-default when
     # the record does not exist yet. An NPM proxy keeps whatever certificate it
     # already has when this is blank, which is a sensible default for an edit
@@ -828,7 +858,10 @@ def _resolve_tls(
         raise ValueError(f"Topology certificate {topology_ref!r} has no consumers.")
     return {
         "certificate_name": certificate.get("certificate_name", certificate_id),
-        "domains": certificate.get("domains", []),
+        # Authored names win. Blank means HQ has not been asked to own them yet
+        # and the topology's list still stands; saving the form once writes
+        # them here, after which adding a domain is an edit rather than a sync.
+        "domains": authored.get("domains") or certificate.get("domains", []),
         "consumers": consumers,
         "renewal_window_days": authored["renewal_window_days"],
     }
@@ -967,11 +1000,27 @@ def expiry_phrase(stamp: str) -> str:
 def _certificate_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    verified = status.get("verified_domains") or ()
+    consumers = status.get("consumers") or []
+    # The names themselves, not how many of them there are. A count answers a
+    # question nobody asks: "which names does this cover" is the reason to look
+    # at a certificate at all, and "7" is the one reply that cannot be checked.
+    installed = sorted(
+        {
+            str(consumer.get("consumer") or consumer.get("consumer_kind") or "")
+            for consumer in consumers
+            if isinstance(consumer, dict)
+        }
+        - {""}
+    )
+    # Compact on purpose. This readout is what a *service* page shows beside a
+    # hostname, and there the question is whether this name is covered by
+    # something healthy -- not which seven other names share the certificate.
+    # The full list belongs on the certificate, where it is now an editable
+    # field rather than a paragraph.
     return (
         ("Issuer", "", status.get("issuer", "")),
         ("Expires", "", expiry_phrase(status.get("not_after", ""))),
-        ("Verified names", "", str(len(verified)) if verified else ""),
+        ("Installed on", "", ", ".join(installed)),
     )
 
 
@@ -1292,6 +1341,18 @@ _PROVIDERS = (
         # managed. Adding means defining a new one; the reference stays visible
         # on the resources that use it.
         advanced_fields=("topology_ref", "renewal_window_days"),
+        alternatives=(
+            ("described", ("topology_ref",)),
+            ("defined", ("certificate_name", "install_on")),
+        ),
+        fixed_after_create=("topology_ref",),
+        change_effects=(
+            (
+                "domains",
+                "Saving re-issues the certificate and redeploys it everywhere "
+                "it is installed. Takes about a minute.",
+            ),
+        ),
         facet="certificate",
         readout=_certificate_readout,
         hostnames=_certificate_hostnames,
