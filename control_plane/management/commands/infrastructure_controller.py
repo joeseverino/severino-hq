@@ -1,8 +1,22 @@
-"""Machine-readable bridge used by the privileged homelab controller."""
+"""Machine-readable bridge used by the privileged homelab controller.
+
+Every action is declared once, in ``ACTIONS``: its name, the flags it takes,
+and the function that runs it. The subparsers and the dispatch are both derived
+from that.
+
+Stated twice -- a subparser here, a branch in an if/elif ladder there -- the two
+could disagree, and one disagreement was dangerous rather than merely untidy:
+the ladder ended in a bare ``else`` that ran ``report``, so an action added to
+the parser and forgotten in the ladder would not fail. It would quietly report
+an operation instead.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import json
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 from pydantic import TypeAdapter, ValidationError
@@ -22,97 +36,138 @@ from application.infrastructure import controller_contract
 from control_plane.models import ManagedResource
 
 
+# Flags shared across actions, declared once so "--controller-id" means the
+# same thing wherever it is accepted.
+FLAGS: dict[str, Callable[[Any], None]] = {
+    "controller_id": lambda parser: parser.add_argument(
+        "--controller-id", required=True
+    ),
+    "lease_seconds": lambda parser: parser.add_argument(
+        "--lease-seconds", type=int, default=300
+    ),
+    "capability": lambda parser: parser.add_argument(
+        "--capability", action="append", default=[]
+    ),
+    "resource": lambda parser: parser.add_argument("--resource", required=True),
+    "payload": lambda parser: parser.add_argument("--payload", required=True),
+    "operation": lambda parser: parser.add_argument("--operation", required=True),
+}
+
+
+def _capabilities(options: dict) -> tuple[tuple[str, str], ...]:
+    parsed = tuple(
+        tuple(value.split(":", 1)) for value in options.get("capability", [])
+    )
+    if any(len(item) != 2 or not all(item) for item in parsed):
+        raise ValueError("Capabilities must use kind:action.")
+    return parsed
+
+
+def _claim(options: dict) -> Any:
+    return claim_next_operation(
+        options["controller_id"],
+        lease_seconds=options["lease_seconds"],
+        capabilities=_capabilities(options),
+    )
+
+
+def _peek(options: dict) -> Any:
+    return peek_next_operation(capabilities=_capabilities(options))
+
+
+def _export(options: dict) -> Any:
+    try:
+        resource = ManagedResource.objects.get(key=options["resource"])
+    except ManagedResource.DoesNotExist as exc:
+        raise ValueError("Managed resource was not found.") from exc
+    return controller_contract(resource)
+
+
+def _preflight(options: dict) -> Any:
+    probes = preflight_connections()
+    result = {
+        "ok": all(probe.ok for probe in probes),
+        "connections": [
+            {
+                "connection_ref": probe.connection_ref,
+                "provider": probe.provider,
+                "ok": probe.ok,
+                "message": probe.message,
+            }
+            for probe in probes
+        ],
+    }
+    if not result["ok"]:
+        raise ValueError(json.dumps(result, sort_keys=True))
+    return result
+
+
+def _material(options: dict) -> Any:
+    # Its own action rather than a field on the contract: `export` prints a
+    # contract, and a stored private key must not be one keystroke away from a
+    # terminal that was only being inspected.
+    try:
+        return material_for(options["resource"])
+    except CertificateError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _inventory(options: dict) -> Any:
+    return record_sweep(
+        json.loads(options["payload"]),
+        principal=cli_principal(),
+        controller_id=options["controller_id"],
+    )
+
+
+def _schedule(options: dict) -> Any:
+    return schedule_automatic_operations(options["controller_id"])
+
+
+def _report(options: dict) -> Any:
+    payload = json.loads(options["payload"])
+    parsed = TypeAdapter(ControllerReport).validate_python(payload)
+    return report_operation(
+        options["operation"], parsed, controller_id=options["controller_id"]
+    )
+
+
+@dataclass(frozen=True)
+class Action:
+    name: str
+    flags: tuple[str, ...]
+    run: Callable[[dict], Any]
+
+
+ACTIONS: tuple[Action, ...] = (
+    Action("claim", ("controller_id", "lease_seconds", "capability"), _claim),
+    Action("peek", ("capability",), _peek),
+    Action("export", ("resource",), _export),
+    Action("preflight", (), _preflight),
+    Action("schedule", ("controller_id",), _schedule),
+    Action("material", ("resource",), _material),
+    Action("inventory", ("controller_id", "payload"), _inventory),
+    Action("report", ("controller_id", "operation", "payload"), _report),
+)
+
+BY_NAME = {action.name: action for action in ACTIONS}
+
+
 class Command(BaseCommand):
     help = "Claim or report a typed infrastructure operation as JSON."
 
     def add_arguments(self, parser):
         subparsers = parser.add_subparsers(dest="action", required=True)
-        claim = subparsers.add_parser("claim")
-        claim.add_argument("--controller-id", required=True)
-        claim.add_argument("--lease-seconds", type=int, default=300)
-        claim.add_argument("--capability", action="append", default=[])
-        peek = subparsers.add_parser("peek")
-        peek.add_argument("--capability", action="append", default=[])
-
-        export = subparsers.add_parser("export")
-        export.add_argument("--resource", required=True)
-        subparsers.add_parser("preflight")
-        schedule = subparsers.add_parser("schedule")
-        schedule.add_argument("--controller-id", required=True)
-
-        material = subparsers.add_parser("material")
-        material.add_argument("--resource", required=True)
-
-        inventory = subparsers.add_parser("inventory")
-        inventory.add_argument("--controller-id", required=True)
-        inventory.add_argument("--payload", required=True)
-
-        report = subparsers.add_parser("report")
-        report.add_argument("--controller-id", required=True)
-        report.add_argument("--operation", required=True)
-        report.add_argument("--payload", required=True)
+        for action in ACTIONS:
+            subparser = subparsers.add_parser(action.name)
+            for flag in action.flags:
+                FLAGS[flag](subparser)
 
     def handle(self, *args, **options):
+        # No fallback branch. argparse only admits a name that is in ACTIONS,
+        # and ACTIONS is what built the parser, so the two cannot drift apart.
         try:
-            capabilities = tuple(
-                tuple(value.split(":", 1)) for value in options.get("capability", [])
-            )
-            if any(len(item) != 2 or not all(item) for item in capabilities):
-                raise ValueError("Capabilities must use kind:action.")
-            if options["action"] == "claim":
-                result = claim_next_operation(
-                    options["controller_id"],
-                    lease_seconds=options["lease_seconds"],
-                    capabilities=capabilities,
-                )
-            elif options["action"] == "peek":
-                result = peek_next_operation(capabilities=capabilities)
-            elif options["action"] == "export":
-                try:
-                    resource = ManagedResource.objects.get(key=options["resource"])
-                except ManagedResource.DoesNotExist as exc:
-                    raise ValueError("Managed resource was not found.") from exc
-                result = controller_contract(resource)
-            elif options["action"] == "preflight":
-                probes = preflight_connections()
-                result = {
-                    "ok": all(probe.ok for probe in probes),
-                    "connections": [
-                        {
-                            "connection_ref": probe.connection_ref,
-                            "provider": probe.provider,
-                            "ok": probe.ok,
-                            "message": probe.message,
-                        }
-                        for probe in probes
-                    ],
-                }
-                if not result["ok"]:
-                    raise ValueError(json.dumps(result, sort_keys=True))
-            elif options["action"] == "material":
-                # Its own command rather than a field on the contract: `export`
-                # prints a contract, and a stored private key must not be one
-                # keystroke away from a terminal that was only being inspected.
-                try:
-                    result = material_for(options["resource"])
-                except CertificateError as exc:
-                    raise ValueError(str(exc)) from exc
-            elif options["action"] == "inventory":
-                result = record_sweep(
-                    json.loads(options["payload"]),
-                    principal=cli_principal(),
-                    controller_id=options["controller_id"],
-                )
-            elif options["action"] == "schedule":
-                result = schedule_automatic_operations(options["controller_id"])
-            else:
-                payload = json.loads(options["payload"])
-                parsed = TypeAdapter(ControllerReport).validate_python(payload)
-                result = report_operation(
-                    options["operation"],
-                    parsed,
-                    controller_id=options["controller_id"],
-                )
+            result = BY_NAME[options["action"]].run(options)
         except (ValueError, ValidationError, json.JSONDecodeError) as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(json.dumps(result, sort_keys=True))

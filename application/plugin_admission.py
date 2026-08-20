@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import Any, Protocol
+from typing import Any, NoReturn, Protocol
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -23,6 +23,9 @@ class AdmittedPlugin(Protocol):
     source_workflow: str
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
+HOST = "severino-hq"
 LOCK_KEYS = {
     "ok",
     "schema_version",
@@ -52,8 +55,15 @@ def admission_required() -> bool:
     return not _enabled(os.environ.get("DJANGO_DEBUG"))
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     raise ImproperlyConfigured(f"Plugin admission failed: {message}")
+
+
+def _require(digest: Any, pattern: re.Pattern[str], message: str) -> None:
+    """A field that must be a hex digest of exactly the right shape."""
+
+    if not isinstance(digest, str) or not pattern.fullmatch(digest):
+        _fail(message)
 
 
 def _load_lock() -> list[dict[str, Any]]:
@@ -79,67 +89,92 @@ def _load_lock() -> list[dict[str, Any]]:
     return plugins
 
 
+def _expected_policy() -> str:
+    """The Cordon policy digest every approval must have been signed under."""
+
+    digest = os.environ.get("SEVERINO_HQ_PLUGIN_POLICY_SHA256", "").strip()
+    _require(
+        digest, SHA256, "SEVERINO_HQ_PLUGIN_POLICY_SHA256 must be a lowercase SHA-256"
+    )
+    return digest
+
+
+def _admitted_id(approval: dict[str, Any], *, expected_policy: str, seen: set) -> str:
+    """Check one approval on its own terms; return the plugin it admits.
+
+    Order is load-bearing: the shape check runs first because every later line
+    indexes fields it guarantees are present. Checks are written out rather than
+    driven from a table so the requirements can be read in order.
+    """
+
+    if set(approval) != LOCK_KEYS:
+        _fail("approval fields are not canonical")
+    if approval["ok"] is not True or approval["schema_version"] != 1:
+        _fail("approval verdict or schema is incompatible")
+    plugin_id = approval["plugin"]
+    if not isinstance(plugin_id, str) or plugin_id in seen:
+        _fail("approval plugin IDs must be unique strings")
+    if approval["host"] != HOST:
+        _fail(f"{plugin_id!r} targets another host")
+    # Built from the approval's own claimed source, then compared. An extension
+    # cannot widen who may sign for it by editing its own repository, because
+    # the identity it must match is derived from the fields being checked.
+    expected_identity = (
+        f"https://github.com/{approval['source_repository']}/"
+        f"{approval['source_workflow']}@refs/heads/main"
+    )
+    if approval["signer_identity"] != expected_identity:
+        _fail(f"{plugin_id!r} used an unexpected signer identity")
+    if approval["oidc_issuer"] != SIGNER_ISSUER:
+        _fail(f"{plugin_id!r} used an unexpected OIDC issuer")
+    if approval["policy_sha256"] != expected_policy:
+        _fail(f"{plugin_id!r} used an unexpected Cordon policy")
+    for field in ("artifact_sha256", "policy_sha256"):
+        _require(approval[field], SHA256, f"{plugin_id!r} has an invalid {field}")
+    _require(
+        approval["source_commit"], COMMIT, f"{plugin_id!r} has an invalid source commit"
+    )
+    return plugin_id
+
+
+def _agrees_with_approval(manifest: AdmittedPlugin, approval: dict[str, Any]) -> None:
+    """The running manifest must be the artifact that was approved."""
+
+    approved = {
+        "version": manifest.version,
+        "distribution": manifest.distribution,
+        "plugin_api_version": manifest.api_version,
+        "source_repository": manifest.source_repository,
+        "source_workflow": manifest.source_workflow,
+    }
+    for field, value in approved.items():
+        if approval[field] != value:
+            _fail(f"{manifest.id!r} {field} does not match its approval")
+    # And the wheel actually installed must be that version too: a manifest
+    # agreeing with its approval says nothing about what pip resolved.
+    try:
+        installed = package_version(manifest.distribution)
+    except PackageNotFoundError:
+        _fail(f"distribution {manifest.distribution!r} is not installed")
+    if installed != manifest.version:
+        _fail(f"installed {manifest.distribution!r} version does not match")
+
+
 def enforce_plugin_admission(manifests: tuple[AdmittedPlugin, ...]) -> None:
     if not manifests or not admission_required():
         return
-    expected_policy = os.environ.get(
-        "SEVERINO_HQ_PLUGIN_POLICY_SHA256", ""
-    ).strip()
-    if not SHA256.fullmatch(expected_policy):
-        _fail("SEVERINO_HQ_PLUGIN_POLICY_SHA256 must be a lowercase SHA-256")
+    expected_policy = _expected_policy()
 
-    approvals = _load_lock()
     by_id: dict[str, dict[str, Any]] = {}
-    for approval in approvals:
-        if set(approval) != LOCK_KEYS:
-            _fail("approval fields are not canonical")
-        if approval["ok"] is not True or approval["schema_version"] != 1:
-            _fail("approval verdict or schema is incompatible")
-        plugin_id = approval["plugin"]
-        if not isinstance(plugin_id, str) or plugin_id in by_id:
-            _fail("approval plugin IDs must be unique strings")
-        if approval["host"] != "severino-hq":
-            _fail(f"{plugin_id!r} targets another host")
-        expected_identity = (
-            f"https://github.com/{approval['source_repository']}/"
-            f"{approval['source_workflow']}@refs/heads/main"
+    for approval in _load_lock():
+        plugin_id = _admitted_id(
+            approval, expected_policy=expected_policy, seen=set(by_id)
         )
-        if approval["signer_identity"] != expected_identity:
-            _fail(f"{plugin_id!r} used an unexpected signer identity")
-        if approval["oidc_issuer"] != "https://token.actions.githubusercontent.com":
-            _fail(f"{plugin_id!r} used an unexpected OIDC issuer")
-        if approval["policy_sha256"] != expected_policy:
-            _fail(f"{plugin_id!r} used an unexpected Cordon policy")
-        for field in ("artifact_sha256", "policy_sha256"):
-            if not isinstance(approval[field], str) or not SHA256.fullmatch(
-                approval[field]
-            ):
-                _fail(f"{plugin_id!r} has an invalid {field}")
-        if not isinstance(approval["source_commit"], str) or not re.fullmatch(
-            r"[0-9a-f]{40}", approval["source_commit"]
-        ):
-            _fail(f"{plugin_id!r} has an invalid source commit")
         by_id[plugin_id] = approval
 
-    expected_ids = {manifest.id for manifest in manifests}
-    if set(by_id) != expected_ids:
+    # Exactly, in both directions. An approval without a plugin is a stale lock;
+    # a plugin without an approval is the thing this whole path exists to refuse.
+    if set(by_id) != {manifest.id for manifest in manifests}:
         _fail("lock inventory does not exactly match enabled plugins")
     for manifest in manifests:
-        approval = by_id[manifest.id]
-        expected = {
-            "version": manifest.version,
-            "distribution": manifest.distribution,
-            "plugin_api_version": manifest.api_version,
-            "source_repository": manifest.source_repository,
-            "source_workflow": manifest.source_workflow,
-        }
-        for field, value in expected.items():
-            if approval[field] != value:
-                _fail(f"{manifest.id!r} {field} does not match its approval")
-        try:
-            installed_version = package_version(manifest.distribution)
-        except PackageNotFoundError:
-            _fail(f"distribution {manifest.distribution!r} is not installed")
-            raise AssertionError
-        if installed_version != manifest.version:
-            _fail(f"installed {manifest.distribution!r} version does not match")
+        _agrees_with_approval(manifest, by_id[manifest.id])
