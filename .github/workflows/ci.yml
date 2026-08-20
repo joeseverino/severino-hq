@@ -17,16 +17,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Reads scripts/toolchain.env and re-emits it as job outputs, so the matrix,
+  # the ruff pin and the coverage floor are declared in one file that
+  # scripts/ci-local.sh reads directly.
+  toolchain:
+    name: toolchain
+    runs-on: ubuntu-latest
+    outputs:
+      python-versions: ${{ steps.read.outputs.python-versions }}
+      oldest-python: ${{ steps.read.outputs.oldest-python }}
+      ruff-version: ${{ steps.read.outputs.ruff-version }}
+      coverage-floor: ${{ steps.read.outputs.coverage-floor }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: read
+        run: |
+          set -euo pipefail
+          . ./scripts/toolchain.env
+          # shellcheck disable=SC2086  # the version list is meant to split
+          versions="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rrc '[.]' | jq -sc 'add')"
+          {
+            echo "python-versions=$versions"
+            # shellcheck disable=SC2086
+            echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
+            echo "ruff-version=$RUFF_VERSION"
+            echo "coverage-floor=$COVERAGE_FLOOR"
+          } >> "$GITHUB_OUTPUT"
+          echo "matrix: $versions"
+
   lint:
     name: lint
+    needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
-      - run: pip install ruff==0.15.18
+          python-version: ${{ needs.toolchain.outputs.oldest-python }}
+      - run: pip install ruff==${{ needs.toolchain.outputs.ruff-version }}
       - run: ruff check .
+      - name: The README badges state what is actually tested
+        # Static markdown cannot be generated, so it is verified: the Python
+        # versions a reader sees are the versions the matrix runs.
+        run: |
+          set -euo pipefail
+          . ./scripts/toolchain.env
+          # shellcheck disable=SC2086  # the version list is meant to split
+          expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
+          claimed="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 \
+                     | sed 's/%20%7C%20/|/g')"
+          if [ "$expected" != "$claimed" ]; then
+            echo "::error::README python badge says '$claimed'; the matrix runs '$expected'."
+            exit 1
+          fi
+          echo "README python badge agrees with the matrix: $expected"
       - name: No private extension names in the public tree
         # The extensions are private repositories; this one is public. Their
         # inventory is kept in the COMPOSITION_EXTENSIONS variable rather than
@@ -69,37 +113,29 @@ jobs:
           echo "no private extension identifiers in the tracked tree"
       - name: Shell safety
         run: |
-          sh -n scripts/deploy-image.sh scripts/install-controller.sh \
-            scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
-            scripts/refresh-secrets.sh scripts/render-controller-env.sh \
-            scripts/run-controller.sh scripts/test-render-controller-env.sh \
-            scripts/test-edge-controller.sh scripts/test-deploy-image.sh \
-            scripts/test-backup.sh \
-            deploy/targets/severino-hq-edge-controller \
-            deploy/targets/severino-hq-edge-dispatch \
-            deploy/targets/severino-hq-cpanel-controller
-          bash -n scripts/backup.sh
-          shellcheck scripts/deploy-image.sh scripts/install-controller.sh \
-            scripts/controller-ssh.sh scripts/provision-controller-ssh.sh \
-            scripts/refresh-secrets.sh scripts/render-controller-env.sh \
-            scripts/run-controller.sh scripts/test-render-controller-env.sh \
-            scripts/test-edge-controller.sh scripts/test-deploy-image.sh \
-            scripts/backup.sh scripts/test-backup.sh \
-            deploy/targets/severino-hq-edge-controller \
-            deploy/targets/severino-hq-edge-dispatch \
-            deploy/targets/severino-hq-cpanel-controller
-          scripts/test-render-controller-env.sh
-          scripts/test-edge-controller.sh
-          scripts/test-deploy-image.sh
-          scripts/test-backup.sh
+          set -euo pipefail
+          . ./scripts/toolchain.env
+          # shellcheck disable=SC2086  # both lists are meant to split
+          set -- $SHELL_SOURCES
+          for f; do
+            case "$f" in
+              *backup.sh|*ci-local.sh) bash -n "$f" ;;
+              *) sh -n "$f" ;;
+            esac
+          done
+          # shellcheck disable=SC2086
+          shellcheck -x $SHELL_SOURCES
+          # shellcheck disable=SC2086
+          for suite in $SHELL_SUITES; do "$suite"; done
 
   test:
     name: test
+    needs: toolchain
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13", "3.14"]
+        python-version: ${{ fromJSON(needs.toolchain.outputs.python-versions) }}
     env:
       DJANGO_DEBUG: "1"
       DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
@@ -121,22 +157,45 @@ jobs:
           python manage.py plugins
       - run: python manage.py makemigrations --check --dry-run
       - name: Tests with coverage gate
+        env:
+          COVERAGE_FLOOR: ${{ needs.toolchain.outputs.coverage-floor }}
         run: |
           coverage run manage.py test --verbosity 2
-          coverage report --fail-under=70
+          coverage report --fail-under="$COVERAGE_FLOOR"
           pct="$(coverage report --format=total 2>/dev/null || echo '')"
-          if [ "${{ matrix.python-version }}" = "3.12" ] && [ -n "$pct" ]; then
+          if [ "${{ matrix.python-version }}" = "${{ needs.toolchain.outputs.oldest-python }}" ] && [ -n "$pct" ]; then
             echo "### Test coverage: ${pct}%" >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: The README badge states the coverage actually measured
+        # The badge was hand-typed and drifted -- it claimed 80% against a real
+        # 86% and a gate of 70%, three numbers for one fact in a repository
+        # whose argument is that a fact should be stated once. It cannot be
+        # generated (the README is static), so it is verified instead: the
+        # number a reader sees has to be the number this run measured.
+        if: matrix.python-version == needs.toolchain.outputs.oldest-python
+        run: |
+          set -euo pipefail
+          measured="$(coverage report --format=total)"
+          # One capture group, not two greps: the URL-encoded percent sign in
+          # `coverage-86%25-brightgreen` is itself digits, and a looser match
+          # reads the badge as both 86 and 25.
+          claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
+          if [ "$measured" != "$claimed" ]; then
+            echo "::error::README claims ${claimed}% coverage; this run measured ${measured}%."
+            echo "Update the badge in README.md to ${measured}%."
+            exit 1
+          fi
+          echo "README badge agrees with the measured ${measured}%."
 
   security:
     name: security
+    needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: ${{ needs.toolchain.outputs.oldest-python }}
       - run: pip install --require-hashes -r requirements.txt
       # Production-posture check: DEBUG off, real host. --fail-level WARNING
       # turns Django's security advisories into hard failures. The env below
