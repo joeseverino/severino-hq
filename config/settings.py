@@ -285,6 +285,10 @@ DATABASES = {
     }
 }
 
+# Django's own runner, plus a WAL checkpoint before it clones the test database
+# for parallel workers. See core/test_runner.py for why that is necessary.
+TEST_RUNNER = "core.test_runner.SeverinoTestRunner"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
