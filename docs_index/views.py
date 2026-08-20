@@ -20,9 +20,14 @@ from application.documentation import (
     save_documentation,
     sync_documentation,
 )
-from application.deletion import DeleteCommand, delete_documentation
+from application.deletion import delete_documentation
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.writes import (
+    ServiceCreateMixin,
+    ServiceDeleteMixin,
+    ServiceUpdateMixin,
+)
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
@@ -105,62 +110,39 @@ class DocsDetailView(LoginRequiredMixin, DetailView):
     )
 
 
-class DocsCreateView(LoginRequiredMixin, CreateView):
+class DocsWrite:
+    """What every documentation write shares, whichever direction it goes."""
+
     model = DocumentationRecord
+    noun = "Doc record"
+    result_key = "documentation"
+    identity_attr = "doc_id"
+    identity_kwarg = "current_doc_id"
+
+
+class DocsCreateView(DocsWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView):
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
-
-    def form_valid(self, form):
-        result = save_documentation(
-            documentation_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-        )
-        self.object = DocumentationRecord.objects.get(
-            doc_id=result["documentation"]["doc_id"]
-        )
-        messages.success(self.request, f"Doc record “{self.object}” created.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_documentation)
+    command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsUpdateView(LoginRequiredMixin, UpdateView):
-    model = DocumentationRecord
+class DocsUpdateView(DocsWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
-
-    def form_valid(self, form):
-        result = save_documentation(
-            documentation_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-            current_doc_id=self.get_object().doc_id,
-        )
-        self.object = DocumentationRecord.objects.get(
-            doc_id=result["documentation"]["doc_id"]
-        )
-        messages.success(self.request, f"Doc record “{self.object}” updated.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_documentation)
+    command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsDeleteView(LoginRequiredMixin, DeleteView):
-    model = DocumentationRecord
+class DocsDeleteView(DocsWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
     template_name = "docs_index/docs_confirm_delete.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
     success_url = reverse_lazy("docs_index:list")
     context_object_name = "record"
-
-    def form_valid(self, form):
-        doc_id = self.get_object().doc_id
-        result = delete_documentation(
-            DeleteCommand(confirm=doc_id),
-            principal=web_principal(self.request.user),
-            current_doc_id=doc_id,
-        )
-        messages.success(
-            self.request, f"Doc record “{result['deleted']['label']}” deleted."
-        )
-        return redirect(self.success_url)
+    service = staticmethod(delete_documentation)
 
 
 class ManifestImportView(LoginRequiredMixin, View):

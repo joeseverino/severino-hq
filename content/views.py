@@ -1,7 +1,5 @@
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
-from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -12,9 +10,13 @@ from django.views.generic import (
 )
 
 from application.content import content_command_from_cleaned_data, save_content
-from application.deletion import DeleteCommand, delete_content
-from application.security import web_principal
+from application.deletion import delete_content
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.writes import (
+    ServiceCreateMixin,
+    ServiceDeleteMixin,
+    ServiceUpdateMixin,
+)
 from .forms import ContentItemForm
 from .models import ContentItem
 
@@ -67,53 +69,42 @@ class ContentDetailView(LoginRequiredMixin, DetailView):
     )
 
 
-class ContentCreateView(LoginRequiredMixin, CreateView):
+class ContentWrite:
+    """What every content write shares, whichever direction it goes."""
+
     model = ContentItem
+    noun = "Content item"
+    result_key = "content"
+    identity_attr = "slug"
+    identity_kwarg = "current_slug"
+
+
+class ContentCreateView(
+    ContentWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView
+):
     form_class = ContentItemForm
     template_name = "content/content_form.html"
-
-    def form_valid(self, form):
-        result = save_content(
-            content_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-        )
-        self.object = ContentItem.objects.get(slug=result["content"]["slug"])
-        messages.success(self.request, f"Content item “{self.object}” created.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_content)
+    command_from_cleaned_data = staticmethod(content_command_from_cleaned_data)
 
 
-class ContentUpdateView(LoginRequiredMixin, UpdateView):
-    model = ContentItem
+class ContentUpdateView(
+    ContentWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
+):
     form_class = ContentItemForm
     template_name = "content/content_form.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
-
-    def form_valid(self, form):
-        result = save_content(
-            content_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-            current_slug=self.get_object().slug,
-        )
-        self.object = ContentItem.objects.get(slug=result["content"]["slug"])
-        messages.success(self.request, f"Content item “{self.object}” updated.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_content)
+    command_from_cleaned_data = staticmethod(content_command_from_cleaned_data)
 
 
-class ContentDeleteView(LoginRequiredMixin, DeleteView):
-    model = ContentItem
+class ContentDeleteView(
+    ContentWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
+):
     template_name = "content/content_confirm_delete.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
     success_url = reverse_lazy("content:list")
     context_object_name = "item"
-
-    def form_valid(self, form):
-        slug = self.get_object().slug
-        result = delete_content(
-            DeleteCommand(confirm=slug),
-            principal=web_principal(self.request.user),
-            current_slug=slug,
-        )
-        messages.success(self.request, f"Content item “{result['deleted']['label']}” deleted.")
-        return redirect(self.success_url)
+    service = staticmethod(delete_content)

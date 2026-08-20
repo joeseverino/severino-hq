@@ -111,6 +111,44 @@ class CapabilityTests(TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
 
+    def test_a_target_of_the_wrong_kind_is_refused_by_name(self):
+        """The message names the kind expected, so a client can correct itself.
+
+        Reached only after authorization and payload validation have passed:
+        a caller who may not run the capability is told that instead, and
+        learns nothing about the shape of target it would have taken.
+        """
+
+        result = execute_capability(
+            "expense.update",
+            {
+                "date": "2026-01-01",
+                "vendor": "V",
+                "item": "I",
+                "total_cost": "1.00",
+                "business_use_percentage": 100,
+            },
+            principal=cli_principal(),
+            target="not-an-integer",
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(
+            result["error"]["message"], "expense.update requires a integer target."
+        )
+
+    def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
+        result = execute_capability(
+            "expense.update",
+            {},
+            principal=Principal("nobody", "test", frozenset()),
+            target="not-an-integer",
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "forbidden")
+
     def test_json_executor_creates_through_same_service(self):
         result = execute_capability(
             "project.create",
