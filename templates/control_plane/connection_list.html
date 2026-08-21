@@ -29,7 +29,7 @@ found on its last pass.
         <tr>
           <td>
             <strong>{{ connection.connection_ref }}</strong>
-            {% if connection.controller_id %}<br><span class="muted">via {{ connection.controller_id }}</span>{% endif %}
+            {% if name_the_controller and connection.controller_id %}<br><span class="muted">via {{ connection.controller_id }}</span>{% endif %}
           </td>
           <td>{% if connection.provider %}<code>{{ connection.provider }}</code>{% else %}<span class="muted">unlabelled</span>{% endif %}</td>
           <td>{% if connection.endpoint %}<code>{{ connection.endpoint }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>

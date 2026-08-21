@@ -790,6 +790,12 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         context["observed_at"] = min(
             (item.observed_at for item in readings), default=None
         )
+        # Which controller reported a connection only matters once there are
+        # two. Printed unconditionally it repeated one machine's name under
+        # every row, which on a phone was a third of the page saying nothing.
+        context["name_the_controller"] = (
+            len({item.controller_id for item in readings}) > 1
+        )
         return context
 
 

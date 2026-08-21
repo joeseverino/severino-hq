@@ -475,3 +475,33 @@ class AdoptionSafetyTests(TestCase):
 
         self.assertContains(response, "probe")
         self.assertContains(response, "watch it but not take it over")
+
+
+class ControllerColumnTests(TestCase):
+    """Whose controller reported a connection is worth saying once there are two.
+
+    Printed under every row it repeated one machine's name seven times, which on
+    a phone was a third of the page saying nothing.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+
+    def test_one_controller_is_not_named_on_every_row(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN, controller_id="homelab-server")
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "via homelab-server")
+
+    def test_two_controllers_are_told_apart(self):
+        sweep(A_PORTAINER, controller_id="homelab-server")
+        sweep(A_DNS_TOKEN, controller_id="edge")
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, "via homelab-server")
+        self.assertContains(response, "via edge")
