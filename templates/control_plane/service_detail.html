@@ -156,9 +156,12 @@ thing actually answering. That is a claim about the row, so it reads under it.
 {% endcomment %}
 {% if service.origin_is_news %}
 <p class="control-origin">
-  {% if not service.origin %}
-    Nothing declares where requests for this name are served.
-  {% elif service.origin.external %}
+  {% comment %}
+  No branch for "nothing is routed": this whole note is skipped when there is no
+  origin, because the facets above already read "Not declared" and a fourth way
+  of saying so is not a fourth fact.
+  {% endcomment %}
+  {% if service.origin.external %}
     {% comment %}
     A statement, not a disclaimer. This is a working arrangement: something else
     serves the content and HQ publishes the record that sends people there.

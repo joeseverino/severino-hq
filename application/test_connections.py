@@ -505,3 +505,50 @@ class ControllerColumnTests(TestCase):
 
         self.assertContains(response, "via homelab-server")
         self.assertContains(response, "via edge")
+
+
+class ExpiredCredentialTests(TestCase):
+    """A credential that stopped answering must not read as an answer.
+
+    The two look identical from the zone list -- both report none -- and taken
+    the same way, a token expiring turns every public name HQ owns into a name
+    it claims no account holds.
+    """
+
+    def test_a_failed_probe_does_not_rule_out_every_public_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        sweep({**A_DNS_TOKEN, "ok": False, "reaches": [], "detail": "Token expired."})
+        context = name_context("probe.example.com")
+
+        self.assertFalse(context.swept)
+        self.assertEqual(PROVIDERS["cloudflare.dns_record"].applies(context), "")
+        self.assertEqual(PROVIDERS["tls.certificate"].applies(context), "")
+
+    def test_an_unprobed_connection_is_not_an_answer_either(self):
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        sweep({**A_DNS_TOKEN, "probed": False, "reaches": []})
+
+        self.assertEqual(
+            PROVIDERS["cloudflare.dns_record"].applies(name_context("a.example.com")),
+            "",
+        )
+
+    def test_a_working_credential_still_rules_out_what_it_cannot_reach(self):
+        """The guard must not swallow the rule it guards."""
+
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        sweep(A_DNS_TOKEN)
+
+        self.assertNotEqual(
+            PROVIDERS["cloudflare.dns_record"].applies(name_context("probe.homelab")),
+            "",
+        )

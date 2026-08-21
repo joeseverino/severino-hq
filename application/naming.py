@@ -60,10 +60,15 @@ def _reported_zones() -> tuple[tuple[str, ...], bool]:
         if spec.public_effect
         for provider in spec.connection_providers
     }
+    # Only a connection that answered. One that exists and failed its probe
+    # reports no zones, and counted as having reported it would turn an expired
+    # token into "no connected account holds a zone for jseverino.com" -- HQ
+    # refusing to publish a record in a domain it owns, on the strength of not
+    # having been able to ask.
     reported = [
         connection
         for connection in ProviderConnection.objects.all()
-        if connection.provider in public
+        if connection.provider in public and connection.reachable and connection.probed
     ]
     zones = {
         str(zone).strip().lower().rstrip(".")
