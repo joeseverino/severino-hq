@@ -22,7 +22,7 @@ from .services import CONTAINER_KIND
 def a_connection(ref, provider, endpoint="", reaches=(), reachable=True):
     return ProviderConnection.objects.create(
         connection_ref=ref,
-        controller_id="homelab-server",
+        controller_id="a-controller",
         provider=provider,
         endpoint=endpoint,
         reaches=list(reaches),
@@ -46,15 +46,15 @@ def containers(*records):
 class MembershipTests(TestCase):
     def test_a_portainer_environment_is_a_machine(self):
         a_connection(
-            "homelab-portainer",
+            "a-portainer",
             "portainer",
-            endpoint="https://admin.example",
-            reaches=["homelab-server", "cloud-edge"],
+            endpoint="https://portainer.example",
+            reaches=["a-docker-host", "a-cloud-host"],
         )
 
         self.assertEqual(
             [item.name for item in machine_catalog()],
-            ["cloud-edge", "homelab-server"],
+            ["a-cloud-host", "a-docker-host"],
         )
 
     def test_a_zone_a_dns_token_reaches_is_not_a_machine(self):
@@ -103,34 +103,34 @@ class MembershipTests(TestCase):
 class TieTests(TestCase):
     def setUp(self):
         a_connection(
-            "homelab-portainer",
+            "a-portainer",
             "portainer",
-            endpoint="https://admin.example",
-            reaches=["homelab-server"],
+            endpoint="https://portainer.example",
+            reaches=["a-docker-host"],
         )
         containers(
             {
                 "name": "app",
-                "host": "homelab-server",
+                "host": "a-docker-host",
                 "state": "running",
                 "ports": [8081],
             },
-            {"name": "old", "host": "homelab-server", "state": "exited", "ports": []},
+            {"name": "old", "host": "a-docker-host", "state": "exited", "ports": []},
         )
 
     def test_it_counts_what_is_running_rather_than_what_exists(self):
-        found = machine(" Homelab-Server ")
+        found = machine(" A-Docker-Host ")
 
         self.assertEqual(len(found.containers), 2)
         self.assertEqual(found.running, 1)
 
     def test_a_credential_that_answered_makes_the_machine_reachable(self):
-        self.assertTrue(machine("homelab-server").reachable)
+        self.assertTrue(machine("a-docker-host").reachable)
 
     def test_a_credential_that_did_not_answer_does_not(self):
         ProviderConnection.objects.update(reachable=False)
 
-        self.assertFalse(machine("homelab-server").reachable)
+        self.assertFalse(machine("a-docker-host").reachable)
 
     def test_an_unreported_name_is_not_a_machine(self):
         self.assertIsNone(machine("nowhere"))
@@ -143,15 +143,15 @@ class MachinePageTests(TestCase):
         )
         self.client.force_login(self.user)
         a_connection(
-            "homelab-portainer",
+            "a-portainer",
             "portainer",
-            endpoint="https://admin.example",
-            reaches=["homelab-server"],
+            endpoint="https://portainer.example",
+            reaches=["a-docker-host"],
         )
         containers(
             {
                 "name": "app",
-                "host": "homelab-server",
+                "host": "a-docker-host",
                 "image": "nginx:alpine",
                 "state": "running",
                 "ports": [8081],
@@ -161,15 +161,15 @@ class MachinePageTests(TestCase):
     def test_the_board_lists_what_is_on_each(self):
         response = self.client.get(reverse("control_plane:machines"))
 
-        self.assertContains(response, "homelab-server")
+        self.assertContains(response, "a-docker-host")
         self.assertContains(response, "1 of 1 running")
 
     def test_the_page_gathers_what_ties_to_one(self):
         response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "homelab-server"})
+            reverse("control_plane:machine", kwargs={"name": "a-docker-host"})
         )
 
-        self.assertContains(response, "homelab-portainer")
+        self.assertContains(response, "a-portainer")
         self.assertContains(response, "nginx:alpine")
         self.assertContains(response, "8081")
 
@@ -182,7 +182,7 @@ class MachinePageTests(TestCase):
 
     def test_the_page_never_carries_a_credential(self):
         response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "homelab-server"})
+            reverse("control_plane:machine", kwargs={"name": "a-docker-host"})
         )
 
         self.assertNotContains(response, "API_TOKEN")

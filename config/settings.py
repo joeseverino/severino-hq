@@ -471,6 +471,11 @@ SEVERINO_ACTIVITY_THROTTLE_SECONDS = env_int("SEVERINO_ACTIVITY_THROTTLE_SECONDS
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
 
+# Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
+# status page is a fact about that deployment; the consoles HQ can reach are
+# derived from the connections a controller reported and need no entry here.
+SEVERINO_DASHBOARD_LINKS = os.environ.get("SEVERINO_DASHBOARD_LINKS", "")
+
 
 # ----- I18N --------------------------------------------------------------------
 

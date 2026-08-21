@@ -701,7 +701,7 @@ class NameContext:
     # container stack is the machine's name rather than an address.
     origin: str = ""
     # The same place, as something on the network can actually reach it. A
-    # proxy seeded with "homelab-server" is seeded with a name nginx cannot
+    # proxy seeded with a machine name is seeded with something nginx cannot
     # resolve, which is a worse answer than an empty box: it looks considered.
     origin_address: str = ""
     # Resource keys of certificates that already cover this name.

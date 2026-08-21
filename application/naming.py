@@ -111,8 +111,8 @@ def _origin_for(hostname: str) -> str:
 def _reachable(origin: str) -> str:
     """The same origin, with the machine named as the network reaches it.
 
-    A stack says it runs on ``homelab-server`` because that is what the machine
-    is called, and everything inside HQ matches on it. A proxy is not inside HQ:
+    A stack says which machine it runs on by name, because that is what the
+    machine is called and what everything inside HQ matches on. A proxy is not
     nginx resolves what it is given, and it has never heard the name.
 
     Unchanged when the topology knows no address for the machine, which leaves

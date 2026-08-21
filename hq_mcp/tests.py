@@ -155,12 +155,12 @@ class MCPBoundaryTests(TestCase):
         self,
         *,
         client: str = "100.64.0.10",
-        host: str = "homelab-server",
+        host: str = "a-docker-host",
         token: str | None = TOKEN,
         origin: str | None = None,
         forwarded_for: str | None = None,
         configured_token: str = TOKEN,
-        allowed_hosts: tuple[str, ...] = ("homelab-server",),
+        allowed_hosts: tuple[str, ...] = ("a-docker-host",),
     ) -> tuple[int, dict]:
         headers = [(b"host", host.encode())]
         if token is not None:
@@ -249,7 +249,7 @@ class MCPBoundaryTests(TestCase):
                 self.assertEqual(body["error"], "unauthorized")
 
     def test_disables_endpoint_for_weak_token_or_missing_hosts(self):
-        for token, hosts in (("short", ("homelab-server",)), (TOKEN, ())):
+        for token, hosts in (("short", ("a-docker-host",)), (TOKEN, ())):
             with self.subTest(token=token, hosts=hosts):
                 status, body = self._request(
                     configured_token=token, allowed_hosts=hosts

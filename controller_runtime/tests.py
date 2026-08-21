@@ -865,7 +865,7 @@ class ProviderAdapterTests(TestCase):
             [
                 {"id": 1, "domain_names": ["hq.example.test"], "certificate_id": 11},
                 {"id": 2, "domain_names": ["sso.example.test"], "certificate_id": 11},
-                {"id": 3, "domain_names": ["proxy.homelab"], "certificate_id": 7},
+                {"id": 3, "domain_names": ["proxy.invalid"], "certificate_id": 7},
                 {"id": 4, "domain_names": ["off.example.test"], "enabled": False},
             ],
             {},

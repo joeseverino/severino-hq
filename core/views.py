@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView
 
+from application.connections import consoles, operator_links
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
@@ -176,26 +177,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # filtered list that shows it, supplied by the domain that raised it.
         action_queue = snapshot["priority"]
 
-        # Live infra status is NOT computed here — HQ links out to Uptime Kuma
-        # on the VPS rather than duplicating a status checker.
+        # One deployment's four addresses used to be written here, which shipped
+        # them to everyone who cloned a public repository and went stale for the
+        # one deployment that had them. The consoles come from the connections a
+        # controller reported; anything else an operator wants on the dashboard
+        # is theirs to name, in their environment rather than in this file.
         external_links = [
-            {
-                "label": "Live status",
-                "sub": "Uptime Kuma · VPS",
-                "href": "https://status.jseverino.com",
-            },
-            {
-                "label": "Health endpoint",
-                "sub": "liveness",
-                "href": "https://health.jseverino.com",
-            },
-            {"label": "Portainer", "sub": "containers", "href": "http://admin.homelab"},
-            {
-                "label": "Public site",
-                "sub": "jseverino.com",
-                "href": "https://jseverino.com",
-            },
-        ]
+            {"label": label, "sub": sub, "href": href}
+            for label, sub, href in consoles()
+        ] + operator_links()
 
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.

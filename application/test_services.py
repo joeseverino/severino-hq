@@ -591,20 +591,20 @@ class OriginNoteTests(TestCase):
         from .services import Facet, Origin, Running, Service
 
         running = Running(
-            name="probe", host="homelab-server", stack="probe", image="",
+            name="probe", host="a-docker-host", stack="probe", image="",
             state="running", status="", ports=(8099,), network_mode="bridge",
             host_address="", portainer_managed=False, connection_ref="",
             observed_at=None,
         )
         service = Service(
-            hostname="probe.homelab",
+            hostname="probe.invalid",
             facets=(
                 Facet(
                     id="runtime", label="Runtime", observed=running,
                     context=NameContext(),
                 ),
             ),
-            origin=Origin(address="192.168.1.233:8099", host="homelab-server",
+            origin=Origin(address="192.168.1.233:8099", host="a-docker-host",
                           container="probe"),
         )
 
@@ -628,7 +628,7 @@ class OriginNoteTests(TestCase):
         from .services import Origin, Service
 
         service = Service(
-            hostname="probe.homelab",
+            hostname="probe.invalid",
             facets=(),
             origin=Origin(address="10.9.9.9:8080"),
         )
@@ -641,9 +641,9 @@ class OriginNoteTests(TestCase):
         from .services import Facet, Origin, Service
 
         service = Service(
-            hostname="probe.homelab",
+            hostname="probe.invalid",
             facets=(Facet(id="runtime", label="Runtime", context=NameContext()),),
-            origin=Origin(address="192.168.1.233:8099", host="homelab-server"),
+            origin=Origin(address="192.168.1.233:8099", host="a-docker-host"),
         )
 
         self.assertTrue(service.origin_is_news)
@@ -669,10 +669,10 @@ class OriginWordingTests(TestCase):
     def test_a_known_machine_reads_as_itself(self):
         from .services import Origin
 
-        origin = Origin(address="192.168.1.233:8000", host="homelab-server",
-                        container="severino-hq")
+        origin = Origin(address="192.168.1.233:8000", host="a-docker-host",
+                        container="probe")
 
-        self.assertEqual(origin.headline, "homelab-server · severino-hq")
+        self.assertEqual(origin.headline, "a-docker-host · probe")
         self.assertEqual(origin.qualifier, "")
 
     def test_an_address_nothing_claims_still_says_so(self):
@@ -700,14 +700,14 @@ class ConnectedMachineTests(TestCase):
         from .services import _locate
 
         ProviderConnection.objects.create(
-            connection_ref="namecheap-cpanel", controller_id="homelab-server",
+            connection_ref="a-shared-host", controller_id="a-controller",
             provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
         origin = _locate("203.0.113.10:443", {"hosts": []})
 
-        self.assertEqual(origin.host, "namecheap-cpanel")
+        self.assertEqual(origin.host, "a-shared-host")
         self.assertTrue(origin.known)
         self.assertEqual(origin.qualifier, "")
 
@@ -725,14 +725,14 @@ class ConnectedMachineTests(TestCase):
         from .services import _locate
 
         ProviderConnection.objects.create(
-            connection_ref="homelab-npm", controller_id="homelab-server",
-            provider="npm", endpoint="https://proxy.homelab", reaches=[],
+            connection_ref="a-proxy", controller_id="a-controller",
+            provider="npm", endpoint="https://proxy.example", reaches=[],
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("proxy.homelab:81", {"hosts": []})
+        origin = _locate("proxy.example:81", {"hosts": []})
 
-        self.assertEqual(origin.host, "homelab-npm")
+        self.assertEqual(origin.host, "a-proxy")
 
 
 class PortlessOriginTests(TestCase):
@@ -748,10 +748,10 @@ class PortlessOriginTests(TestCase):
 
         origin = _locate(
             "192.168.1.233",
-            {"hosts": [{"id": "homelab-server", "lan_ip": "192.168.1.233"}]},
+            {"hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]},
         )
 
-        self.assertEqual(origin.host, "homelab-server")
+        self.assertEqual(origin.host, "a-docker-host")
         self.assertFalse(origin.external)
 
     def test_a_bare_address_matches_a_connection_too(self):
@@ -761,14 +761,14 @@ class PortlessOriginTests(TestCase):
         from .services import _locate
 
         ProviderConnection.objects.create(
-            connection_ref="namecheap-cpanel", controller_id="homelab-server",
+            connection_ref="a-shared-host", controller_id="a-controller",
             provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
         origin = _locate("203.0.113.10", {"hosts": []})
 
-        self.assertEqual(origin.headline, "namecheap-cpanel")
+        self.assertEqual(origin.headline, "a-shared-host")
 
     def test_a_name_nothing_claims_is_still_answered_elsewhere(self):
         """The heuristic it guards must survive: a portless address nothing

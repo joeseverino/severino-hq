@@ -3,7 +3,7 @@
 A machine was the one thing in HQ with no page. Its name appeared in a
 container's record, in a proxy's forwarding address, in what a Portainer
 reports it reaches, in a certificate's install list -- as a string, in five
-places, clickable in none. So "what is on homelab-server" was a question you
+places, clickable in none. So "what is on this machine" was a question you
 answered by reading four screens and holding the answer in your head.
 
 Nothing here is declared. A machine exists because something reported it: a
@@ -35,8 +35,8 @@ class Machine:
     # which of those is in play depends on what is being asked of it.
     reached_by: tuple[str, ...] = ()
     # Other names this same machine is known by. Two credentials name one
-    # machine differently -- an SSH item called "edge" and a Portainer
-    # environment called "sl-cloud-edge-01" for the same VPS -- and listed
+    # machine differently -- an SSH item and a Portainer
+    # environment naming the same VPS differently -- and listed
     # separately it appeared twice, with its containers under one of them and
     # the way to log into it under the other.
     aliases: tuple[str, ...] = ()

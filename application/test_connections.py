@@ -24,10 +24,10 @@ from .security import cli_principal
 
 
 A_PORTAINER = {
-    "connection_ref": "homelab-portainer",
+    "connection_ref": "a-portainer",
     "provider": "portainer",
-    "endpoint": "https://admin.homelab",
-    "reaches": ["homelab-server", "sl-cloud-edge-01"],
+    "endpoint": "https://portainer.example",
+    "reaches": ["a-docker-host", "a-cloud-host"],
     "ok": True,
     "probed": True,
     "detail": "2 of 2 environments reachable.",
@@ -43,7 +43,7 @@ A_DNS_TOKEN = {
 }
 
 
-def sweep(*connections, controller_id="homelab-server"):
+def sweep(*connections, controller_id="a-controller"):
     return record_connections(
         list(connections), principal=cli_principal(), controller_id=controller_id
     )
@@ -63,7 +63,7 @@ class RecordingTests(TestCase):
 
         self.assertEqual(
             [row.connection_ref for row in ProviderConnection.objects.all()],
-            ["homelab-portainer"],
+            ["a-portainer"],
         )
 
     def test_one_controller_does_not_erase_another(self):
@@ -74,8 +74,8 @@ class RecordingTests(TestCase):
         take the first one's menus down every fifteen minutes.
         """
 
-        sweep(A_PORTAINER, controller_id="homelab-server")
-        sweep(A_DNS_TOKEN, controller_id="edge")
+        sweep(A_PORTAINER, controller_id="a-controller")
+        sweep(A_DNS_TOKEN, controller_id="another-controller")
 
         self.assertEqual(ProviderConnection.objects.count(), 2)
 
@@ -153,9 +153,9 @@ class DerivationTests(TestCase):
         choices = container_stack(NameContext())
         self.assertEqual(
             [value for value, _ in choices["host"]],
-            ["homelab-server", "sl-cloud-edge-01"],
+            ["a-cloud-host", "a-docker-host"],
         )
-        self.assertEqual(choices["connection_ref"], (("homelab-portainer",) * 2,))
+        self.assertEqual(choices["connection_ref"], (("a-portainer",) * 2,))
 
     def test_a_machine_behind_two_portainers_is_offered_once(self):
         sweep(
@@ -163,13 +163,13 @@ class DerivationTests(TestCase):
             {
                 **A_PORTAINER,
                 "connection_ref": "second-portainer",
-                "reaches": ["homelab-server"],
+                "reaches": ["a-docker-host"],
             },
         )
 
         self.assertEqual(
             [name for name, _ in reachable_through("portainer")],
-            ["homelab-server", "sl-cloud-edge-01"],
+            ["a-cloud-host", "a-docker-host"],
         )
 
     def test_which_domains_can_be_declared_is_what_the_token_may_edit(self):
@@ -191,7 +191,7 @@ class DerivationTests(TestCase):
 
         refs = [ref for ref, _ in container_stack(NameContext())["connection_ref"]]
         labels = dict(container_stack(NameContext())["connection_ref"])
-        self.assertEqual(refs, ["homelab-portainer", "a-broken-one"])
+        self.assertEqual(refs, ["a-portainer", "a-broken-one"])
         self.assertIn("not answering", labels["a-broken-one"])
 
     def test_menus_are_empty_before_the_first_sweep(self):
@@ -214,8 +214,8 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "homelab-portainer")
-        self.assertContains(response, "sl-cloud-edge-01")
+        self.assertContains(response, "a-portainer")
+        self.assertContains(response, "a-cloud-host")
         self.assertContains(response, "Container stack")
 
     def test_the_page_never_carries_a_secret(self):
@@ -240,7 +240,7 @@ class ConnectionPageTests(TestCase):
         response = self.client.get(reverse("control_plane:connections"))
 
         self.assertContains(response, "Not yet classified")
-        self.assertContains(response, "homelab-portainer")
+        self.assertContains(response, "a-portainer")
 
 
 class OfferTests(TestCase):
@@ -253,7 +253,7 @@ class OfferTests(TestCase):
     def test_a_name_in_no_reachable_zone_is_not_offered_public_dns(self):
         sweep(A_DNS_TOKEN)
 
-        offers = dict(_certificate_and_dns("probe.homelab")["dns"].declarable)
+        offers = dict(_certificate_and_dns("probe.invalid")["dns"].declarable)
 
         self.assertNotIn("cloudflare.dns_record", offers)
         self.assertIn("adguard.rewrite", offers)
@@ -261,7 +261,7 @@ class OfferTests(TestCase):
     def test_it_says_why_rather_than_dropping_the_option(self):
         sweep(A_DNS_TOKEN)
 
-        refused = dict(_certificate_and_dns("probe.homelab")["certificate"].unavailable)
+        refused = dict(_certificate_and_dns("probe.invalid")["certificate"].unavailable)
 
         self.assertIn("TLS certificate", refused)
         self.assertIn("Upload a certificate instead", refused["TLS certificate"])
@@ -270,7 +270,7 @@ class OfferTests(TestCase):
         sweep(A_DNS_TOKEN)
 
         offers = dict(
-            _certificate_and_dns("probe.homelab")["certificate"].declarable
+            _certificate_and_dns("probe.invalid")["certificate"].declarable
         )
 
         self.assertIn("tls.uploaded_certificate", offers)
@@ -323,7 +323,7 @@ class SeedTests(TestCase):
                 "schema_version": 1,
                 "checksum": "test",
                 "payload": {
-                    "hosts": [{"id": "homelab-server", "lan_ip": "192.168.1.233"}]
+                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
                 },
             },
         )
@@ -331,12 +331,12 @@ class SeedTests(TestCase):
             key="probe-stack",
             kind="portainer.stack",
             spec={
-                "connection_ref": "homelab-portainer",
-                "host": "homelab-server",
+                "connection_ref": "a-portainer",
+                "host": "a-docker-host",
                 "name": "probe",
                 "compose": "services: {}",
                 "environment": [],
-                "hostnames": ["probe.homelab"],
+                "hostnames": ["probe.invalid"],
                 "port": 8099,
             },
         )
@@ -346,19 +346,19 @@ class SeedTests(TestCase):
 
         from .naming import name_context
 
-        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.homelab"))
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.invalid"))
 
         self.assertEqual(seeded["forward_port"], 8099)
 
     def test_it_uses_an_address_the_proxy_can_resolve(self):
-        """Not the machine's name. Nginx has never heard of `homelab-server`,
+        """Not the machine's name. Nginx has never heard of it,
         so seeding it puts a plausible value in the box that cannot work."""
 
         from control_plane.providers import PROVIDERS
 
         from .naming import name_context
 
-        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.homelab"))
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.invalid"))
 
         self.assertEqual(seeded["forward_host"], "192.168.1.233")
 
@@ -367,10 +367,10 @@ class SeedTests(TestCase):
 
         from .naming import name_context
 
-        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("nowhere.homelab"))
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("nowhere.invalid"))
 
         self.assertNotIn("forward_host", seeded)
-        self.assertEqual(seeded["domain_names"], ["nowhere.homelab"])
+        self.assertEqual(seeded["domain_names"], ["nowhere.invalid"])
 
     def test_a_public_record_seeds_the_zone_the_credential_holds(self):
         """Rather than the last two labels, which is a guess that is wrong for
@@ -413,7 +413,7 @@ class AdoptionSafetyTests(TestCase):
                     {
                         "name": "probe",
                         "stack": "probe",
-                        "host": "homelab-server",
+                        "host": "a-docker-host",
                         "ports": [8099],
                         "state": "running",
                         "portainer_managed": portainer_managed,
@@ -427,7 +427,7 @@ class AdoptionSafetyTests(TestCase):
             key="probe-proxy",
             kind="npm.proxy_host",
             defaults={"spec": {
-                "domain_names": ["probe.homelab"],
+                "domain_names": ["probe.invalid"],
                 "forward_scheme": "http",
                 "forward_host": "192.168.1.233",
                 "forward_port": 8099,
@@ -453,12 +453,12 @@ class AdoptionSafetyTests(TestCase):
                 "schema_version": 1,
                 "checksum": "test",
                 "payload": {
-                    "hosts": [{"id": "homelab-server", "lan_ip": "192.168.1.233"}]
+                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
                 },
             },
         )
         return self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "probe.homelab"})
+            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
         )
 
     def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
@@ -500,17 +500,17 @@ class AdoptionSafetyTests(TestCase):
 
         self._service_page(portainer_managed=False)
         ManagedResource.objects.create(
-            key="homelab-server-probe",
+            key="a-docker-host-probe",
             kind="portainer.container",
             spec={
-                "connection_ref": "homelab-portainer",
-                "host": "homelab-server",
+                "connection_ref": "a-portainer",
+                "host": "a-docker-host",
                 "name": "probe",
             },
         )
 
         response = self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "probe.homelab"})
+            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
         )
 
         self.assertContains(response, "Restart")
@@ -531,20 +531,20 @@ class ControllerColumnTests(TestCase):
         self.client.force_login(self.user)
 
     def test_one_controller_is_not_named_on_every_row(self):
-        sweep(A_PORTAINER, A_DNS_TOKEN, controller_id="homelab-server")
+        sweep(A_PORTAINER, A_DNS_TOKEN, controller_id="a-controller")
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertNotContains(response, "via homelab-server")
+        self.assertNotContains(response, "via a-docker-host")
 
     def test_two_controllers_are_told_apart(self):
-        sweep(A_PORTAINER, controller_id="homelab-server")
-        sweep(A_DNS_TOKEN, controller_id="edge")
+        sweep(A_PORTAINER, controller_id="a-controller")
+        sweep(A_DNS_TOKEN, controller_id="another-controller")
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "via homelab-server")
-        self.assertContains(response, "via edge")
+        self.assertContains(response, "via a-controller")
+        self.assertContains(response, "via another-controller")
 
 
 class ExpiredCredentialTests(TestCase):
@@ -589,6 +589,6 @@ class ExpiredCredentialTests(TestCase):
         sweep(A_DNS_TOKEN)
 
         self.assertNotEqual(
-            PROVIDERS["cloudflare.dns_record"].applies(name_context("probe.homelab")),
+            PROVIDERS["cloudflare.dns_record"].applies(name_context("probe.invalid")),
             "",
         )

@@ -63,7 +63,7 @@ def resolved_certificate_spec():
         "consumers": [
             {
                 "kind": "npm",
-                "topology_ref": "container:homelab-server/npm",
+                "topology_ref": "container:a-docker-host/npm",
                 "name": "jseverino-wildcard",
                 "connection_ref": "homelab-npm",
                 "verify_domains": ["dev.jseverino.com"],
@@ -74,13 +74,13 @@ def resolved_certificate_spec():
                 "name": "edge-caddy",
                 "connection_ref": "edge",
                 "certificate_directory": "/opt/apps/caddy/certs",
-                "verify_domains": ["health.jseverino.com"],
+                "verify_domains": ["health.example.com"],
             },
             {
                 "kind": "cpanel",
-                "topology_ref": "external:namecheap-cpanel",
+                "topology_ref": "external:a-shared-host",
                 "name": "namecheap-shared-hosting",
-                "connection_ref": "namecheap-cpanel",
+                "connection_ref": "a-shared-host",
                 "install_domains": ["jseverino.com", "jseverino.net"],
                 "verify_domains": ["jseverino.com", "quiz.jseverino.net"],
             },
@@ -96,7 +96,7 @@ def topology_payload():
         "version": 3,
         "hosts": [
             {
-                "id": "homelab-server",
+                "id": "a-docker-host",
                 "containers": [{"id": "npm"}],
             },
             {
@@ -111,10 +111,10 @@ def topology_payload():
                 "domains": spec["domains"],
             }
         ],
-        "externals": [{"id": "namecheap-cpanel"}],
+        "externals": [{"id": "a-shared-host"}],
         "dependencies": [
             {
-                "from": "container:homelab-server/npm",
+                "from": "container:a-docker-host/npm",
                 "relation": "consumes",
                 "to": "pki:jseverino-wildcard",
                 "attributes": {
@@ -134,7 +134,7 @@ def topology_payload():
                 },
             },
             {
-                "from": "external:namecheap-cpanel",
+                "from": "external:a-shared-host",
                 "relation": "consumes",
                 "to": "pki:jseverino-wildcard",
                 "attributes": {
@@ -564,7 +564,7 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
-        result = schedule_automatic_operations("homelab-server")
+        result = schedule_automatic_operations("a-docker-host")
 
         operation = OperationRequest.objects.get()
         self.assertEqual(result["scheduled"], [str(operation.id)])
@@ -581,7 +581,7 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation - 1
         self.resource.save()
 
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
 
         self.assertEqual(
             OperationRequest.objects.get().action,
@@ -598,15 +598,15 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         operation = OperationRequest.objects.get()
         operation.state = OperationRequest.State.FAILED
         operation.save(update_fields=("state", "updated_at"))
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 1)
 
         now.return_value = current + timedelta(days=1)
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 2)
 
     def test_active_controller_capability_queues_renewal_work(self):

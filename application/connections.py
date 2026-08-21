@@ -111,3 +111,69 @@ def reachable_through(provider: str) -> tuple[tuple[str, str], ...]:
         for name in connection.reaches:
             seen.setdefault(name, connection.connection_ref)
     return tuple(sorted(seen.items()))
+
+
+def consoles() -> tuple[tuple[str, str, str], ...]:
+    """Connections that are a thing you can open, as (label, sub, url).
+
+    A console and an API base are both URLs and only one is worth a link. Told
+    apart by the shape a credential's endpoint already has: an API is reached at
+    a path -- a version, a prefix -- and a console is reached at the host
+    itself. So this offers Portainer and the proxy and leaves out the DNS API,
+    without a list here naming any of them.
+
+    Nothing is hand-authored, which is the point: these used to be four URLs
+    written into a public repository, one deployment's addresses shipped to
+    everybody who cloned it.
+    """
+
+    from urllib.parse import urlsplit
+
+    found = []
+    for connection in ProviderConnection.objects.all():
+        endpoint = connection.endpoint.strip()
+        if not endpoint or "://" not in endpoint:
+            continue
+        parsed = urlsplit(endpoint)
+        if parsed.path.strip("/"):
+            continue
+        found.append(
+            (
+                connection.provider.replace("_", " ").title()
+                or connection.connection_ref,
+                connection.connection_ref,
+                endpoint,
+            )
+        )
+    return tuple(sorted(found))
+
+
+def operator_links() -> list[dict[str, str]]:
+    """Extra dashboard links this deployment wants, from its own environment.
+
+    A status page or a public site is a fact about one installation and belongs
+    with its other deployment facts. Malformed input is ignored rather than
+    fatal: a dashboard is where an operator goes to fix things, and refusing to
+    render it over a bad link is the least useful moment to fail.
+    """
+
+    import json
+
+    from django.conf import settings
+
+    raw = str(getattr(settings, "SEVERINO_DASHBOARD_LINKS", "") or "").strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return []
+    return [
+        {
+            "label": str(item.get("label", ""))[:80],
+            "sub": str(item.get("sub", ""))[:80],
+            "href": str(item.get("href", ""))[:500],
+        }
+        for item in parsed
+        if isinstance(item, dict) and str(item.get("href", "")).startswith("http")
+    ]
