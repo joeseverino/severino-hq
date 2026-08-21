@@ -47,6 +47,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_readings
+from application.machines import machine, machine_catalog
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -788,6 +789,42 @@ class ServiceStartView(LoginRequiredMixin, View):
             messages.error(request, "Enter a hostname, like app.example.com.")
             return redirect("control_plane:service_start")
         return redirect("control_plane:service", hostname=hostname)
+
+
+class MachineListView(LoginRequiredMixin, TemplateView):
+    """Every machine anything reported, and what is on each.
+
+    Nothing here is declared. A machine exists because a credential reaches it,
+    a container runs on it, or a service is served from it -- so adding a VPS is
+    registering it somewhere rather than entering it here.
+    """
+
+    template_name = "control_plane/machine_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["machines"] = machine_catalog()
+        return context
+
+
+class MachineDetailView(LoginRequiredMixin, TemplateView):
+    """One machine, and everything that ties to it.
+
+    The page exists because the ties did and had nowhere to meet: a container's
+    host, a proxy's forwarding address, what a Portainer says it reaches and
+    which credential opens a shell there were four facts about one thing, on
+    four screens, joined by an operator's memory.
+    """
+
+    template_name = "control_plane/machine_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        found = machine(self.kwargs["name"])
+        if found is None:
+            raise Http404("No machine of that name has been reported.")
+        context["machine"] = found
+        return context
 
 
 class ConnectionListView(LoginRequiredMixin, TemplateView):

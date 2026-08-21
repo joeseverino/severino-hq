@@ -224,6 +224,19 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         attention_provider="application.attention:infrastructure",
     ),
     DomainDescriptor(
+        id="hq.machines",
+        label="Machines",
+        # Between the things HQ manages and the credentials it manages them
+        # with, because that is what a machine is: the thing both halves are
+        # about.
+        navigation=(
+            NavigationItem(
+                "Machines", "control_plane:machines", "control_plane", 132,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.connections",
         label="Connections",
         # Last in the group, and deliberately so. It answers "what can HQ reach

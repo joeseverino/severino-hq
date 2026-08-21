@@ -17,6 +17,9 @@ urlpatterns = [
         views.ConnectionListView.as_view(),
         name="connections",
     ),
+    path("machines/", views.MachineListView.as_view(), name="machines"),
+    # Before <slug:key>, which would otherwise swallow a machine name.
+    path("machines/<str:name>/", views.MachineDetailView.as_view(), name="machine"),
     # Before <str:hostname>, which would otherwise swallow "new" as a name.
     path("services/new/", views.ServiceStartView.as_view(), name="service_start"),
     path("new/", views.ResourceFormView.as_view(), name="create"),

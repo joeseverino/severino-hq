@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ machine.name }} · Machines{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ machine.name }}</h1>
+    <p class="muted">
+      {% if machine.reached_by %}
+        <span class="pill pill-{% if machine.reachable %}reachable{% else %}unreachable{% endif %}">{% if machine.reachable %}reachable{% else %}unreachable{% endif %}</span>
+      {% else %}
+        <span class="pill pill-unprobed">no credential</span>
+      {% endif %}
+      {% if machine.role %} · {{ machine.role }}{% endif %}
+      {% if machine.address %} · <code>{{ machine.address }}</code>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
+  </div>
+</div>
+
+<div class="control-summary">
+  <div class="control-metric">
+    <span class="control-label">Reached through</span>
+    <strong>{{ machine.reached_by|length }}</strong>
+    {% comment %}
+    More than one is normal. A machine can be a Portainer environment and an SSH
+    transport at once, and which is in play depends on what is being asked of
+    it — so both are named rather than one being chosen.
+    {% endcomment %}
+    {% for ref in machine.reached_by %}
+      <span class="readout"><a href="{% url 'control_plane:connections' %}"><code>{{ ref }}</code></a></span>
+    {% empty %}
+      <span class="readout muted">Nothing HQ holds opens this. Its name was reported by something else.</span>
+    {% endfor %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Containers</span>
+    <strong>{% if machine.containers %}{{ machine.running }} of {{ machine.containers|length }}{% else %}None{% endif %}</strong>
+    {% if machine.containers %}<span class="readout muted">running</span>{% endif %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Serves</span>
+    <strong>{{ machine.hostnames|length }}</strong>
+    {% for hostname in machine.hostnames %}
+      <span class="readout"><a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a></span>
+    {% empty %}
+      <span class="readout muted">No service HQ manages is served from here.</span>
+    {% endfor %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Declared here</span>
+    <strong>{{ machine.resources|length }}</strong>
+    {% for key in machine.resources %}
+      <span class="readout"><a href="{% url 'control_plane:detail' key %}"><code>{{ key }}</code></a></span>
+    {% empty %}
+      <span class="readout muted">Nothing HQ declares names this machine.</span>
+    {% endfor %}
+  </div>
+</div>
+
+{% if machine.containers %}
+  <h2>What is running</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Image</th>
+          <th>Publishes</th>
+          <th>Status</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for container in machine.containers %}
+          <tr>
+            <td>
+              <strong>{{ container.name }}</strong>
+              {% comment %}
+              The compose project only when it is not the container's own name.
+              A one-service compose file names the project after the service, so
+              printing both said one thing twice.
+              {% endcomment %}
+              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
+            </td>
+            <td><code>{{ container.image_label }}</code></td>
+            <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{{ container.status }}</td>
+            <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}
