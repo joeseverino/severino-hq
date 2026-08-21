@@ -140,10 +140,9 @@ class Facet:
     label: str
     claims: tuple[Claim, ...] = ()
     # What HQ can see supplying this that no declaration accounts for. A facet
-    # has three states, not two, and collapsing the middle one is what made a
-    # fully working service read "Not declared -- add a container stack" beside
-    # a card naming the container it was already running in. "Nothing supplies
-    # this" was false, and the offer it led with was to build a second one.
+    # has three states, not two: declared, found, and absent. Collapsing the
+    # middle one into absent reports a running service as missing, and offers to
+    # build a second of what is already there.
     observed: "Running | None" = None
     # What HQ knows about this name. Held so ``declarable`` can ask each
     # provider whether it could actually supply it -- an offer that cannot work
@@ -312,9 +311,9 @@ class Running:
     def published(self) -> str:
         """The ports this publishes, or why that cannot be answered.
 
-        A host-network container binds the machine's ports directly, so Docker
-        reports none and an empty list would read as "serves nothing" about the
-        container currently serving the page.
+        A host-network container binds the machine's ports directly and Docker
+        reports none for it, so an empty list means "not knowable from here"
+        rather than "publishes nothing".
         """
 
         if self.ports:
@@ -413,10 +412,9 @@ class Origin:
     def headline(self) -> str:
         """What to call whatever serves this, in one phrase.
 
-        Here rather than in a template, because there are two templates. The
-        board rendered "unknown host" beside jseverino.com while the page for
-        that same name said "Served by Cloudflare Pages" -- one fact, two
-        surfaces, and only one of them had learned about the third case.
+        Here rather than in a template, because there are two templates and one
+        fact. Phrased in each, they drift, and the board and the page disagree
+        about the same origin.
         """
 
         if self.external:
@@ -509,10 +507,10 @@ class Service:
 
         It usually does not. Once a facet names the container and another prints
         the address it forwards to, a sentence repeating both is a third copy of
-        one fact -- and the page had it in the largest position on the row.
+        one fact.
 
-        It still earns its place twice: when something outside answers the name,
-        which no facet can report, and when the address belongs to no machine HQ
+        It earns its place twice: when something outside answers the name, which
+        no facet can report, and when the address belongs to no machine HQ
         knows, which is the one thing here worth interrupting for.
         """
 
@@ -1116,3 +1114,40 @@ def get_service(hostname: str) -> dict[str, Any]:
     if found is None:
         raise NotFoundError(f"No service is declared for {hostname!r}.")
     return {"service": serialize_service(found)}
+
+
+def public_sites() -> tuple[tuple[str, str, str], ...]:
+    """Names HQ publishes to the internet, as (label, sub, url).
+
+    A dashboard link to a site is the site HQ already declares a public record
+    for, so the list is whatever HQ is currently publishing rather than what it
+    was publishing when somebody last edited a template.
+
+    Read through the providers that say their effect is public, and through
+    their own ``hostnames`` hook -- which returns nothing for the record types
+    that carry policy, so a DMARC entry never arrives here looking like a site.
+    """
+
+    projects = _published_projects()
+    found: dict[str, str] = {}
+    for resource in ManagedResource.objects.filter(enabled=True):
+        provider = PROVIDERS.get(resource.kind)
+        if provider is None or not provider.public_effect:
+            continue
+        if provider.hostnames is None:
+            continue
+        try:
+            names = tuple(provider.hostnames(resource.spec))
+        except (KeyError, TypeError, ValueError):
+            continue
+        for name in names:
+            hostname = _normalise(name)
+            # A wildcard is a rule about names, not a name anything answers at.
+            if hostname and names_a_host(hostname) and "*" not in hostname:
+                found.setdefault(
+                    hostname, projects.get(hostname, {}).get("name", "")
+                )
+    return tuple(
+        (hostname, sub, f"https://{hostname}")
+        for hostname, sub in sorted(found.items())
+    )

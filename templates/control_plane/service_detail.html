@@ -21,9 +21,7 @@
   <div class="page-actions">
     {% comment %}
     The controls sit with the page's other actions rather than inside the card
-    that describes the container. A card reports; this is where you do something
-    — and buried in a disclosure, the one thing an operator opens this page to
-    press was three clicks from the top of it.
+    that describes the container. A card reports; this is where you act.
 
     Which buttons appear is two readings, not a choice: what the controller says
     it implements for a container, and what the container's own state makes
@@ -99,11 +97,9 @@ not restated here.
         and offered to add a proxy in front of a site that must not have one.
 
         Named by what it would otherwise have taken, rather than by whoever
-        answers instead. Every facet that routes takes this branch, so a
-        sentence about the operator is printed once per card: Runtime and
-        Ingress sat side by side reading the same line about Cloudflare Pages,
-        with the origin note under them saying it a third time. Who serves it is
-        one fact and belongs in the one place — the note below the row.
+        answers instead. Every facet that routes takes this branch, so naming
+        the operator here prints one fact once per card. Who serves it belongs
+        in one place — the note below the row.
 
         What differs per card is what is not needed, and each facet already
         says that: its own providers are the things it would otherwise want.
@@ -116,8 +112,7 @@ not restated here.
         {% comment %}
         Found, not declared. Two lines and a disclosure: the state and the name
         are what a glance is for, and everything else is what you open when the
-        glance was not reassuring. Listed flat, this card ran six rows deep and
-        drowned the three facets beside it.
+        glance was not reassuring.
 
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
@@ -192,12 +187,11 @@ not restated here.
 
 {% comment %}
 Origin is a sentence, not a fifth card. Four facets are what a name needs to
-answer, and a fifth box beside them wrapped the row onto a second line while
-mostly restating the cards it sat under — the ingress card already prints the
-address, and the runtime card already names the container.
+answer, and the cards already carry most of what a fifth would say — the ingress
+card prints the address, the runtime card names the container.
 
-What is left is the one thing neither says on its own: which of them is the
-thing actually answering. That is a claim about the row, so it reads under it.
+What is left is the one thing neither says on its own: which of them is actually
+answering. That is a claim about the row, so it reads under it.
 {% endcomment %}
 {% if service.origin_is_news %}
 <p class="control-origin">

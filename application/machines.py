@@ -1,10 +1,9 @@
 """The machines HQ knows about, and everything that ties to one.
 
-A machine was the one thing in HQ with no page. Its name appeared in a
-container's record, in a proxy's forwarding address, in what a Portainer
-reports it reaches, in a certificate's install list -- as a string, in five
-places, clickable in none. So "what is on this machine" was a question you
-answered by reading four screens and holding the answer in your head.
+A machine is named in a container's record, in a proxy's forwarding address, in
+what a Portainer reports it reaches and in a certificate's install list. This is
+where those meet, so "what is on this machine" is one page rather than four read
+in sequence.
 
 Nothing here is declared. A machine exists because something reported it: a
 credential that reaches it, a container running on it, a service served from it,
@@ -31,14 +30,12 @@ class Machine:
     name: str
     role: str = ""
     # How HQ gets to it, as connection refs. More than one is normal: a machine
-    # can be an SSH transport and a Portainer environment at the same time, and
-    # which of those is in play depends on what is being asked of it.
+    # can be an SSH transport and a Portainer environment at once, and which is
+    # in play depends on what is being asked of it.
     reached_by: tuple[str, ...] = ()
-    # Other names this same machine is known by. Two credentials name one
-    # machine differently -- an SSH item and a Portainer
-    # environment naming the same VPS differently -- and listed
-    # separately it appeared twice, with its containers under one of them and
-    # the way to log into it under the other.
+    # Other names this same machine is known by. Two credentials naming one
+    # machine differently is normal, and keeping them apart splits its facts
+    # across two rows.
     aliases: tuple[str, ...] = ()
     address: str = ""
     containers: tuple[Running, ...] = ()
@@ -141,9 +138,8 @@ def _same_machine(
 
     Two credentials name one machine differently and neither is wrong: a
     Portainer calls a VPS by its environment name, a 1Password SSH item calls it
-    whatever the operator called it. Listed as two, its containers sat under one
-    name and the way to log into it under the other, and the page said nothing
-    was running on a machine running three things.
+    whatever the operator called it. Kept apart, one machine is two rows with
+    half its facts each.
 
     The address is what both agree on, so it is the identity. The name kept is
     the one the containers were reported under, because that is the name every
@@ -259,10 +255,9 @@ def _services_by_host(
 ) -> dict[str, set[str]]:
     """Which names are served from which machine.
 
-    Read straight off the declarations that answer "and then what serves it",
-    rather than by assembling every service in full. A board of machines needs
-    one field from each service, and building the whole facet graph to get it
-    cost forty queries for four rows.
+    Read straight off the declarations that answer "and then what serves it".
+    A board of machines needs one field from each service, and assembling every
+    service in full to get it is a query per row and then some.
 
     The address is resolved against what already names machines here -- a
     container reporting where it runs, a credential pointing somewhere, the

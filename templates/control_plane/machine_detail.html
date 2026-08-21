@@ -15,8 +15,8 @@
       {% comment %}
       The other names this same machine answers to. Two credentials name one
       machine differently and neither is wrong — a Portainer environment and an
-      SSH item for the same VPS — so the names are folded together and the ones
-      not chosen are said here rather than dropped.
+      SSH item for the same VPS — so the names fold together and the ones not
+      chosen are said here rather than dropped.
       {% endcomment %}
       {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
     </p>
@@ -98,10 +98,9 @@
             <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
             <td>
               {% comment %}
-              A container HQ watches has a declaration to open and operations to
-              queue against; one it merely sees has neither, and the offer to
-              start watching is the only thing that changes that. Every row is
-              therefore a way in, rather than five facts and a dead end.
+              A container HQ watches has a declaration to open and operations
+              to queue against; one it merely sees has neither, and watching it
+              is what changes that. So every row leads somewhere.
               {% endcomment %}
               {% if container.watcher %}
                 <a class="subtle-link" href="{% url 'control_plane:detail' container.watcher %}">Open &rarr;</a>

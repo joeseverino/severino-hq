@@ -22,6 +22,7 @@ from application.connections import consoles, operator_links
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
+from application.services import public_sites
 from application.security import safe_next, web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
@@ -177,15 +178,31 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # filtered list that shows it, supplied by the domain that raised it.
         action_queue = snapshot["priority"]
 
-        # One deployment's four addresses used to be written here, which shipped
-        # them to everyone who cloned a public repository and went stale for the
-        # one deployment that had them. The consoles come from the connections a
-        # controller reported; anything else an operator wants on the dashboard
-        # is theirs to name, in their environment rather than in this file.
-        external_links = [
-            {"label": label, "sub": sub, "href": href}
-            for label, sub, href in consoles()
-        ] + operator_links()
+        # Consoles come from the connections a controller reported. Anything
+        # else an operator wants here is a fact about their installation and is
+        # named in their environment: an address written into this file is
+        # published to everyone who clones it and true for nobody else.
+        external_links = (
+            [
+                # HQ's own liveness, by route rather than by address: it is a
+                # path this application serves, so naming a hostname for it
+                # would be writing down one deployment's front door.
+                {
+                    "label": "Health endpoint",
+                    "sub": "liveness",
+                    "href": reverse("health_ready"),
+                }
+            ]
+            + [
+                {"label": label, "sub": sub or "console", "href": href}
+                for label, sub, href in consoles()
+            ]
+            + [
+                {"label": hostname, "sub": sub or "published", "href": href}
+                for hostname, sub, href in public_sites()
+            ]
+            + operator_links()
+        )
 
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.

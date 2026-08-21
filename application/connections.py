@@ -119,12 +119,12 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
     A console and an API base are both URLs and only one is worth a link. Told
     apart by the shape a credential's endpoint already has: an API is reached at
     a path -- a version, a prefix -- and a console is reached at the host
-    itself. So this offers Portainer and the proxy and leaves out the DNS API,
-    without a list here naming any of them.
+    itself. So a proxy's web interface is offered and a DNS API is not, without
+    a list here naming either.
 
-    Nothing is hand-authored, which is the point: these used to be four URLs
-    written into a public repository, one deployment's addresses shipped to
-    everybody who cloned it.
+    Nothing is hand-authored. A URL written into this repository is one
+    deployment's address published to everyone who clones it, and stale for the
+    deployment it belonged to.
     """
 
     from urllib.parse import urlsplit
