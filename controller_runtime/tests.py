@@ -1599,3 +1599,25 @@ class WorkerEntryPointTests(TestCase):
             worker.main()
 
         self.assertTrue(run.call_args.kwargs["apply"])
+
+
+class MachineNameTests(TestCase):
+    """Portainer calls its own environment "local", which is nobody's hostname.
+
+    Everything ties to a machine by name, so filing containers under "local"
+    splits one machine into two: the credential and the services on one row, the
+    containers on another.
+    """
+
+    @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": ""})
+    def test_the_local_socket_is_the_machine_this_runs_on(self):
+        record = providers._container_record(
+            {"Names": ["/app"], "State": "running"}, providers.controller_id(), ""
+        )
+
+        self.assertEqual(record["host"], os.uname().nodename)
+        self.assertNotEqual(record["host"], "local")
+
+    @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-host"})
+    def test_the_environment_names_it_when_it_says_so(self):
+        self.assertEqual(providers.controller_id(), "a-named-host")

@@ -39,7 +39,10 @@ from .ui import Insight
 # Reconciliation states that mean the declared world and the real one disagree.
 # "degraded" is a failure; the others are a resource HQ cannot currently vouch
 # for, which is its own kind of thing to look at.
-UNSETTLED_RESOURCE_STATES = frozenset({"degraded", "pending", "unknown"})
+# A resource HQ has already asked the controller about is not something to ask
+# an operator about. Pending clears itself on the next pass; degraded and
+# unknown do not.
+UNSETTLED_RESOURCE_STATES = frozenset({"degraded", "unknown"})
 
 
 def _backlog(

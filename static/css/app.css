@@ -737,6 +737,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .control-good, .control-healthy { color: #1f7250; }
 .control-warn, .control-degraded, .control-drifted { color: #9a5a12; }
 .control-unknown { color: var(--muted); }
+/* Neither is a health reading: one is a responsibility nothing reconciles, the
+   other is a resource between being declared and being applied. Both take the
+   neutral colour rather than a warning one. */
+.control-declared, .control-pending { color: var(--muted); }
 .kv.compact { margin-bottom: 0; }
 .compact-table { box-shadow: none; }
 /* The origin reads under the facet row rather than as a fifth card in it:
