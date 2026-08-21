@@ -41,6 +41,7 @@ from django.urls import reverse
 
 from control_plane.models import (
     ManagedResource,
+    ProviderConnection,
     ProviderInventory,
     TopologySnapshot,
 )
@@ -373,6 +374,26 @@ class Origin:
         if self.container:
             return f"{self.host} · {self.container}"
         return self.host or self.address
+
+    @property
+    def headline(self) -> str:
+        """What to call whatever serves this, in one phrase.
+
+        Here rather than in a template, because there are two templates. The
+        board rendered "unknown host" beside jseverino.com while the page for
+        that same name said "Served by Cloudflare Pages" -- one fact, two
+        surfaces, and only one of them had learned about the third case.
+        """
+
+        if self.external:
+            return self.operator or self.address
+        return self.label
+
+    @property
+    def qualifier(self) -> str:
+        """The caveat, when the headline needs one."""
+
+        return "" if self.external or self.known else "unknown host"
 
 
 @dataclass(frozen=True)
@@ -833,7 +854,13 @@ def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
     reported as silence -- a guess printed beside four facts reads as a fifth.
     """
 
-    host_address, _, port = address.rpartition(":")
+    # An address with no port is all host. `rpartition` puts the whole string
+    # in its last element when the separator is absent, so splitting blind left
+    # the host empty and every portless origin unmatchable -- a DNS answer
+    # naming a machine HQ knows read as somewhere it had never heard of.
+    host_address, separator, port = address.rpartition(":")
+    if not separator:
+        host_address, port = address, ""
     for host in (topology or {}).get("hosts", ()):
         known = {
             host.get("id"),
@@ -863,7 +890,31 @@ def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
             host=host_id,
             container=claimed[0] if len(claimed) == 1 else "",
         )
-    return Origin(address=address)
+    return Origin(address=address, host=_connected_machine(host_address))
+
+
+def _connected_machine(address: str) -> str:
+    """A machine HQ holds a credential for, matched by where that credential points.
+
+    The topology is not the only thing that names machines. A proxy forwarding
+    to the cPanel host read as "unknown host" while the connections page listed
+    that exact address under a name -- HQ knowing the machine well enough to log
+    into it, and not well enough to say what it was called.
+    """
+
+    if not address:
+        return ""
+    for connection in ProviderConnection.objects.all():
+        endpoint = connection.endpoint
+        if not endpoint:
+            continue
+        if "://" in endpoint:
+            endpoint = urlparse(endpoint).hostname or ""
+        else:
+            endpoint = endpoint.rpartition(":")[0] or endpoint
+        if endpoint == address:
+            return connection.connection_ref
+    return ""
 
 
 def _listening(host: str, port: str) -> list[str]:
