@@ -169,8 +169,7 @@ thing actually answering. That is a claim about the row, so it reads under it.
     limitation being apologised for, about the half of it HQ actually runs.
     {% endcomment %}
     Served by <strong>{{ service.origin.operator }}</strong> from
-    <code>{{ service.origin.address }}</code>. HQ publishes the DNS record that
-    points here.
+    <code>{{ service.origin.address }}</code>.
   {% elif service.origin.known %}
     Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
     <code>{{ service.origin.address }}</code>.
