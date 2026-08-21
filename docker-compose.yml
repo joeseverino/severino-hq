@@ -53,6 +53,10 @@ services:
       # Production mounts the validator token as a file. The /dev/null default
       # keeps MCP disabled in development without putting a token in .env.
       SEVERINO_MCP_TOKEN_FILE: /run/secrets/severino_mcp_token
+      # A file HQ replaces when it queues controller work. It carries nothing --
+      # not what to do, not who asked -- so the host may watch it and start the
+      # controller without HQ gaining any way to reach out.
+      SEVERINO_CONTROLLER_DOORBELL: /run/severino-hq/controller-doorbell
     volumes:
       - severino_data:/data
       - severino_media:/media
@@ -62,6 +66,12 @@ services:
         source: ${SEVERINO_MCP_TOKEN_FILE_HOST:-/dev/null}
         target: /run/secrets/severino_mcp_token
         read_only: true
+      # Somewhere both sides can see. `/run` is transient by design, which is
+      # right for a doorbell -- a stale one after a reboot would ring for work
+      # that was claimed before it.
+      - type: bind
+        source: ${SEVERINO_CONTROLLER_RUN_DIR:-/run/severino-hq}
+        target: /run/severino-hq
       # Production app env, rendered from 1Password by refresh-secrets.sh.
       # The entrypoint sources it when present; /dev/null keeps local dev on
       # plain shell/compose env without a real secrets mount.

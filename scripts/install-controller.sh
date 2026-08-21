@@ -37,6 +37,13 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.timer" \
     "${systemd_dir}/severino-hq-controller.timer"
+# Watches the doorbell, so pressing Save applies now rather than within a
+# minute. The directory has to exist before the unit starts watching it, and
+# compose creates it as the bind mount's source on first boot.
+install -d -o root -g root -m 0755 /run/severino-hq
+install -o root -g root -m 0644 \
+    "${unit_dir}/severino-hq-controller.path" \
+    "${systemd_dir}/severino-hq-controller.path"
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-content-sync.service" \
     "${systemd_dir}/severino-hq-content-sync.service"
@@ -51,6 +58,7 @@ install -o root -g root -m 0644 \
     "${systemd_dir}/severino-hq-backup.timer"
 systemctl daemon-reload
 systemctl enable --now \
+    severino-hq-controller.path \
     severino-hq-controller.timer \
     severino-hq-content-sync.timer \
     severino-hq-backup.timer

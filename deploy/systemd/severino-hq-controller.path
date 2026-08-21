@@ -1,0 +1,13 @@
+[Unit]
+Description=Start the Severino HQ controller when HQ has queued work
+# The doorbell is a file HQ replaces when it queues an operation. It carries no
+# authority, no credentials and no data: it cannot say what to do, only that
+# something changed. The controller still pulls the work through the bridge, so
+# a forged or replayed doorbell causes a run that finds nothing to do.
+
+[Path]
+PathChanged=/run/severino-hq/controller-doorbell
+Unit=severino-hq-controller.service
+
+[Install]
+WantedBy=paths.target

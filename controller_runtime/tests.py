@@ -60,6 +60,22 @@ def _by_url(routes):
     return respond
 
 
+def _bridge(**responses):
+    """Answer a mocked bridge call by which action it is, not by call order.
+
+    Order-indexed fakes encode the pass's exact sequence into every test that
+    uses one, so adding a step rewrites tests that have nothing to do with it.
+    """
+
+    def respond(*args, **kwargs):
+        action = args[0] if args else ""
+        if action in responses:
+            return responses[action]
+        raise AssertionError(f"Unexpected bridge call: {action}")
+
+    return respond
+
+
 class ProviderAdapterTests(TestCase):
     @mock.patch.dict(
         "os.environ", {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"}, clear=True
@@ -1046,23 +1062,27 @@ class WorkerTests(TestCase):
     def test_idle_apply_claims_without_provider_preflight(
         self, manage, preflight, _connections
     ):
-        manage.return_value = {"ok": True, "operation": None}
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True},
+                "inventory": {"ok": True},
+                "schedule": {"ok": True},
+                "claim": {"ok": True, "operation": None},
+            }
+        )
 
         self.assertEqual(worker.run_once("test", apply=True), 0)
 
-        arguments = manage.call_args.args
-        self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
+        called = [call.args[0] for call in manage.call_args_list]
         # Both sweeps, before anything is claimed. What HQ can reach is reported
         # ahead of what it found there, so an empty inventory can be read
         # against the credential that would have filled it.
         self.assertEqual(
-            [call.args[0] for call in manage.call_args_list[:2]],
-            ["connections", "inventory"],
+            called, ["sweep-due", "connections", "inventory", "schedule", "claim"]
         )
-        self.assertEqual(
-            manage.call_args_list[2].args,
-            ("schedule", "--controller-id", "test"),
-        )
+        arguments = manage.call_args.args
+        self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
         self.assertIn("adguard.rewrite:reconcile", arguments)
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
@@ -1128,27 +1148,29 @@ class WorkerTests(TestCase):
     def test_provider_failure_is_reported_without_secret(
         self, manage, execute, _preflight, _connections
     ):
-        manage.side_effect = [
-            # Both sweeps run first on every apply pass.
-            {"ok": True, "recorded": []},
-            {"ok": True, "recorded": []},
-            {"ok": True, "scheduled": []},
-            {
-                "operation": {"id": "operation-1", "action": "reconcile"},
-                "resource": {
-                    "key": "dns",
-                    "kind": "adguard.rewrite",
-                    "generation": 2,
-                    "spec": {},
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True, "recorded": []},
+                "inventory": {"ok": True, "recorded": []},
+                "schedule": {"ok": True, "scheduled": []},
+                "claim": {
+                    "operation": {"id": "operation-1", "action": "reconcile"},
+                    "resource": {
+                        "key": "dns",
+                        "kind": "adguard.rewrite",
+                        "generation": 2,
+                        "spec": {},
+                    },
                 },
-            },
-            {"ok": True},
-        ]
+                "report": {"ok": True},
+            }
+        )
         execute.side_effect = providers.ProviderError("Provider request failed.")
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = json.loads(manage.call_args_list[4].args[-1])
+        report_payload = json.loads(manage.call_args.args[-1])
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
 
@@ -1159,22 +1181,24 @@ class WorkerTests(TestCase):
     def test_claimed_operation_preflights_before_provider_execution(
         self, manage, execute, preflight, _connections
     ):
-        manage.side_effect = [
-            # Both sweeps run first on every apply pass.
-            {"ok": True, "recorded": []},
-            {"ok": True, "recorded": []},
-            {"ok": True, "scheduled": []},
-            {
-                "operation": {"id": "operation-1", "action": "reconcile"},
-                "resource": {
-                    "key": "dns",
-                    "kind": "adguard.rewrite",
-                    "generation": 2,
-                    "spec": {},
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True, "recorded": []},
+                "inventory": {"ok": True, "recorded": []},
+                "schedule": {"ok": True, "scheduled": []},
+                "claim": {
+                    "operation": {"id": "operation-1", "action": "reconcile"},
+                    "resource": {
+                        "key": "dns",
+                        "kind": "adguard.rewrite",
+                        "generation": 2,
+                        "spec": {},
+                    },
                 },
-            },
-            {"ok": True},
-        ]
+                "report": {"ok": True},
+            }
+        )
         execute.return_value = providers.ProviderResult(
             changed=False,
             status={},

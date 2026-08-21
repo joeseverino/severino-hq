@@ -272,12 +272,23 @@ class Running:
     portainer_managed: bool
     connection_ref: str
     observed_at: Any
+    # The declaration already watching this, when one is. A field rather than a
+    # lookup, because a page renders a table of these and a property would be a
+    # query per row -- and every row asks the same question of the same table.
+    watcher: str = ""
 
     @classmethod
-    def of(cls, record: dict[str, Any], observed_at: Any) -> "Running":
+    def of(
+        cls,
+        record: dict[str, Any],
+        observed_at: Any,
+        watchers: dict[tuple[str, str], str] | None = None,
+    ) -> "Running":
+        host = str(record.get("host", ""))
+        name = str(record.get("name", ""))
         return cls(
-            name=str(record.get("name", "")),
-            host=str(record.get("host", "")),
+            name=name,
+            host=host,
             stack=str(record.get("stack", "")),
             image=str(record.get("image", "")),
             state=str(record.get("state", "")),
@@ -290,6 +301,7 @@ class Running:
             portainer_managed=bool(record.get("portainer_managed")),
             connection_ref=str(record.get("connection_ref", "")),
             observed_at=observed_at,
+            watcher=(watchers or {}).get((host, name), ""),
         )
 
     @property
@@ -318,26 +330,6 @@ class Running:
         from .inventory import record_token
 
         return record_token(CONTAINER_KIND, (self.host, self.name))
-
-    @property
-    def watcher(self) -> str:
-        """The declaration already watching this container, if one is.
-
-        Matched on the same identity the provider uses, so a container declared
-        here and the same container found by a sweep are recognised as one
-        thing -- which is what turns "found this" into "and here is what you can
-        do about it".
-        """
-
-        for resource in ManagedResource.objects.filter(
-            kind=CONTAINER_KIND, enabled=True
-        ):
-            if (
-                resource.spec.get("host") == self.host
-                and resource.spec.get("name") == self.name
-            ):
-                return resource.key
-        return ""
 
     @property
     def verbs(self) -> tuple[str, ...]:
@@ -832,6 +824,21 @@ def _assemble(
 CONTAINER_KIND = "portainer.container"
 
 
+def container_watchers() -> dict[tuple[str, str], str]:
+    """Which declaration watches which container, in one query.
+
+    Keyed on the identity the provider uses, so a container declared in HQ and
+    the same container found by a sweep are recognised as one thing.
+    """
+
+    return {
+        (resource.spec.get("host", ""), resource.spec.get("name", "")): resource.key
+        for resource in ManagedResource.objects.filter(
+            kind=CONTAINER_KIND, enabled=True
+        )
+    }
+
+
 def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
     """What HQ found supplying this facet without having been told.
 
@@ -853,7 +860,7 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
                 record.get("host") == origin.host
                 and record.get("name") == origin.container
             ):
-                return Running.of(record, snapshot.observed_at)
+                return Running.of(record, snapshot.observed_at, container_watchers())
     return None
 
 

@@ -19,9 +19,9 @@ from dataclasses import dataclass, field
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
-from control_plane.providers import PROVIDERS
+from control_plane.providers import PROVIDERS, normalized_hostname
 
-from .services import CONTAINER_KIND, Running, service_catalog
+from .services import CONTAINER_KIND, Running, _topology, container_watchers
 
 
 @dataclass(frozen=True)
@@ -53,29 +53,24 @@ class Machine:
     def running(self) -> int:
         return sum(1 for container in self.containers if container.healthy)
 
-    @property
-    def reachable(self) -> bool:
-        """Whether any credential that reaches this answered on the last sweep.
-
-        A machine nothing can reach is not necessarily down -- the credential
-        may be what broke -- so this says what HQ knows rather than what is
-        true, and the page it feeds says which of the two it means.
-        """
-
-        refs = set(self.reached_by)
-        return any(
-            connection.reachable
-            for connection in ProviderConnection.objects.filter(connection_ref__in=refs)
-        )
+    # Whether any credential that reaches this answered on the last sweep. A
+    # machine nothing can reach is not necessarily down -- the credential may be
+    # what broke -- so this says what HQ knows rather than what is true, and the
+    # page it feeds says which of the two it means.
+    #
+    # Passed in rather than looked up, because a board of these would otherwise
+    # ask the same table once per row.
+    reachable: bool = False
 
 
 def machine_catalog() -> tuple[Machine, ...]:
     """Every machine anything has reported, with what ties to it."""
 
+    connections = tuple(ProviderConnection.objects.all())
     containers = _containers()
-    reached = _reached()
+    reached = _reached(connections)
     roles = _roles()
-    services = _services_by_host()
+    services = _services_by_host(connections, containers)
     resources = _resources_by_host()
     names = (
         set(containers)
@@ -84,12 +79,27 @@ def machine_catalog() -> tuple[Machine, ...]:
         | set(resources)
         | {name for name in roles if name in reached or name in containers}
     )
-    aliases, addresses = _same_machine(containers)
+    answered = {
+        connection.connection_ref
+        for connection in connections
+        if connection.reachable
+    }
+    aliases, addresses = _same_machine(containers, connections)
     canonical = sorted(names - set(aliases))
     return tuple(
         Machine(
             name=name,
             role=roles.get(name, ""),
+            reachable=any(
+                ref in answered
+                for ref in set(reached.get(name, ()))
+                | {
+                    alias_ref
+                    for alias, target in aliases.items()
+                    if target == name
+                    for alias_ref in reached.get(alias, ())
+                }
+            ),
             reached_by=tuple(
                 sorted(
                     set(reached.get(name, ()))
@@ -104,7 +114,7 @@ def machine_catalog() -> tuple[Machine, ...]:
             aliases=tuple(
                 sorted(alias for alias, target in aliases.items() if target == name)
             ),
-            address=addresses.get(name, "") or _address(name, reached.get(name, ())),
+            address=addresses.get(name, "") or _address(name, connections),
             containers=tuple(containers.get(name, ())),
             hostnames=tuple(
                 sorted(
@@ -125,6 +135,7 @@ def machine_catalog() -> tuple[Machine, ...]:
 
 def _same_machine(
     containers: dict[str, list[Running]],
+    connections: tuple[ProviderConnection, ...],
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Names that are one machine, and where that machine is.
 
@@ -145,7 +156,7 @@ def _same_machine(
         if found and found[0].host_address
     }
     aliases: dict[str, str] = {}
-    for connection in ProviderConnection.objects.all():
+    for connection in connections:
         endpoint = connection.endpoint
         if not endpoint or "://" in endpoint:
             continue
@@ -164,18 +175,19 @@ def machine(name: str) -> Machine | None:
 
 
 def _containers() -> dict[str, list[Running]]:
+    watchers = container_watchers()
     found: dict[str, list[Running]] = {}
     for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
         for record in snapshot.records:
             host = str(record.get("host", ""))
             if host:
                 found.setdefault(host, []).append(
-                    Running.of(record, snapshot.observed_at)
+                    Running.of(record, snapshot.observed_at, watchers)
                 )
     return found
 
 
-def _reached() -> dict[str, set[str]]:
+def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]:
     """Which connections reach which machine.
 
     Two shapes, because there are two ways a credential names a machine. A
@@ -185,7 +197,7 @@ def _reached() -> dict[str, set[str]]:
     """
 
     found: dict[str, set[str]] = {}
-    for connection in ProviderConnection.objects.all():
+    for connection in connections:
         if _reaches_machines(connection.provider):
             for name in connection.reaches:
                 found.setdefault(str(name), set()).add(connection.connection_ref)
@@ -221,21 +233,19 @@ def _reaches_machines(provider: str) -> bool:
     )
 
 
-def _address(name: str, refs: set[str] | tuple[str, ...]) -> str:
+def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
     """Where the machine is, when a credential pointing at it says so."""
 
-    for connection in ProviderConnection.objects.filter(
-        connection_ref__in=set(refs)
-    ).order_by("connection_ref"):
+    for connection in connections:
+        if connection.connection_ref != name:
+            continue
         endpoint = connection.endpoint
-        if endpoint and "://" not in endpoint and connection.connection_ref == name:
+        if endpoint and "://" not in endpoint:
             return endpoint
     return ""
 
 
 def _roles() -> dict[str, str]:
-    from .services import _topology
-
     return {
         str(host["id"]): str(host.get("role", ""))
         for host in (_topology() or {}).get("hosts", ())
@@ -243,12 +253,73 @@ def _roles() -> dict[str, str]:
     }
 
 
-def _services_by_host() -> dict[str, set[str]]:
+def _services_by_host(
+    connections: tuple[ProviderConnection, ...],
+    containers: dict[str, list[Running]],
+) -> dict[str, set[str]]:
+    """Which names are served from which machine.
+
+    Read straight off the declarations that answer "and then what serves it",
+    rather than by assembling every service in full. A board of machines needs
+    one field from each service, and building the whole facet graph to get it
+    cost forty queries for four rows.
+
+    The address is resolved against what already names machines here -- a
+    container reporting where it runs, a credential pointing somewhere, the
+    topology -- so this adds no query of its own.
+    """
+
+    located = _by_address(connections, containers)
     found: dict[str, set[str]] = {}
-    for service in service_catalog():
-        if service.origin and service.origin.host:
-            found.setdefault(service.origin.host, set()).add(service.hostname)
+    for resource in ManagedResource.objects.filter(enabled=True):
+        provider = PROVIDERS.get(resource.kind)
+        if provider is None or provider.origin is None or provider.hostnames is None:
+            continue
+        try:
+            origin = provider.origin(resource.spec)
+            names = tuple(provider.hostnames(resource.spec))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not origin:
+            continue
+        address, separator, _ = origin.rpartition(":")
+        host = located.get(address if separator else origin, "")
+        if not host:
+            continue
+        for name in names:
+            hostname = normalized_hostname(name)
+            if hostname:
+                found.setdefault(host, set()).add(hostname)
     return found
+
+
+def _by_address(
+    connections: tuple[ProviderConnection, ...],
+    containers: dict[str, list[Running]],
+) -> dict[str, str]:
+    """Every way of naming a machine, pointing at the one name kept for it."""
+
+    located: dict[str, str] = {}
+    for host, found in containers.items():
+        located[host] = host
+        if found and found[0].host_address:
+            located[found[0].host_address] = host
+    for connection in connections:
+        endpoint = connection.endpoint
+        if not endpoint or "://" in endpoint:
+            continue
+        address = endpoint.rpartition(":")[0] or endpoint
+        located.setdefault(address, connection.connection_ref)
+        located.setdefault(connection.connection_ref, connection.connection_ref)
+    for host in (_topology() or {}).get("hosts", ()):
+        identifier = str(host.get("id", ""))
+        if not identifier:
+            continue
+        for key in ("id", "lan_ip", "ts_ip", "public_ip"):
+            value = str(host.get(key, "") or "")
+            if value:
+                located.setdefault(value, located.get(identifier, identifier))
+    return located
 
 
 def _resources_by_host() -> dict[str, set[str]]:

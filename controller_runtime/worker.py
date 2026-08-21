@@ -134,13 +134,30 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
 
 
 def _report_findings(controller_id: str) -> None:
-    """Both sweeps, each independent of the other's luck.
+    """Both sweeps, when HQ says one is due.
+
+    Cadence is HQ's to decide, because HQ is where the observations are: it
+    records when each provider was last swept and how stale that may be. This
+    asks and executes, the same split as claim, schedule and report -- so the
+    interval is a setting rather than a timer, and the timer is free to fire as
+    often as applying work needs.
 
     Connections first: it is the cheaper call and the one that explains the
     other. An inventory that comes back empty because a token expired reads as
     "nothing is out there" on its own, and as one broken credential beside a
     connection sweep that says so.
     """
+
+    try:
+        verdict = _manage("sweep-due")
+    except BridgeError as exc:
+        # Sweeping anyway. HQ being unreachable is a reason to be careful about
+        # writing, not about looking, and skipping would make one bad bridge
+        # call leave the estate unwatched until the next one succeeds.
+        print(f"sweep policy unavailable: {type(exc).__name__}", file=sys.stderr)
+    else:
+        if not verdict.get("due", True):
+            return
 
     try:
         found = connections()

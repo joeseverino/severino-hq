@@ -29,6 +29,7 @@ from application.controller import (
     schedule_automatic_operations,
 )
 from application.certificates import CertificateError, material_for
+from application.cadence import sweep_due
 from application.inventory import record_connections
 from application.sweep import record_sweep
 from application.security import cli_principal
@@ -109,6 +110,11 @@ def _connections(options: dict) -> Any:
     )
 
 
+def _sweep_due(options: dict) -> Any:
+    del options
+    return sweep_due()
+
+
 def _schedule(options: dict) -> Any:
     return schedule_automatic_operations(options["controller_id"])
 
@@ -136,6 +142,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("material", ("resource",), _material),
     Action("inventory", ("controller_id", "payload"), _inventory),
     Action("connections", ("controller_id", "payload"), _connections),
+    Action("sweep-due", (), _sweep_due),
     Action("report", ("controller_id", "operation", "payload"), _report),
 )
 
