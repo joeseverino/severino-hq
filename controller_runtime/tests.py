@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest import TestCase, mock
 
@@ -1563,3 +1564,38 @@ class ControllerStepReportingTests(TestCase):
             with self.assertRaises(ProviderError) as caught:
                 _run(["/bin/false"], step="a step")
         self.assertNotIn("/home/someone", str(caught.exception))
+
+
+class WorkerEntryPointTests(TestCase):
+    """The worker's own start-up, which nothing else exercises.
+
+    Every other test calls `run_once` directly and never builds the parser, so
+    a default that reads a field the contract no longer carries raised nothing
+    until the controller started -- which is after the image is deployed.
+    """
+
+    def test_it_starts_and_names_the_machine_it_runs_on(self):
+        with mock.patch.object(worker.sys, "argv", ["worker"]), mock.patch.object(
+            worker, "run_once", return_value=0
+        ) as run:
+            self.assertEqual(worker.main(), 0)
+
+        self.assertEqual(run.call_args.args[0], os.uname().nodename)
+        self.assertFalse(run.call_args.kwargs["apply"])
+
+    @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-controller"})
+    def test_the_environment_names_it_when_it_says_so(self):
+        with mock.patch.object(worker.sys, "argv", ["worker"]), mock.patch.object(
+            worker, "run_once", return_value=0
+        ) as run:
+            worker.main()
+
+        self.assertEqual(run.call_args.args[0], "a-named-controller")
+
+    def test_apply_is_off_unless_asked_for(self):
+        with mock.patch.object(worker.sys, "argv", ["worker", "--apply"]), (
+            mock.patch.object(worker, "run_once", return_value=0)
+        ) as run:
+            worker.main()
+
+        self.assertTrue(run.call_args.kwargs["apply"])
