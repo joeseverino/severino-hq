@@ -27,10 +27,29 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
-from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import PROVIDERS, SERVICE_FACETS
+from control_plane.models import (
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+)
+from control_plane.providers import PROVIDERS, service_facets
 
 from .security import Capability, Principal
+
+
+def record_token(kind: str, identity: tuple[str, ...]) -> str:
+    """A short, stable handle for one live record, safe to put in a URL.
+
+    Derived rather than stored because nothing persists an unmanaged record --
+    it exists only in the last sweep. Hashed rather than joined because an
+    identity contains a DNS value, and a TXT record's value is neither short nor
+    URL-safe.
+
+    Shared with whatever else needs to name the same record, so a page offering
+    to adopt something computes the same handle the adoption looks it up by.
+    """
+
+    return hashlib.sha256("\x1f".join((kind, *identity)).encode()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -67,8 +86,7 @@ class Unmanaged:
         short nor URL-safe.
         """
 
-        joined = "\x1f".join((self.kind, *self.identity))
-        return hashlib.sha256(joined.encode()).hexdigest()[:16]
+        return record_token(self.kind, self.identity)
 
     @property
     def readout(self) -> tuple[tuple[str, str], ...]:
@@ -132,6 +150,51 @@ def record_inventory(
     return {
         "ok": True,
         "recorded": stored,
+        "observed_at": observed_at.isoformat(),
+    }
+
+
+@transaction.atomic
+def record_connections(
+    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
+) -> dict[str, Any]:
+    """Store what one controller can currently reach, replacing its last answer.
+
+    Scoped to the controller that reported it, so a connection this one no
+    longer carries goes away without touching another controller's. A credential
+    revoked in 1Password stops being offered on the next sweep, which is the
+    whole point of holding this as an observation rather than as a list.
+    """
+
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    observed_at = timezone.now()
+    stored = []
+    for connection in payload:
+        connection_ref = str(connection.get("connection_ref", "")).strip()
+        if not connection_ref:
+            continue
+        ProviderConnection.objects.update_or_create(
+            controller_id=controller_id,
+            connection_ref=connection_ref,
+            defaults={
+                "provider": str(connection.get("provider", ""))[:64],
+                "endpoint": str(connection.get("endpoint", ""))[:500],
+                "reaches": [
+                    str(name) for name in connection.get("reaches") or [] if name
+                ],
+                "reachable": bool(connection.get("ok", True)),
+                "probed": bool(connection.get("probed", True)),
+                "detail": str(connection.get("detail", ""))[:500],
+                "observed_at": observed_at,
+            },
+        )
+        stored.append(connection_ref)
+    ProviderConnection.objects.filter(controller_id=controller_id).exclude(
+        connection_ref__in=stored
+    ).delete()
+    return {
+        "ok": True,
+        "recorded": sorted(stored),
         "observed_at": observed_at.isoformat(),
     }
 
@@ -256,7 +319,7 @@ class UnmanagedService:
                 label,
                 by_facet.get(facet_id, (("", ""),))[0][1],
             )
-            for facet_id, label in SERVICE_FACETS
+            for facet_id, label in service_facets()
         )
 
 

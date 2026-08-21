@@ -1,10 +1,11 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
-The private internal operating system behind Severino Labs.
+The internal operating system behind Severino Labs. A host that composes
+private extensions, and names none of them.
 
 ![Severino HQ dashboard — work queue, KPI snapshot, recent contacts, quick actions, and a live external-status panel](docs/images/dashboard.png)
 
@@ -17,6 +18,36 @@ and the year-end summary it rolls up into.
 This app is **not** the public website, a SaaS product, a CRM, or an
 accounting system. It runs on the homelab / a small Linux VPS, accessible only
 over Tailscale.
+
+## The host does not know its extensions
+
+The domains HQ runs ship as separately released, signed packages from their own
+repositories. This repository names none of them: no inventory, no repository
+identifiers, no routes, no models, no vocabulary.
+
+That is an architectural rule before it is a privacy one. A host that names an
+extension has taken a dependency on it, and three properties stop holding: add
+an extension without touching the host, run the host with none installed,
+release the two on independent schedules.
+
+The boundary is enforced in both directions. `python -m hq_sdk.validation`
+rejects an extension importing anything but `hq_sdk`, against a package list
+derived from the host tree rather than hand-maintained, so it cannot fall behind
+as the host grows. Two contract tests check the reverse — that no host file
+names an installed extension — taking the names from runtime composition rather
+than from anything committed, since a list of them here would be the coupling
+they look for. Public examples use the synthetic `example.*` namespace, which
+lets the contract be demonstrated in public CI without the host gaining a real
+consumer.
+
+![How the public host and its private extensions become one application: extensions import only hq_sdk and release signed wheels; compose.yml assembles them with the scanned host image and a runtime-supplied extension list](docs/diagrams/host-and-extensions.png)
+
+<sup>Diagram source: [`docs/diagrams/host-and-extensions.mmd`](docs/diagrams/host-and-extensions.mmd),
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
+
+How that assembly is triggered, fingerprinted and deployed is under
+[How changes reach HQ](#how-changes-reach-hq); the contract an extension
+implements is [`docs/PLUGINS.md`](docs/PLUGINS.md).
 
 ---
 
@@ -164,13 +195,26 @@ credential for the other. See [`docs/PLUGINS.md`](docs/PLUGINS.md#composition).
 ## Local development
 
 Coding agents and contributors should read [`AGENTS.md`](AGENTS.md) first. It
-contains the one-page architecture map, placement rules, public/private
+contains the one-page architecture map, placement rules, the host/extension
 boundary, frontend standards, and definition of done. After setup, the entire
 local quality gate is one command:
 
 ```bash
 ./scripts/check.sh
 ```
+
+and everything the pipeline will check is one more:
+
+```bash
+./scripts/ci-local.sh
+```
+
+Both read an optional, gitignored `.env.dev` for the things only your machine
+knows — which interpreter has the extensions importable, where their sources
+are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.example)
+and fill it in. Without it both commands still run, but quietly cover less:
+`check.sh` skips the composed pass, which is the one that catches what public
+CI cannot, because the host and its extensions first meet there.
 
 ```bash
 # 1. Clone & enter

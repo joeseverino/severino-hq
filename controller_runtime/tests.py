@@ -22,23 +22,58 @@ class ControllerConnectionRegistryTests(TestCase):
             {"source": "field", "label": "website"},
         )
 
-    def test_ssh_connections_declare_a_prefix_and_carry_no_endpoint(self):
-        """The registry says how a transport is wired, never where it goes."""
+    def test_the_registry_describes_shapes_and_names_no_connection(self):
+        """The registry says how a connection is wired, never which exist.
 
-        ssh = {
-            ref: connection
-            for ref, connection in self.registry["connections"].items()
-            if connection["projection"] == "ssh_transport"
-        }
+        Which connections a deployment has is its own configuration, and it
+        lives in the vault the controller resolves credentials from. Committed
+        here it would be a second copy, in a public repository, that drifts.
+        """
 
-        self.assertEqual(set(ssh), {"edge", "namecheap-cpanel"})
-        for connection_ref, connection in ssh.items():
-            with self.subTest(connection_ref=connection_ref):
-                self.assertRegex(connection["env_prefix"], r"^[A-Z][A-Z0-9_]*$")
-        self.assertNotIn("ssh_transports", self.registry)
-        # The projection may name a *field* called host_key; what must never
-        # appear is key material or an address.
-        self.assertNotIn("ssh-ed25519", json.dumps(self.registry))
+        self.assertEqual(set(self.registry), {"schema_version", "projections"})
+
+        serialised = json.dumps(self.registry)
+        # A projection may name a *field* called host_key; what must never
+        # appear is key material, an address, or a host.
+        self.assertNotIn("ssh-ed25519", serialised)
+        self.assertNotRegex(serialised, r"\b\d{1,3}(\.\d{1,3}){3}\b")
+
+
+def _by_url(routes):
+    """Answer a mocked provider request by what it asked for, not by call order.
+
+    Order-indexed fakes encode the sweep's iteration order into every test that
+    uses one, so adding a connection rewrites tests that have nothing to do
+    with it.
+    """
+
+    def respond(url, *args, **kwargs):
+        # Longest match wins. `/tokens` is a substring of `/user/tokens/verify`,
+        # so first-match would answer Cloudflare with NPM's reply.
+        matches = sorted(
+            (fragment for fragment in routes if fragment in url), key=len
+        )
+        if not matches:
+            raise AssertionError(f"Unexpected provider request: {url}")
+        return routes[matches[-1]]
+
+    return respond
+
+
+def _bridge(**responses):
+    """Answer a mocked bridge call by which action it is, not by call order.
+
+    Order-indexed fakes encode the pass's exact sequence into every test that
+    uses one, so adding a step rewrites tests that have nothing to do with it.
+    """
+
+    def respond(*args, **kwargs):
+        action = args[0] if args else ""
+        if action in responses:
+            return responses[action]
+        raise AssertionError(f"Unexpected bridge call: {action}")
+
+    return respond
 
 
 class ProviderAdapterTests(TestCase):
@@ -238,39 +273,106 @@ class ProviderAdapterTests(TestCase):
             "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
             "HQ_ACME_DIR": "/tmp",
             "HQ_CONTROLLER_SSH_DIR": "/tmp",
+            # Two SSH connections, recognised by the values their projection
+            # produces rather than by anything naming them here.
+            "EXAMPLE_EDGE_CONNECTION_REF": "example-edge",
+            "EXAMPLE_EDGE_HOST": "edge.example",
+            "EXAMPLE_EDGE_USER": "controller",
+            "EXAMPLE_EDGE_PORT": "22",
+            "EXAMPLE_EDGE_HOST_KEY": "example-host-key",
+            "EXAMPLE_SHARED_CONNECTION_REF": "example-shared",
+            "EXAMPLE_SHARED_HOST": "shared.example",
+            "EXAMPLE_SHARED_USER": "controller",
+            "EXAMPLE_SHARED_PORT": "22",
+            "EXAMPLE_SHARED_HOST_KEY": "example-host-key",
         },
         clear=True,
     )
     @mock.patch("controller_runtime.providers._run")
     @mock.patch("controller_runtime.providers._ssh")
     @mock.patch("controller_runtime.providers._request")
-    def test_preflight_proves_cloudflare_token_and_zone_scope(
+    def test_preflight_probes_every_connection_the_environment_carries(
         self, request, ssh, _run
     ):
-        request.side_effect = [
-            {"dns_addresses": ["0.0.0.0"]},
-            {"token": "short-lived"},
-            {"success": True},
+        """Five 1Password items, five probes, and nothing naming any of them.
+
+        The environment is the whole inventory: which connections exist, what
+        kind each is, and -- for the two SSH transports -- that they are
+        transports at all, learned from the values their projection produced.
+        """
+
+        request.side_effect = _by_url(
             {
-                "result": [
-                    {"name": "jseverino.com"},
-                    {"name": "jseverino.net"},
-                    {"name": "jseverino.org"},
-                    {"name": "joeseverino.com"},
-                ]
-            },
-        ]
+                "/control/status": {"dns_addresses": ["0.0.0.0"], "version": "0.107"},
+                "/tokens": {"token": "short-lived"},
+                "/user/tokens/verify": {"success": True},
+                "/zones": {
+                    "result": [
+                        {"name": "jseverino.com"},
+                        {"name": "jseverino.net"},
+                    ]
+                },
+            }
+        )
 
         result = providers.preflight()
 
-        self.assertTrue(
-            any(
-                item["connection_ref"] == "cloudflare-dns-jseverino"
-                for item in result
-            )
+        by_ref = {item["connection_ref"]: item for item in result}
+        self.assertEqual(
+            sorted(by_ref),
+            [
+                "cloudflare-dns-jseverino",
+                "example-edge",
+                "example-shared",
+                "homelab-adguard",
+                "homelab-npm",
+            ],
         )
+        self.assertTrue(all(item["ok"] for item in result))
+        # Classified by env prefix without a `provider` field anywhere, which
+        # is what keeps an existing vault working unchanged.
+        self.assertEqual(by_ref["homelab-adguard"]["provider"], "adguard")
+        self.assertEqual(by_ref["example-edge"]["provider"], "ssh")
+        # What a credential can act on is a fact only it has. HQ derives its
+        # "which domain" menu from exactly this.
+        self.assertEqual(
+            by_ref["cloudflare-dns-jseverino"]["reaches"],
+            ["jseverino.com", "jseverino.net"],
+        )
+        self.assertEqual(by_ref["example-edge"]["reaches"], ["edge.example"])
         self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
+            "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
+            "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
+            "HQ_ACME_DIR": "/tmp",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers._run")
+    @mock.patch("controller_runtime.providers._request")
+    def test_one_broken_credential_does_not_hide_the_others(self, request, _run):
+        """A failure is that connection's, and the sweep still reports the rest.
+
+        The alternative loses every row the moment one token expires, which is
+        precisely when an operator needs to see which of them still works.
+        """
+
+        request.side_effect = providers.ProviderError("Token is not valid.")
+
+        found = providers.connections()
+
+        self.assertEqual(len(found), 1)
+        self.assertFalse(found[0]["ok"])
+        self.assertIn("Token is not valid.", found[0]["detail"])
+        # And read as a gate rather than as a report, the same failure stops
+        # the pass instead of being carried into an operation.
+        with self.assertRaises(providers.ProviderError):
+            providers.preflight()
 
     @mock.patch.dict(
         "os.environ",
@@ -576,10 +678,11 @@ class ProviderAdapterTests(TestCase):
         "os.environ",
         {
             "NPM_URL": "https://npm-origin.example",
-            "EDGE_HOST": "192.0.2.20",
-            "EDGE_PORT": "22",
-            "EDGE_USER": "controller",
-            "EDGE_HOST_KEY": "ssh-ed25519 AAAA",
+            "EXAMPLE_EDGE_CONNECTION_REF": "example-edge",
+            "EXAMPLE_EDGE_HOST": "192.0.2.20",
+            "EXAMPLE_EDGE_PORT": "22",
+            "EXAMPLE_EDGE_USER": "controller",
+            "EXAMPLE_EDGE_HOST_KEY": "ssh-ed25519 AAAA",
         },
         clear=True,
     )
@@ -622,7 +725,7 @@ class ProviderAdapterTests(TestCase):
                     {
                         "kind": "caddy",
                         "name": "caddy",
-                        "connection_ref": "edge",
+                        "connection_ref": "example-edge",
                         "verify_domains": ["health.example"],
                     },
                 ],
@@ -647,10 +750,11 @@ class ProviderAdapterTests(TestCase):
     @mock.patch.dict(
         "os.environ",
         {
-            "CPANEL_HOST": "192.0.2.10",
-            "CPANEL_PORT": "22",
-            "CPANEL_USER": "controller",
-            "CPANEL_HOST_KEY": "ssh-ed25519 AAAA",
+            "EXAMPLE_CPANEL_CONNECTION_REF": "example-cpanel",
+            "EXAMPLE_CPANEL_HOST": "192.0.2.10",
+            "EXAMPLE_CPANEL_PORT": "22",
+            "EXAMPLE_CPANEL_USER": "controller",
+            "EXAMPLE_CPANEL_HOST_KEY": "ssh-ed25519 AAAA",
         },
         clear=True,
     )
@@ -676,7 +780,7 @@ class ProviderAdapterTests(TestCase):
                     {
                         "kind": "cpanel",
                         "name": "cpanel",
-                        "connection_ref": "cpanel",
+                        "connection_ref": "example-cpanel",
                         "verify_domains": ["quiz.example.test"],
                     }
                 ],
@@ -687,11 +791,11 @@ class ProviderAdapterTests(TestCase):
             "quiz.example.test", connect_host="192.0.2.10"
         )
 
-    @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.homelab"}, clear=True)
+    @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
         self.assertEqual(
-            providers._consumer_tls_endpoint({"kind": "npm"}, {}),
-            "proxy.homelab",
+            providers._consumer_tls_endpoint({"kind": "npm"}),
+            "proxy.example",
         )
 
     @mock.patch("controller_runtime.providers.renew_tls")
@@ -761,7 +865,7 @@ class ProviderAdapterTests(TestCase):
             [
                 {"id": 1, "domain_names": ["hq.example.test"], "certificate_id": 11},
                 {"id": 2, "domain_names": ["sso.example.test"], "certificate_id": 11},
-                {"id": 3, "domain_names": ["proxy.homelab"], "certificate_id": 7},
+                {"id": 3, "domain_names": ["proxy.invalid"], "certificate_id": 7},
                 {"id": 4, "domain_names": ["off.example.test"], "enabled": False},
             ],
             {},
@@ -819,7 +923,7 @@ class ProviderAdapterTests(TestCase):
         spec = {
             "domains": ["example.test"],
             "consumers": [
-                {"kind": "caddy", "connection_ref": "edge"},
+                {"kind": "caddy", "connection_ref": "example-edge"},
             ],
         }
 
@@ -887,7 +991,7 @@ class ProviderAdapterTests(TestCase):
             "certificate_name": "example",
             "domains": ["example.test"],
             "renewal_window_days": 30,
-            "consumers": [{"kind": "caddy", "connection_ref": "edge"}],
+            "consumers": [{"kind": "caddy", "connection_ref": "example-edge"}],
         }
 
         result = providers.renew_tls(spec)
@@ -912,7 +1016,7 @@ class ProviderAdapterTests(TestCase):
         spec = {
             "domains": ["example.test"],
             "consumers": [
-                {"kind": "caddy", "connection_ref": "edge"},
+                {"kind": "caddy", "connection_ref": "example-edge"},
             ],
         }
 
@@ -952,22 +1056,33 @@ class WorkerTests(TestCase):
         self.assertNotIn("claim", manage.call_args.args)
         preflight.assert_not_called()
 
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker._manage")
-    def test_idle_apply_claims_without_provider_preflight(self, manage, preflight):
-        manage.return_value = {"ok": True, "operation": None}
+    def test_idle_apply_claims_without_provider_preflight(
+        self, manage, preflight, _connections
+    ):
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True},
+                "inventory": {"ok": True},
+                "schedule": {"ok": True},
+                "claim": {"ok": True, "operation": None},
+            }
+        )
 
         self.assertEqual(worker.run_once("test", apply=True), 0)
 
+        called = [call.args[0] for call in manage.call_args_list]
+        # Both sweeps, before anything is claimed. What HQ can reach is reported
+        # ahead of what it found there, so an empty inventory can be read
+        # against the credential that would have filled it.
+        self.assertEqual(
+            called, ["sweep-due", "connections", "inventory", "schedule", "claim"]
+        )
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
-        self.assertEqual(
-            manage.call_args_list[0].args[0], "inventory"
-        )
-        self.assertEqual(
-            manage.call_args_list[1].args,
-            ("schedule", "--controller-id", "test"),
-        )
         self.assertIn("adguard.rewrite:reconcile", arguments)
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
@@ -975,25 +1090,31 @@ class WorkerTests(TestCase):
         preflight.assert_not_called()
 
     def test_capability_registry_drives_supported_kinds(self):
-        self.assertEqual(
-            worker.supported_capabilities(),
-            (
-                ("adguard.rewrite", "delete"),
-                ("adguard.rewrite", "reconcile"),
-                # A public DNS record applies and deletes. The zone it lives in
-                # is deliberately absent: its only action is locked, because
-                # changing a zone's settings needs a credential the controller
-                # does not hold.
-                ("cloudflare.dns_record", "delete"),
-                ("cloudflare.dns_record", "reconcile"),
-                ("npm.proxy_host", "delete"),
-                ("npm.proxy_host", "reconcile"),
-                ("tls.certificate", "reconcile"),
-                ("tls.certificate", "renew"),
-                ("tls.uploaded_certificate", "delete"),
-                ("tls.uploaded_certificate", "reconcile"),
-            ),
+        """What the controller offers is the registry, minus what is locked.
+
+        Derived rather than listed: a provider added to the registry appears
+        here without this test being edited, which is the whole claim the
+        registry makes.
+        """
+        from control_plane.providers import controller_capability_registry
+
+        expected = tuple(
+            sorted(
+                (kind, action)
+                for kind, capability in (
+                    controller_capability_registry().capabilities.items()
+                )
+                for action, settings in capability.actions.items()
+                # A locked action needs a credential the controller does not
+                # hold -- a zone's own settings, for one -- so it is declared
+                # and never offered.
+                if settings.mode != "locked"
+            )
         )
+
+        self.assertEqual(worker.supported_capabilities(), expected)
+        # And the exclusion is real, not vacuous.
+        self.assertNotIn(("cloudflare.zone", "reconcile"), expected)
 
     def test_removal_is_never_scheduled_automatically(self):
         """The scheduler converges declarations. It must not decide to delete.
@@ -1020,54 +1141,64 @@ class WorkerTests(TestCase):
 
         self.assertEqual(set(providers.PROVIDER_ACTIONS), declared)
 
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker.preflight", return_value=[])
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
-    def test_provider_failure_is_reported_without_secret(self, manage, execute, _):
-        manage.side_effect = [
-            # The inventory sweep runs first on every apply pass.
-            {"ok": True, "recorded": []},
-            {"ok": True, "scheduled": []},
-            {
-                "operation": {"id": "operation-1", "action": "reconcile"},
-                "resource": {
-                    "key": "dns",
-                    "kind": "adguard.rewrite",
-                    "generation": 2,
-                    "spec": {},
+    def test_provider_failure_is_reported_without_secret(
+        self, manage, execute, _preflight, _connections
+    ):
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True, "recorded": []},
+                "inventory": {"ok": True, "recorded": []},
+                "schedule": {"ok": True, "scheduled": []},
+                "claim": {
+                    "operation": {"id": "operation-1", "action": "reconcile"},
+                    "resource": {
+                        "key": "dns",
+                        "kind": "adguard.rewrite",
+                        "generation": 2,
+                        "spec": {},
+                    },
                 },
-            },
-            {"ok": True},
-        ]
+                "report": {"ok": True},
+            }
+        )
         execute.side_effect = providers.ProviderError("Provider request failed.")
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = json.loads(manage.call_args_list[3].args[-1])
+        report_payload = json.loads(manage.call_args.args[-1])
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
 
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
     def test_claimed_operation_preflights_before_provider_execution(
-        self, manage, execute, preflight
+        self, manage, execute, preflight, _connections
     ):
-        manage.side_effect = [
-            # The inventory sweep runs first on every apply pass.
-            {"ok": True, "recorded": []},
-            {"ok": True, "scheduled": []},
-            {
-                "operation": {"id": "operation-1", "action": "reconcile"},
-                "resource": {
-                    "key": "dns",
-                    "kind": "adguard.rewrite",
-                    "generation": 2,
-                    "spec": {},
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "connections": {"ok": True, "recorded": []},
+                "inventory": {"ok": True, "recorded": []},
+                "schedule": {"ok": True, "scheduled": []},
+                "claim": {
+                    "operation": {"id": "operation-1", "action": "reconcile"},
+                    "resource": {
+                        "key": "dns",
+                        "kind": "adguard.rewrite",
+                        "generation": 2,
+                        "spec": {},
+                    },
                 },
-            },
-            {"ok": True},
-        ]
+                "report": {"ok": True},
+            }
+        )
         execute.return_value = providers.ProviderResult(
             changed=False,
             status={},

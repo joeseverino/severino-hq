@@ -1,4 +1,4 @@
-"""Authorization helpers for plugin-owned Django views."""
+"""Authorization and navigation helpers for plugin-owned Django views."""
 
 from functools import wraps
 
@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 
-from application.security import AuthorizationError, web_principal
+from application.security import AuthorizationError, safe_next, web_principal
 
 
 def _require(user, capability: str) -> None:
@@ -52,4 +52,4 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
-__all__ = ["CapabilityRequiredMixin", "capability_required"]
+__all__ = ["CapabilityRequiredMixin", "capability_required", "safe_next"]

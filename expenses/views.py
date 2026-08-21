@@ -1,9 +1,7 @@
 from decimal import Decimal
 
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Sum
-from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -14,9 +12,13 @@ from django.views.generic import (
 )
 
 from application.expenses import expense_command_from_cleaned_data, save_expense
-from application.deletion import DeleteCommand, delete_expense
-from application.security import web_principal
+from application.deletion import delete_expense
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.writes import (
+    ServiceCreateMixin,
+    ServiceDeleteMixin,
+    ServiceUpdateMixin,
+)
 from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
@@ -102,51 +104,49 @@ class ExpenseDetailView(LoginRequiredMixin, DetailView):
     ).prefetch_related("receipts")
 
 
-class ExpenseCreateView(LoginRequiredMixin, CreateView):
+class ExpenseWrite:
+    """What every expense write shares, whichever direction it goes.
+
+    An expense is identified by its primary key, which the service payload
+    spells ``id`` -- hence the two names for the one identity.
+    """
+
     model = Expense
+    noun = "Expense"
+    result_key = "expense"
+    identity_attr = "pk"
+    identity_result_key = "id"
+    identity_kwarg = "current_id"
+
+    # An expense is logged, not created: the ledger vocabulary is the one the
+    # rest of this domain already speaks.
+    created_message = "Expense logged: {target}."
+    updated_message = "Expense updated: {target}."
+    deleted_message = "Expense deleted: {target}."
+
+
+class ExpenseCreateView(
+    ExpenseWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView
+):
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-
-    def form_valid(self, form):
-        result = save_expense(
-            expense_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-        )
-        self.object = Expense.objects.get(pk=result["expense"]["id"])
-        messages.success(self.request, f"Expense logged: {self.object}.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_expense)
+    command_from_cleaned_data = staticmethod(expense_command_from_cleaned_data)
 
 
-class ExpenseUpdateView(LoginRequiredMixin, UpdateView):
-    model = Expense
+class ExpenseUpdateView(
+    ExpenseWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
+):
     form_class = ExpenseForm
     template_name = "expenses/expense_form.html"
-
-    def form_valid(self, form):
-        result = save_expense(
-            expense_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-            current_id=self.get_object().pk,
-        )
-        self.object = Expense.objects.get(pk=result["expense"]["id"])
-        messages.success(self.request, f"Expense updated: {self.object}.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_expense)
+    command_from_cleaned_data = staticmethod(expense_command_from_cleaned_data)
 
 
-class ExpenseDeleteView(LoginRequiredMixin, DeleteView):
-    model = Expense
+class ExpenseDeleteView(
+    ExpenseWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
+):
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"
-
-    def form_valid(self, form):
-        expense_id = self.get_object().pk
-        result = delete_expense(
-            DeleteCommand(confirm=str(expense_id)),
-            principal=web_principal(self.request.user),
-            current_id=expense_id,
-        )
-        messages.success(
-            self.request, f"Expense deleted: {result['deleted']['label']}."
-        )
-        return redirect(self.success_url)
+    service = staticmethod(delete_expense)

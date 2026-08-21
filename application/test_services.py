@@ -66,6 +66,12 @@ def healthy(resource: ManagedResource) -> ManagedResource:
     return resource
 
 
+def facet(service, facet_id):
+    """One facet of a service, by name rather than by position."""
+
+    return next(item for item in service.facets if item.id == facet_id)
+
+
 class ServiceCompositionTests(TestCase):
     """The join itself: three declarations meeting on one name."""
 
@@ -111,7 +117,7 @@ class ServiceCompositionTests(TestCase):
         self.assertEqual([service.hostname for service in catalog], ["app.example.com"])
         service = catalog[0]
         self.assertEqual(
-            {facet.id: [claim.resource_key for claim in facet.claims] for facet in service.facets},
+            {facet.id: [claim.resource_key for claim in facet.claims] for facet in service.facets if facet.claims},
             {"dns": ["app-dns"], "proxy": ["app-proxy"], "certificate": ["wildcard"]},
         )
         self.assertEqual(service.faults, ())
@@ -126,7 +132,7 @@ class ServiceCompositionTests(TestCase):
         """
         self._wire()
 
-        certificate = find_service("app.example.com").facets[2]
+        certificate = facet(find_service("app.example.com"), "certificate")
 
         self.assertEqual(certificate.id, "certificate")
         self.assertTrue(certificate.present)
@@ -167,8 +173,8 @@ class ServiceCompositionTests(TestCase):
         catalog = service_catalog()
 
         self.assertEqual(len(catalog), 1)
-        self.assertTrue(catalog[0].facets[0].present)
-        self.assertTrue(catalog[0].facets[1].present)
+        self.assertTrue(facet(catalog[0], "dns").present)
+        self.assertTrue(facet(catalog[0], "proxy").present)
 
     def test_a_disabled_resource_stops_supplying_its_facet(self):
         self._wire()
@@ -176,7 +182,7 @@ class ServiceCompositionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(service.facets[1].present)
+        self.assertFalse(facet(service, "proxy").present)
         self.assertIsNone(service.origin)
 
 
@@ -395,7 +401,7 @@ class ServiceResolutionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(service.facets[2].present)
+        self.assertFalse(facet(service, "certificate").present)
         self.assertIn("no declared certificate covers it", " ".join(service.faults))
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
@@ -512,8 +518,14 @@ class ProviderFacetContractTests(TestCase):
         self.assertIn("new.example.com", hostnames)
 
     def test_the_facet_order_is_declared_once(self):
-        """Templates render columns from SERVICE_FACETS, so nothing restates it."""
-        catalog_order = [facet for facet, _ in SERVICE_FACETS]
+        """Templates render columns from SERVICE_FACETS, so nothing restates it.
+
+        Filtered to the facets some provider supplies, in the catalogue's order:
+        a facet can be declared before the provider that fills it exists, and
+        until then it is not a column with nothing in it.
+        """
+        supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+        catalog_order = [facet for facet, _ in SERVICE_FACETS if facet in supplyable]
 
         healthy(
             ManagedResource.objects.create(
@@ -564,3 +576,206 @@ class AliasNavigationTests(TestCase):
             response["Location"],
             reverse("control_plane:service", kwargs={"hostname": "example.com"}),
         )
+
+
+class OriginNoteTests(TestCase):
+    """Where a name is served is said once, in whichever place says it best.
+
+    It was a fifth card on a four-card row, in the largest type, mostly
+    restating the two cards it sat beside.
+    """
+
+    def test_it_is_silent_when_a_facet_already_names_the_container(self):
+        from control_plane.providers import NameContext
+
+        from .services import Facet, Origin, Running, Service
+
+        running = Running(
+            name="probe", host="a-docker-host", stack="probe", image="",
+            state="running", status="", ports=(8099,), network_mode="bridge",
+            host_address="", portainer_managed=False, connection_ref="",
+            observed_at=None,
+        )
+        service = Service(
+            hostname="probe.invalid",
+            facets=(
+                Facet(
+                    id="runtime", label="Runtime", observed=running,
+                    context=NameContext(),
+                ),
+            ),
+            origin=Origin(address="192.168.1.233:8099", host="a-docker-host",
+                          container="probe"),
+        )
+
+        self.assertFalse(service.origin_is_news)
+
+    def test_it_speaks_up_when_something_outside_answers_the_name(self):
+        from .services import Origin, Service
+
+        service = Service(
+            hostname="jseverino.com",
+            facets=(),
+            origin=Origin(address="jseverino.pages.dev"),
+        )
+
+        self.assertTrue(service.origin_is_news)
+
+    def test_it_speaks_up_when_no_machine_claims_the_address(self):
+        """The one case worth interrupting for: ingress forwards somewhere HQ
+        cannot describe, reconcile or reach."""
+
+        from .services import Origin, Service
+
+        service = Service(
+            hostname="probe.invalid",
+            facets=(),
+            origin=Origin(address="10.9.9.9:8080"),
+        )
+
+        self.assertTrue(service.origin_is_news)
+
+    def test_it_speaks_up_when_nothing_identified_what_is_running(self):
+        from control_plane.providers import NameContext
+
+        from .services import Facet, Origin, Service
+
+        service = Service(
+            hostname="probe.invalid",
+            facets=(Facet(id="runtime", label="Runtime", context=NameContext()),),
+            origin=Origin(address="192.168.1.233:8099", host="a-docker-host"),
+        )
+
+        self.assertTrue(service.origin_is_news)
+
+
+class OriginWordingTests(TestCase):
+    """One fact, one phrasing, whichever surface asks for it.
+
+    The board rendered "unknown host" beside a name whose own page said "Served
+    by Cloudflare Pages". Both were reading the same Origin and only one of them
+    had learned about the third case.
+    """
+
+    def test_something_outside_is_named_rather_than_called_unknown(self):
+        from .services import Origin
+
+        origin = Origin(address="jseverino.pages.dev")
+
+        self.assertTrue(origin.external)
+        self.assertEqual(origin.qualifier, "")
+        self.assertNotEqual(origin.headline, "unknown host")
+
+    def test_a_known_machine_reads_as_itself(self):
+        from .services import Origin
+
+        origin = Origin(address="192.168.1.233:8000", host="a-docker-host",
+                        container="probe")
+
+        self.assertEqual(origin.headline, "a-docker-host · probe")
+        self.assertEqual(origin.qualifier, "")
+
+    def test_an_address_nothing_claims_still_says_so(self):
+        """The caveat has to survive: an ingress pointing somewhere HQ cannot
+        describe is worth interrupting for."""
+
+        from .services import Origin
+
+        origin = Origin(address="10.9.9.9:8080")
+
+        self.assertEqual(origin.qualifier, "unknown host")
+
+
+class ConnectedMachineTests(TestCase):
+    """A machine HQ holds a credential for is not an unknown host.
+
+    The proxy in front of the cPanel site read as "unknown host" while the
+    connections page listed that exact address under a name.
+    """
+
+    def test_an_address_a_connection_points_at_is_named(self):
+        from control_plane.models import ProviderConnection
+        from django.utils import timezone
+
+        from .services import _locate
+
+        ProviderConnection.objects.create(
+            connection_ref="a-shared-host", controller_id="a-controller",
+            provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
+            reachable=True, probed=True, observed_at=timezone.now(),
+        )
+
+        origin = _locate("203.0.113.10:443", {"hosts": []})
+
+        self.assertEqual(origin.host, "a-shared-host")
+        self.assertTrue(origin.known)
+        self.assertEqual(origin.qualifier, "")
+
+    def test_an_address_no_credential_points_at_is_still_unknown(self):
+        from .services import _locate
+
+        origin = _locate("10.9.9.9:443", {"hosts": []})
+
+        self.assertEqual(origin.qualifier, "unknown host")
+
+    def test_a_url_endpoint_matches_by_its_hostname(self):
+        from control_plane.models import ProviderConnection
+        from django.utils import timezone
+
+        from .services import _locate
+
+        ProviderConnection.objects.create(
+            connection_ref="a-proxy", controller_id="a-controller",
+            provider="npm", endpoint="https://proxy.example", reaches=[],
+            reachable=True, probed=True, observed_at=timezone.now(),
+        )
+
+        origin = _locate("proxy.example:81", {"hosts": []})
+
+        self.assertEqual(origin.host, "a-proxy")
+
+
+class PortlessOriginTests(TestCase):
+    """An address with no port is all host.
+
+    `rpartition` puts the whole string in its last element when the separator
+    is absent, so a DNS answer naming a machine HQ knows was matched against an
+    empty host and read as somewhere it had never heard of.
+    """
+
+    def test_a_bare_address_matches_the_machine_it_names(self):
+        from .services import _locate
+
+        origin = _locate(
+            "192.168.1.233",
+            {"hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]},
+        )
+
+        self.assertEqual(origin.host, "a-docker-host")
+        self.assertFalse(origin.external)
+
+    def test_a_bare_address_matches_a_connection_too(self):
+        from control_plane.models import ProviderConnection
+        from django.utils import timezone
+
+        from .services import _locate
+
+        ProviderConnection.objects.create(
+            connection_ref="a-shared-host", controller_id="a-controller",
+            provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
+            reachable=True, probed=True, observed_at=timezone.now(),
+        )
+
+        origin = _locate("203.0.113.10", {"hosts": []})
+
+        self.assertEqual(origin.headline, "a-shared-host")
+
+    def test_a_name_nothing_claims_is_still_answered_elsewhere(self):
+        """The heuristic it guards must survive: a portless address nothing
+        knows is a name answered outside this network."""
+
+        from .services import _locate
+
+        origin = _locate("jseverino.pages.dev", {"hosts": []})
+
+        self.assertTrue(origin.external)

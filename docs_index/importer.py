@@ -12,8 +12,8 @@ Reads a JSON array like:
         "environment": "homelab",
         "status": "active",
         "sensitivity": "sensitive",
-        "related_projects": ["homelab-dns"],
-        "related_assets": ["optiplex-7050"],
+        "related_projects": ["example-dns"],
+        "related_assets": ["example-workstation"],
         "last_reviewed": "2026-05-16"
     }, ...]
 
@@ -313,6 +313,96 @@ def _backfill_project_technologies(projects, entry: dict, stats: dict) -> None:
 
 
 @transaction.atomic
+def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dict) -> None:
+    """Upsert one manifest record, its relations and its mirrored content."""
+
+    _, defaults, _ = _build_record_defaults(entry)
+
+    record, created = DocumentationRecord.objects.get_or_create(
+        doc_id=doc_id, defaults=defaults
+    )
+    if created:
+        changed = True
+    elif update_existing:
+        changed = any(getattr(record, k) != v for k, v in defaults.items())
+        if changed:
+            for k, v in defaults.items():
+                setattr(record, k, v)
+            record.save()
+    else:
+        stats["skipped"] += 1
+        return
+
+    project_slugs = entry.get("related_projects") or []
+    asset_slugs = entry.get("related_assets") or []
+
+    if project_slugs:
+        qs, rel_changed = _sync_relation(
+            record, Project.objects, project_slugs, kind="project", doc_id=doc_id, stats=stats
+        )
+        changed = changed or rel_changed
+        _backfill_project_technologies(qs, entry, stats)
+    if asset_slugs:
+        _, rel_changed = _sync_relation(
+            record, Asset.objects, asset_slugs, kind="asset", doc_id=doc_id, stats=stats
+        )
+        changed = changed or rel_changed
+
+    if created:
+        stats["created"] += 1
+    elif changed:
+        stats["updated"] += 1
+    else:
+        stats["skipped"] += 1
+
+    # Only explicit content entries mirror into ContentItem. Some reporting
+    # docs use public_article_draft as a writing state, but they are not
+    # part of the site CMS unless the manifest carries content_type.
+    if (
+        defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+        and entry.get("content_type")
+    ):
+        _upsert_content_item(record, entry, defaults, stats)
+    elif defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
+        _prune_legacy_content_item_for_record(record, stats)
+
+
+def _reap_orphans(manifest_doc_ids: set[str], *, prune: bool, stats: dict) -> None:
+    """Records HQ holds that the manifest no longer claims.
+
+    Reported always, deleted only on request. A mirrored ContentItem goes with
+    them only when *every* doc it hangs off is an orphan -- an item shared with
+    a doc that survived is not this manifest's to remove.
+    """
+
+    db_doc_ids = set(DocumentationRecord.objects.values_list("doc_id", flat=True))
+    orphan_ids = sorted(db_doc_ids - manifest_doc_ids)
+    stats["orphans"] = orphan_ids
+    if not (prune and orphan_ids):
+        return
+
+    orphan_docs = DocumentationRecord.objects.filter(doc_id__in=orphan_ids)
+    content_items_to_prune = (
+        ContentItem.objects.filter(related_documentation__in=orphan_docs)
+        .annotate(
+            documentation_count=Count("related_documentation", distinct=True),
+            orphan_documentation_count=Count(
+                "related_documentation",
+                filter=Q(related_documentation__in=orphan_docs),
+                distinct=True,
+            ),
+        )
+        .filter(documentation_count=F("orphan_documentation_count"))
+    )
+    content_items_pruned = content_items_to_prune.count()
+    content_items_to_prune.delete()
+
+    deleted_count, _by_model = orphan_docs.delete()
+    stats["orphans_pruned"] = len(orphan_ids)
+    stats["orphans_pruned_records"] = deleted_count
+    stats["content_items_pruned"] = content_items_pruned
+
+
 def import_manifest_data(
     items: Iterable[dict],
     *,
@@ -346,93 +436,19 @@ def import_manifest_data(
         stats["orphans"] = []
 
     manifest_doc_ids: set[str] = set()
-
     for entry in items:
         doc_id = (entry.get("doc_id") or "").strip()
         if not doc_id:
             stats["skipped"] += 1
             continue
+        # Claimed before the update decision: a record the manifest names but
+        # chose not to update is still named, and must not read as an orphan.
         manifest_doc_ids.add(doc_id)
-
-        _, defaults, _ = _build_record_defaults(entry)
-
-        record, created = DocumentationRecord.objects.get_or_create(
-            doc_id=doc_id, defaults=defaults
+        _import_entry(
+            entry, doc_id=doc_id, update_existing=update_existing, stats=stats
         )
-        if created:
-            changed = True
-        elif update_existing:
-            changed = any(getattr(record, k) != v for k, v in defaults.items())
-            if changed:
-                for k, v in defaults.items():
-                    setattr(record, k, v)
-                record.save()
-        else:
-            stats["skipped"] += 1
-            continue
-
-        project_slugs = entry.get("related_projects") or []
-        asset_slugs = entry.get("related_assets") or []
-
-        if project_slugs:
-            qs, rel_changed = _sync_relation(
-                record, Project.objects, project_slugs, kind="project", doc_id=doc_id, stats=stats
-            )
-            changed = changed or rel_changed
-            _backfill_project_technologies(qs, entry, stats)
-        if asset_slugs:
-            _, rel_changed = _sync_relation(
-                record, Asset.objects, asset_slugs, kind="asset", doc_id=doc_id, stats=stats
-            )
-            changed = changed or rel_changed
-
-        if created:
-            stats["created"] += 1
-        elif changed:
-            stats["updated"] += 1
-        else:
-            stats["skipped"] += 1
-
-        # Only explicit content entries mirror into ContentItem. Some reporting
-        # docs use public_article_draft as a writing state, but they are not
-        # part of the site CMS unless the manifest carries content_type.
-        if (
-            defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
-            and entry.get("content_type")
-        ):
-            _upsert_content_item(record, entry, defaults, stats)
-        elif defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
-            _prune_legacy_content_item_for_record(record, stats)
 
     if report_orphans or prune_orphans:
-        db_doc_ids = set(
-            DocumentationRecord.objects.values_list("doc_id", flat=True)
-        )
-        orphan_ids = sorted(db_doc_ids - manifest_doc_ids)
-        stats["orphans"] = orphan_ids
-
-        if prune_orphans and orphan_ids:
-            orphan_docs = DocumentationRecord.objects.filter(doc_id__in=orphan_ids)
-            content_items_to_prune = (
-                ContentItem.objects.filter(related_documentation__in=orphan_docs)
-                .annotate(
-                    documentation_count=Count("related_documentation", distinct=True),
-                    orphan_documentation_count=Count(
-                        "related_documentation",
-                        filter=Q(related_documentation__in=orphan_docs),
-                        distinct=True,
-                    ),
-                )
-                .filter(documentation_count=F("orphan_documentation_count"))
-            )
-            content_items_pruned = content_items_to_prune.count()
-            content_items_to_prune.delete()
-
-            deleted_count, _by_model = (
-                orphan_docs.delete()
-            )
-            stats["orphans_pruned"] = len(orphan_ids)
-            stats["orphans_pruned_records"] = deleted_count
-            stats["content_items_pruned"] = content_items_pruned
+        _reap_orphans(manifest_doc_ids, prune=prune_orphans, stats=stats)
 
     return stats

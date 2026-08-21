@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Sum
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
@@ -83,99 +85,89 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         return ctx
 
 
-class _BaseExportView(LoginRequiredMixin, View):
-    def _serve(self, *, body: str, content_type: str, filename: str, export_label: str):
+CSV = "text/csv; charset=utf-8"
+
+
+@dataclass(frozen=True)
+class Export:
+    """One downloadable report, declared rather than written out.
+
+    Every export did the same four things -- build a body, name a file, record
+    that it was taken, and return it as an attachment -- and differed only in
+    which builder and which name. Seven view classes stated those differences
+    in prose; here they are data, and the four things happen once.
+    """
+
+    name: str
+    path: str
+    build: Callable[..., str]
+    content_type: str
+    stem: str
+    extension: str
+    # "none": the report has no year. "optional": a year narrows it, and its
+    # absence means all time. "required": a year always applies, defaulting to
+    # this one.
+    year: str = "none"
+
+    def filename(self, year: int | None) -> str:
+        suffix = f"-{year}" if year else ""
+        return f"{self.stem}{suffix}.{self.extension}"
+
+
+EXPORTS = (
+    Export("expenses_csv", "export/expenses.csv", exporters.expenses_csv, CSV,
+           "expenses", "csv", year="optional"),
+    Export("assets_csv", "export/assets.csv", exporters.assets_csv, CSV,
+           "assets", "csv", year="optional"),
+    Export("content_csv", "export/content.csv", exporters.content_csv, CSV,
+           "content", "csv"),
+    Export("projects_csv", "export/projects.csv", exporters.projects_csv, CSV,
+           "projects", "csv"),
+    Export("documentation_csv", "export/documentation.csv",
+           exporters.documentation_csv, CSV, "documentation", "csv"),
+    Export("year_summary_json", "export/year-summary.json",
+           exporters.year_summary_json, "application/json; charset=utf-8",
+           "year-summary", "json", year="required"),
+    Export("year_summary_md", "export/year-summary.md",
+           exporters.year_summary_markdown, "text/markdown; charset=utf-8",
+           "year-summary", "md", year="required"),
+)
+
+
+class ExportView(LoginRequiredMixin, View):
+    """Serve one declared export.
+
+    Bound to its ``Export`` through ``as_view(export=...)``, so the URL table
+    is the only place the set is enumerated.
+    """
+
+    export: Export = None
+
+    def get(self, request):
+        spec = self.export
+        if spec.year == "none":
+            year = None
+        else:
+            raw = request.GET.get("year", "").strip()
+            if raw and not raw.isdigit():
+                # Answered rather than ignored. Silently exporting all time --
+                # or this year -- for a request that named neither hands back a
+                # document that is not the one asked for, and nothing says so.
+                return HttpResponseBadRequest("year must be a four-digit year.")
+            if raw:
+                year = int(raw)
+            else:
+                year = timezone.localdate().year if spec.year == "required" else None
+
+        body = spec.build() if spec.year == "none" else spec.build(year)
+        filename = spec.filename(year)
         record_event(
             action=AuditLog.Action.EXPORTED,
             type_label="Export",
-            message=f"Generated export: {export_label}",
+            message=f"Generated export: {filename}",
             metadata={"filename": filename, "bytes": len(body.encode("utf-8"))},
         )
-        response = HttpResponse(body, content_type=content_type)
+        response = HttpResponse(body, content_type=spec.content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["Cache-Control"] = "private, no-store"
         return response
-
-
-class ExpensesCSVView(_BaseExportView):
-    def get(self, request):
-        year_q = request.GET.get("year")
-        year = int(year_q) if year_q and year_q.isdigit() else None
-        suffix = f"-{year}" if year else ""
-        return self._serve(
-            body=exporters.expenses_csv(year),
-            content_type="text/csv; charset=utf-8",
-            filename=f"expenses{suffix}.csv",
-            export_label=f"expenses{suffix}.csv",
-        )
-
-
-class AssetsCSVView(_BaseExportView):
-    def get(self, request):
-        year_q = request.GET.get("year")
-        year = int(year_q) if year_q and year_q.isdigit() else None
-        suffix = f"-{year}" if year else ""
-        return self._serve(
-            body=exporters.assets_csv(year),
-            content_type="text/csv; charset=utf-8",
-            filename=f"assets{suffix}.csv",
-            export_label=f"assets{suffix}.csv",
-        )
-
-
-class ContentCSVView(_BaseExportView):
-    def get(self, request):
-        return self._serve(
-            body=exporters.content_csv(),
-            content_type="text/csv; charset=utf-8",
-            filename="content.csv",
-            export_label="content.csv",
-        )
-
-
-class ProjectsCSVView(_BaseExportView):
-    def get(self, request):
-        return self._serve(
-            body=exporters.projects_csv(),
-            content_type="text/csv; charset=utf-8",
-            filename="projects.csv",
-            export_label="projects.csv",
-        )
-
-
-class DocumentationCSVView(_BaseExportView):
-    def get(self, request):
-        return self._serve(
-            body=exporters.documentation_csv(),
-            content_type="text/csv; charset=utf-8",
-            filename="documentation.csv",
-            export_label="documentation.csv",
-        )
-
-
-class YearSummaryJSONView(_BaseExportView):
-    def get(self, request):
-        try:
-            year = int(request.GET.get("year") or timezone.localdate().year)
-        except ValueError:
-            year = timezone.localdate().year
-        return self._serve(
-            body=exporters.year_summary_json(year),
-            content_type="application/json; charset=utf-8",
-            filename=f"year-summary-{year}.json",
-            export_label=f"year-summary-{year}.json",
-        )
-
-
-class YearSummaryMarkdownView(_BaseExportView):
-    def get(self, request):
-        try:
-            year = int(request.GET.get("year") or timezone.localdate().year)
-        except ValueError:
-            year = timezone.localdate().year
-        return self._serve(
-            body=exporters.year_summary_markdown(year),
-            content_type="text/markdown; charset=utf-8",
-            filename=f"year-summary-{year}.md",
-            export_label=f"year-summary-{year}.md",
-        )

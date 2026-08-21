@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ machine.name }} · Machines{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ machine.name }}</h1>
+    <p class="muted">
+      {% if machine.reached_by %}
+        <span class="pill pill-{% if machine.reachable %}reachable{% else %}unreachable{% endif %}">{% if machine.reachable %}reachable{% else %}unreachable{% endif %}</span>
+      {% else %}
+        <span class="pill pill-unprobed">no credential</span>
+      {% endif %}
+      {% if machine.role %} · {{ machine.role }}{% endif %}
+      {% if machine.address %} · <code>{{ machine.address }}</code>{% endif %}
+      {% comment %}
+      The other names this same machine answers to. Two credentials name one
+      machine differently and neither is wrong — a Portainer environment and an
+      SSH item for the same VPS — so the names fold together and the ones not
+      chosen are said here rather than dropped.
+      {% endcomment %}
+      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
+  </div>
+</div>
+
+<div class="control-summary">
+  <div class="control-metric">
+    <span class="control-label">Reached through</span>
+    <strong>{{ machine.reached_by|length }}</strong>
+    {% comment %}
+    More than one is normal. A machine can be a Portainer environment and an SSH
+    transport at once, and which is in play depends on what is being asked of
+    it — so both are named rather than one being chosen.
+    {% endcomment %}
+    {% for ref in machine.reached_by %}
+      <span class="readout"><a href="{% url 'control_plane:connections' %}"><code>{{ ref }}</code></a></span>
+    {% empty %}
+      <span class="readout muted">Nothing HQ holds opens this. Its name was reported by something else.</span>
+    {% endfor %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Containers</span>
+    <strong>{% if machine.containers %}{{ machine.running }} of {{ machine.containers|length }}{% else %}None{% endif %}</strong>
+    {% if machine.containers %}<span class="readout muted">running</span>{% endif %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Serves</span>
+    <strong>{{ machine.hostnames|length }}</strong>
+    {% for hostname in machine.hostnames %}
+      <span class="readout"><a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a></span>
+    {% empty %}
+      <span class="readout muted">No service HQ manages is served from here.</span>
+    {% endfor %}
+  </div>
+  <div class="control-metric">
+    <span class="control-label">Declared here</span>
+    <strong>{{ machine.resources|length }}</strong>
+    {% for key in machine.resources %}
+      <span class="readout"><a href="{% url 'control_plane:detail' key %}"><code>{{ key }}</code></a></span>
+    {% empty %}
+      <span class="readout muted">Nothing HQ declares names this machine.</span>
+    {% endfor %}
+  </div>
+</div>
+
+{% if machine.containers %}
+  <h2>What is running</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Image</th>
+          <th>Publishes</th>
+          <th>Status</th>
+          <th>State</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for container in machine.containers %}
+          <tr>
+            <td>
+              <strong>{{ container.name }}</strong>
+              {% comment %}
+              The compose project only when it is not the container's own name.
+              A one-service compose file names the project after the service, so
+              printing both said one thing twice.
+              {% endcomment %}
+              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
+            </td>
+            <td><code>{{ container.image_label }}</code></td>
+            <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{{ container.status }}</td>
+            <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
+            <td>
+              {% comment %}
+              A container HQ watches has a declaration to open and operations
+              to queue against; one it merely sees has neither, and watching it
+              is what changes that. So every row leads somewhere.
+              {% endcomment %}
+              {% if container.watcher %}
+                <a class="subtle-link" href="{% url 'control_plane:detail' container.watcher %}">Open &rarr;</a>
+              {% else %}
+                <form method="post" action="{% url 'control_plane:adopt_record' container_kind container.token %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn ghost">Watch</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}

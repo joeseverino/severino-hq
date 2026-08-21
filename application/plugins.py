@@ -93,7 +93,9 @@ def _references() -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
-def _validate(manifest: PluginManifest, reference: str) -> None:
+def _validate_identity(manifest: PluginManifest, reference: str) -> None:
+    """Who the plugin says it is, and whether HQ can run it at all."""
+
     if not isinstance(manifest, PluginManifest):
         raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     if not PLUGIN_ID.fullmatch(manifest.id):
@@ -119,6 +121,11 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
             f"Plugin {manifest.id!r} requires API {manifest.api_version}; "
             f"HQ supports {PLUGIN_API_VERSION}."
         )
+
+
+def _validate_mount(manifest: PluginManifest) -> None:
+    """Where the plugin attaches to the URL tree, and its Django apps."""
+
     if bool(manifest.url_prefix) != bool(manifest.urlconf):
         raise ImproperlyConfigured(
             f"Plugin {manifest.id!r} must declare url_prefix and urlconf together."
@@ -136,6 +143,11 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} has invalid Django app {app!r}."
             )
+
+
+def _validate_providers(manifest: PluginManifest) -> None:
+    """Optional hooks the host will import by name if they are declared."""
+
     for field in (
         "dashboard_provider",
         "overview_provider",
@@ -149,6 +161,11 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} has invalid {field} {provider!r}."
             )
+
+
+def _validate_token_routes(manifest: PluginManifest) -> None:
+    """Routes exempt from the session login redirect, and only those."""
+
     if len(manifest.token_authenticated_routes) != len(
         set(manifest.token_authenticated_routes)
     ):
@@ -168,6 +185,9 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
                 f"Plugin {manifest.id!r} token-authenticated route {route!r} "
                 "must be a non-empty path relative to its url_prefix."
             )
+
+
+def _validate_navigation(manifest: PluginManifest) -> None:
     for item in manifest.navigation:
         if (
             not item.label.strip()
@@ -178,6 +198,11 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
             raise ImproperlyConfigured(
                 f"Plugin {manifest.id!r} has an incomplete navigation item."
             )
+
+
+def _validate_capabilities(manifest: PluginManifest) -> None:
+    """Names, uniqueness, and the rule that MCP can never exceed the operator."""
+
     declared_capabilities = (
         *manifest.operator_capabilities,
         *manifest.mcp_read_capabilities,
@@ -207,6 +232,24 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
             f"hold: {', '.join(sorted(mcp_only))}."
         )
 
+
+def _validate(manifest: PluginManifest, reference: str) -> None:
+    """Everything a manifest must satisfy before HQ will boot with it.
+
+    Grouped rather than tabulated: this is fail-closed startup validation, and
+    somebody auditing it should be able to read the requirements in order. A
+    table of rules would be shorter and harder to check.
+
+    Order is load-bearing -- identity first, because every later message names
+    the plugin by the id validated there.
+    """
+
+    _validate_identity(manifest, reference)
+    _validate_mount(manifest)
+    _validate_providers(manifest)
+    _validate_token_routes(manifest)
+    _validate_navigation(manifest)
+    _validate_capabilities(manifest)
 
 def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
     """Reject collisions Django would otherwise resolve by ordering."""

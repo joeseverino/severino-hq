@@ -94,6 +94,25 @@ Built-in 1Password fields may be selected by stable ID. Custom fields must be
 selected by their stable, unique label because 1Password assigns an opaque ID
 per item; the renderer rejects missing or duplicate matches.
 
+#### Adding a connection
+
+Create the item. Nothing else. `connection_ref`, `projection` and `env_prefix`
+on the item are what make it one, and the renderer reads them, so no file in
+this repository names any connection.
+
+What kind of thing it is comes from the env prefix — `ADGUARD_*` is AdGuard,
+`PORTAINER_*` is Portainer — unless the item carries a `provider` field, which
+overrides it. That field is what lets two of a kind coexist: `PORTAINER_HOME`
+and `PORTAINER_CLOUD` are both `portainer`, and each resource says which it
+uses. It is optional, so an existing vault keeps working untouched.
+
+On each pass the controller probes every connection it was handed and reports
+what answered and what that thing can act on — the machines behind a Portainer,
+the zones a DNS token may edit. HQ stores the report, not the credential, and
+`/infrastructure/connections/` is that report. Every menu asking "which machine"
+or "which domain" is derived from it, so registering a new VPS with Portainer is
+the whole of making it a place HQ can deploy to.
+
 The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate
 is not stored in this public repository. Never disable TLS verification.

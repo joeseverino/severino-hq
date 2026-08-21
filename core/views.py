@@ -15,14 +15,15 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView
 
+from application.connections import consoles, operator_links
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
-from application.security import web_principal
+from application.services import public_sites
+from application.security import safe_next, web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
 from contacts.d1 import (
@@ -68,14 +69,12 @@ class ThrottledLoginView(LoginView):
 
         if self.sso_only and "signed_out" not in request.GET:
             target = reverse("oidc_authentication_init")
-            nxt = request.GET.get("next")
             # Checked here even though the provider library checks it again
             # before use. A destination is only carried forward if it points
             # back at this host, so nothing downstream has to be trusted to
             # notice that it does not.
-            if nxt and url_has_allowed_host_and_scheme(
-                nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-            ):
+            nxt = safe_next(request)
+            if nxt:
                 return redirect(f"{target}?next={quote(nxt)}")
             return redirect(target)
         return super().get(request, *args, **kwargs)
@@ -179,26 +178,31 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # filtered list that shows it, supplied by the domain that raised it.
         action_queue = snapshot["priority"]
 
-        # Live infra status is NOT computed here — HQ links out to Uptime Kuma
-        # on the VPS rather than duplicating a status checker.
-        external_links = [
-            {
-                "label": "Live status",
-                "sub": "Uptime Kuma · VPS",
-                "href": "https://status.jseverino.com",
-            },
-            {
-                "label": "Health endpoint",
-                "sub": "liveness",
-                "href": "https://health.jseverino.com",
-            },
-            {"label": "Portainer", "sub": "containers", "href": "http://admin.homelab"},
-            {
-                "label": "Public site",
-                "sub": "jseverino.com",
-                "href": "https://jseverino.com",
-            },
-        ]
+        # Consoles come from the connections a controller reported. Anything
+        # else an operator wants here is a fact about their installation and is
+        # named in their environment: an address written into this file is
+        # published to everyone who clones it and true for nobody else.
+        external_links = (
+            [
+                # HQ's own liveness, by route rather than by address: it is a
+                # path this application serves, so naming a hostname for it
+                # would be writing down one deployment's front door.
+                {
+                    "label": "Health endpoint",
+                    "sub": "liveness",
+                    "href": reverse("health_ready"),
+                }
+            ]
+            + [
+                {"label": label, "sub": sub or "console", "href": href}
+                for label, sub, href in consoles()
+            ]
+            + [
+                {"label": hostname, "sub": sub or "published", "href": href}
+                for hostname, sub, href in public_sites()
+            ]
+            + operator_links()
+        )
 
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.

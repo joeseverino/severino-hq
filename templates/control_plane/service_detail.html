@@ -19,6 +19,35 @@
     </p>
   </div>
   <div class="page-actions">
+    {% comment %}
+    The controls sit with the page's other actions rather than inside the card
+    that describes the container. A card reports; this is where you act.
+
+    Which buttons appear is two readings, not a choice: what the controller says
+    it implements for a container, and what the container's own state makes
+    worth asking. Nothing offers Start to something already running.
+    {% endcomment %}
+    {% if service.container.watcher %}
+      {% for route, label in container_actions %}
+        <form method="post" action="{% url route service.container.watcher %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn icon-btn" title="{{ label }} {{ service.container.name }}">
+            {% include "partials/_icon.html" with name=route|cut:"control_plane:" %}
+            <span>{{ label }}</span>
+          </button>
+        </form>
+      {% endfor %}
+    {% elif service.container %}
+      <form method="post" action="{% url 'control_plane:adopt_record' container_kind service.container.token %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn" title="Let HQ start, stop and restart {{ service.container.name }}">Watch this container</button>
+      </form>
+    {% endif %}
+    {% if service.zone_key %}
+      <a class="btn" href="{% url 'zones:detail' service.zone_key %}">Domain</a>
+    {% endif %}
     <a class="btn" href="{% url 'control_plane:services' %}">All services</a>
   </div>
 </div>
@@ -66,14 +95,70 @@ not restated here.
         routed, and nothing on this network should answer for it — the page
         said "nothing supplies this" beside a card naming exactly what does,
         and offered to add a proxy in front of a site that must not have one.
-        {% endcomment %}
-        {% comment %}
-        Deliberately not naming the operator again. Origin already does, and two
-        cards side by side both reading "Cloudflare Pages" is one fact charged
-        twice — this card's job is to say the facet is not missing.
+
+        Named by what it would otherwise have taken, rather than by whoever
+        answers instead. Every facet that routes takes this branch, so naming
+        the operator here prints one fact once per card. Who serves it belongs
+        in one place — the note below the row.
+
+        What differs per card is what is not needed, and each facet already
+        says that: its own providers are the things it would otherwise want.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
-        <span>{{ service.origin.operator }} answers this name directly, so there is nothing to proxy.</span>
+        {% for kind, label in facet.declarable %}
+          <span class="readout">No {{ label }} to add.</span>
+        {% endfor %}
+      {% elif facet.observed %}
+        {% comment %}
+        Found, not declared. Two lines and a disclosure: the state and the name
+        are what a glance is for, and everything else is what you open when the
+        glance was not reassuring.
+
+        Never an Edit link. HQ does not manage this and must not imply it could.
+        {% endcomment %}
+        <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
+        <span class="readout"><code>{{ facet.observed.name }}</code> on {{ facet.observed.host }}</span>
+        <details class="control-diagnostics">
+          <summary>What is running</summary>
+          <dl class="kv compact">
+            {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label }}</code></dd>{% endif %}
+            {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
+            {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
+            {% comment %}
+            Only when it differs from the container's own name. A one-service
+            compose file names the project after the service, so the row read
+            "Compose project: severino-hq" under a heading already saying
+            severino-hq -- a fact charged twice.
+            {% endcomment %}
+            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
+            <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
+            {% comment %}
+            The offer to take it on, only when taking it on would not mean
+            building a second one. A container started by compose on the machine
+            is invisible to Portainer's stack list, so declaring it here asks
+            Portainer to stand up its own copy of something already serving —
+            which, for the container running this page, means HQ redeploying
+            itself.
+            {% endcomment %}
+            {% comment %}
+            Defining it and cycling it are different claims. HQ can start, stop
+            and restart any container, because those are Docker's verbs; it can
+            only redefine one Portainer created, because everything else is
+            defined by a compose file HQ has never seen. Offering the second as
+            though it were the first would ask Portainer to stand up its own
+            copy of something already serving.
+            {% endcomment %}
+            <dt>Defined by</dt>
+            <dd>
+              {% if facet.observed.portainer_managed %}
+                Portainer.
+                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a>{% endfor %}
+              {% else %}
+                A compose file on {{ facet.observed.host }}, which HQ has not seen.
+              {% endif %}
+            </dd>
+          </dl>
+        </details>
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>
@@ -86,44 +171,54 @@ not restated here.
         {% for kind, label in facet.declarable %}
           <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
         {% endfor %}
+        {% comment %}
+        Named, not silently dropped. An option disappearing without explanation
+        reads as a missing feature; the sentence turns it into an answer, and
+        each one names the alternative that does work.
+        {% endcomment %}
+        {% for label, reason in facet.unavailable %}
+          <span class="readout muted"><span class="readout-label">{{ label }}</span> {{ reason }}</span>
+        {% endfor %}
       {% endif %}
     </div>
+
   {% endfor %}
-  <div class="control-metric">
-    <span class="control-label">Origin</span>
-    {% if not service.origin %}
-      <strong>Not routed</strong>
-      <span>Nothing declares where requests for this name are served.</span>
-    {% elif service.origin.external %}
-      {% comment %}
-      A public record pointing straight at something is the routing. Reported as
-      "Not routed", the page said nothing declared where a name was served about
-      a name whose entire configuration was a statement of exactly that.
-      {% endcomment %}
-      {% comment %}
-      A statement, not a disclaimer. This is a working arrangement: something
-      else serves the content and HQ publishes the record that sends people
-      there. Written as "outside your network … managed at the provider" it
-      read as a limitation being apologised for, about the half of it HQ
-      actually runs.
-      {% endcomment %}
-      <strong>{{ service.origin.operator }}</strong>
-      <span>
-        Serves this name from <code>{{ service.origin.address }}</code>.
-        HQ publishes the DNS record that points here.
-      </span>
-    {% elif service.origin.known %}
-      <strong>{{ service.origin.label }}</strong>
-      <span>
-        Ingress forwards to <code>{{ service.origin.address }}</code>.
-        {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
-      </span>
-    {% else %}
-      <strong>Unknown host</strong>
-      <span>Ingress forwards to <code>{{ service.origin.address }}</code>, which no host in the topology claims.</span>
-    {% endif %}
-  </div>
 </div>
+
+{% comment %}
+Origin is a sentence, not a fifth card. Four facets are what a name needs to
+answer, and the cards already carry most of what a fifth would say — the ingress
+card prints the address, the runtime card names the container.
+
+What is left is the one thing neither says on its own: which of them is actually
+answering. That is a claim about the row, so it reads under it.
+{% endcomment %}
+{% if service.origin_is_news %}
+<p class="control-origin">
+  {% comment %}
+  No branch for "nothing is routed": this whole note is skipped when there is no
+  origin, because the facets above already read "Not declared" and a fourth way
+  of saying so is not a fourth fact.
+  {% endcomment %}
+  {% if service.origin.external %}
+    {% comment %}
+    A statement, not a disclaimer. This is a working arrangement: something else
+    serves the content and HQ publishes the record that sends people there.
+    Written as "outside your network … managed at the provider" it read as a
+    limitation being apologised for, about the half of it HQ actually runs.
+    {% endcomment %}
+    Served by <strong>{{ service.origin.operator }}</strong> from
+    <code>{{ service.origin.address }}</code>.
+  {% elif service.origin.known %}
+    Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
+    <code>{{ service.origin.address }}</code>.
+    {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
+  {% else %}
+    Ingress forwards to <code>{{ service.origin.address }}</code>, which
+    <strong>no host in the topology claims</strong>.
+  {% endif %}
+</p>
+{% endif %}
 
 <h2>Resources behind this name</h2>
 <div class="table-scroll">

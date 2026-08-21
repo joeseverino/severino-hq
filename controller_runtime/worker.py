@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-from .providers import ProviderError, execute, inventory, preflight
+from .providers import ProviderError, connections, execute, inventory, preflight
 from control_plane.providers import (
     controller_capability_registry,
     enabled_controller_actions,
@@ -105,35 +105,67 @@ def _with_material(resource: dict[str, Any]) -> dict[str, Any]:
     return {**resource, "spec": {**resource["spec"], "material": material}}
 
 
-def _report_inventory(controller_id: str) -> None:
-    """Tell HQ what the providers hold, before doing anything about it.
+def _post(action: str, controller_id: str, payload: Any) -> None:
+    """Tell HQ one thing this controller found, before doing anything about it.
 
-    Best effort on purpose. This is a convenience -- it powers a page that lists
-    what exists and offers to adopt it -- and it must never be the reason an
-    operation the operator actually asked for goes unclaimed. A provider that is
-    down already reports itself unreachable inside ``inventory``; this catch is
-    for the bridge, so a failure to record cannot take out the pass.
+    Best effort on purpose. These are conveniences -- they power the pages that
+    list what exists and what HQ can reach -- and neither must ever be the reason
+    an operation the operator actually asked for goes unclaimed. A provider that
+    is down already reports itself unreachable inside its own sweep; this catch
+    is for the bridge, so a failure to record cannot take out the pass.
     """
 
     try:
         _manage(
-            "inventory",
+            action,
             "--controller-id",
             controller_id,
             "--payload",
-            json.dumps(inventory(), separators=(",", ":")),
+            json.dumps(payload, separators=(",", ":")),
         )
     except (BridgeError, ProviderError, OSError, ValueError) as exc:
         # Swallowed, but not silently: stdout is the run's JSON result and is
         # parsed, so this goes to stderr and lands in the journal. A sweep that
-        # quietly stopped reporting would leave the adoption page looking
+        # quietly stopped reporting would leave the pages it feeds looking
         # settled while going stale, which is the failure worth noticing.
         # The type, not the message -- a provider error can name a host or a
         # path, and this line is the one that gets copied into a paste.
-        print(
-            f"inventory report skipped: {type(exc).__name__}",
-            file=sys.stderr,
-        )
+        print(f"{action} report skipped: {type(exc).__name__}", file=sys.stderr)
+
+
+def _report_findings(controller_id: str) -> None:
+    """Both sweeps, when HQ says one is due.
+
+    Cadence is HQ's to decide, because HQ is where the observations are: it
+    records when each provider was last swept and how stale that may be. This
+    asks and executes, the same split as claim, schedule and report -- so the
+    interval is a setting rather than a timer, and the timer is free to fire as
+    often as applying work needs.
+
+    Connections first: it is the cheaper call and the one that explains the
+    other. An inventory that comes back empty because a token expired reads as
+    "nothing is out there" on its own, and as one broken credential beside a
+    connection sweep that says so.
+    """
+
+    try:
+        verdict = _manage("sweep-due")
+    except BridgeError as exc:
+        # Sweeping anyway. HQ being unreachable is a reason to be careful about
+        # writing, not about looking, and skipping would make one bad bridge
+        # call leave the estate unwatched until the next one succeeds.
+        print(f"sweep policy unavailable: {type(exc).__name__}", file=sys.stderr)
+    else:
+        if not verdict.get("due", True):
+            return
+
+    try:
+        found = connections()
+    except (ProviderError, OSError, ValueError) as exc:
+        print(f"connections sweep skipped: {type(exc).__name__}", file=sys.stderr)
+    else:
+        _post("connections", controller_id, found)
+    _post("inventory", controller_id, inventory())
 
 
 def run_once(controller_id: str, *, apply: bool) -> int:
@@ -144,9 +176,9 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         pending = _manage(*peek_args)
         operation = pending.get("operation")
         plan = None
-        connections: list[dict[str, Any]] = []
+        probed: list[dict[str, Any]] = []
         if operation is not None:
-            connections = preflight()
+            probed = preflight()
             resource = pending["resource"]
             result = execute(resource, operation["action"], apply=False)
             plan = {
@@ -162,14 +194,14 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                     "ok": True,
                     "mode": "plan",
                     "claimed": False,
-                    "connections": connections,
+                    "connections": probed,
                     "plan": plan,
                 }
             )
         )
         return 0
 
-    _report_inventory(controller_id)
+    _report_findings(controller_id)
     _manage("schedule", "--controller-id", controller_id)
     claim_args = ["claim", "--controller-id", controller_id]
     for kind, action in supported_capabilities():

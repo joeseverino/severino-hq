@@ -156,6 +156,7 @@ everything would make the system less honest, not more unified.
 | Authored documentation | Obsidian vault | Validated metadata, relationships, and vault pointers |
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
+| Which connections exist, and what each reaches | 1Password, read by the controller | A timestamped report — never the credential, never a second list |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Infrastructure identities and dependencies | Severino Labs topology | Trusted checksummed snapshot + stable references |

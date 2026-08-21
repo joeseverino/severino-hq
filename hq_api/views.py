@@ -13,6 +13,7 @@ is the failure this prevents.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from django.conf import settings
@@ -236,86 +237,140 @@ def capabilities(request, version: int):
     )
 
 
-@_endpoint(("POST",))
-def execute(request, name: str, version: int):
-    """Run one HQ capability, replaying machine writes by idempotency key."""
+class EnvelopeError(Exception):
+    """A request body that never reaches a capability, and why."""
 
-    if version >= 2 and request.content_type != "application/json":
-        return _fail(
+    def __init__(self, message: str, *, code: str = "invalid_input", status: int = 400):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+        self.status = status
+
+
+@dataclass(frozen=True)
+class Envelope:
+    """The three things a capability call arrives wrapped in."""
+
+    command: dict[str, Any]
+    target: str | int | None
+    expected_updated_at: str | None
+
+
+@dataclass(frozen=True)
+class Dialect:
+    """How one API version reads a request body.
+
+    There is one axis here, not seven. v2 checks the envelope -- media type,
+    JSON strictness, unknown fields, field types, a retry key on every write --
+    and v1 checks none of it. Stating that once, as data, is the difference
+    between adding v3 and auditing a function for every place a version number
+    was compared.
+
+    v1 is frozen rather than improved: a Shortcut written against it six months
+    ago still works, which is the whole reason the version sits in the path.
+    """
+
+    strict: bool
+
+
+DIALECTS = {1: Dialect(strict=False), 2: Dialect(strict=True)}
+
+ENVELOPE_FIELDS = frozenset({"payload", "target", "expected_updated_at"})
+
+
+def _body_json(request, dialect: Dialect) -> dict[str, Any]:
+    """The request body as a JSON object, or an EnvelopeError saying why not."""
+
+    if dialect.strict and request.content_type != "application/json":
+        raise EnvelopeError(
             "Content-Type must be application/json.",
             code="unsupported_media_type",
             status=415,
         )
-
     try:
         body = request.body
     except RequestDataTooBig:
-        return _fail(
+        raise EnvelopeError(
             "Request body exceeds this deployment's safety limit.",
             code="request_too_large",
             status=413,
-        )
-
+        ) from None
     if not body:
-        payload: dict[str, Any] = {}
-    else:
-        try:
-            if version >= 2:
-                payload = json.loads(
-                    body,
-                    parse_constant=_reject_json_constant,
-                    object_pairs_hook=_strict_json_object,
-                )
-            else:
-                payload = json.loads(body)
-        except (ValueError, UnicodeDecodeError):
-            return _fail(
-                "Request body is not valid JSON.", code="invalid_json", status=400
+        return {}
+    try:
+        if dialect.strict:
+            payload = json.loads(
+                body,
+                parse_constant=_reject_json_constant,
+                object_pairs_hook=_strict_json_object,
             )
+        else:
+            payload = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        raise EnvelopeError(
+            "Request body is not valid JSON.", code="invalid_json"
+        ) from None
     if not isinstance(payload, dict):
-        return _fail(
-            "Request body must be a JSON object.", code="invalid_json", status=400
+        raise EnvelopeError(
+            "Request body must be a JSON object.", code="invalid_json"
         )
+    return payload
 
-    unknown = payload.keys() - {"payload", "target", "expected_updated_at"}
-    if version >= 2 and unknown:
-        return _fail(
-            f"Unknown request fields: {', '.join(sorted(unknown))}.",
-            code="invalid_input",
-            status=400,
-        )
 
-    command = payload.get("payload", {}) if version >= 2 else payload.get("payload") or {}
+def _parse_envelope(request, dialect: Dialect) -> tuple[dict[str, Any], Envelope]:
+    """Validate the wrapper so the capability only ever sees a real command.
+
+    Returns the raw body alongside the parsed envelope because the idempotency
+    fingerprint is taken over what was actually sent, not over what survived
+    interpretation -- two different bodies that normalise to the same command
+    are still two different requests.
+    """
+
+    payload = _body_json(request, dialect)
+
+    if dialect.strict:
+        unknown = payload.keys() - ENVELOPE_FIELDS
+        if unknown:
+            raise EnvelopeError(
+                f"Unknown request fields: {', '.join(sorted(unknown))}."
+            )
+
+    command = payload.get("payload", {}) if dialect.strict else payload.get("payload") or {}
     if not isinstance(command, dict):
-        return _fail(
-            "payload must be a JSON object.", code="invalid_input", status=400
-        )
+        raise EnvelopeError("payload must be a JSON object.")
+
     target = payload.get("target")
-    if version >= 2 and target is not None and (
-        isinstance(target, bool) or not isinstance(target, (str, int))
-    ):
-        return _fail(
-            "target must be a string or integer.", code="invalid_input", status=400
-        )
     expected_updated_at = payload.get("expected_updated_at")
-    if (
-        version >= 2
-        and expected_updated_at is not None
-        and not isinstance(expected_updated_at, str)
-    ):
-        return _fail(
-            "expected_updated_at must be a string.",
-            code="invalid_input",
-            status=400,
-        )
+    if dialect.strict:
+        # bool before (str, int): in Python a bool *is* an int, and a target of
+        # ``true`` is a client bug worth naming rather than a record id of 1.
+        if target is not None and (
+            isinstance(target, bool) or not isinstance(target, (str, int))
+        ):
+            raise EnvelopeError("target must be a string or integer.")
+        if expected_updated_at is not None and not isinstance(expected_updated_at, str):
+            raise EnvelopeError("expected_updated_at must be a string.")
+
+    return payload, Envelope(command, target, expected_updated_at)
+
+
+@_endpoint(("POST",))
+def execute(request, name: str, version: int):
+    """Run one HQ capability, replaying machine writes by idempotency key."""
+
+    dialect = DIALECTS.get(version, DIALECTS[CURRENT_API_VERSION])
+    try:
+        payload, envelope = _parse_envelope(request, dialect)
+    except EnvelopeError as exc:
+        return _fail(exc.message, code=exc.code, status=exc.status)
 
     def run() -> tuple[dict[str, Any], int]:
         result = execute_capability(
             name,
-            command,
+            envelope.command,
             principal=request.principal,
-            target=target,
-            expected_updated_at=expected_updated_at,
+            target=envelope.target,
+            expected_updated_at=envelope.expected_updated_at,
         )
         if result.get("ok", False):
             return (
@@ -351,7 +406,7 @@ def execute(request, name: str, version: int):
         return _fail(exc.reason, code=exc.code, status=403)
 
     key = request.headers.get("Idempotency-Key", "")
-    if version >= 2 and not key:
+    if dialect.strict and not key:
         return _fail(
             "Idempotency-Key is required for capabilities that change state.",
             code="idempotency_key_required",

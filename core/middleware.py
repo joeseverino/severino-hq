@@ -18,6 +18,8 @@ from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
+from application.cadence import note_activity
+
 import core.logging as request_logging
 
 
@@ -34,6 +36,10 @@ class RequestContextMiddleware:
     def __call__(self, request):
         request_id = uuid4().hex
         request.request_id = request_id
+        # How often the controller sweeps depends on whether anybody is here.
+        # A stat on most requests and a small write on the first of each
+        # interval; see `application.cadence`.
+        note_activity()
         token = request_logging.set_request_id(request_id)
         started = monotonic()
         try:

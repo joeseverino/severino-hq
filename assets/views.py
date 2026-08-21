@@ -1,7 +1,5 @@
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -12,9 +10,13 @@ from django.views.generic import (
 )
 
 from application.assets import asset_command_from_cleaned_data, save_asset
-from application.deletion import DeleteCommand, delete_asset
-from application.security import web_principal
+from application.deletion import delete_asset
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.writes import (
+    ServiceCreateMixin,
+    ServiceDeleteMixin,
+    ServiceUpdateMixin,
+)
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
@@ -89,53 +91,36 @@ class AssetDetailView(LoginRequiredMixin, DetailView):
     )
 
 
-class AssetCreateView(LoginRequiredMixin, CreateView):
+class AssetWrite:
+    """What every asset write shares, whichever direction it goes."""
+
     model = Asset
+    noun = "Asset"
+    result_key = "asset"
+    identity_attr = "slug"
+    identity_kwarg = "current_slug"
+
+
+class AssetCreateView(AssetWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView):
     form_class = AssetForm
     template_name = "assets/asset_form.html"
-
-    def form_valid(self, form):
-        result = save_asset(
-            asset_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-        )
-        self.object = Asset.objects.get(slug=result["asset"]["slug"])
-        messages.success(self.request, f"Asset “{self.object}” created.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_asset)
+    command_from_cleaned_data = staticmethod(asset_command_from_cleaned_data)
 
 
-class AssetUpdateView(LoginRequiredMixin, UpdateView):
-    model = Asset
+class AssetUpdateView(AssetWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
     form_class = AssetForm
     template_name = "assets/asset_form.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
-
-    def form_valid(self, form):
-        result = save_asset(
-            asset_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-            current_slug=self.get_object().slug,
-        )
-        self.object = Asset.objects.get(slug=result["asset"]["slug"])
-        messages.success(self.request, f"Asset “{self.object}” updated.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_asset)
+    command_from_cleaned_data = staticmethod(asset_command_from_cleaned_data)
 
 
-class AssetDeleteView(LoginRequiredMixin, DeleteView):
-    model = Asset
+class AssetDeleteView(AssetWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
     template_name = "assets/asset_confirm_delete.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
     success_url = reverse_lazy("assets:list")
     context_object_name = "asset"
-
-    def form_valid(self, form):
-        slug = self.get_object().slug
-        result = delete_asset(
-            DeleteCommand(confirm=slug),
-            principal=web_principal(self.request.user),
-            current_slug=slug,
-        )
-        messages.success(self.request, f"Asset “{result['deleted']['label']}” deleted.")
-        return redirect(self.success_url)
+    service = staticmethod(delete_asset)

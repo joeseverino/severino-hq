@@ -461,9 +461,18 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    on a `space-between` line starts at the beginning of it. Pushed right with
    `auto` instead, a URL or a list of eight names wrapped *and* stayed
    right-aligned, leaving a ragged column and a hole under the label. */
+/* `align-content: flex-start` so a card's rows sit at the top whatever height
+   the card ends up. Cards share a height with the tallest in the row, and left
+   to stretch the spare space was distributed between the rows -- a two-line
+   card beside an expanded one rendered with its value floating in the middle
+   of nothing. */
 .control-metric { display: flex; flex-wrap: wrap; align-items: baseline;
-  justify-content: space-between; gap: 5px 12px; }
-.control-metric > .control-label { flex: 0 1 auto; }
+  align-content: flex-start; justify-content: space-between; gap: 5px 12px; }
+/* A fixed line box, so the label sits at the same height whether its headline
+   shares the line or wraps below. Left to the 11px font's own leading, a card
+   whose value was too long to share the row -- "CNAME name.pages.dev" -- put its
+   label three pixels above the three beside it. */
+.control-metric > .control-label { flex: 0 1 auto; line-height: 20px; }
 .control-metric > strong { text-align: left; }
 .control-metric > *:not(.control-label):not(strong) { flex: 1 1 100%; }
 /* Smaller than it was: at 18px a value like "CNAME name.pages.dev" could not
@@ -480,7 +489,7 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .readout-label { color: var(--ink-2); font-weight: 600; }
 /* Inside a table, a readout keeps its line. `.table-scroll td` breaks words so
    a long cell wraps rather than widening the page -- right for prose, wrong for
-   an address: on a phone "192.168.1.233" became a column one digit wide and
+   an address: on a phone a dotted-quad IP became a column one digit wide and
    thirteen lines tall. The wrapper already scrolls, so the honest answer is to
    let the row be as wide as it is and let the reader swipe. */
 td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
@@ -730,9 +739,36 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .control-unknown { color: var(--muted); }
 .kv.compact { margin-bottom: 0; }
 .compact-table { box-shadow: none; }
+/* The origin reads under the facet row rather than as a fifth card in it:
+   four is what a name needs to answer, and a fifth wrapped the row. */
+.control-origin { margin: -6px 0 22px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.control-origin strong { color: var(--ink); font-weight: 600; }
+
+/* The row of things you can do to an observed container. Buttons are each in
+   their own form because each is a different POST, and a wrapping flex row is
+   what keeps them reading as one set rather than three stacked submissions. */
+/* A button whose mark and word read as one thing. `1em` so the icon is the
+   height of the text beside it, and `currentColor` so it inherits the button's
+   state rather than needing a second rule per variant. */
+.icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+.icon { width: 1em; height: 1em; flex: none; }
+/* Each control is its own POST, so each is its own form. Without this the page
+   actions row treated three forms as three blocks and stacked them. */
+.page-actions form { margin: 0; display: inline-flex; }
+
 .control-diagnostics { margin: 22px 0; }
 .control-diagnostics > summary { color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; }
 .control-diagnostics[open] > summary { margin-bottom: 12px; }
+/* Inside a metric card the disclosure is one more row, not a section. */
+.control-metric > .control-diagnostics { margin: 4px 0 0; }
+/* Stacked, not two columns. A metric card is 220px at its narrowest and the
+   shared definition list reserves 200px for the term alone, so every value in
+   it rendered outside the card it was supposed to be inside. */
+.control-metric .kv { grid-template-columns: 1fr; gap: 2px 0; padding: 10px 12px; }
+.control-metric .kv dt { margin-top: 8px; font-size: 12px; }
+.control-metric .kv dt:first-of-type { margin-top: 0; }
+.control-metric .kv dd { overflow-wrap: anywhere; }
+.control-metric > .control-diagnostics[open] > summary { margin-bottom: 6px; }
 .operation-result { max-width: 34rem; overflow-wrap: anywhere; }
 .operation-result > strong { display: block; line-height: 1.35; }
 .operation-guidance { margin: 5px 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
@@ -964,6 +1000,12 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 .pill-read { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
 .pill-replied { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
 .pill-spam { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
+/* A connection that was not asked is not a connection that failed, so unprobed
+   is neutral rather than the warning colour it would read as if it shared one
+   with unreachable. */
+.pill-reachable { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
+.pill-unreachable { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
+.pill-unprobed { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
 
 /* ── Contact submissions ────────────────────────────────────────── */
 

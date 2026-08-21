@@ -44,6 +44,19 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def env_int(name: str, default: int) -> int:
+    """A whole number from the environment, or the default when it is not one.
+
+    Refusing to start over a malformed cadence value would take HQ down to
+    protect a polling interval. The default is always a working answer.
+    """
+
+    try:
+        return int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
 def env_list(name: str, default: list[str] | None = None) -> list[str]:
     raw = os.environ.get(name, "")
     items = [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
@@ -285,6 +298,10 @@ DATABASES = {
     }
 }
 
+# Django's own runner, plus a WAL checkpoint before it clones the test database
+# for parallel workers. See core/test_runner.py for why that is necessary.
+TEST_RUNNER = "core.test_runner.SeverinoTestRunner"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
@@ -424,6 +441,40 @@ SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", 
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
     "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
 )
+
+
+# ----- Controller cadence ------------------------------------------------------
+#
+# Applying queued work and sweeping what the providers hold run on different
+# clocks. The first happens when the doorbell rings; the second is due when HQ
+# says it is, and HQ says so less often when nobody is looking. See
+# `application/cadence.py`.
+
+# How stale the estate may look while somebody is using HQ. This is the number
+# that decides whether the board is worth trusting at a glance.
+SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = env_int(
+    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 60
+)
+# And while nobody is. Every sweep costs a call to each provider, and nothing
+# reads the answer until somebody opens a page.
+SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = env_int(
+    "SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60
+)
+# How long after a request HQ still counts as in use. Long enough to cover
+# reading a page and acting on it without the tab being open throughout.
+SEVERINO_ACTIVE_WINDOW_SECONDS = env_int("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
+# How often the in-use marker is rewritten. Every request checks it; only the
+# first in each interval writes.
+SEVERINO_ACTIVITY_THROTTLE_SECONDS = env_int("SEVERINO_ACTIVITY_THROTTLE_SECONDS", 60)
+# Where HQ leaves each marker. The doorbell has to be somewhere the host can
+# watch; the in-use marker is read only by HQ and defaults beside the database.
+SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
+SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
+
+# Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
+# status page is a fact about that deployment; the consoles HQ can reach are
+# derived from the connections a controller reported and need no entry here.
+SEVERINO_DASHBOARD_LINKS = os.environ.get("SEVERINO_DASHBOARD_LINKS", "")
 
 
 # ----- I18N --------------------------------------------------------------------

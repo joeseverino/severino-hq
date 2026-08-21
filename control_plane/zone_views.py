@@ -22,7 +22,9 @@ from application.infrastructure import NotFoundError, PolicyError
 from application.inventory import AdoptCommand, adopt, inventory_state
 from application.security import web_principal
 
-from .views import _readable_error, safe_next
+from application.security import safe_next
+
+from .views import _readable_error
 from application.pins import DOMAIN, pinned, toggle
 from application.mail_policy import (
     DMARC_TAGS,

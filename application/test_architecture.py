@@ -204,6 +204,15 @@ class StyleContractTests(SimpleTestCase):
         # short stand-ins, and failing on those would teach people to weaken
         # the check rather than fix a leak.
         host_key = re.compile(r"ssh-(?:ed25519|rsa) AAAA[A-Za-z0-9+/]{32,}")
+        # A hostname under the deployment's own private zone. Not secret --
+        # nothing outside the network resolves it -- but it names one
+        # installation's topology, and a public repository holds the shape
+        # rather than the deployment. `example` and `invalid` are reserved for
+        # writing about hostnames, which is what a fixture is doing.
+        private_host = re.compile(
+            r"\b[a-z0-9-]+\.(?!example\b|invalid\b|test\b|localhost\b)"
+            r"(?:homelab|lan|internal|local)\b"
+        )
         # Lockfiles and pinned action SHAs are hashes, not hosts.
         skip = ("package-lock.json", "requirements.txt", ".github/")
 
@@ -226,6 +235,8 @@ class StyleContractTests(SimpleTestCase):
                     findings.append(f"{name}: {candidate}")
             if host_key.search(text):
                 findings.append(f"{name}: ssh host key")
+            for candidate in sorted(set(private_host.findall(text))):
+                findings.append(f"{name}: {candidate}")
 
         self.assertEqual(findings, [], f"reachable endpoints in tracked files: {findings}")
 

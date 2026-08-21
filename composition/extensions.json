@@ -1,8 +1,10 @@
 {
   "$comment": [
-    "Shape documentation only. The live set is supplied by the",
-    "COMPOSITION_EXTENSIONS repository variable, because this repository is",
-    "public and the extensions it composes are not.",
+    "Shape documentation only. The live set is supplied at composition time by",
+    "the COMPOSITION_EXTENSIONS repository variable, so the host builds and runs",
+    "identically with a different set or with none, and adding an extension",
+    "never edits the host. A list committed here would make this file the thing",
+    "that has to change, which is the coupling the variable exists to avoid.",
     "",
     "'repository' and 'workflow' are the trust declaration: the host verifies",
     "each signature against the identity built from them, so an extension cannot",

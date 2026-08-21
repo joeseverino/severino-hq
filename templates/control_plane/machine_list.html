@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Machines · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Machines" lede="Everything HQ can reach or has seen something running on, and what is on each." %}
+
+{% comment %}
+No add button. A machine is here because something reported it — a credential
+that reaches it, a container running on it, a service served from it. Entering
+one by hand would create a row that means nothing until one of those is true
+anyway, and would go on meaning nothing after it stopped being.
+{% endcomment %}
+
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Machine</th>
+        <th>Reached through</th>
+        <th>Containers</th>
+        <th>Serves</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for machine in machines %}
+        <tr>
+          <td>
+            <a href="{{ machine.url }}"><strong>{{ machine.name }}</strong></a>
+            {% if machine.role %}<br><span class="muted">{{ machine.role }}</span>{% endif %}
+          </td>
+          <td>
+            {% for ref in machine.reached_by %}<code>{{ ref }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td>
+            {% if machine.containers %}
+              {{ machine.running }} of {{ machine.containers|length }} running
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for hostname in machine.hostnames %}<a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td>
+            {% if machine.reached_by %}
+              <span class="pill pill-{% if machine.reachable %}reachable{% else %}unreachable{% endif %}">{% if machine.reachable %}reachable{% else %}unreachable{% endif %}</span>
+            {% else %}
+              {% comment %}
+              Seen, never reached. Something reported this machine's name and no
+              credential opens it — which is a different thing from being down,
+              and the only one of the two HQ can honestly report.
+              {% endcomment %}
+              <span class="pill pill-unprobed">no credential</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">{% include "partials/_empty_state.html" with compact=True message="No controller has reported yet. Machines appear here after the first sweep — nothing is entered by hand." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

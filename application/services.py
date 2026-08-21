@@ -33,23 +33,30 @@ earlier sketch of this:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
 from django.urls import reverse
 
-from control_plane.models import ManagedResource, TopologySnapshot
+from control_plane.models import (
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+    TopologySnapshot,
+)
 from control_plane.providers import (
     PROVIDERS,
-    SERVICE_FACETS,
+    NameContext,
     certificate_covers,
+    service_facets,
     names_a_host,
     normalized_hostname,
 )
 from projects.models import Project
 
 from .infrastructure import NotFoundError, resolved_spec, resource_health
+from .naming import name_context
 from .ui import ListRow
 
 
@@ -132,6 +139,15 @@ class Facet:
     id: str
     label: str
     claims: tuple[Claim, ...] = ()
+    # What HQ can see supplying this that no declaration accounts for. A facet
+    # has three states, not two: declared, found, and absent. Collapsing the
+    # middle one into absent reports a running service as missing, and offers to
+    # build a second of what is already there.
+    observed: "Running | None" = None
+    # What HQ knows about this name. Held so ``declarable`` can ask each
+    # provider whether it could actually supply it -- an offer that cannot work
+    # is worse than no offer, and only the provider knows which is which.
+    context: NameContext = field(default_factory=NameContext)
 
     @property
     def present(self) -> bool:
@@ -165,9 +181,39 @@ class Facet:
                 # record" and shouted at nobody about the acronym.
                 (kind, _lower_first(provider.label or kind))
                 for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id and provider.seed is not None
+                if provider.facet == self.id
+                and provider.seed is not None
+                and not self._refused(provider)
             )
         )
+
+    @property
+    def unavailable(self) -> tuple[tuple[str, str], ...]:
+        """``(label, reason)`` for providers this name rules out.
+
+        Said rather than silently dropped. A `.homelab` service losing its
+        Let's Encrypt option without explanation looks like a missing feature,
+        and the sentence is what turns it into an answer -- it names the
+        alternative that does work.
+        """
+
+        return tuple(
+            sorted(
+                (provider.label or kind, refused)
+                for kind, provider in PROVIDERS.items()
+                if provider.facet == self.id
+                and provider.seed is not None
+                and (refused := self._refused(provider))
+            )
+        )
+
+    def _refused(self, provider) -> str:
+        if provider.applies is None:
+            return ""
+        try:
+            return provider.applies(self.context)
+        except (KeyError, TypeError, ValueError):
+            return ""
 
     @property
     def routes(self) -> bool:
@@ -202,6 +248,115 @@ class Facet:
         if "degraded" in states:
             return "serious"
         return "attention" if states - {"healthy"} else "good"
+
+
+@dataclass(frozen=True)
+class Running:
+    """A container a controller last saw, described as a person would read it.
+
+    Built from the sweep rather than from a declaration, so every field here is
+    something that was true at ``observed_at`` and may not be now. The page says
+    when, because a container list with no timestamp invites being read as live.
+    """
+
+    name: str
+    host: str
+    stack: str
+    image: str
+    state: str
+    status: str
+    ports: tuple[int, ...]
+    network_mode: str
+    host_address: str
+    portainer_managed: bool
+    connection_ref: str
+    observed_at: Any
+    # The declaration already watching this, when one is. A field rather than a
+    # lookup, because a page renders a table of these and a property would be a
+    # query per row -- and every row asks the same question of the same table.
+    watcher: str = ""
+
+    @classmethod
+    def of(
+        cls,
+        record: dict[str, Any],
+        observed_at: Any,
+        watchers: dict[tuple[str, str], str] | None = None,
+    ) -> "Running":
+        host = str(record.get("host", ""))
+        name = str(record.get("name", ""))
+        return cls(
+            name=name,
+            host=host,
+            stack=str(record.get("stack", "")),
+            image=str(record.get("image", "")),
+            state=str(record.get("state", "")),
+            status=str(record.get("status", "")),
+            ports=tuple(
+                int(port) for port in record.get("ports") or () if str(port).isdigit()
+            ),
+            network_mode=str(record.get("network_mode", "")),
+            host_address=str(record.get("host_address", "")),
+            portainer_managed=bool(record.get("portainer_managed")),
+            connection_ref=str(record.get("connection_ref", "")),
+            observed_at=observed_at,
+            watcher=(watchers or {}).get((host, name), ""),
+        )
+
+    @property
+    def healthy(self) -> bool:
+        return self.state == "running"
+
+    @property
+    def published(self) -> str:
+        """The ports this publishes, or why that cannot be answered.
+
+        A host-network container binds the machine's ports directly and Docker
+        reports none for it, so an empty list means "not knowable from here"
+        rather than "publishes nothing".
+        """
+
+        if self.ports:
+            return ", ".join(str(port) for port in self.ports)
+        if self.network_mode == "host":
+            return "on the host network"
+        return ""
+
+    @property
+    def token(self) -> str:
+        """The handle adoption looks this record up by."""
+
+        from .inventory import record_token
+
+        return record_token(CONTAINER_KIND, (self.host, self.name))
+
+    @property
+    def verbs(self) -> tuple[str, ...]:
+        """What it makes sense to ask of a container in this state.
+
+        Offering all three always means offering Start to something already
+        running, whose only outcome is Docker answering "already started" a
+        minute later in a job result. The state is right here; the buttons
+        should read it.
+        """
+
+        return ("stop", "restart") if self.healthy else ("start",)
+
+    @property
+    def image_label(self) -> str:
+        """The image, short enough to read in a card.
+
+        A digest-pinned image is a seventy-character line whose last twelve
+        characters are the only part that distinguishes two of them, and printed
+        whole it pushed every other fact on the card out of view. The repository
+        and the head of the digest is what an operator compares.
+        """
+
+        repository, marker, digest = self.image.partition("@")
+        if not marker:
+            return self.image
+        _, _, hexadecimal = digest.partition(":")
+        return f"{repository}@{hexadecimal[:12]}"
 
 
 @dataclass(frozen=True)
@@ -253,6 +408,25 @@ class Origin:
             return f"{self.host} · {self.container}"
         return self.host or self.address
 
+    @property
+    def headline(self) -> str:
+        """What to call whatever serves this, in one phrase.
+
+        Here rather than in a template, because there are two templates and one
+        fact. Phrased in each, they drift, and the board and the page disagree
+        about the same origin.
+        """
+
+        if self.external:
+            return self.operator or self.address
+        return self.label
+
+    @property
+    def qualifier(self) -> str:
+        """The caveat, when the headline needs one."""
+
+        return "" if self.external or self.known else "unknown host"
+
 
 @dataclass(frozen=True)
 class Service:
@@ -289,6 +463,63 @@ class Service:
     @property
     def claims(self) -> tuple[Claim, ...]:
         return tuple(claim for facet in self.facets for claim in facet.claims)
+
+    @property
+    def container(self) -> "Running | None":
+        """The one container this service was found running in, if any.
+
+        Held on the service rather than dug out of a facet by the template,
+        because the page acts on it in a different place from where it reports
+        it -- the controls belong beside the page's other actions, not inside a
+        card that is describing something.
+        """
+
+        return next(
+            (facet.observed for facet in self.facets if facet.observed), None
+        )
+
+    @property
+    def zone_key(self) -> str:
+        """The domain HQ manages that this name lives in, if it manages one.
+
+        A service and a domain are different pages about overlapping things --
+        one is a hostname and everything that has to be true for it to answer,
+        the other is a zone and every record published in it. jseverino.com is
+        both, and neither page had a way to reach the other.
+
+        Matched through the provider that says it contains records, so the tie
+        is the one the registry already declares rather than a second opinion
+        about what a domain is.
+        """
+
+        for resource in ManagedResource.objects.filter(enabled=True):
+            provider = PROVIDERS.get(resource.kind)
+            if provider is None or not provider.contains:
+                continue
+            zone = str(resource.spec.get("zone", "")).strip().lower().rstrip(".")
+            if zone and (self.hostname == zone or self.hostname.endswith(f".{zone}")):
+                return zone
+        return ""
+
+    @property
+    def origin_is_news(self) -> bool:
+        """Whether saying where this is served adds anything to the cards.
+
+        It usually does not. Once a facet names the container and another prints
+        the address it forwards to, a sentence repeating both is a third copy of
+        one fact.
+
+        It earns its place twice: when something outside answers the name, which
+        no facet can report, and when the address belongs to no machine HQ
+        knows, which is the one thing here worth interrupting for.
+        """
+
+        if self.origin is None:
+            return False
+        if self.origin.external or not self.origin.known:
+            return True
+        # Nothing identified what is running, so the note carries the caveat.
+        return not any(facet.observed for facet in self.facets)
 
     @property
     def declared_claims(self) -> tuple[Claim, ...]:
@@ -556,6 +787,8 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
 ) -> Service:
+    origin = _locate(origin_address, topology) if origin_address else None
+    context = name_context(hostname)
     facets = tuple(
         Facet(
             id=facet_id,
@@ -567,10 +800,11 @@ def _assemble(
                 if covered_facet == facet_id
                 and certificate_covers(hostname, names)
             ),
+            observed=_observed(facet_id, origin),
+            context=context,
         )
-        for facet_id, label in SERVICE_FACETS
+        for facet_id, label in service_facets()
     )
-    origin = _locate(origin_address, topology) if origin_address else None
     return Service(
         hostname=hostname,
         facets=facets,
@@ -580,6 +814,52 @@ def _assemble(
         project=projects.get(hostname),
         faults=_faults(facets, origin),
     )
+
+
+# The provider whose inventory records are containers. Named once, here, because
+# the runtime card is the one surface that has to know which sweep to read; every
+# other reference to it in this module goes through this.
+CONTAINER_KIND = "portainer.container"
+
+
+def container_watchers() -> dict[tuple[str, str], str]:
+    """Which declaration watches which container, in one query.
+
+    Keyed on the identity the provider uses, so a container declared in HQ and
+    the same container found by a sweep are recognised as one thing.
+    """
+
+    return {
+        (resource.spec.get("host", ""), resource.spec.get("name", "")): resource.key
+        for resource in ManagedResource.objects.filter(
+            kind=CONTAINER_KIND, enabled=True
+        )
+    }
+
+
+def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
+    """What HQ found supplying this facet without having been told.
+
+    Only the runtime facet can answer today, and only because the origin has
+    already done the work: a proxy forwards to an address and a port, and the
+    container inventory says which container on that machine is listening. Both
+    facts existed and nothing joined them, so the page asked to declare
+    something it could already name.
+
+    Never a Claim. HQ does not manage this, cannot reconcile it, and a card that
+    blurred the two would offer an Edit link that edits nothing.
+    """
+
+    if facet_id != "runtime" or origin is None or not origin.container:
+        return None
+    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+        for record in snapshot.records:
+            if (
+                record.get("host") == origin.host
+                and record.get("name") == origin.container
+            ):
+                return Running.of(record, snapshot.observed_at, container_watchers())
+    return None
 
 
 def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]:
@@ -608,12 +888,16 @@ def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]
             )
 
     # These two rules are statements about particular facets, so they name them.
-    # Indexing rather than getting is safe because ``_assemble`` builds a Facet
-    # for every entry in SERVICE_FACETS whether or not anything supplies it -- a
-    # missing key here would mean the facet had been removed from the vocabulary
-    # entirely, at which point failing loudly is the correct outcome.
-    serves = by_id["proxy"].present
-    if serves and not by_id["certificate"].present:
+    # A facet no provider supplies is not assembled, so a rule about it simply
+    # does not apply -- which is the right answer for a question HQ cannot ask
+    # rather than a fault to report.
+    proxy = by_id.get("proxy")
+    certificate = by_id.get("certificate")
+    if proxy is None or certificate is None:
+        return tuple(faults)
+
+    serves = proxy.present
+    if serves and not certificate.present:
         faults.append(
             "Something answers for this name but no declared certificate covers "
             "it, so HQ cannot show it is served over TLS."
@@ -649,15 +933,24 @@ def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
 
 
 def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
-    """Match a forwarding address to a topology host, and if certain, a container.
+    """Match a forwarding address to a machine, and if certain, a container.
 
-    The container is named only when exactly one on that host claims the port. A
-    topology records ports as prose -- "80, 443, 81" -- so taking the first match
-    is a guess, and a guess printed beside four facts reads as a fifth fact.
-    Silence is the honest answer when two containers could both be it.
+    The topology maps an address to a machine; the container inventory says what
+    is listening on it. Two sources because they answer different questions, and
+    only one of them is observed: which machine an IP is has to be authored,
+    while what is running on it is a fact a sweep can go and get.
+
+    The container is named only when exactly one claims the port. Ambiguity is
+    reported as silence -- a guess printed beside four facts reads as a fifth.
     """
 
-    host_address, _, port = address.rpartition(":")
+    # An address with no port is all host. `rpartition` puts the whole string
+    # in its last element when the separator is absent, so splitting blind left
+    # the host empty and every portless origin unmatchable -- a DNS answer
+    # naming a machine HQ knows read as somewhere it had never heard of.
+    host_address, separator, port = address.rpartition(":")
+    if not separator:
+        host_address, port = address, ""
     for host in (topology or {}).get("hosts", ()):
         known = {
             host.get("id"),
@@ -667,20 +960,72 @@ def _locate(address: str, topology: dict[str, Any] | None) -> Origin:
         }
         if host_address not in known:
             continue
-        claimed = [
-            container.get("id", "")
-            for container in host.get("containers", ())
-            if port
-            and re.search(
-                rf"(?<!\d){re.escape(port)}(?!\d)", str(container.get("ports", ""))
-            )
-        ]
+        host_id = host.get("id", "")
+        claimed = _listening(host_id, port)
+        if not claimed:
+            # Nothing has swept this machine, so fall back to what the topology
+            # says is on it. Ports there are prose -- "80, 443, 81" -- which is
+            # why this is the fallback and not the answer.
+            claimed = [
+                container.get("id", "")
+                for container in host.get("containers", ())
+                if port
+                and re.search(
+                    rf"(?<!\d){re.escape(port)}(?!\d)",
+                    str(container.get("ports", "")),
+                )
+            ]
         return Origin(
             address=address,
-            host=host.get("id", ""),
+            host=host_id,
             container=claimed[0] if len(claimed) == 1 else "",
         )
-    return Origin(address=address)
+    return Origin(address=address, host=_connected_machine(host_address))
+
+
+def _connected_machine(address: str) -> str:
+    """A machine HQ holds a credential for, matched by where that credential points.
+
+    The topology is not the only thing that names machines. A proxy forwarding
+    to the cPanel host read as "unknown host" while the connections page listed
+    that exact address under a name -- HQ knowing the machine well enough to log
+    into it, and not well enough to say what it was called.
+    """
+
+    if not address:
+        return ""
+    for connection in ProviderConnection.objects.all():
+        endpoint = connection.endpoint
+        if not endpoint:
+            continue
+        if "://" in endpoint:
+            endpoint = urlparse(endpoint).hostname or ""
+        else:
+            endpoint = endpoint.rpartition(":")[0] or endpoint
+        if endpoint == address:
+            return connection.connection_ref
+    return ""
+
+
+def _listening(host: str, port: str) -> list[str]:
+    """Containers a controller last saw publishing one port on one machine.
+
+    Structured ports, so "8081" cannot match "18081" and a container publishing
+    three ports is found by any of them -- neither of which a regular expression
+    over prose can promise.
+    """
+
+    if not host or not port.isdigit():
+        return []
+    wanted = int(port)
+    return sorted(
+        str(record.get("name", ""))
+        for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND)
+        for record in snapshot.records
+        if record.get("host") == host
+        and wanted in (record.get("ports") or [])
+        and record.get("name")
+    )
 
 
 def _published_projects() -> dict[str, dict[str, str]]:
@@ -769,3 +1114,40 @@ def get_service(hostname: str) -> dict[str, Any]:
     if found is None:
         raise NotFoundError(f"No service is declared for {hostname!r}.")
     return {"service": serialize_service(found)}
+
+
+def public_sites() -> tuple[tuple[str, str, str], ...]:
+    """Names HQ publishes to the internet, as (label, sub, url).
+
+    A dashboard link to a site is the site HQ already declares a public record
+    for, so the list is whatever HQ is currently publishing rather than what it
+    was publishing when somebody last edited a template.
+
+    Read through the providers that say their effect is public, and through
+    their own ``hostnames`` hook -- which returns nothing for the record types
+    that carry policy, so a DMARC entry never arrives here looking like a site.
+    """
+
+    projects = _published_projects()
+    found: dict[str, str] = {}
+    for resource in ManagedResource.objects.filter(enabled=True):
+        provider = PROVIDERS.get(resource.kind)
+        if provider is None or not provider.public_effect:
+            continue
+        if provider.hostnames is None:
+            continue
+        try:
+            names = tuple(provider.hostnames(resource.spec))
+        except (KeyError, TypeError, ValueError):
+            continue
+        for name in names:
+            hostname = _normalise(name)
+            # A wildcard is a rule about names, not a name anything answers at.
+            if hostname and names_a_host(hostname) and "*" not in hostname:
+                found.setdefault(
+                    hostname, projects.get(hostname, {}).get("name", "")
+                )
+    return tuple(
+        (hostname, sub, f"https://{hostname}")
+        for hostname, sub in sorted(found.items())
+    )

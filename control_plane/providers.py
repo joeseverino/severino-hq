@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -50,7 +51,6 @@ class ControllerProviderCapability(ProviderModel):
 
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
-    controller_id: str = Field(min_length=1, max_length=160)
     capabilities: dict[str, ControllerProviderCapability]
 
 
@@ -243,12 +243,115 @@ def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
 # because a provider names the facet it supplies. A provider added later joins
 # the service view by declaring one, and nothing else holds a list of what can
 # participate.
+# The order columns are rendered in, and the order a name is wired in: something
+# has to run before ingress can reach it, and ingress before a certificate
+# secures it.
 SERVICE_FACETS: tuple[tuple[str, str], ...] = (
+    ("runtime", "Runtime"),
     ("dns", "DNS"),
     ("proxy", "Ingress"),
     ("certificate", "Certificate"),
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
+
+
+def service_facets() -> tuple[tuple[str, str], ...]:
+    """The facets to render, in catalogue order.
+
+    A facet nothing supplies is a gap in HQ, not in the service, and a column
+    with nothing in it tells the operator to go fix something they cannot. So a
+    facet may be declared ahead of the provider that fills it and stays
+    invisible until that provider is registered.
+    """
+
+    supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+    return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
+
+
+class PortainerContainerSpec(ProviderModel):
+    """One container HQ is responsible for keeping up, not for defining.
+
+    Deliberately identity and nothing else. A container's definition lives in
+    whatever compose file created it, which HQ has never seen and must not
+    pretend to own -- declaring one here says "this is mine to watch and to
+    cycle", and reconciliation is locked because there is nothing to converge.
+
+    That is what makes it usable at all. Almost nothing running was created by
+    Portainer, so almost nothing can be declared as a stack; every container can
+    be started, stopped and restarted, because those are Docker's verbs rather
+    than Portainer's.
+    """
+
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Portainer",
+        description="Which Portainer reaches the machine this runs on.",
+    )
+    host: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Runs on",
+        description="The machine this runs on.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        title="Container",
+        description="The container's name, exactly as Docker reports it.",
+    )
+
+
+class PortainerStackEnvVar(ProviderModel):
+    name: str = Field(min_length=1, max_length=200, title="Name")
+    value: str = Field(default="", max_length=4000, title="Value")
+
+
+class PortainerStackSpec(ProviderModel):
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Portainer",
+        description="Which Portainer holds the environment this runs in.",
+    )
+    host: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Runs on",
+        description="The machine this runs on, as the topology names it.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        title="Stack name",
+        description="Lowercase and hyphenated. Names the compose project.",
+    )
+    compose: str = Field(
+        min_length=1,
+        title="Compose file",
+        description="The docker compose definition, exactly as it would be on disk.",
+    )
+    environment: list[PortainerStackEnvVar] = Field(
+        default_factory=list,
+        title="Environment",
+        description="Values the compose file reads. Secrets belong in 1Password, not here.",
+    )
+    hostnames: list[str] = Field(
+        default_factory=list,
+        title="Serves",
+        description="The names this answers for, if any reach it from outside.",
+    )
+    port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        title="Answers on port",
+        description=(
+            "The port on the machine itself. Published ports are read back from "
+            "the running container; a container on the host network has to say."
+        ),
+    )
 
 
 class NPMProxyHostSpec(ProviderModel):
@@ -571,6 +674,54 @@ class CloudflareZoneSpec(ProviderModel):
 
 
 @dataclass(frozen=True)
+class NameContext:
+    """What HQ already knows about a hostname, offered to the next question.
+
+    Every field here was worked out somewhere else on the way in: which zones a
+    credential may edit, where something already answers this name, which
+    certificate already covers it. Passed rather than re-derived, because a form
+    that cannot see them asks for them again -- and a page offering to issue a
+    Let's Encrypt certificate for a name in no public zone is not asking, it is
+    proposing a failure.
+
+    Declared here beside the providers that read it and built in the application
+    layer, which is the half allowed to touch the database. Every field defaults,
+    so a caller that knows nothing yet is a legal caller and providers behave as
+    they did before any of this existed.
+    """
+
+    hostname: str = ""
+    # Zones a connected credential can actually edit, as the controller last
+    # reported them. Empty means nothing has swept, not that nothing is
+    # reachable -- so an empty tuple must never be read as a prohibition.
+    public_zones: tuple[str, ...] = ()
+    swept: bool = False
+    # Where this name is already served, as "host:port", declared or observed.
+    # The host half is whatever the provider calls the machine, which for a
+    # container stack is the machine's name rather than an address.
+    origin: str = ""
+    # The same place, as something on the network can actually reach it. A
+    # proxy seeded with a machine name is seeded with something nginx cannot
+    # resolve, which is a worse answer than an empty box: it looks considered.
+    origin_address: str = ""
+    # Resource keys of certificates that already cover this name.
+    certificates: tuple[str, ...] = ()
+
+    @property
+    def public_zone(self) -> str:
+        """The reported zone this name falls in, if one does.
+
+        Suffix-matched on label boundaries: "notjseverino.com" is not in
+        "jseverino.com", and a check on plain string endings says it is.
+        """
+
+        for zone in self.public_zones:
+            if self.hostname == zone or self.hostname.endswith(f".{zone}"):
+                return zone
+        return ""
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
     kind: str
     # What this is called in a sentence, and what it does in one line. Both are
@@ -611,7 +762,7 @@ class ProviderSpec:
     # provider that declares a facet for it, so the operator types it once
     # rather than once per resource -- and a provider added later joins that
     # flow by saying which of its fields the name fills in.
-    seed: Callable[[str], dict[str, Any]] | None = None
+    seed: Callable[["NameContext"], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
     # supply -- an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
@@ -652,6 +803,26 @@ class ProviderSpec:
     # and a guaranteed failure on create: the reconciler refuses to create an
     # HTTPS host with no certificate to bind, a minute later, in a job result.
     required_on_create: tuple[str, ...] = ()
+    # What sorts of connection stand behind this, matching what the controller
+    # calls them. This is the join between a declaration and the credentials
+    # that would carry it out: it tells a form which connections to offer, and
+    # the connections page what each one is for.
+    #
+    # Plural because one resource routinely needs two unrelated credentials. A
+    # managed certificate is issued through a DNS token and installed over SSH,
+    # and a single field would have had to pick one and be wrong about the
+    # other on the page whose whole job is saying what a credential is for.
+    connection_providers: tuple[str, ...] = ()
+    # Why this provider cannot supply a given name, or "" when it can.
+    #
+    # An offer that cannot work is worse than no offer: a `.homelab` service was
+    # invited to add a Let's Encrypt certificate, which needs a DNS-01 challenge
+    # in a zone no credential holds, so the only way to find out was to declare
+    # it and read the failure a minute later in a job result.
+    #
+    # A sentence rather than a boolean, because the page says why -- and the
+    # provider is the only thing that knows.
+    applies: Callable[["NameContext"], str] | None = None
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
     # A topology reference is the case that forced it: rendered from the
@@ -961,6 +1132,65 @@ def _rewrite_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
     return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
+
+
+def _stack_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(spec.get("hostnames") or ())
+
+
+def _stack_origin(spec: dict[str, Any]) -> str:
+    """Where this answers, as the topology names the machine.
+
+    ``_locate`` matches a host by id as readily as by address, so a stack says
+    which machine it runs on and never repeats that machine's address. A stack
+    with no port answers nothing directly -- it is reached through whatever
+    fronts it -- and returning nothing is the honest form of that.
+    """
+
+    port = spec.get("port")
+    host = spec.get("host", "")
+    return f"{host}:{port}" if host and port else ""
+
+
+def _stack_seed(context: NameContext) -> dict[str, Any]:
+    """A stack seeded from the name it will serve.
+
+    The name doubles as the stack's own, lowercased and hyphenated the way
+    compose projects are, so publishing a service does not ask for it twice.
+    """
+
+    label = re.sub(r"[^a-z0-9-]+", "-", context.hostname.lower()).strip("-")
+    return {"hostnames": [context.hostname], "name": label or "service"}
+
+
+def _stack_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    port = spec.get("port")
+    where = f"{spec.get('host', '')}:{port}" if port else spec.get("host", "")
+    return (
+        ("Runs on", where, status.get("origin", "")),
+        ("Stack", spec.get("name", ""), status.get("state", "")),
+    )
+
+
+def _stack_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """A declaration matching a container the controller already reported.
+
+    Adopting takes what is running rather than asking for it again: the stack
+    name, the machine, and the published port when the container has one. A
+    container on the host network publishes nothing, so its port stays for the
+    operator to supply -- nothing else knows it.
+    """
+
+    return {
+        "name": record.get("stack", ""),
+        "host": record.get("host", ""),
+        "port": record.get("port") or None,
+        "compose": record.get("compose", ""),
+        "hostnames": list(record.get("hostnames") or ()),
+        "connection_ref": record.get("connection_ref", ""),
+    }
 
 
 def _proxy_readout(
@@ -1296,15 +1526,35 @@ def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _rewrite_seed(hostname: str) -> dict[str, Any]:
-    return {"domain": hostname}
+def _rewrite_seed(context: NameContext) -> dict[str, Any]:
+    return {"domain": context.hostname}
 
 
-def _proxy_seed(hostname: str) -> dict[str, Any]:
-    return {"domain_names": [hostname]}
+def _proxy_seed(context: NameContext) -> dict[str, Any]:
+    """A proxy for this name, pointed at whatever already serves it.
+
+    The address is not a guess. Something declared or observed answers this name
+    on a host and a port, and the form used to open with an empty "Send traffic
+    to" beside a page stating exactly that -- so the operator read the answer off
+    one card and typed it into the next.
+
+    Blank when nothing serves it yet, which is the honest form of not knowing.
+    """
+
+    host, _, port = (context.origin_address or context.origin).rpartition(":")
+    seeded: dict[str, Any] = {"domain_names": [context.hostname]}
+    if host and port.isdigit():
+        seeded["forward_host"] = host
+        seeded["forward_port"] = int(port)
+    # The certificate that already answers for this name, rather than whichever
+    # sorted first. With one certificate the menu was right by luck; the second
+    # one would have bound a proxy to a certificate that does not cover it.
+    if len(context.certificates) == 1:
+        seeded["certificate_resource"] = context.certificates[0]
+    return seeded
 
 
-def _certificate_seed(hostname: str) -> dict[str, Any]:
+def _certificate_seed(context: NameContext) -> dict[str, Any]:
     """A new certificate, started from the name that needs one.
 
     Only the names it covers: what to call its lineage and where to install it
@@ -1312,17 +1562,106 @@ def _certificate_seed(hostname: str) -> dict[str, Any]:
     an answer in the form that looks considered and is not.
     """
 
-    return {"domains": [hostname]}
+    return {"domains": [context.hostname]}
 
 
-def _dns_record_seed(hostname: str) -> dict[str, Any]:
+def _dns_record_seed(context: NameContext) -> dict[str, Any]:
     # The registrable domain, guessed from the last two labels. A seed, not a
     # decision: it is offered in an editable field because a zone is not always
     # the last two labels, and being wrong here is visible and one keystroke to
     # correct.
-    labels = hostname.split(".")
-    zone = ".".join(labels[-2:]) if len(labels) > 2 else hostname
-    return {"name": hostname, "zone": zone}
+    # The zone a connected credential actually holds, when one does. Falling
+    # back to the last two labels, which is right for most names and wrong for
+    # every co.uk -- a guess worth making only when there is nothing better.
+    labels = context.hostname.split(".")
+    zone = context.public_zone or (
+        ".".join(labels[-2:]) if len(labels) > 2 else context.hostname
+    )
+    return {"name": context.hostname, "zone": zone}
+
+
+def _uploaded_certificate_seed(context: NameContext) -> dict[str, Any]:
+    """An uploaded certificate, named after what needs one.
+
+    Seeding the name is the whole of what a hostname can answer here: which
+    machines to install it on is a decision, and the certificate itself arrives
+    as a file on the same page.
+
+    Its existence is the point. Offered nowhere, a `.homelab` service had one
+    certificate option and it was the one that cannot work -- the answer was
+    reachable only by knowing to go to the registry and pick it by hand.
+    """
+
+    label = re.sub(r"[^a-z0-9.-]+", "-", context.hostname.lower()).strip("-.")
+    return {"certificate_name": label or "certificate"}
+
+
+def _container_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    return (
+        ("Container", spec.get("name", ""), status.get("container", "")),
+        ("Runs on", spec.get("host", ""), status.get("host", "")),
+        ("State", "", status.get("state", "")),
+    )
+
+
+def _container_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "connection_ref": record.get("connection_ref", ""),
+        "host": record.get("host", ""),
+        "name": record.get("name", ""),
+    }
+
+
+def _container_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (spec.get("host", ""), spec.get("name", ""))
+
+
+def _container_key_hint(spec: dict[str, Any]) -> str:
+    host = spec.get("host", "")
+    name = spec.get("name", "")
+    return re.sub(r"[^a-z0-9-]+", "-", f"{host}-{name}".lower()).strip("-")
+
+
+def _container_removal_note(spec: dict[str, Any]) -> str:
+    return (
+        f"HQ stops watching {spec.get('name', 'this container')} and can no "
+        "longer start, stop or restart it. The container itself is untouched."
+    )
+
+
+def _public_dns_applies(context: NameContext) -> str:
+    """Whether any connected account holds a zone this name could live in.
+
+    A `.homelab` name has no public zone and never will, so offering to publish
+    a record for it proposes a call Cloudflare will refuse. The credential
+    already reported which zones it may edit; this is that answer, used.
+
+    Silent until something has swept. An empty report means nobody has looked,
+    and refusing every name on that basis would make one missed sweep look like
+    a deliberate restriction.
+    """
+
+    if not context.swept or context.public_zone:
+        return ""
+    return "No connected DNS account holds a zone for this name."
+
+
+def _managed_certificate_applies(context: NameContext) -> str:
+    """Whether Let's Encrypt could issue for this name at all.
+
+    Issuance here is DNS-01, which means proving control by writing a record
+    into the name's own zone. No zone, no proof, and no certificate -- a fact
+    knowable now rather than a minute later in a failed job.
+    """
+
+    if not context.swept or context.public_zone:
+        return ""
+    return (
+        "Let's Encrypt proves this name by writing a DNS record in its zone, "
+        "and no connected account holds one. Upload a certificate instead."
+    )
 
 
 _PROVIDERS = (
@@ -1334,6 +1673,8 @@ _PROVIDERS = (
         ResolvedTLSCertificateSpec,
         _resolve_tls,
         label="TLS certificate",
+        applies=_managed_certificate_applies,
+        connection_providers=("cloudflare_dns", "ssh"),
         choices="application.provider_choices:certificate_choices",
         # topology_ref is not offered when adding one. It exists because every
         # certificate here predates HQ owning them, and "add the certificate you
@@ -1367,6 +1708,8 @@ _PROVIDERS = (
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
         label="Uploaded certificate",
+        seed=_uploaded_certificate_seed,
+        connection_providers=("ssh",),
         choices="application.provider_choices:uploaded_certificate_choices",
         material_form="application.provider_forms:CertificateUploadForm",
         material_handler="application.certificates:store_uploaded_material",
@@ -1383,6 +1726,7 @@ _PROVIDERS = (
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
         label="Proxy host",
+        connection_providers=("npm",),
         removal_note=lambda spec: (
             "Every name this answers for stops being served: "
             + ", ".join(spec.get("domain_names", ()))
@@ -1410,11 +1754,58 @@ _PROVIDERS = (
         readout=_proxy_readout,
     ),
     ProviderSpec(
+        "portainer.stack",
+        "Runs a set of containers on one of your machines. Created in Portainer "
+        "if it is not there yet.",
+        PortainerStackSpec,
+        label="Container stack",
+        connection_providers=("portainer",),
+        # Which Portainer is folded away with the tuning. There is normally one,
+        # the menu selects it, and asking first makes the form open on the
+        # question an operator is least likely to have an opinion about.
+        advanced_fields=("connection_ref", "environment"),
+        removal_note=lambda spec: (
+            f"{spec.get('name', 'This stack')} stops running on "
+            f"{spec.get('host', 'its machine')}, and anything it serves goes "
+            "with it."
+        ),
+        facet="runtime",
+        hostnames=_stack_hostnames,
+        origin=_stack_origin,
+        seed=_stack_seed,
+        readout=_stack_readout,
+        from_record=_stack_from_record,
+        choices="application.provider_choices:container_stack",
+    ),
+    ProviderSpec(
+        "portainer.container",
+        "A container HQ keeps an eye on and can start, stop or restart. It "
+        "does not define the container -- whatever compose file created it "
+        "still does.",
+        PortainerContainerSpec,
+        label="Container",
+        connection_providers=("portainer",),
+        # No facet, no hostnames and no seed, so it is never offered as a way
+        # to publish a name. A container answers wherever its ports are pointed
+        # and the declaration does not say where that is; inventing a hostname
+        # from a container name would put a service on the board that no name
+        # reaches. It is adopted from what a sweep found, which is the only
+        # place its identity is known.
+        readout=_container_readout,
+        from_record=_container_from_record,
+        identity=_container_identity,
+        key_hint=_container_key_hint,
+        removal_note=_container_removal_note,
+        declaration_only=True,
+        choices="application.provider_choices:container_stack",
+    ),
+    ProviderSpec(
         "adguard.rewrite",
         "Makes a hostname resolve to an IP on your network. Created in AdGuard "
         "if it is not there yet.",
         AdGuardRewriteSpec,
         label="Internal DNS record",
+        connection_providers=("adguard",),
         removal_note=lambda spec: (
             f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
             "anything reached by that name goes dark inside the network."
@@ -1430,6 +1821,8 @@ _PROVIDERS = (
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         label="Public DNS record",
+        applies=_public_dns_applies,
+        connection_providers=("cloudflare_dns",),
         advanced_fields=("priority", "ttl"),
         public_effect=True,
         facet="dns",
@@ -1451,6 +1844,7 @@ _PROVIDERS = (
         "the account, which is not the same as being asked to manage them.",
         CloudflareZoneSpec,
         label="Domain",
+        connection_providers=("cloudflare_dns",),
         public_effect=True,
         hostnames=None,
         readout=_zone_readout,
@@ -1483,10 +1877,22 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
     return registry
 
 
+def controller_id() -> str:
+    """Which controller this deployment runs.
+
+    An identity, not a policy: it names one installation, so it arrives from the
+    environment rather than from the committed contract beside it.
+    """
+
+    return os.environ.get("HQ_CONTROLLER_ID", "").strip() or "controller"
+
+
 def controller_capabilities() -> dict[str, Any]:
     """Return the one validated, JSON-safe controller contract."""
 
-    return controller_capability_registry().model_dump(mode="json")
+    contract = controller_capability_registry().model_dump(mode="json")
+    contract["controller_id"] = controller_id()
+    return contract
 
 
 def enabled_controller_actions(*, automatic_only: bool = False) -> tuple[tuple[str, str], ...]:

@@ -113,6 +113,30 @@ class AuthGateTests(TestCase):
         self.assertIn("object-src 'none'", policy)
         self.assertIn("frame-ancestors 'none'", policy)
 
+    def test_inline_styles_are_the_only_relaxation_in_the_policy(self):
+        """Pin the one exception so it stays one exception.
+
+        ``style-src`` allows ``'unsafe-inline'`` because charts position their
+        marks with a per-datum custom property -- ``style="--at: 62%"`` -- which
+        no class can express and no nonce can cover, because nonces apply to
+        style *elements* and not to style *attributes*.
+
+        That is a deliberate, bounded exception. It is asserted here rather
+        than merely documented, because the failure mode of a documented rule
+        is that a second directive quietly joins the first and the policy is
+        weaker than the prose claims. Anything relaxed beyond this fails.
+        """
+
+        response = self.client.get("/accounts/login/")
+        policy = response.headers["Content-Security-Policy"]
+
+        relaxed = sorted(
+            directive.split()[0]
+            for directive in policy.split(";")
+            if "'unsafe-inline'" in directive or "'unsafe-eval'" in directive
+        )
+        self.assertEqual(relaxed, ["style-src"])
+
     def test_application_shell_versions_every_shared_asset(self):
         content = self.client.get("/accounts/login/").content.decode()
         for asset in (

@@ -6,6 +6,7 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from unittest import TestCase, mock
 
@@ -23,6 +24,46 @@ from .plugins import (
 )
 from .domains import domain_navigation
 from .ui import Insight, Kpi
+
+
+# What the coupling scan walks past. Generated trees, virtualenvs and vendored
+# assets are not host source, and the runtime image has neither `.git` nor git
+# itself -- so the scan must not depend on either.
+SKIP_DIRECTORIES = frozenset(
+    {
+        ".claude",
+        ".git",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "backups",
+        "data",
+        "exports",
+        "media",
+        "node_modules",
+        "staticfiles",
+        "var",
+        "venv",
+    }
+)
+SKIP_SUFFIXES = frozenset(
+    {
+        ".ico",
+        ".jpeg",
+        ".jpg",
+        ".png",
+        ".pyc",
+        ".pyo",
+        ".sqlite3",
+        ".svg",
+        ".woff2",
+    }
+)
+# Developer-local environment files: gitignored, dockerignored, and the
+# supported place to record where your extension checkouts are. Naming one there
+# is configuration, not a dependency in the host.
+SKIP_FILE_PREFIXES = (".env",)
 
 
 VALID = PluginManifest(
@@ -65,7 +106,16 @@ class PluginContractTests(TestCase):
             installed_plugins.cache_clear()
             self.assertEqual(installed_plugins(), ())
 
-    def test_the_public_repo_never_commits_the_private_composition_inventory(self):
+    def test_the_committed_inventory_stays_a_shape_and_not_a_list(self):
+        """`composition/extensions.json` documents the format, never the set.
+
+        The set is supplied at composition time through
+        `COMPOSITION_EXTENSIONS`, so the host builds and runs identically with a
+        different one, or with none. A committed list would make this file the
+        thing that has to change to add an extension, which is the coupling the
+        runtime variable exists to avoid.
+        """
+
         root = Path(__file__).resolve().parents[1]
         document = json.loads(
             (root / "composition" / "extensions.json").read_text(encoding="utf-8")
@@ -73,8 +123,78 @@ class PluginContractTests(TestCase):
         self.assertEqual(
             document["extensions"],
             [],
-            "private extension identities belong in COMPOSITION_EXTENSIONS, "
-            "never in the public host repository",
+            "the installed set belongs in COMPOSITION_EXTENSIONS at composition "
+            "time, not in the host source",
+        )
+
+    def test_the_host_source_never_names_an_installed_extension(self):
+        """The host must not know which extensions exist. This proves it does not.
+
+        Imports are checked by `hq_sdk.validation`; this checks the other half.
+        A host that merely *mentions* an extension -- in a docstring, a comment,
+        a fixture, a default -- has begun to depend on it, and the properties
+        this architecture exists for start to go: install an extension without
+        touching the host, run the host with none, release the two apart.
+
+        The names are taken from the runtime composition rather than written
+        down here, since a list of them in the host would itself be the coupling
+        being tested for. So this is quiet on a checkout with no extensions and
+        speaks in the composed image, where the real set exists and where
+        `compose.yml` runs the suite.
+
+        The tree is walked rather than asked of git: neither `.git` nor git
+        itself exists in the runtime image, which is where this has to run.
+        Walking also asks about what shipped, which is the better question.
+        """
+
+        forbidden: dict[str, str] = {}
+        for plugin in installed_plugins():
+            if plugin.id.startswith("example."):
+                continue  # the synthetic namespace exists to be named here
+            forbidden[plugin.id] = "plugin id"
+            forbidden[plugin.distribution] = "distribution"
+            for app in plugin.django_apps:
+                forbidden[app.partition(".")[0]] = "django app"
+            if plugin.urlconf:
+                forbidden[plugin.urlconf.partition(".")[0]] = "urlconf package"
+
+        if not forbidden:
+            self.skipTest("no extensions composed; nothing for the host to know")
+
+        # One alternation over each file rather than one pass per word: the
+        # cost is the tree, not the tree times the extension count.
+        needle = re.compile(
+            "|".join(re.escape(word) for word in sorted(forbidden)), re.IGNORECASE
+        )
+        kind_of = {word.lower(): kind for word, kind in forbidden.items()}
+
+        root = Path(__file__).resolve().parents[1]
+        offences: list[str] = []
+        for directory, subdirectories, filenames in os.walk(root):
+            subdirectories[:] = [
+                name for name in subdirectories if name not in SKIP_DIRECTORIES
+            ]
+            for filename in filenames:
+                path = Path(directory) / filename
+                if path.suffix.lower() in SKIP_SUFFIXES:
+                    continue
+                if filename.startswith(SKIP_FILE_PREFIXES):
+                    continue
+                try:
+                    body = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue  # binary or unreadable: it is not carrying prose
+                found = needle.search(body)
+                if found:
+                    word = found.group(0).lower()
+                    relative = path.relative_to(root)
+                    offences.append(f"{relative}: {kind_of[word]} {word!r}")
+
+        self.assertEqual(
+            sorted(offences),
+            [],
+            "the host names an installed extension, which is a dependency it is "
+            "not supposed to have; use the synthetic example.* namespace",
         )
 
     def test_manifest_is_projected_into_every_registered_surface(self):

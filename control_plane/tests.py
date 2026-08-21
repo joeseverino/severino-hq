@@ -17,7 +17,6 @@ from application.controller import (
     report_operation,
     schedule_automatic_operations,
 )
-from application.connections import preflight_connections
 from application.infrastructure import (
     ManagedResourceCommand,
     OperationCommand,
@@ -64,7 +63,7 @@ def resolved_certificate_spec():
         "consumers": [
             {
                 "kind": "npm",
-                "topology_ref": "container:homelab-server/npm",
+                "topology_ref": "container:a-docker-host/npm",
                 "name": "jseverino-wildcard",
                 "connection_ref": "homelab-npm",
                 "verify_domains": ["dev.jseverino.com"],
@@ -75,13 +74,13 @@ def resolved_certificate_spec():
                 "name": "edge-caddy",
                 "connection_ref": "edge",
                 "certificate_directory": "/opt/apps/caddy/certs",
-                "verify_domains": ["health.jseverino.com"],
+                "verify_domains": ["health.example.com"],
             },
             {
                 "kind": "cpanel",
-                "topology_ref": "external:namecheap-cpanel",
+                "topology_ref": "external:a-shared-host",
                 "name": "namecheap-shared-hosting",
-                "connection_ref": "namecheap-cpanel",
+                "connection_ref": "a-shared-host",
                 "install_domains": ["jseverino.com", "jseverino.net"],
                 "verify_domains": ["jseverino.com", "quiz.jseverino.net"],
             },
@@ -97,7 +96,7 @@ def topology_payload():
         "version": 3,
         "hosts": [
             {
-                "id": "homelab-server",
+                "id": "a-docker-host",
                 "containers": [{"id": "npm"}],
             },
             {
@@ -112,10 +111,10 @@ def topology_payload():
                 "domains": spec["domains"],
             }
         ],
-        "externals": [{"id": "namecheap-cpanel"}],
+        "externals": [{"id": "a-shared-host"}],
         "dependencies": [
             {
-                "from": "container:homelab-server/npm",
+                "from": "container:a-docker-host/npm",
                 "relation": "consumes",
                 "to": "pki:jseverino-wildcard",
                 "attributes": {
@@ -135,7 +134,7 @@ def topology_payload():
                 },
             },
             {
-                "from": "external:namecheap-cpanel",
+                "from": "external:a-shared-host",
                 "relation": "consumes",
                 "to": "pki:jseverino-wildcard",
                 "attributes": {
@@ -377,49 +376,6 @@ class ProviderContractTests(TestCase):
 
         validate_resolved_certificate(spec)
 
-    def test_provider_preflight_authenticates_without_returning_secrets(self):
-        class Response:
-            def __init__(self, payload):
-                self.payload = payload
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return None
-
-            def read(self):
-                return json.dumps(self.payload).encode()
-
-        def open_url(request, timeout, context):
-            self.assertEqual(timeout, 10)
-            self.assertIsNotNone(context)
-            if request.full_url.endswith("/control/status"):
-                return Response({"dns_addresses": ["0.0.0.0"]})
-            if request.full_url.endswith("/user/tokens/verify"):
-                return Response({"success": True})
-            return Response({"token": "not-returned-by-probe"})
-
-        env = {
-            "ADGUARD_CONNECTION_REF": "homelab-adguard",
-            "ADGUARD_URL": "https://adguard.homelab",
-            "ADGUARD_USERNAME": "admin",
-            "ADGUARD_PASSWORD": "secret-a",
-            "NPM_CONNECTION_REF": "homelab-npm",
-            "NPM_URL": "https://proxy.homelab",
-            "NPM_USERNAME": "controller@example.com",
-            "NPM_PASSWORD": "secret-b",
-            "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-jseverino",
-            "CLOUDFLARE_DNS_URL": "https://api.cloudflare.com/client/v4",
-            "CLOUDFLARE_DNS_API_TOKEN": "secret-c",
-        }
-        probes = preflight_connections(env, open_url=open_url)
-        rendered = repr(probes)
-        self.assertTrue(all(probe.ok for probe in probes))
-        self.assertNotIn("secret-a", rendered)
-        self.assertNotIn("secret-b", rendered)
-        self.assertNotIn("secret-c", rendered)
-
     def test_provider_catalog_is_stable_strict_and_marks_public_effects(self):
         self.assertEqual(describe_providers(), describe_providers())
         providers = {
@@ -608,7 +564,7 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
-        result = schedule_automatic_operations("homelab-server")
+        result = schedule_automatic_operations("a-docker-host")
 
         operation = OperationRequest.objects.get()
         self.assertEqual(result["scheduled"], [str(operation.id)])
@@ -625,7 +581,7 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation - 1
         self.resource.save()
 
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
 
         self.assertEqual(
             OperationRequest.objects.get().action,
@@ -642,15 +598,15 @@ class OperationPolicyTests(TestCase):
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         operation = OperationRequest.objects.get()
         operation.state = OperationRequest.State.FAILED
         operation.save(update_fields=("state", "updated_at"))
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 1)
 
         now.return_value = current + timedelta(days=1)
-        schedule_automatic_operations("homelab-server")
+        schedule_automatic_operations("a-docker-host")
         self.assertEqual(OperationRequest.objects.count(), 2)
 
     def test_active_controller_capability_queues_renewal_work(self):

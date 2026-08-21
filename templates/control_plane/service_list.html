@@ -43,7 +43,13 @@ template changing.
           {% endfor %}
           <td>
             {% if service.origin %}
-              {% if service.origin.known %}{{ service.origin.label }}{% else %}<code>{{ service.origin.address }}</code> <span class="muted">unknown host</span>{% endif %}
+              {% comment %}
+              The phrasing comes from Origin, not from here. This column read
+              "unknown host" beside jseverino.com while the page for that same
+              name said "Served by Cloudflare Pages" — one fact, two surfaces,
+              and only one of them had learned about the third case.
+              {% endcomment %}
+              {% if service.origin.qualifier %}<code>{{ service.origin.headline }}</code> <span class="muted">{{ service.origin.qualifier }}</span>{% else %}{{ service.origin.headline }}{% endif %}
             {% else %}
               <span class="muted">—</span>
             {% endif %}

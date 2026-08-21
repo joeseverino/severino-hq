@@ -2,6 +2,10 @@
 Description=Run Severino HQ infrastructure controller
 
 [Timer]
+# The floor, not the cadence. Applying queued work no longer waits for this --
+# the .path unit starts the controller the moment HQ queues something -- and
+# how often it sweeps is HQ's to decide, so this only has to be often enough to
+# catch a doorbell that was missed while the machine was off.
 OnBootSec=2min
 OnUnitInactiveSec=1min
 RandomizedDelaySec=5s

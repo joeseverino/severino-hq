@@ -22,6 +22,7 @@ from control_plane.topology import desired_fingerprint
 from core.audit import operation_context
 
 from .projection import page_size
+from .cadence import ring_doorbell
 from .security import Capability, Principal
 
 
@@ -483,6 +484,11 @@ def _queue_operation(
         idempotency_key=command.idempotency_key,
         input={"generation": resource.generation},
     )
+    # Every operation of every kind is created here, so this is the one place
+    # that has to ring. The controller still pulls the work; this only says
+    # there is some, which is what removes the wait between pressing Save and
+    # anything happening.
+    transaction.on_commit(ring_doorbell)
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 

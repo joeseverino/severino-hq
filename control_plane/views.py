@@ -11,7 +11,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -35,7 +34,9 @@ from application.infrastructure import (
     topology_payload,
 )
 from application.inventory import (
+    AdoptCommand,
     AdoptServiceCommand,
+    adopt,
     adopt_service,
     inventory_state,
     unmanaged_services,
@@ -45,14 +46,18 @@ from application.certificates import (
     UploadCertificateCommand,
     store_certificate,
 )
+from application.connections import connection_readings
+from application.machines import machine, machine_catalog
+from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
     CertificateUploadForm,
     ResourceIdentityForm,
     spec_form_class,
 )
-from application.security import web_principal
+from application.security import safe_next, web_principal
 from application.services import (
+    CONTAINER_KIND,
     alias_target,
     service_catalog,
     service_or_prospect,
@@ -62,9 +67,10 @@ from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    NameContext,
     PROVIDERS,
     normalized_hostname,
-    SERVICE_FACETS,
+    service_facets,
     controller_action_policy,
     describe_providers,
 )
@@ -145,9 +151,15 @@ class ResourceFormView(LoginRequiredMixin, View):
                     if resource
                     else None
                 ),
-                "spec": spec_form_class(kind, lock_identity=bool(resource))(
-                    initial=_initial_spec(request, kind, resource)
-                ),
+                # The form is built knowing which name it is about, so its
+                # menus can offer what suits that name rather than everything
+                # that exists. A certificate menu with one entry was right by
+                # luck; the second certificate is what makes it a question.
+                "spec": spec_form_class(
+                    kind,
+                    lock_identity=bool(resource),
+                    context=_form_context(request, resource),
+                )(initial=_initial_spec(request, kind, resource)),
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
                 # without it.
@@ -169,9 +181,11 @@ class ResourceFormView(LoginRequiredMixin, View):
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
         identity = ResourceIdentityForm(request.POST) if resource else None
-        spec = spec_form_class(kind, lock_identity=bool(resource))(
-            request.POST, initial=resource.spec if resource else None
-        )
+        spec = spec_form_class(
+            kind,
+            lock_identity=bool(resource),
+            context=_form_context(request, resource),
+        )(request.POST, initial=resource.spec if resource else None)
         material_class = _material_form(kind) if not resource else None
         material = material_class(request.POST) if material_class else None
         if (
@@ -381,28 +395,6 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
     return reverse("control_plane:detail", kwargs={"key": saved})
 
 
-def safe_next(request) -> str:
-    """A caller-supplied destination, but only if it points back at us.
-
-    Shared rather than repeated: the same "go back where I came from" appears
-    on forms, on toggles and on anything else that returns somewhere, and each
-    one written separately is one more chance to redirect wherever a query
-    string says. Checked in one place, every caller gets the check.
-    """
-
-    candidate = (
-        request.POST.get("next", "") if request.method == "POST" else ""
-    ) or request.GET.get("next", "")
-    candidate = candidate.strip()
-    if candidate and url_has_allowed_host_and_scheme(
-        candidate,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return candidate
-    return ""
-
-
 def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
@@ -488,12 +480,33 @@ def _initial_spec(request, kind: str, resource) -> dict | None:
     initial: dict = {}
     hostname = request.GET.get("hostname", "").strip()
     if provider.seed and hostname:
-        initial.update(provider.seed(hostname))
+        initial.update(provider.seed(name_context(hostname)))
     for name in provider.spec_type.model_fields:
         value = request.GET.get(name, "").strip()
         if value:
             initial[name] = value
     return initial or None
+
+
+def _form_context(request, resource) -> NameContext:
+    """What HQ knows about the name this form is about.
+
+    On create the name arrives in the query string, the same way every other
+    seeded value does. On edit it is read back out of the resource through its
+    own provider, because a form has to keep offering whatever the record
+    already holds -- a menu that cannot describe an existing value tells the
+    operator their unmodified record is invalid.
+    """
+
+    hostname = request.GET.get("hostname", "").strip()
+    if not hostname and resource is not None:
+        provider = PROVIDERS.get(resource.kind)
+        if provider is not None and provider.hostnames is not None:
+            try:
+                hostname = next(iter(provider.hostnames(resource.spec)), "")
+            except (KeyError, TypeError, ValueError):
+                hostname = ""
+    return name_context(hostname)
 
 
 def _material_form(kind: str):
@@ -697,8 +710,9 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["services"] = service_catalog()
         # The column headers come from the providers, so a provider that
-        # declares a new facet gets a column without this template being touched.
-        context["facets"] = SERVICE_FACETS
+        # declares a new facet gets a column without this template being
+        # touched -- and a facet no provider supplies yet gets none.
+        context["facets"] = service_facets()
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -722,6 +736,11 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/service_detail.html"
 
+    # Verbs, from the capability registry rather than from this template. A
+    # controller that stops implementing one stops offering it here, and one
+    # that gains a verb needs a route and a phrase -- not an edit to a page.
+    LIFECYCLE = ("start", "stop", "restart")
+
     def get(self, request, *args, **kwargs):
         """An alias goes to the service it is an alias of.
 
@@ -738,6 +757,19 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = service_or_prospect(self.kwargs["hostname"])
+        context["container_kind"] = CONTAINER_KIND
+        # Two filters, and both are readings rather than opinions: what the
+        # controller says it implements for a container, and what the container's
+        # current state makes worth asking. Offering all three always means
+        # offering Start to something already running, whose only outcome is
+        # Docker answering "already started" in a job result a minute later.
+        container = context["service"].container
+        offered = container.verbs if container else ()
+        context["container_actions"] = tuple(
+            (f"control_plane:{action}", action.capitalize())
+            for action in self.LIFECYCLE
+            if action in offered and controller_action_policy(CONTAINER_KIND, action)[0]
+        )
         return context
 
 
@@ -757,6 +789,73 @@ class ServiceStartView(LoginRequiredMixin, View):
             messages.error(request, "Enter a hostname, like app.example.com.")
             return redirect("control_plane:service_start")
         return redirect("control_plane:service", hostname=hostname)
+
+
+class MachineListView(LoginRequiredMixin, TemplateView):
+    """Every machine anything reported, and what is on each.
+
+    Nothing here is declared. A machine exists because a credential reaches it,
+    a container runs on it, or a service is served from it -- so adding a VPS is
+    registering it somewhere rather than entering it here.
+    """
+
+    template_name = "control_plane/machine_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["machines"] = machine_catalog()
+        return context
+
+
+class MachineDetailView(LoginRequiredMixin, TemplateView):
+    """One machine, and everything that ties to it.
+
+    The page exists because the ties did and had nowhere to meet: a container's
+    host, a proxy's forwarding address, what a Portainer says it reaches and
+    which credential opens a shell there were four facts about one thing, on
+    four screens, joined by an operator's memory.
+    """
+
+    template_name = "control_plane/machine_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        found = machine(self.kwargs["name"])
+        if found is None:
+            raise Http404("No machine of that name has been reported.")
+        context["machine"] = found
+        context["container_kind"] = CONTAINER_KIND
+        return context
+
+
+class ConnectionListView(LoginRequiredMixin, TemplateView):
+    """What HQ can reach, as the controllers last found it.
+
+    Read-only by construction. Every row here started as a 1Password item, and
+    the only way to change one is to change that item -- so this page reports
+    and never edits, which is what keeps it from becoming a second inventory.
+    """
+
+    template_name = "control_plane/connection_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        readings = connection_readings()
+        context["connections"] = readings
+        context["unlabelled"] = [item for item in readings if not item.provider]
+        # The oldest of them, because the page's honesty depends on the staler
+        # half: reporting the newest would describe a controller that is still
+        # sweeping as though every row were current.
+        context["observed_at"] = min(
+            (item.observed_at for item in readings), default=None
+        )
+        # Which controller reported a connection only matters once there are
+        # two. Printed unconditionally it repeated one machine's name under
+        # every row, which on a phone was a third of the page saying nothing.
+        context["name_the_controller"] = (
+            len({item.controller_id for item in readings}) > 1
+        )
+        return context
 
 
 class InfrastructureListView(LoginRequiredMixin, ListView):
@@ -891,7 +990,39 @@ OPERATION_PHRASE = {
     OperationRequest.Action.RECONCILE: "reconciliation",
     OperationRequest.Action.RENEW: "certificate renewal",
     OperationRequest.Action.DELETE: "removal",
+    OperationRequest.Action.RESTART: "a restart",
+    OperationRequest.Action.START: "a start",
+    OperationRequest.Action.STOP: "a stop",
 }
+
+
+class AdoptRecordView(LoginRequiredMixin, View):
+    """Take on one record a sweep found, identified by what makes it that record.
+
+    Separate from adopting a service because a service is a hostname and some
+    records have none: a container answers wherever its ports are pointed, so
+    there is no name to route by and no group of records to take on together.
+
+    The spec is read back out of the sweep rather than posted, the same as every
+    other adoption -- the declaration starts equal to the world, so the first
+    reconciliation after it changes nothing.
+    """
+
+    def post(self, request, kind, token):
+        try:
+            result = adopt(
+                AdoptCommand(kind=kind, token=token),
+                principal=web_principal(request.user),
+            )
+        except (NotFoundError, PolicyError, ValueError) as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                f"HQ is now watching “{result['resource']['key']}”, exactly as "
+                "it is running.",
+            )
+        return redirect(safe_next(request, fallback=reverse("control_plane:list")))
 
 
 class OperationView(LoginRequiredMixin, View):

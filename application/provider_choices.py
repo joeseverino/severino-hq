@@ -14,15 +14,19 @@ late-bound way a domain points at its attention provider.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
-from control_plane.models import ManagedResource, ProviderInventory, TopologySnapshot
-from control_plane.providers import DNS_RECORD_TYPES
+from control_plane.models import (
+    ManagedResource,
+    ProviderInventory,
+    TopologySnapshot,
+)
+from control_plane.providers import DNS_RECORD_TYPES, NameContext
+
+from .connections import connections_for, reachable_through
 
 
-def proxy_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Certificates HQ manages, for a proxy host that needs one bound.
 
     ``certificate_resource`` names an HQ key, so typing it correctly required
@@ -34,18 +38,29 @@ def proxy_choices() -> dict[str, tuple[tuple[str, str], ...]]:
     managed = ManagedResource.objects.filter(
         kind="tls.certificate", enabled=True
     ).order_by("key")
+    covering = set(context.certificates)
+    # The ones that answer for this name first, and marked. With a single
+    # certificate the menu was right by accident; the second one is a coin
+    # flip, and binding a proxy to a certificate that does not cover its names
+    # is a browser warning rather than an error anything reports.
+    options = [
+        (resource.key, f"{resource.key} — covers {context.hostname}")
+        for resource in managed
+        if resource.key in covering
+    ]
+    options.extend(
+        (resource.key, resource.key)
+        for resource in managed
+        if resource.key not in covering
+    )
     # No blank option here. Whether "leave it as it is" is even a coherent
     # answer depends on whether the thing exists yet, and only the form knows
     # that -- offered on a create page it read as "keep the certificate it
     # already has" about a proxy host that did not exist.
-    return {
-        "certificate_resource": tuple(
-            (resource.key, resource.key) for resource in managed
-        )
-    }
+    return {"certificate_resource": tuple(options)}
 
 
-def certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The certificates the topology describes, as ``pki:`` references.
 
     Labelled with the names each one covers, because "pki:jseverino-wildcard"
@@ -122,7 +137,7 @@ def _certificates(payload: dict[str, Any]):
         )
 
 
-def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The same install targets an issued certificate can go to.
 
     Deploying is deploying: a proxy does not care which authority signed the
@@ -147,8 +162,72 @@ def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
     }
 
 
-def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
-    """The zones a record could belong to, declared ones first.
+def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """The zone a record belongs to, and what kind of record it is."""
+
+    return {
+        "zone": _known_zones(),
+        # Named rather than lettered. Rendered from the annotation alone the
+        # menu reads "A / AAAA / CNAME / TXT / MX / CAA", which is a quiz for
+        # anyone who does not already know the answer -- and the registry
+        # already carries a sentence about each one.
+        "record_type": tuple(
+            (record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES
+        ),
+    }
+
+
+def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Where a stack can run, and which Portainer reaches it.
+
+    Both menus come from the connection sweep, because a Portainer is the only
+    thing that knows which machines it holds -- a topology lists a printer and a
+    phone as readily as a Docker host, and a machine registered this morning is
+    available whether or not anything has been recorded about it anywhere else.
+
+    Read from the connection rather than from the containers found on it, so a
+    machine that is running nothing is still offered. That is precisely when
+    this form is being filled in.
+    """
+
+    described = _topology_roles()
+    return {
+        # Labelled from the topology where it knows the machine, because
+        # Portainer calls its own host "local" and that is nobody's hostname.
+        "host": tuple(
+            (host, f"{host} — {described[host]}" if described.get(host) else host)
+            for host, _ in reachable_through("portainer")
+        ),
+        "connection_ref": _connection_choices("portainer"),
+    }
+
+
+def _topology_roles() -> dict[str, str]:
+    """What the topology calls each machine, for labelling only."""
+
+    payload = (
+        TopologySnapshot.objects.filter(pk="topology")
+        .values_list("payload", flat=True)
+        .first()
+    ) or {}
+    return {
+        host["id"]: host.get("role", "")
+        for host in payload.get("hosts", ())
+        if host.get("id")
+    }
+
+
+def zone(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Which domain to take responsibility for, and through which credential."""
+
+    return {
+        "zone": _known_zones(),
+        "connection_ref": _connection_choices("cloudflare_dns"),
+    }
+
+
+def _known_zones() -> tuple[tuple[str, str], ...]:
+    """Every zone HQ has seen, declared ones first.
 
     Not restricted to declared domains, deliberately. Restricting it reads as
     the stricter, safer choice and is neither: adopting a record from a zone
@@ -159,6 +238,9 @@ def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
 
     Undeclared zones are labelled rather than hidden, which is the nudge without
     the dead end.
+
+    Shared by the two forms that ask which domain, so declaring one and adding a
+    record to one cannot come to disagree about what a domain is.
     """
 
     declared = {
@@ -179,43 +261,25 @@ def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
         (zone, f"{zone} — not managed by HQ yet")
         for zone in sorted(seen - declared)
     )
-    return {
-        "zone": tuple(options),
-        # Named rather than lettered. Rendered from the annotation alone the
-        # menu reads "A / AAAA / CNAME / TXT / MX / CAA", which is a quiz for
-        # anyone who does not already know the answer -- and the registry
-        # already carries a sentence about each one.
-        "record_type": tuple(
-            (record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES
-        ),
-    }
+    return tuple(options)
 
 
-def zone() -> dict[str, tuple[tuple[str, str], ...]]:
-    """The provider connections that could hold a zone.
+def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
+    """The connections of one kind, as the controller last reported them.
 
-    Read from the controller connection registry rather than from a list kept
-    here, so adding a second Cloudflare account is a registry entry and not a
-    code change. The registry is the same file the controller resolves
-    credentials from, so a connection offered here is one that actually exists.
+    Empty until the first sweep, and the field stays typeable -- an empty menu
+    is a smaller failure than a menu that cannot describe what already exists.
+    A connection that stopped answering is still offered, and says so: it is
+    the one an operator already has, and hiding it reads as never having set
+    it up.
     """
 
-    return {"connection_ref": tuple(_dns_connections())}
-
-
-def _dns_connections():
-    registry_path = (
-        Path(__file__).resolve().parents[1] / "config" / "controller-connections.json"
+    return tuple(
+        (
+            connection.connection_ref,
+            connection.connection_ref
+            if connection.reachable
+            else f"{connection.connection_ref} (not answering)",
+        )
+        for connection in connections_for(provider)
     )
-    try:
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        # The form is still usable without the menu; refusing to render the page
-        # because a config file is unreadable would be a worse failure than
-        # asking the operator to type the reference.
-        return
-    for ref, connection in sorted((registry.get("connections") or {}).items()):
-        provider = connection.get("provider", "")
-        if not provider.startswith("cloudflare"):
-            continue
-        yield (ref, f"{ref} ({provider})")

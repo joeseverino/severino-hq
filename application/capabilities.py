@@ -49,7 +49,33 @@ CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 CAPABILITY_EFFECTS = frozenset(
     {"read", "remote_write", "destructive", "infrastructure_change"}
 )
-TARGET_KINDS = frozenset({"slug", "doc_id", "integer", "key"})
+
+
+@dataclass(frozen=True)
+class TargetKind:
+    """How one kind of target reaches the handler that acts on it.
+
+    ``keyword`` is the parameter the host binds it to; ``coerce`` turns the
+    transport's value into what that parameter expects.
+    """
+
+    keyword: str
+    coerce: Callable[[Any], Any]
+
+
+# One declaration, read three ways: the set of valid kinds (spec validation at
+# startup), the keyword each binds to (the handler signature check), and the
+# coercion applied when a call arrives. Adding a kind here is the whole change.
+TARGET_KINDS: dict[str, TargetKind] = {
+    "slug": TargetKind("current_slug", str),
+    "doc_id": TargetKind("current_doc_id", str),
+    "integer": TargetKind("current_id", int),
+    "key": TargetKind("current_key", str),
+}
+
+
+class _UnusableTarget(Exception):
+    """The target arrived, but not as the kind the capability declared."""
 
 
 @dataclass(frozen=True)
@@ -360,14 +386,9 @@ def _validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
 
     kwargs: dict[str, Any] = {"principal": None, "expected_updated_at": None}
-    target_parameter = {
-        "slug": "current_slug",
-        "doc_id": "current_doc_id",
-        "integer": "current_id",
-        "key": "current_key",
-    }.get(spec.target_kind)
-    if target_parameter:
-        kwargs[target_parameter] = None
+    kind = TARGET_KINDS.get(spec.target_kind) if spec.target_kind else None
+    if kind:
+        kwargs[kind.keyword] = None
     try:
         inspect.signature(spec.handler).bind(None, **kwargs)
     except TypeError as exc:
@@ -417,6 +438,18 @@ def describe_capabilities() -> dict[str, Any]:
     }
 
 
+def _target_keyword(spec: CapabilitySpec, target: str | int | None) -> dict[str, Any]:
+    """Bind the target to the keyword its capability declared it under."""
+
+    if not spec.target_kind:
+        return {}
+    kind = TARGET_KINDS[spec.target_kind]
+    try:
+        return {kind.keyword: kind.coerce(target)}
+    except (ValueError, TypeError) as exc:
+        raise _UnusableTarget from exc
+
+
 def execute_capability(
     name: str,
     payload: dict[str, Any],
@@ -436,26 +469,19 @@ def execute_capability(
         return _error("target_not_allowed", f"{name} does not accept a target.")
 
     try:
+        # Authority first, then the payload, then the target. A caller who may
+        # not run this at all is told exactly that, and learns nothing about
+        # what shape of target it would have taken.
         authorize_capability(spec, principal)
         command = TypeAdapter(spec.command_type).validate_python(payload)
         kwargs: dict[str, Any] = {
             "principal": principal,
             "expected_updated_at": expected_updated_at,
+            **_target_keyword(spec, target),
         }
-        try:
-            if spec.target_kind == "slug":
-                kwargs["current_slug"] = str(target)
-            elif spec.target_kind == "doc_id":
-                kwargs["current_doc_id"] = str(target)
-            elif spec.target_kind == "integer":
-                kwargs["current_id"] = int(target)
-            elif spec.target_kind == "key":
-                kwargs["current_key"] = str(target)
-        except (ValueError, TypeError):
-            return _error(
-                "invalid_input", f"{name} requires a {spec.target_kind} target."
-            )
         return spec.handler(command, **kwargs)
+    except _UnusableTarget:
+        return _error("invalid_input", f"{name} requires a {spec.target_kind} target.")
     except AuthorizationError as exc:
         return _error(exc.code, str(exc))
     except PydanticValidationError as exc:

@@ -19,9 +19,14 @@ from application.projects import (
     refresh_project,
     save_project,
 )
-from application.deletion import DeleteCommand, delete_project
+from application.deletion import delete_project
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.writes import (
+    ServiceCreateMixin,
+    ServiceDeleteMixin,
+    ServiceUpdateMixin,
+)
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
@@ -129,55 +134,42 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     )
 
 
-class ProjectCreateView(LoginRequiredMixin, CreateView):
+class ProjectWrite:
+    """What every project write shares, whichever direction it goes."""
+
     model = Project
+    noun = "Project"
+    result_key = "project"
+    identity_attr = "slug"
+    identity_kwarg = "current_slug"
+
+
+class ProjectCreateView(
+    ProjectWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView
+):
     form_class = ProjectForm
     template_name = "projects/project_form.html"
-
-    def form_valid(self, form):
-        result = save_project(
-            project_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-        )
-        self.object = Project.objects.get(slug=result["project"]["slug"])
-        messages.success(self.request, f"Project “{self.object}” created.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_project)
+    command_from_cleaned_data = staticmethod(project_command_from_cleaned_data)
 
 
-class ProjectUpdateView(LoginRequiredMixin, UpdateView):
-    model = Project
+class ProjectUpdateView(
+    ProjectWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
+):
     form_class = ProjectForm
     template_name = "projects/project_form.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
-
-    def form_valid(self, form):
-        result = save_project(
-            project_command_from_cleaned_data(form.cleaned_data),
-            principal=web_principal(self.request.user),
-            current_slug=self.get_object().slug,
-        )
-        self.object = Project.objects.get(slug=result["project"]["slug"])
-        messages.success(self.request, f"Project “{self.object}” updated.")
-        return redirect(self.object.get_absolute_url())
+    service = staticmethod(save_project)
+    command_from_cleaned_data = staticmethod(project_command_from_cleaned_data)
 
 
-class ProjectDeleteView(LoginRequiredMixin, DeleteView):
-    model = Project
+class ProjectDeleteView(
+    ProjectWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
+):
     template_name = "projects/project_confirm_delete.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"
     success_url = reverse_lazy("projects:list")
     context_object_name = "project"
-
-    def form_valid(self, form):
-        slug = self.get_object().slug
-        result = delete_project(
-            DeleteCommand(confirm=slug),
-            principal=web_principal(self.request.user),
-            current_slug=slug,
-        )
-        messages.success(
-            self.request, f"Project “{result['deleted']['label']}” deleted."
-        )
-        return redirect(self.success_url)
+    service = staticmethod(delete_project)
