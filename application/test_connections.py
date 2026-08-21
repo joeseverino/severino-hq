@@ -17,6 +17,8 @@ from control_plane.providers import PROVIDERS
 
 from .connections import connection_readings, connections_for, reachable_through
 from .inventory import record_connections
+from control_plane.providers import NameContext
+
 from .provider_choices import container_stack, zone
 from .security import cli_principal
 
@@ -146,7 +148,7 @@ class DerivationTests(TestCase):
 
         sweep(A_PORTAINER)
 
-        choices = container_stack()
+        choices = container_stack(NameContext())
         self.assertEqual(
             [value for value, _ in choices["host"]],
             ["homelab-server", "sl-cloud-edge-01"],
@@ -171,7 +173,7 @@ class DerivationTests(TestCase):
     def test_which_domains_can_be_declared_is_what_the_token_may_edit(self):
         sweep(A_DNS_TOKEN)
 
-        self.assertEqual(zone()["connection_ref"], (("cloudflare-dns",) * 2,))
+        self.assertEqual(zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,))
 
     def test_a_broken_connection_is_offered_last_and_says_so(self):
         """Still offered, because it is the one that already exists.
@@ -185,8 +187,8 @@ class DerivationTests(TestCase):
             A_PORTAINER,
         )
 
-        refs = [ref for ref, _ in container_stack()["connection_ref"]]
-        labels = dict(container_stack()["connection_ref"])
+        refs = [ref for ref, _ in container_stack(NameContext())["connection_ref"]]
+        labels = dict(container_stack(NameContext())["connection_ref"])
         self.assertEqual(refs, ["homelab-portainer", "a-broken-one"])
         self.assertIn("not answering", labels["a-broken-one"])
 
@@ -194,7 +196,7 @@ class DerivationTests(TestCase):
         """And the fields stay typeable. An empty menu is a smaller failure
         than one that cannot describe what already exists."""
 
-        self.assertEqual(container_stack()["host"], ())
+        self.assertEqual(container_stack(NameContext())["host"], ())
         self.assertEqual(connections_for("portainer"), ())
 
 
@@ -237,3 +239,148 @@ class ConnectionPageTests(TestCase):
 
         self.assertContains(response, "Not yet classified")
         self.assertContains(response, "homelab-portainer")
+
+
+class OfferTests(TestCase):
+    """What HQ offers for a name, given what it can actually reach.
+
+    An offer that cannot work is worse than no offer. Declaring one is how you
+    find out, and the finding out arrives a minute later in a failed job.
+    """
+
+    def test_a_name_in_no_reachable_zone_is_not_offered_public_dns(self):
+        sweep(A_DNS_TOKEN)
+
+        offers = dict(_certificate_and_dns("probe.homelab")["dns"].declarable)
+
+        self.assertNotIn("cloudflare.dns_record", offers)
+        self.assertIn("adguard.rewrite", offers)
+
+    def test_it_says_why_rather_than_dropping_the_option(self):
+        sweep(A_DNS_TOKEN)
+
+        refused = dict(_certificate_and_dns("probe.homelab")["certificate"].unavailable)
+
+        self.assertIn("TLS certificate", refused)
+        self.assertIn("Upload a certificate instead", refused["TLS certificate"])
+
+    def test_the_option_that_works_is_offered_in_its_place(self):
+        sweep(A_DNS_TOKEN)
+
+        offers = dict(
+            _certificate_and_dns("probe.homelab")["certificate"].declarable
+        )
+
+        self.assertIn("tls.uploaded_certificate", offers)
+
+    def test_a_name_in_a_reachable_zone_keeps_both(self):
+        sweep(A_DNS_TOKEN)
+
+        facets = _certificate_and_dns("probe.example.com")
+
+        self.assertIn("cloudflare.dns_record", dict(facets["dns"].declarable))
+        self.assertIn("tls.certificate", dict(facets["certificate"].declarable))
+
+    def test_nothing_is_refused_before_a_sweep(self):
+        """An empty report means nobody looked, not that nothing is reachable.
+
+        Read as a prohibition, one missed sweep would present as a deliberate
+        restriction on every public name HQ has.
+        """
+
+        facets = _certificate_and_dns("probe.example.com")
+
+        self.assertIn("cloudflare.dns_record", dict(facets["dns"].declarable))
+        self.assertEqual(facets["certificate"].unavailable, ())
+
+
+def _certificate_and_dns(hostname):
+    from .naming import name_context
+    from .services import Facet
+
+    context = name_context(hostname)
+    return {
+        facet: Facet(id=facet, label=facet.title(), context=context)
+        for facet in ("dns", "certificate")
+    }
+
+
+class SeedTests(TestCase):
+    """What a form opens already knowing.
+
+    Each of these was on the screen when the question was asked, and the
+    operator was reading it off one card and typing it into the next.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource, TopologySnapshot
+
+        TopologySnapshot.objects.update_or_create(
+            pk="topology",
+            defaults={
+                "schema_version": 1,
+                "checksum": "test",
+                "payload": {
+                    "hosts": [{"id": "homelab-server", "lan_ip": "192.168.1.233"}]
+                },
+            },
+        )
+        ManagedResource.objects.create(
+            key="probe-stack",
+            kind="portainer.stack",
+            spec={
+                "connection_ref": "homelab-portainer",
+                "host": "homelab-server",
+                "name": "probe",
+                "compose": "services: {}",
+                "environment": [],
+                "hostnames": ["probe.homelab"],
+                "port": 8099,
+            },
+        )
+
+    def test_a_proxy_points_at_what_already_serves_the_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.homelab"))
+
+        self.assertEqual(seeded["forward_port"], 8099)
+
+    def test_it_uses_an_address_the_proxy_can_resolve(self):
+        """Not the machine's name. Nginx has never heard of `homelab-server`,
+        so seeding it puts a plausible value in the box that cannot work."""
+
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.homelab"))
+
+        self.assertEqual(seeded["forward_host"], "192.168.1.233")
+
+    def test_nothing_is_seeded_when_nothing_serves_the_name(self):
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        seeded = PROVIDERS["npm.proxy_host"].seed(name_context("nowhere.homelab"))
+
+        self.assertNotIn("forward_host", seeded)
+        self.assertEqual(seeded["domain_names"], ["nowhere.homelab"])
+
+    def test_a_public_record_seeds_the_zone_the_credential_holds(self):
+        """Rather than the last two labels, which is a guess that is wrong for
+        every co.uk and right only by the shape of most names."""
+
+        from control_plane.providers import PROVIDERS
+
+        from .naming import name_context
+
+        sweep({**A_DNS_TOKEN, "reaches": ["dev.example.com"]})
+        seeded = PROVIDERS["cloudflare.dns_record"].seed(
+            name_context("probe.dev.example.com")
+        )
+
+        self.assertEqual(seeded["zone"], "dev.example.com")

@@ -45,6 +45,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_readings
+from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
     CertificateUploadForm,
@@ -62,6 +63,7 @@ from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    NameContext,
     PROVIDERS,
     normalized_hostname,
     service_facets,
@@ -145,9 +147,15 @@ class ResourceFormView(LoginRequiredMixin, View):
                     if resource
                     else None
                 ),
-                "spec": spec_form_class(kind, lock_identity=bool(resource))(
-                    initial=_initial_spec(request, kind, resource)
-                ),
+                # The form is built knowing which name it is about, so its
+                # menus can offer what suits that name rather than everything
+                # that exists. A certificate menu with one entry was right by
+                # luck; the second certificate is what makes it a question.
+                "spec": spec_form_class(
+                    kind,
+                    lock_identity=bool(resource),
+                    context=_form_context(request, resource),
+                )(initial=_initial_spec(request, kind, resource)),
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
                 # without it.
@@ -169,9 +177,11 @@ class ResourceFormView(LoginRequiredMixin, View):
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
         identity = ResourceIdentityForm(request.POST) if resource else None
-        spec = spec_form_class(kind, lock_identity=bool(resource))(
-            request.POST, initial=resource.spec if resource else None
-        )
+        spec = spec_form_class(
+            kind,
+            lock_identity=bool(resource),
+            context=_form_context(request, resource),
+        )(request.POST, initial=resource.spec if resource else None)
         material_class = _material_form(kind) if not resource else None
         material = material_class(request.POST) if material_class else None
         if (
@@ -466,12 +476,33 @@ def _initial_spec(request, kind: str, resource) -> dict | None:
     initial: dict = {}
     hostname = request.GET.get("hostname", "").strip()
     if provider.seed and hostname:
-        initial.update(provider.seed(hostname))
+        initial.update(provider.seed(name_context(hostname)))
     for name in provider.spec_type.model_fields:
         value = request.GET.get(name, "").strip()
         if value:
             initial[name] = value
     return initial or None
+
+
+def _form_context(request, resource) -> NameContext:
+    """What HQ knows about the name this form is about.
+
+    On create the name arrives in the query string, the same way every other
+    seeded value does. On edit it is read back out of the resource through its
+    own provider, because a form has to keep offering whatever the record
+    already holds -- a menu that cannot describe an existing value tells the
+    operator their unmodified record is invalid.
+    """
+
+    hostname = request.GET.get("hostname", "").strip()
+    if not hostname and resource is not None:
+        provider = PROVIDERS.get(resource.kind)
+        if provider is not None and provider.hostnames is not None:
+            try:
+                hostname = next(iter(provider.hostnames(resource.spec)), "")
+            except (KeyError, TypeError, ValueError):
+                hostname = ""
+    return name_context(hostname)
 
 
 def _material_form(kind: str):

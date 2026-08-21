@@ -836,15 +836,22 @@ class ServiceFacetOfferTests(TestCase):
 
         self.assertEqual(offers["tls.certificate"], "TLS certificate")
 
-    def test_an_uploaded_certificate_is_not_offered_that_way(self):
-        """It cannot be created by naming a host: it is not usable without
-        material only the operator has."""
+    def test_an_uploaded_certificate_is_offered_beside_the_issued_one(self):
+        """Both ways of getting a certificate, offered where one is needed.
+
+        It was excluded because it needs material only the operator has -- true,
+        and no longer a reason: the form that creates one collects the file on
+        the same page. Left out, the only certificate offered for a `.homelab`
+        name was the one Let's Encrypt cannot issue, and the option that works
+        was reachable only by knowing to go and find it in the registry.
+        """
 
         from .services import Facet
 
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
 
-        self.assertNotIn("tls.uploaded_certificate", offers)
+        self.assertIn("tls.certificate", offers)
+        self.assertIn("tls.uploaded_certificate", offers)
 
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)

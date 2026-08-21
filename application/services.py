@@ -33,7 +33,7 @@ earlier sketch of this:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
@@ -46,6 +46,7 @@ from control_plane.models import (
 )
 from control_plane.providers import (
     PROVIDERS,
+    NameContext,
     certificate_covers,
     service_facets,
     names_a_host,
@@ -54,6 +55,7 @@ from control_plane.providers import (
 from projects.models import Project
 
 from .infrastructure import NotFoundError, resolved_spec, resource_health
+from .naming import name_context
 from .ui import ListRow
 
 
@@ -142,6 +144,10 @@ class Facet:
     # a card naming the container it was already running in. "Nothing supplies
     # this" was false, and the offer it led with was to build a second one.
     observed: "Running | None" = None
+    # What HQ knows about this name. Held so ``declarable`` can ask each
+    # provider whether it could actually supply it -- an offer that cannot work
+    # is worse than no offer, and only the provider knows which is which.
+    context: NameContext = field(default_factory=NameContext)
 
     @property
     def present(self) -> bool:
@@ -175,9 +181,39 @@ class Facet:
                 # record" and shouted at nobody about the acronym.
                 (kind, _lower_first(provider.label or kind))
                 for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id and provider.seed is not None
+                if provider.facet == self.id
+                and provider.seed is not None
+                and not self._refused(provider)
             )
         )
+
+    @property
+    def unavailable(self) -> tuple[tuple[str, str], ...]:
+        """``(label, reason)`` for providers this name rules out.
+
+        Said rather than silently dropped. A `.homelab` service losing its
+        Let's Encrypt option without explanation looks like a missing feature,
+        and the sentence is what turns it into an answer -- it names the
+        alternative that does work.
+        """
+
+        return tuple(
+            sorted(
+                (provider.label or kind, refused)
+                for kind, provider in PROVIDERS.items()
+                if provider.facet == self.id
+                and provider.seed is not None
+                and (refused := self._refused(provider))
+            )
+        )
+
+    def _refused(self, provider) -> str:
+        if provider.applies is None:
+            return ""
+        try:
+            return provider.applies(self.context)
+        except (KeyError, TypeError, ValueError):
+            return ""
 
     @property
     def routes(self) -> bool:
@@ -640,6 +676,7 @@ def _assemble(
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
 ) -> Service:
     origin = _locate(origin_address, topology) if origin_address else None
+    context = name_context(hostname)
     facets = tuple(
         Facet(
             id=facet_id,
@@ -652,6 +689,7 @@ def _assemble(
                 and certificate_covers(hostname, names)
             ),
             observed=_observed(facet_id, origin),
+            context=context,
         )
         for facet_id, label in service_facets()
     )

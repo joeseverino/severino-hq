@@ -21,12 +21,12 @@ from control_plane.models import (
     ProviderInventory,
     TopologySnapshot,
 )
-from control_plane.providers import DNS_RECORD_TYPES
+from control_plane.providers import DNS_RECORD_TYPES, NameContext
 
 from .connections import connections_for, reachable_through
 
 
-def proxy_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Certificates HQ manages, for a proxy host that needs one bound.
 
     ``certificate_resource`` names an HQ key, so typing it correctly required
@@ -38,18 +38,29 @@ def proxy_choices() -> dict[str, tuple[tuple[str, str], ...]]:
     managed = ManagedResource.objects.filter(
         kind="tls.certificate", enabled=True
     ).order_by("key")
+    covering = set(context.certificates)
+    # The ones that answer for this name first, and marked. With a single
+    # certificate the menu was right by accident; the second one is a coin
+    # flip, and binding a proxy to a certificate that does not cover its names
+    # is a browser warning rather than an error anything reports.
+    options = [
+        (resource.key, f"{resource.key} — covers {context.hostname}")
+        for resource in managed
+        if resource.key in covering
+    ]
+    options.extend(
+        (resource.key, resource.key)
+        for resource in managed
+        if resource.key not in covering
+    )
     # No blank option here. Whether "leave it as it is" is even a coherent
     # answer depends on whether the thing exists yet, and only the form knows
     # that -- offered on a create page it read as "keep the certificate it
     # already has" about a proxy host that did not exist.
-    return {
-        "certificate_resource": tuple(
-            (resource.key, resource.key) for resource in managed
-        )
-    }
+    return {"certificate_resource": tuple(options)}
 
 
-def certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The certificates the topology describes, as ``pki:`` references.
 
     Labelled with the names each one covers, because "pki:jseverino-wildcard"
@@ -126,7 +137,7 @@ def _certificates(payload: dict[str, Any]):
         )
 
 
-def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
+def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The same install targets an issued certificate can go to.
 
     Deploying is deploying: a proxy does not care which authority signed the
@@ -151,7 +162,7 @@ def uploaded_certificate_choices() -> dict[str, tuple[tuple[str, str], ...]]:
     }
 
 
-def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
+def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """The zone a record belongs to, and what kind of record it is."""
 
     return {
@@ -166,7 +177,7 @@ def dns_record() -> dict[str, tuple[tuple[str, str], ...]]:
     }
 
 
-def container_stack() -> dict[str, tuple[tuple[str, str], ...]]:
+def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Where a stack can run, and which Portainer reaches it.
 
     Both menus come from the connection sweep, because a Portainer is the only
@@ -206,7 +217,7 @@ def _topology_roles() -> dict[str, str]:
     }
 
 
-def zone() -> dict[str, tuple[tuple[str, str], ...]]:
+def zone(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Which domain to take responsibility for, and through which credential."""
 
     return {

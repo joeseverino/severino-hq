@@ -33,7 +33,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
-from control_plane.providers import PROVIDERS, validate_spec
+from control_plane.providers import PROVIDERS, NameContext, validate_spec
 
 from .plugins import _import
 
@@ -308,11 +308,14 @@ def identity_fields(kind: str) -> tuple[str, ...]:
     provider = PROVIDERS[kind]
     if provider.covers or provider.seed is None:
         return ()
-    return tuple(provider.seed("hostname.invalid"))
+    return tuple(provider.seed(NameContext(hostname="hostname.invalid")))
 
 
 def spec_form_class(
-    kind: str, *, lock_identity: bool = False
+    kind: str,
+    *,
+    lock_identity: bool = False,
+    context: NameContext | None = None,
 ) -> type[ProviderSpecForm]:
     """Build the form for one provider kind.
 
@@ -325,11 +328,12 @@ def spec_form_class(
     """
 
     provider = PROVIDERS[kind]
+    context = context or NameContext()
     fields = {
         name: _field_for(field)
         for name, field in provider.spec_type.model_fields.items()
     }
-    for name, options in _live_choices(provider).items():
+    for name, options in _live_choices(provider, context).items():
         if name not in fields:
             continue
         original = fields[name]
@@ -455,7 +459,9 @@ def _field_for(field: Any) -> forms.Field:
     )
 
 
-def _live_choices(provider: Any) -> dict[str, tuple[tuple[str, str], ...]]:
+def _live_choices(
+    provider: Any, context: NameContext
+) -> dict[str, tuple[tuple[str, str], ...]]:
     """Options a provider says come from live data, resolved late.
 
     A failure here must not take the form down: the page is how an operator
@@ -467,7 +473,7 @@ def _live_choices(provider: Any) -> dict[str, tuple[tuple[str, str], ...]]:
     if not provider.choices:
         return {}
     try:
-        return _import(provider.choices)() or {}
+        return _import(provider.choices)(context) or {}
     except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
         return {}
 

@@ -640,6 +640,54 @@ class CloudflareZoneSpec(ProviderModel):
 
 
 @dataclass(frozen=True)
+class NameContext:
+    """What HQ already knows about a hostname, offered to the next question.
+
+    Every field here was worked out somewhere else on the way in: which zones a
+    credential may edit, where something already answers this name, which
+    certificate already covers it. Passed rather than re-derived, because a form
+    that cannot see them asks for them again -- and a page offering to issue a
+    Let's Encrypt certificate for a name in no public zone is not asking, it is
+    proposing a failure.
+
+    Declared here beside the providers that read it and built in the application
+    layer, which is the half allowed to touch the database. Every field defaults,
+    so a caller that knows nothing yet is a legal caller and providers behave as
+    they did before any of this existed.
+    """
+
+    hostname: str = ""
+    # Zones a connected credential can actually edit, as the controller last
+    # reported them. Empty means nothing has swept, not that nothing is
+    # reachable -- so an empty tuple must never be read as a prohibition.
+    public_zones: tuple[str, ...] = ()
+    swept: bool = False
+    # Where this name is already served, as "host:port", declared or observed.
+    # The host half is whatever the provider calls the machine, which for a
+    # container stack is the machine's name rather than an address.
+    origin: str = ""
+    # The same place, as something on the network can actually reach it. A
+    # proxy seeded with "homelab-server" is seeded with a name nginx cannot
+    # resolve, which is a worse answer than an empty box: it looks considered.
+    origin_address: str = ""
+    # Resource keys of certificates that already cover this name.
+    certificates: tuple[str, ...] = ()
+
+    @property
+    def public_zone(self) -> str:
+        """The reported zone this name falls in, if one does.
+
+        Suffix-matched on label boundaries: "notjseverino.com" is not in
+        "jseverino.com", and a check on plain string endings says it is.
+        """
+
+        for zone in self.public_zones:
+            if self.hostname == zone or self.hostname.endswith(f".{zone}"):
+                return zone
+        return ""
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
     kind: str
     # What this is called in a sentence, and what it does in one line. Both are
@@ -680,7 +728,7 @@ class ProviderSpec:
     # provider that declares a facet for it, so the operator types it once
     # rather than once per resource -- and a provider added later joins that
     # flow by saying which of its fields the name fills in.
-    seed: Callable[[str], dict[str, Any]] | None = None
+    seed: Callable[["NameContext"], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
     # supply -- an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
@@ -731,6 +779,16 @@ class ProviderSpec:
     # and a single field would have had to pick one and be wrong about the
     # other on the page whose whole job is saying what a credential is for.
     connection_providers: tuple[str, ...] = ()
+    # Why this provider cannot supply a given name, or "" when it can.
+    #
+    # An offer that cannot work is worse than no offer: a `.homelab` service was
+    # invited to add a Let's Encrypt certificate, which needs a DNS-01 challenge
+    # in a zone no credential holds, so the only way to find out was to declare
+    # it and read the failure a minute later in a job result.
+    #
+    # A sentence rather than a boolean, because the page says why -- and the
+    # provider is the only thing that knows.
+    applies: Callable[["NameContext"], str] | None = None
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
     # A topology reference is the case that forced it: rendered from the
@@ -1060,15 +1118,15 @@ def _stack_origin(spec: dict[str, Any]) -> str:
     return f"{host}:{port}" if host and port else ""
 
 
-def _stack_seed(hostname: str) -> dict[str, Any]:
+def _stack_seed(context: NameContext) -> dict[str, Any]:
     """A stack seeded from the name it will serve.
 
     The name doubles as the stack's own, lowercased and hyphenated the way
     compose projects are, so publishing a service does not ask for it twice.
     """
 
-    label = re.sub(r"[^a-z0-9-]+", "-", hostname.lower()).strip("-")
-    return {"hostnames": [hostname], "name": label or "service"}
+    label = re.sub(r"[^a-z0-9-]+", "-", context.hostname.lower()).strip("-")
+    return {"hostnames": [context.hostname], "name": label or "service"}
 
 
 def _stack_readout(
@@ -1434,15 +1492,35 @@ def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _rewrite_seed(hostname: str) -> dict[str, Any]:
-    return {"domain": hostname}
+def _rewrite_seed(context: NameContext) -> dict[str, Any]:
+    return {"domain": context.hostname}
 
 
-def _proxy_seed(hostname: str) -> dict[str, Any]:
-    return {"domain_names": [hostname]}
+def _proxy_seed(context: NameContext) -> dict[str, Any]:
+    """A proxy for this name, pointed at whatever already serves it.
+
+    The address is not a guess. Something declared or observed answers this name
+    on a host and a port, and the form used to open with an empty "Send traffic
+    to" beside a page stating exactly that -- so the operator read the answer off
+    one card and typed it into the next.
+
+    Blank when nothing serves it yet, which is the honest form of not knowing.
+    """
+
+    host, _, port = (context.origin_address or context.origin).rpartition(":")
+    seeded: dict[str, Any] = {"domain_names": [context.hostname]}
+    if host and port.isdigit():
+        seeded["forward_host"] = host
+        seeded["forward_port"] = int(port)
+    # The certificate that already answers for this name, rather than whichever
+    # sorted first. With one certificate the menu was right by luck; the second
+    # one would have bound a proxy to a certificate that does not cover it.
+    if len(context.certificates) == 1:
+        seeded["certificate_resource"] = context.certificates[0]
+    return seeded
 
 
-def _certificate_seed(hostname: str) -> dict[str, Any]:
+def _certificate_seed(context: NameContext) -> dict[str, Any]:
     """A new certificate, started from the name that needs one.
 
     Only the names it covers: what to call its lineage and where to install it
@@ -1450,17 +1528,71 @@ def _certificate_seed(hostname: str) -> dict[str, Any]:
     an answer in the form that looks considered and is not.
     """
 
-    return {"domains": [hostname]}
+    return {"domains": [context.hostname]}
 
 
-def _dns_record_seed(hostname: str) -> dict[str, Any]:
+def _dns_record_seed(context: NameContext) -> dict[str, Any]:
     # The registrable domain, guessed from the last two labels. A seed, not a
     # decision: it is offered in an editable field because a zone is not always
     # the last two labels, and being wrong here is visible and one keystroke to
     # correct.
-    labels = hostname.split(".")
-    zone = ".".join(labels[-2:]) if len(labels) > 2 else hostname
-    return {"name": hostname, "zone": zone}
+    # The zone a connected credential actually holds, when one does. Falling
+    # back to the last two labels, which is right for most names and wrong for
+    # every co.uk -- a guess worth making only when there is nothing better.
+    labels = context.hostname.split(".")
+    zone = context.public_zone or (
+        ".".join(labels[-2:]) if len(labels) > 2 else context.hostname
+    )
+    return {"name": context.hostname, "zone": zone}
+
+
+def _uploaded_certificate_seed(context: NameContext) -> dict[str, Any]:
+    """An uploaded certificate, named after what needs one.
+
+    Seeding the name is the whole of what a hostname can answer here: which
+    machines to install it on is a decision, and the certificate itself arrives
+    as a file on the same page.
+
+    Its existence is the point. Offered nowhere, a `.homelab` service had one
+    certificate option and it was the one that cannot work -- the answer was
+    reachable only by knowing to go to the registry and pick it by hand.
+    """
+
+    label = re.sub(r"[^a-z0-9.-]+", "-", context.hostname.lower()).strip("-.")
+    return {"certificate_name": label or "certificate"}
+
+
+def _public_dns_applies(context: NameContext) -> str:
+    """Whether any connected account holds a zone this name could live in.
+
+    A `.homelab` name has no public zone and never will, so offering to publish
+    a record for it proposes a call Cloudflare will refuse. The credential
+    already reported which zones it may edit; this is that answer, used.
+
+    Silent until something has swept. An empty report means nobody has looked,
+    and refusing every name on that basis would make one missed sweep look like
+    a deliberate restriction.
+    """
+
+    if not context.swept or context.public_zone:
+        return ""
+    return "No connected DNS account holds a zone for this name."
+
+
+def _managed_certificate_applies(context: NameContext) -> str:
+    """Whether Let's Encrypt could issue for this name at all.
+
+    Issuance here is DNS-01, which means proving control by writing a record
+    into the name's own zone. No zone, no proof, and no certificate -- a fact
+    knowable now rather than a minute later in a failed job.
+    """
+
+    if not context.swept or context.public_zone:
+        return ""
+    return (
+        "Let's Encrypt proves this name by writing a DNS record in its zone, "
+        "and no connected account holds one. Upload a certificate instead."
+    )
 
 
 _PROVIDERS = (
@@ -1472,6 +1604,7 @@ _PROVIDERS = (
         ResolvedTLSCertificateSpec,
         _resolve_tls,
         label="TLS certificate",
+        applies=_managed_certificate_applies,
         connection_providers=("cloudflare_dns", "ssh"),
         choices="application.provider_choices:certificate_choices",
         # topology_ref is not offered when adding one. It exists because every
@@ -1506,6 +1639,7 @@ _PROVIDERS = (
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
         label="Uploaded certificate",
+        seed=_uploaded_certificate_seed,
         connection_providers=("ssh",),
         choices="application.provider_choices:uploaded_certificate_choices",
         material_form="application.provider_forms:CertificateUploadForm",
@@ -1596,6 +1730,7 @@ _PROVIDERS = (
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         label="Public DNS record",
+        applies=_public_dns_applies,
         connection_providers=("cloudflare_dns",),
         advanced_fields=("priority", "ttl"),
         public_effect=True,

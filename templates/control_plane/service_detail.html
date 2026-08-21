@@ -105,6 +105,14 @@ not restated here.
         {% for kind, label in facet.declarable %}
           <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
         {% endfor %}
+        {% comment %}
+        Named, not silently dropped. An option disappearing without explanation
+        reads as a missing feature; the sentence turns it into an answer, and
+        each one names the alternative that does work.
+        {% endcomment %}
+        {% for label, reason in facet.unavailable %}
+          <span class="readout muted"><span class="readout-label">{{ label }}</span> {{ reason }}</span>
+        {% endfor %}
       {% endif %}
     </div>
   {% endfor %}
