@@ -8,8 +8,10 @@
 # connection is creating an item and touches no file here. The registry holds
 # only the projections: the shapes a connection can take, which are generic.
 #
-# `connections` in the registry is still honoured for items that predate the
-# fields, and is the only reason this reads it at all.
+# The registry holds only the projections: the shapes a connection can take,
+# which are generic. It names no connection, so an item that declares neither a
+# projection nor an env_prefix is an error here rather than something a second
+# list could answer for.
 
 set -eu
 
@@ -66,16 +68,6 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
 
     projection="$(item_field "${item}" projection)"
     prefix="$(item_field "${item}" env_prefix)"
-    if [ -z "${projection}" ] || [ -z "${prefix}" ]; then
-        projection="${projection:-$(
-            jq -r --arg ref "${connection_ref}" \
-                '.connections[$ref].projection // ""' "${registry}"
-        )}"
-        prefix="${prefix:-$(
-            jq -r --arg ref "${connection_ref}" \
-                '.connections[$ref].env_prefix // ""' "${registry}"
-        )}"
-    fi
     if [ -z "${projection}" ] || [ -z "${prefix}" ]; then
         echo "Connection ${connection_ref} declares no projection or env_prefix." >&2
         exit 1

@@ -7,7 +7,6 @@ set -eu
 
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly env_file="${app_dir}/secrets/severino_controller_env"
-readonly registry="${app_dir}/config/controller-connections.json"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly ssh_dir="${app_dir}/secrets/ssh"
@@ -66,22 +65,19 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
-for connection_ref in $(jq -r '.connections | keys[]' "${registry}"); do
-    prefix="$(
-        jq -r --arg ref "${connection_ref}" \
-            '.connections[$ref].env_prefix' "${registry}"
-    )"
-    projection="$(
-        jq -r --arg ref "${connection_ref}" \
-            '.connections[$ref].projection' "${registry}"
-    )"
-    for env_name in $(
-        jq -r --arg projection "${projection}" \
-            '.projections[$projection] | keys[]' "${registry}"
-    ); do
-        set -- "$@" --env "${prefix}_${env_name}"
-    done
-done
+# Forward what the renderer produced, rather than recomputing the same names
+# from a registry. The registry holds the shape a connection can take; which
+# connections exist is the vault's to say, so a list rebuilt here is a second
+# answer to a question this file cannot see.
+#
+# The names only: `--env NAME` passes the value already sourced above, so no
+# secret reaches the process table.
+while IFS= read -r env_name; do
+    [ -n "${env_name}" ] || continue
+    set -- "$@" --env "${env_name}"
+done <<EOF
+$(sed -nE 's/^([A-Z][A-Z0-9_]*)=.*/\1/p' "${env_file}")
+EOF
 set -- "$@" "${image}" -m controller_runtime.worker
 if [ "${mode}" = "--apply" ]; then
     set -- "$@" --apply

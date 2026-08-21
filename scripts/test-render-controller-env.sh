@@ -30,28 +30,6 @@ cat >"${fixture_dir}/projections-only.json" <<'JSON'
 }
 JSON
 
-# The same, plus a named connection, for an item that predates the fields.
-cat >"${fixture_dir}/with-connections.json" <<'JSON'
-{
-  "schema_version": 1,
-  "projections": {
-    "api_token": {
-      "CONNECTION_REF": {"source": "connection_ref"},
-      "URL": {"source": "field", "label": "website"},
-      "API_TOKEN": {"source": "field", "id": "credential"},
-      "PROVIDER": {"source": "field", "label": "provider", "optional": true}
-    }
-  },
-  "connections": {
-    "example": {
-      "provider": "example",
-      "projection": "api_token",
-      "env_prefix": "EXAMPLE"
-    }
-  }
-}
-JSON
-
 # $1 = fixture name, $2 = the JSON `op item get` should return
 write_op() {
     cat >"${fixture_dir}/op" <<SH
@@ -107,16 +85,13 @@ write_op '[{"id":"item-1"}]' '{"fields":[
 check "item declares its own connection" "${fixture_dir}/projections-only.json" 0 \
     'EXAMPLE_API_TOKEN="test-token"'
 
-# 2. An item that predates the fields still resolves through the registry.
+# 3. An item that declares no projection: a loud failure, not a silent omission.
+#    The registry names no connections, so nothing can answer for it.
 write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"a","label":"connection_ref","value":"example"},
   {"id":"credential","label":"credential","value":"test-token"},
   {"id":"d","label":"website","value":"https://api.example.test"}
 ]}'
-check "registry names an unmigrated item" "${fixture_dir}/with-connections.json" 0 \
-    'EXAMPLE_CONNECTION_REF="example"'
-
-# 3. Neither side declares it: a loud failure, not a silent omission.
 check "undeclared connection fails" "${fixture_dir}/projections-only.json" 1 \
     "declares no projection or env_prefix"
 
@@ -169,6 +144,23 @@ write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"a","label":"username","value":"someone"}
 ]}'
 check "unrelated vault item is skipped" "${fixture_dir}/projections-only.json" 0 ""
+
+# 9. No script may still read a registry key the registry no longer has. The
+#    renderer is covered by the cases above; every other script that reads this
+#    file is not, and one of them recomputing from `.connections` failed at
+#    deploy time rather than here.
+for script in "${script_dir}"/*.sh; do
+    if grep -q '\.connections\[' "${script}"; then
+        echo "FAIL ${script##*/} reads .connections; the vault is the inventory." >&2
+        failures=$((failures + 1))
+    fi
+done
+present="$(jq -r '[.projections | keys[]] | join(",")' \
+    "${script_dir}/../config/controller-connections.json")"
+case "${present}" in
+    *acme*|*api_token*|*login*|*ssh_transport*) echo "ok   registry declares projections" ;;
+    *) echo "FAIL registry declares no projections" >&2; failures=$((failures + 1)) ;;
+esac
 
 if [ "${failures}" -ne 0 ]; then
     echo "Controller projection contract failed (${failures})." >&2
