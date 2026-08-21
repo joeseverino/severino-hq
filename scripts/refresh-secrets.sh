@@ -83,17 +83,15 @@ fi
 # into the web container; run-controller.sh forwards it only to controller exec.
 temporary="$(mktemp "${secret_dir}/.tmp.XXXXXX")"
 "${script_dir}/render-controller-env.sh" "${vault}" >"${temporary}"
-count="$(grep -c . "${temporary}" || true)"
-expected_count="$(
-    jq '
-        [.connections[].projection] as $selected
-        | [$selected[] as $projection
-          | (.projections[$projection] | length)] | add
-    ' \
-        "${script_dir}/../config/controller-connections.json"
-)"
-if [ "${count}" -ne "${expected_count}" ]; then
-    echo "Refusing incomplete controller env (${count}/${expected_count} vars)." >&2
+# Completeness is the renderer's to guarantee, not this script's to recount.
+# The registry no longer lists the connections -- the vault does -- so there is
+# no number here to compare against, and the renderer exits non-zero on any
+# value a projection requires and an item does not carry. What is left to check
+# is that it produced an environment at all: a run that resolved nothing exits
+# zero with an empty file, and installing that would take every provider away.
+connections="$(grep -c '_CONNECTION_REF=' "${temporary}" || true)"
+if [ "${connections}" -eq 0 ]; then
+    echo "Refusing a controller env that resolved no connections." >&2
     exit 1
 fi
 install_if_changed "${temporary}" "${controller_target}" 0 0

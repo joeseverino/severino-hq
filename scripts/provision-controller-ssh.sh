@@ -14,14 +14,14 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# The registry declares the shape a connection can take. Which connections
+# exist is the vault's to say, and they arrive already resolved in the rendered
+# environment read below -- so there is nothing to cross-check here beyond the
+# projection this script depends on being defined at all.
 jq -e '
     .schema_version == 1
-    and (.connections | type == "object")
-    and all(
-        [.connections | to_entries[] | select(.value.projection == "ssh_transport")][];
-        (.key | test("^[a-z0-9][a-z0-9-]*$"))
-        and (.value.env_prefix | test("^[A-Z][A-Z0-9_]*$"))
-    )
+    and (.projections.ssh_transport | type == "object")
+    and (.projections.ssh_transport | has("HOST") and has("PORT") and has("USER"))
 ' "${registry}" >/dev/null
 
 # Endpoints come from 1Password through the rendered controller environment.
@@ -37,10 +37,19 @@ install -d -o root -g root -m 0700 "${ssh_dir}"
 temporary="$(mktemp "${ssh_dir}/.known_hosts.XXXXXX")"
 trap 'rm -f "${temporary}"' EXIT HUP INT TERM
 
-for connection_ref in $(
-    jq -r '.connections | to_entries[]
-           | select(.value.projection == "ssh_transport") | .key' "${registry}"
-); do
+# Which connections open a shell is read off the rendered environment, the same
+# way the controller reads it: a connection carrying a host and a user is one
+# this can open. The registry says what an ssh_transport looks like; it does not
+# know which of them exist, because the vault does.
+while IFS= read -r prefix; do
+    [ -n "${prefix}" ] || continue
+    host=""
+    eval "host=\${${prefix}_HOST:-}"
+    [ -n "${host}" ] || continue
+    connection_ref=""
+    eval "connection_ref=\${${prefix}_CONNECTION_REF:-}"
+    [ -n "${connection_ref}" ] || continue
+
     identity="${ssh_dir}/${connection_ref}"
     if [ ! -f "${identity}" ]; then
         ssh-keygen -q -t ed25519 -N '' \
@@ -52,14 +61,8 @@ for connection_ref in $(
     chmod 0600 "${identity}"
     chmod 0644 "${identity}.pub"
 
-    prefix="$(
-        jq -r --arg ref "${connection_ref}" \
-            '.connections[$ref].env_prefix' "${registry}"
-    )"
-    host=""
     port=""
     host_key=""
-    eval "host=\${${prefix}_HOST:-}"
     eval "port=\${${prefix}_PORT:-}"
     eval "host_key=\${${prefix}_HOST_KEY:-}"
     if [ -z "${host}" ] || [ -z "${port}" ] || [ -z "${host_key}" ]; then
@@ -71,7 +74,9 @@ for connection_ref in $(
         *) echo "${prefix}_HOST_KEY must be an ssh-ed25519 key." >&2; exit 1 ;;
     esac
     printf '[%s]:%s %s\n' "${host}" "${port}" "${host_key}" >>"${temporary}"
-done
+done <<EOF
+$(sed -nE 's/^([A-Z][A-Z0-9_]*)_CONNECTION_REF=.*/\1/p' "${env_file}")
+EOF
 
 sort -u "${temporary}" -o "${temporary}"
 install -o root -g root -m 0600 "${temporary}" "${ssh_dir}/known_hosts"
