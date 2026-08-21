@@ -46,8 +46,11 @@ def _use_the_file_clone(creation, worker_id):
 
     settings_dict = creation.get_test_db_clone_settings(worker_id)
     if creation.is_in_memory_db(settings_dict["NAME"]):
-        # Nothing was cloned to disk; leave Django's handling alone.
-        return creation.__class__.setup_worker_connection(creation, worker_id)
+        # Nothing was cloned to disk; leave Django's handling alone. It returns
+        # nothing, and so does this: one exit value on both paths rather than a
+        # value on one and a fall-through on the other.
+        creation.__class__.setup_worker_connection(creation, worker_id)
+        return
     creation.connection.settings_dict.update(settings_dict)
     creation.connection.close()
 

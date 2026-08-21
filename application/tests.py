@@ -1013,3 +1013,58 @@ class TableTotalsTests(TestCase):
     def test_a_missing_queryset_is_not_an_error(self):
         view, _ = self._view()
         self.assertEqual(view.table_totals_for(None), {})
+
+
+class WriteSpineContractTests(TestCase):
+    """What a write view must declare, enforced where the fix is obvious.
+
+    Both guards exist because the failure they replace is quiet. A service left
+    as a plain function binds as a method and passes the view where the command
+    belongs; a missing noun renders a success message with a hole in it.
+    """
+
+    def _view(self, **attributes):
+        from .writes import ServiceCreateMixin
+
+        return type("AView", (ServiceCreateMixin,), attributes)
+
+    def test_a_service_that_is_not_a_staticmethod_is_refused(self):
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            self._view(service=lambda command, **kwargs: None)
+
+        self.assertIn("staticmethod", str(caught.exception))
+
+    def test_a_view_that_writes_must_say_what_it_writes(self):
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            self._view(service=staticmethod(lambda command, **kwargs: None))
+
+        self.assertIn("noun", str(caught.exception))
+        self.assertIn("result_key", str(caught.exception))
+
+    def test_a_complete_view_is_accepted(self):
+        view = self._view(
+            service=staticmethod(lambda command, **kwargs: None),
+            noun="Thing",
+            result_key="thing",
+        )
+
+        self.assertEqual(view.noun, "Thing")
+
+    def test_a_mixin_that_supplies_no_service_is_not_a_view(self):
+        """Intermediate layers declare part of the contract and finish none of
+        it, so completeness is asked of the class that supplies the service."""
+
+        from .writes import ServiceCreateMixin
+
+        layer = type("PartialLayer", (ServiceCreateMixin,), {"noun": "Thing"})
+
+        self.assertEqual(layer.noun, "Thing")
+
+    def test_the_base_declares_no_noun_to_collide_with(self):
+        """A placeholder value that is never correct still wins or loses by base
+        order, so which one applies depends on how the bases were written."""
+
+        from .writes import ServiceWriteMixin
+
+        self.assertNotIn("noun", vars(ServiceWriteMixin))
+        self.assertNotIn("result_key", vars(ServiceWriteMixin))

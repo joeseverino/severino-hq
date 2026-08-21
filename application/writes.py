@@ -50,14 +50,23 @@ class ServiceWriteMixin:
         Not used when creating.
     ``noun``
         What to call the thing in a message, e.g. ``"Content item"``.
+
+    Declared here as a contract and not as attributes. A placeholder value that
+    is never correct -- an empty noun, an empty result key -- collides with the
+    real one on whichever base supplies it, so which wins depends on the order
+    the bases were written in and reordering them breaks the view silently. It
+    also turns "forgot to set this" into a message reading "“Ada” created" with
+    the noun missing, rather than into an error.
+
+    ``identity_attr`` has a default because a slug genuinely is the common case
+    and every value it takes is a working one.
     """
 
-    service = None
-    result_key = ""
     identity_attr = "slug"
-    identity_result_key = ""
-    identity_kwarg = ""
-    noun = ""
+
+    #: Read through ``getattr`` so a subclass that omits one is an error naming
+    #: the attribute, rather than a blank in a sentence.
+    REQUIRED = ("service", "noun", "result_key")
 
     def __init_subclass__(cls, **kwargs):
         # A plain function assigned to a class attribute becomes a bound method
@@ -71,6 +80,18 @@ class ServiceWriteMixin:
                 raise ImproperlyConfigured(
                     f"{cls.__name__}.{name} must be wrapped in staticmethod()."
                 )
+        # Only a class that supplies a service is a view rather than another
+        # layer of mixin, so only that class has to be complete.
+        if "service" not in cls.__dict__:
+            return
+        missing = [
+            name for name in cls.REQUIRED if getattr(cls, name, None) in (None, "")
+        ]
+        if missing:
+            raise ImproperlyConfigured(
+                f"{cls.__name__} writes through a service and declares no "
+                f"{', '.join(missing)}."
+            )
 
     def write_principal(self):
         return web_principal(self.request.user)
@@ -81,7 +102,7 @@ class ServiceWriteMixin:
     def reload(self, result):
         """The saved record, as a model instance the URL can be taken from."""
 
-        key = self.identity_result_key or self.identity_attr
+        key = getattr(self, "identity_result_key", "") or self.identity_attr
         return self.model._default_manager.get(
             **{self.identity_attr: result[self.result_key][key]}
         )
