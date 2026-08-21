@@ -2043,15 +2043,24 @@ def _published(container: dict[str, Any]) -> tuple[list[int], int | None, bool]:
 
 
 def _container_record(
-    container: dict[str, Any], host: str, connection_ref: str
+    container: dict[str, Any],
+    host: str,
+    connection_ref: str,
+    portainer_stacks: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """What Portainer knows about one container, in HQ's vocabulary."""
 
     labels = container.get("Labels") or {}
     ports, port, reachable = _published(container)
+    stack = labels.get("com.docker.compose.project", "")
     return {
+        # Whether Portainer created this, or merely sees it. Everything running
+        # today was started by compose on the machine, so Portainer holds no
+        # stack for any of it -- and a declaration built as though it did would
+        # ask Portainer to stand up a second copy of something already serving.
+        "portainer_managed": bool(stack) and stack in portainer_stacks,
         "name": (container.get("Names") or ["/"])[0].lstrip("/"),
-        "stack": labels.get("com.docker.compose.project", ""),
+        "stack": stack,
         "working_dir": labels.get("com.docker.compose.project.working_dir", ""),
         "image": container.get("Image", ""),
         # How it is attached, because it decides whether the ports below can
@@ -2238,8 +2247,15 @@ def list_portainer() -> list[dict[str, Any]]:
                 if environment["local"] and local_host
                 else environment["name"]
             )
+            created_here = frozenset(
+                str(stack.get("Name", ""))
+                for stack in _portainer_stacks(environment["id"], connection_ref)
+                if stack.get("Name")
+            )
             for container in _portainer_containers(environment["id"], connection_ref):
-                records.append(_container_record(container, host, connection_ref))
+                records.append(
+                    _container_record(container, host, connection_ref, created_here)
+                )
     return records
 
 

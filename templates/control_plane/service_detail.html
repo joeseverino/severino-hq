@@ -90,9 +90,20 @@ not restated here.
         {% if facet.observed.published %}<span class="readout"><span class="readout-label">Publishes</span> {{ facet.observed.published }}</span>{% endif %}
         {% if facet.observed.status %}<span class="readout"><span class="readout-label">Status</span> {{ facet.observed.status }}</span>{% endif %}
         <span class="readout muted">Not managed by HQ · seen {{ facet.observed.observed_at|timesince }} ago</span>
-        {% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a></span>
-        {% endfor %}
+        {% comment %}
+        The offer to take it on, only when taking it on would not mean building
+        a second one. A container started by compose on the machine is invisible
+        to Portainer's stack list, so declaring it here asks Portainer to stand
+        up its own copy of something already serving — which, for the container
+        running this page, means HQ redeploying itself.
+        {% endcomment %}
+        {% if facet.observed.portainer_managed %}
+          {% for kind, label in facet.declarable %}
+            <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a></span>
+          {% endfor %}
+        {% else %}
+          <span class="readout muted">Started outside Portainer, so HQ can watch it but not take it over.</span>
+        {% endif %}
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>

@@ -384,3 +384,94 @@ class SeedTests(TestCase):
         )
 
         self.assertEqual(seeded["zone"], "dev.example.com")
+
+
+class AdoptionSafetyTests(TestCase):
+    """HQ offers to take on a container only when that would not build a second.
+
+    Everything running today was started by compose on the machine, so Portainer
+    holds no stack for any of it. A declaration built as though it did would ask
+    Portainer to stand up its own copy of something already serving.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+
+    def _service_page(self, portainer_managed):
+        from control_plane.models import ManagedResource, ProviderInventory
+        from django.utils import timezone
+
+        ProviderInventory.objects.update_or_create(
+            kind="portainer.stack",
+            defaults={
+                "records": [
+                    {
+                        "name": "probe",
+                        "stack": "probe",
+                        "host": "homelab-server",
+                        "ports": [8099],
+                        "state": "running",
+                        "portainer_managed": portainer_managed,
+                    }
+                ],
+                "reachable": True,
+                "observed_at": timezone.now(),
+            },
+        )
+        ManagedResource.objects.create(
+            key="probe-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["probe.homelab"],
+                "forward_scheme": "http",
+                "forward_host": "192.168.1.233",
+                "forward_port": 8099,
+                "certificate_resource": "",
+                "ssl_forced": True,
+                "http2": True,
+                "websocket": True,
+                "caching_enabled": False,
+                "block_exploits": True,
+                "access_list_id": 0,
+                "advanced_config": "",
+                "hsts_enabled": True,
+                "hsts_subdomains": True,
+                "trust_forwarded_proto": True,
+                "serving": True,
+            },
+        )
+        from control_plane.models import TopologySnapshot
+
+        TopologySnapshot.objects.update_or_create(
+            pk="topology",
+            defaults={
+                "schema_version": 1,
+                "checksum": "test",
+                "payload": {
+                    "hosts": [{"id": "homelab-server", "lan_ip": "192.168.1.233"}]
+                },
+            },
+        )
+        return self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": "probe.homelab"})
+        )
+
+    def test_a_container_portainer_did_not_create_is_not_offered_for_adoption(self):
+        response = self._service_page(portainer_managed=False)
+
+        self.assertContains(response, "watch it but not take it over")
+        self.assertNotContains(response, "Manage as container stack")
+
+    def test_one_portainer_created_can_be_taken_on(self):
+        response = self._service_page(portainer_managed=True)
+
+        self.assertContains(response, "Manage as container stack")
+
+    def test_either_way_it_reports_what_is_running(self):
+        response = self._service_page(portainer_managed=False)
+
+        self.assertContains(response, "probe")
+        self.assertContains(response, "Not managed by HQ")
