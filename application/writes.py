@@ -29,6 +29,15 @@ from .deletion import DeleteCommand
 from .security import web_principal
 
 
+# What a write says when the view does not say it differently. Constants rather
+# than attributes on the mixins: a default on one base and an override on
+# another are two bases declaring the same name, and which applies depends on
+# the order they were written in.
+CREATED = "{noun} “{target}” created."
+UPDATED = "{noun} “{target}” updated."
+DELETED = "{noun} “{target}” deleted."
+
+
 class ServiceWriteMixin:
     """Shared spine for a view whose mutation is one service call.
 
@@ -58,15 +67,15 @@ class ServiceWriteMixin:
     also turns "forgot to set this" into a message reading "“Ada” created" with
     the noun missing, rather than into an error.
 
-    ``identity_attr`` has a default because a slug genuinely is the common case
-    and every value it takes is a working one.
+    That applies to ``identity_attr`` too. A slug is the common case and every
+    value it takes is a working one, which is exactly why a default is wrong
+    here: it does not fail, it wins or loses by base order and sends a doc
+    record's redirect to a slug it does not have.
     """
-
-    identity_attr = "slug"
 
     #: Read through ``getattr`` so a subclass that omits one is an error naming
     #: the attribute, rather than a blank in a sentence.
-    REQUIRED = ("service", "noun", "result_key")
+    REQUIRED = ("service", "noun", "result_key", "identity_attr")
 
     def __init_subclass__(cls, **kwargs):
         # A plain function assigned to a class attribute becomes a bound method
@@ -114,15 +123,13 @@ class ServiceWriteMixin:
 class ServiceCreateMixin(ServiceWriteMixin):
     """Create through a service, then go to what was created."""
 
-    created_message = "{noun} “{target}” created."
-
     def form_valid(self, form):
         result = self.service(
             self.command_from_cleaned_data(form.cleaned_data),
             principal=self.write_principal(),
         )
         self.object = self.reload(result)
-        self.announce(self.created_message, self.object)
+        self.announce(getattr(self, "created_message", CREATED), self.object)
         return redirect(self.object.get_absolute_url())
 
 
@@ -133,8 +140,6 @@ class ServiceUpdateMixin(ServiceWriteMixin):
     a rename changes the slug, and redirecting to the old one 404s.
     """
 
-    updated_message = "{noun} “{target}” updated."
-
     def form_valid(self, form):
         result = self.service(
             self.command_from_cleaned_data(form.cleaned_data),
@@ -142,7 +147,7 @@ class ServiceUpdateMixin(ServiceWriteMixin):
             **{self.identity_kwarg: self.current_identity()},
         )
         self.object = self.reload(result)
-        self.announce(self.updated_message, self.object)
+        self.announce(getattr(self, "updated_message", UPDATED), self.object)
         return redirect(self.object.get_absolute_url())
 
 
@@ -153,8 +158,6 @@ class ServiceDeleteMixin(ServiceWriteMixin):
     time there is something to announce the record is gone.
     """
 
-    deleted_message = "{noun} “{target}” deleted."
-
     def form_valid(self, form):
         identity = self.current_identity()
         result = self.service(
@@ -162,7 +165,9 @@ class ServiceDeleteMixin(ServiceWriteMixin):
             principal=self.write_principal(),
             **{self.identity_kwarg: identity},
         )
-        self.announce(self.deleted_message, result["deleted"]["label"])
+        self.announce(
+            getattr(self, "deleted_message", DELETED), result["deleted"]["label"]
+        )
         return redirect(self.success_url)
 
 

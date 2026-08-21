@@ -1046,6 +1046,7 @@ class WriteSpineContractTests(TestCase):
             service=staticmethod(lambda command, **kwargs: None),
             noun="Thing",
             result_key="thing",
+            identity_attr="slug",
         )
 
         self.assertEqual(view.noun, "Thing")
@@ -1066,5 +1067,5 @@ class WriteSpineContractTests(TestCase):
 
         from .writes import ServiceWriteMixin
 
-        self.assertNotIn("noun", vars(ServiceWriteMixin))
-        self.assertNotIn("result_key", vars(ServiceWriteMixin))
+        for name in ("noun", "result_key", "identity_attr"):
+            self.assertNotIn(name, vars(ServiceWriteMixin))
