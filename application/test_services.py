@@ -593,7 +593,8 @@ class OriginNoteTests(TestCase):
         running = Running(
             name="probe", host="homelab-server", stack="probe", image="",
             state="running", status="", ports=(8099,), network_mode="bridge",
-            portainer_managed=False, connection_ref="", observed_at=None,
+            host_address="", portainer_managed=False, connection_ref="",
+            observed_at=None,
         )
         service = Service(
             hostname="probe.homelab",

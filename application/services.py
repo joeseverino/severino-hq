@@ -268,6 +268,7 @@ class Running:
     status: str
     ports: tuple[int, ...]
     network_mode: str
+    host_address: str
     portainer_managed: bool
     connection_ref: str
     observed_at: Any
@@ -285,6 +286,7 @@ class Running:
                 int(port) for port in record.get("ports") or () if str(port).isdigit()
             ),
             network_mode=str(record.get("network_mode", "")),
+            host_address=str(record.get("host_address", "")),
             portainer_managed=bool(record.get("portainer_managed")),
             connection_ref=str(record.get("connection_ref", "")),
             observed_at=observed_at,

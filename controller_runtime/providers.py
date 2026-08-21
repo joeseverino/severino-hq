@@ -2047,6 +2047,7 @@ def _container_record(
     host: str,
     connection_ref: str,
     portainer_stacks: frozenset[str] = frozenset(),
+    host_address: str = "",
 ) -> dict[str, Any]:
     """What Portainer knows about one container, in HQ's vocabulary."""
 
@@ -2075,6 +2076,12 @@ def _container_record(
         "port": port,
         "reachable": reachable,
         "host": host,
+        # Where the machine is, not just what this credential calls it. Two
+        # credentials name one machine differently -- an SSH item and a
+        # Portainer environment for the same VPS -- and the address is the only
+        # thing both agree on. Without it HQ lists one machine twice and files
+        # its containers under whichever name the sweep used.
+        "host_address": host_address,
         "connection_ref": connection_ref,
     }
 
@@ -2258,7 +2265,13 @@ def list_portainer_containers() -> list[dict[str, Any]]:
             )
             for container in _portainer_containers(environment["id"], connection_ref):
                 records.append(
-                    _container_record(container, host, connection_ref, created_here)
+                    _container_record(
+                        container,
+                        host,
+                        connection_ref,
+                        created_here,
+                        environment["address"],
+                    )
                 )
     return records
 

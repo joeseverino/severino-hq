@@ -34,6 +34,12 @@ class Machine:
     # can be an SSH transport and a Portainer environment at the same time, and
     # which of those is in play depends on what is being asked of it.
     reached_by: tuple[str, ...] = ()
+    # Other names this same machine is known by. Two credentials name one
+    # machine differently -- an SSH item called "edge" and a Portainer
+    # environment called "sl-cloud-edge-01" for the same VPS -- and listed
+    # separately it appeared twice, with its containers under one of them and
+    # the way to log into it under the other.
+    aliases: tuple[str, ...] = ()
     address: str = ""
     containers: tuple[Running, ...] = ()
     hostnames: tuple[str, ...] = ()
@@ -78,18 +84,76 @@ def machine_catalog() -> tuple[Machine, ...]:
         | set(resources)
         | {name for name in roles if name in reached or name in containers}
     )
+    aliases, addresses = _same_machine(containers)
+    canonical = sorted(names - set(aliases))
     return tuple(
         Machine(
             name=name,
             role=roles.get(name, ""),
-            reached_by=tuple(sorted(reached.get(name, ()))),
-            address=_address(name, reached.get(name, ())),
+            reached_by=tuple(
+                sorted(
+                    set(reached.get(name, ()))
+                    | {
+                        ref
+                        for alias in aliases
+                        if aliases[alias] == name
+                        for ref in reached.get(alias, ())
+                    }
+                )
+            ),
+            aliases=tuple(
+                sorted(alias for alias, target in aliases.items() if target == name)
+            ),
+            address=addresses.get(name, "") or _address(name, reached.get(name, ())),
             containers=tuple(containers.get(name, ())),
-            hostnames=tuple(sorted(services.get(name, ()))),
+            hostnames=tuple(
+                sorted(
+                    set(services.get(name, ()))
+                    | {
+                        hostname
+                        for alias in aliases
+                        if aliases[alias] == name
+                        for hostname in services.get(alias, ())
+                    }
+                )
+            ),
             resources=tuple(sorted(resources.get(name, ()))),
         )
-        for name in sorted(names)
+        for name in canonical
     )
+
+
+def _same_machine(
+    containers: dict[str, list[Running]],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Names that are one machine, and where that machine is.
+
+    Two credentials name one machine differently and neither is wrong: a
+    Portainer calls a VPS by its environment name, a 1Password SSH item calls it
+    whatever the operator called it. Listed as two, its containers sat under one
+    name and the way to log into it under the other, and the page said nothing
+    was running on a machine running three things.
+
+    The address is what both agree on, so it is the identity. The name kept is
+    the one the containers were reported under, because that is the name every
+    declaration's ``host`` field already uses.
+    """
+
+    located = {
+        host: found[0].host_address
+        for host, found in containers.items()
+        if found and found[0].host_address
+    }
+    aliases: dict[str, str] = {}
+    for connection in ProviderConnection.objects.all():
+        endpoint = connection.endpoint
+        if not endpoint or "://" in endpoint:
+            continue
+        address = endpoint.rpartition(":")[0] or endpoint
+        for host, known in located.items():
+            if known == address and connection.connection_ref != host:
+                aliases[connection.connection_ref] = host
+    return aliases, located
 
 
 def machine(name: str) -> Machine | None:

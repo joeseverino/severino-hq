@@ -12,6 +12,13 @@
       {% endif %}
       {% if machine.role %} · {{ machine.role }}{% endif %}
       {% if machine.address %} · <code>{{ machine.address }}</code>{% endif %}
+      {% comment %}
+      The other names this same machine answers to. Two credentials name one
+      machine differently and neither is wrong — a Portainer environment and an
+      SSH item for the same VPS — so the names are folded together and the ones
+      not chosen are said here rather than dropped.
+      {% endcomment %}
+      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
     </p>
   </div>
   <div class="page-actions">
@@ -70,6 +77,7 @@
           <th>Publishes</th>
           <th>Status</th>
           <th>State</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -88,6 +96,23 @@
             <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
             <td>{{ container.status }}</td>
             <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
+            <td>
+              {% comment %}
+              A container HQ watches has a declaration to open and operations to
+              queue against; one it merely sees has neither, and the offer to
+              start watching is the only thing that changes that. Every row is
+              therefore a way in, rather than five facts and a dead end.
+              {% endcomment %}
+              {% if container.watcher %}
+                <a class="subtle-link" href="{% url 'control_plane:detail' container.watcher %}">Open &rarr;</a>
+              {% else %}
+                <form method="post" action="{% url 'control_plane:adopt_record' container_kind container.token %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn ghost">Watch</button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>

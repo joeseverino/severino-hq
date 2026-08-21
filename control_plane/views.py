@@ -824,6 +824,7 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         if found is None:
             raise Http404("No machine of that name has been reported.")
         context["machine"] = found
+        context["container_kind"] = CONTAINER_KIND
         return context
 
 
