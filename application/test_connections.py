@@ -114,7 +114,9 @@ class DerivationTests(TestCase):
 
         sweep(A_PORTAINER)
 
-        self.assertEqual(connection_readings()[0].supplies, ("Container stack",))
+        self.assertEqual(
+            connection_readings()[0].supplies, ("Container", "Container stack")
+        )
 
     def test_an_unclassified_connection_claims_nothing(self):
         sweep({**A_PORTAINER, "provider": ""})
@@ -405,7 +407,7 @@ class AdoptionSafetyTests(TestCase):
         from django.utils import timezone
 
         ProviderInventory.objects.update_or_create(
-            kind="portainer.stack",
+            kind="portainer.container",
             defaults={
                 "records": [
                     {
@@ -421,10 +423,10 @@ class AdoptionSafetyTests(TestCase):
                 "observed_at": timezone.now(),
             },
         )
-        ManagedResource.objects.create(
+        ManagedResource.objects.update_or_create(
             key="probe-proxy",
             kind="npm.proxy_host",
-            spec={
+            defaults={"spec": {
                 "domain_names": ["probe.homelab"],
                 "forward_scheme": "http",
                 "forward_host": "192.168.1.233",
@@ -441,7 +443,7 @@ class AdoptionSafetyTests(TestCase):
                 "hsts_subdomains": True,
                 "trust_forwarded_proto": True,
                 "serving": True,
-            },
+            }},
         )
         from control_plane.models import TopologySnapshot
 
@@ -459,22 +461,60 @@ class AdoptionSafetyTests(TestCase):
             reverse("control_plane:service", kwargs={"hostname": "probe.homelab"})
         )
 
-    def test_a_container_portainer_did_not_create_is_not_offered_for_adoption(self):
+    def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
         response = self._service_page(portainer_managed=False)
 
-        self.assertContains(response, "watch it but not take it over")
+        self.assertContains(response, "which HQ has not seen")
         self.assertNotContains(response, "Manage as container stack")
 
-    def test_one_portainer_created_can_be_taken_on(self):
+    def test_one_portainer_created_can_be_redefined(self):
         response = self._service_page(portainer_managed=True)
 
         self.assertContains(response, "Manage as container stack")
 
-    def test_either_way_it_reports_what_is_running(self):
-        response = self._service_page(portainer_managed=False)
+    def test_either_way_it_can_be_watched(self):
+        """Defining and cycling are different claims.
 
-        self.assertContains(response, "probe")
-        self.assertContains(response, "watch it but not take it over")
+        Docker will start, stop and restart any container; Portainer will only
+        redefine one it made. Refusing both because it cannot do the second
+        would leave every container running today with no controls at all.
+        """
+
+        for created_by_portainer in (True, False):
+            with self.subTest(portainer_managed=created_by_portainer):
+                response = self._service_page(
+                    portainer_managed=created_by_portainer
+                )
+
+                self.assertContains(response, "Watch this container")
+
+    def test_watching_it_is_what_puts_the_controls_there(self):
+        """Buttons appear once a declaration exists to hang an operation on.
+
+        Every operation targets a resource, so a container nothing declares has
+        nothing to queue against -- which is what adoption is for here, and why
+        it asserts nothing about the container's definition.
+        """
+
+        from control_plane.models import ManagedResource
+
+        self._service_page(portainer_managed=False)
+        ManagedResource.objects.create(
+            key="homelab-server-probe",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "homelab-portainer",
+                "host": "homelab-server",
+                "name": "probe",
+            },
+        )
+
+        response = self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": "probe.homelab"})
+        )
+
+        self.assertContains(response, "Restart")
+        self.assertNotContains(response, "Watch this container")
 
 
 class ControllerColumnTests(TestCase):

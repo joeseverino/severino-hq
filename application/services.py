@@ -310,6 +310,46 @@ class Running:
         return ""
 
     @property
+    def token(self) -> str:
+        """The handle adoption looks this record up by."""
+
+        from .inventory import record_token
+
+        return record_token(CONTAINER_KIND, (self.host, self.name))
+
+    @property
+    def watcher(self) -> str:
+        """The declaration already watching this container, if one is.
+
+        Matched on the same identity the provider uses, so a container declared
+        here and the same container found by a sweep are recognised as one
+        thing -- which is what turns "found this" into "and here is what you can
+        do about it".
+        """
+
+        for resource in ManagedResource.objects.filter(
+            kind=CONTAINER_KIND, enabled=True
+        ):
+            if (
+                resource.spec.get("host") == self.host
+                and resource.spec.get("name") == self.name
+            ):
+                return resource.key
+        return ""
+
+    @property
+    def verbs(self) -> tuple[str, ...]:
+        """What it makes sense to ask of a container in this state.
+
+        Offering all three always means offering Start to something already
+        running, whose only outcome is Docker answering "already started" a
+        minute later in a job result. The state is right here; the buttons
+        should read it.
+        """
+
+        return ("stop", "restart") if self.healthy else ("start",)
+
+    @property
     def image_label(self) -> str:
         """The image, short enough to read in a card.
 
@@ -431,6 +471,43 @@ class Service:
     @property
     def claims(self) -> tuple[Claim, ...]:
         return tuple(claim for facet in self.facets for claim in facet.claims)
+
+    @property
+    def container(self) -> "Running | None":
+        """The one container this service was found running in, if any.
+
+        Held on the service rather than dug out of a facet by the template,
+        because the page acts on it in a different place from where it reports
+        it -- the controls belong beside the page's other actions, not inside a
+        card that is describing something.
+        """
+
+        return next(
+            (facet.observed for facet in self.facets if facet.observed), None
+        )
+
+    @property
+    def zone_key(self) -> str:
+        """The domain HQ manages that this name lives in, if it manages one.
+
+        A service and a domain are different pages about overlapping things --
+        one is a hostname and everything that has to be true for it to answer,
+        the other is a zone and every record published in it. jseverino.com is
+        both, and neither page had a way to reach the other.
+
+        Matched through the provider that says it contains records, so the tie
+        is the one the registry already declares rather than a second opinion
+        about what a domain is.
+        """
+
+        for resource in ManagedResource.objects.filter(enabled=True):
+            provider = PROVIDERS.get(resource.kind)
+            if provider is None or not provider.contains:
+                continue
+            zone = str(resource.spec.get("zone", "")).strip().lower().rstrip(".")
+            if zone and (self.hostname == zone or self.hostname.endswith(f".{zone}")):
+                return zone
+        return ""
 
     @property
     def origin_is_news(self) -> bool:
@@ -747,6 +824,12 @@ def _assemble(
     )
 
 
+# The provider whose inventory records are containers. Named once, here, because
+# the runtime card is the one surface that has to know which sweep to read; every
+# other reference to it in this module goes through this.
+CONTAINER_KIND = "portainer.container"
+
+
 def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
     """What HQ found supplying this facet without having been told.
 
@@ -762,7 +845,7 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
 
     if facet_id != "runtime" or origin is None or not origin.container:
         return None
-    for snapshot in ProviderInventory.objects.filter(kind="portainer.stack"):
+    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
         for record in snapshot.records:
             if (
                 record.get("host") == origin.host
@@ -930,7 +1013,7 @@ def _listening(host: str, port: str) -> list[str]:
     wanted = int(port)
     return sorted(
         str(record.get("name", ""))
-        for snapshot in ProviderInventory.objects.filter(kind="portainer.stack")
+        for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND)
         for record in snapshot.records
         if record.get("host") == host
         and wanted in (record.get("ports") or [])

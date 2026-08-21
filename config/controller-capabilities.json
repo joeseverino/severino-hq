@@ -84,6 +84,26 @@
           "automatic": false
         }
       }
+    },
+    "portainer.container": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "There is nothing to converge. A container's definition lives in whatever compose file created it, which HQ has never seen; this declaration records that HQ watches the container and may cycle it, not that HQ defines it."
+        },
+        "restart": {
+          "mode": "apply",
+          "automatic": false
+        },
+        "start": {
+          "mode": "apply",
+          "automatic": false
+        },
+        "stop": {
+          "mode": "apply",
+          "automatic": false
+        }
+      }
     }
   }
 }

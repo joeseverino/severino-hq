@@ -34,7 +34,9 @@ from application.infrastructure import (
     topology_payload,
 )
 from application.inventory import (
+    AdoptCommand,
     AdoptServiceCommand,
+    adopt,
     adopt_service,
     inventory_state,
     unmanaged_services,
@@ -54,6 +56,7 @@ from application.provider_forms import (
 )
 from application.security import safe_next, web_principal
 from application.services import (
+    CONTAINER_KIND,
     alias_target,
     service_catalog,
     service_or_prospect,
@@ -732,6 +735,11 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/service_detail.html"
 
+    # Verbs, from the capability registry rather than from this template. A
+    # controller that stops implementing one stops offering it here, and one
+    # that gains a verb needs a route and a phrase -- not an edit to a page.
+    LIFECYCLE = ("start", "stop", "restart")
+
     def get(self, request, *args, **kwargs):
         """An alias goes to the service it is an alias of.
 
@@ -748,6 +756,19 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = service_or_prospect(self.kwargs["hostname"])
+        context["container_kind"] = CONTAINER_KIND
+        # Two filters, and both are readings rather than opinions: what the
+        # controller says it implements for a container, and what the container's
+        # current state makes worth asking. Offering all three always means
+        # offering Start to something already running, whose only outcome is
+        # Docker answering "already started" in a job result a minute later.
+        container = context["service"].container
+        offered = container.verbs if container else ()
+        context["container_actions"] = tuple(
+            (f"control_plane:{action}", action.capitalize())
+            for action in self.LIFECYCLE
+            if action in offered and controller_action_policy(CONTAINER_KIND, action)[0]
+        )
         return context
 
 
@@ -931,7 +952,39 @@ OPERATION_PHRASE = {
     OperationRequest.Action.RECONCILE: "reconciliation",
     OperationRequest.Action.RENEW: "certificate renewal",
     OperationRequest.Action.DELETE: "removal",
+    OperationRequest.Action.RESTART: "a restart",
+    OperationRequest.Action.START: "a start",
+    OperationRequest.Action.STOP: "a stop",
 }
+
+
+class AdoptRecordView(LoginRequiredMixin, View):
+    """Take on one record a sweep found, identified by what makes it that record.
+
+    Separate from adopting a service because a service is a hostname and some
+    records have none: a container answers wherever its ports are pointed, so
+    there is no name to route by and no group of records to take on together.
+
+    The spec is read back out of the sweep rather than posted, the same as every
+    other adoption -- the declaration starts equal to the world, so the first
+    reconciliation after it changes nothing.
+    """
+
+    def post(self, request, kind, token):
+        try:
+            result = adopt(
+                AdoptCommand(kind=kind, token=token),
+                principal=web_principal(request.user),
+            )
+        except (NotFoundError, PolicyError, ValueError) as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                f"HQ is now watching “{result['resource']['key']}”, exactly as "
+                "it is running.",
+            )
+        return redirect(safe_next(request, fallback=reverse("control_plane:list")))
 
 
 class OperationView(LoginRequiredMixin, View):

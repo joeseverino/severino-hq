@@ -1,0 +1,16 @@
+{% comment %}
+One inline SVG per name, drawn here rather than fetched. A strict CSP forbids an
+external sprite sheet, and an icon font would be a second typeface loaded to say
+three things. Sized in `em` so an icon is the height of the text beside it
+whatever that text is set at.
+
+`aria-hidden` on all of them: every caller puts the word next to the mark, so a
+screen reader announcing both would read each button twice.
+{% endcomment %}
+{% if name == "start" %}
+  <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 3.5v9l7.5-4.5z" fill="currentColor"/></svg>
+{% elif name == "stop" %}
+  <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+{% elif name == "restart" %}
+  <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5V5.2H10.3"/></svg>
+{% endif %}

@@ -171,6 +171,13 @@ class OperationRequest(TimestampedModel):
         RECONCILE = "reconcile", "Reconcile"
         RENEW = "renew", "Renew certificate"
         DELETE = "delete", "Delete"
+        # Lifecycle, not convergence. Restarting a container does not move the
+        # world toward a declaration -- it is a thing an operator asks for once,
+        # about something already exactly as declared, which is why none of
+        # these is ever scheduled automatically.
+        RESTART = "restart", "Restart"
+        START = "start", "Start"
+        STOP = "stop", "Stop"
 
     class State(models.TextChoices):
         QUEUED = "queued", "Queued"

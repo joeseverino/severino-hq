@@ -22,6 +22,14 @@ urlpatterns = [
     path("new/", views.ResourceFormView.as_view(), name="create"),
     path("services/<str:hostname>/", views.ServiceDetailView.as_view(), name="service"),
     path("adopt/<str:hostname>/", views.AdoptView.as_view(), name="adopt"),
+    # One specific record rather than everything a hostname answers with. A
+    # container has no hostname at all, so it is unreachable from the route
+    # above and would otherwise be adoptable only through the API.
+    path(
+        "adopt/record/<str:kind>/<str:token>/",
+        views.AdoptRecordView.as_view(),
+        name="adopt_record",
+    ),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),
     path("<slug:key>/edit/", views.ResourceFormView.as_view(), name="edit"),
     path("<slug:key>/remove/", views.ResourceRemoveView.as_view(), name="remove"),
@@ -39,6 +47,24 @@ urlpatterns = [
         "<slug:key>/renew/",
         views.OperationView.as_view(action=OperationRequest.Action.RENEW),
         name="renew",
+    ),
+    # Lifecycle verbs, one route each. The view takes its action from the URL,
+    # so a verb is a route and a phrase rather than another view doing what this
+    # one already does.
+    path(
+        "<slug:key>/restart/",
+        views.OperationView.as_view(action=OperationRequest.Action.RESTART),
+        name="restart",
+    ),
+    path(
+        "<slug:key>/start/",
+        views.OperationView.as_view(action=OperationRequest.Action.START),
+        name="start",
+    ),
+    path(
+        "<slug:key>/stop/",
+        views.OperationView.as_view(action=OperationRequest.Action.STOP),
+        name="stop",
     ),
     path(
         "<slug:key>/certificate.pem",

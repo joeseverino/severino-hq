@@ -37,6 +37,21 @@ from control_plane.providers import PROVIDERS, service_facets
 from .security import Capability, Principal
 
 
+def record_token(kind: str, identity: tuple[str, ...]) -> str:
+    """A short, stable handle for one live record, safe to put in a URL.
+
+    Derived rather than stored because nothing persists an unmanaged record --
+    it exists only in the last sweep. Hashed rather than joined because an
+    identity contains a DNS value, and a TXT record's value is neither short nor
+    URL-safe.
+
+    Shared with whatever else needs to name the same record, so a page offering
+    to adopt something computes the same handle the adoption looks it up by.
+    """
+
+    return hashlib.sha256("\x1f".join((kind, *identity)).encode()).hexdigest()[:16]
+
+
 @dataclass(frozen=True)
 class Unmanaged:
     """One record a provider holds that no HQ declaration accounts for.
@@ -71,8 +86,7 @@ class Unmanaged:
         short nor URL-safe.
         """
 
-        joined = "\x1f".join((self.kind, *self.identity))
-        return hashlib.sha256(joined.encode()).hexdigest()[:16]
+        return record_token(self.kind, self.identity)
 
     @property
     def readout(self) -> tuple[tuple[str, str], ...]:

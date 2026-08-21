@@ -2225,13 +2225,17 @@ def delete_portainer(
     )
 
 
-def list_portainer() -> list[dict[str, Any]]:
+def list_portainer_containers() -> list[dict[str, Any]]:
     """Every container Portainer can see, on every machine it reaches.
 
-    Read from containers rather than stacks. A stack listing describes only what
-    Portainer itself created, and everything standing up today was started by
-    compose on the machine -- so a stack listing would report an estate of
-    nothing while seven containers ran.
+    Containers rather than stacks, and reported as such. A stack listing
+    describes only what Portainer itself created, and everything standing up
+    today was started by compose on the machine -- so a stack listing reports an
+    estate of nothing while ten containers run.
+
+    The distinction is not pedantic. Docker will start, stop and restart any
+    container; Portainer will only do so for a stack it made. Modelling what is
+    running as a container is what lets HQ cycle one it did not create.
     """
 
     local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
@@ -2259,12 +2263,116 @@ def list_portainer() -> list[dict[str, Any]]:
     return records
 
 
+def _portainer_container_id(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The Docker id of a declared container, and the environment holding it.
+
+    Looked up by name on each pass rather than stored. A container id changes
+    every time it is recreated, and a stored one would address something that no
+    longer exists -- silently, because Docker answers "no such container" the
+    same way whether it never existed or was replaced this morning.
+    """
+
+    connection_ref = spec.get("connection_ref", "")
+    environment = _portainer_environment_for(spec["host"], connection_ref)
+    wanted = spec["name"]
+    for container in _portainer_containers(environment["id"], connection_ref):
+        names = [str(name).lstrip("/") for name in container.get("Names") or ()]
+        if wanted in names:
+            return str(container.get("Id", "")), environment
+    raise ProviderError(f"No container named {wanted!r} on {spec['host']}.")
+
+
+def _cycle_portainer_container(
+    spec: dict[str, Any], verb: str, *, apply: bool
+) -> ProviderResult:
+    """Start, stop or restart one container, and report what it did.
+
+    Docker answers these with 204 on success and 304 when the container is
+    already in the state asked for, so "start an already-running container" is
+    not an error and must not be reported as one.
+    """
+
+    connection_ref = spec.get("connection_ref", "")
+    container_id, environment = _portainer_container_id(spec)
+    if apply:
+        _request(
+            f"{_portainer_url(connection_ref)}/endpoints/{environment['id']}"
+            f"/docker/containers/{container_id}/{verb}",
+            method="POST",
+            headers=_portainer_headers(connection_ref),
+            payload={},
+        )
+    # Read back rather than trusting the call. A restart that brought the
+    # container up and let it exit two seconds later reports success at the API
+    # and is not what was asked for.
+    observed = [
+        _container_record(container, spec["host"], connection_ref)
+        for container in _portainer_containers(environment["id"], connection_ref)
+        if spec["name"] in [
+            str(name).lstrip("/") for name in container.get("Names") or ()
+        ]
+    ]
+    state = observed[0]["state"] if observed else ""
+    status = {
+        "host": spec["host"],
+        "container": spec["name"],
+        "state": state,
+        "containers": observed,
+    }
+    settled = state == ("exited" if verb == "stop" else "running")
+    return ProviderResult(
+        changed=apply,
+        status=status,
+        conditions=[
+            _condition(
+                "Ready" if settled else "Degraded",
+                True,
+                verb.capitalize() + ("ed" if verb == "stop" else "ed"),
+                f"{spec['name']} is {state or 'in an unknown state'}.",
+            )
+        ],
+        message=f"{spec['name']} is {state or 'in an unknown state'}.",
+    )
+
+
+def _container_locked(
+    spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    del spec, apply, observed
+    raise ProviderError(
+        "There is nothing to converge. A container's definition lives in "
+        "whatever compose file created it; this declaration records that HQ "
+        "watches the container and may cycle it."
+    )
+
+
+def restart_portainer_container(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    return _cycle_portainer_container(spec, "restart", apply=apply)
+
+
+def start_portainer_container(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    return _cycle_portainer_container(spec, "start", apply=apply)
+
+
+def stop_portainer_container(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    return _cycle_portainer_container(spec, "stop", apply=apply)
+
+
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
-    "portainer.stack": list_portainer,
+    "portainer.container": list_portainer_containers,
 }
 
 
@@ -2441,6 +2549,10 @@ PROVIDER_ACTIONS = {
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
     ("portainer.stack", "reconcile"): reconcile_portainer,
     ("portainer.stack", "delete"): delete_portainer,
+    ("portainer.container", "reconcile"): _container_locked,
+    ("portainer.container", "restart"): restart_portainer_container,
+    ("portainer.container", "start"): start_portainer_container,
+    ("portainer.container", "stop"): stop_portainer_container,
     ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
     ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
     ("adguard.rewrite", "delete"): delete_adguard,

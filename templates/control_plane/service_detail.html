@@ -19,6 +19,37 @@
     </p>
   </div>
   <div class="page-actions">
+    {% comment %}
+    The controls sit with the page's other actions rather than inside the card
+    that describes the container. A card reports; this is where you do something
+    — and buried in a disclosure, the one thing an operator opens this page to
+    press was three clicks from the top of it.
+
+    Which buttons appear is two readings, not a choice: what the controller says
+    it implements for a container, and what the container's own state makes
+    worth asking. Nothing offers Start to something already running.
+    {% endcomment %}
+    {% if service.container.watcher %}
+      {% for route, label in container_actions %}
+        <form method="post" action="{% url route service.container.watcher %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn icon-btn" title="{{ label }} {{ service.container.name }}">
+            {% include "partials/_icon.html" with name=route|cut:"control_plane:" %}
+            <span>{{ label }}</span>
+          </button>
+        </form>
+      {% endfor %}
+    {% elif service.container %}
+      <form method="post" action="{% url 'control_plane:adopt_record' container_kind service.container.token %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn" title="Let HQ start, stop and restart {{ service.container.name }}">Watch this container</button>
+      </form>
+    {% endif %}
+    {% if service.zone_key %}
+      <a class="btn" href="{% url 'zones:detail' service.zone_key %}">Domain</a>
+    {% endif %}
     <a class="btn" href="{% url 'control_plane:services' %}">All services</a>
   </div>
 </div>
@@ -98,7 +129,13 @@ not restated here.
             {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label }}</code></dd>{% endif %}
             {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
             {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
-            {% if facet.observed.stack %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
+            {% comment %}
+            Only when it differs from the container's own name. A one-service
+            compose file names the project after the service, so the row read
+            "Compose project: severino-hq" under a heading already saying
+            severino-hq -- a fact charged twice.
+            {% endcomment %}
+            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
             <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
             {% comment %}
             The offer to take it on, only when taking it on would not mean
@@ -108,13 +145,21 @@ not restated here.
             which, for the container running this page, means HQ redeploying
             itself.
             {% endcomment %}
-            <dt>Managed by</dt>
+            {% comment %}
+            Defining it and cycling it are different claims. HQ can start, stop
+            and restart any container, because those are Docker's verbs; it can
+            only redefine one Portainer created, because everything else is
+            defined by a compose file HQ has never seen. Offering the second as
+            though it were the first would ask Portainer to stand up its own
+            copy of something already serving.
+            {% endcomment %}
+            <dt>Defined by</dt>
             <dd>
               {% if facet.observed.portainer_managed %}
-                Not HQ yet.
+                Portainer.
                 {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a>{% endfor %}
               {% else %}
-                Started outside Portainer, so HQ can watch it but not take it over.
+                A compose file on {{ facet.observed.host }}, which HQ has not seen.
               {% endif %}
             </dd>
           </dl>

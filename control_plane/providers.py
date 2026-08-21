@@ -268,6 +268,40 @@ def service_facets() -> tuple[tuple[str, str], ...]:
     return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
 
 
+class PortainerContainerSpec(ProviderModel):
+    """One container HQ is responsible for keeping up, not for defining.
+
+    Deliberately identity and nothing else. A container's definition lives in
+    whatever compose file created it, which HQ has never seen and must not
+    pretend to own -- declaring one here says "this is mine to watch and to
+    cycle", and reconciliation is locked because there is nothing to converge.
+
+    That is what makes it usable at all. Almost nothing running was created by
+    Portainer, so almost nothing can be declared as a stack; every container can
+    be started, stopped and restarted, because those are Docker's verbs rather
+    than Portainer's.
+    """
+
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Portainer",
+        description="Which Portainer reaches the machine this runs on.",
+    )
+    host: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Runs on",
+        description="The machine this runs on.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        title="Container",
+        description="The container's name, exactly as Docker reports it.",
+    )
+
+
 class PortainerStackEnvVar(ProviderModel):
     name: str = Field(min_length=1, max_length=200, title="Name")
     value: str = Field(default="", max_length=4000, title="Value")
@@ -1562,6 +1596,41 @@ def _uploaded_certificate_seed(context: NameContext) -> dict[str, Any]:
     return {"certificate_name": label or "certificate"}
 
 
+def _container_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    return (
+        ("Container", spec.get("name", ""), status.get("container", "")),
+        ("Runs on", spec.get("host", ""), status.get("host", "")),
+        ("State", "", status.get("state", "")),
+    )
+
+
+def _container_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "connection_ref": record.get("connection_ref", ""),
+        "host": record.get("host", ""),
+        "name": record.get("name", ""),
+    }
+
+
+def _container_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (spec.get("host", ""), spec.get("name", ""))
+
+
+def _container_key_hint(spec: dict[str, Any]) -> str:
+    host = spec.get("host", "")
+    name = spec.get("name", "")
+    return re.sub(r"[^a-z0-9-]+", "-", f"{host}-{name}".lower()).strip("-")
+
+
+def _container_removal_note(spec: dict[str, Any]) -> str:
+    return (
+        f"HQ stops watching {spec.get('name', 'this container')} and can no "
+        "longer start, stop or restart it. The container itself is untouched."
+    )
+
+
 def _public_dns_applies(context: NameContext) -> str:
     """Whether any connected account holds a zone this name could live in.
 
@@ -1706,6 +1775,28 @@ _PROVIDERS = (
         seed=_stack_seed,
         readout=_stack_readout,
         from_record=_stack_from_record,
+        choices="application.provider_choices:container_stack",
+    ),
+    ProviderSpec(
+        "portainer.container",
+        "A container HQ keeps an eye on and can start, stop or restart. It "
+        "does not define the container -- whatever compose file created it "
+        "still does.",
+        PortainerContainerSpec,
+        label="Container",
+        connection_providers=("portainer",),
+        # No facet, no hostnames and no seed, so it is never offered as a way
+        # to publish a name. A container answers wherever its ports are pointed
+        # and the declaration does not say where that is; inventing a hostname
+        # from a container name would put a service on the board that no name
+        # reaches. It is adopted from what a sweep found, which is the only
+        # place its identity is known.
+        readout=_container_readout,
+        from_record=_container_from_record,
+        identity=_container_identity,
+        key_hint=_container_key_hint,
+        removal_note=_container_removal_note,
+        declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
     ProviderSpec(
