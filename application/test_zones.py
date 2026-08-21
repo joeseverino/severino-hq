@@ -1649,9 +1649,13 @@ class ExternallyAnsweredFacetTests(TestCase):
             f for f in service_or_prospect("example.com").facets if f.id == "proxy"
         )
 
-        # The wording says who answers rather than where it is not: the card
-        # reports a working arrangement, not a gap.
-        self.assertContains(response, "answers this name directly")
+        # A working arrangement, not a gap -- and said once. Every facet that
+        # routes takes this branch, so a sentence in the card is printed once
+        # per card: Runtime and Ingress sat side by side reading the same line,
+        # with the origin note under them saying it a third time.
+        self.assertContains(response, "Not needed")
+        self.assertContains(response, "Served by")
+        self.assertEqual(response.content.count(b"Served by"), 1)
         # Asserted on the facet rather than on the page, because the
         # certificate facet says the same sentence for its own good reason.
         self.assertFalse(ingress.present)

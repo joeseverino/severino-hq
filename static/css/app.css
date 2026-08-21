@@ -463,7 +463,11 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    right-aligned, leaving a ragged column and a hole under the label. */
 .control-metric { display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: space-between; gap: 5px 12px; }
-.control-metric > .control-label { flex: 0 1 auto; }
+/* A fixed line box, so the label sits at the same height whether its headline
+   shares the line or wraps below. Left to the 11px font's own leading, a card
+   whose value was too long to share the row -- "CNAME name.pages.dev" -- put its
+   label three pixels above the three beside it. */
+.control-metric > .control-label { flex: 0 1 auto; line-height: 20px; }
 .control-metric > strong { text-align: left; }
 .control-metric > *:not(.control-label):not(strong) { flex: 1 1 100%; }
 /* Smaller than it was: at 18px a value like "CNAME name.pages.dev" could not

@@ -66,14 +66,21 @@ not restated here.
         routed, and nothing on this network should answer for it — the page
         said "nothing supplies this" beside a card naming exactly what does,
         and offered to add a proxy in front of a site that must not have one.
-        {% endcomment %}
-        {% comment %}
-        Deliberately not naming the operator again. Origin already does, and two
-        cards side by side both reading "Cloudflare Pages" is one fact charged
-        twice — this card's job is to say the facet is not missing.
+
+        Named by what it would otherwise have taken, rather than by whoever
+        answers instead. Every facet that routes takes this branch, so a
+        sentence about the operator is printed once per card: Runtime and
+        Ingress sat side by side reading the same line about Cloudflare Pages,
+        with the origin note under them saying it a third time. Who serves it is
+        one fact and belongs in the one place — the note below the row.
+
+        What differs per card is what is not needed, and each facet already
+        says that: its own providers are the things it would otherwise want.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
-        <span>{{ service.origin.operator }} answers this name directly, so there is nothing to proxy.</span>
+        {% for kind, label in facet.declarable %}
+          <span class="readout">No {{ label }} to add.</span>
+        {% endfor %}
       {% elif facet.observed %}
         {% comment %}
         Found, not declared. Two lines and a disclosure: the state and the name
