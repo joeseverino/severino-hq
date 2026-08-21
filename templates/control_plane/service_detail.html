@@ -76,34 +76,42 @@ not restated here.
         <span>{{ service.origin.operator }} answers this name directly, so there is nothing to proxy.</span>
       {% elif facet.observed %}
         {% comment %}
-        Found, not declared. This card used to read "Not declared — nothing
-        supplies this" directly above one naming the container the service was
-        running in, and offered to add a second. Everything below is a fact from
-        the last sweep, so it carries its age and never an Edit link: HQ does not
-        manage this and must not imply it could.
+        Found, not declared. Two lines and a disclosure: the state and the name
+        are what a glance is for, and everything else is what you open when the
+        glance was not reassuring. Listed flat, this card ran six rows deep and
+        drowned the three facets beside it.
+
+        Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
         <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
-        <span class="readout">
-          <span class="readout-label">Container</span> <code>{{ facet.observed.name }}</code> on {{ facet.observed.host }}
-        </span>
-        {% if facet.observed.image %}<span class="readout"><span class="readout-label">Image</span> <code>{{ facet.observed.image_label }}</code></span>{% endif %}
-        {% if facet.observed.published %}<span class="readout"><span class="readout-label">Publishes</span> {{ facet.observed.published }}</span>{% endif %}
-        {% if facet.observed.status %}<span class="readout"><span class="readout-label">Status</span> {{ facet.observed.status }}</span>{% endif %}
-        <span class="readout muted">Not managed by HQ · seen {{ facet.observed.observed_at|timesince }} ago</span>
-        {% comment %}
-        The offer to take it on, only when taking it on would not mean building
-        a second one. A container started by compose on the machine is invisible
-        to Portainer's stack list, so declaring it here asks Portainer to stand
-        up its own copy of something already serving — which, for the container
-        running this page, means HQ redeploying itself.
-        {% endcomment %}
-        {% if facet.observed.portainer_managed %}
-          {% for kind, label in facet.declarable %}
-            <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a></span>
-          {% endfor %}
-        {% else %}
-          <span class="readout muted">Started outside Portainer, so HQ can watch it but not take it over.</span>
-        {% endif %}
+        <span class="readout"><code>{{ facet.observed.name }}</code> on {{ facet.observed.host }}</span>
+        <details class="control-diagnostics">
+          <summary>What is running</summary>
+          <dl class="kv compact">
+            {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label }}</code></dd>{% endif %}
+            {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
+            {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
+            {% if facet.observed.stack %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
+            <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
+            {% comment %}
+            The offer to take it on, only when taking it on would not mean
+            building a second one. A container started by compose on the machine
+            is invisible to Portainer's stack list, so declaring it here asks
+            Portainer to stand up its own copy of something already serving —
+            which, for the container running this page, means HQ redeploying
+            itself.
+            {% endcomment %}
+            <dt>Managed by</dt>
+            <dd>
+              {% if facet.observed.portainer_managed %}
+                Not HQ yet.
+                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a>{% endfor %}
+              {% else %}
+                Started outside Portainer, so HQ can watch it but not take it over.
+              {% endif %}
+            </dd>
+          </dl>
+        </details>
       {% else %}
         <strong class="control-unknown">Not declared</strong>
         <span>Nothing supplies this for {{ service.hostname }}.</span>
@@ -126,42 +134,43 @@ not restated here.
         {% endfor %}
       {% endif %}
     </div>
+
   {% endfor %}
-  <div class="control-metric">
-    <span class="control-label">Origin</span>
-    {% if not service.origin %}
-      <strong>Not routed</strong>
-      <span>Nothing declares where requests for this name are served.</span>
-    {% elif service.origin.external %}
-      {% comment %}
-      A public record pointing straight at something is the routing. Reported as
-      "Not routed", the page said nothing declared where a name was served about
-      a name whose entire configuration was a statement of exactly that.
-      {% endcomment %}
-      {% comment %}
-      A statement, not a disclaimer. This is a working arrangement: something
-      else serves the content and HQ publishes the record that sends people
-      there. Written as "outside your network … managed at the provider" it
-      read as a limitation being apologised for, about the half of it HQ
-      actually runs.
-      {% endcomment %}
-      <strong>{{ service.origin.operator }}</strong>
-      <span>
-        Serves this name from <code>{{ service.origin.address }}</code>.
-        HQ publishes the DNS record that points here.
-      </span>
-    {% elif service.origin.known %}
-      <strong>{{ service.origin.label }}</strong>
-      <span>
-        Ingress forwards to <code>{{ service.origin.address }}</code>.
-        {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
-      </span>
-    {% else %}
-      <strong>Unknown host</strong>
-      <span>Ingress forwards to <code>{{ service.origin.address }}</code>, which no host in the topology claims.</span>
-    {% endif %}
-  </div>
 </div>
+
+{% comment %}
+Origin is a sentence, not a fifth card. Four facets are what a name needs to
+answer, and a fifth box beside them wrapped the row onto a second line while
+mostly restating the cards it sat under — the ingress card already prints the
+address, and the runtime card already names the container.
+
+What is left is the one thing neither says on its own: which of them is the
+thing actually answering. That is a claim about the row, so it reads under it.
+{% endcomment %}
+{% if service.origin_is_news %}
+<p class="control-origin">
+  {% if not service.origin %}
+    Nothing declares where requests for this name are served.
+  {% elif service.origin.external %}
+    {% comment %}
+    A statement, not a disclaimer. This is a working arrangement: something else
+    serves the content and HQ publishes the record that sends people there.
+    Written as "outside your network … managed at the provider" it read as a
+    limitation being apologised for, about the half of it HQ actually runs.
+    {% endcomment %}
+    Served by <strong>{{ service.origin.operator }}</strong> from
+    <code>{{ service.origin.address }}</code>. HQ publishes the DNS record that
+    points here.
+  {% elif service.origin.known %}
+    Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
+    <code>{{ service.origin.address }}</code>.
+    {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
+  {% else %}
+    Ingress forwards to <code>{{ service.origin.address }}</code>, which
+    <strong>no host in the topology claims</strong>.
+  {% endif %}
+</p>
+{% endif %}
 
 <h2>Resources behind this name</h2>
 <div class="table-scroll">

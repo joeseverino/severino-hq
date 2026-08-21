@@ -412,6 +412,26 @@ class Service:
         return tuple(claim for facet in self.facets for claim in facet.claims)
 
     @property
+    def origin_is_news(self) -> bool:
+        """Whether saying where this is served adds anything to the cards.
+
+        It usually does not. Once a facet names the container and another prints
+        the address it forwards to, a sentence repeating both is a third copy of
+        one fact -- and the page had it in the largest position on the row.
+
+        It still earns its place twice: when something outside answers the name,
+        which no facet can report, and when the address belongs to no machine HQ
+        knows, which is the one thing here worth interrupting for.
+        """
+
+        if self.origin is None:
+            return False
+        if self.origin.external or not self.origin.known:
+            return True
+        # Nothing identified what is running, so the note carries the caveat.
+        return not any(facet.observed for facet in self.facets)
+
+    @property
     def declared_claims(self) -> tuple[Claim, ...]:
         """Claims that name this service, rather than merely answering for it.
 

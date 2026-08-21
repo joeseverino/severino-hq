@@ -576,3 +576,73 @@ class AliasNavigationTests(TestCase):
             response["Location"],
             reverse("control_plane:service", kwargs={"hostname": "example.com"}),
         )
+
+
+class OriginNoteTests(TestCase):
+    """Where a name is served is said once, in whichever place says it best.
+
+    It was a fifth card on a four-card row, in the largest type, mostly
+    restating the two cards it sat beside.
+    """
+
+    def test_it_is_silent_when_a_facet_already_names_the_container(self):
+        from control_plane.providers import NameContext
+
+        from .services import Facet, Origin, Running, Service
+
+        running = Running(
+            name="probe", host="homelab-server", stack="probe", image="",
+            state="running", status="", ports=(8099,), network_mode="bridge",
+            portainer_managed=False, connection_ref="", observed_at=None,
+        )
+        service = Service(
+            hostname="probe.homelab",
+            facets=(
+                Facet(
+                    id="runtime", label="Runtime", observed=running,
+                    context=NameContext(),
+                ),
+            ),
+            origin=Origin(address="192.168.1.233:8099", host="homelab-server",
+                          container="probe"),
+        )
+
+        self.assertFalse(service.origin_is_news)
+
+    def test_it_speaks_up_when_something_outside_answers_the_name(self):
+        from .services import Origin, Service
+
+        service = Service(
+            hostname="jseverino.com",
+            facets=(),
+            origin=Origin(address="jseverino.pages.dev"),
+        )
+
+        self.assertTrue(service.origin_is_news)
+
+    def test_it_speaks_up_when_no_machine_claims_the_address(self):
+        """The one case worth interrupting for: ingress forwards somewhere HQ
+        cannot describe, reconcile or reach."""
+
+        from .services import Origin, Service
+
+        service = Service(
+            hostname="probe.homelab",
+            facets=(),
+            origin=Origin(address="10.9.9.9:8080"),
+        )
+
+        self.assertTrue(service.origin_is_news)
+
+    def test_it_speaks_up_when_nothing_identified_what_is_running(self):
+        from control_plane.providers import NameContext
+
+        from .services import Facet, Origin, Service
+
+        service = Service(
+            hostname="probe.homelab",
+            facets=(Facet(id="runtime", label="Runtime", context=NameContext()),),
+            origin=Origin(address="192.168.1.233:8099", host="homelab-server"),
+        )
+
+        self.assertTrue(service.origin_is_news)

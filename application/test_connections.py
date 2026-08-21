@@ -474,4 +474,4 @@ class AdoptionSafetyTests(TestCase):
         response = self._service_page(portainer_managed=False)
 
         self.assertContains(response, "probe")
-        self.assertContains(response, "Not managed by HQ")
+        self.assertContains(response, "watch it but not take it over")
