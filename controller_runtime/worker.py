@@ -13,7 +13,7 @@ from typing import Any
 
 from .providers import ProviderError, connections, execute, inventory, preflight
 from control_plane.providers import (
-    controller_capability_registry,
+    controller_id,
     enabled_controller_actions,
 )
 
@@ -274,7 +274,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--controller-id",
-        default=controller_capability_registry().controller_id or os.uname().nodename,
+        # One definition, shared with HQ. The registry stopped carrying this
+        # when it became an identity rather than a policy, and a second default
+        # here would name the same machine differently on each side.
+        default=controller_id(),
     )
     parser.add_argument(
         "--apply",

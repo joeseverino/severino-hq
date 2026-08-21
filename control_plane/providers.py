@@ -1882,9 +1882,15 @@ def controller_id() -> str:
 
     An identity, not a policy: it names one installation, so it arrives from the
     environment rather than from the committed contract beside it.
+
+    Falling back to the machine's own name rather than to a word. This is what
+    a sweep files its findings under, so a placeholder would put every container
+    on a host called "controller" -- and both processes that ask run on the host
+    network, so both get the same answer without anything being passed between
+    them.
     """
 
-    return os.environ.get("HQ_CONTROLLER_ID", "").strip() or "controller"
+    return os.environ.get("HQ_CONTROLLER_ID", "").strip() or os.uname().nodename
 
 
 def controller_capabilities() -> dict[str, Any]:
