@@ -26,6 +26,7 @@ from typing import Any
 from control_plane.providers import (
     caa_parts,
     certificate_covers,
+    controller_id,
     normalized_record_content,
     normalized_hostname,
 )
@@ -1983,7 +1984,7 @@ def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str,
             return environment
         if environment["name"] == host:
             return environment
-    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    local_host = controller_id()
     for environment in environments:
         if environment["local"] and local_host and local_host == host:
             return environment
@@ -2245,7 +2246,7 @@ def list_portainer_containers() -> list[dict[str, Any]]:
     running as a container is what lets HQ cycle one it did not create.
     """
 
-    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    local_host = controller_id()
     records: list[dict[str, Any]] = []
     for connection_ref in provider_connection_refs("portainer"):
         for environment in _portainer_environments(connection_ref):
@@ -2444,7 +2445,7 @@ def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
 def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     environments = _portainer_environments(connection_ref)
     reachable = [item for item in environments if item["reachable"]]
-    local_host = os.environ.get("HQ_CONTROLLER_ID", "").strip()
+    local_host = controller_id()
     return {
         "detail": (
             f"{len(reachable)} of {len(environments)} environments reachable."

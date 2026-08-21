@@ -203,6 +203,26 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
                 "reason": condition.get("reason", ""),
                 "message": condition.get("message", ""),
             }
+    # A declaration that records only a responsibility has nothing to converge,
+    # so "not reported" describes something that is never going to happen.
+    provider = PROVIDERS.get(resource.kind)
+    if provider is not None and provider.declaration_only:
+        return {
+            "state": "declared",
+            "label": "Recorded",
+            "reason": "",
+            "message": "",
+        }
+    # HQ has asked for something the controller has not confirmed yet. That is
+    # the normal state of a resource between being declared and being applied,
+    # not a fault -- the model already says so by carrying two generations.
+    if resource.observed_generation != resource.generation:
+        return {
+            "state": "pending",
+            "label": "Awaiting first check",
+            "reason": "",
+            "message": "",
+        }
     return {
         "state": "unknown",
         "label": "Not observed",

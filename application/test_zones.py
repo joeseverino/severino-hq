@@ -1934,3 +1934,93 @@ class CredentialCoverageTests(TestCase):
 
     def test_extra_zones_the_credential_can_reach_are_not_a_problem(self):
         self.assertEqual(unreachable_zones(["example.com", "example.net", "spare.test"]), ())
+
+
+class RecordedResponsibilityTests(TestCase):
+    """A declaration nothing converges is not a resource awaiting convergence.
+
+    Reported as one, every domain and every watched container sat in the
+    attention queue forever, each a line an operator can do nothing about.
+    """
+
+    def test_a_domain_is_recorded_rather_than_unobserved(self):
+        from application.infrastructure import resource_health
+
+        resource = ManagedResource.objects.create(
+            key="a-domain", kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "a-dns-account"},
+        )
+
+        health = resource_health(resource)
+        self.assertEqual(health["state"], "declared")
+        self.assertEqual(health["message"], "")
+
+    def test_it_does_not_reach_the_attention_queue(self):
+        from application.attention import infrastructure
+
+        ManagedResource.objects.create(
+            key="a-domain", kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "a-dns-account"},
+        )
+
+        self.assertEqual(infrastructure(), ())
+
+    def test_something_that_does_converge_still_does(self):
+        """The rule must not swallow the resources it does not describe."""
+
+        from application.attention import infrastructure
+
+        ManagedResource.objects.create(
+            key="a-rewrite", kind="adguard.rewrite",
+            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
+            generation=1, observed_generation=1,
+        )
+
+        self.assertEqual(len(infrastructure()), 1)
+
+
+class PendingIsNotAFaultTests(TestCase):
+    """A resource HQ has already asked about is not one to ask an operator about.
+
+    Adopting eight names put sixteen declarations in the queue at once, each
+    reading as a failure while the controller was on its way to them.
+    """
+
+    def _resource(self, **fields):
+        return ManagedResource.objects.create(
+            key="a-rewrite", kind="adguard.rewrite",
+            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
+            **fields,
+        )
+
+    def test_a_declaration_the_controller_has_not_reached_is_pending(self):
+        from application.infrastructure import resource_health
+
+        health = resource_health(self._resource(generation=1, observed_generation=0))
+
+        self.assertEqual(health["state"], "pending")
+        self.assertEqual(health["message"], "")
+
+    def test_pending_does_not_reach_the_attention_queue(self):
+        from application.attention import infrastructure
+
+        self._resource(generation=1, observed_generation=0)
+
+        self.assertEqual(infrastructure(), ())
+
+    def test_one_the_controller_reached_and_said_nothing_about_still_does(self):
+        """The rule must not swallow a resource that was applied and reported
+        nothing, which is the case the message was written for."""
+
+        from application.attention import infrastructure
+
+        self._resource(generation=1, observed_generation=1)
+
+        self.assertEqual(len(infrastructure()), 1)
+
+    def test_an_edit_awaiting_reapply_is_pending_rather_than_failing(self):
+        from application.infrastructure import resource_health
+
+        health = resource_health(self._resource(generation=3, observed_generation=2))
+
+        self.assertEqual(health["state"], "pending")
