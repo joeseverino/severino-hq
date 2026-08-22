@@ -2691,8 +2691,12 @@ textarea.code {
 .conn-link-idle .conn-link-line { background: var(--line); }
 .conn-link-idle .conn-link-label, .conn-link-unknown .conn-link-label { color: var(--muted); }
 @media (max-width: 620px) {
-  .conn-peering { grid-template-columns: 1fr; }
-  .conn-peering > .conn-peer:last-child { justify-items: start; text-align: left; }
+  /* Stacked, the two ends read as one column rather than as two facing each
+     other, so they share an axis instead of one hugging each edge. */
+  .conn-peering { grid-template-columns: 1fr; text-align: center; }
+  .conn-peer, .conn-peering > .conn-peer:last-child {
+    justify-items: center; text-align: center;
+  }
   .conn-link-line { height: 2px; }
 }
 
