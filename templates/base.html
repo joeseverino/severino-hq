@@ -99,6 +99,20 @@
         </summary>
         <div class="user-menu-panel">
           <a href="{% url 'admin:index' %}">Admin</a>
+          {% comment %}
+          A real link to the page that answers this, so it works with the dialog
+          closed, unopenable, or bookmarked. The dialog fetches the same page
+          and lifts the panel out of it. The dot carries which network this
+          request came over; the word stays put so the control does not change
+          shape depending on where you are sitting.
+          {% endcomment %}
+          <a class="conn-badge conn-badge-{{ CONNECTION_CHANNEL.id }}"
+             href="{% url 'connection' %}"
+             data-modal-open="connection"
+             data-connection-source="{% url 'connection' %}">
+            Connection
+            <span class="conn-dot" aria-hidden="true"></span>
+          </a>
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}
             <button type="submit">Sign out</button>
@@ -130,6 +144,16 @@
   <footer class="site-footer">
     <span>{{ SITE_NAME }} · Unauthorized Access is Strictly Prohibited</span>
   </footer>
+
+  {% if user.is_authenticated %}
+    {% comment %}
+    Empty until opened. The panel behind it reads the tailnet inventory and
+    evaluates the access policy, and this dialog is on every page -- so it
+    fetches on first open rather than making every page pay for a panel almost
+    nobody opens.
+    {% endcomment %}
+    {% include "partials/_modal.html" with id="connection" title="This connection" lede="How this request reached HQ, and what had to hold for it to arrive." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
+  {% endif %}
 
   <script src="{% static 'js/app.js' %}?v={{ ASSET_VERSION }}" defer></script>
   <script src="{% static 'js/tables.js' %}?v={{ ASSET_VERSION }}" defer></script>

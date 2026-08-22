@@ -247,6 +247,7 @@ TEMPLATES = [
                 "core.context_processors.site",
                 "core.context_processors.nav",
                 "core.context_processors.auth_config",
+                "core.context_processors.connection",
             ],
         },
     },

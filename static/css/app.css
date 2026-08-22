@@ -2533,3 +2533,187 @@ textarea.code {
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px; line-height: 1.5; tab-size: 2;
 }
+
+/* ----- This connection -------------------------------------------------- */
+
+/* Wider than a normal dialog because this one is a table of readings rather
+   than a short task, and at the shared width every row wrapped onto four
+   lines. */
+.modal-wide { width: min(780px, calc(100vw - 32px)); }
+
+.conn-badge { display: flex; align-items: center; gap: 10px; }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--muted-2); margin-left: auto;
+}
+.conn-badge-tailnet .conn-dot { background: var(--ok); }
+.conn-badge-network .conn-dot, .conn-badge-loopback .conn-dot { background: var(--warn); }
+.conn-badge-elsewhere .conn-dot { background: var(--danger); }
+
+.conn { display: grid; gap: 20px; }
+.conn-pending { padding: 20px 0; }
+.conn h3 {
+  font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 8px;
+}
+.conn-note { color: var(--muted); font-size: 12.5px; margin: -4px 0 10px; }
+
+.conn-verdict {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 15px; border-radius: var(--radius);
+  background: var(--bg-tint); border-left: 3px solid var(--muted-2);
+}
+.conn-tailnet { border-left-color: var(--ok); }
+.conn-network, .conn-loopback { border-left-color: var(--warn); }
+.conn-elsewhere { border-left-color: var(--danger); }
+.conn-verdict .conn-dot { margin: 0; width: 9px; height: 9px; }
+.conn-tailnet .conn-dot { background: var(--ok); }
+.conn-network .conn-dot, .conn-loopback .conn-dot { background: var(--warn); }
+.conn-elsewhere .conn-dot { background: var(--danger); }
+.conn-verdict-text { flex: 1; min-width: 0; }
+.conn-headline { font-size: 16px; font-weight: 650; margin: 0; }
+.conn-sub { margin: 1px 0 0; color: var(--muted); font-size: 12.5px; }
+.conn-address { font-size: 13px; white-space: nowrap; }
+
+/* Two columns of label/value pairs. A grid rather than a table so the labels
+   share one width across both columns and the values line up with each other. */
+.conn-cols { display: grid; gap: 20px 28px; grid-template-columns: 1fr 1fr; align-items: start; }
+.conn-pairs { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; align-items: baseline; }
+.conn-pairs dt { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.conn-pairs dd { margin: 0; font-size: 13.5px; min-width: 0; overflow-wrap: anywhere; }
+.conn-pairs dd code { font-size: 12.5px; }
+.conn-pairs strong { font-weight: 600; }
+.conn-agree { font-size: 12.5px; margin: 12px 0 0; }
+.conn-agree-yes { color: var(--ok); }
+.conn-agree-no { color: var(--warn); }
+
+/* Address rows: value and kind hold their width, the note takes the rest and
+   is the only thing allowed to wrap. */
+.conn-rows { display: grid; gap: 2px; }
+.conn-row {
+  display: grid; grid-template-columns: minmax(0, auto) max-content 1fr;
+  gap: 12px; align-items: center; padding: 6px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+.conn-row:last-child { border-bottom: 0; }
+.conn-row code { font-size: 12.5px; overflow-wrap: anywhere; }
+.conn-row-note { color: var(--muted); font-size: 12px; }
+.conn-current code { font-weight: 650; }
+.conn-kind {
+  font-size: 10.5px; letter-spacing: .04em; padding: 2px 8px; border-radius: 20px;
+  background: var(--bg-tint); color: var(--muted); white-space: nowrap;
+}
+.conn-kind-tailnet { background: #e2efe6; color: var(--ok); }
+.conn-kind-elsewhere, .conn-kind-public { background: #f6e2e0; color: var(--danger); }
+
+/* The chain HQ walked to decide which address it is judging you by. */
+.conn-hops { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.conn-hop {
+  display: grid; grid-template-columns: minmax(0, auto) max-content 1fr;
+  gap: 12px; align-items: center;
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+}
+.conn-hop-judged { border-color: var(--accent); background: var(--accent-tint); }
+.conn-hop-ignored { opacity: .6; }
+.conn-kind-hop-judged { background: var(--accent); color: var(--accent-ink); }
+.conn-kind-hop-ignored { background: #f6e2e0; color: var(--danger); }
+
+.conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
+.conn-layer summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 13px; cursor: pointer; list-style: none;
+}
+.conn-layer summary::-webkit-details-marker { display: none; }
+.conn-tick {
+  width: 17px; height: 17px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 11px;
+  background: #e2efe6; color: var(--ok);
+}
+.conn-layer-does-not .conn-tick { background: #f6e2e0; color: var(--danger); }
+.conn-layer-label { font-weight: 550; font-size: 13.5px; }
+.conn-layer-evidence {
+  margin-left: auto; font-size: 11.5px; color: var(--muted);
+  max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.conn-layer p { margin: 0 13px 11px 40px; font-size: 13px; color: var(--ink-2); }
+
+/* A live reading, so it reads as a measurement being taken rather than a
+   number that was true once. */
+.conn-live { display: inline-flex; align-items: center; gap: 8px; }
+.conn-pulse {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+  animation: conn-pulse 1.8s ease-in-out infinite;
+}
+@keyframes conn-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.72); }
+}
+@media (prefers-reduced-motion: reduce) { .conn-pulse { animation: none; } }
+.conn-samples { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+.conn-samples i {
+  width: 3px; background: var(--accent-2); border-radius: 1px;
+  height: calc(var(--at) * 1%); min-height: 2px;
+}
+
+@media (max-width: 620px) {
+  .conn-cols { grid-template-columns: 1fr; }
+  .conn-verdict { flex-wrap: wrap; }
+  .conn-address { width: 100%; }
+  .conn-layer-evidence { display: none; }
+  /* Value and kind on one line, the note beneath, rather than three columns
+     that cannot each hold an IPv6 address. */
+  .conn-row, .conn-hop { grid-template-columns: minmax(0, 1fr) max-content; }
+  .conn-row-note, .conn-hop .conn-row-note { grid-column: 1 / -1; }
+}
+
+/* The two ends and the link between them. */
+.conn-peering {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius);
+}
+.conn-peer { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.conn-peering > .conn-peer:last-child { justify-items: end; text-align: right; }
+.conn-peer-role {
+  font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted-2);
+}
+.conn-peer strong { font-size: 14px; }
+.conn-peer code { font-size: 12px; }
+.conn-link { display: grid; gap: 4px; justify-items: center; min-width: 120px; }
+.conn-link-label { font-size: 11.5px; font-weight: 600; color: var(--accent-2); }
+.conn-link-line {
+  width: 100%; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent-2), var(--ok));
+}
+.conn-link-relayed .conn-link-line { background: repeating-linear-gradient(
+  90deg, var(--warn) 0 5px, transparent 5px 10px); }
+.conn-link-relayed .conn-link-label { color: var(--warn); }
+.conn-link-idle .conn-link-line { background: var(--line); }
+.conn-link-idle .conn-link-label, .conn-link-unknown .conn-link-label { color: var(--muted); }
+@media (max-width: 620px) {
+  .conn-peering { grid-template-columns: 1fr; }
+  .conn-peering > .conn-peer:last-child { justify-items: start; text-align: left; }
+  .conn-link-line { height: 2px; }
+}
+
+/* On a phone the dialog stops being a dialog and becomes the page: this one
+   is long enough that a floating box with margins on four sides wastes the
+   only dimension there is. */
+@media (max-width: 560px) {
+  .modal-wide {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    margin: 0; border: 0; border-radius: 0;
+  }
+  .modal-wide .modal-panel { height: 100%; overflow-y: auto; }
+}
+
+.conn-kind-read { background: var(--accent-tint); color: var(--accent); }
+.conn-row-used code { color: var(--ink); }
+.conn-more > summary {
+  cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 8px 0 4px;
+}
+.conn-opaque { border-left-color: var(--danger); }
+.conn-opaque .conn-dot { background: var(--danger); }
+.conn-badge-opaque .conn-dot { background: var(--danger); }
+.conn-rules { display: grid; gap: 4px; margin: 0 13px 11px 40px; justify-items: start; }
+.conn-rules code { font-size: 11.5px; }

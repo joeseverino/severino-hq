@@ -11,7 +11,7 @@ still works when the dialog does not open:
 `body_template` is rendered with the surrounding context. Escape and the
 backdrop close the dialog; both are handled by the host, not by the caller.
 {% endcomment %}
-<dialog class="modal" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title">
+<dialog class="modal {{ modal_class }}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title">
   {% comment %}
   tabindex and autofocus together: the dialog moves focus inside itself on open,
   and without a target it lands on the close button and rings it.

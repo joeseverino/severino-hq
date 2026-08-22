@@ -2432,7 +2432,14 @@ def local_tailnet_devices() -> list[dict[str, Any]]:
     except ValueError as exc:
         raise ProviderError("The tailnet reading is not readable status.") from exc
     nodes = [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
-    return [record for record in map(_tailnet_record, nodes) if record]
+    found = [record for record in map(_tailnet_record, nodes) if record]
+    # Which of them took the reading. Every other device is described from its
+    # point of view -- the relay carrying it, the bytes exchanged with it -- so
+    # a reader that cannot tell which one is the observer is reading a set of
+    # measurements with no origin.
+    for record in found[:1]:
+        record["self"] = True
+    return found
 
 
 def list_tailnet_devices() -> list[dict[str, Any]]:
@@ -2501,6 +2508,24 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "addresses": [str(address) for address in node.get("TailscaleIPs") or ()],
         "os": str(node.get("OS") or ""),
         "exit_node": bool(node.get("ExitNode")),
+        "self": False,
+        # How the traffic actually gets there, which is the part nothing else
+        # can answer. A peer is either reached directly -- the two daemons found
+        # a path through both NATs -- or carried by a relay, and the difference
+        # is a real one an operator otherwise has to shell in to see. Absent
+        # means the peer is idle rather than unreachable: a path is negotiated
+        # when there is traffic, so a machine nobody is talking to has neither.
+        "direct_endpoint": str(node.get("CurAddr") or ""),
+        # Every address this node can be reached at off the tailnet -- the one
+        # its router hands out and the one the internet sees it as. Reported
+        # only for the node taking the reading; a peer's own list is not
+        # something the daemon is told.
+        "endpoints": [str(endpoint) for endpoint in node.get("Addrs") or ()],
+        "relay": str(node.get("Relay") or ""),
+        "last_handshake": str(node.get("LastHandshake") or ""),
+        "active": bool(node.get("Active")),
+        "rx_bytes": int(node.get("RxBytes") or 0),
+        "tx_bytes": int(node.get("TxBytes") or 0),
     }
 
 

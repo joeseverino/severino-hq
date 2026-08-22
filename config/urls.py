@@ -7,6 +7,7 @@ from django.views.generic import RedirectView
 
 from core.views import (
     DashboardLinkChoiceView,
+    ConnectionView,
     DashboardView,
     SearchView,
     ThrottledLoginView,
@@ -38,6 +39,7 @@ urlpatterns = [
     ),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
+    path("connection/", ConnectionView.as_view(), name="connection"),
     path(
         "dashboard/links/",
         DashboardLinkChoiceView.as_view(),

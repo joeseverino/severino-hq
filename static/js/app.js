@@ -432,3 +432,107 @@ document.addEventListener("submit", (event) => {
       form.submit();
     });
 });
+
+// The connection panel, fetched the first time it is opened. It reads the
+// tailnet inventory and evaluates the access policy, and it sits behind a
+// control on every page -- so paying for it on every page render would be
+// paying for it almost always to go unread.
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest("[data-connection-source]");
+  if (!opener || !window.fetch) return;
+  const dialog = document.getElementById("modal-connection");
+  const slot = dialog?.querySelector("[data-connection-slot]");
+  if (!slot) return;
+  fetch(opener.dataset.connectionSource, {
+    headers: { "X-Requested-With": "fetch" },
+    credentials: "same-origin",
+  })
+    .then((response) => (response.ok ? response.text() : Promise.reject(response)))
+    .then((html) => {
+      const panel = new DOMParser()
+        .parseFromString(html, "text/html")
+        .querySelector("[data-connection-panel]");
+      if (!panel) return;
+      slot.replaceWith(panel);
+      hqWatchRoundTrip(panel);
+    })
+    .catch(() => {
+      // The same answer is a page away, and a dialog stuck on "reading" is
+      // worse than a navigation.
+      window.location.assign(opener.dataset.connectionSource);
+    });
+});
+
+// Round trip, actually measured rather than reported. Everything else in that
+// panel is read from the last sweep and says so; this one is taken now, from
+// the browser reading it, which is the only place the number means anything.
+// It keeps sampling while the panel is open, because a peering is a live thing
+// and a single figure printed once reads like a stored one.
+const hqRoundTrip = (() => {
+  let timer = null;
+
+  const sample = (endpoint) => {
+    const started = performance.now();
+    // A response with no body and no database behind it, so what is measured
+    // is the path rather than what HQ did after arriving.
+    return fetch(`${endpoint}?t=${started}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    }).then(() => performance.now() - started);
+  };
+
+  const render = (slot, runs) => {
+    const best = Math.min(...runs);
+    const worst = Math.max(...runs);
+    // Each bar relative to the slowest sample, so the shape shows variation
+    // rather than an absolute scale nobody can read at this size.
+    const bars = runs
+      .slice(-12)
+      .map((run) => `<i style="--at: ${Math.max(12, (run / worst) * 100)}"></i>`)
+      .join("");
+    slot.innerHTML =
+      `<span class="conn-live"><span class="conn-pulse"></span>` +
+      `<strong>${best.toFixed(1)} ms</strong>` +
+      `<span class="conn-samples">${bars}</span></span>`;
+  };
+
+  const start = (slot, endpoint) => {
+    const runs = [];
+    const tick = () =>
+      sample(endpoint)
+        .then((run) => {
+          runs.push(run);
+          render(slot, runs);
+        })
+        .catch(() => {
+          slot.textContent = "could not measure";
+          stop();
+        });
+    tick();
+    timer = window.setInterval(tick, 3000);
+  };
+
+  const stop = () => {
+    if (timer !== null) window.clearInterval(timer);
+    timer = null;
+  };
+
+  return { start, stop };
+})();
+
+// Measured as soon as the panel exists, and stopped when it goes away. Nothing
+// is polling while the dialog is shut.
+const hqWatchRoundTrip = (root) => {
+  const slot = root.querySelector("[data-rtt]");
+  const endpoint = root.querySelector("[data-rtt-measure]")?.dataset.rttMeasure;
+  if (slot && endpoint) hqRoundTrip.start(slot, endpoint);
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const panel = document.querySelector("[data-connection-panel]");
+  if (panel && !panel.closest("dialog")) hqWatchRoundTrip(panel);
+});
+
+document.getElementById("modal-connection")?.addEventListener("close", () => {
+  hqRoundTrip.stop();
+});

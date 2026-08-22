@@ -30,6 +30,36 @@ class Device:
     tags: tuple[str, ...] = ()
     reach: dict[int, tuple[str, ...]] = field(default_factory=dict)
     rules: dict[int, tuple[dict, ...]] = field(default_factory=dict)
+    addresses: tuple[str, ...] = ()
+    dns_name: str = ""
+    os: str = ""
+    online: bool = False
+    observer: bool = False
+    # How the observer is talking to it, as that node's own daemon reports it.
+    direct_endpoint: str = ""
+    relay: str = ""
+    last_handshake: str = ""
+    active: bool = False
+    rx_bytes: int = 0
+    tx_bytes: int = 0
+    endpoints: tuple[str, ...] = ()
+    key_expires: str = ""
+    exit_node: bool = False
+
+    @property
+    def path(self) -> str:
+        """Direct, relayed, or not currently negotiated -- in those words.
+
+        A relayed peer still works; it is slower and it crosses a machine
+        neither end owns. Saying which is the point: the two look identical
+        from every other surface in HQ.
+        """
+
+        if self.direct_endpoint:
+            return "direct"
+        if self.relay:
+            return "relayed"
+        return "idle"
 
     @property
     def principals(self) -> frozenset[str]:
@@ -90,8 +120,60 @@ def devices() -> dict[str, Device]:
                     for entry in record.get("reach") or ()
                     if str(entry.get("port", "")).isdigit()
                 },
+                addresses=tuple(
+                    str(address) for address in record.get("addresses") or ()
+                ),
+                dns_name=str(record.get("dns_name", "")),
+                os=str(record.get("os", "")),
+                online=bool(record.get("online")),
+                observer=bool(record.get("self")),
+                direct_endpoint=str(record.get("direct_endpoint", "")),
+                relay=str(record.get("relay", "")),
+                last_handshake=str(record.get("last_handshake", "")),
+                active=bool(record.get("active")),
+                rx_bytes=int(record.get("rx_bytes") or 0),
+                tx_bytes=int(record.get("tx_bytes") or 0),
+                endpoints=tuple(
+                    str(endpoint) for endpoint in record.get("endpoints") or ()
+                ),
+                key_expires=str(record.get("key_expires", "")),
+                exit_node=bool(record.get("exit_node")),
             )
     return found
+
+
+def device_at(address: str, known: dict[str, Device] | None = None) -> Device | None:
+    """The device answering at an address, where the tailnet knows of one.
+
+    ``known`` lets a caller that already read the inventory hand it in. One
+    surface asks three of these questions about the same sweep, and reading it
+    once per question is three identical queries for one answer.
+    """
+
+    wanted = str(address or "").strip()
+    if not wanted:
+        return None
+    return next(
+        (
+            found
+            for found in (known if known is not None else devices()).values()
+            if wanted in found.addresses
+        ),
+        None,
+    )
+
+
+def observer(known: dict[str, Device] | None = None) -> Device | None:
+    """The device whose daemon took the reading -- the one HQ runs on."""
+
+    return next(
+        (
+            found
+            for found in (known if known is not None else devices()).values()
+            if found.observer
+        ),
+        None,
+    )
 
 
 def ports() -> tuple[int, ...]:
@@ -100,7 +182,9 @@ def ports() -> tuple[int, ...]:
     return tuple(sorted({port for device in devices().values() for port in device.reach}))
 
 
-def may_reach(source: str, target: str, port: int) -> Verdict:
+def may_reach(
+    source: str, target: str, port: int, known: dict[str, Device] | None = None
+) -> Verdict:
     """Whether the policy admits ``source`` to ``target`` on ``port``.
 
     Three answers, not two. "Cannot say" is a real outcome and is kept distinct
@@ -108,7 +192,7 @@ def may_reach(source: str, target: str, port: int) -> Verdict:
     about, is a gap in what HQ was told rather than a decision the policy made.
     """
 
-    known = devices()
+    known = devices() if known is None else known
     who_asks = known.get(source)
     who_answers = known.get(target)
     if who_asks is None or who_answers is None:

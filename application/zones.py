@@ -542,3 +542,30 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
         for record in pending
     ]
     return {"ok": True, "zone": found.zone, "adopted": adopted}
+
+
+def public_answers_for(hostname: str) -> tuple[str, ...]:
+    """What the public internet is told when it asks for this name.
+
+    Read from the zones HQ actually manages rather than by resolving the name.
+    A resolver on the same machine as HQ is inside every boundary this is meant
+    to describe -- it would follow the internal rewrite and report that a
+    private name resolves, which is the opposite of the question being asked.
+
+    An empty answer means no zone HQ manages publishes this name. That is not
+    the same as proving the name is unresolvable everywhere, and nothing built
+    on this should say that it is.
+    """
+
+    wanted = normalized_hostname(hostname)
+    if not wanted:
+        return ()
+    found: list[str] = []
+    for snapshot in ProviderInventory.objects.filter(kind=RECORD_KIND):
+        for record in snapshot.records:
+            if normalized_hostname(str(record.get("name", ""))) != wanted:
+                continue
+            content = str(record.get("content", "")).strip()
+            if content and content not in found:
+                found.append(content)
+    return tuple(found)
