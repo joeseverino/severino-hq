@@ -1,0 +1,90 @@
+{% comment %}
+One table of services. Rendered twice -- once for the favorites, once for
+everything else -- so the two lists cannot drift into showing different columns
+or reading a facet differently.
+
+`reorderable` turns on the up/down controls. They are only meaningful inside the
+favorites, where the order is something the operator chose; among the rest,
+alphabetical is the order and there is nothing to move.
+{% endcomment %}
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Service</th>
+        {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
+        <th>Runs on</th>
+        <th>Project</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for service in rows %}
+        <tr>
+          <td>
+            <div class="service-name">
+              <form method="post" action="{% url 'control_plane:service_pin' service.hostname %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="pin-toggle{% if service.pinned %} pinned{% endif %}" type="submit"
+                        title="{% if service.pinned %}Remove from favorites{% else %}Keep at the top{% endif %}"
+                        aria-label="{% if service.pinned %}Remove {{ service.hostname }} from favorites{% else %}Keep {{ service.hostname }} at the top{% endif %}">★</button>
+              </form>
+              <a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a>
+              {% if reorderable %}
+                <span class="pin-move">
+                  {% if not forloop.first %}
+                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <input type="hidden" name="direction" value="up">
+                      <button type="submit" aria-label="Move {{ service.hostname }} up">↑</button>
+                    </form>
+                  {% endif %}
+                  {% if not forloop.last %}
+                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <input type="hidden" name="direction" value="down">
+                      <button type="submit" aria-label="Move {{ service.hostname }} down">↓</button>
+                    </form>
+                  {% endif %}
+                </span>
+              {% endif %}
+            </div>
+          </td>
+          {% for facet in service.facets %}
+            {% if facet.id != runtime_facet %}
+              <td>
+                {% for claim in facet.claims %}
+                  <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>{% if not forloop.last %}<br>{% endif %}
+                {% empty %}
+                  <span class="muted">—</span>
+                {% endfor %}
+              </td>
+            {% endif %}
+          {% endfor %}
+          {% comment %}
+          Where it runs, in one column. The runtime facet named the container
+          declaration and the origin named the machine, side by side, in two
+          vocabularies for one fact -- and the long resource key was the half
+          that read worst. The origin's own phrasing wins, and the declaration
+          behind it is what the name links to.
+          {% endcomment %}
+          <td>
+            {% if service.origin %}
+              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}<a href="{{ claim.url }}">{{ service.origin.headline }}</a>{% endif %}{% empty %}{{ service.origin.headline }}{% endfor %}{% endif %}{% endfor %}
+              {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier }}</span>{% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>{% if service.project %}<a href="{{ service.project.url }}">{{ service.project.name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish your first one" %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

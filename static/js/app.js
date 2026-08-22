@@ -455,6 +455,7 @@ document.addEventListener("click", (event) => {
       if (!panel) return;
       slot.replaceWith(panel);
       hqWatchRoundTrip(panel);
+      hqShowResponseHeaders(panel);
     })
     .catch(() => {
       // The same answer is a page away, and a dialog stuck on "reading" is
@@ -535,4 +536,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.getElementById("modal-connection")?.addEventListener("close", () => {
   hqRoundTrip.stop();
+});
+
+// What HQ sent back, taken from a real response rather than from the settings
+// meant to produce one. A same-origin fetch exposes every response header, so
+// the browser reading the panel is the honest place to ask what it was given.
+const HQ_RESPONSE_HEADERS = [
+  ["content-security-policy", "Which origins may load script, style and frames"],
+  ["strict-transport-security", "Refuses plain HTTP for this host from now on"],
+  ["x-content-type-options", "Stops the browser guessing a type it was not sent"],
+  ["x-frame-options", "Refuses to be framed by another site"],
+  ["referrer-policy", "How much of this URL travels to anywhere you click"],
+  ["cross-origin-opener-policy", "Keeps other origins out of this browsing context"],
+  ["permissions-policy", "Which device capabilities this page may ask for"],
+];
+
+const hqShowResponseHeaders = (root) => {
+  const slot = root.querySelector("[data-response-headers]");
+  if (!slot || !window.fetch) return;
+  fetch(window.location.href, { credentials: "same-origin", cache: "no-store" })
+    .then((response) => {
+      slot.innerHTML = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
+        const value = response.headers.get(name);
+        const shown = value
+          ? `<code>${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}</code>`
+          : `<code>${name}</code>`;
+        const chip = value
+          ? `<span class="conn-kind conn-kind-read">sent</span>`
+          : `<span class="conn-kind conn-kind-elsewhere">absent</span>`;
+        return `<div class="conn-row conn-row-wide">${shown}${chip}<span class="conn-row-note">${purpose}</span></div>`;
+      }).join("");
+    })
+    .catch(() => {
+      slot.innerHTML =
+        '<div class="conn-row"><span class="conn-row-note">The response could not be read back.</span></div>';
+    });
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const panel = document.querySelector("[data-connection-panel]");
+  if (panel && !panel.closest("dialog")) hqShowResponseHeaders(panel);
 });

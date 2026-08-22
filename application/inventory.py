@@ -172,6 +172,87 @@ def record_inventory(
     }
 
 
+def confirm_observed(payload: dict[str, Any]) -> int:
+    """Mark declarations the sweep just found still matching as observed.
+
+    A declaration is "in sync" when what HQ asked for is what is there, and a
+    sweep is HQ going and looking. Yet only a reconcile ever wrote that down,
+    so a declaration nothing had changed sat reporting "never reported" -- and
+    nothing queues a reconcile for a resource that has not drifted, so the
+    first look never came. Whole services read as unverified while every part
+    of them was running and had just been seen.
+
+    Only where the spec still matches the live record. A declaration that has
+    drifted is exactly the one a reconcile should visit, and quietly calling it
+    observed would hide the difference this whole model exists to surface.
+    """
+
+    from django.utils import timezone
+
+    seen = timezone.now()
+    confirmed = 0
+    for kind, report in payload.items():
+        if kind not in PROVIDERS or not report.get("ok", True):
+            continue
+        live = {}
+        for record in report.get("records") or []:
+            spec = _spec_from_record(kind, record)
+            if spec is not None:
+                live[_identity(kind, spec)] = spec
+        if not live:
+            continue
+        for resource in ManagedResource.objects.filter(kind=kind, enabled=True):
+            found = live.get(_identity(kind, resource.spec))
+            if found is None or not _same_declaration(kind, resource.spec, found):
+                continue
+            resource.observed_generation = resource.generation
+            resource.last_observed_at = seen
+            resource.status = dict(found)
+            resource.conditions = [
+                {
+                    "type": "Ready",
+                    "status": True,
+                    "reason": "Observed",
+                    "message": "The last sweep found this exactly as declared.",
+                }
+            ]
+            resource.save(
+                update_fields=[
+                    "observed_generation",
+                    "last_observed_at",
+                    "status",
+                    "conditions",
+                ]
+            )
+            confirmed += 1
+    return confirmed
+
+
+def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | None:
+    provider = PROVIDERS[kind]
+    if provider.from_record is None:
+        return None
+    try:
+        return provider.from_record(record)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> bool:
+    """Whether the live record says what the declaration asks for.
+
+    Compared on the fields the declaration carries. A provider hands back more
+    than was asked for -- an id it assigned, a status it keeps -- and requiring
+    those to appear in a spec nobody wrote would report drift on every record.
+    """
+
+    return all(
+        str(found.get(field, "")) == str(value)
+        for field, value in declared.items()
+        if field in found
+    )
+
+
 @transaction.atomic
 def record_connections(
     payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
@@ -469,7 +550,7 @@ def adopt(
             f"No unmanaged {command.kind} was last seen for {subject!r}. "
             "It may have been adopted already, or removed at the provider."
         )
-    return save_managed_resource(
+    result = save_managed_resource(
         ManagedResourceCommand(
             key=command.key or suggested_key(found),
             kind=found.kind,
@@ -477,6 +558,54 @@ def adopt(
             enabled=True,
         ),
         principal=principal,
+        copied_from_live=True,
+    )
+    _record_as_observed(result.get("resource", {}).get("key", ""), found)
+    return result
+
+
+def _record_as_observed(key: str, found: "Unmanaged") -> None:
+    """Mark an adopted resource as seen, because it just was.
+
+    Everything else here is born unobserved and waits for a controller to go
+    and look, which is right: a declaration somebody typed is a claim about a
+    world nobody has checked. Adoption is the one case where that is false. The
+    spec was read from the live record moments ago, so a resource created from
+    it is in sync by construction -- that is the entire safety argument for
+    adopting rather than declaring.
+
+    Left unmarked, it says "never reported" forever: nothing queues a
+    reconcile for a resource that has not drifted, so the first look never
+    comes, and a service assembled from it reads as incomplete while every part
+    of it is running.
+    """
+
+    from django.utils import timezone
+
+    from control_plane.models import ManagedResource
+
+    resource = ManagedResource.objects.filter(key=key).first()
+    if resource is None:
+        return
+    resource.observed_generation = resource.generation
+    resource.last_observed_at = timezone.now()
+    # What was found, which for an adopted resource is what was declared.
+    resource.status = dict(found.spec)
+    resource.conditions = [
+        {
+            "type": "Ready",
+            "status": True,
+            "reason": "Adopted",
+            "message": "Adopted from what the provider was holding.",
+        }
+    ]
+    resource.save(
+        update_fields=[
+            "observed_generation",
+            "last_observed_at",
+            "status",
+            "conditions",
+        ]
     )
 
 

@@ -467,3 +467,48 @@ class WhoeverSweptTests(TestCase):
         """Discarding it would leave nothing explaining the fold."""
 
         self.assertIn("a-laptop-that-swept", machine("a-docker-host").aliases)
+
+
+class ReadingThisOnTheMachineTests(TestCase):
+    """The page describing a machine, opened on that machine.
+
+    HQ judged the caller's address for the network gate before any view ran,
+    and every machine carries the addresses it answers at. So the page could
+    always have known, and instead said "this machine" in the third person
+    while somebody looked at their own laptop.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        self.user = get_user_model().objects.create_user(
+            username="an-operator", password="not-used-here"
+        )
+        self.client.force_login(self.user)
+        ManagedResource.objects.create(
+            key="a-laptop",
+            kind="machine",
+            spec={"name": "a-laptop", "role": "", "addresses": ["100.64.0.5"]},
+        )
+
+    def page(self, address):
+        return self.client.get(
+            reverse("control_plane:machine", kwargs={"name": "a-laptop"}),
+            REMOTE_ADDR=address,
+        )
+
+    def test_the_machine_you_are_reading_it_on_says_so(self):
+        self.assertContains(self.page("100.64.0.5"), "this device")
+
+    def test_another_machine_does_not(self):
+        self.assertNotContains(self.page("100.64.0.9"), "this device")
+
+    def test_knowing_costs_no_query(self):
+        """It is arithmetic on one address, and the header is on every page."""
+
+        from core.network import client_ip
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/", REMOTE_ADDR="100.64.0.5")
+        with self.assertNumQueries(0):
+            client_ip(request)

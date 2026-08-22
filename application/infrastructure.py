@@ -412,12 +412,26 @@ def save_managed_resource(
     principal: Principal,
     current_key: str | None = None,
     expected_updated_at: str | None = None,
+    copied_from_live: bool = False,
 ) -> dict[str, Any]:
+    """Write one declaration.
+
+    ``copied_from_live`` says the spec was read from the provider moments ago
+    rather than authored. It exempts the write from the public-DNS switch
+    below, and only that: an adopted record asserts exactly what the provider
+    already holds, so reconciling it changes nothing. The switch exists to stop
+    HQ changing public DNS, and refusing to *write down* a record that is
+    already published stopped nothing -- it left every public record listed as
+    unadopted, on a deployment that had deliberately said "do not change these"
+    and was then told it could not describe them either.
+    """
+
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     validated_spec = validate_spec(command.kind, command.spec)
     provider = PROVIDERS[command.kind]
     if (
         command.enabled
+        and not copied_from_live
         and provider.public_effect
         and _can_change_the_public_internet(command.kind)
         and not getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)

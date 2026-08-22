@@ -819,3 +819,172 @@ class ParkedNameTests(TestCase):
         from .services import _points_nowhere
 
         self.assertEqual(_points_nowhere(None), "")
+
+
+class LoopbackOriginTests(TestCase):
+    """A proxy forwarding to itself still names a machine.
+
+    Terminating TLS and forwarding over loopback is the safer arrangement --
+    the request never crosses a network between the proxy and the thing it
+    serves -- and it made every such service unresolvable: no machine is
+    declared at 127.0.0.1 because every machine is, so matching by address
+    reported "unknown host" for the one hop that never left the box.
+    """
+
+    def a_container_on(self, host, name, port):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+        from .services import CONTAINER_KIND
+
+        ProviderInventory.objects.update_or_create(
+            kind=CONTAINER_KIND,
+            defaults={
+                "records": [
+                    {"name": name, "host": host, "ports": [port], "state": "running"}
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def test_loopback_resolves_to_the_machine_listening_on_that_port(self):
+        from .services import _locate
+
+        self.a_container_on("a-docker-host", "an-app", 8000)
+
+        origin = _locate("127.0.0.1:8000", ({"name": "a-docker-host"},))
+
+        self.assertEqual(origin.host, "a-docker-host")
+        self.assertEqual(origin.container, "an-app")
+
+    def test_a_loopback_port_nothing_listens_on_names_no_machine(self):
+        """Better silent than confidently wrong about which box it meant."""
+
+        from .services import _locate
+
+        self.a_container_on("a-docker-host", "an-app", 8000)
+
+        self.assertEqual(_locate("127.0.0.1:9999", ({"name": "a-docker-host"},)).host, "")
+
+    def test_two_machines_listening_on_that_port_is_reported_as_silence(self):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+        from .services import CONTAINER_KIND, _locate
+
+        ProviderInventory.objects.update_or_create(
+            kind=CONTAINER_KIND,
+            defaults={
+                "records": [
+                    {"name": "one", "host": "host-a", "ports": [8000], "state": "running"},
+                    {"name": "two", "host": "host-b", "ports": [8000], "state": "running"},
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+        origin = _locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
+
+        self.assertEqual(origin.host, "")
+
+
+class WwwIsTheSameSiteTests(TestCase):
+    """`www.example.com` and `example.com` as two address records are one site.
+
+    A CNAME says "I am that name" and already folded. An address record says
+    only where to go, so the pair read as two services with two certificates
+    and two verdicts about one website.
+
+    Narrow on purpose. Every other subdomain sharing an address is a different
+    service on one host -- mail and a quiz on one cPanel are not each other --
+    so the rule is the one prefix that conventionally means the same site.
+    """
+
+    def aliases(self, origins, declared=None):
+        from .services import _aliases
+
+        return _aliases(declared or set(origins), origins)
+
+    def test_www_folds_into_the_apex_when_both_point_at_one_place(self):
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"}
+        )
+
+        self.assertEqual(found, {"www.example.com": "example.com"})
+
+    def test_www_pointing_somewhere_else_stays_its_own_service(self):
+        """Two addresses is two places, whatever the names suggest."""
+
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"}
+        )
+
+        self.assertEqual(found, {})
+
+    def test_another_subdomain_on_the_same_address_is_not_folded(self):
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"}
+        )
+
+        self.assertEqual(found, {})
+
+    def test_an_apex_nobody_declares_leaves_www_alone(self):
+        found = self.aliases({"www.example.com": "203.0.113.9"})
+
+        self.assertEqual(found, {})
+
+
+class TlsHqDoesNotOwnTests(TestCase):
+    """A name served over TLS by a certificate HQ can never hold.
+
+    An internally signed certificate is signed by a CA that is deliberately
+    air-gapped, so HQ cannot own one and never will. Counting only declared
+    certificates reported "no certificate covers this" for names that had been
+    served over TLS the whole time -- and the fix is not to declare something
+    HQ cannot fulfil, but to look at what the proxy is actually serving.
+    """
+
+    def a_proxy_serving(self, hostname, certificate=None):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        record = {"domain_names": [hostname], "forward_host": "10.0.0.9"}
+        if certificate is not None:
+            record["certificate"] = certificate
+        ProviderInventory.objects.update_or_create(
+            kind="npm.proxy_host",
+            defaults={"records": [record], "observed_at": timezone.now()},
+        )
+
+    def test_a_certificate_the_proxy_serves_answers_the_question(self):
+        from .services import _certificates_in_use
+
+        self.a_proxy_serving(
+            "a-host.example.com",
+            {"name": "a-host.example.com", "domains": ["a-host.example.com"]},
+        )
+
+        self.assertEqual(
+            _certificates_in_use()["a-host.example.com"]["name"], "a-host.example.com"
+        )
+
+    def test_a_proxy_serving_nothing_over_tls_is_not_counted(self):
+        from .services import _certificates_in_use
+
+        self.a_proxy_serving("a-host.example.com")
+
+        self.assertEqual(_certificates_in_use(), {})
+
+    def test_the_reading_is_not_taken_unless_something_asks(self):
+        """Most services carry a declared certificate and never reach it."""
+
+        from .services import _CertificatesInUse
+
+        taken = []
+        held = _CertificatesInUse(lambda: taken.append(1) or {})
+
+        self.assertEqual(taken, [])
+        held.covering("anything")
+        held.covering("anything else")
+        self.assertEqual(taken, [1])

@@ -2725,3 +2725,78 @@ textarea.code {
 /* An address is as wide as the address. Stretching each one to the column
    turns a list of six values into six grey slabs. */
 .conn-row > code, .conn-hop > code { justify-self: start; }
+.conn-peer-name { font-size: 14px; font-weight: 600; }
+.conn-kind-declined { background: #f4ead8; color: var(--warn); }
+
+/* A header value is long by nature, and beside it a three-column row squeezes
+   the note into one word per line the moment the panel is a dialog rather than
+   a page. The value keeps the width it needs and the note takes its own line. */
+.conn-row-wide { grid-template-columns: minmax(0, 1fr) max-content; }
+.conn-row-wide > code { overflow-wrap: anywhere; }
+.conn-row-wide .conn-row-note { grid-column: 1 / -1; }
+
+/* A row whose value is long and variable -- a header, a policy -- puts its
+   note on its own line. Squeezed into a third column beside a value that can
+   be three hundred characters, the note collapses to one word per line. */
+.conn-row-stacked { grid-template-columns: minmax(0, 1fr) max-content; row-gap: 3px; }
+.conn-row-stacked > code { justify-self: stretch; }
+.conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
+
+/* ----- Favourites ------------------------------------------------------- */
+
+.service-name { display: flex; align-items: center; gap: 8px; }
+.service-name > form { display: inline-flex; }
+.pin-toggle {
+  background: none; border: 0; box-shadow: none; padding: 0 2px; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--line); /* an empty star, not an absent one */
+}
+.pin-toggle:hover { color: var(--muted-2); }
+.pin-toggle.pinned { color: var(--warn); }
+.pin-move { display: inline-flex; gap: 2px; margin-left: auto; }
+.pin-move button {
+  background: none; border: 0; box-shadow: none; padding: 0 3px; cursor: pointer;
+  font-size: 12px; line-height: 1; color: var(--muted-2);
+}
+.pin-move button:hover { color: var(--ink); }
+/* Where the operator's own order stops and the rest of the estate begins. */
+.data-table tr.service-rest > * { border-top: 2px solid var(--line); }
+
+/* On a phone a wide table has two honest options and one dishonest one. It can
+   stack, it can scroll, or it can squeeze every column to three characters and
+   stand each value up as a vertical strip -- which is what `width: 100%` plus
+   `break-word` does, and it is unreadable.
+   `.table-scroll` was already the answer; it just never got the chance, because
+   a table told to be exactly as wide as its container never overflows the thing
+   that scrolls it. Sized to its content it does, and the reader swipes -- the
+   same conclusion `td > .readout` reached for a dotted-quad address. */
+@media (max-width: 760px) {
+  .table-scroll .data-table { min-width: max-content; }
+  .table-scroll .data-table td,
+  .table-scroll .data-table th { overflow-wrap: normal; }
+}
+
+/* ----- Provider readings ------------------------------------------------ */
+
+.sweep { margin-top: 26px; }
+.sweep-grid {
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.sweep-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  align-items: baseline; padding: 9px 12px; background: var(--surface);
+}
+.sweep-label { font-size: 12.5px; color: var(--ink-2); }
+/* The count is the number on the row, so it leads rather than trails. */
+.sweep-count { font-size: 14px; font-weight: 650; justify-self: end; }
+.sweep-age { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.sweep-item-unreachable { background: #fdf6f5; }
+.sweep-item-unreachable .sweep-age { color: var(--danger); }
+
+.section-heading {
+  font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--muted); margin: 22px 0 10px; font-weight: 600;
+}
+.unmanaged > summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 10px 0; }
+.unmanaged > summary:hover { color: var(--ink); }

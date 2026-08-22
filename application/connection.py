@@ -173,6 +173,15 @@ class Connection:
     layers: tuple[Layer, ...] = ()
     secure_transport: bool = False
     host: str = ""
+    # The machine pages behind the two ends, where HQ knows a machine at the
+    # address each one answers at. A tailnet name is rarely the name HQ uses,
+    # so this is resolved by address rather than by matching the two names.
+    machine_url: str = ""
+    serves_url: str = ""
+    # What HQ was told about its machines, read once and answering every
+    # relationship this page draws: which machine each end of the link is, and
+    # which of a node's addresses are ones HQ was actually declared at.
+    declared: tuple = ()
 
     @property
     def holds(self) -> bool:
@@ -235,11 +244,17 @@ def connection(request) -> Connection:
     device = tailnet.device_at(address, known)
     serves = tailnet.observer(known)
     identity = _identity(request, device)
+    from .infrastructure import declared_machines
+
+    declared = declared_machines()
     return Connection(
         address=address,
         channel=channel,
         device=device,
         serves=serves,
+        machine_url=_machine_url(device.addresses if device else (address,), declared),
+        serves_url=_machine_url(serves.addresses if serves else (), declared),
+        declared=declared,
         identity=identity,
         secure_transport=bool(request.is_secure()),
         host=request.get_host(),
@@ -640,41 +655,67 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
 
 
 def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
-    """The same for HQ's own node, minus the interfaces nobody reaches it on.
+    """Where HQ answers, and where its daemon merely negotiates a tunnel.
 
-    A node reports every address it has, and on a Docker host most of them are
-    bridge gateways: a dozen rows that are all the same fact about container
-    networking and none of them a way to reach HQ. The ones worth printing are
-    the tailnet addresses, the public endpoint, and whichever private address
-    HQ was actually declared at -- the last of which HQ already knows, so the
-    bridges fall away without anything here having to recognise a bridge.
+    Two different facts that a single list of addresses will be read as one.
+    The tailnet addresses are where HQ serves; the endpoints beside them are
+    what Tailscale advertises so two daemons can find a path through NAT, and
+    a public one among them is not a service on the internet -- it is the
+    outside of a router, carrying WireGuard and nothing else. Printed together
+    without saying which is which, that reads as HQ being on the internet.
+
+    A node also reports every bridge gateway a container runtime gave it, which
+    is a dozen rows of the same fact and no way to reach anything. Those fall
+    away by keeping only private addresses HQ was declared at, so nothing here
+    has to recognise a bridge.
     """
 
     serves = found.serves
     if serves is None:
         return ()
-    declared = _declared_addresses(serves.name)
+    declared = _declared_addresses(serves.name, found.declared)
     rows: list[Address | None] = [
-        _address_row(address, "issued by Tailscale") for address in serves.addresses
+        _address_row(address, "HQ answers here") for address in serves.addresses
     ]
+    # The addresses HQ was declared at, where the tailnet also reports reaching
+    # the node there. Not the rest of what the daemon advertises: those are
+    # endpoints for finding a path through NAT, one of them the outside of a
+    # router, and none of them anything HQ serves on. Printed under a heading
+    # about where HQ answers, a public one of those says HQ is on the internet.
     for endpoint in serves.endpoints:
-        row = _address_row(endpoint, "answers here")
-        if row is None:
-            continue
-        if row.kind == "network" and split_host_port(row.value)[0] not in declared:
+        row = _address_row(endpoint, "HQ answers here")
+        if row is None or split_host_port(row.value)[0] not in declared:
             continue
         rows.append(row)
     return tuple(_deduplicated(rows))
 
 
-def _declared_addresses(name: str) -> frozenset[str]:
-    """Every address HQ was told this machine answers at."""
+def _machine_url(addresses, declared) -> str:
+    """The page for the machine answering at any of these addresses.
 
-    from .infrastructure import declared_machines
+    By address, because the tailnet's name for a machine is rarely the one HQ
+    uses -- a laptop is whatever its owner typed into it years ago -- and the
+    address is the one thing every source of a machine agrees on.
+    """
+
+    from django.urls import reverse
+
+    wanted = {str(address) for address in addresses or ()}
+    if not wanted:
+        return ""
+    for machine in declared:
+        name = str(machine.get("name", ""))
+        if name and wanted & {str(a) for a in machine.get("addresses") or ()}:
+            return reverse("control_plane:machine", kwargs={"name": name})
+    return ""
+
+
+def _declared_addresses(name: str, declared) -> frozenset[str]:
+    """Every address HQ was told this machine answers at."""
 
     return frozenset(
         str(address)
-        for machine in declared_machines()
+        for machine in declared
         if str(machine.get("name", "")) == name
         for address in machine.get("addresses") or ()
     )
@@ -717,11 +758,20 @@ class Header:
     name: str
     value: str
     purpose: str = ""
+    # Why this one is not believed, where declining it was a decision rather
+    # than an absence.
+    declined: str = ""
     redacted: bool = False
 
     @property
     def used(self) -> bool:
         return bool(self.purpose)
+
+    @property
+    def state(self) -> str:
+        if self.purpose:
+            return "read"
+        return "declined" if self.declined else "ignored"
 
 
 # What each header HQ reads is read *for*. Written here rather than inferred,
@@ -736,6 +786,26 @@ HEADERS_READ = {
     "Cookie": "Carries the session. Its contents are never shown, here or anywhere.",
 }
 REDACTED = {"Cookie", "Authorization", "X-Csrftoken", "Proxy-Authorization"}
+# Headers deliberately not believed, and the reason. Without these the page
+# lists a header carrying the correct answer as merely ignored, which reads as
+# an oversight rather than as the safer of two choices.
+HEADERS_DECLINED = {
+    "X-Real-Ip": (
+        "Carries one address the proxy asserts, with no chain behind it to "
+        "check. HQ reads the forwarded chain instead, which it can walk back "
+        "through the proxies it knows and stop at the first hop it cannot "
+        "vouch for. Believing a single asserted value would be weaker."
+    ),
+    "X-Forwarded-Scheme": (
+        "Says the same thing as X-Forwarded-Proto, which is the one Django is "
+        "configured to read. Two sources for one fact is one more than can be "
+        "trusted to agree."
+    ),
+    "X-Forwarded-Host": (
+        "The host is taken from the request line and checked against the hosts "
+        "HQ will answer for. A forwarded copy could disagree with it."
+    ),
+}
 
 
 def headers_of(request) -> tuple[Header, ...]:
@@ -765,11 +835,13 @@ def headers_of(request) -> tuple[Header, ...]:
                     else str(value)
                 ),
                 purpose=HEADERS_READ.get(name, ""),
+                declined=HEADERS_DECLINED.get(name, ""),
                 redacted=redacted,
             )
         )
-    # Read-and-acted-on first, then the rest in the order they arrived.
-    return tuple(sorted(found, key=lambda header: not header.used))
+    # Acted on first, then deliberately declined, then everything else.
+    order = {"read": 0, "declined": 1, "ignored": 2}
+    return tuple(sorted(found, key=lambda header: order[header.state]))
 
 
 @dataclass(frozen=True)
@@ -839,16 +911,7 @@ def hops_of(request) -> tuple[Hop, ...]:
         ),
     }
     found = [
-        Hop(
-            value,
-            roles[index],
-            detail[roles[index]]
-            + (
-                " It is the machine that connected."
-                if index == len(chain) - 1
-                else ""
-            ),
-        )
+        Hop(value, roles[index], _hop_detail(detail[roles[index]], value, index, chain))
         for index, value in enumerate(chain)
     ]
     if not settled:
@@ -864,17 +927,43 @@ def hops_of(request) -> tuple[Hop, ...]:
     return tuple(found)
 
 
-def _ago(stamp: str) -> str:
-    """A timestamp as an age, or as the fact that there has not been one."""
+def _hop_detail(detail: str, value: str, index: int, chain: list[str]) -> str:
+    """The line for one hop, with what is worth adding about the last one.
 
-    from django.utils.timesince import timesince
+    A loopback peer is worth saying out loud rather than filing as one more
+    proxy: it means the proxy handed the request over without it crossing a
+    network at all, so there is no segment between the two for anything to sit
+    on. Any other peer is simply the machine that connected.
+    """
+
+    if index != len(chain) - 1:
+        return detail
+    if channel_of(split_host_port(value)[0]).id == "loopback":
+        return (
+            detail
+            + " It reached HQ over loopback, so the request never crossed a "
+            "network between the proxy and here."
+        )
+    return detail + " It is the machine that connected."
+
+
+
+def _ago(stamp: str) -> str:
+    """A provider's timestamp as an age, or as the fact that there is none.
+
+    What is local here is reading a stamp that spells "never" as the zero time
+    and one that has not happened yet. The phrasing is `ui.ago`, so this reads
+    the same as every other elapsed time in HQ.
+    """
+
+    from .ui import ago
 
     parsed = _parsed(stamp)
     if parsed is None:
         return "—"
     if parsed > datetime.now(utc.utc):
         return "just now"
-    return f"{timesince(parsed)} ago"
+    return ago(parsed)
 
 
 def _parsed(stamp: str) -> datetime | None:

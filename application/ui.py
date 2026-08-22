@@ -12,6 +12,20 @@ from datetime import date, timedelta
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
 
 
+def ago(moment) -> str:
+    """How long ago something happened, in the one phrasing HQ uses.
+
+    Two surfaces had grown their own three-line version of this. They agreed by
+    coincidence, which is the state a shared vocabulary is supposed to make
+    impossible -- a page saying "4 hours ago" beside one saying "4 hours old"
+    reads as two different facts.
+    """
+
+    from django.utils.timesince import timesince
+
+    return f"{timesince(moment)} ago"
+
+
 @dataclass(frozen=True)
 class Kpi:
     label: str

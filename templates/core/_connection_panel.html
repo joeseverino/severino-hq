@@ -20,7 +20,11 @@ page it falls back to. Nothing here knows which one it is in.
   <section class="conn-peering">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
-      <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+      {% if connection.machine_url %}
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.device.label|default:"Unknown device" }}</a>
+      {% else %}
+        <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+      {% endif %}
       <code>{{ connection.address }}</code>
       {% if connection.identity.tailnet_user %}
         <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
@@ -33,7 +37,11 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
-      <strong>{{ connection.serves.name|default:connection.host }}</strong>
+      {% if connection.serves_url %}
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.name|default:connection.host }}</a>
+      {% else %}
+        <strong>{{ connection.serves.name|default:connection.host }}</strong>
+      {% endif %}
       {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
       <span class="conn-row-note">{{ connection.host }}</span>
     </div>
@@ -168,7 +176,7 @@ page it falls back to. Nothing here knows which one it is in.
     <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
     <div class="conn-rows">
       {% for header in headers %}{% if header.used %}
-        <div class="conn-row conn-row-used">
+        <div class="conn-row conn-row-wide conn-row-used">
           <code>{{ header.name }}: {{ header.value }}</code>
           <span class="conn-kind conn-kind-read">read</span>
           <span class="conn-row-note">{{ header.purpose }}</span>
@@ -178,8 +186,8 @@ page it falls back to. Nothing here knows which one it is in.
     <details class="conn-more">
       <summary>Received but not read</summary>
       <div class="conn-rows">
-        {% for header in headers %}{% if not header.used %}
-          <div class="conn-row">
+        {% for header in headers %}{% if header.state == "ignored" %}
+          <div class="conn-row conn-row-wide">
             <code>{{ header.name }}: {{ header.value }}</code>
             <span class="conn-kind">ignored</span>
             <span class="conn-row-note"></span>
@@ -187,6 +195,14 @@ page it falls back to. Nothing here knows which one it is in.
         {% endif %}{% endfor %}
       </div>
     </details>
+  </section>
+
+  <section>
+    <h3>What HQ sent back</h3>
+    <p class="conn-note">Read from the response this browser actually received, not from the settings that were meant to produce it.</p>
+    <div class="conn-rows" data-response-headers>
+      <div class="conn-row"><span class="conn-row-note">Reading the response…</span></div>
+    </div>
   </section>
 
   <section>

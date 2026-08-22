@@ -407,8 +407,12 @@ class TailnetDeviceSpec(ProviderModel):
     would mean the controller had to guess which device was meant.
     """
 
+    # Optional, like the policy's: a device is adopted from a reading the
+    # daemon gave for free, which names no credential, and the reconciler
+    # resolves the single Tailscale connection when this is blank. Required, it
+    # made every device fail adoption on a field the record could never carry.
     connection_ref: str = Field(
-        min_length=1,
+        default="",
         max_length=160,
         title="Tailscale",
         description="The credential HQ changes this device through.",

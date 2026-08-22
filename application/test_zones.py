@@ -757,10 +757,16 @@ class SelfClosingAdoptionTests(TestCase):
         self.assertEqual(len(result["adopted"]), len(APEX))
         self.assertFalse(find_zone("example.com").adoptable)
 
-    def test_a_domain_hq_was_not_made_responsible_for_is_left_alone(self):
-        """Seeing a zone is not being asked to manage it."""
+    def test_a_domain_the_credential_reaches_is_taken_on_with_its_records(self):
+        """Holding a token that can edit the zone is the decision.
 
-        result = record_sweep(
+        This used to assert the opposite: a zone was seen and left alone until
+        somebody declared it, and every record inside sat listed as reachable
+        and pointedly untaken. That is the opt-in the rest of the sweep had
+        already stopped doing, and it was the last place still doing it.
+        """
+
+        record_sweep(
             {
                 ZONE_KIND: {"ok": True, "records": ZONES},
                 RECORD_KIND: {"ok": True, "records": APEX},
@@ -768,8 +774,15 @@ class SelfClosingAdoptionTests(TestCase):
             principal=cli_principal(),
         )
 
-        self.assertEqual(result["adopted"], [])
-        self.assertEqual(ManagedResource.objects.count(), 0)
+        self.assertIn(
+            ZONE_KIND,
+            set(ManagedResource.objects.values_list("kind", flat=True)),
+        )
+        # The records inside it, in the same sweep rather than the next one.
+        self.assertEqual(
+            ManagedResource.objects.filter(kind=RECORD_KIND).count(), len(APEX)
+        )
+        self.assertFalse(find_zone("example.com").adoptable)
 
     def test_a_record_added_at_the_provider_later_is_taken_on_too(self):
         self._declare_domain()
@@ -785,10 +798,14 @@ class SelfClosingAdoptionTests(TestCase):
         self.assertEqual(len(result["adopted"]), 1)
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
-    def test_a_refused_adoption_does_not_lose_the_sweep(self):
-        """Recording what a provider holds must not depend on being allowed to
-        declare it. Losing the whole inventory because one record could not be
-        adopted is a far worse trade."""
+    def test_records_are_adopted_even_where_changing_public_dns_is_off(self):
+        """The switch stops HQ changing public DNS, not describing it.
+
+        Adoption copies what the provider already publishes, so reconciling the
+        result changes nothing. Refusing it left every public record listed as
+        unadopted on a deployment that had said "do not change these" and was
+        then told it could not write them down either.
+        """
 
         self._declare_domain()
 
@@ -796,9 +813,35 @@ class SelfClosingAdoptionTests(TestCase):
             {RECORD_KIND: {"ok": True, "records": APEX}}, principal=cli_principal()
         )
 
-        self.assertEqual(result["adopted"], [])
+        self.assertEqual(len(result["adopted"]), len(APEX))
         self.assertIn(RECORD_KIND, result["recorded"])
         self.assertEqual(len(find_zone("example.com").records), len(APEX))
+
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
+    def test_a_record_authored_by_hand_is_still_refused(self):
+        """What the switch is actually for. A typed record asserts something
+        the provider does not already hold, which is the change it guards."""
+
+        from application.infrastructure import (
+            ManagedResourceCommand,
+            PolicyError,
+            save_managed_resource,
+        )
+
+        with self.assertRaises(PolicyError):
+            save_managed_resource(
+                ManagedResourceCommand(
+                    key="typed-by-hand",
+                    kind=RECORD_KIND,
+                    spec={
+                        key: value
+                        for key, value in APEX[0].items()
+                        if key != "record_id"
+                    },
+                    enabled=True,
+                ),
+                principal=cli_principal(),
+            )
 
 
 class ServiceFacetOfferTests(TestCase):

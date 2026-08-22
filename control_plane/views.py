@@ -57,6 +57,7 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
+from core.network import client_ip
 from application.service_context import sections_for
 from application.services import (
     CONTAINER_KIND,
@@ -732,12 +733,28 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
     template_name = "control_plane/service_list.html"
 
     def get_context_data(self, **kwargs):
+        from application.pins import SERVICE, ordered
+        from application.services import RUNTIME_FACET
+
         context = super().get_context_data(**kwargs)
-        context["services"] = service_catalog()
+        favorites = ordered(self.request.user, SERVICE)
+        found = service_catalog(favorites)
+        # Two tables rather than one with a rule through it. The few an
+        # operator keeps at the top are a different list with a different
+        # question -- "is my stuff healthy" against "what else is out there" --
+        # and reordering only means anything within the first.
+        context["favorites"] = [item for item in found if item.pinned]
+        context["services"] = [item for item in found if not item.pinned]
+        # Where a service runs is one column, not two. The runtime facet named
+        # the container declaration and the origin named the machine it runs
+        # on, side by side, in two different vocabularies for one fact.
+        context["runtime_facet"] = RUNTIME_FACET
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
         # touched -- and a facet no provider supplies yet gets none.
-        context["facets"] = service_facets()
+        context["facets"] = [
+            facet for facet in service_facets() if facet[0] != RUNTIME_FACET
+        ]
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -917,6 +934,12 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         if found is None:
             raise Http404("No machine of that name has been reported.")
         context["machine"] = found
+        # Whether you are reading this on the machine it describes. HQ already
+        # judged the caller's address for the network gate, and every machine
+        # carries the addresses it answers at -- so the page could always have
+        # known, and said "this machine" while you looked at your own laptop.
+        # Arithmetic on one address: no query, no sweep.
+        context["is_this_device"] = client_ip(self.request) in found.addresses
         context["container_kind"] = CONTAINER_KIND
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
@@ -1242,3 +1265,38 @@ class ResourceReportDownloadView(LoginRequiredMixin, View):
 class ProviderSchemaView(LoginRequiredMixin, View):
     def get(self, request):
         return JsonResponse(describe_providers(), json_dumps_params={"indent": 2})
+
+
+class ServicePinView(LoginRequiredMixin, View):
+    """Keep a service at the top of the list, for this operator only.
+
+    A preference, so it never touches a spec: starring a hostname does not
+    bump a generation, queue a reconcile, or change anything about the world.
+    """
+
+    def post(self, request, hostname: str):
+        from application.pins import SERVICE, toggle
+
+        name = normalized_hostname(hostname)
+        if not name:
+            raise Http404("No such service.")
+        toggle(request.user, SERVICE, name)
+        return redirect(safe_next(request) or reverse("control_plane:services"))
+
+
+class ServiceMoveView(LoginRequiredMixin, View):
+    """Move one favorite past its neighbour.
+
+    Up and down rather than dragging: it is one POST, it works without script,
+    and it says out loud which two things swapped -- which a drag does not.
+    """
+
+    def post(self, request, hostname: str):
+        from application.pins import SERVICE, move
+
+        name = normalized_hostname(hostname)
+        if not name:
+            raise Http404("No such service.")
+        delta = -1 if request.POST.get("direction") == "up" else 1
+        move(request.user, SERVICE, name, delta)
+        return redirect(safe_next(request) or reverse("control_plane:services"))

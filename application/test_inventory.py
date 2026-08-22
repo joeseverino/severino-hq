@@ -23,11 +23,13 @@ from .inventory import (
     AdoptCommand,
     AdoptServiceCommand,
     adopt,
+    adopt_discovered,
     adopt_service,
     inventory_state,
     unmanaged,
     unmanaged_services,
 )
+from .inventory import record_inventory
 from .sweep import record_sweep
 from .infrastructure import NotFoundError
 from .security import cli_principal
@@ -145,7 +147,7 @@ class RecordingTests(TestCase):
 
 class UnmanagedTests(TestCase):
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(
                 **{
                     "adguard.rewrite": [A_REWRITE, ANOTHER],
@@ -209,7 +211,7 @@ class UnmanagedTests(TestCase):
 
 class AdoptionTests(TestCase):
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}),
             principal=cli_principal(),
         )
@@ -303,15 +305,32 @@ class AdoptionWebTests(TestCase):
             username="operator", password="test-only-password"
         )
         self.client.force_login(self.user)
+        # Stored without adopting, because the tests below exercise the manual
+        # button -- which only has anything to do when nothing took the record
+        # first. A real sweep adopts, and the test for that says so itself.
+        record_inventory(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+
+    def test_a_swept_record_is_managed_without_being_opted_in(self):
+        """If HQ can see it, HQ manages it.
+
+        The page used to list what HQ had found and not taken, one row at a
+        time, waiting to be clicked. The decision was made when the credential
+        was added; asking again per record is a question whose answer is always
+        yes, and a list of them is a chore standing in for a choice.
+        """
+
         record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
 
-    def test_the_service_page_lists_what_hq_does_not_manage(self):
         response = self.client.get(reverse("control_plane:services"))
 
-        self.assertContains(response, "Not managed by HQ")
         self.assertContains(response, "app.example.com")
+        self.assertTrue(
+            ManagedResource.objects.filter(kind="adguard.rewrite").exists()
+        )
 
     def test_adopting_from_the_page_creates_the_declaration(self):
         response = self.client.post(
@@ -373,7 +392,7 @@ class AdoptServiceTests(TestCase):
     """A hostname is one decision, even when it is several records."""
 
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(
                 **{
                     "adguard.rewrite": [
@@ -447,3 +466,135 @@ class AdoptServiceTests(TestCase):
                 )
 
         self.assertEqual(ManagedResource.objects.count(), 1)
+
+
+class AdoptedIsObservedTests(TestCase):
+    """Adoption is the one write that starts in sync, so it must say so.
+
+    Everything else is born unobserved and waits for a controller to look --
+    correct, because a typed declaration is a claim about a world nobody has
+    checked. An adopted spec was read from the live record moments earlier.
+
+    Left unmarked it stays "never reported" forever: nothing queues a reconcile
+    for a resource that has not drifted, so the first look never comes, and
+    every service assembled from it reads as incomplete while it is running.
+    """
+
+    def setUp(self):
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+        adopt_discovered("adguard.rewrite", principal=cli_principal())
+        self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
+
+    def test_it_is_not_waiting_to_be_looked_at(self):
+        self.assertEqual(
+            self.resource.observed_generation, self.resource.generation
+        )
+
+    def test_it_carries_when_it_was_seen(self):
+        self.assertIsNotNone(self.resource.last_observed_at)
+
+    def test_its_status_is_what_the_provider_was_holding(self):
+        self.assertEqual(
+            self.resource.status.get("domain"), A_REWRITE["domain"]
+        )
+
+    def test_it_reads_as_healthy_rather_than_merely_recorded(self):
+        from application.infrastructure import resource_health
+
+        self.assertEqual(resource_health(self.resource)["state"], "healthy")
+
+
+class NothingWaitsToBeOptedInTests(TestCase):
+    """If HQ can see it, HQ manages it.
+
+    The estate arrived a click at a time: every rewrite, proxy host and
+    container a credential could reach sat in a list of things to take on, and
+    the answer was always yes. The decision was made when the credential was
+    added.
+
+    Nothing is exempt. A token that can edit a zone is the decision that HQ
+    manages it, the same way a Portainer credential is the decision about the
+    containers behind it.
+    """
+
+    def swept(self, **kinds):
+        record_sweep(a_sweep(**kinds), principal=cli_principal())
+        return set(
+            ManagedResource.objects.values_list("kind", flat=True)
+        )
+
+    def test_a_rewrite_a_credential_reached_needs_no_click(self):
+        self.assertIn("adguard.rewrite", self.swept(**{"adguard.rewrite": [A_REWRITE]}))
+
+    def test_nothing_is_left_offering_itself_for_adoption(self):
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
+            principal=cli_principal(),
+        )
+
+        self.assertEqual([item.hostname for item in unmanaged()], [])
+
+    def test_a_domain_the_credential_reaches_is_taken_on(self):
+        """The last place still asking. Holding the token is the answer."""
+
+        kinds = self.swept(
+            **{"cloudflare.zone": [{"zone": "example.com", "connection_ref": "a-token"}]}
+        )
+
+        self.assertIn("cloudflare.zone", kinds)
+
+
+class ASweepConfirmsWhatItFindsTests(TestCase):
+    """A sweep is HQ going and looking, so it may write down what it saw.
+
+    Only a reconcile ever did. Nothing queues a reconcile for a resource that
+    has not drifted, so the first look never came and a declaration nothing had
+    touched reported "never reported" forever -- with whole services reading as
+    unverified while every part of them was running and had just been seen.
+    """
+
+    def setUp(self):
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+        self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
+
+    def test_a_declaration_the_sweep_found_unchanged_is_observed(self):
+        self.assertEqual(
+            self.resource.observed_generation, self.resource.generation
+        )
+
+    def test_it_reads_as_healthy_rather_than_awaiting_a_first_check(self):
+        from application.infrastructure import resource_health
+
+        self.assertEqual(resource_health(self.resource)["state"], "healthy")
+
+    def test_a_declaration_that_has_drifted_is_left_for_a_reconcile(self):
+        """Calling drift "observed" hides the difference this model exists for."""
+
+        self.resource.spec = {**self.resource.spec, "answer": "10.0.0.99"}
+        self.resource.generation += 1
+        self.resource.save(update_fields=["spec", "generation"])
+
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+
+        self.resource.refresh_from_db()
+        self.assertNotEqual(
+            self.resource.observed_generation, self.resource.generation
+        )
+
+    def test_a_provider_that_could_not_be_reached_confirms_nothing(self):
+        before = ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at
+
+        record_sweep(
+            {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
+            principal=cli_principal(),
+        )
+
+        self.assertEqual(
+            ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at, before
+        )

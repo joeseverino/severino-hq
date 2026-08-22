@@ -86,6 +86,11 @@ class Pin(models.Model):
     )
     target_kind = models.CharField(max_length=64)
     target_key = models.CharField(max_length=255)
+    # Where the operator wants it, among the others they pinned. Alphabetical
+    # is an ordering nobody chose: the whole point of pinning is that these few
+    # matter more than the rest, and which of them matters most is the same
+    # kind of preference as pinning them at all.
+    position = models.IntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
@@ -95,7 +100,10 @@ class Pin(models.Model):
             )
         ]
         indexes = [models.Index(fields=("user", "target_kind"))]
-        ordering = ("target_key",)
+        # Position first, then the key, so pins that predate an ordering (all
+        # of them share position 0) still come out stable rather than shuffling
+        # between requests.
+        ordering = ("position", "target_key")
 
     def __str__(self) -> str:
         return f"{self.user_id}:{self.target_kind}:{self.target_key}"
