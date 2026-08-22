@@ -108,13 +108,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Read the composition set
-        # The set is supplied by the COMPOSITION_EXTENSIONS repository variable,
-        # not committed. This host repository is public and the extensions are
-        # not, so their names must not appear in it. composition-set.json
-        # documents the shape only.
+        # A secret, and never interpolated into the script body. Actions
+        # expands `${{ … }}` into the text of the step it echoes, and masks only
+        # secret values -- so anything private reaches the log through the
+        # environment or not at all.
+        env:
+          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
         run: |
           set -euo pipefail
-          printf '%s' '${{ vars.COMPOSITION_EXTENSIONS }}' > composition-set.json
+          if [ -z "${COMPOSITION_EXTENSIONS:-}" ]; then
+            echo "::error::COMPOSITION_EXTENSIONS must be set as a repository" \
+                 "secret. A repository variable cannot hold it: this log is" \
+                 "public and only a secret is masked."
+            exit 1
+          fi
+          printf '%s' "$COMPOSITION_EXTENSIONS" > composition-set.json
           if ! jq -e '.extensions | length > 0' composition-set.json >/dev/null 2>&1; then
             echo "::error::COMPOSITION_EXTENSIONS must list at least one extension"; exit 1
           fi
@@ -133,13 +141,15 @@ jobs:
         # the composed schema into a world-readable log.
         #
         # Every spelling, because the same extension appears as a repository
-        # path, a bare name, a Python package and a table prefix.
+        # path, a bare name, a Python package, a table prefix and the path it
+        # mounts at. A URL is none of the other four, so it needs its own.
         run: |
           set -euo pipefail
           jq -r '
             .extensions[]
             | .id, .repository,
-              (.repository | split("/") | last)
+              (.repository | split("/") | last),
+              (.id | split(".") | last)
           ' composition-set.json \
             | tr -d '\r' | sed '/^$/d' | sort -u \
             | while read -r name; do
@@ -355,15 +365,23 @@ jobs:
         # can expose duplicate routes/capabilities, migration conflicts, missing
         # host-owned dependencies, or a test that wrongly assumes its plugin is
         # the only contributor to a global surface.
+        #
+        # Log level raised for the run. At INFO the application writes a line
+        # per request, which a suite exercising every composed page turns into
+        # a list of everything the composition serves. Masking is the backstop;
+        # not emitting it is the fix. Failures are unaffected -- the test runner
+        # reports those itself.
         run: |
           image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
           docker run --rm --entrypoint python \
             --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
             --env DJANGO_ALLOWED_HOSTS=localhost \
+            --env SEVERINO_LOG_LEVEL=WARNING \
             "$image" manage.py check
           docker run --rm --entrypoint python \
             --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
             --env DJANGO_ALLOWED_HOSTS=localhost \
+            --env SEVERINO_LOG_LEVEL=WARNING \
             "$image" manage.py test --verbosity 1
 
       - name: Scan composed image

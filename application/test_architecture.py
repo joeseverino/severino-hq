@@ -473,3 +473,66 @@ class TemplateCommentTests(SimpleTestCase):
             [],
             "use {% comment %}…{% endcomment %} for multi-line comments",
         )
+
+
+class WorkflowSecrecyTests(SimpleTestCase):
+    """A private value reaches a public log through the environment or not at all.
+
+    Actions expands ``${{ … }}`` into the text of the step it then echoes, so a
+    value interpolated into a script body is printed in full before the step
+    runs -- ahead of anything the job does later to conceal it. Passed through
+    ``env:`` it is a shell variable the echo never sees, and a secret is masked
+    on top of that.
+    """
+
+    def workflows(self):
+        root = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        return sorted(root.glob("*.yml"))
+
+    def run_block_lines(self, text: str):
+        """Every line inside a ``run:`` script, with its line number.
+
+        Read by indentation rather than parsed, so this needs no YAML library
+        and cannot start disagreeing with one about what a block contains.
+        """
+
+        lines = text.splitlines()
+        inside = None
+        for number, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if inside is not None:
+                indent = len(line) - len(line.lstrip())
+                if stripped and indent <= inside:
+                    inside = None
+                else:
+                    yield number, line
+                    continue
+            if stripped.startswith("run:") and stripped.endswith(("|", ">", "|-")):
+                inside = len(line) - len(line.lstrip())
+
+    def test_no_script_body_interpolates_a_secret_or_a_variable(self):
+        offenders = []
+        for path in self.workflows():
+            for number, line in self.run_block_lines(path.read_text(encoding="utf-8")):
+                if "${{ secrets." in line or "${{ vars." in line:
+                    offenders.append(f"{path.name}:{number}")
+
+        self.assertEqual(
+            sorted(offenders),
+            [],
+            "pass it through env: instead — a script body is echoed verbatim",
+        )
+
+    def test_the_composition_set_is_read_from_a_secret(self):
+        """A variable is not masked, and this inventory is the private half."""
+
+        # Asserted on names rather than on contents: a failure that printed the
+        # file would put the whole workflow in the output of the check meant to
+        # keep things out of it.
+        offenders = [
+            path.name
+            for path in self.workflows()
+            if "vars.COMPOSITION_EXTENSIONS" in path.read_text(encoding="utf-8")
+        ]
+
+        self.assertEqual(offenders, [], "read it from secrets, which are masked")
