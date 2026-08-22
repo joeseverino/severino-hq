@@ -1408,34 +1408,20 @@ class ExternallyServedNameTests(TestCase):
 
 
 class CertificateEditFormTests(TestCase):
-    """Editing a certificate showed an empty "define a new one" form.
-
-    A certificate that exists only as a topology reference carries that
-    reference in an advanced field, so the page opened on blank boxes with the
-    one field describing it folded away -- it appeared to say the certificate
-    had no configuration at all.
-    """
+    """A certificate's edit form asks what it is, and folds what it tunes."""
 
     def _form(self, **initial):
         from .provider_forms import spec_form_class
 
         return spec_form_class("tls.certificate", lock_identity=True)(initial=initial)
 
-    def test_editing_does_not_ask_which_certificate_this_is(self):
-        """The question has an answer already, and no second answer is valid.
+    def test_editing_asks_the_things_that_define_the_certificate(self):
+        form = self._form(certificate_name="wildcard", domains=["example.com"])
 
-        Offered on the edit form, the selector let an existing certificate be
-        told it was "a new certificate defined below" -- with the fields that
-        would define one folded out of sight, so the option named inputs the
-        page did not have. Which certificate this is belongs above the form,
-        as a fact.
-        """
-
-        form = self._form(topology_ref="pki:wildcard", renewal_window_days=30)
-        offered = [f.name for f in form.primary] + [f.name for f in form.advanced]
-
-        self.assertNotIn("topology_ref", offered)
-        self.assertIn("renewal_window_days", offered)
+        self.assertEqual(
+            {"certificate_name", "domains", "install_on"},
+            {field.name for field in form.primary},
+        )
 
     def test_a_field_still_at_its_default_stays_folded_away(self):
         """Nobody arrives at a certificate to adjust how early it renews.
@@ -1444,29 +1430,14 @@ class CertificateEditFormTests(TestCase):
         and it holds the answer the model would have given anyway.
         """
 
-        form = self._form(topology_ref="pki:wildcard", renewal_window_days=30)
+        form = self._form(certificate_name="wildcard", renewal_window_days=30)
 
         self.assertIn("renewal_window_days", [f.name for f in form.advanced])
 
     def test_a_default_somebody_changed_comes_out_of_the_disclosure(self):
-        form = self._form(topology_ref="pki:wildcard", renewal_window_days=45)
+        form = self._form(certificate_name="wildcard", renewal_window_days=45)
 
         self.assertIn("renewal_window_days", [f.name for f in form.primary])
-
-    def test_adding_one_does_not_offer_the_reference_at_all(self):
-        """Creating asks for a new certificate, and only for that.
-
-        The reference names a certificate that already exists, so it answers a
-        different question than "add one". Behind a disclosure it was still
-        offered -- an empty box for a thing that cannot be created by naming
-        something already there -- so it is not among the fields at all.
-        """
-
-        form = self._form()
-        offered = [f.name for f in form.primary] + [f.name for f in form.advanced]
-
-        self.assertNotIn("topology_ref", offered)
-        self.assertIn("certificate_name", offered)
 
 
 class WhatCountsAsAServiceTests(TestCase):

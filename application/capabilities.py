@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from dataclasses import dataclass
 from functools import cache
 import inspect
@@ -42,7 +44,6 @@ from .projects import ProjectCommand, save_project, upsert_project
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
-from .topology import TopologySyncCommand, execute_topology_sync
 from .plugins import plugin_capability_specs
 
 CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
@@ -98,9 +99,13 @@ class CapabilitySpec:
 _SPECS = (
     CapabilitySpec(
         "hq.sync",
-        "Atomically synchronize the vault manifest and topology into HQ.",
+        "Atomically synchronize the vault manifest into HQ.",
         "remote_write",
-        (Capability.SYNC_DOCUMENTATION, Capability.MANAGE_INFRASTRUCTURE),
+        # Documentation authority alone. It also required infrastructure
+        # authority while it carried a topology; keeping that would mean an
+        # account allowed to sync docs and nothing else could not, and the only
+        # way to let it would be to hand it the whole control plane.
+        Capability.SYNC_DOCUMENTATION,
         HQSyncCommand,
         execute_hq_sync,
     ),
@@ -212,14 +217,6 @@ _SPECS = (
         Capability.SYNC_DOCUMENTATION,
         DocumentationSyncCommand,
         execute_documentation_sync,
-    ),
-    CapabilitySpec(
-        "infrastructure.topology.sync",
-        "Synchronize the validated infrastructure topology into HQ.",
-        "remote_write",
-        Capability.MANAGE_INFRASTRUCTURE,
-        TopologySyncCommand,
-        execute_topology_sync,
     ),
     CapabilitySpec(
         "receipt.update",
@@ -473,6 +470,7 @@ def execute_capability(
         # not run this at all is told exactly that, and learns nothing about
         # what shape of target it would have taken.
         authorize_capability(spec, principal)
+        _refuse_unknown_fields(spec, payload)
         command = TypeAdapter(spec.command_type).validate_python(payload)
         kwargs: dict[str, Any] = {
             "principal": principal,
@@ -491,6 +489,22 @@ def execute_capability(
         return _error("invalid_input", "Domain validation failed.", details)
     except (ValueError, TypeError) as exc:
         return _error("operation_failed", str(exc))
+
+
+def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:
+    """A field the command does not have is an error, not a no-op.
+
+    Pydantic drops what a dataclass has no room for, so a caller sending a
+    misspelled field -- or one this capability used to take and no longer does
+    -- got back a success about work it did not ask for.
+    """
+
+    known = {field.name for field in dataclasses.fields(spec.command_type)}
+    unknown = sorted(set(payload) - known)
+    if unknown:
+        raise ValueError(
+            f"{spec.name} does not take {', '.join(unknown)}."
+        )
 
 
 def _error(code: str, message: str, details: Any = None) -> dict[str, Any]:

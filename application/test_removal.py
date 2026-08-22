@@ -81,7 +81,11 @@ class RemovalRequestTests(TestCase):
         ManagedResource.objects.create(
             key="a-certificate",
             kind="tls.certificate",
-            spec={"topology_ref": "pki:example"},
+            spec={
+                "certificate_name": "example",
+                "domains": ["example.com"],
+                "install_on": ["a-target"],
+            },
         )
 
         with self.assertRaises(PolicyError):

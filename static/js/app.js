@@ -346,3 +346,59 @@ document.querySelectorAll("form.form").forEach((form) => {
   form.addEventListener("input", review);
   form.addEventListener("click", () => setTimeout(review, 0));
 });
+
+// A form that saves where it stands. The markup submits normally without this
+// file, so the feature is the reload it removes rather than the saving itself:
+// a preference panel that navigates the whole page to record two checkboxes
+// throws away the scroll position and everything else on screen.
+//
+// One selector, so the next such form is handled by construction. What it
+// replaces on success is named by the form, not assumed, because "the thing
+// this edits" is not derivable from the form itself.
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("form[data-live-form]");
+  if (!form || !window.fetch) return;
+  event.preventDefault();
+  const status = form.querySelector("[data-live-status]");
+  const buttons = form.querySelectorAll("button");
+  buttons.forEach((button) => (button.disabled = true));
+  if (status) status.textContent = "Saving…";
+  fetch(form.action, {
+    method: "POST",
+    body: new FormData(form),
+    headers: { "X-Requested-With": "fetch" },
+    credentials: "same-origin",
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      return response.text();
+    })
+    .then((html) => {
+      // The server answers with the panel it just changed, so the page shows
+      // what was stored rather than what the browser believes was stored.
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const fresh = parsed.querySelector(".ext-links");
+      const current = document.querySelector(".ext-links");
+      if (fresh && current) current.replaceWith(fresh);
+      const menu = form.closest("details[data-menu]");
+      if (menu) menu.removeAttribute("open");
+      if (status) status.textContent = "";
+    })
+    .catch(() => {
+      // Saying so and leaving the panel open, rather than closing over a
+      // change that did not happen.
+      if (status) status.textContent = "Could not save.";
+    })
+    .finally(() => buttons.forEach((button) => (button.disabled = false)));
+});
+
+// Cancel restores what was stored and closes, without asking the server for a
+// page it already has.
+document.addEventListener("click", (event) => {
+  const cancel = event.target.closest("[data-live-cancel]");
+  if (!cancel) return;
+  const form = cancel.closest("form");
+  if (form) form.reset();
+  const menu = cancel.closest("details[data-menu]");
+  if (menu) menu.removeAttribute("open");
+});

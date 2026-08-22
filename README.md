@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 The internal operating system behind Severino Labs. A host that composes
@@ -70,9 +70,9 @@ Trusted, installable modules use the domain-neutral, versioned
 [`plugin contract`](docs/PLUGINS.md); a generic conformance plugin proves the
 contract in public CI without coupling HQ to any private module.
 
-Infrastructure follows the same rule. Severino Labs emits one validated topology
-inventory of what exists; HQ authors what should be configured and is the only
-thing that does. The homelab controller reconciles only explicitly enabled
+Infrastructure follows the same rule, and HQ is both halves of it: it derives
+what exists from what its credentials reach and what its sweeps find, and it
+authors what should be configured. Nothing is read out of a file. The homelab controller reconciles only explicitly enabled
 capabilities, reports back both observed state and the full provider inventory,
 and holds every provider credential — those never enter HQ persistence or the
 web process.
@@ -155,7 +155,7 @@ Every operator action lands through a *checked* path — content through a share
 schema, code through a gated pipeline. The Obsidian vault stays the source of
 truth; only validated metadata and tested images ever reach HQ.
 
-![How changes reach HQ: the Vault MCP emits manifest and topology through one atomic HQ MCP sync; code reaches production only through gated CI, a scanned GHCR image, and the self-hosted homelab runner](docs/diagrams/changes-reach-hq.png)
+![How changes reach HQ: the Vault MCP emits one manifest through one atomic HQ MCP sync; code reaches production only through gated CI, a scanned GHCR image, and the self-hosted homelab runner](docs/diagrams/changes-reach-hq.png)
 
 <sup>Diagram source: [`docs/diagrams/changes-reach-hq.mmd`](docs/diagrams/changes-reach-hq.mmd),
 pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
@@ -163,9 +163,9 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 **Content — `hq sync`.** Severino HQ never reads the vault directly. The
 [`hq`](https://github.com/joeseverino/tools) CLI calls the local
 [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
-server to emit one JSON manifest and one topology projection, then sends both
-to HQ through one authenticated `hq.sync` MCP capability call. HQ validates and
-commits them atomically—no SSH, temporary server payload, or partial sync. The
+server to emit one JSON manifest, then sends it to HQ through one authenticated
+`hq.sync` MCP capability call. HQ validates and commits it atomically—no SSH,
+temporary server payload, or partial sync. The
 importer validates every record against
 [`docs_index/schema.json`](docs_index/schema.json) — the frontmatter enum
 contract single-sourced from the MCP and committed here — so HQ can never accept

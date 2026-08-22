@@ -21,10 +21,24 @@
     Reconcile leads: it is the thing an operator comes here to do, and the one
     that acts on the world rather than on the declaration.
     {% endcomment %}
-    <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
-      {% csrf_token %}
-      <button type="submit" {% if not reconcile_allowed %}disabled title="{{ reconcile_explanation }}"{% endif %}>Reconcile</button>
-    </form>
+    {% comment %}
+    What the controller can actually do to this, in the order it matters. A
+    container cannot be reconciled — its definition lives in a compose file HQ
+    has never seen — so offering Reconcile greyed out and nothing else made the
+    page about the one verb that does not apply.
+    {% endcomment %}
+    {% for route, label in lifecycle_actions %}
+      <form action="{% url route resource.key %}" method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn icon-btn">{% include "partials/_icon.html" with name=route|cut:"control_plane:" %}<span>{{ label }}</span></button>
+      </form>
+    {% endfor %}
+    {% if reconcile_allowed or not lifecycle_actions %}
+      <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
+        {% csrf_token %}
+        <button type="submit" {% if not reconcile_allowed %}disabled title="{{ reconcile_explanation }}"{% endif %}>Reconcile</button>
+      </form>
+    {% endif %}
     {% url 'control_plane:edit' resource.key as edit_url %}
     <a class="btn" href="{{ edit_url|returning_to:request.get_full_path }}">Edit</a>
     {% if resource.kind == "tls.uploaded_certificate" %}
@@ -70,7 +84,16 @@
 <div class="control-summary">
   <div class="control-metric">
     <span class="control-label">Configuration</span>
-    {% if sync_state == "in_sync" %}
+    {% comment %}
+    A declaration nothing converges has no generation to wait for. Asked only
+    whether observed matches desired, this card read "Pending" beside one saying
+    there is nothing to converge — two cards contradicting each other about the
+    same resource, forever.
+    {% endcomment %}
+    {% if declaration_only %}
+      <strong class="control-declared">Recorded</strong>
+      <span>What HQ is responsible for, which is the whole of this declaration.</span>
+    {% elif sync_state == "in_sync" %}
       <strong class="control-good">In sync</strong>
       <span>Observed generation {{ resource.observed_generation }} matches desired generation {{ resource.generation }}.</span>
     {% else %}
@@ -107,12 +130,11 @@
 </div>
 
 {% if resource.kind == "tls.certificate" %}
-  {% if topology_error %}<p class="message error">{{ topology_error }}</p>{% endif %}
+  {% if resolution_error %}<p class="message error">{{ resolution_error }}</p>{% endif %}
   <div class="two-col">
     <section class="control-card">
       <h2>Certificate</h2>
       <dl class="kv compact">
-        <dt>Topology identity</dt><dd><code>{{ resource.spec.topology_ref }}</code></dd>
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
         <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
         <dt>Expires</dt><dd>{{ resource.status.not_after|default:"Not observed" }}</dd>
@@ -125,11 +147,15 @@
     <section class="control-card">
       <h2>Consumers</h2>
       <table class="data-table compact-table">
-        <thead><tr><th>Consumer</th><th>Verification names</th></tr></thead>
+        <thead><tr><th>Installed on</th><th>Verification names</th></tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>
-              <td><strong>{{ consumer.name }}</strong><br><code>{{ consumer.kind }}</code><br><span class="muted">{{ consumer.topology_ref }}</span></td>
+              <td>
+                <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name }}</a>{% else %}{{ consumer.name }}{% endif %}</strong>
+                <br><code>{{ consumer.kind }}</code>
+                <span class="muted">via {{ consumer.connection_ref }}</span>
+              </td>
               <td>{% for domain in consumer.display_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
             </tr>
           {% endfor %}
@@ -157,11 +183,46 @@
     outside a collapsed disclosure — and the service page, where the rest of
     what answers for that name lives, could only be reached by typing its URL.
     {% endcomment %}
+    {% if origin_machine %}
+      <p class="muted">Runs on <a href="{{ origin_machine.url }}">{{ origin_machine.name }}</a></p>
+    {% endif %}
     {% if service_links %}
       <p class="muted">
         Serves
         {% for hostname, url in service_links %}<a href="{{ url }}">{{ hostname }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
       </p>
+    {% endif %}
+    {% comment %}
+    A container declares identity and nothing else, so on its own this page is
+    two names. What it is doing, which machine that is, and which services reach
+    it are all joins the sweep already supports — the last one being the reverse
+    of what a service page does, matching a proxy's forwarding port against the
+    ports a container publishes.
+    {% endcomment %}
+    {% if container %}
+      <dl class="kv compact">
+        {% if container.machine %}
+          <dt>Runs on</dt>
+          <dd><a href="{{ container.machine.url }}">{{ container.machine.name }}</a>{% if container.machine.role %} <span class="muted">{{ container.machine.role }}</span>{% endif %}</dd>
+        {% endif %}
+        {% if container.running %}
+          <dt>State</dt>
+          <dd>
+            <span class="pill pill-{% if container.running.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.running.state|default:"unknown" }}</span>
+            {% if container.running.status %}<span class="muted">{{ container.running.status }}</span>{% endif %}
+          </dd>
+          <dt>Image</dt><dd><code>{{ container.running.image_label }}</code></dd>
+          {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published }}</dd>{% endif %}
+          <dt>Seen</dt><dd>{{ container.running.observed_at|timesince }} ago</dd>
+        {% else %}
+          <dt>State</dt>
+          <dd><span class="muted">No sweep has reported this container.</span></dd>
+        {% endif %}
+        {% if container.serves %}
+          <dt>Serves</dt>
+          <dd>{% for hostname in container.serves %}<a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+        {% endif %}
+      </dl>
     {% endif %}
     {% if readout_rows %}
       <dl class="kv compact">

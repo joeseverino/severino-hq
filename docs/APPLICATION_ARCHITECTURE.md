@@ -159,8 +159,8 @@ everything would make the system less honest, not more unified.
 | Which connections exist, and what each reaches | 1Password, read by the controller | A timestamped report — never the credential, never a second list |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
-| Infrastructure identities and dependencies | Severino Labs topology | Trusted checksummed snapshot + stable references |
-| Desired infrastructure state | HQ database | The only copy; the topology no longer declares it |
+| Which machines exist, and what reaches them | Sweeps, plus a declaration for what nothing sweeps | Derived first; declared only where nothing can observe |
+| Desired infrastructure state | HQ database | The only copy |
 | What a provider actually holds | The provider | A timestamped cache, never reconciled from |
 | Provider authored/resolved contracts | Provider definition registry | No parallel resolver schema |
 | Controller actions and automation | Validated controller capability document | Queued operations and observations |
@@ -196,10 +196,10 @@ Project writes provide:
 ### Documentation synchronization
 
 `application.sync.execute_hq_sync()` is the external synchronization boundary.
-The local Vault MCP emits the manifest and topology once; `hq sync` sends both
-in one `hq.sync` MCP capability call. HQ applies both inside one database
-transaction, so invalid topology cannot leave newly imported documentation
-behind. Lower-level documentation/topology services remain reusable in-process.
+The local Vault MCP emits the manifest; `hq sync` sends it in one `hq.sync` MCP
+capability call, applied inside one database transaction. It used to carry an
+authored infrastructure topology alongside the manifest; HQ derives that now, so
+the vault describes documentation and nothing else.
 
 The sync is:
 
@@ -312,23 +312,28 @@ Business logic in a view, MCP registration function, or management command is
 an architecture regression and should fail review.
 ## Infrastructure control plane
 
-Severino Labs topology owns stable infrastructure identities and dependency
-edges. HQ imports the complete sensitive topology into a trusted, checksummed
-server-side snapshot. Managed resources reference topology identities; they do
-not duplicate hosts, certificate SANs, or consumer topology.
+**HQ owns the topology.** An authored document used to describe the world —
+which machines exist, what runs on them, which certificate installs where — and
+HQ read it. That made the answer to "what does this cover" live somewhere HQ
+could read and not edit, so adding a name to a certificate was a file change, a
+sync and a hope rather than saving a form.
 
-**HQ owns desired state.** The topology document described what exists and also
-declared what should be configured, so every import re-materialised the managed
-resources and an edit made in HQ was reverted minutes later by the next sync. A
-`managed_resources` block is now refused on import, by name, rather than quietly
-dropped. One tie remains deliberately: a certificate's authored spec is a single
-topology reference, so importing re-fingerprints resolved desired state and
-advances the generation of anything whose resolution moved.
+Now every part of it is HQ's. A machine is derived from what a credential
+reaches and what a sweep found, and declared only where nothing can observe one
+— the printer, the offline CA. A certificate states its own names and the
+targets it installs on. How a target takes a certificate is stated once on the
+target, because that is a property of the place rather than of any certificate
+sent to it.
+
+Desired state therefore spans two resources: what a certificate says, and what
+its targets say. Saving a target recomputes the desired state of everything
+installed there and advances the generation of whatever resolved differently —
+otherwise a certificate reports itself in sync against a world that moved
+underneath it.
 
 HQ stores typed operational intent, resource generations, public observations,
 and audited operation requests. Each provider definition owns its authored
-schema, reference resolver, and resolved runtime schema. Topology supplies the
-trusted graph; it contains no TLS-specific resolver logic. Web, MCP, scheduler,
+schema, reference resolver, and resolved runtime schema. Web, MCP, scheduler,
 and controller contracts consume the same resolved provider output. HQ stores no
 provider credentials. Every interface invokes the same application capabilities.
 

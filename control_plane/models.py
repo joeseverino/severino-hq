@@ -43,18 +43,6 @@ class ManagedResource(TimestampedModel):
         return self.key
 
 
-class TopologySnapshot(TimestampedModel):
-    """Trusted local cache of the authored topology SSOT."""
-
-    id = models.CharField(primary_key=True, max_length=64, default="topology")
-    schema_version = models.PositiveIntegerField()
-    checksum = models.CharField(max_length=64)
-    payload = models.JSONField()
-
-    def __str__(self) -> str:
-        return f"{self.id} v{self.schema_version}"
-
-
 class ProviderInventory(TimestampedModel):
     """What a provider actually holds, as a controller last saw it.
 

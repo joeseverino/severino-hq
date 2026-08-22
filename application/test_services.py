@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from control_plane.models import ManagedResource, TopologySnapshot
+from control_plane.models import ManagedResource
 from control_plane.providers import PROVIDERS, SERVICE_FACETS, SERVICE_FACET_IDS
 from projects.models import Project
 
@@ -23,41 +23,35 @@ from .services import (
     service_reading,
 )
 
-TOPOLOGY = {
-    "version": 3,
-    "hosts": [
-        {
-            "id": "app-host",
-            "lan_ip": "10.0.0.10",
-            "containers": [
-                {"id": "web", "ports": "8000"},
-                {"id": "cache", "ports": "6379"},
-            ],
-        }
-    ],
-    "pki": [
-        {
-            "id": "wildcard",
-            "certificate_name": "wildcard",
-            "domains": ["example.com", "*.example.com"],
-        }
-    ],
-    "externals": [],
-    "dependencies": [
-        {
-            "from": "container:app-host/web",
-            "relation": "consumes",
-            "to": "pki:wildcard",
-            "attributes": {
-                "kind": "npm",
-                "name": "edge",
-                "connection_ref": "edge",
-                "verify_domains": [],
-            },
-        }
-    ],
-    "managed_resources": [],
+APP_HOST = {
+    "name": "app-host",
+    "role": "Docker host",
+    "addresses": ["10.0.0.10"],
 }
+
+
+def declare_world(containers: bool = False):
+    """The machine these tests forward to, and optionally what answers on it.
+
+    A container sharing its machine's network publishes no ports for a sweep to
+    find, so what it answers on is declared. That is the case these fixtures
+    exercise: nothing here has ever been swept.
+    """
+
+    ManagedResource.objects.create(key="app-host", kind="machine", spec=APP_HOST)
+    if not containers:
+        return
+    for name, port in (("web", 8000), ("cache", 6379)):
+        ManagedResource.objects.create(
+            key=f"app-host-{name}",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "a-portainer",
+                "host": "app-host",
+                "name": name,
+                "serves_ports": [port],
+            },
+        )
 
 
 def healthy(resource: ManagedResource) -> ManagedResource:
@@ -76,9 +70,7 @@ class ServiceCompositionTests(TestCase):
     """The join itself: three declarations meeting on one name."""
 
     def setUp(self):
-        TopologySnapshot.objects.create(
-            id="topology", schema_version=3, checksum="test", payload=TOPOLOGY
-        )
+        declare_world()
 
     def _wire(self, hostname="app.example.com", *, certificate=True):
         healthy(
@@ -105,7 +97,12 @@ class ServiceCompositionTests(TestCase):
                 ManagedResource.objects.create(
                     key="wildcard",
                     kind="tls.certificate",
-                    spec={"topology_ref": "pki:wildcard", "renewal_window_days": 30},
+                    spec={
+                    "certificate_name": "wildcard",
+                    "domains": ["example.com", "*.example.com"],
+                    "install_on": ["a-proxy"],
+                    "renewal_window_days": 30,
+                },
                 )
             )
 
@@ -143,7 +140,12 @@ class ServiceCompositionTests(TestCase):
             ManagedResource.objects.create(
                 key="wildcard",
                 kind="tls.certificate",
-                spec={"topology_ref": "pki:wildcard", "renewal_window_days": 30},
+                spec={
+                    "certificate_name": "wildcard",
+                    "domains": ["example.com", "*.example.com"],
+                    "install_on": ["a-proxy"],
+                    "renewal_window_days": 30,
+                },
             )
         )
 
@@ -188,9 +190,7 @@ class ServiceCompositionTests(TestCase):
 
 class OriginResolutionTests(TestCase):
     def setUp(self):
-        TopologySnapshot.objects.create(
-            id="topology", schema_version=3, checksum="test", payload=TOPOLOGY
-        )
+        declare_world(containers=True)
 
     def _proxy(self, forward_host="10.0.0.10", forward_port=8000):
         healthy(
@@ -235,16 +235,14 @@ class OriginResolutionTests(TestCase):
         service = self._proxy(forward_host="10.9.9.9")
 
         self.assertFalse(service.origin.known)
-        self.assertIn("matches no host in the topology", " ".join(service.faults))
+        self.assertIn("cannot match to any machine", " ".join(service.faults))
 
 
 class WiringFaultTests(TestCase):
     """The faults exist only in the join, which is why no resource page has them."""
 
     def setUp(self):
-        TopologySnapshot.objects.create(
-            id="topology", schema_version=3, checksum="test", payload=TOPOLOGY
-        )
+        declare_world(containers=True)
 
     def test_a_served_name_with_no_covering_certificate_is_a_fault(self):
         healthy(
@@ -295,8 +293,11 @@ class WiringFaultTests(TestCase):
                 spec={
                     "zone": "example.com",
                     "name": "app.example.com",
-                    "record_type": "A",
-                    "content": "203.0.113.10",
+                    # A name rather than an address: the addresses reserved for
+                    # writing about addresses are the ones a parked name uses,
+                    # and this test is about two kinds on one facet.
+                    "record_type": "CNAME",
+                    "content": "app.pages.dev",
                 },
             )
         )
@@ -372,18 +373,23 @@ class WiringFaultTests(TestCase):
 
 
 class ServiceResolutionTests(TestCase):
-    def test_a_certificate_covers_nothing_when_the_topology_cannot_resolve_it(self):
-        """No snapshot imported: the honest answer is that HQ cannot show cover.
+    def test_a_certificate_still_covers_its_names_when_it_cannot_resolve(self):
+        """A target that is gone stops it installing, not from covering.
 
-        The alternative -- raising -- would take out the dashboard, the nav queue
-        and this page at once over a reference that a controller has simply not
-        been given yet.
+        The names are authored on the certificate, so they survive a failed
+        resolution. Raising instead would take out the dashboard, the nav queue
+        and this page at once over one missing target.
         """
         healthy(
             ManagedResource.objects.create(
                 key="wildcard",
                 kind="tls.certificate",
-                spec={"topology_ref": "pki:missing", "renewal_window_days": 30},
+                spec={
+                    "certificate_name": "wildcard",
+                    "domains": ["*.example.com"],
+                    "install_on": ["a-target-that-is-gone"],
+                    "renewal_window_days": 30,
+                },
             )
         )
         healthy(
@@ -401,8 +407,11 @@ class ServiceResolutionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(facet(service, "certificate").present)
-        self.assertIn("no declared certificate covers it", " ".join(service.faults))
+        certificate = facet(service, "certificate")
+        self.assertTrue(certificate.present)
+        self.assertNotIn(
+            "no declared certificate covers it", " ".join(service.faults)
+        )
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
         healthy(
@@ -705,7 +714,7 @@ class ConnectedMachineTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("203.0.113.10:443", {"hosts": []})
+        origin = _locate("203.0.113.10:443", ())
 
         self.assertEqual(origin.host, "a-shared-host")
         self.assertTrue(origin.known)
@@ -714,7 +723,7 @@ class ConnectedMachineTests(TestCase):
     def test_an_address_no_credential_points_at_is_still_unknown(self):
         from .services import _locate
 
-        origin = _locate("10.9.9.9:443", {"hosts": []})
+        origin = _locate("10.9.9.9:443", ())
 
         self.assertEqual(origin.qualifier, "unknown host")
 
@@ -730,7 +739,7 @@ class ConnectedMachineTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("proxy.example:81", {"hosts": []})
+        origin = _locate("proxy.example:81", ())
 
         self.assertEqual(origin.host, "a-proxy")
 
@@ -748,7 +757,7 @@ class PortlessOriginTests(TestCase):
 
         origin = _locate(
             "192.168.1.233",
-            {"hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]},
+            ({"name": "a-docker-host", "addresses": ["192.168.1.233"]},),
         )
 
         self.assertEqual(origin.host, "a-docker-host")
@@ -766,7 +775,7 @@ class PortlessOriginTests(TestCase):
             reachable=True, probed=True, observed_at=timezone.now(),
         )
 
-        origin = _locate("203.0.113.10", {"hosts": []})
+        origin = _locate("203.0.113.10", ())
 
         self.assertEqual(origin.headline, "a-shared-host")
 
@@ -776,6 +785,37 @@ class PortlessOriginTests(TestCase):
 
         from .services import _locate
 
-        origin = _locate("jseverino.pages.dev", {"hosts": []})
+        origin = _locate("jseverino.pages.dev", ())
 
         self.assertTrue(origin.external)
+
+
+class ParkedNameTests(TestCase):
+    """A record that exists is not a name that answers.
+
+    Boards ask whether a record is declared and reconciled, and both are true of
+    a name pointed at an address reserved for documentation -- so a parked
+    domain reads as a working service.
+    """
+
+    def test_a_documentation_address_is_a_wiring_fault(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertIn("reserved", _points_nowhere(Origin(address="192.0.2.1")))
+        self.assertIn("reserved", _points_nowhere(Origin(address="203.0.113.9:443")))
+
+    def test_an_unspecified_address_is_too(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertIn("reached", _points_nowhere(Origin(address="0.0.0.0")))
+
+    def test_a_real_address_is_not(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertEqual(_points_nowhere(Origin(address="192.168.1.233:8000")), "")
+        self.assertEqual(_points_nowhere(Origin(address="jseverino.pages.dev")), "")
+
+    def test_nothing_routed_is_not_a_parked_name(self):
+        from .services import _points_nowhere
+
+        self.assertEqual(_points_nowhere(None), "")

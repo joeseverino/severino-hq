@@ -53,7 +53,11 @@ set -a
 . "${env_file}"
 set +a
 
+# Labelled so the sweep this container is about to run can tell that one of the
+# containers it finds is itself. Unlabelled, Docker invents a name for it and
+# the machine grows a row called something different every minute.
 set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
+    --label severino-hq.role=controller \
     --security-opt no-new-privileges:true \
     --entrypoint python \
     --mount "type=volume,source=${data_volume},target=/data" \

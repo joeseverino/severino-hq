@@ -27,50 +27,94 @@ from application.infrastructure import (
     save_managed_resource,
 )
 from application.security import cli_principal, mcp_principal
-from application.topology import sync_topology
 
-from core.models import AuditLog
-
-from .models import ManagedResource, OperationRequest, TopologySnapshot
+from .models import ManagedResource, OperationRequest
 from .providers import (
     NPMProxyHostSpec,
     describe_providers,
     validate_resolved_certificate,
 )
-from .topology import TopologyError, import_topology, resolve_certificate
+from application.infrastructure import delivery_targets as delivery_targets_for_test
+
+from .desired_state import advance_dependents
+
+
+DOMAINS = [
+    "jseverino.com",
+    "*.jseverino.com",
+    "jseverino.net",
+    "*.jseverino.net",
+    "jseverino.org",
+    "*.jseverino.org",
+    "joeseverino.com",
+    "*.joeseverino.com",
+]
 
 
 def certificate_spec():
     return {
-        "topology_ref": "pki:jseverino-wildcard",
+        "certificate_name": "jseverino",
+        "domains": list(DOMAINS),
+        "install_on": ["homelab-npm", "edge", "a-shared-host"],
         "renewal_window_days": 30,
     }
+
+
+TARGETS = (
+    {
+        "kind": "npm",
+        "connection_ref": "homelab-npm",
+        "name": "jseverino-wildcard",
+        "certificate_resource": "jseverino-wildcard",
+        "verify_domains": ["dev.jseverino.com"],
+        "discover_covered_hosts": False,
+    },
+    {
+        "kind": "caddy",
+        "connection_ref": "edge",
+        "name": "edge-caddy",
+        "certificate_resource": "jseverino-wildcard",
+        "verify_domains": ["health.example.com"],
+        "certificate_directory": "/opt/apps/caddy/certs",
+    },
+    {
+        "kind": "cpanel",
+        "connection_ref": "a-shared-host",
+        "name": "namecheap-shared-hosting",
+        "certificate_resource": "jseverino-wildcard",
+        "verify_domains": ["jseverino.com", "quiz.jseverino.net"],
+        "install_domains": ["jseverino.com", "jseverino.net"],
+    },
+)
+
+
+def declare_targets():
+    """The three places the certificate in these tests is installed."""
+
+    return [
+        ManagedResource.objects.create(
+            key=f"{spec['connection_ref']}-certificate-target",
+            kind="tls.delivery_target",
+            spec=dict(spec),
+        )
+        for spec in TARGETS
+    ]
 
 
 def resolved_certificate_spec():
     return {
         "certificate_name": "jseverino",
-        "domains": [
-            "jseverino.com",
-            "*.jseverino.com",
-            "jseverino.net",
-            "*.jseverino.net",
-            "jseverino.org",
-            "*.jseverino.org",
-            "joeseverino.com",
-            "*.joeseverino.com",
-        ],
+        "domains": list(DOMAINS),
         "consumers": [
             {
                 "kind": "npm",
-                "topology_ref": "container:a-docker-host/npm",
                 "name": "jseverino-wildcard",
                 "connection_ref": "homelab-npm",
                 "verify_domains": ["dev.jseverino.com"],
+                "discover_covered_hosts": False,
             },
             {
                 "kind": "caddy",
-                "topology_ref": "container:edge/caddy",
                 "name": "edge-caddy",
                 "connection_ref": "edge",
                 "certificate_directory": "/opt/apps/caddy/certs",
@@ -78,7 +122,6 @@ def resolved_certificate_spec():
             },
             {
                 "kind": "cpanel",
-                "topology_ref": "external:a-shared-host",
                 "name": "namecheap-shared-hosting",
                 "connection_ref": "a-shared-host",
                 "install_domains": ["jseverino.com", "jseverino.net"],
@@ -86,65 +129,6 @@ def resolved_certificate_spec():
             },
         ],
         "renewal_window_days": 30,
-    }
-
-
-def topology_payload():
-    spec = resolved_certificate_spec()
-    consumers = spec.pop("consumers")
-    return {
-        "version": 3,
-        "hosts": [
-            {
-                "id": "a-docker-host",
-                "containers": [{"id": "npm"}],
-            },
-            {
-                "id": "edge",
-                "containers": [{"id": "caddy"}],
-            },
-        ],
-        "pki": [
-            {
-                "id": "jseverino-wildcard",
-                "certificate_name": "jseverino",
-                "domains": spec["domains"],
-            }
-        ],
-        "externals": [{"id": "a-shared-host"}],
-        "dependencies": [
-            {
-                "from": "container:a-docker-host/npm",
-                "relation": "consumes",
-                "to": "pki:jseverino-wildcard",
-                "attributes": {
-                    key: value
-                    for key, value in consumers[0].items()
-                    if key != "topology_ref"
-                },
-            },
-            {
-                "from": "container:edge/caddy",
-                "relation": "consumes",
-                "to": "pki:jseverino-wildcard",
-                "attributes": {
-                    key: value
-                    for key, value in consumers[1].items()
-                    if key != "topology_ref"
-                },
-            },
-            {
-                "from": "external:a-shared-host",
-                "relation": "consumes",
-                "to": "pki:jseverino-wildcard",
-                "attributes": {
-                    key: value
-                    for key, value in consumers[2].items()
-                    if key != "topology_ref"
-                },
-            },
-        ],
-        "managed_resources": [],
     }
 
 
@@ -185,185 +169,135 @@ class ControllerContractCompletenessTests(TestCase):
             self.assertIn(field, spec, f"{field} would KeyError in the controller")
 
 
-class TopologyOwnershipTests(TestCase):
-    """The topology describes the world; HQ decides what should be true of it."""
+class DesiredStateOwnershipTests(TestCase):
+    """HQ holds every part of the answer, including the parts it resolves."""
 
-    def _hq_authored_certificate(self):
+    def _certificate(self):
+        declare_targets()
         return ManagedResource.objects.create(
             key="jseverino-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
 
-    def test_a_declared_resource_block_is_refused_rather_than_ignored(self):
-        """Dropping it silently is what let an HQ edit look like it worked.
+    def test_a_certificate_says_what_it_covers_without_being_resolved(self):
+        """The names are on the resource, so nothing else has to be present."""
 
-        The operator would go on believing the document governed these, and the
-        next sync would revert whatever they changed in HQ -- minutes later,
-        with nothing connecting the two events.
-        """
-        payload = topology_payload()
-        payload["managed_resources"] = [
-            {
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "spec": {"domain": "hq.example.com", "answer": "10.0.0.10"},
-            }
-        ]
+        resource = self._certificate()
 
-        with self.assertRaisesRegex(TopologyError, "HQ owns managed resources"):
-            import_topology(payload)
+        self.assertEqual(resource.spec["domains"], DOMAINS)
 
-        self.assertFalse(ManagedResource.objects.exists())
-        self.assertFalse(TopologySnapshot.objects.exists())
+    def test_a_target_supplies_the_settings_the_certificate_does_not(self):
+        from application.infrastructure import resolved_spec
 
-    def test_the_error_names_what_to_remove(self):
-        payload = topology_payload()
-        payload["managed_resources"] = [
-            {"key": "hq-dns", "kind": "adguard.rewrite", "spec": {}},
-            {"key": "hq-proxy", "kind": "npm.proxy_host", "spec": {}},
-        ]
+        resolved = resolved_spec(self._certificate())
 
-        with self.assertRaisesRegex(TopologyError, "hq-dns, hq-proxy"):
-            import_topology(payload)
+        self.assertEqual(resolved["consumers"], resolved_certificate_spec()["consumers"])
 
-    def test_import_declares_no_resources_at_all(self):
-        import_topology(topology_payload())
+    def test_a_certificate_naming_a_target_that_is_gone_covers_nothing(self):
+        """Reported as an uncovered name, which is exactly what is true."""
 
-        self.assertTrue(TopologySnapshot.objects.exists())
-        self.assertFalse(ManagedResource.objects.exists())
+        from application.infrastructure import resolved_spec
 
-    def test_an_hq_edit_survives_the_next_import(self):
-        """The whole point of the ownership change, asserted directly."""
-        resource = ManagedResource.objects.create(
-            key="hq-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
+        resource = self._certificate()
+        ManagedResource.objects.filter(kind="tls.delivery_target").delete()
+
+        self.assertNotIn("consumers", resolved_spec(resource))
+
+    def test_a_second_certificate_is_named_after_itself_at_a_shared_target(self):
+        """Two certificates at one target must not collide on one name."""
+
+        from application.infrastructure import resolved_spec
+
+        self._certificate()
+        other = ManagedResource.objects.create(
+            key="another",
+            kind="tls.certificate",
+            spec={**certificate_spec(), "certificate_name": "another",
+                  "install_on": ["edge"]},
         )
 
-        import_topology(topology_payload())
+        self.assertEqual(resolved_spec(other)["consumers"][0]["name"], "another-caddy")
+
+    def test_editing_a_target_advances_the_certificates_installed_there(self):
+        """The authored spec is byte-identical; what it resolves to is not.
+
+        A certificate names where it installs. Change how that place takes a
+        certificate and the controller has different work to do, while the spec
+        HQ holds has not moved at all.
+        """
+
+        from application.infrastructure import delivery_targets
+
+        resource = self._certificate()
+        advance_dependents(delivery_targets())
+        resource.refresh_from_db()
+        settled = resource.generation
+
+        target = ManagedResource.objects.get(key="homelab-npm-certificate-target")
+        target.spec = {**target.spec, "discover_covered_hosts": True}
+        target.save(update_fields=["spec"])
+        advance_dependents(delivery_targets())
 
         resource.refresh_from_db()
-        self.assertTrue(resource.enabled)
-        self.assertEqual(resource.spec["answer"], "10.0.0.10")
+        self.assertEqual(resource.generation, settled + 1)
 
     def test_a_first_fingerprint_adopts_without_queueing_work(self):
-        """Otherwise the first import after this change reconciles everything.
+        """Otherwise every resource looks changed at once the first time.
 
-        Every existing resource predates fingerprinting by HQ, so all of them
-        would look changed at once and each would queue an operation against a
-        provider for a difference that does not exist.
+        Each would queue an operation against a provider for a difference that
+        does not exist.
         """
-        resource = self._hq_authored_certificate()
+
+        from application.infrastructure import delivery_targets
+
+        resource = self._certificate()
         self.assertEqual(resource.desired_fingerprint, "")
 
-        import_topology(topology_payload())
+        advance_dependents(delivery_targets())
 
         resource.refresh_from_db()
         self.assertTrue(resource.desired_fingerprint)
         self.assertEqual(resource.generation, 1)
 
-    def test_a_dependency_change_advances_a_reference_backed_resource(self):
-        """The authored spec is byte-identical; what it resolves to is not.
+    def test_saving_a_target_advances_them_without_a_separate_step(self):
+        """Editing the target is the whole action; nothing else has to be run."""
 
-        A certificate declares one topology reference. Change the consumers
-        behind it and the controller has different work to do, while the spec
-        HQ holds has not moved at all.
-        """
-        resource = self._hq_authored_certificate()
-        payload = topology_payload()
-        import_topology(payload)
+        from application.infrastructure import ManagedResourceCommand, save_managed_resource
+        from application.security import cli_principal
+
+        resource = self._certificate()
+        advance_dependents(delivery_targets_for_test())
         resource.refresh_from_db()
         settled = resource.generation
 
-        payload["dependencies"][0]["attributes"]["discover_covered_hosts"] = True
-        payload["dependencies"][0]["attributes"]["verify_domains"] = []
-        import_topology(payload)
+        target = ManagedResource.objects.get(key="edge-certificate-target")
+        save_managed_resource(
+            ManagedResourceCommand(
+                key=target.key,
+                kind=target.kind,
+                spec={**target.spec, "certificate_directory": "/srv/certs"},
+            ),
+            principal=cli_principal(),
+            current_key=target.key,
+        )
 
         resource.refresh_from_db()
         self.assertEqual(resource.generation, settled + 1)
 
-    def test_reimporting_an_unchanged_topology_changes_nothing(self):
-        resource = self._hq_authored_certificate()
-        first = import_topology(topology_payload())
+    def test_nothing_moves_when_nothing_resolved_differently(self):
+        from application.infrastructure import delivery_targets
+
+        resource = self._certificate()
+        advance_dependents(delivery_targets())
         resource.refresh_from_db()
         settled, stamped = resource.generation, resource.updated_at
 
-        import_topology(topology_payload())
+        advance_dependents(delivery_targets())
 
-        snapshot = TopologySnapshot.objects.get(pk="topology")
         resource.refresh_from_db()
         self.assertEqual(resource.generation, settled)
         self.assertEqual(resource.updated_at, stamped)
-        self.assertEqual(snapshot.updated_at, first.updated_at)
-
-    def test_a_stored_snapshot_predating_the_change_still_resolves(self):
-        """Snapshots written before this change still carry the old block.
-
-        Validating a stored payload as strictly as an authored one would fail
-        certificate resolution for every resource, on the strength of a block
-        nothing reads any more.
-        """
-        legacy = topology_payload()
-        legacy["managed_resources"] = [
-            {
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "spec": {"domain": "hq.example.com", "answer": "10.0.0.10"},
-            }
-        ]
-        TopologySnapshot.objects.create(
-            id="topology", schema_version=3, checksum="legacy", payload=legacy
-        )
-
-        resolved = resolve_certificate("pki:jseverino-wildcard")
-
-        self.assertEqual(resolved["certificate_name"], "jseverino")
-
-    def test_a_resolution_driven_change_records_sync_provenance(self):
-        """A generation advanced by an import was not the operator's doing.
-
-        It is the one way a resource changes without anyone editing it, so the
-        audit trail has to name the import rather than leave the change looking
-        like it came from a person.
-        """
-        resource = self._hq_authored_certificate()
-        payload = topology_payload()
-        import_topology(payload)
-        payload["dependencies"][0]["attributes"]["discover_covered_hosts"] = True
-        payload["dependencies"][0]["attributes"]["verify_domains"] = []
-
-        import_topology(payload)
-
-        event = AuditLog.objects.filter(
-            object_type="Managed resource", object_repr=resource.key
-        ).latest("created_at")
-        self.assertEqual(event.metadata["interface"], "sync")
-        self.assertEqual(event.metadata["actor"], "topology-sync")
-        self.assertEqual(event.metadata["operation"], "infrastructure.topology.import")
-
-    def test_sync_schedules_each_pending_generation_once(self):
-        resource = ManagedResource.objects.create(
-            key="hq-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
-        )
-        resource.generation = 2
-        resource.save(update_fields=("generation", "updated_at"))
-        payload = topology_payload()
-
-        first = sync_topology(payload, principal=cli_principal())
-        second = sync_topology(payload, principal=cli_principal())
-
-        self.assertTrue(first["scheduled"][0]["queued"])
-        self.assertFalse(second["scheduled"][0]["queued"])
-        self.assertEqual(OperationRequest.objects.count(), 1)
-
-        resource.refresh_from_db()
-        resource.observed_generation = resource.generation
-        resource.save(update_fields=("observed_generation", "updated_at"))
-        converged = sync_topology(payload, principal=cli_principal())
-        self.assertEqual(converged["scheduled"], [])
 
 
 class ProviderContractTests(TestCase):
@@ -397,7 +331,7 @@ class ProviderContractTests(TestCase):
             providers["tls.certificate"]["spec_schema"]["additionalProperties"]
         )
         self.assertIn(
-            "topology_ref",
+            "install_on",
             providers["tls.certificate"]["spec_schema"]["properties"],
         )
 
@@ -472,7 +406,7 @@ class InfrastructureWebTests(TestCase):
             password="test-only-password",
         )
         self.client.force_login(self.user)
-        import_topology(topology_payload())
+        declare_targets()
         save_managed_resource(
             ManagedResourceCommand(
                 key="jseverino-wildcard",
@@ -543,7 +477,7 @@ class InfrastructureWebTests(TestCase):
 
 class OperationPolicyTests(TestCase):
     def setUp(self):
-        import_topology(topology_payload())
+        declare_targets()
         save_managed_resource(
             ManagedResourceCommand(
                 key="jseverino-wildcard",
@@ -571,7 +505,7 @@ class OperationPolicyTests(TestCase):
         self.assertEqual(operation.action, OperationRequest.Action.RENEW)
         self.assertEqual(operation.requested_interface, "controller")
 
-    def test_controller_automatically_reconciles_new_topology_generation(self):
+    def test_controller_automatically_reconciles_a_new_generation(self):
         self.resource.status = {
             "not_after": (timezone.now() + timedelta(days=89)).isoformat()
         }
@@ -980,3 +914,88 @@ class DnsRecordReadoutTests(TestCase):
         _, desired, observed = _dns_record_readout(spec, {})[0]
         self.assertEqual(observed, "")
         self.assertTrue(desired)
+
+
+class QueueHeadTests(TestCase):
+    """One resource HQ cannot describe must not stop every other one.
+
+    The queue is ordered by age and a claim is atomic, so an operation whose
+    contract could not be built rolled the claim back and stayed exactly where
+    it was. Every poll after it hit the same one, and nothing else -- no DNS, no
+    proxy hosts, no renewals -- was ever claimed again.
+    """
+
+    def setUp(self):
+        from application.controller import claim_next_operation
+
+        self.claim = claim_next_operation
+        declare_targets()
+        self.certificate = ManagedResource.objects.create(
+            key="jseverino-wildcard",
+            kind="tls.certificate",
+            spec=certificate_spec(),
+        )
+        self.rewrite = ManagedResource.objects.create(
+            key="hq-dns",
+            kind="adguard.rewrite",
+            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
+        )
+
+    def queue(self, resource, key):
+        return OperationRequest.objects.create(
+            resource=resource,
+            action=OperationRequest.Action.RECONCILE,
+            state=OperationRequest.State.QUEUED,
+            requested_interface="cli",
+            idempotency_key=key,
+        )
+
+    def test_work_behind_an_unresolvable_resource_is_still_claimed(self):
+        broken = self.queue(self.certificate, "broken")
+        wanted = self.queue(self.rewrite, "wanted")
+        ManagedResource.objects.filter(kind="tls.delivery_target").delete()
+
+        claimed = self.claim("a-controller", capabilities=(("adguard.rewrite", "reconcile"),
+                                                           ("tls.certificate", "reconcile")))
+
+        self.assertEqual(claimed["operation"]["id"], str(wanted.id))
+        broken.refresh_from_db()
+        self.assertEqual(broken.state, OperationRequest.State.FAILED)
+
+    def test_the_failure_says_what_could_not_be_resolved(self):
+        broken = self.queue(self.certificate, "broken")
+        ManagedResource.objects.filter(kind="tls.delivery_target").delete()
+
+        self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
+
+        broken.refresh_from_db()
+        self.assertIn("receives a certificate", broken.result["message"])
+
+    def test_a_resolvable_queue_is_untouched(self):
+        wanted = self.queue(self.certificate, "wanted")
+
+        claimed = self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
+
+        self.assertEqual(claimed["operation"]["id"], str(wanted.id))
+        self.assertIn("resource", claimed)
+
+    def test_removing_a_target_stops_the_certificate_reporting_itself_in_sync(self):
+        """Removing one is as much a change as editing one."""
+
+        from application.infrastructure import OperationCommand, request_removal
+        from application.security import cli_principal
+
+        self.certificate.desired_fingerprint = "settled"
+        self.certificate.observed_generation = self.certificate.generation
+        self.certificate.save()
+
+        request_removal(
+            OperationCommand(idempotency_key="forget-it"),
+            principal=cli_principal(),
+            current_key="edge-certificate-target",
+        )
+
+        self.certificate.refresh_from_db()
+        self.assertGreater(
+            self.certificate.generation, self.certificate.observed_generation
+        )

@@ -473,3 +473,118 @@ class TemplateCommentTests(SimpleTestCase):
             [],
             "use {% comment %}…{% endcomment %} for multi-line comments",
         )
+
+
+class WorkflowSecrecyTests(SimpleTestCase):
+    """A private value reaches a public log through the environment or not at all.
+
+    Actions expands ``${{ … }}`` into the text of the step it then echoes, so a
+    value interpolated into a script body is printed in full before the step
+    runs -- ahead of anything the job does later to conceal it. Passed through
+    ``env:`` it is a shell variable the echo never sees, and a secret is masked
+    on top of that.
+    """
+
+    def workflows(self):
+        root = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        return sorted(root.glob("*.yml"))
+
+    def run_block_lines(self, text: str):
+        """Every line of every ``run:`` script, with its line number.
+
+        Read by indentation rather than parsed, so this needs no YAML library
+        and cannot start disagreeing with one about what a block contains.
+
+        A one-line ``run:`` counts. Checking only block scalars is how a
+        ``docker login`` that piped a token straight into a shell went unnoticed
+        by the check written to find exactly that.
+        """
+
+        lines = text.splitlines()
+        inside = None
+        for number, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if inside is not None:
+                indent = len(line) - len(line.lstrip())
+                if stripped and indent <= inside:
+                    inside = None
+                else:
+                    yield number, line
+                    continue
+            if not stripped.startswith("run:"):
+                continue
+            if stripped.endswith(("|", ">", "|-", ">-")):
+                inside = len(line) - len(line.lstrip())
+            else:
+                yield number, line
+
+    def test_no_script_body_interpolates_a_secret_or_a_variable(self):
+        offenders = []
+        for path in self.workflows():
+            for number, line in self.run_block_lines(path.read_text(encoding="utf-8")):
+                if "${{ secrets." in line or "${{ vars." in line:
+                    offenders.append(f"{path.name}:{number}")
+
+        self.assertEqual(
+            sorted(offenders),
+            [],
+            "pass it through env: instead — a script body is echoed verbatim",
+        )
+
+    def test_the_composition_set_is_read_from_a_secret(self):
+        """A variable is not masked, and this inventory is the private half."""
+
+        # Asserted on names rather than on contents: a failure that printed the
+        # file would put the whole workflow in the output of the check meant to
+        # keep things out of it.
+        offenders = [
+            path.name
+            for path in self.workflows()
+            if "vars.COMPOSITION_EXTENSIONS" in path.read_text(encoding="utf-8")
+        ]
+
+        self.assertEqual(offenders, [], "read it from secrets, which are masked")
+
+
+class AssertionPrecisionTests(SimpleTestCase):
+    """A comparison belongs in the assertion, not inside a boolean.
+
+    ``assertTrue(a > b)`` fails with "False is not true", which says nothing
+    about a or b. ``assertGreater(a, b)`` prints both. CodeQL flags this and
+    nothing local did, so it was found in review rather than before it.
+    """
+
+    SPECIFIC = {
+        "Eq": "assertEqual", "NotEq": "assertNotEqual",
+        "Lt": "assertLess", "LtE": "assertLessEqual",
+        "Gt": "assertGreater", "GtE": "assertGreaterEqual",
+        "Is": "assertIs", "IsNot": "assertIsNot",
+        "In": "assertIn", "NotIn": "assertNotIn",
+    }
+
+    def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
+        root = Path(__file__).resolve().parents[1]
+        offenders = []
+        for path in sorted(root.rglob("test*.py")) + sorted(root.rglob("tests.py")):
+            if ".venv" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not node.args:
+                    continue
+                name = getattr(node.func, "attr", "")
+                if name not in ("assertTrue", "assertFalse"):
+                    continue
+                # `any(x > y for …)` is a Call, not a Compare, and is fine:
+                # the comparison is part of the predicate being asserted.
+                if not isinstance(node.args[0], ast.Compare):
+                    continue
+                operator = type(node.args[0].ops[0]).__name__
+                better = self.SPECIFIC.get(operator, "a specific assertion")
+                if name == "assertFalse":
+                    better = "the negated form of " + better
+                offenders.append(
+                    f"{path.relative_to(root)}:{node.lineno} — use {better}"
+                )
+
+        self.assertEqual(offenders, [])

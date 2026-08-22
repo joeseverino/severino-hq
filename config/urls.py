@@ -6,6 +6,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import (
+    DashboardLinkChoiceView,
     DashboardView,
     SearchView,
     ThrottledLoginView,
@@ -37,6 +38,11 @@ urlpatterns = [
     ),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
+    path(
+        "dashboard/links/",
+        DashboardLinkChoiceView.as_view(),
+        name="dashboard_links",
+    ),
     path("search/", SearchView.as_view(), name="search"),
     path("projects/", include("projects.urls")),
     path("content/", include("content.urls")),

@@ -91,10 +91,10 @@ class ValidationOwnershipTests(TestCase):
     """The model decides what is valid. The form only collects it."""
 
     def test_a_pattern_on_the_model_is_enforced_by_the_form(self):
-        form = spec_form_class("tls.certificate")({"topology_ref": "not-a-reference"})
+        form = spec_form_class("tls.certificate")({"certificate_name": "Not A Name"})
 
         self.assertFalse(form.is_valid())
-        self.assertIn("topology_ref", form.errors)
+        self.assertIn("certificate_name", form.errors)
 
     def test_a_model_rule_no_widget_could_express_is_still_enforced(self):
         """`extra="forbid"` and cross-field rules live only in pydantic.
@@ -313,83 +313,41 @@ class ResourceFormViewTests(TestCase):
         self.assertIn("/accounts/login/", response["Location"])
 
 
-class AlternativeBranchTests(TestCase):
-    """A spec that means "this or that" must not render as "both, empty"."""
-
-    def test_a_topology_backed_certificate_hides_the_define_branch(self):
-        form = spec_form_class("tls.certificate")(
-            initial={"topology_ref": "pki:example-wildcard"}
-        )
-        primary = {field.name for field in form.primary}
-        self.assertIn("topology_ref", primary)
-        # Domains are asked either way: what a certificate covers is desired
-        # state, not part of the choice between describing one and defining one.
-        self.assertIn("domains", primary)
-        for folded in ("certificate_name", "install_on"):
-            self.assertNotIn(folded, primary)
-
-    def test_a_certificate_defined_here_hides_the_topology_branch(self):
-        form = spec_form_class("tls.certificate")(
-            initial={"certificate_name": "example", "domains": ["example.com"]}
-        )
-        primary = {field.name for field in form.primary}
-        self.assertIn("certificate_name", primary)
-        self.assertIn("domains", primary)
-        self.assertNotIn("topology_ref", primary)
-
-    def test_adding_one_offers_the_branch_that_defines_something(self):
-        """"Add" can only mean a new certificate, so that branch is the one shown."""
-
-        form = spec_form_class("tls.certificate")()
-        primary = {field.name for field in form.primary}
-        self.assertIn("certificate_name", primary)
-        self.assertNotIn("topology_ref", primary)
-
-    def test_a_provider_without_alternatives_is_unaffected(self):
-        form = spec_form_class("cloudflare.dns_record")(initial={"zone": "example.com"})
-        self.assertIn("name", {field.name for field in form.primary})
-
-
-class InapplicableBranchTests(TestCase):
-    """The branch that does not apply is not offered, not merely hidden."""
-
-    def test_the_unused_branch_is_absent_from_options_too(self):
-        form = spec_form_class("tls.certificate")(
-            initial={"topology_ref": "pki:example-wildcard"}
-        )
-        offered = {field.name for field in form.primary} | {
-            field.name for field in form.advanced
-        }
-        self.assertIn("domains", offered)
-        for absent in ("certificate_name", "install_on"):
-            self.assertNotIn(absent, offered)
+class RoutineKnobTests(TestCase):
+    """A knob nobody has touched stays behind the disclosure, and no further."""
 
     def test_the_renewal_window_stays_a_knob(self):
         """Renewal is automatic, so how early it starts is not a question."""
 
         form = spec_form_class("tls.certificate")(
-            initial={"topology_ref": "pki:example-wildcard"}
+            initial={"certificate_name": "example"}
         )
+
         self.assertIn("renewal_window_days", {field.name for field in form.advanced})
 
-
-class FixedIdentityTests(TestCase):
-    """What a thing *is* cannot be re-answered on the form that edits it."""
-
-    def test_editing_does_not_offer_to_redefine_the_certificate(self):
-        """It offered "Define a new certificate below" for one that exists."""
-
-        form = spec_form_class("tls.certificate", lock_identity=True)(
-            initial={"topology_ref": "pki:example-wildcard"}
+    def test_a_knob_somebody_answered_comes_out_from_behind_it(self):
+        form = spec_form_class("tls.certificate")(
+            initial={"certificate_name": "example", "renewal_window_days": 45}
         )
-        offered = {field.name for field in form.primary} | {
-            field.name for field in form.advanced
-        }
-        self.assertNotIn("topology_ref", offered)
-        self.assertIn("renewal_window_days", offered)
 
-    def test_creating_one_still_asks_which_kind_it_is(self):
-        offered = {
-            field.name for field in spec_form_class("tls.certificate")().primary
-        }
-        self.assertIn("certificate_name", offered)
+        self.assertIn("renewal_window_days", {field.name for field in form.primary})
+
+    def test_what_a_certificate_is_is_always_asked(self):
+        primary = {field.name for field in spec_form_class("tls.certificate")().primary}
+
+        self.assertIn("certificate_name", primary)
+        self.assertIn("domains", primary)
+        self.assertIn("install_on", primary)
+
+
+class RenameWarningTests(TestCase):
+    """A name that reaches a provider says so before it is changed."""
+
+    def test_editing_warns_that_renaming_reaches_the_provider(self):
+        form = spec_form_class("adguard.rewrite", lock_identity=True)(
+            initial={"domain": "app.example.com", "answer": "10.0.0.1"}
+        )
+
+        domain = next(field for field in form.primary if field.name == "domain")
+
+        self.assertIn("renames the record", domain.help_text)

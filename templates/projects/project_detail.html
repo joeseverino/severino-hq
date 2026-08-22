@@ -22,7 +22,7 @@
   <dt>Slug</dt><dd><code>{{ project.slug }}</code></dd>
   {% if project.repository_url %}<dt>Repository</dt><dd><a href="{{ project.repository_url }}" rel="noopener noreferrer">{{ project.repository_url }}</a></dd>{% endif %}
   {% if project.last_push_at %}<dt>Last push</dt><dd><strong>{{ project.last_push_at }}</strong></dd>{% endif %}
-  {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a></dd>{% endif %}
+  {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a>{% if service_url %} · <a href="{{ service_url }}">What serves it &rarr;</a>{% endif %}</dd>{% endif %}
   {% if project.tech_list %}<dt>Technologies</dt><dd>{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
   <dt>Created</dt><dd class="muted">{{ project.created_at }}</dd>
   <dt>Updated</dt><dd class="muted">{{ project.updated_at }}</dd>

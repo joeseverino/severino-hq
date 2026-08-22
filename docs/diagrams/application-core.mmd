@@ -27,7 +27,7 @@ flowchart LR
     cli --> mcp
     contract --> policy --> transaction --> db
 
-    vault -->|"manifest + topology"| cli
+    vault -->|"manifest"| cli
     secrets -.->|"credentials only"| web
     secrets -.->|"credentials only"| mcp
     secrets -.->|"runtime bearer only"| cli

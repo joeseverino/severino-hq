@@ -221,3 +221,127 @@ class FailClosedTests(TestCase):
         with override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"):
             with self.assertRaises(secrets.SecretsUnavailable):
                 secrets.unseal(sealed)
+
+
+@override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
+class CoverageTests(TestCase):
+    """A certificate HQ was given covers the names it carries.
+
+    It covered nothing at all, so every private name it answered for read as
+    "no declared certificate covers it" -- permanently, on the service page and
+    in the attention queue. That is the whole reason this kind exists: for a
+    name no public authority will issue for, an internally signed certificate is
+    the only possible answer.
+    """
+
+    def setUp(self):
+        self.resource = ManagedResource.objects.create(
+            key="homelab-wildcard",
+            kind="tls.uploaded_certificate",
+            spec={
+                "certificate_name": "homelab-wildcard",
+                "install_on": ["a-proxy"],
+            },
+        )
+
+    def upload(self, name="grafana.example"):
+        fullchain, private_key = a_certificate(name)
+        store_certificate(
+            UploadCertificateCommand(
+                key=self.resource.key, fullchain=fullchain, private_key=private_key
+            ),
+            principal=cli_principal(),
+        )
+        self.resource.refresh_from_db()
+
+    def covered(self):
+        from control_plane.providers import PROVIDERS
+
+        from .infrastructure import resolved_spec
+
+        provider = PROVIDERS[self.resource.kind]
+        return tuple(provider.hostnames(resolved_spec(self.resource)))
+
+    def test_it_covers_what_the_uploaded_certificate_carries(self):
+        self.upload("grafana.example")
+
+        self.assertEqual(self.covered(), ("grafana.example",))
+
+    def test_it_covers_them_before_the_controller_has_ever_run(self):
+        """HQ read the certificate, so it does not need to be told twice.
+
+        Waiting for the first pass left the name uncovered at the one moment an
+        operator is certain to look: right after uploading a certificate for it.
+        """
+
+        self.upload("grafana.example")
+
+        self.assertEqual(self.resource.observed_generation, 0)
+        self.assertEqual(self.covered(), ("grafana.example",))
+
+    def test_one_HQ_has_not_been_given_yet_covers_nothing(self):
+        self.assertEqual(self.covered(), ())
+
+    def test_the_service_it_serves_stops_asking_for_a_certificate(self):
+        from control_plane.models import ManagedResource as Resource
+
+        from .services import service_or_prospect
+
+        self.upload("grafana.example")
+        Resource.objects.create(
+            key="grafana-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["grafana.example"],
+                "forward_scheme": "http",
+                "forward_host": "10.0.0.10",
+                "forward_port": 3000,
+            },
+        )
+
+        service = service_or_prospect("grafana.example")
+
+        self.assertNotIn(
+            "no declared certificate covers it", " ".join(service.faults)
+        )
+
+    def test_uploading_asks_for_it_to_be_installed(self):
+        """The page promises a pass; something has to give that pass a reason."""
+
+        self.resource.observed_generation = self.resource.generation
+        self.resource.save(update_fields=["observed_generation"])
+
+        self.upload("grafana.example")
+
+        self.assertGreater(
+            self.resource.generation, self.resource.observed_generation
+        )
+
+    def test_replacing_it_with_a_renewal_asks_again(self):
+        """A renewal covers the same names, and still has to be installed."""
+
+        self.upload("grafana.example")
+        self.resource.observed_generation = self.resource.generation
+        self.resource.save(update_fields=["observed_generation"])
+
+        self.upload("grafana.example")
+
+        self.assertGreater(
+            self.resource.generation, self.resource.observed_generation
+        )
+
+    def test_a_proxy_can_be_pointed_at_one_from_the_form(self):
+        """The only possible answer for a private name was not on the menu."""
+
+        from control_plane.providers import NameContext
+
+        from .provider_choices import proxy_choices
+
+        self.upload("grafana.example")
+        offered = dict(
+            proxy_choices(NameContext(hostname="grafana.example"))[
+                "certificate_resource"
+            ]
+        )
+
+        self.assertIn("homelab-wildcard", offered)

@@ -5,10 +5,11 @@ what a Portainer reports it reaches and in a certificate's install list. This is
 where those meet, so "what is on this machine" is one page rather than four read
 in sequence.
 
-Nothing here is declared. A machine exists because something reported it: a
-credential that reaches it, a container running on it, a service served from it,
-or the topology naming it. That is the whole membership rule, which is why
-adding a VPS is registering it somewhere rather than entering it here.
+A machine exists because something reported it -- a credential that reaches it,
+a container running on it, a service served from it -- or because HQ was told
+about one directly. Observation first: registering a VPS somewhere is what puts
+it here, and a declaration is for the printer and the offline CA, which nothing
+will ever sweep and which are still part of the place.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from control_plane.providers import PROVIDERS, normalized_hostname
 
-from .services import CONTAINER_KIND, Running, _topology, container_watchers
+from .infrastructure import declared_machines
+from .services import CONTAINER_KIND, Running, container_watchers
 
 
 @dataclass(frozen=True)
@@ -69,13 +71,13 @@ def machine_catalog() -> tuple[Machine, ...]:
     roles = _roles()
     services = _services_by_host(connections, containers)
     resources = _resources_by_host()
-    names = (
-        set(containers)
-        | set(reached)
-        | set(services)
-        | set(resources)
-        | {name for name in roles if name in reached or name in containers}
-    )
+    # A declared machine counts on its own. It used to have to be reached or
+    # running something as well, because the declarations came from a document
+    # that named a printer and a phone as readily as a Docker host and nobody
+    # had asked for either. Declaring one is a deliberate act in HQ now, and a
+    # board that drops what it was just told about is answering a question
+    # nobody asked.
+    names = set(containers) | set(reached) | set(services) | set(resources) | set(roles)
     answered = {
         connection.connection_ref
         for connection in connections
@@ -243,9 +245,9 @@ def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
 
 def _roles() -> dict[str, str]:
     return {
-        str(host["id"]): str(host.get("role", ""))
-        for host in (_topology() or {}).get("hosts", ())
-        if host.get("id")
+        str(machine["name"]): str(machine.get("role", ""))
+        for machine in declared_machines()
+        if machine.get("name")
     }
 
 
@@ -260,8 +262,8 @@ def _services_by_host(
     service in full to get it is a query per row and then some.
 
     The address is resolved against what already names machines here -- a
-    container reporting where it runs, a credential pointing somewhere, the
-    topology -- so this adds no query of its own.
+    container reporting where it runs, a credential pointing somewhere, a
+    declared address -- so this adds no query of its own.
     """
 
     located = _by_address(connections, containers)
@@ -306,14 +308,13 @@ def _by_address(
         address = endpoint.rpartition(":")[0] or endpoint
         located.setdefault(address, connection.connection_ref)
         located.setdefault(connection.connection_ref, connection.connection_ref)
-    for host in (_topology() or {}).get("hosts", ()):
-        identifier = str(host.get("id", ""))
-        if not identifier:
+    for machine in declared_machines():
+        name = str(machine.get("name", ""))
+        if not name:
             continue
-        for key in ("id", "lan_ip", "ts_ip", "public_ip"):
-            value = str(host.get(key, "") or "")
-            if value:
-                located.setdefault(value, located.get(identifier, identifier))
+        for address in (name, *machine.get("addresses", ())):
+            if address:
+                located.setdefault(str(address), located.get(name, name))
     return located
 
 
@@ -334,3 +335,49 @@ def _resources_by_host() -> dict[str, set[str]]:
         if host:
             found.setdefault(host, set()).add(resource.key)
     return found
+
+
+def container_context(host: str, name: str) -> dict[str, object]:
+    """What else a declared container is tied to, and what it is doing.
+
+    The services are the inverse of the runtime claim: a service page resolves
+    its origin to a machine and a container, so the containers that answer for a
+    name are exactly the ones some service resolved to. Asked the other way --
+    by matching published ports -- a container on the host network answers for
+    nothing, because Docker reports no ports for one.
+    """
+
+    from control_plane.providers import normalized_hostname
+
+    from .services import _locate
+
+    found = machine(host)
+    running = next(
+        (item for item in (found.containers if found else ()) if item.name == name),
+        None,
+    )
+    # Resolved the same way a service resolves its own origin, but without
+    # assembling every service to ask: the board builds facets, health and
+    # certificates for each name, and none of that answers this question.
+    machines = declared_machines()
+    wanted = found.name if found else host
+    serves: set[str] = set()
+    for resource in ManagedResource.objects.filter(enabled=True):
+        provider = PROVIDERS.get(resource.kind)
+        if provider is None or provider.origin is None or provider.hostnames is None:
+            continue
+        try:
+            origin = provider.origin(resource.spec)
+            names = tuple(provider.hostnames(resource.spec))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not origin:
+            continue
+        located = _locate(origin, machines)
+        if located.host == wanted and located.container == name:
+            serves.update(normalized_hostname(item) for item in names)
+    return {
+        "machine": found,
+        "running": running,
+        "serves": tuple(sorted(item for item in serves if item)),
+    }

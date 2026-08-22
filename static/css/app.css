@@ -755,6 +755,33 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    height of the text beside it, and `currentColor` so it inherits the button's
    state rather than needing a second rule per variant. */
 .icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* The outward panel's chooser. A `details` so it needs no script, and a panel
+   in the flow rather than an overlay so it cannot trap focus behind anything.
+   The panel is absolutely positioned so opening it does not shove the list it
+   is about down the page. */
+.ext-choose { position: relative; }
+.ext-choose > summary { color: var(--muted); cursor: pointer; font-size: 12.5px; list-style: none; }
+.ext-choose > summary::-webkit-details-marker { display: none; }
+.ext-choose > summary::marker { content: ""; }
+.ext-choose > summary:hover { color: var(--ink); }
+.ext-choose > form {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 20rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px 14px;
+}
+.ext-chooser-lede { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+/* One row per choice, each the same height, with the label and its subtitle in
+   fixed columns so the ticks line up whatever the words are. */
+.ext-choices { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 2px; max-height: 15rem; overflow-y: auto; }
+.ext-choices label {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 8px; font-size: 13px; padding: 5px 6px; border-radius: 6px; cursor: pointer;
+}
+.ext-choices label:hover { background: var(--bg-tint); }
+.ext-choice-label { overflow-wrap: anywhere; }
+.ext-choice-sub { font-size: 12px; white-space: nowrap; }
+.ext-chooser-actions { display: flex; align-items: center; gap: 8px; }
+.ext-chooser-status { font-size: 12px; }
 .icon { width: 1em; height: 1em; flex: none; }
 /* Each control is its own POST, so each is its own form. Without this the page
    actions row treated three forms as three blocks and stacked them. */

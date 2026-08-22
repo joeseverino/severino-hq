@@ -22,6 +22,7 @@ from application.projects import (
 from application.deletion import delete_project
 from application.security import web_principal
 from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.services import service_url_for
 from application.writes import (
     ServiceCreateMixin,
     ServiceDeleteMixin,
@@ -132,6 +133,14 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     queryset = Project.objects.prefetch_related(
         "content_items", "assets", "documentation_records", "expenses"
     )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # The reverse of the tie the service page makes. A project says where it
+        # is published and HQ manages that name, so the two are one thing seen
+        # from either side -- and only one side led anywhere.
+        context["service_url"] = service_url_for(self.object.public_url)
+        return context
 
 
 class ProjectWrite:

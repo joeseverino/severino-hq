@@ -73,20 +73,21 @@ jobs:
           echo "README python badge agrees with the matrix: $expected"
       - name: No private extension names in the public tree
         # The extensions are private repositories; this one is public. Their
-        # inventory is kept in the COMPOSITION_EXTENSIONS variable rather than
+        # inventory is kept in the COMPOSITION_EXTENSIONS secret rather than
         # committed, and a test already asserts the committed inventory file
         # stays empty. Nothing stopped the names appearing in prose, though --
         # a doc, a comment, a commit message -- and that is how one reached
         # this repository.
         #
-        # Checked against the variable, so this file never has to name the
-        # thing it is protecting. Matched on the repository and identifier
+        # Checked against the secret, so this file never has to name the thing
+        # it is protecting -- and a secret rather than a variable because
+        # Actions prints a step's environment, and a variable is not masked. Matched on the repository and identifier
         # forms only (`severino-x`, `severino.x`, `severino_x`), not the bare
         # word: bare words appear in ordinary English -- the MIT licence says
         # "FITNESS FOR A PARTICULAR PURPOSE" -- and a check with false
         # positives gets switched off.
         env:
-          COMPOSITION_EXTENSIONS: ${{ vars.COMPOSITION_EXTENSIONS }}
+          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
         run: |
           set -euo pipefail
           if [ -z "${COMPOSITION_EXTENSIONS:-}" ]; then
@@ -295,7 +296,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         id: build
         env:

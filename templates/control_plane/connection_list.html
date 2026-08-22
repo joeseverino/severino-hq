@@ -34,10 +34,25 @@ found on its last pass.
           <td>{% if connection.provider %}<code>{{ connection.provider }}</code>{% else %}<span class="muted">unlabelled</span>{% endif %}</td>
           <td>{% if connection.endpoint %}<code>{{ connection.endpoint }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td>
-            {% for name in connection.reaches %}<code>{{ name }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+            {% comment %}
+            A machine this reaches is a page, not a word. Zones are not, so a
+            DNS token still reads as text -- what a credential can act on is
+            only sometimes a thing HQ has somewhere to send you.
+            {% endcomment %}
+            {% for name, url in connection.machines %}<a href="{{ url }}">{{ name }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}{% for name in connection.reaches %}<code>{{ name }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}{% endfor %}
           </td>
           <td>
             {% for label in connection.supplies %}{{ label }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+            {% comment %}
+            What actually depends on this credential, which is the question an
+            operator asks before touching one. The reverse of the ref every spec
+            already carries, so nothing new is stored to answer it.
+            {% endcomment %}
+            {% if connection.resources %}
+              <br><span class="muted">{{ connection.resources|length }} using:</span>
+              {% for key, url in connection.resources|slice:":4" %}<br><a href="{{ url }}"><code>{{ key }}</code></a>{% endfor %}
+              {% if connection.resources|length > 4 %}<br><span class="muted">and {{ connection.resources|length|add:"-4" }} more</span>{% endif %}
+            {% endif %}
           </td>
           <td>
             <span class="pill pill-{{ connection.status }}">{{ connection.status }}</span>

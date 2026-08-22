@@ -315,16 +315,15 @@ class SeedTests(TestCase):
     """
 
     def setUp(self):
-        from control_plane.models import ManagedResource, TopologySnapshot
+        from control_plane.models import ManagedResource
 
-        TopologySnapshot.objects.update_or_create(
-            pk="topology",
-            defaults={
-                "schema_version": 1,
-                "checksum": "test",
-                "payload": {
-                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
-                },
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={
+                "name": "a-docker-host",
+                "role": "",
+                "addresses": ["192.168.1.233"],
             },
         )
         ManagedResource.objects.create(
@@ -445,15 +444,14 @@ class AdoptionSafetyTests(TestCase):
                 "serving": True,
             }},
         )
-        from control_plane.models import TopologySnapshot
-
-        TopologySnapshot.objects.update_or_create(
-            pk="topology",
+        ManagedResource.objects.update_or_create(
+            key="a-docker-host",
             defaults={
-                "schema_version": 1,
-                "checksum": "test",
-                "payload": {
-                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
+                "kind": "machine",
+                "spec": {
+                    "name": "a-docker-host",
+                    "role": "",
+                    "addresses": ["192.168.1.233"],
                 },
             },
         )
@@ -591,4 +589,74 @@ class ExpiredCredentialTests(TestCase):
         self.assertNotEqual(
             PROVIDERS["cloudflare.dns_record"].applies(name_context("probe.invalid")),
             "",
+        )
+
+
+class OutwardLinkChoiceTests(TestCase):
+    """Which shortcuts the dashboard shows is a preference, not configuration.
+
+    Everything HQ can reach is offered, and most of it is not what an operator
+    wants a shortcut to. Nothing chosen means everything, because a panel that
+    starts empty teaches nobody that it can be filled.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+
+    def test_nothing_chosen_shows_everything(self):
+        from .connections import outward_links
+
+        offered, curated = outward_links(self.user)
+
+        self.assertFalse(curated)
+        self.assertTrue(any(item["label"] == "Portainer" for item in offered))
+
+    def test_choosing_narrows_the_panel(self):
+        from .connections import outward_links
+
+        self.client.post(
+            reverse("dashboard_links"), {"href": "https://portainer.example"}
+        )
+        offered, curated = outward_links(self.user)
+
+        self.assertTrue(curated)
+        self.assertEqual([item["href"] for item in offered], ["https://portainer.example"])
+
+    def test_choosing_again_replaces_rather_than_adds(self):
+        """A chooser answers with the whole set, so applying it as toggles would
+        depend on what was already stored."""
+
+        from .connections import outward_links
+
+        self.client.post(
+            reverse("dashboard_links"), {"href": "https://portainer.example"}
+        )
+        self.client.post(reverse("dashboard_links"), {"href": "/health/ready/"})
+        offered, _ = outward_links(self.user)
+
+        self.assertEqual([item["href"] for item in offered], ["/health/ready/"])
+
+    def test_something_never_offered_cannot_be_stored(self):
+        """A key arriving in a form post is a request, not an instruction."""
+
+        from .connections import outward_links
+
+        self.client.post(reverse("dashboard_links"), {"href": "https://elsewhere.test"})
+        offered, curated = outward_links(self.user)
+
+        self.assertFalse(curated)
+        self.assertGreater(len(offered), 1)
+
+    def test_the_chooser_offers_exactly_what_the_panel_renders(self):
+        from .connections import link_choices, outward_links
+
+        offered, _ = outward_links(None)
+
+        self.assertEqual(
+            [item["href"] for item in link_choices(self.user)],
+            [item["href"] for item in offered],
         )

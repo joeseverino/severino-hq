@@ -10,6 +10,10 @@ from __future__ import annotations
 from core.models import Pin
 
 DOMAIN = "domain"
+# A link on the dashboard's outward panel. Everything HQ can reach is offered
+# there and most of it is not what an operator wants a shortcut to, so the panel
+# shows what has been chosen and falls back to everything when nothing has.
+DASHBOARD_LINK = "dashboard_link"
 
 
 def pinned(user, target_kind: str) -> frozenset[str]:
@@ -37,3 +41,23 @@ def toggle(user, target_kind: str, target_key: str) -> bool:
         return False
     Pin.objects.create(user=user, target_kind=target_kind, target_key=key)
     return True
+
+
+def replace(user, target_kind: str, keys) -> None:
+    """Set exactly which keys are pinned for one kind.
+
+    A chooser answers with the whole set, so applying it as toggles would depend
+    on what was already stored and drift the moment two tabs disagree.
+    """
+
+    if not getattr(user, "is_authenticated", False):
+        return
+    wanted = {str(key).strip().lower() for key in keys if str(key).strip()}
+    Pin.objects.filter(user=user, target_kind=target_kind).exclude(
+        target_key__in=wanted
+    ).delete()
+    existing = pinned(user, target_kind)
+    Pin.objects.bulk_create(
+        Pin(user=user, target_kind=target_kind, target_key=key)
+        for key in wanted - existing
+    )
