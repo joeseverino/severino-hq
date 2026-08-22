@@ -334,3 +334,49 @@ def _resources_by_host() -> dict[str, set[str]]:
         if host:
             found.setdefault(host, set()).add(resource.key)
     return found
+
+
+def container_context(host: str, name: str) -> dict[str, object]:
+    """What else a declared container is tied to, and what it is doing.
+
+    The services are the inverse of the runtime claim: a service page resolves
+    its origin to a machine and a container, so the containers that answer for a
+    name are exactly the ones some service resolved to. Asked the other way --
+    by matching published ports -- a container on the host network answers for
+    nothing, because Docker reports no ports for one.
+    """
+
+    from control_plane.providers import normalized_hostname
+
+    from .services import _locate, _topology
+
+    found = machine(host)
+    running = next(
+        (item for item in (found.containers if found else ()) if item.name == name),
+        None,
+    )
+    # Resolved the same way a service resolves its own origin, but without
+    # assembling every service to ask: the board builds facets, health and
+    # certificates for each name, and none of that answers this question.
+    topology = _topology()
+    wanted = found.name if found else host
+    serves: set[str] = set()
+    for resource in ManagedResource.objects.filter(enabled=True):
+        provider = PROVIDERS.get(resource.kind)
+        if provider is None or provider.origin is None or provider.hostnames is None:
+            continue
+        try:
+            origin = provider.origin(resource.spec)
+            names = tuple(provider.hostnames(resource.spec))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not origin:
+            continue
+        located = _locate(origin, topology)
+        if located.host == wanted and located.container == name:
+            serves.update(normalized_hostname(item) for item in names)
+    return {
+        "machine": found,
+        "running": running,
+        "serves": tuple(sorted(item for item in serves if item)),
+    }

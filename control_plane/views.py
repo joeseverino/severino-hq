@@ -23,6 +23,7 @@ from application.infrastructure import (
     controller_contract,
     operation_summary,
     request_certificate_renewal,
+    request_lifecycle,
     request_reconcile,
     request_removal,
     resource_health,
@@ -47,7 +48,8 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_readings
-from application.machines import machine, machine_catalog
+from application.machines import container_context, machine, machine_catalog
+from application.services import machine_link
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -56,6 +58,7 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
+from application.service_context import sections_for
 from application.services import (
     CONTAINER_KIND,
     alias_target,
@@ -76,21 +79,29 @@ from .providers import (
 )
 
 
+# Which use case serves which verb. A ladder here meant every verb but one fell
+# through to reconciliation: pressing Restart queued a reconcile, which is
+# locked for a container, so the button reported a policy error and did nothing.
+_OPERATION_USE_CASE = {
+    OperationRequest.Action.RECONCILE: request_reconcile,
+    OperationRequest.Action.RENEW: request_certificate_renewal,
+}
+
+
 def _web_operation(request, resource, action):
     command = OperationCommand(
         idempotency_key=f"web:{request.user.pk}:{uuid.uuid4()}",
         reason=request.POST.get("reason", "").strip(),
     )
-    if action == "renew":
-        return request_certificate_renewal(
-            command,
-            principal=web_principal(request.user),
-            current_key=resource.key,
-        )
-    return request_reconcile(
-        command,
-        principal=web_principal(request.user),
-        current_key=resource.key,
+    principal = web_principal(request.user)
+    use_case = _OPERATION_USE_CASE.get(action)
+    if use_case is not None:
+        return use_case(command, principal=principal, current_key=resource.key)
+    # Everything else is a lifecycle verb: asked for once, about something
+    # already as declared. One entry point rather than one function per verb,
+    # because they differ only in the word.
+    return request_lifecycle(
+        command, principal=principal, current_key=resource.key, action=action
     )
 
 
@@ -295,6 +306,19 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
         row = (label, _spec_value(value))
         (advanced if name in provider.advanced_fields else primary).append(row)
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
+
+
+def _origin_machine(resource):
+    """The machine a resource forwards to, if its provider says where it serves."""
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None or provider.origin is None:
+        return None
+    try:
+        origin = provider.origin(resolved_spec(resource, topology_payload()))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return machine_link(origin) if origin else None
 
 
 def _service_links(resource) -> tuple[tuple[str, str], ...]:
@@ -758,6 +782,9 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["service"] = service_or_prospect(self.kwargs["hostname"])
         context["container_kind"] = CONTAINER_KIND
+        # Everything else HQ holds about this name, gathered by the name. Only
+        # here: the board builds every service and needs none of it.
+        context["sections"] = sections_for(context["service"])
         # Two filters, and both are readings rather than opinions: what the
         # controller says it implements for a container, and what the container's
         # current state makes worth asking. Offering all three always means
@@ -903,6 +930,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         context["controller_capability"] = describe_providers()["controller"][
             "capabilities"
         ][self.object.kind]["actions"]
+        context["declaration_only"] = PROVIDERS[self.object.kind].declaration_only
         context["sync_state"] = (
             "in_sync"
             if self.object.generation == self.object.observed_generation
@@ -914,6 +942,31 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         # to do, and the reason a provider added later had no detail card at all.
         context["label"] = PROVIDERS[self.object.kind].label or self.object.kind
         context["service_links"] = _service_links(self.object)
+        # Where this resource sends traffic, when it sends it anywhere. A
+        # provider that declares an origin is one whose thing runs on a machine,
+        # so the machine is a link rather than an address printed in a readout.
+        context["origin_machine"] = _origin_machine(self.object)
+        # A container declares identity and nothing else, so everything worth
+        # opening the page for is a join: which machine that name is, what the
+        # container is doing, and which services reach it through the ports it
+        # publishes. All three come from the sweep this resource was adopted out
+        # of, so none of it is a second opinion about anything.
+        if self.object.kind == CONTAINER_KIND:
+            context["container"] = container_context(
+                self.object.spec.get("host", ""), self.object.spec.get("name", "")
+            )
+        # Lifecycle verbs the controller implements for this kind, narrowed to
+        # the ones the thing's own state makes worth asking. Read from the
+        # registry rather than listed here, so a verb a controller gains needs a
+        # route and a phrase and nothing else.
+        running = (context.get("container") or {}).get("running")
+        offered = running.verbs if running else ()
+        context["lifecycle_actions"] = tuple(
+            (f"control_plane:{action}", action.capitalize())
+            for action in ServiceDetailView.LIFECYCLE
+            if action in offered
+            and controller_action_policy(self.object.kind, action)[0]
+        )
         # A resource with a removal in flight is on its way out. Offering Edit
         # and Reconcile unchanged invited an operator to work on something that
         # is about to stop existing, and to queue a convergence that races the

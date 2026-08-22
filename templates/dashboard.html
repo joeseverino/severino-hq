@@ -88,6 +88,39 @@ that summarises every domain at once.
     <section class="ops-panel">
       <div class="section-head">
         <h2>Live &amp; external</h2>
+        {% comment %}
+        The chooser opens under the heading rather than beside it: squeezed into
+        the header row it took the heading's width and wrapped the title.
+
+        A `details` so it needs no script, and a plain form inside so it submits
+        without one. `data-live-form` upgrades it to save in place where script
+        is available -- this is a preference, and reloading the dashboard to
+        record one is a lot of work to move two checkboxes.
+        {% endcomment %}
+        <details class="ext-choose" data-menu>
+          <summary>Edit</summary>
+          <form method="post" action="{% url 'dashboard_links' %}" data-live-form>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <p class="ext-chooser-lede">Pick what you want here. With none picked, everything HQ can reach is shown.</p>
+            <ul class="ext-choices">
+              {% for choice in external_choices %}
+                <li>
+                  <label>
+                    <input type="checkbox" name="href" value="{{ choice.href }}"{% if choice.chosen %} checked{% endif %}>
+                    <span class="ext-choice-label">{{ choice.label }}</span>
+                    <span class="ext-choice-sub muted">{{ choice.sub }}</span>
+                  </label>
+                </li>
+              {% endfor %}
+            </ul>
+            <div class="ext-chooser-actions">
+              <button type="submit" class="btn primary">Save</button>
+              <button type="button" class="btn" data-live-cancel>Cancel</button>
+              <span class="ext-chooser-status muted" data-live-status role="status"></span>
+            </div>
+          </form>
+        </details>
       </div>
       <ul class="ext-links">
         {% for l in external_links %}

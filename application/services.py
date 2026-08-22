@@ -144,6 +144,9 @@ class Facet:
     # middle one into absent reports a running service as missing, and offers to
     # build a second of what is already there.
     observed: "Running | None" = None
+    # The machine whatever supplies this facet runs on. Held here so the card
+    # links it once, whether the container is declared or merely observed.
+    machine: Any = None
     # What HQ knows about this name. Held so ``declarable`` can ask each
     # provider whether it could actually supply it -- an offer that cannot work
     # is worse than no offer, and only the provider knows which is which.
@@ -703,6 +706,7 @@ def service_catalog() -> tuple[Service, ...]:
 
     declared, covering, origins, aliases, alias_claims, topology = _declarations()
     projects = _published_projects()
+    containers = _container_declarations()
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
         by_target.setdefault(target, []).append(alias)
@@ -710,7 +714,7 @@ def service_catalog() -> tuple[Service, ...]:
         _assemble(
             hostname, facets, covering, origins.get(hostname, ""), projects,
             topology, tuple(by_target.get(hostname, ())),
-            tuple(alias_claims.get(hostname, ())),
+            tuple(alias_claims.get(hostname, ())), containers,
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -777,6 +781,90 @@ def service_reading() -> dict[str, int]:
     }
 
 
+@dataclass(frozen=True)
+class MachineLink:
+    """A machine named on a card, and the page for it.
+
+    Built from the origin and the topology the caller already holds. Looking the
+    machine up instead would be a catalogue read per service, which on a board
+    is a catalogue read per row.
+    """
+
+    name: str
+    role: str = ""
+
+    @property
+    def url(self) -> str:
+        return reverse("control_plane:machine", kwargs={"name": self.name})
+
+
+RUNTIME_FACET = "runtime"
+
+
+def _container_declarations() -> dict[tuple[str, str], Any]:
+    """Container declarations, keyed by the machine and name they identify."""
+
+    return {
+        (resource.spec.get("host", ""), resource.spec.get("name", "")): resource
+        for resource in ManagedResource.objects.filter(
+            kind=CONTAINER_KIND, enabled=True
+        )
+    }
+
+
+def machine_link(address: str) -> "MachineLink | None":
+    """The machine an address belongs to, resolved the way a service resolves it.
+
+    One resolution, so a page naming where something runs and a page naming what
+    runs there cannot disagree about which machine that is.
+    """
+
+    origin = _locate(address, _topology())
+    if not origin.host:
+        return None
+    return _machine_for(origin, _topology())
+
+
+def _machine_for(origin: "Origin | None", topology: "dict[str, Any] | None"):
+    """The machine whatever supplies this facet runs on."""
+
+    if origin is None or not origin.host:
+        return None
+    role = next(
+        (
+            str(host.get("role", ""))
+            for host in (topology or {}).get("hosts", ())
+            if str(host.get("id", "")) == origin.host
+        ),
+        "",
+    )
+    return MachineLink(name=origin.host, role=role)
+
+
+def _runtime_claim(
+    origin: "Origin | None", containers: "dict[tuple[str, str], Any]"
+) -> "Claim | None":
+    """The declaration for the container this name is served from, if there is one.
+
+    Matched on what the origin already resolved: a machine and a container on
+    it. That is the same pair the declaration carries, so the two are the same
+    thing recognised from opposite directions -- one authored, one observed.
+    """
+
+    if origin is None or not origin.host or not origin.container:
+        return None
+    resource = containers.get((origin.host, origin.container))
+    if resource is None:
+        return None
+    provider = PROVIDERS[resource.kind]
+    return Claim(
+        resource.key,
+        resource.kind,
+        resource_health(resource),
+        _readings(provider, resource),
+    )
+
+
 def _assemble(
     hostname: str,
     declared: dict[str, list[Claim]],
@@ -786,14 +874,22 @@ def _assemble(
     topology: dict[str, Any] | None,
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
+    containers: "dict[tuple[str, str], Any] | None" = None,
 ) -> Service:
+    containers = _container_declarations() if containers is None else containers
     origin = _locate(origin_address, topology) if origin_address else None
     context = name_context(hostname)
+    # A container declaration names a machine and a container, not a hostname,
+    # so nothing tied it to the name it serves -- the runtime card knew the
+    # container and the resources table did not list it. The origin already
+    # resolves both halves, which is the tie.
+    runtime = _runtime_claim(origin, containers)
     facets = tuple(
         Facet(
             id=facet_id,
             label=label,
             claims=tuple(declared.get(facet_id, ()))
+            + ((runtime,) if runtime and facet_id == RUNTIME_FACET else ())
             + tuple(
                 claim
                 for covered_facet, names, claim in covering
@@ -801,6 +897,9 @@ def _assemble(
                 and certificate_covers(hostname, names)
             ),
             observed=_observed(facet_id, origin),
+            machine=(
+                _machine_for(origin, topology) if facet_id == RUNTIME_FACET else None
+            ),
             context=context,
         )
         for facet_id, label in service_facets()
@@ -875,6 +974,10 @@ def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]
     by_id = {facet.id: facet for facet in facets}
     faults: list[str] = []
 
+    parked = _points_nowhere(origin)
+    if parked:
+        faults.append(parked)
+
     for facet in facets:
         kinds = [claim.kind for claim in facet.claims]
         # Two providers of *different* kinds on one facet is normal -- an
@@ -908,6 +1011,33 @@ def _faults(facets: tuple[Facet, ...], origin: Origin | None) -> tuple[str, ...]
             "topology."
         )
     return tuple(faults)
+
+
+# Addresses reserved for writing about addresses. Nothing answers at one, so a
+# name pointed there resolves to somewhere no packet arrives -- which reads as a
+# working service on every board that only asks whether a record exists.
+_DOCUMENTATION_RANGES = ("192.0.2.", "198.51.100.", "203.0.113.")
+
+
+def _points_nowhere(origin: Origin | None) -> str:
+    """Why an address answers nothing, when that is knowable from the address.
+
+    A parked name is a legitimate thing to have and an easy thing to forget, so
+    HQ says which it is looking at rather than reporting the record as healthy
+    because the record exists.
+    """
+
+    if origin is None:
+        return ""
+    address = origin.address.rpartition(":")[0] or origin.address
+    if address.startswith(_DOCUMENTATION_RANGES):
+        return (
+            f"{address} is reserved for documentation, so this name resolves to "
+            "somewhere nothing answers."
+        )
+    if address in {"0.0.0.0", "::"}:
+        return f"{address} is not an address anything can be reached at."
+    return ""
 
 
 def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
@@ -1036,23 +1166,46 @@ def _published_projects() -> dict[str, dict[str, str]]:
     thereby incomplete.
     """
 
-    found: dict[str, dict[str, str]] = {}
-    for project in Project.objects.exclude(public_url="").only(
-        "name", "slug", "public_url"
-    ):
+    return {
+        hostname: {
+            "name": project.name,
+            "url": reverse("projects:detail", kwargs={"slug": project.slug}),
+        }
+        for hostname, project in projects_by_hostname().items()
+    }
+
+
+def service_url_for(public_url: str) -> str:
+    """The service page for a published URL, when HQ manages that name.
+
+    The reverse of the tie the service page makes, kept beside it so the two
+    cannot come to disagree about which names HQ knows.
+    """
+
+    hostname = _normalise(urlparse(public_url or "").hostname or "")
+    if not hostname or not find_service(hostname):
+        return ""
+    return reverse("control_plane:service", kwargs={"hostname": hostname})
+
+
+def projects_by_hostname() -> dict[str, Project]:
+    """The project publishing each name, keyed by that name.
+
+    The one place that decides which project a service belongs to. Nothing
+    points a project at infrastructure; a project that says where it is
+    published has said which service it is, and reading that twice in two
+    modules is two answers to one question.
+    """
+
+    found: dict[str, Project] = {}
+    for project in Project.objects.exclude(public_url=""):
         hostname = urlparse(project.public_url).hostname
         if hostname:
             # Most recently updated wins a contested hostname: the model orders
             # by ``-updated_at``, and ``setdefault`` keeps the first. Two
             # projects claiming one name is a data problem, but picking the
             # stalest of them would be a worse answer than picking the freshest.
-            found.setdefault(
-                _normalise(hostname),
-                {
-                    "name": project.name,
-                    "url": reverse("projects:detail", kwargs={"slug": project.slug}),
-                },
-            )
+            found.setdefault(_normalise(hostname), project)
     return found
 
 
@@ -1130,6 +1283,7 @@ def public_sites() -> tuple[tuple[str, str, str], ...]:
 
     projects = _published_projects()
     found: dict[str, str] = {}
+    targets: dict[str, str] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
         if provider is None or not provider.public_effect:
@@ -1138,6 +1292,7 @@ def public_sites() -> tuple[tuple[str, str, str], ...]:
             continue
         try:
             names = tuple(provider.hostnames(resource.spec))
+            origin = provider.origin(resource.spec) if provider.origin else ""
         except (KeyError, TypeError, ValueError):
             continue
         for name in names:
@@ -1147,7 +1302,18 @@ def public_sites() -> tuple[tuple[str, str, str], ...]:
                 found.setdefault(
                     hostname, projects.get(hostname, {}).get("name", "")
                 )
+                targets.setdefault(hostname, _normalise(origin))
+    # A name whose target is another name here is the same site reached a
+    # second way. The board folds those in, and a list that unfolds them shows
+    # one site twice. An address with a port is where a name is served, not
+    # another name for it.
+    aliases = {
+        hostname
+        for hostname, target in targets.items()
+        if target and ":" not in target and target != hostname and target in found
+    }
     return tuple(
         (hostname, sub, f"https://{hostname}")
         for hostname, sub in sorted(found.items())
+        if hostname not in aliases
     )

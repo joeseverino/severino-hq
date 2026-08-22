@@ -16,13 +16,12 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import formats
-from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView, View
 
-from application.connections import consoles, operator_links
+from application.connections import link_choices, outward_links
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
-from application.services import public_sites
 from application.security import safe_next, web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
@@ -152,6 +151,34 @@ def health_ready(request):
     )
 
 
+class DashboardLinkChoiceView(LoginRequiredMixin, View):
+    """Choose which outward links the dashboard shows, for this operator only.
+
+    A preference, so it is stored the same way starring a domain is and reaches
+    no spec, no generation and no controller: the world does not change because
+    somebody decided which shortcuts they want.
+    """
+
+    def post(self, request):
+        from application.connections import link_choices
+        from application.pins import DASHBOARD_LINK, replace
+
+        offered = {item["href"].lower() for item in link_choices(None)}
+        keep = {
+            href.lower()
+            for href in request.POST.getlist("href")
+            # Only what was offered. A key arriving in a form post is a request,
+            # and an unchecked one would let anything be stored as a shortcut.
+            if href.lower() in offered
+        }
+        replace(request.user, DASHBOARD_LINK, keep)
+        # One answer for both callers. A browser follows this and lands on the
+        # dashboard; a fetch follows it too and reads the panel out of the page
+        # it gets back, so what is shown is what was stored rather than what the
+        # browser believes was stored.
+        return redirect(safe_next(request) or reverse("dashboard"))
+
+
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "dashboard.html"
 
@@ -182,28 +209,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # else an operator wants here is a fact about their installation and is
         # named in their environment: an address written into this file is
         # published to everyone who clones it and true for nobody else.
-        external_links = (
-            [
-                # HQ's own liveness, by route rather than by address: it is a
-                # path this application serves, so naming a hostname for it
-                # would be writing down one deployment's front door.
-                {
-                    "label": "Health endpoint",
-                    "sub": "liveness",
-                    "href": reverse("health_ready"),
-                }
-            ]
-            + [
-                {"label": label, "sub": sub or "console", "href": href}
-                for label, sub, href in consoles()
-            ]
-            + [
-                {"label": hostname, "sub": sub or "published", "href": href}
-                for hostname, sub, href in public_sites()
-            ]
-            + operator_links()
-        )
-
+        external_links, external_curated = outward_links(self.request.user)
+        external_choices = link_choices(self.request.user)
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.
         contact_rows = [
@@ -260,6 +267,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             active_projects=snapshot["active_projects"],
             project_opportunities_count=snapshot["kpis"]["projects_needing_output"],
             external_links=external_links,
+            external_choices=external_choices,
+            external_curated=external_curated,
             draft_content=snapshot["draft_content"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             published_content_count=snapshot["kpis"]["published_content"],

@@ -71,7 +71,32 @@ not restated here.
   {% for facet in service.facets %}
     <div class="control-metric">
       <span class="control-label">{{ facet.label }}</span>
-      {% if facet.present %}
+      {% comment %}
+      A facet HQ both declares and watches says it once. The container's key is
+      its machine and its name joined, so printing the key under them repeated
+      both halves a third time — and the state the sweep knows was nowhere,
+      because a declaration nothing reconciles observes nothing.
+      {% endcomment %}
+      {% if facet.present and facet.observed %}
+        {% with claim=facet.claims.0 %}
+          <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
+          <span class="readout">
+            <a href="{{ claim.url }}"><code>{{ facet.observed.name }}</code></a>
+            {% if facet.machine %}on <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a>{% endif %}
+          </span>
+          <details class="control-diagnostics">
+            <summary>What is running</summary>
+            <dl class="kv compact">
+              {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label }}</code></dd>{% endif %}
+              {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
+              {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
+              {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
+              <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
+            </dl>
+            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit this declaration &rarr;</a></span>
+          </details>
+        {% endwith %}
+      {% elif facet.present %}
         {% for claim in facet.claims %}
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
@@ -89,6 +114,14 @@ not restated here.
             <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
           </span>
         {% endfor %}
+        {% comment %}
+        Where it runs, once, as a link. Named in prose on the observed card and
+        as a plain readout row on the declared one, it went nowhere either way —
+        so "what else is on this machine" meant going to find it.
+        {% endcomment %}
+        {% if facet.machine %}
+          <span class="readout"><span class="readout-label">On</span> <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a></span>
+        {% endif %}
       {% elif service.origin.external and facet.routes %}
         {% comment %}
         Not a gap. A name resolving straight to something outside is already
@@ -117,7 +150,7 @@ not restated here.
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
         <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
-        <span class="readout"><code>{{ facet.observed.name }}</code> on {{ facet.observed.host }}</span>
+        <span class="readout"><code>{{ facet.observed.name }}</code>{% if facet.machine %} on <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a>{% else %} on {{ facet.observed.host }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>What is running</summary>
           <dl class="kv compact">
@@ -219,6 +252,40 @@ answering. That is a claim about the row, so it reads under it.
   {% endif %}
 </p>
 {% endif %}
+
+{% comment %}
+What else HQ holds about this name. Each band is a section the registry produced,
+rendered through the host's own row primitive — so a section HQ gains later
+appears here without this template learning anything about it.
+{% endcomment %}
+{% for section in sections %}
+  <h2>{{ section.label }}</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for record in section.records %}
+          <tr>
+            {% for cell in record %}
+              <td>
+                {% if cell.url %}
+                  <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text }}</a>
+                {% elif cell.muted %}
+                  <span class="muted">{{ cell.text }}</span>
+                {% else %}
+                  {{ cell.text }}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% for label, url in section.actions %}
+    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
+  {% endfor %}
+{% endfor %}
 
 <h2>Resources behind this name</h2>
 <div class="table-scroll">

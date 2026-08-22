@@ -601,6 +601,39 @@ def _forget_declaration(
         }
 
 
+@transaction.atomic
+def request_lifecycle(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    action: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Ask the controller to start, stop or restart what a declaration names.
+
+    Not reconciliation. Cycling a container does not move the world toward a
+    declaration -- it is a thing asked for once, about something already exactly
+    as declared -- so it neither bumps the generation nor waits on one.
+
+    Which verbs exist is the capability registry's to say, so a controller that
+    does not implement one refuses here rather than queueing work nothing will
+    claim.
+    """
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation=f"infrastructure.{action}.request",
+    ):
+        return _queue_operation(
+            resource, command, principal=principal, action=action
+        )
+
+
 def request_removal(
     command: OperationCommand,
     *,

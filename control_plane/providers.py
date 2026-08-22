@@ -1599,9 +1599,10 @@ def _uploaded_certificate_seed(context: NameContext) -> dict[str, Any]:
 def _container_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
+    # No "Runs on" row: the card carries the machine as a link, and printing it
+    # here as text would say it twice in the same box.
     return (
         ("Container", spec.get("name", ""), status.get("container", "")),
-        ("Runs on", spec.get("host", ""), status.get("host", "")),
         ("State", "", status.get("state", "")),
     )
 

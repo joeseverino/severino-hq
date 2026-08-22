@@ -39,6 +39,12 @@ class ConnectionReading:
     # the providers rather than stored, so a provider added tomorrow lists
     # itself against the connections that could serve it.
     supplies: tuple[str, ...]
+    # The machines this reaches, as (name, url). What a credential opens is the
+    # most useful thing about it and the page named them as plain text.
+    machines: tuple[tuple[str, str], ...] = ()
+    # Declarations that name this connection, as (key, url). The reverse of the
+    # ref every spec already carries.
+    resources: tuple[tuple[str, str], ...] = ()
 
     @property
     def status(self) -> str:
@@ -62,8 +68,25 @@ def _supplies(provider: str) -> tuple[str, ...]:
 
 
 def connection_readings() -> tuple[ConnectionReading, ...]:
-    """Every connection every controller last reported."""
+    """Every connection every controller last reported, and what ties to it."""
 
+    from django.urls import reverse
+
+    from control_plane.models import ManagedResource
+
+    from .machines import machine_catalog
+
+    known = {item.name.lower(): item for item in machine_catalog()}
+    using: dict[str, list[tuple[str, str]]] = {}
+    for resource in ManagedResource.objects.filter(enabled=True):
+        ref = str(resource.spec.get("connection_ref", "")).strip()
+        if ref:
+            using.setdefault(ref, []).append(
+                (
+                    resource.key,
+                    reverse("control_plane:detail", kwargs={"key": resource.key}),
+                )
+            )
     return tuple(
         ConnectionReading(
             connection_ref=row.connection_ref,
@@ -76,6 +99,17 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             detail=row.detail,
             observed_at=row.observed_at,
             supplies=_supplies(row.provider),
+            machines=tuple(
+                (name, known[name.lower()].url)
+                for name in row.reaches
+                if name.lower() in known
+            )
+            or (
+                ((row.connection_ref, known[row.connection_ref.lower()].url),)
+                if row.connection_ref.lower() in known
+                else ()
+            ),
+            resources=tuple(sorted(using.get(row.connection_ref, ()))),
         )
         for row in ProviderConnection.objects.all()
     )
@@ -146,6 +180,57 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
             )
         )
     return tuple(sorted(found))
+
+
+def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
+    """Everything HQ can open, and whether the operator has chosen a subset.
+
+    Chosen rather than configured: which of these is worth a shortcut is a
+    preference, and a preference belongs with the operator rather than in the
+    deployment's environment. Nothing chosen means everything, because a panel
+    that starts empty teaches nobody that it can be filled.
+    """
+
+    from .pins import DASHBOARD_LINK, pinned
+
+    from django.urls import reverse
+
+    from .services import public_sites
+
+    offered = [
+        {"label": "Health endpoint", "sub": "liveness", "href": reverse("health_ready")},
+        *(
+            {"label": label, "sub": sub or "console", "href": href}
+            for label, sub, href in consoles()
+        ),
+        *(
+            {"label": hostname, "sub": sub or "published", "href": href}
+            for hostname, sub, href in public_sites()
+        ),
+        *operator_links(),
+    ]
+    chosen = pinned(user, DASHBOARD_LINK)
+    if not chosen:
+        return offered, False
+    return [
+        item for item in offered if item["href"].lower() in chosen
+    ] or offered, True
+
+
+def link_choices(user=None) -> list[dict[str, object]]:
+    """Every outward link, each marked with whether it has been chosen.
+
+    The same list the panel shows, so the chooser cannot offer something the
+    panel would not render or miss something it would.
+    """
+
+    from .pins import DASHBOARD_LINK, pinned
+
+    chosen = pinned(user, DASHBOARD_LINK)
+    offered, _ = outward_links(None)
+    return [
+        {**item, "chosen": item["href"].lower() in chosen} for item in offered
+    ]
 
 
 def operator_links() -> list[dict[str, str]]:

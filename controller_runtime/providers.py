@@ -2265,6 +2265,10 @@ def list_portainer_containers() -> list[dict[str, Any]]:
                 if stack.get("Name")
             )
             for container in _portainer_containers(environment["id"], connection_ref):
+                # The controller is running this sweep from inside one of these.
+                # Reporting it adds a row that is gone before the page renders.
+                if (container.get("Labels") or {}).get("severino-hq.role") == "controller":
+                    continue
                 records.append(
                     _container_record(
                         container,

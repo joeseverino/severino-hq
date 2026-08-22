@@ -295,8 +295,11 @@ class WiringFaultTests(TestCase):
                 spec={
                     "zone": "example.com",
                     "name": "app.example.com",
-                    "record_type": "A",
-                    "content": "203.0.113.10",
+                    # A name rather than an address: the addresses reserved for
+                    # writing about addresses are the ones a parked name uses,
+                    # and this test is about two kinds on one facet.
+                    "record_type": "CNAME",
+                    "content": "app.pages.dev",
                 },
             )
         )
@@ -779,3 +782,34 @@ class PortlessOriginTests(TestCase):
         origin = _locate("jseverino.pages.dev", {"hosts": []})
 
         self.assertTrue(origin.external)
+
+
+class ParkedNameTests(TestCase):
+    """A record that exists is not a name that answers.
+
+    Boards ask whether a record is declared and reconciled, and both are true of
+    a name pointed at an address reserved for documentation -- so a parked
+    domain reads as a working service.
+    """
+
+    def test_a_documentation_address_is_a_wiring_fault(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertIn("reserved", _points_nowhere(Origin(address="192.0.2.1")))
+        self.assertIn("reserved", _points_nowhere(Origin(address="203.0.113.9:443")))
+
+    def test_an_unspecified_address_is_too(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertIn("reached", _points_nowhere(Origin(address="0.0.0.0")))
+
+    def test_a_real_address_is_not(self):
+        from .services import Origin, _points_nowhere
+
+        self.assertEqual(_points_nowhere(Origin(address="192.168.1.233:8000")), "")
+        self.assertEqual(_points_nowhere(Origin(address="jseverino.pages.dev")), "")
+
+    def test_nothing_routed_is_not_a_parked_name(self):
+        from .services import _points_nowhere
+
+        self.assertEqual(_points_nowhere(None), "")
