@@ -949,16 +949,21 @@ def _hop_detail(detail: str, value: str, index: int, chain: list[str]) -> str:
 
 
 def _ago(stamp: str) -> str:
-    """A timestamp as an age, or as the fact that there has not been one."""
+    """A provider's timestamp as an age, or as the fact that there is none.
 
-    from django.utils.timesince import timesince
+    What is local here is reading a stamp that spells "never" as the zero time
+    and one that has not happened yet. The phrasing is `ui.ago`, so this reads
+    the same as every other elapsed time in HQ.
+    """
+
+    from .ui import ago
 
     parsed = _parsed(stamp)
     if parsed is None:
         return "—"
     if parsed > datetime.now(utc.utc):
         return "just now"
-    return f"{timesince(parsed)} ago"
+    return ago(parsed)
 
 
 def _parsed(stamp: str) -> datetime | None:

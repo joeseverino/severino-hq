@@ -117,9 +117,9 @@ def _repository_label(url: str) -> str:
 
 
 def _ago(moment) -> str:
-    from django.utils.timesince import timesince
+    from .ui import ago
 
-    return f"{timesince(moment)} ago"
+    return ago(moment)
 
 
 def _activity(service, project) -> ServiceSection | None:
