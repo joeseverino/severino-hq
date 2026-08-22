@@ -1621,3 +1621,85 @@ class MachineNameTests(TestCase):
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-host"})
     def test_the_environment_names_it_when_it_says_so(self):
         self.assertEqual(providers.controller_id(), "a-named-host")
+
+
+class TailnetSweepTests(TestCase):
+    """Reading the tailnet through the daemon this node is already a peer of.
+
+    Every field is optional. Tailscale omits rather than nulls -- a device with
+    expiry disabled carries no ``KeyExpiry`` and one never seen carries no
+    ``LastSeen`` -- so a reader that requires any of them rejects exactly the
+    devices it exists to describe.
+    """
+
+    STATUS = {
+        "Self": {"HostName": "this-node", "Online": True, "OS": "linux"},
+        "Peer": {
+            "k1": {
+                "HostName": "an-edge",
+                "DNSName": "an-edge.example.ts.net.",
+                "Online": True,
+                "KeyExpiry": "2026-11-04T00:00:00Z",
+                "TailscaleIPs": ["100.64.0.2"],
+                "OS": "linux",
+                "ExitNode": True,
+            },
+            "k2": {"HostName": "a-tv", "Online": False, "LastSeen": "2026-07-01T00:00:00Z"},
+        },
+    }
+
+    def sweep(self, status=None, code=200):
+        from unittest import mock
+
+        payload = json.dumps(self.STATUS if status is None else status).encode()
+        response = mock.Mock(status=code, read=mock.Mock(return_value=payload))
+        with mock.patch.object(
+            providers, "_DaemonSocket", autospec=True
+        ) as connection:
+            connection.return_value.getresponse.return_value = response
+            return providers.list_tailnet_devices()
+
+    def by_name(self):
+        return {record["name"]: record for record in self.sweep()}
+
+    def test_the_node_itself_is_one_of_the_machines(self):
+        self.assertIn("this-node", self.by_name())
+
+    def test_presence_comes_across(self):
+        found = self.by_name()
+        self.assertTrue(found["an-edge"]["online"])
+        self.assertFalse(found["a-tv"]["online"])
+
+    def test_a_key_expiry_is_carried_and_its_absence_is_not_invented(self):
+        found = self.by_name()
+        self.assertEqual(found["an-edge"]["key_expires"], "2026-11-04T00:00:00Z")
+        self.assertEqual(found["a-tv"]["key_expires"], "")
+
+    def test_a_device_missing_every_optional_field_is_still_read(self):
+        records = self.sweep({"Self": {"HostName": "bare"}, "Peer": {}})
+
+        self.assertEqual(records[0]["name"], "bare")
+
+    def test_a_nameless_device_is_dropped_rather_than_named_blank(self):
+        records = self.sweep({"Self": {}, "Peer": {"k": {"HostName": ""}}})
+
+        self.assertEqual(records, [])
+
+    def test_a_refusal_is_reported_without_repeating_the_daemon(self):
+        with self.assertRaises(providers.ProviderError) as raised:
+            self.sweep(code=403)
+
+        self.assertIn("refused", str(raised.exception))
+
+    def test_an_unreachable_daemon_does_not_take_the_sweep_down(self):
+        """One provider that cannot be read must not lose the other five."""
+
+        from unittest import mock
+
+        with mock.patch.object(
+            providers, "list_tailnet_devices", side_effect=providers.ProviderError("no")
+        ):
+            found = providers.inventory()
+
+        self.assertFalse(found["tailscale.device"]["ok"])
+        self.assertEqual(found["tailscale.device"]["records"], [])

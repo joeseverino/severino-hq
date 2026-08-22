@@ -6,6 +6,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import io
+import http.client
 import json
 import os
 from pathlib import Path
@@ -2364,6 +2365,30 @@ def stop_portainer_container(
     return _cycle_portainer_container(spec, "stop", apply=apply)
 
 
+TAILNET_SOCKET = os.environ.get(
+    "SEVERINO_TAILSCALE_SOCKET", "/var/run/tailscale/tailscaled.sock"
+)
+
+
+class _DaemonSocket(http.client.HTTPConnection):
+    """HTTP to the tailscale daemon over its local unix socket.
+
+    Spoken directly rather than through the `tailscale` client, so nothing has
+    to be added to a scanned image: no third-party apt source, no pinned binary
+    to keep current, and one less thing between the controller and an answer.
+    The daemon requires this exact Host header and ignores the address.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__("local-tailscaled.sock", timeout=15)
+        self._path = path
+
+    def connect(self) -> None:
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self._path)
+
+
 def list_tailnet_devices() -> list[dict[str, Any]]:
     """Every machine on the tailnet, as the node this runs on currently sees it.
 
@@ -2383,28 +2408,31 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
     """
 
     try:
-        completed = subprocess.run(
-            [os.environ.get("SEVERINO_TAILSCALE_CLI", "tailscale"), "status", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
+        connection = _DaemonSocket(TAILNET_SOCKET)
+        connection.request(
+            "GET", "/localapi/v0/status", headers={"Host": "local-tailscaled.sock"}
         )
-    except FileNotFoundError as exc:
-        raise ProviderError(
-            "No tailscale client on this controller, so it cannot see the "
-            "tailnet it is on."
-        ) from exc
-    except (OSError, subprocess.SubprocessError) as exc:
-        # The daemon's own stderr is not repeated. It names socket paths and
+        response = connection.getresponse()
+        body = response.read()
+    except (OSError, http.client.HTTPException) as exc:
+        # The daemon's own error text is not repeated: it names socket paths and
         # occasionally node keys, and this string is stored and rendered.
         raise ProviderError(
             "The tailscale daemon did not answer. The controller reads it "
-            "through its local socket, which has to be reachable from here."
+            f"through {TAILNET_SOCKET}, which has to be reachable from here."
         ) from exc
+    finally:
+        try:
+            connection.close()
+        except (OSError, NameError, UnboundLocalError):
+            pass
 
+    if response.status != 200:
+        raise ProviderError(
+            f"The tailscale daemon refused the status request ({response.status})."
+        )
     try:
-        status = json.loads(completed.stdout)
+        status = json.loads(body)
     except ValueError as exc:
         raise ProviderError("The tailscale daemon returned no readable status.") from exc
 
