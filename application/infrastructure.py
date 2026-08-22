@@ -630,7 +630,16 @@ def _forget_declaration(
         contained = _contained_keys(resource)
         ManagedResource.objects.filter(key__in=contained).delete()
         key = resource.key
+        kind = resource.kind
         resource.delete()
+        # Removing one is as much a change to what others resolve to as editing
+        # one, and the two paths reached the same end by different code. Left
+        # out here, a certificate installed on a target that had just been
+        # removed kept its old fingerprint and went on reporting itself in sync
+        # while resolving to nothing installable.
+        provider = PROVIDERS.get(kind)
+        if provider is not None and provider.resolution_input:
+            advance_dependents(delivery_targets())
         return {
             "ok": True,
             "queued": False,

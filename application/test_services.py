@@ -373,18 +373,23 @@ class WiringFaultTests(TestCase):
 
 
 class ServiceResolutionTests(TestCase):
-    def test_a_certificate_covers_nothing_when_the_topology_cannot_resolve_it(self):
-        """No snapshot imported: the honest answer is that HQ cannot show cover.
+    def test_a_certificate_still_covers_its_names_when_it_cannot_resolve(self):
+        """A target that is gone stops it installing, not from covering.
 
-        The alternative -- raising -- would take out the dashboard, the nav queue
-        and this page at once over a reference that a controller has simply not
-        been given yet.
+        The names are authored on the certificate, so they survive a failed
+        resolution. Raising instead would take out the dashboard, the nav queue
+        and this page at once over one missing target.
         """
         healthy(
             ManagedResource.objects.create(
                 key="wildcard",
                 kind="tls.certificate",
-                spec={"topology_ref": "pki:missing", "renewal_window_days": 30},
+                spec={
+                    "certificate_name": "wildcard",
+                    "domains": ["*.example.com"],
+                    "install_on": ["a-target-that-is-gone"],
+                    "renewal_window_days": 30,
+                },
             )
         )
         healthy(
@@ -402,8 +407,11 @@ class ServiceResolutionTests(TestCase):
 
         service = find_service("app.example.com")
 
-        self.assertFalse(facet(service, "certificate").present)
-        self.assertIn("no declared certificate covers it", " ".join(service.faults))
+        certificate = facet(service, "certificate")
+        self.assertTrue(certificate.present)
+        self.assertNotIn(
+            "no declared certificate covers it", " ".join(service.faults)
+        )
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
         healthy(

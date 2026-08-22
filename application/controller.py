@@ -64,7 +64,13 @@ def peek_next_operation(
     if operation is None:
         return {"ok": True, "operation": None}
     result = {"ok": True, "operation": serialize_operation(operation)}
-    result.update(controller_contract(operation.resource))
+    try:
+        result.update(controller_contract(operation.resource))
+    except (KeyError, TypeError, ValueError) as exc:
+        # Said rather than raised. This is the read-only look at what is next,
+        # and a caller asking what the controller would do next is owed the
+        # answer "it cannot build this one, because ..." rather than a traceback.
+        result["unresolvable"] = str(exc)
     return result
 
 
@@ -192,7 +198,7 @@ def claim_next_operation(
         .order_by("created_at")
     )
     operations = _compatible_operations(operations, capabilities)
-    operation = operations.first()
+    operation, contract = _next_resolvable(operations, now)
     if operation is None:
         return {"ok": True, "operation": None}
     operation.state = OperationRequest.State.CLAIMED
@@ -214,8 +220,36 @@ def claim_next_operation(
         "ok": True,
         "operation": serialize_operation(operation),
     }
-    result.update(controller_contract(operation.resource))
+    result.update(contract)
     return result
+
+
+def _next_resolvable(operations, now):
+    """The first queued operation HQ can actually describe, failing the rest.
+
+    A resource whose spec cannot be resolved is not work waiting to happen; it
+    is work that cannot be done, and saying so is the only useful thing left.
+    Raised instead, it rolled back the claim and left the operation at the head
+    of a queue ordered by age -- so every poll after it hit the same one and
+    nothing else was ever claimed. A certificate naming a target that has been
+    removed stopped DNS, proxies and renewals, silently, everywhere.
+    """
+
+    for operation in operations:
+        try:
+            return operation, controller_contract(operation.resource)
+        except (KeyError, TypeError, ValueError) as exc:
+            operation.state = OperationRequest.State.FAILED
+            operation.completed_at = now
+            operation.result = {
+                "ok": False,
+                "message": str(exc),
+                "reason": "Unresolvable",
+            }
+            operation.save(
+                update_fields=("state", "completed_at", "result", "updated_at")
+            )
+    return None, {}
 
 
 @transaction.atomic

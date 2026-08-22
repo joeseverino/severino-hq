@@ -36,6 +36,7 @@ from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, sav
 from .projects import ConflictError, ProjectCommand, refresh_project, save_project
 from .security import (
     OPERATOR_CAPABILITIES,
+    Capability,
     AuthorizationError,
     Principal,
     cli_principal,
@@ -201,6 +202,39 @@ class CapabilityTests(TestCase):
         self.assertFalse(result["ok"])
         self.assertFalse(
             DocumentationRecord.objects.filter(doc_id="rb-atomic-sync").exists()
+        )
+
+    def test_syncing_docs_does_not_require_the_whole_control_plane(self):
+        """A service account allowed to sync docs and nothing else can.
+
+        It also needed infrastructure authority while the sync carried a
+        topology. The only way to grant that was to hand the same account
+        resource upsert, removal and reconcile -- full control-plane write, to
+        run a documentation sync.
+        """
+
+        docs_only = Principal(
+            "docs-bot", "mcp", frozenset({Capability.SYNC_DOCUMENTATION})
+        )
+
+        result = execute_capability(
+            "hq.sync",
+            {
+                "manifest": [
+                    {
+                        "doc_id": "rb-docs-only",
+                        "title": "Docs only",
+                        "doc_type": "runbook",
+                        "status": "active",
+                    }
+                ]
+            },
+            principal=docs_only,
+        )
+
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(
+            DocumentationRecord.objects.filter(doc_id="rb-docs-only").exists()
         )
 
     def test_delete_requires_exact_confirmation(self):

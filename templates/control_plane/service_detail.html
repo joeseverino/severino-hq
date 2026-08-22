@@ -248,7 +248,8 @@ answering. That is a claim about the row, so it reads under it.
     {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
   {% else %}
     Ingress forwards to <code>{{ service.origin.address }}</code>, which
-    <strong>no host in the topology claims</strong>.
+    <strong>HQ cannot match to any machine it knows</strong>. Add it to a
+    machine's addresses if it is one.
   {% endif %}
 </p>
 {% endif %}

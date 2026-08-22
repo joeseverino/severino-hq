@@ -914,3 +914,88 @@ class DnsRecordReadoutTests(TestCase):
         _, desired, observed = _dns_record_readout(spec, {})[0]
         self.assertEqual(observed, "")
         self.assertTrue(desired)
+
+
+class QueueHeadTests(TestCase):
+    """One resource HQ cannot describe must not stop every other one.
+
+    The queue is ordered by age and a claim is atomic, so an operation whose
+    contract could not be built rolled the claim back and stayed exactly where
+    it was. Every poll after it hit the same one, and nothing else -- no DNS, no
+    proxy hosts, no renewals -- was ever claimed again.
+    """
+
+    def setUp(self):
+        from application.controller import claim_next_operation
+
+        self.claim = claim_next_operation
+        declare_targets()
+        self.certificate = ManagedResource.objects.create(
+            key="jseverino-wildcard",
+            kind="tls.certificate",
+            spec=certificate_spec(),
+        )
+        self.rewrite = ManagedResource.objects.create(
+            key="hq-dns",
+            kind="adguard.rewrite",
+            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
+        )
+
+    def queue(self, resource, key):
+        return OperationRequest.objects.create(
+            resource=resource,
+            action=OperationRequest.Action.RECONCILE,
+            state=OperationRequest.State.QUEUED,
+            requested_interface="cli",
+            idempotency_key=key,
+        )
+
+    def test_work_behind_an_unresolvable_resource_is_still_claimed(self):
+        broken = self.queue(self.certificate, "broken")
+        wanted = self.queue(self.rewrite, "wanted")
+        ManagedResource.objects.filter(kind="tls.delivery_target").delete()
+
+        claimed = self.claim("a-controller", capabilities=(("adguard.rewrite", "reconcile"),
+                                                           ("tls.certificate", "reconcile")))
+
+        self.assertEqual(claimed["operation"]["id"], str(wanted.id))
+        broken.refresh_from_db()
+        self.assertEqual(broken.state, OperationRequest.State.FAILED)
+
+    def test_the_failure_says_what_could_not_be_resolved(self):
+        broken = self.queue(self.certificate, "broken")
+        ManagedResource.objects.filter(kind="tls.delivery_target").delete()
+
+        self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
+
+        broken.refresh_from_db()
+        self.assertIn("receives a certificate", broken.result["message"])
+
+    def test_a_resolvable_queue_is_untouched(self):
+        wanted = self.queue(self.certificate, "wanted")
+
+        claimed = self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
+
+        self.assertEqual(claimed["operation"]["id"], str(wanted.id))
+        self.assertIn("resource", claimed)
+
+    def test_removing_a_target_stops_the_certificate_reporting_itself_in_sync(self):
+        """Removing one is as much a change as editing one."""
+
+        from application.infrastructure import OperationCommand, request_removal
+        from application.security import cli_principal
+
+        self.certificate.desired_fingerprint = "settled"
+        self.certificate.observed_generation = self.certificate.generation
+        self.certificate.save()
+
+        request_removal(
+            OperationCommand(idempotency_key="forget-it"),
+            principal=cli_principal(),
+            current_key="edge-certificate-target",
+        )
+
+        self.certificate.refresh_from_db()
+        self.assertGreater(
+            self.certificate.generation, self.certificate.observed_generation
+        )

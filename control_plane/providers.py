@@ -1161,9 +1161,9 @@ def _resolve_npm(
     return {**authored, "certificate_id": certificate_id}
 
 
-# Each reads a *resolved* spec, which is why a certificate can answer at all:
-# authored, it declares only a topology reference, and the names it covers exist
-# solely on the far side of resolution.
+# Each reads a *resolved* spec. A certificate's names are authored and survive a
+# failed resolution, which is why an unresolvable one still reports what it
+# covers; what resolution adds is where it installs.
 
 
 def _certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1542,11 +1542,6 @@ def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _machine_identity(spec: dict[str, Any]) -> tuple[str, ...]:
-    name = str(spec.get("name", ""))
-    return (name,) if name else ()
-
-
 def _machine_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("name", ""))
 
@@ -1560,17 +1555,6 @@ def _machine_readout(
         ("What it is for", "", str(spec.get("role", ""))),
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
     )
-
-
-def _machine_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {"name": record.get("name", ""), "role": record.get("role", "")}
-
-
-def _delivery_target_identity(spec: dict[str, Any]) -> tuple[str, ...]:
-    # One target per connection. Two would race each other onto the same host,
-    # and a certificate naming the connection could not say which it meant.
-    connection_ref = str(spec.get("connection_ref", ""))
-    return (connection_ref,) if connection_ref else ()
 
 
 def _delivery_target_key_hint(spec: dict[str, Any]) -> str:
@@ -1613,14 +1597,6 @@ def _delivery_target_readout(
     if spec.get("verify_domains"):
         rows.append(("Verified at", "", ", ".join(spec["verify_domains"])))
     return tuple(rows)
-
-
-def _delivery_target_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": record.get("kind", ""),
-        "connection_ref": record.get("connection_ref", ""),
-        "name": record.get("name", ""),
-    }
 
 
 def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1951,8 +1927,9 @@ _PROVIDERS = (
         declaration_only=True,
         hostnames=None,
         readout=_machine_readout,
-        from_record=_machine_from_record,
-        identity=_machine_identity,
+        # No ``from_record``: nothing sweeps machines into an inventory, so
+        # there is no record to adopt one from. What HQ observes about a machine
+        # arrives as containers and connections, which name it in passing.
         key_hint=_machine_key_hint,
         removal_note=lambda spec: (
             f"{spec.get('name', 'This machine')} stops being a place in HQ. "
@@ -1972,8 +1949,9 @@ _PROVIDERS = (
         resolution_input=True,
         hostnames=None,
         readout=_delivery_target_readout,
-        from_record=_delivery_target_from_record,
-        identity=_delivery_target_identity,
+        # No ``from_record`` for the same reason as a machine: how a place takes
+        # a certificate is not something any provider reports, which is exactly
+        # why it has to be stated.
         key_hint=_delivery_target_key_hint,
         choices="application.provider_choices:delivery_target",
         removal_note=lambda spec: (

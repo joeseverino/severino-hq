@@ -99,9 +99,13 @@ class CapabilitySpec:
 _SPECS = (
     CapabilitySpec(
         "hq.sync",
-        "Atomically synchronize the vault manifest and topology into HQ.",
+        "Atomically synchronize the vault manifest into HQ.",
         "remote_write",
-        (Capability.SYNC_DOCUMENTATION, Capability.MANAGE_INFRASTRUCTURE),
+        # Documentation authority alone. It also required infrastructure
+        # authority while it carried a topology; keeping that would mean an
+        # account allowed to sync docs and nothing else could not, and the only
+        # way to let it would be to hand it the whole control plane.
+        Capability.SYNC_DOCUMENTATION,
         HQSyncCommand,
         execute_hq_sync,
     ),
