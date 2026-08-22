@@ -819,3 +819,70 @@ class ParkedNameTests(TestCase):
         from .services import _points_nowhere
 
         self.assertEqual(_points_nowhere(None), "")
+
+
+class LoopbackOriginTests(TestCase):
+    """A proxy forwarding to itself still names a machine.
+
+    Terminating TLS and forwarding over loopback is the safer arrangement --
+    the request never crosses a network between the proxy and the thing it
+    serves -- and it made every such service unresolvable: no machine is
+    declared at 127.0.0.1 because every machine is, so matching by address
+    reported "unknown host" for the one hop that never left the box.
+    """
+
+    def a_container_on(self, host, name, port):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+        from .services import CONTAINER_KIND
+
+        ProviderInventory.objects.update_or_create(
+            kind=CONTAINER_KIND,
+            defaults={
+                "records": [
+                    {"name": name, "host": host, "ports": [port], "state": "running"}
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def test_loopback_resolves_to_the_machine_listening_on_that_port(self):
+        from .services import _locate
+
+        self.a_container_on("a-docker-host", "an-app", 8000)
+
+        origin = _locate("127.0.0.1:8000", ({"name": "a-docker-host"},))
+
+        self.assertEqual(origin.host, "a-docker-host")
+        self.assertEqual(origin.container, "an-app")
+
+    def test_a_loopback_port_nothing_listens_on_names_no_machine(self):
+        """Better silent than confidently wrong about which box it meant."""
+
+        from .services import _locate
+
+        self.a_container_on("a-docker-host", "an-app", 8000)
+
+        self.assertEqual(_locate("127.0.0.1:9999", ({"name": "a-docker-host"},)).host, "")
+
+    def test_two_machines_listening_on_that_port_is_reported_as_silence(self):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+        from .services import CONTAINER_KIND, _locate
+
+        ProviderInventory.objects.update_or_create(
+            kind=CONTAINER_KIND,
+            defaults={
+                "records": [
+                    {"name": "one", "host": "host-a", "ports": [8000], "state": "running"},
+                    {"name": "two", "host": "host-b", "ports": [8000], "state": "running"},
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+        origin = _locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
+
+        self.assertEqual(origin.host, "")

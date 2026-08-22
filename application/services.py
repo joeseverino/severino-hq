@@ -1110,6 +1110,25 @@ def _locate(address: str, machines: tuple[dict[str, Any], ...]) -> Origin:
     host_address, separator, port = address.rpartition(":")
     if not separator:
         host_address, port = address, ""
+    # A proxy forwarding to loopback is forwarding to itself: the request never
+    # leaves the machine the ingress runs on. No machine is declared at
+    # 127.0.0.1 -- every machine is -- so matching by address cannot answer it,
+    # and the honest answer is the machine with something listening on that
+    # port. Silence when more than one qualifies, for the reason below.
+    if _is_loopback(host_address):
+        found = [
+            (machine, claimed)
+            for machine in machines
+            if (claimed := _listening(str(machine.get("name", "")), port))
+        ]
+        if len(found) == 1:
+            machine, claimed = found[0]
+            return Origin(
+                address=address,
+                host=str(machine.get("name", "")),
+                container=claimed[0] if len(claimed) == 1 else "",
+            )
+        return Origin(address=address)
     for machine in machines:
         name = str(machine.get("name", ""))
         if host_address != name and host_address not in machine.get("addresses", ()):
@@ -1121,6 +1140,14 @@ def _locate(address: str, machines: tuple[dict[str, Any], ...]) -> Origin:
             container=claimed[0] if len(claimed) == 1 else "",
         )
     return Origin(address=address, host=_connected_machine(host_address))
+
+
+def _is_loopback(address: str) -> bool:
+    """Whether an address means "this machine", by the ranges rather than a name."""
+
+    from .reach import network_of
+
+    return network_of(address) == "loopback"
 
 
 def _connected_machine(address: str) -> str:
