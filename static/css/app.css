@@ -2774,3 +2774,29 @@ textarea.code {
   .table-scroll .data-table td,
   .table-scroll .data-table th { overflow-wrap: normal; }
 }
+
+/* ----- Provider readings ------------------------------------------------ */
+
+.sweep { margin-top: 26px; }
+.sweep-grid {
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.sweep-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  align-items: baseline; padding: 9px 12px; background: var(--surface);
+}
+.sweep-label { font-size: 12.5px; color: var(--ink-2); }
+/* The count is the number on the row, so it leads rather than trails. */
+.sweep-count { font-size: 14px; font-weight: 650; justify-self: end; }
+.sweep-age { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.sweep-item-unreachable { background: #fdf6f5; }
+.sweep-item-unreachable .sweep-age { color: var(--danger); }
+
+.section-heading {
+  font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--muted); margin: 22px 0 10px; font-weight: 600;
+}
+.unmanaged > summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 10px 0; }
+.unmanaged > summary:hover { color: var(--ink); }

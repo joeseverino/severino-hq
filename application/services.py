@@ -720,6 +720,22 @@ def _aliases(declared, origins) -> dict[str, str]:
             continue
         if target != hostname and target in declared:
             found[hostname] = target
+    # And the same site under the one prefix that conventionally means it.
+    # A CNAME says "I am that name"; an address record says only where to go,
+    # so `www.example.com` and `example.com` as two A records to one place look
+    # like two services and are one site. Every other subdomain sharing an
+    # address is a different service on one host -- mail and a quiz sitting on
+    # the same cPanel are not each other -- so this is `www` and nothing else.
+    for hostname in declared:
+        apex = hostname.partition(".")[2]
+        if not hostname.startswith("www.") or apex not in declared:
+            continue
+        if hostname in found or apex in found:
+            continue
+        here = _normalise(origins.get(hostname, ""))
+        there = _normalise(origins.get(apex, ""))
+        if here and here == there:
+            found[hostname] = apex
     return found
 
 

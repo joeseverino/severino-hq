@@ -886,3 +886,49 @@ class LoopbackOriginTests(TestCase):
         origin = _locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
 
         self.assertEqual(origin.host, "")
+
+
+class WwwIsTheSameSiteTests(TestCase):
+    """`www.example.com` and `example.com` as two address records are one site.
+
+    A CNAME says "I am that name" and already folded. An address record says
+    only where to go, so the pair read as two services with two certificates
+    and two verdicts about one website.
+
+    Narrow on purpose. Every other subdomain sharing an address is a different
+    service on one host -- mail and a quiz on one cPanel are not each other --
+    so the rule is the one prefix that conventionally means the same site.
+    """
+
+    def aliases(self, origins, declared=None):
+        from .services import _aliases
+
+        return _aliases(declared or set(origins), origins)
+
+    def test_www_folds_into_the_apex_when_both_point_at_one_place(self):
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"}
+        )
+
+        self.assertEqual(found, {"www.example.com": "example.com"})
+
+    def test_www_pointing_somewhere_else_stays_its_own_service(self):
+        """Two addresses is two places, whatever the names suggest."""
+
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"}
+        )
+
+        self.assertEqual(found, {})
+
+    def test_another_subdomain_on_the_same_address_is_not_folded(self):
+        found = self.aliases(
+            {"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"}
+        )
+
+        self.assertEqual(found, {})
+
+    def test_an_apex_nobody_declares_leaves_www_alone(self):
+        found = self.aliases({"www.example.com": "203.0.113.9"})
+
+        self.assertEqual(found, {})

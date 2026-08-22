@@ -14,31 +14,52 @@ the markup — which is the one thing a template must not do here, since the
 provider already says what it is called. `snapshot.label` comes from the
 registry, so a provider added later names itself.
 
-`only_kind` narrows it to one provider for a page that shows one provider's
-records; without it, every sweep is listed.
+Listed rather than written out. Eight providers swept together produce eight
+identical clauses of "records, checked three hours ago", and the one that had
+not been swept in a day was a phrase in the middle of a paragraph nobody
+finishes reading. In a grid the counts line up, and the odd one out is the row
+whose age does not match its neighbours.
+
+`only_kind` narrows it to one provider, and stays a sentence: one reading needs
+no grid, and the page around it has already said which provider it is about.
 {% endcomment %}
 {% if inventory %}
-  <p class="muted">
-    {% for snapshot in inventory %}
-      {% if not only_kind or snapshot.kind == only_kind %}
-        {% comment %}
-        The label names one of a thing ("Public DNS record"), which is the right
-        word beside a single resource and the wrong one in front of a count --
-        it read "Public DNS record: 33 records". A page scoped to one provider
-        has already said which provider it is about, so the count stands alone
-        there; only a list of several needs each one named.
-        {% endcomment %}
-        {% if not only_kind %}{{ snapshot.label }}:{% endif %}
-        {% if snapshot.reachable %}
-          {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked
-          {% with age=snapshot.observed_at|timesince %}
-            {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
-          {% endwith %}
-        {% else %}
-          unreachable ({{ snapshot.error }})
+  {% if only_kind %}
+    <p class="muted">
+      {% for snapshot in inventory %}
+        {% if snapshot.kind == only_kind %}
+          {% if snapshot.reachable %}
+            {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked
+            {% with age=snapshot.observed_at|timesince %}
+              {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
+            {% endwith %}
+          {% else %}
+            unreachable ({{ snapshot.error }})
+          {% endif %}
         {% endif %}
-        {% if not forloop.last and not only_kind %} · {% endif %}
-      {% endif %}
-    {% endfor %}
-  </p>
+      {% endfor %}
+    </p>
+  {% else %}
+    <section class="sweep">
+      <h2 class="section-heading">Provider readings</h2>
+      <div class="sweep-grid">
+        {% for snapshot in inventory %}
+          <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% endif %}">
+            <span class="sweep-label">{{ snapshot.label }}</span>
+            {% if snapshot.reachable %}
+              <span class="sweep-count">{{ snapshot.count }}</span>
+              <span class="sweep-age">
+                {% with age=snapshot.observed_at|timesince %}
+                  {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
+                {% endwith %}
+              </span>
+            {% else %}
+              <span class="sweep-count">—</span>
+              <span class="sweep-age" title="{{ snapshot.error }}">unreachable</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 {% endif %}

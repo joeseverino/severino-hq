@@ -31,11 +31,12 @@ which now shares the "Runs on" column with the origin it was duplicating.
   estate.
   {% endcomment %}
   <details class="unmanaged">
-    <summary>{{ unmanaged|length }} HQ has not taken on</summary>
+    <summary>{{ unmanaged|length }} not adopted</summary>
     <p class="muted">
-      A sweep adopts what a credential reaches, so these are the exceptions:
-      records inside a domain nobody made HQ responsible for, or a spec the
-      provider holds that HQ could not validate. Listed rather than dropped.
+      A sweep adopts everything a credential reaches. These were not: their
+      domain has not been adopted, so the records inside it are not HQ's to
+      take — or the provider holds a spec HQ could not validate. Adopt the
+      domain and the rest follow on the next sweep.
     </p>
     <div class="table-scroll">
       <table class="data-table">
