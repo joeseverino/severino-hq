@@ -417,3 +417,46 @@ class ProxyThatDropsTheCallerTests(TestCase):
 
         self.assertFalse(gate.holds)
         self.assertIn("admitting the proxy", gate.detail)
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class DeclinedHeaderTests(TestCase):
+    """A header carrying the right answer that HQ refuses to believe.
+
+    The dangerous reading of "ignored" is that nobody wired it up, which
+    invites somebody to wire it up. Declining `X-Real-IP` is the safer of two
+    choices and the page has to be able to say which it is.
+    """
+
+    def header(self, name, **extra):
+        request = RequestFactory().get(
+            "/connection/", HTTP_HOST="hq.example.test", **extra
+        )
+        return next(h for h in headers_of(request) if h.name == name)
+
+    def test_a_single_asserted_address_is_declined_rather_than_unread(self):
+        found = self.header("X-Real-Ip", HTTP_X_REAL_IP="100.64.0.5")
+
+        self.assertEqual(found.state, "declined")
+        self.assertIn("chain", found.declined)
+
+    def test_a_second_source_for_the_scheme_is_declined(self):
+        found = self.header("X-Forwarded-Scheme", HTTP_X_FORWARDED_SCHEME="https")
+
+        self.assertEqual(found.state, "declined")
+
+    def test_a_header_nothing_has_an_opinion_on_is_merely_ignored(self):
+        found = self.header("Accept-Language", HTTP_ACCEPT_LANGUAGE="en")
+
+        self.assertEqual(found.state, "ignored")
+
+    def test_declined_headers_sort_above_ignored_ones(self):
+        found = headers_of(
+            RequestFactory().get(
+                "/connection/", HTTP_HOST="hq.example.test",
+                HTTP_ACCEPT_LANGUAGE="en", HTTP_X_REAL_IP="100.64.0.5",
+            )
+        )
+        states = [h.state for h in found]
+
+        self.assertLess(states.index("declined"), states.index("ignored"))

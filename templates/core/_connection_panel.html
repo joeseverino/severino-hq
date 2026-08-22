@@ -186,7 +186,7 @@ page it falls back to. Nothing here knows which one it is in.
     <details class="conn-more">
       <summary>Received but not read</summary>
       <div class="conn-rows">
-        {% for header in headers %}{% if not header.used %}
+        {% for header in headers %}{% if header.state == "ignored" %}
           <div class="conn-row">
             <code>{{ header.name }}: {{ header.value }}</code>
             <span class="conn-kind">ignored</span>
@@ -195,6 +195,14 @@ page it falls back to. Nothing here knows which one it is in.
         {% endif %}{% endfor %}
       </div>
     </details>
+  </section>
+
+  <section>
+    <h3>What HQ sent back</h3>
+    <p class="conn-note">Read from the response this browser actually received, not from the settings that were meant to produce it.</p>
+    <div class="conn-rows" data-response-headers>
+      <div class="conn-row"><span class="conn-row-note">Reading the response…</span></div>
+    </div>
   </section>
 
   <section>

@@ -2726,3 +2726,4 @@ textarea.code {
    turns a list of six values into six grey slabs. */
 .conn-row > code, .conn-hop > code { justify-self: start; }
 .conn-peer-name { font-size: 14px; font-weight: 600; }
+.conn-kind-declined { background: #f4ead8; color: var(--warn); }

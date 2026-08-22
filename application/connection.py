@@ -677,11 +677,14 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     rows: list[Address | None] = [
         _address_row(address, "HQ answers here") for address in serves.addresses
     ]
+    # The addresses HQ was declared at, where the tailnet also reports reaching
+    # the node there. Not the rest of what the daemon advertises: those are
+    # endpoints for finding a path through NAT, one of them the outside of a
+    # router, and none of them anything HQ serves on. Printed under a heading
+    # about where HQ answers, a public one of those says HQ is on the internet.
     for endpoint in serves.endpoints:
-        row = _address_row(endpoint, "carries the encrypted tunnel, never HTTP")
-        if row is None:
-            continue
-        if row.kind == "network" and split_host_port(row.value)[0] not in declared:
+        row = _address_row(endpoint, "HQ answers here")
+        if row is None or split_host_port(row.value)[0] not in declared:
             continue
         rows.append(row)
     return tuple(_deduplicated(rows))
@@ -755,11 +758,20 @@ class Header:
     name: str
     value: str
     purpose: str = ""
+    # Why this one is not believed, where declining it was a decision rather
+    # than an absence.
+    declined: str = ""
     redacted: bool = False
 
     @property
     def used(self) -> bool:
         return bool(self.purpose)
+
+    @property
+    def state(self) -> str:
+        if self.purpose:
+            return "read"
+        return "declined" if self.declined else "ignored"
 
 
 # What each header HQ reads is read *for*. Written here rather than inferred,
@@ -774,6 +786,26 @@ HEADERS_READ = {
     "Cookie": "Carries the session. Its contents are never shown, here or anywhere.",
 }
 REDACTED = {"Cookie", "Authorization", "X-Csrftoken", "Proxy-Authorization"}
+# Headers deliberately not believed, and the reason. Without these the page
+# lists a header carrying the correct answer as merely ignored, which reads as
+# an oversight rather than as the safer of two choices.
+HEADERS_DECLINED = {
+    "X-Real-Ip": (
+        "Carries one address the proxy asserts, with no chain behind it to "
+        "check. HQ reads the forwarded chain instead, which it can walk back "
+        "through the proxies it knows and stop at the first hop it cannot "
+        "vouch for. Believing a single asserted value would be weaker."
+    ),
+    "X-Forwarded-Scheme": (
+        "Says the same thing as X-Forwarded-Proto, which is the one Django is "
+        "configured to read. Two sources for one fact is one more than can be "
+        "trusted to agree."
+    ),
+    "X-Forwarded-Host": (
+        "The host is taken from the request line and checked against the hosts "
+        "HQ will answer for. A forwarded copy could disagree with it."
+    ),
+}
 
 
 def headers_of(request) -> tuple[Header, ...]:
@@ -803,11 +835,13 @@ def headers_of(request) -> tuple[Header, ...]:
                     else str(value)
                 ),
                 purpose=HEADERS_READ.get(name, ""),
+                declined=HEADERS_DECLINED.get(name, ""),
                 redacted=redacted,
             )
         )
-    # Read-and-acted-on first, then the rest in the order they arrived.
-    return tuple(sorted(found, key=lambda header: not header.used))
+    # Acted on first, then deliberately declined, then everything else.
+    order = {"read": 0, "declined": 1, "ignored": 2}
+    return tuple(sorted(found, key=lambda header: order[header.state]))
 
 
 @dataclass(frozen=True)
