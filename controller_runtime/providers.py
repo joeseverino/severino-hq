@@ -1556,11 +1556,47 @@ def list_npm() -> list[dict[str, Any]]:
         "trust_forwarded_proto",
         "enabled",
     )
+    # Which certificate each host actually serves. A name behind a proxy is
+    # served over TLS or it is not, and until now HQ could only see the ones it
+    # had been told about -- so an internal certificate, installed and working,
+    # read as "no certificate covers this" on every name it served. The proxy
+    # already knows; it just was not asked.
+    served_by = _npm_certificates(base_url, headers)
     return [
-        {field: record.get(field) for field in fields}
+        {
+            **{field: record.get(field) for field in fields},
+            "certificate": served_by.get(record.get("certificate_id"), {}),
+        }
         for record in records
         if record.get("domain_names")
     ]
+
+
+def _npm_certificates(base_url: str, headers: dict[str, str]) -> dict[Any, dict[str, Any]]:
+    """Every certificate the proxy holds, by the id a host refers to it with.
+
+    Reported as an attribute of the host that serves it rather than as an
+    inventory of its own. HQ does not hold the material for these -- the CA
+    that signs them is deliberately air-gapped -- so a declaration it could
+    never fulfil would be worse than the gap it closes. What it needs is to be
+    able to see that the name is served over TLS, which is an observation.
+    """
+
+    try:
+        certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
+    except (ProviderError, OSError, ValueError, KeyError):
+        # One reading missing must not lose the proxy hosts themselves.
+        return {}
+    return {
+        item.get("id"): {
+            "name": str(item.get("nice_name", "")),
+            "domains": [str(name) for name in item.get("domain_names") or ()],
+            "expires_on": str(item.get("expires_on", "")),
+            "provider": str(item.get("provider", "")),
+        }
+        for item in certificates or ()
+        if item.get("id")
+    }
 
 
 # ----- Cloudflare ------------------------------------------------------------

@@ -932,3 +932,59 @@ class WwwIsTheSameSiteTests(TestCase):
         found = self.aliases({"www.example.com": "203.0.113.9"})
 
         self.assertEqual(found, {})
+
+
+class TlsHqDoesNotOwnTests(TestCase):
+    """A name served over TLS by a certificate HQ can never hold.
+
+    An internally signed certificate is signed by a CA that is deliberately
+    air-gapped, so HQ cannot own one and never will. Counting only declared
+    certificates reported "no certificate covers this" for names that had been
+    served over TLS the whole time -- and the fix is not to declare something
+    HQ cannot fulfil, but to look at what the proxy is actually serving.
+    """
+
+    def a_proxy_serving(self, hostname, certificate=None):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        record = {"domain_names": [hostname], "forward_host": "10.0.0.9"}
+        if certificate is not None:
+            record["certificate"] = certificate
+        ProviderInventory.objects.update_or_create(
+            kind="npm.proxy_host",
+            defaults={"records": [record], "observed_at": timezone.now()},
+        )
+
+    def test_a_certificate_the_proxy_serves_answers_the_question(self):
+        from .services import _certificates_in_use
+
+        self.a_proxy_serving(
+            "a-host.example.com",
+            {"name": "a-host.example.com", "domains": ["a-host.example.com"]},
+        )
+
+        self.assertEqual(
+            _certificates_in_use()["a-host.example.com"]["name"], "a-host.example.com"
+        )
+
+    def test_a_proxy_serving_nothing_over_tls_is_not_counted(self):
+        from .services import _certificates_in_use
+
+        self.a_proxy_serving("a-host.example.com")
+
+        self.assertEqual(_certificates_in_use(), {})
+
+    def test_the_reading_is_not_taken_unless_something_asks(self):
+        """Most services carry a declared certificate and never reach it."""
+
+        from .services import _Lazy
+
+        taken = []
+        lazy = _Lazy(lambda: taken.append(1) or {})
+
+        self.assertEqual(taken, [])
+        lazy.get("anything")
+        lazy.get("anything else")
+        self.assertEqual(taken, [1])
