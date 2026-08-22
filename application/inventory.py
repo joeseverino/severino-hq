@@ -172,6 +172,87 @@ def record_inventory(
     }
 
 
+def confirm_observed(payload: dict[str, Any]) -> int:
+    """Mark declarations the sweep just found still matching as observed.
+
+    A declaration is "in sync" when what HQ asked for is what is there, and a
+    sweep is HQ going and looking. Yet only a reconcile ever wrote that down,
+    so a declaration nothing had changed sat reporting "never reported" -- and
+    nothing queues a reconcile for a resource that has not drifted, so the
+    first look never came. Whole services read as unverified while every part
+    of them was running and had just been seen.
+
+    Only where the spec still matches the live record. A declaration that has
+    drifted is exactly the one a reconcile should visit, and quietly calling it
+    observed would hide the difference this whole model exists to surface.
+    """
+
+    from django.utils import timezone
+
+    seen = timezone.now()
+    confirmed = 0
+    for kind, report in payload.items():
+        if kind not in PROVIDERS or not report.get("ok", True):
+            continue
+        live = {}
+        for record in report.get("records") or []:
+            spec = _spec_from_record(kind, record)
+            if spec is not None:
+                live[_identity(kind, spec)] = spec
+        if not live:
+            continue
+        for resource in ManagedResource.objects.filter(kind=kind, enabled=True):
+            found = live.get(_identity(kind, resource.spec))
+            if found is None or not _same_declaration(kind, resource.spec, found):
+                continue
+            resource.observed_generation = resource.generation
+            resource.last_observed_at = seen
+            resource.status = dict(found)
+            resource.conditions = [
+                {
+                    "type": "Ready",
+                    "status": True,
+                    "reason": "Observed",
+                    "message": "The last sweep found this exactly as declared.",
+                }
+            ]
+            resource.save(
+                update_fields=[
+                    "observed_generation",
+                    "last_observed_at",
+                    "status",
+                    "conditions",
+                ]
+            )
+            confirmed += 1
+    return confirmed
+
+
+def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | None:
+    provider = PROVIDERS[kind]
+    if provider.from_record is None:
+        return None
+    try:
+        return provider.from_record(record)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> bool:
+    """Whether the live record says what the declaration asks for.
+
+    Compared on the fields the declaration carries. A provider hands back more
+    than was asked for -- an id it assigned, a status it keeps -- and requiring
+    those to appear in a spec nobody wrote would report drift on every record.
+    """
+
+    return all(
+        str(found.get(field, "")) == str(value)
+        for field, value in declared.items()
+        if field in found
+    )
+
+
 @transaction.atomic
 def record_connections(
     payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
@@ -477,6 +558,7 @@ def adopt(
             enabled=True,
         ),
         principal=principal,
+        copied_from_live=True,
     )
     _record_as_observed(result.get("resource", {}).get("key", ""), found)
     return result

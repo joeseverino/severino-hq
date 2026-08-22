@@ -22,6 +22,7 @@ from django.db import transaction
 
 from .inventory import (
     adopt_discovered,
+    confirm_observed,
     record_inventory,
 )
 from .zones import adopt_discovered_records
@@ -40,18 +41,26 @@ def record_sweep(
     # of the records just recorded, so every declaration it writes starts equal
     # to what the controller actually found and the first reconcile is a no-op.
     #
-    # Records inside a domain HQ was made responsible for are `zones`' to
-    # decide, because the responsibility is the domain rather than the record.
-    adopted = adopt_discovered_records(principal=principal)["adopted"]
-    # Everything else a credential reached, whatever kind it is. If HQ can see
-    # it, HQ manages it: the decision was made when the credential was added,
-    # and asking again per record is a question whose answer is always yes.
-    # Listing the kinds here meant a provider added later stayed unmanaged
-    # until somebody remembered to add it to this line -- and in the meantime
-    # its records sat in a list of things to opt into one at a time.
+    # Everything a credential reached, whatever kind it is. If HQ can see it,
+    # HQ manages it: the decision was made when the credential was added, and
+    # asking again per record is a question whose answer is always yes.
+    # Listing the kinds here meant a provider added later stayed unadopted
+    # until somebody remembered to add it to this line.
+    adopted: list[str] = []
     for kind in _adoptable_kinds():
         adopted += adopt_discovered(kind, principal=principal)["adopted"]
-    return {**result, "adopted": adopted}
+    # Records last, and separately, because they are the one kind whose
+    # adoption is scoped by something other than the credential: a record
+    # belongs to a domain, so `zones` takes the ones inside domains HQ holds.
+    # Run after the loop above so a zone adopted moments ago already counts --
+    # otherwise its records would wait a whole sweep for no reason.
+    adopted += adopt_discovered_records(principal=principal)["adopted"]
+    # And everything already declared that the sweep just found unchanged. A
+    # sweep is HQ going and looking; until now only a reconcile wrote that
+    # down, so a declaration nothing had touched reported "never reported"
+    # forever.
+    confirmed = confirm_observed(payload)
+    return {**result, "adopted": adopted, "confirmed": confirmed}
 
 
 def _adoptable_kinds() -> tuple[str, ...]:
@@ -63,16 +72,11 @@ def _adoptable_kinds() -> tuple[str, ...]:
 
     from .inventory import unmanaged
 
-    from .zones import RECORD_KIND, ZONE_KIND
+    from .zones import RECORD_KIND
 
-    # Everything except the two that a domain governs rather than a credential.
-    #
-    # Taking on a domain is a decision -- it says HQ is responsible for what
-    # that name resolves to -- and a sweep that made it would claim every zone
-    # the token can see. The records inside one follow from that decision, so
-    # `zones` adopts those, for domains HQ was actually made responsible for.
-    # Everything else is a thing a credential plainly already manages, where
-    # asking per record is a question whose answer is always yes.
-    return tuple(
-        sorted({item.kind for item in unmanaged()} - {RECORD_KIND, ZONE_KIND})
-    )
+    # Everything except records, which `zones` adopts by domain rather than one
+    # at a time. Domains themselves are in: a token that can edit a zone is the
+    # decision that HQ manages it, and holding that back left records visibly
+    # reachable and pointedly untouched, waiting for somebody to click the
+    # domain they already owned.
+    return tuple(sorted({item.kind for item in unmanaged()} - {RECORD_KIND}))
