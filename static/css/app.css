@@ -2727,3 +2727,10 @@ textarea.code {
 .conn-row > code, .conn-hop > code { justify-self: start; }
 .conn-peer-name { font-size: 14px; font-weight: 600; }
 .conn-kind-declined { background: #f4ead8; color: var(--warn); }
+
+/* A header value is long by nature, and beside it a three-column row squeezes
+   the note into one word per line the moment the panel is a dialog rather than
+   a page. The value keeps the width it needs and the note takes its own line. */
+.conn-row-wide { grid-template-columns: minmax(0, 1fr) max-content; }
+.conn-row-wide > code { overflow-wrap: anywhere; }
+.conn-row-wide .conn-row-note { grid-column: 1 / -1; }

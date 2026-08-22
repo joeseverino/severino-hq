@@ -176,7 +176,7 @@ page it falls back to. Nothing here knows which one it is in.
     <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
     <div class="conn-rows">
       {% for header in headers %}{% if header.used %}
-        <div class="conn-row conn-row-used">
+        <div class="conn-row conn-row-wide conn-row-used">
           <code>{{ header.name }}: {{ header.value }}</code>
           <span class="conn-kind conn-kind-read">read</span>
           <span class="conn-row-note">{{ header.purpose }}</span>
@@ -187,7 +187,7 @@ page it falls back to. Nothing here knows which one it is in.
       <summary>Received but not read</summary>
       <div class="conn-rows">
         {% for header in headers %}{% if header.state == "ignored" %}
-          <div class="conn-row">
+          <div class="conn-row conn-row-wide">
             <code>{{ header.name }}: {{ header.value }}</code>
             <span class="conn-kind">ignored</span>
             <span class="conn-row-note"></span>

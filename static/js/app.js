@@ -564,7 +564,7 @@ const hqShowResponseHeaders = (root) => {
         const chip = value
           ? `<span class="conn-kind conn-kind-read">sent</span>`
           : `<span class="conn-kind conn-kind-elsewhere">absent</span>`;
-        return `<div class="conn-row">${shown}${chip}<span class="conn-row-note">${purpose}</span></div>`;
+        return `<div class="conn-row conn-row-wide">${shown}${chip}<span class="conn-row-note">${purpose}</span></div>`;
       }).join("");
     })
     .catch(() => {
