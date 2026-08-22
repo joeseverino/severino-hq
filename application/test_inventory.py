@@ -29,6 +29,7 @@ from .inventory import (
     unmanaged,
     unmanaged_services,
 )
+from .inventory import record_inventory
 from .sweep import record_sweep
 from .infrastructure import NotFoundError
 from .security import cli_principal
@@ -146,7 +147,7 @@ class RecordingTests(TestCase):
 
 class UnmanagedTests(TestCase):
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(
                 **{
                     "adguard.rewrite": [A_REWRITE, ANOTHER],
@@ -210,7 +211,7 @@ class UnmanagedTests(TestCase):
 
 class AdoptionTests(TestCase):
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}),
             principal=cli_principal(),
         )
@@ -304,15 +305,32 @@ class AdoptionWebTests(TestCase):
             username="operator", password="test-only-password"
         )
         self.client.force_login(self.user)
+        # Stored without adopting, because the tests below exercise the manual
+        # button -- which only has anything to do when nothing took the record
+        # first. A real sweep adopts, and the test for that says so itself.
+        record_inventory(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+
+    def test_a_swept_record_is_managed_without_being_opted_in(self):
+        """If HQ can see it, HQ manages it.
+
+        The page used to list what HQ had found and not taken, one row at a
+        time, waiting to be clicked. The decision was made when the credential
+        was added; asking again per record is a question whose answer is always
+        yes, and a list of them is a chore standing in for a choice.
+        """
+
         record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
 
-    def test_the_service_page_lists_what_hq_does_not_manage(self):
         response = self.client.get(reverse("control_plane:services"))
 
-        self.assertContains(response, "Not managed by HQ")
         self.assertContains(response, "app.example.com")
+        self.assertTrue(
+            ManagedResource.objects.filter(kind="adguard.rewrite").exists()
+        )
 
     def test_adopting_from_the_page_creates_the_declaration(self):
         response = self.client.post(
@@ -374,7 +392,7 @@ class AdoptServiceTests(TestCase):
     """A hostname is one decision, even when it is several records."""
 
     def setUp(self):
-        record_sweep(
+        record_inventory(
             a_sweep(
                 **{
                     "adguard.rewrite": [
@@ -486,3 +504,43 @@ class AdoptedIsObservedTests(TestCase):
         from application.infrastructure import resource_health
 
         self.assertEqual(resource_health(self.resource)["state"], "healthy")
+
+
+class NothingWaitsToBeOptedInTests(TestCase):
+    """If HQ can see it, HQ manages it.
+
+    The estate arrived a click at a time: every rewrite, proxy host and
+    container a credential could reach sat in a list of things to take on, and
+    the answer was always yes. The decision was made when the credential was
+    added.
+
+    Two kinds are still a decision, and for the same reason as each other: a
+    domain says what a name resolves to, and taking one on is a claim about
+    somebody's zone rather than about a row inside it.
+    """
+
+    def swept(self, **kinds):
+        record_sweep(a_sweep(**kinds), principal=cli_principal())
+        return set(
+            ManagedResource.objects.values_list("kind", flat=True)
+        )
+
+    def test_a_rewrite_a_credential_reached_needs_no_click(self):
+        self.assertIn("adguard.rewrite", self.swept(**{"adguard.rewrite": [A_REWRITE]}))
+
+    def test_nothing_is_left_offering_itself_for_adoption(self):
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
+            principal=cli_principal(),
+        )
+
+        self.assertEqual([item.hostname for item in unmanaged()], [])
+
+    def test_taking_on_a_domain_is_still_a_decision(self):
+        """A sweep that adopted zones would claim every one the token can see."""
+
+        kinds = self.swept(
+            **{"cloudflare.zone": [{"zone": "example.com", "connection_ref": "a-token"}]}
+        )
+
+        self.assertNotIn("cloudflare.zone", kinds)

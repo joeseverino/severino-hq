@@ -2,7 +2,7 @@
 
 A pin is a preference about a person, never about the thing pinned: starring a
 hostname must not reach a spec, bump a generation or queue a reconcile. The
-order is the substance of it -- alphabetical among favourites is an ordering
+order is the substance of it -- alphabetical among favorites is an ordering
 nobody chose, which is the whole reason the list needed one.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-class ServiceFavouriteTests(TestCase):
+class ServiceFavoriteTests(TestCase):
 
     def setUp(self):
         from django.contrib.auth import get_user_model
@@ -30,7 +30,7 @@ class ServiceFavouriteTests(TestCase):
         for name in names:
             toggle(self.user, SERVICE, name)
 
-    def test_a_new_favourite_lands_at_the_end(self):
+    def test_a_new_favorite_lands_at_the_end(self):
         """Anywhere else silently rearranges what was already arranged."""
 
         self.pin("one.example.test", "two.example.test", "three.example.test")
@@ -79,7 +79,7 @@ class ServiceFavouriteTests(TestCase):
 
         self.assertEqual(self.order(), ["one.example.test"])
 
-    def test_an_anonymous_visitor_has_no_favourites(self):
+    def test_an_anonymous_visitor_has_no_favorites(self):
         from django.contrib.auth.models import AnonymousUser
 
         from application.pins import SERVICE, ordered

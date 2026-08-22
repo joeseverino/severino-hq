@@ -723,10 +723,10 @@ def _aliases(declared, origins) -> dict[str, str]:
     return found
 
 
-def service_catalog(favourites: tuple[str, ...] = ()) -> tuple[Service, ...]:
+def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
     """Every hostname HQ declares, assembled from the resources that name it.
 
-    ``favourites`` is the operator's own order for the handful they keep at the
+    ``favorites`` is the operator's own order for the handful they keep at the
     top. Applied here rather than in a template so every surface that lists
     services agrees about what comes first, and so the ordering never becomes
     a property of a Service -- it is a fact about a person, not a hostname.
@@ -747,11 +747,11 @@ def service_catalog(favourites: tuple[str, ...] = ()) -> tuple[Service, ...]:
         )
         for hostname, facets in sorted(declared.items())
     )
-    if not favourites:
+    if not favorites:
         return found
     from dataclasses import replace
 
-    rank = {name: index for index, name in enumerate(favourites)}
+    rank = {name: index for index, name in enumerate(favorites)}
     return tuple(
         sorted(
             (

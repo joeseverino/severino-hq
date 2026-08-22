@@ -10,131 +10,61 @@ the one that made publishing a name start in the wrong place.
 {% include "partials/_page_head.html" with title="Services" action_primary=True lede="Every hostname HQ manages, and whether its DNS, ingress and certificate are all in place." action_url=start_url action_label="Publish a service" %}
 
 {% comment %}
-Columns come from SERVICE_FACETS, not from this markup. A provider that declares
-a new facet gets a column here and a panel on the detail page without either
-template changing.
+Columns come from SERVICE_FACETS, not from this markup — minus the runtime one,
+which now shares the "Runs on" column with the origin it was duplicating.
 {% endcomment %}
-<div class="table-scroll">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Service</th>
-        {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
-        <th>Origin</th>
-        <th>Project</th>
-        <th>State</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for service in services %}
-        {% comment %}
-        The first row after the favourites gets a rule above it, so the ones
-        kept at the top are visibly a group rather than just the alphabetical
-        head of the same list.
-        {% endcomment %}
-        <tr{% if favourite_count and forloop.counter0 == favourite_count %} class="service-rest"{% endif %}>
-          <td>
-            <div class="service-name">
-              <form method="post" action="{% url 'control_plane:service_pin' service.hostname %}">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button class="pin-toggle{% if service.pinned %} pinned{% endif %}" type="submit"
-                        title="{% if service.pinned %}Remove from favourites{% else %}Keep at the top{% endif %}"
-                        aria-label="{% if service.pinned %}Remove {{ service.hostname }} from favourites{% else %}Keep {{ service.hostname }} at the top{% endif %}">★</button>
-              </form>
-              <a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a>
-              {% if service.pinned %}
-                <span class="pin-move">
-                  {% if not forloop.first %}
-                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <input type="hidden" name="direction" value="up">
-                      <button type="submit" aria-label="Move {{ service.hostname }} up">↑</button>
-                    </form>
-                  {% endif %}
-                  {% if forloop.counter < favourite_count %}
-                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <input type="hidden" name="direction" value="down">
-                      <button type="submit" aria-label="Move {{ service.hostname }} down">↓</button>
-                    </form>
-                  {% endif %}
-                </span>
-              {% endif %}
-            </div>
-          </td>
-          {% for facet in service.facets %}
-            <td>
-              {% for claim in facet.claims %}
-                <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>{% if not forloop.last %}<br>{% endif %}
-              {% empty %}
-                <span class="muted">—</span>
-              {% endfor %}
-            </td>
-          {% endfor %}
-          <td>
-            {% if service.origin %}
-              {% comment %}
-              The phrasing comes from Origin, not from here. This column read
-              "unknown host" beside jseverino.com while the page for that same
-              name said "Served by Cloudflare Pages" — one fact, two surfaces,
-              and only one of them had learned about the third case.
-              {% endcomment %}
-              {% if service.origin.qualifier %}<code>{{ service.origin.headline }}</code> <span class="muted">{{ service.origin.qualifier }}</span>{% else %}{{ service.origin.headline }}{% endif %}
-            {% else %}
-              <span class="muted">—</span>
-            {% endif %}
-          </td>
-          <td>{% if service.project %}<a href="{{ service.project.url }}">{{ service.project.name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
-          <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." action_url=start_url action_label="Publish your first one" %}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% if favorites %}
+  <h2 class="section-heading">Favorites</h2>
+  {% include "control_plane/_service_rows.html" with rows=favorites reorderable=True %}
+{% endif %}
+
+{% if favorites %}<h2 class="section-heading">Everything else</h2>{% endif %}
+{% include "control_plane/_service_rows.html" with rows=services empty_message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." %}
 
 {% if unmanaged %}
-  <h2>Not managed by HQ</h2>
-  <p class="muted">
-    These exist at the provider but HQ has no declaration for them. Adopting one
-    records it exactly as it is configured now — nothing changes at the provider.
-  </p>
   {% comment %}
-  One row per hostname, with the same columns as the table above. Listed per
-  record instead, a service with a DNS entry and a proxy appeared as two
-  adjacent rows of the same name and took two clicks to onboard.
+  Normally empty, and kept for when it is not. A sweep adopts everything a
+  credential reached, so what survives is either inside a domain HQ was never
+  made responsible for -- taking one of those on is a decision, not a sweep --
+  or something adoption could not validate. Both are worth seeing rather than
+  dropping, and neither is a chore standing between an operator and a managed
+  estate.
   {% endcomment %}
-  <div class="table-scroll">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Hostname</th>
-          {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for service in unmanaged %}
+  <details class="unmanaged">
+    <summary>{{ unmanaged|length }} HQ has not taken on</summary>
+    <p class="muted">
+      A sweep adopts what a credential reaches, so these are the exceptions:
+      records inside a domain nobody made HQ responsible for, or a spec the
+      provider holds that HQ could not validate. Listed rather than dropped.
+    </p>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
           <tr>
-            <td><strong>{{ service.hostname }}</strong></td>
-            {% for id, label, value in service.facets %}
-              <td>{% if value %}<code>{{ value }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-            {% endfor %}
-            <td>
-              <form method="post" action="{% url 'control_plane:adopt' service.hostname %}">
-                {% csrf_token %}
-                <button type="submit">Adopt</button>
-              </form>
-            </td>
+            <th>Hostname</th>
+            {% for id, label, value in unmanaged.0.facets %}<th>{{ label }}</th>{% endfor %}
+            <th></th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          {% for service in unmanaged %}
+            <tr>
+              <td><strong>{{ service.hostname }}</strong></td>
+              {% for id, label, value in service.facets %}
+                <td>{% if value %}<code>{{ value }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+              {% endfor %}
+              <td>
+                <form method="post" action="{% url 'control_plane:adopt' service.hostname %}">
+                  {% csrf_token %}
+                  <button type="submit">Retry</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory %}

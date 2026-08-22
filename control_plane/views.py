@@ -733,15 +733,27 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         from application.pins import SERVICE, ordered
+        from application.services import RUNTIME_FACET
 
         context = super().get_context_data(**kwargs)
-        favourites = ordered(self.request.user, SERVICE)
-        context["services"] = service_catalog(favourites)
-        context["favourite_count"] = len(favourites)
+        favorites = ordered(self.request.user, SERVICE)
+        found = service_catalog(favorites)
+        # Two tables rather than one with a rule through it. The few an
+        # operator keeps at the top are a different list with a different
+        # question -- "is my stuff healthy" against "what else is out there" --
+        # and reordering only means anything within the first.
+        context["favorites"] = [item for item in found if item.pinned]
+        context["services"] = [item for item in found if not item.pinned]
+        # Where a service runs is one column, not two. The runtime facet named
+        # the container declaration and the origin named the machine it runs
+        # on, side by side, in two different vocabularies for one fact.
+        context["runtime_facet"] = RUNTIME_FACET
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
         # touched -- and a facet no provider supplies yet gets none.
-        context["facets"] = service_facets()
+        context["facets"] = [
+            facet for facet in service_facets() if facet[0] != RUNTIME_FACET
+        ]
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -1266,7 +1278,7 @@ class ServicePinView(LoginRequiredMixin, View):
 
 
 class ServiceMoveView(LoginRequiredMixin, View):
-    """Move one favourite past its neighbour.
+    """Move one favorite past its neighbour.
 
     Up and down rather than dragging: it is one POST, it works without script,
     and it says out loud which two things swapped -- which a drag does not.

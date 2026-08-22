@@ -22,7 +22,6 @@ from django.db import transaction
 
 from .inventory import (
     adopt_discovered,
-    adopt_discovered_containers,
     record_inventory,
 )
 from .zones import adopt_discovered_records
@@ -40,11 +39,40 @@ def record_sweep(
     # Deliberately after the sweep is stored: adoption reads each spec back out
     # of the records just recorded, so every declaration it writes starts equal
     # to what the controller actually found and the first reconcile is a no-op.
+    #
+    # Records inside a domain HQ was made responsible for are `zones`' to
+    # decide, because the responsibility is the domain rather than the record.
     adopted = adopt_discovered_records(principal=principal)["adopted"]
-    # Containers too, for the same reason and by the same rule: the decision
-    # was made when the credential was added, not once per container.
-    adopted += adopt_discovered_containers(principal=principal)["adopted"]
-    # The policy too, so it is a declaration an operator can open and change
-    # rather than something only Tailscale's own console can edit.
-    adopted += adopt_discovered("tailscale.policy", principal=principal)["adopted"]
+    # Everything else a credential reached, whatever kind it is. If HQ can see
+    # it, HQ manages it: the decision was made when the credential was added,
+    # and asking again per record is a question whose answer is always yes.
+    # Listing the kinds here meant a provider added later stayed unmanaged
+    # until somebody remembered to add it to this line -- and in the meantime
+    # its records sat in a list of things to opt into one at a time.
+    for kind in _adoptable_kinds():
+        adopted += adopt_discovered(kind, principal=principal)["adopted"]
     return {**result, "adopted": adopted}
+
+
+def _adoptable_kinds() -> tuple[str, ...]:
+    """Every kind currently sitting unadopted, in a stable order.
+
+    Read from what the sweep just recorded rather than named here, so this
+    cannot fall behind the provider registry.
+    """
+
+    from .inventory import unmanaged
+
+    from .zones import RECORD_KIND, ZONE_KIND
+
+    # Everything except the two that a domain governs rather than a credential.
+    #
+    # Taking on a domain is a decision -- it says HQ is responsible for what
+    # that name resolves to -- and a sweep that made it would claim every zone
+    # the token can see. The records inside one follow from that decision, so
+    # `zones` adopts those, for domains HQ was actually made responsible for.
+    # Everything else is a thing a credential plainly already manages, where
+    # asking per record is a question whose answer is always yes.
+    return tuple(
+        sorted({item.kind for item in unmanaged()} - {RECORD_KIND, ZONE_KIND})
+    )

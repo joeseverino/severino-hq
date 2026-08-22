@@ -2760,3 +2760,17 @@ textarea.code {
 .pin-move button:hover { color: var(--ink); }
 /* Where the operator's own order stops and the rest of the estate begins. */
 .data-table tr.service-rest > * { border-top: 2px solid var(--line); }
+
+/* On a phone a wide table has two honest options and one dishonest one. It can
+   stack, it can scroll, or it can squeeze every column to three characters and
+   stand each value up as a vertical strip -- which is what `width: 100%` plus
+   `break-word` does, and it is unreadable.
+   `.table-scroll` was already the answer; it just never got the chance, because
+   a table told to be exactly as wide as its container never overflows the thing
+   that scrolls it. Sized to its content it does, and the reader swipes -- the
+   same conclusion `td > .readout` reached for a dotted-quad address. */
+@media (max-width: 760px) {
+  .table-scroll .data-table { min-width: max-content; }
+  .table-scroll .data-table td,
+  .table-scroll .data-table th { overflow-wrap: normal; }
+}
