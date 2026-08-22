@@ -47,6 +47,20 @@ class Device:
     exit_node: bool = False
 
     @property
+    def label(self) -> str:
+        """The name worth showing a person for this device.
+
+        A node registers under whatever its operating system calls itself, and
+        several of them call themselves the same unhelpful thing -- a phone
+        reporting "localhost" is not a bug in the sweep, it is the hostname.
+        The MagicDNS label is the tailnet's own name for the node and is unique
+        within it by construction, so it wins wherever the two disagree.
+        """
+
+        magic = self.dns_name.partition(".")[0]
+        return magic or self.name
+
+    @property
     def path(self) -> str:
         """Direct, relayed, or not currently negotiated -- in those words.
 

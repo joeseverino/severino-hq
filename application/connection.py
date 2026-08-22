@@ -451,7 +451,7 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
         "device",
         "The device is a known node",
         True,
-        f"{device.name} is enrolled on the tailnet, owned by "
+        f"{device.label} is enrolled on the tailnet, owned by "
         f"{device.user or 'nobody in particular'}, and is talking to HQ "
         f"{carried}.{expiry}",
         evidence=device.dns_name or device.name,
