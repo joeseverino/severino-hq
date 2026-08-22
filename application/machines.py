@@ -19,9 +19,10 @@ from dataclasses import dataclass, field
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
-from control_plane.providers import PROVIDERS, normalized_hostname
 
 from .infrastructure import declared_machines
+from control_plane.providers import MACHINE_KIND, PROVIDERS, normalized_hostname
+
 from .services import CONTAINER_KIND, Running, container_watchers
 
 
@@ -31,6 +32,10 @@ class Machine:
 
     name: str
     role: str = ""
+    # The declaration that says what this machine is, when HQ holds one. A page
+    # that prints a role and then says nothing declares the machine is
+    # describing the same record twice and disowning it once.
+    declaration: str = ""
     # How HQ gets to it, as connection refs. More than one is normal: a machine
     # can be an SSH transport and a Portainer environment at once, and which is
     # in play depends on what is being asked of it.
@@ -68,7 +73,7 @@ def machine_catalog() -> tuple[Machine, ...]:
     connections = tuple(ProviderConnection.objects.all())
     containers = _containers()
     reached = _reached(connections)
-    roles = _roles()
+    declared = _declarations()
     services = _services_by_host(connections, containers)
     resources = _resources_by_host()
     # A declared machine counts on its own. It used to have to be reached or
@@ -77,7 +82,7 @@ def machine_catalog() -> tuple[Machine, ...]:
     # had asked for either. Declaring one is a deliberate act in HQ now, and a
     # board that drops what it was just told about is answering a question
     # nobody asked.
-    names = set(containers) | set(reached) | set(services) | set(resources) | set(roles)
+    names = set(containers) | set(reached) | set(services) | set(resources) | set(declared)
     answered = {
         connection.connection_ref
         for connection in connections
@@ -88,7 +93,8 @@ def machine_catalog() -> tuple[Machine, ...]:
     return tuple(
         Machine(
             name=name,
-            role=roles.get(name, ""),
+            role=declared.get(name, Declared()).role,
+            declaration=declared.get(name, Declared()).key,
             reachable=any(
                 ref in answered
                 for ref in set(reached.get(name, ()))
@@ -113,7 +119,16 @@ def machine_catalog() -> tuple[Machine, ...]:
             aliases=tuple(
                 sorted(alias for alias, target in aliases.items() if target == name)
             ),
-            address=addresses.get(name, "") or _address(name, connections),
+            address=(
+                addresses.get(name, "")
+                or _address(name, connections)
+                # Told, rather than found. A machine nothing sweeps still has
+                # an address -- it is how a proxy forwarding there was matched
+                # to it in the first place -- and printing nothing while the
+                # declaration right below says otherwise is the page arguing
+                # with itself.
+                or next(iter(declared.get(name, Declared()).addresses), "")
+            ),
             containers=tuple(containers.get(name, ())),
             hostnames=tuple(
                 sorted(
@@ -243,11 +258,28 @@ def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
     return ""
 
 
-def _roles() -> dict[str, str]:
+@dataclass(frozen=True)
+class Declared:
+    """What HQ was told about a machine, as opposed to what it found."""
+
+    role: str = ""
+    key: str = ""
+    addresses: tuple[str, ...] = ()
+
+
+def _declarations() -> dict[str, Declared]:
+    """Everything HQ was told, by machine name."""
+
     return {
-        str(machine["name"]): str(machine.get("role", ""))
-        for machine in declared_machines()
-        if machine.get("name")
+        str(spec["name"]): Declared(
+            role=str(spec.get("role", "")),
+            key=key,
+            addresses=tuple(spec.get("addresses") or ()),
+        )
+        for key, spec in ManagedResource.objects.filter(
+            kind=MACHINE_KIND, enabled=True
+        ).values_list("key", "spec")
+        if spec.get("name")
     }
 
 

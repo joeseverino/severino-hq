@@ -22,6 +22,16 @@
     </p>
   </div>
   <div class="page-actions">
+    {% comment %}
+    What this machine is, is a declaration, and this is the page an operator is
+    already on when they want to correct it. Without this the only way to reach
+    it was to know its key and find it in the resource list.
+    {% endcomment %}
+    {% if machine.declaration %}
+      <a class="btn" href="{% url 'control_plane:edit' machine.declaration %}">Edit machine</a>
+    {% else %}
+      <a class="btn" href="{% url 'control_plane:create' %}?kind=machine">Describe this machine</a>
+    {% endif %}
     <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
   </div>
 </div>
@@ -56,12 +66,12 @@
     {% endfor %}
   </div>
   <div class="control-metric">
-    <span class="control-label">Declared here</span>
+    <span class="control-label">Runs here</span>
     <strong>{{ machine.resources|length }}</strong>
     {% for key in machine.resources %}
       <span class="readout"><a href="{% url 'control_plane:detail' key %}"><code>{{ key }}</code></a></span>
     {% empty %}
-      <span class="readout muted">Nothing HQ declares names this machine.</span>
+      <span class="readout muted">Nothing HQ declares runs on this machine.</span>
     {% endfor %}
   </div>
 </div>

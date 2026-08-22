@@ -1,9 +1,12 @@
-"""Machines, and the fact that nothing declares one.
+"""Machines, and where each one's facts come from.
 
-A machine is here because something reported it -- a credential that reaches it,
-a container running on it, a service served from it. That membership rule is the
-whole design: adding a VPS is registering it somewhere rather than entering it
-here, and a machine that stops being any of those things stops being listed.
+Observation first: a machine is here because something reported it -- a
+credential that reaches it, a container running on it, a service served from it
+-- so adding a VPS is registering it somewhere rather than entering it here.
+
+A declaration is the other half, for what nothing can sweep: a printer, an
+offline CA, a phone. It carries what the machine is for and the addresses that
+reach it, and it puts the machine on the board by itself.
 """
 
 from __future__ import annotations
@@ -187,3 +190,54 @@ class MachinePageTests(TestCase):
 
         self.assertNotContains(response, "API_TOKEN")
         self.assertNotContains(response, "PASSWORD")
+
+
+class DeclaredMachineTests(TestCase):
+    """A machine HQ was told about shows what it was told.
+
+    The page printed a role that came from a declaration, said nothing declared
+    the machine, and left the address blank while the same declaration carried
+    two. Three statements about one record, disagreeing.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-laptop",
+            kind="machine",
+            spec={
+                "name": "a-laptop",
+                "role": "Primary admin device",
+                "addresses": ["10.0.0.5", "100.64.0.5"],
+            },
+        )
+
+    def machine(self):
+        from .machines import machine
+
+        return machine("a-laptop")
+
+    def test_it_appears_without_anything_reaching_it(self):
+        self.assertIsNotNone(self.machine())
+
+    def test_it_links_the_declaration_that_describes_it(self):
+        self.assertEqual(self.machine().declaration, "a-laptop")
+
+    def test_it_shows_an_address_it_was_told_about(self):
+        self.assertEqual(self.machine().address, "10.0.0.5")
+
+    def test_a_machine_nobody_declared_links_nothing(self):
+        from control_plane.models import ProviderInventory
+        from django.utils import timezone
+
+        ProviderInventory.objects.create(
+            kind="portainer.container",
+            records=[{"host": "a-docker-host", "name": "web", "ports": [80]}],
+            observed_at=timezone.now(),
+        )
+        from .machines import machine
+
+        found = machine("a-docker-host")
+        self.assertIsNotNone(found)
+        self.assertEqual(found.declaration, "")
