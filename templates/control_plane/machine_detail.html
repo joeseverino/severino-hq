@@ -78,15 +78,21 @@
       <span class="readout muted">No service HQ manages is served from here.</span>
     {% endfor %}
   </div>
-  <div class="control-metric">
-    <span class="control-label">Runs here</span>
-    <strong>{{ machine.resources|length }}</strong>
-    {% for key in machine.resources %}
-      <span class="readout"><a href="{% url 'control_plane:detail' key %}"><code>{{ key }}</code></a></span>
-    {% empty %}
-      <span class="readout muted">Nothing HQ declares runs on this machine.</span>
-    {% endfor %}
-  </div>
+  {% comment %}
+  Only what the table below does not already show. Every watched container is a
+  row down there, named and linked, so repeating its key here said the same
+  thing twice -- and made this the tallest card on the page, stretching three
+  mostly empty ones beside it.
+  {% endcomment %}
+  {% if machine.other_declarations %}
+    <div class="control-metric">
+      <span class="control-label">Also declared here</span>
+      <strong>{{ machine.other_declarations|length }}</strong>
+      {% for key in machine.other_declarations %}
+        <span class="readout"><a href="{% url 'control_plane:detail' key %}"><code>{{ key }}</code></a></span>
+      {% endfor %}
+    </div>
+  {% endif %}
 </div>
 
 {% if machine.containers %}

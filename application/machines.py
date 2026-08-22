@@ -108,6 +108,19 @@ class Machine:
         return tuple(item for item in self.containers if not item.hidden)
 
     @property
+    def other_declarations(self) -> tuple[str, ...]:
+        """Declarations on this machine that the container table does not show.
+
+        Every watched container is already a row below, named and linked, so
+        listing its key again in a summary card says the same thing twice and
+        makes that card the tallest thing on the page. What is left over is
+        worth a line: a stack, or anything else that names this host.
+        """
+
+        watched = {item.watcher for item in self.containers if item.watcher}
+        return tuple(key for key in self.resources if key not in watched)
+
+    @property
     def folded(self) -> tuple[Running, ...]:
         """Watched exactly like the rest, just not what you came to look at."""
 
