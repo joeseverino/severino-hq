@@ -70,6 +70,7 @@ from core import secrets
 from .models import ManagedResource, OperationRequest
 from .providers import (
     CERTIFICATE_KIND,
+    DELIVERY_TARGET_KIND,
     NameContext,
     PROVIDERS,
     normalized_hostname,
@@ -1016,9 +1017,26 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     observed_names.setdefault(observation.get("consumer", ""), set()).add(
                         observation.get("domain", "")
                     )
+                # The target each consumer came from, so the page that shows
+                # where a certificate goes links to where those settings are
+                # changed rather than making the operator find it by name.
+                targets = {
+                    resource.spec.get("connection_ref"): resource.key
+                    for resource in ManagedResource.objects.filter(
+                        kind=DELIVERY_TARGET_KIND, enabled=True
+                    )
+                }
                 context["display_consumers"] = [
                     {
                         **consumer,
+                        "url": (
+                            reverse(
+                                "control_plane:detail",
+                                kwargs={"key": targets[consumer["connection_ref"]]},
+                            )
+                            if consumer.get("connection_ref") in targets
+                            else ""
+                        ),
                         "display_domains": sorted(
                             domain
                             for domain in observed_names.get(consumer["name"], set())

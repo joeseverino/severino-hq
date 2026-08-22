@@ -135,7 +135,6 @@
     <section class="control-card">
       <h2>Certificate</h2>
       <dl class="kv compact">
-        <dt>Topology identity</dt><dd><code>{{ resource.spec.topology_ref }}</code></dd>
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
         <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
         <dt>Expires</dt><dd>{{ resource.status.not_after|default:"Not observed" }}</dd>
@@ -148,11 +147,15 @@
     <section class="control-card">
       <h2>Consumers</h2>
       <table class="data-table compact-table">
-        <thead><tr><th>Consumer</th><th>Verification names</th></tr></thead>
+        <thead><tr><th>Installed on</th><th>Verification names</th></tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>
-              <td><strong>{{ consumer.name }}</strong><br><code>{{ consumer.kind }}</code><br><span class="muted">{{ consumer.topology_ref }}</span></td>
+              <td>
+                <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name }}</a>{% else %}{{ consumer.name }}{% endif %}</strong>
+                <br><code>{{ consumer.kind }}</code>
+                <span class="muted">via {{ consumer.connection_ref }}</span>
+              </td>
               <td>{% for domain in consumer.display_domains %}<span class="tag">{{ domain }}</span>{% endfor %}</td>
             </tr>
           {% endfor %}

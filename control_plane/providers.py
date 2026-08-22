@@ -1599,6 +1599,11 @@ def _delivery_target_readout(
         ("Runs", "", str(spec.get("kind", ""))),
         ("Reached through", "", str(spec.get("connection_ref", ""))),
         ("Named there", "", str(spec.get("name", ""))),
+        (
+            "That name belongs to",
+            "",
+            str(spec.get("certificate_resource", "")) or "nothing yet",
+        ),
     ]
     if settings and settings[1]:
         rows.append((settings[0], "", settings[1]))

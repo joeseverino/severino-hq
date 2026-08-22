@@ -7,8 +7,9 @@ in sequence.
 
 A machine exists because something reported it -- a credential that reaches it,
 a container running on it, a service served from it -- or because HQ was told
-about one nothing can reach. Observation first: registering a VPS somewhere is
-what puts it here, and a declaration is for the printer and the offline CA.
+about one directly. Observation first: registering a VPS somewhere is what puts
+it here, and a declaration is for the printer and the offline CA, which nothing
+will ever sweep and which are still part of the place.
 """
 
 from __future__ import annotations
@@ -70,13 +71,13 @@ def machine_catalog() -> tuple[Machine, ...]:
     roles = _roles()
     services = _services_by_host(connections, containers)
     resources = _resources_by_host()
-    names = (
-        set(containers)
-        | set(reached)
-        | set(services)
-        | set(resources)
-        | {name for name in roles if name in reached or name in containers}
-    )
+    # A declared machine counts on its own. It used to have to be reached or
+    # running something as well, because the declarations came from a document
+    # that named a printer and a phone as readily as a Docker host and nobody
+    # had asked for either. Declaring one is a deliberate act in HQ now, and a
+    # board that drops what it was just told about is answering a question
+    # nobody asked.
+    names = set(containers) | set(reached) | set(services) | set(resources) | set(roles)
     answered = {
         connection.connection_ref
         for connection in connections
