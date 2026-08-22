@@ -20,7 +20,11 @@ page it falls back to. Nothing here knows which one it is in.
   <section class="conn-peering">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
-      <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+      {% if connection.machine_url %}
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.device.label|default:"Unknown device" }}</a>
+      {% else %}
+        <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+      {% endif %}
       <code>{{ connection.address }}</code>
       {% if connection.identity.tailnet_user %}
         <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
@@ -33,7 +37,11 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
-      <strong>{{ connection.serves.name|default:connection.host }}</strong>
+      {% if connection.serves_url %}
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.name|default:connection.host }}</a>
+      {% else %}
+        <strong>{{ connection.serves.name|default:connection.host }}</strong>
+      {% endif %}
       {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
       <span class="conn-row-note">{{ connection.host }}</span>
     </div>

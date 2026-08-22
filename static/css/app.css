@@ -2725,3 +2725,4 @@ textarea.code {
 /* An address is as wide as the address. Stretching each one to the column
    turns a list of six values into six grey slabs. */
 .conn-row > code, .conn-hop > code { justify-self: start; }
+.conn-peer-name { font-size: 14px; font-weight: 600; }

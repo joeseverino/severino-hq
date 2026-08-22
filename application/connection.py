@@ -173,6 +173,15 @@ class Connection:
     layers: tuple[Layer, ...] = ()
     secure_transport: bool = False
     host: str = ""
+    # The machine pages behind the two ends, where HQ knows a machine at the
+    # address each one answers at. A tailnet name is rarely the name HQ uses,
+    # so this is resolved by address rather than by matching the two names.
+    machine_url: str = ""
+    serves_url: str = ""
+    # What HQ was told about its machines, read once and answering every
+    # relationship this page draws: which machine each end of the link is, and
+    # which of a node's addresses are ones HQ was actually declared at.
+    declared: tuple = ()
 
     @property
     def holds(self) -> bool:
@@ -235,11 +244,17 @@ def connection(request) -> Connection:
     device = tailnet.device_at(address, known)
     serves = tailnet.observer(known)
     identity = _identity(request, device)
+    from .infrastructure import declared_machines
+
+    declared = declared_machines()
     return Connection(
         address=address,
         channel=channel,
         device=device,
         serves=serves,
+        machine_url=_machine_url(device.addresses if device else (address,), declared),
+        serves_url=_machine_url(serves.addresses if serves else (), declared),
+        declared=declared,
         identity=identity,
         secure_transport=bool(request.is_secure()),
         host=request.get_host(),
@@ -658,7 +673,7 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     serves = found.serves
     if serves is None:
         return ()
-    declared = _declared_addresses(serves.name)
+    declared = _declared_addresses(serves.name, found.declared)
     rows: list[Address | None] = [
         _address_row(address, "HQ answers here") for address in serves.addresses
     ]
@@ -672,14 +687,32 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     return tuple(_deduplicated(rows))
 
 
-def _declared_addresses(name: str) -> frozenset[str]:
-    """Every address HQ was told this machine answers at."""
+def _machine_url(addresses, declared) -> str:
+    """The page for the machine answering at any of these addresses.
 
-    from .infrastructure import declared_machines
+    By address, because the tailnet's name for a machine is rarely the one HQ
+    uses -- a laptop is whatever its owner typed into it years ago -- and the
+    address is the one thing every source of a machine agrees on.
+    """
+
+    from django.urls import reverse
+
+    wanted = {str(address) for address in addresses or ()}
+    if not wanted:
+        return ""
+    for machine in declared:
+        name = str(machine.get("name", ""))
+        if name and wanted & {str(a) for a in machine.get("addresses") or ()}:
+            return reverse("control_plane:machine", kwargs={"name": name})
+    return ""
+
+
+def _declared_addresses(name: str, declared) -> frozenset[str]:
+    """Every address HQ was told this machine answers at."""
 
     return frozenset(
         str(address)
-        for machine in declared_machines()
+        for machine in declared
         if str(machine.get("name", "")) == name
         for address in machine.get("addresses") or ()
     )
