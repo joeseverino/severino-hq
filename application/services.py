@@ -776,23 +776,19 @@ def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
     """
 
     declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
-    projects = _published_projects()
-    containers = _container_declarations()
-    # Read once, and only if something asks. Most services carry a declared
-    # certificate and never reach the question; a dashboard that assembles
-    # services to list published sites never asks it at all, and a query it
-    # does not need is one every page pays for.
-    in_use = _Lazy(_certificates_in_use)
+    estate = _Estate.read(covering, machines)
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
         by_target.setdefault(target, []).append(alias)
     found = tuple(
         _assemble(
-            hostname, facets, covering, origins.get(hostname, ""), projects,
-            machines, tuple(by_target.get(hostname, ())),
-            tuple(alias_claims.get(hostname, ())), containers,
+            hostname,
+            facets,
+            estate,
+            origins.get(hostname, ""),
+            tuple(by_target.get(hostname, ())),
+            tuple(alias_claims.get(hostname, ())),
             tuple(answers.get(hostname, ())),
-            in_use,
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -857,10 +853,8 @@ def service_or_prospect(hostname: str) -> Service:
     return _assemble(
         wanted,
         declared.get(wanted, {}),
-        covering,
+        _Estate.read(covering, machines),
         origins.get(wanted, ""),
-        _published_projects(),
-        machines,
         tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
         tuple(alias_claims.get(wanted, ())),
         answers=tuple(answers.get(wanted, ())),
@@ -963,20 +957,57 @@ def _runtime_claim(
     )
 
 
+@dataclass(frozen=True)
+class _Estate:
+    """One reading of the world, shared by every service assembled from it.
+
+    Five of these were positional arguments threaded through `_assemble` and
+    repeated at each call site, so adding a sixth meant editing three places to
+    say the same thing -- and the parameter list had grown past the point where
+    anyone could tell which arguments were about this hostname and which were
+    about the estate around it.
+
+    Everything here is the same for every service in one build. What varies per
+    name stays a parameter.
+    """
+
+    covering: list[tuple[str, frozenset[str], Claim]]
+    projects: dict[str, dict[str, str]]
+    machines: tuple[dict[str, Any], ...]
+    containers: "dict[tuple[str, str], Any]"
+    in_use: "_CertificatesInUse | None" = None
+
+    @classmethod
+    def read(cls, covering, machines) -> "_Estate":
+        """The readings a catalogue needs, taken once."""
+
+        return cls(
+            covering=covering,
+            projects=_published_projects(),
+            machines=machines,
+            containers=_container_declarations(),
+            # Only if something asks. Most services carry a declared
+            # certificate and never reach the question; a dashboard listing
+            # published sites never asks it at all, and a query nobody needs is
+            # one every page pays for.
+            in_use=_CertificatesInUse(_certificates_in_use),
+        )
+
+
 def _assemble(
     hostname: str,
     declared: dict[str, list[Claim]],
-    covering: list[tuple[str, frozenset[str], Claim]],
+    estate: "_Estate",
     origin_address: str,
-    projects: dict[str, dict[str, str]],
-    machines: tuple[dict[str, Any], ...],
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
-    containers: "dict[tuple[str, str], Any] | None" = None,
     answers: tuple[str, ...] = (),
-    in_use: "_Lazy | None" = None,
 ) -> Service:
-    containers = _container_declarations() if containers is None else containers
+    covering = estate.covering
+    projects = estate.projects
+    machines = estate.machines
+    containers = estate.containers
+    in_use = estate.in_use
     origin = _locate(origin_address, machines) if origin_address else None
     context = name_context(hostname)
     # A container declaration names a machine and a container, not a hostname,
@@ -1066,23 +1097,28 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
     return None
 
 
-class _Lazy:
-    """A reading taken at most once, and only if anything asks for it."""
+class _CertificatesInUse:
+    """The proxy's certificates, read at most once and only if asked.
+
+    Named for what it holds rather than for how it defers. A bare `get` on a
+    generic `_Lazy` is indistinguishable from a dict lookup at every call site
+    and in every tool that reads this code.
+    """
 
     def __init__(self, read):
         self._read = read
-        self._value = None
+        self._found: dict[str, dict[str, Any]] | None = None
 
-    def get(self, key: str):
-        if self._value is None:
-            self._value = self._read()
-        return self._value.get(key)
+    def covering(self, hostname: str) -> dict[str, Any] | None:
+        if self._found is None:
+            self._found = self._read()
+        return self._found.get(hostname)
 
 
 def _faults(
     facets: tuple[Facet, ...],
     origin: Origin | None,
-    in_use: "_Lazy | None" = None,
+    in_use: "_CertificatesInUse | None" = None,
     hostname: str = "",
 ) -> tuple[str, ...]:
     """Wiring gaps -- the failures that exist only in the join.
@@ -1124,7 +1160,9 @@ def _faults(
 
     serves = proxy.present
     served_with = (
-        in_use.get(hostname) if serves and not certificate.present and in_use else None
+        in_use.covering(hostname)
+        if serves and not certificate.present and in_use
+        else None
     )
     if serves and not certificate.present and not served_with:
         faults.append(

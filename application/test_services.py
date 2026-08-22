@@ -979,12 +979,12 @@ class TlsHqDoesNotOwnTests(TestCase):
     def test_the_reading_is_not_taken_unless_something_asks(self):
         """Most services carry a declared certificate and never reach it."""
 
-        from .services import _Lazy
+        from .services import _CertificatesInUse
 
         taken = []
-        lazy = _Lazy(lambda: taken.append(1) or {})
+        held = _CertificatesInUse(lambda: taken.append(1) or {})
 
         self.assertEqual(taken, [])
-        lazy.get("anything")
-        lazy.get("anything else")
+        held.covering("anything")
+        held.covering("anything else")
         self.assertEqual(taken, [1])
