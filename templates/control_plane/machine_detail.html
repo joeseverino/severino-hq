@@ -10,6 +10,19 @@
       {% else %}
         <span class="pill pill-unprobed">no credential</span>
       {% endif %}
+      {% comment %}
+      Presence is stated beside reachability, not merged into it. One says a
+      credential opened something on the machine; the other says the machine is
+      on the network at all, and an operator reading "unreachable" needs to know
+      which of the two they are looking at.
+      {% endcomment %}
+      {% if machine.presence %}
+        {% if machine.presence.online %}
+          · <span class="pill pill-reachable">on the tailnet</span>
+        {% else %}
+          · <span class="pill pill-unreachable">off the tailnet</span>
+        {% endif %}
+      {% endif %}
       {% if machine.role %} · {{ machine.role }}{% endif %}
       {% if machine.address %} · <code>{{ machine.address }}</code>{% endif %}
       {% comment %}

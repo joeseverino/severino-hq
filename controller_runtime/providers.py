@@ -2364,12 +2364,89 @@ def stop_portainer_container(
     return _cycle_portainer_container(spec, "stop", apply=apply)
 
 
+def list_tailnet_devices() -> list[dict[str, Any]]:
+    """Every machine on the tailnet, as the node this runs on currently sees it.
+
+    Read from the daemon this controller is already a peer of rather than from
+    Tailscale's API. There is no credential to hold, render or rotate: a node's
+    view of its own tailnet is something it has by being on it, and a controller
+    that cannot be given a token cannot leak one.
+
+    It answers the question no other sweep can. Every other provider reports
+    whether a *service* answered, so a machine whose Portainer token expired and
+    a machine that is switched off are indistinguishable. This tells them apart.
+
+    The local view is deliberately not the whole picture -- tags, the policy
+    file and the tailnet's DNS configuration are control-plane facts the daemon
+    does not hold. What it does hold is presence and key expiry, which are the
+    two that go wrong quietly.
+    """
+
+    try:
+        completed = subprocess.run(
+            [os.environ.get("SEVERINO_TAILSCALE_CLI", "tailscale"), "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise ProviderError(
+            "No tailscale client on this controller, so it cannot see the "
+            "tailnet it is on."
+        ) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        # The daemon's own stderr is not repeated. It names socket paths and
+        # occasionally node keys, and this string is stored and rendered.
+        raise ProviderError(
+            "The tailscale daemon did not answer. The controller reads it "
+            "through its local socket, which has to be reachable from here."
+        ) from exc
+
+    try:
+        status = json.loads(completed.stdout)
+    except ValueError as exc:
+        raise ProviderError("The tailscale daemon returned no readable status.") from exc
+
+    nodes = [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
+    return [record for record in map(_tailnet_record, nodes) if record]
+
+
+def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
+    """One machine, keyed by the name the rest of HQ already calls it.
+
+    Every field is optional. Tailscale omits rather than nulls -- a device with
+    expiry disabled has no ``KeyExpiry`` at all, and a machine that has never
+    been seen has no ``LastSeen`` -- so a reader that requires any of them
+    rejects exactly the devices it exists to describe.
+    """
+
+    name = str(node.get("HostName") or "").strip()
+    if not name:
+        return None
+    return {
+        "name": name,
+        # The MagicDNS name, which is how the tailnet addresses it and not
+        # always what the host calls itself.
+        "dns_name": str(node.get("DNSName") or "").rstrip("."),
+        "online": bool(node.get("Online")),
+        "last_seen": str(node.get("LastSeen") or ""),
+        # Absent means expiry is disabled for this device, which is a different
+        # statement from "expires at some unknown time" and is kept distinct.
+        "key_expires": str(node.get("KeyExpiry") or ""),
+        "addresses": [str(address) for address in node.get("TailscaleIPs") or ()],
+        "os": str(node.get("OS") or ""),
+        "exit_node": bool(node.get("ExitNode")),
+    }
+
+
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
     "portainer.container": list_portainer_containers,
+    "tailscale.device": list_tailnet_devices,
 }
 
 

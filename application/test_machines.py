@@ -241,3 +241,124 @@ class DeclaredMachineTests(TestCase):
         found = machine("a-docker-host")
         self.assertIsNotNone(found)
         self.assertEqual(found.declaration, "")
+
+
+class TailnetPresenceTests(TestCase):
+    """Whether a machine is up, said by the network rather than by a service.
+
+    Every other reading HQ has is about something running on a machine, so a box
+    that is switched off and a box whose credential expired look identical.
+    """
+
+    def sweep(self, *records):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={"records": list(records), "observed_at": timezone.now()},
+        )
+
+    def device(self, name, *, online=True, key_expires=""):
+        return {"name": name, "online": online, "key_expires": key_expires}
+
+    def test_a_machine_only_the_tailnet_knows_is_still_a_machine(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop"))
+
+        self.assertIsNotNone(machine("a-laptop"))
+
+    def test_it_reports_being_on_the_tailnet(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop", online=True))
+
+        self.assertTrue(machine("a-laptop").presence.online)
+
+    def test_a_machine_that_is_off_says_so_rather_than_going_missing(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop", online=False))
+
+        found = machine("a-laptop")
+        self.assertIsNotNone(found)
+        self.assertFalse(found.presence.online)
+
+    def test_a_machine_with_no_tailnet_record_has_no_presence(self):
+        from control_plane.models import ManagedResource
+
+        from .machines import machine
+
+        ManagedResource.objects.create(
+            key="a-printer", kind="machine", spec={"name": "a-printer"}
+        )
+
+        self.assertIsNone(machine("a-printer").presence)
+
+
+class KeyExpiryTests(TestCase):
+    """A deadline with no symptom until it passes."""
+
+    def sweep(self, name, days):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [
+                    {
+                        "name": name,
+                        "online": True,
+                        "key_expires": (
+                            timezone.now() + timedelta(days=days)
+                        ).isoformat(),
+                    }
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def titles(self):
+        from .attention import tailnet
+
+        return [item.title for item in tailnet()]
+
+    def test_an_expiry_inside_the_window_is_raised(self):
+        self.sweep("an-edge", 30)
+
+        self.assertEqual(len(self.titles()), 1)
+
+    def test_one_far_away_is_not_raised_at_all(self):
+        """A queue that is never empty is one nobody reads."""
+
+        self.sweep("an-edge", 120)
+
+        self.assertEqual(self.titles(), [])
+
+    def test_one_close_enough_is_serious_rather_than_routine(self):
+        from .attention import tailnet
+
+        self.sweep("an-edge", 3)
+
+        self.assertEqual([item.status for item in tailnet()], ["serious"])
+
+    def test_expiry_disabled_is_silent_because_there_is_no_date(self):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [{"name": "a-server", "online": True, "key_expires": ""}],
+                "observed_at": timezone.now(),
+            },
+        )
+
+        self.assertEqual(self.titles(), [])

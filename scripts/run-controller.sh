@@ -69,6 +69,16 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
+# The tailnet, read from the daemon this machine is already a peer of rather
+# than from Tailscale's API -- so there is no credential for the controller to
+# hold. Mounted only when the socket is actually there: a bind mount of a
+# missing path fails the whole run, and a host that is not on the tailnet is a
+# supported way to be.
+if [ -S /var/run/tailscale/tailscaled.sock ]; then
+    set -- "$@" --mount \
+        "type=bind,source=/var/run/tailscale/tailscaled.sock,target=/var/run/tailscale/tailscaled.sock,readonly"
+fi
+
 # Forward what the renderer produced, rather than recomputing the same names
 # from a registry. The registry holds the shape a connection can take; which
 # connections exist is the vault's to say, so a list rebuilt here is a second

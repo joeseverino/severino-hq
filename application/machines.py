@@ -15,8 +15,11 @@ will ever sweep and which are still part of the place.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 
@@ -24,6 +27,40 @@ from .infrastructure import declared_machines
 from control_plane.providers import MACHINE_KIND, PROVIDERS, normalized_hostname
 
 from .services import CONTAINER_KIND, Running, container_watchers
+
+
+TAILNET_KIND = "tailscale.device"
+
+
+@dataclass(frozen=True)
+class Presence:
+    """Whether a machine is up, said by the network rather than by a service.
+
+    Every other thing HQ knows about a machine is really about something running
+    on it, so a box that is switched off and a box whose credential expired look
+    the same. This is the one reading that tells them apart, which is why it is
+    kept separate from ``reachable`` rather than folded into it.
+    """
+
+    online: bool = False
+    last_seen: str = ""
+    key_expires: str = ""
+    observed_at: Any = None
+
+    @property
+    def key_expiry_days(self) -> int | None:
+        """Days until the node key expires, or None when it does not.
+
+        A device with expiry disabled has no expiry, which is not the same as
+        an expiry far away: one is a decision and the other is a deadline.
+        """
+
+        if not self.key_expires:
+            return None
+        moment = parse_datetime(self.key_expires)
+        if moment is None:
+            return None
+        return (moment - timezone.now()).days
 
 
 @dataclass(frozen=True)
@@ -48,6 +85,8 @@ class Machine:
     containers: tuple[Running, ...] = ()
     hostnames: tuple[str, ...] = ()
     resources: tuple[str, ...] = field(default_factory=tuple)
+    # What the tailnet says about it, where the tailnet knows it at all.
+    presence: "Presence | None" = None
 
     @property
     def url(self) -> str:
@@ -74,6 +113,7 @@ def machine_catalog() -> tuple[Machine, ...]:
     containers = _containers()
     reached = _reached(connections)
     declared = _declarations()
+    present = tailnet_presence()
     services = _services_by_host(connections, containers)
     resources = _resources_by_host()
     # A declared machine counts on its own. It used to have to be reached or
@@ -82,7 +122,7 @@ def machine_catalog() -> tuple[Machine, ...]:
     # had asked for either. Declaring one is a deliberate act in HQ now, and a
     # board that drops what it was just told about is answering a question
     # nobody asked.
-    names = set(containers) | set(reached) | set(services) | set(resources) | set(declared)
+    names = set(containers) | set(reached) | set(services) | set(resources) | set(declared) | set(present)
     answered = {
         connection.connection_ref
         for connection in connections
@@ -95,6 +135,7 @@ def machine_catalog() -> tuple[Machine, ...]:
             name=name,
             role=declared.get(name, Declared()).role,
             declaration=declared.get(name, Declared()).key,
+            presence=present.get(name),
             reachable=any(
                 ref in answered
                 for ref in set(reached.get(name, ()))
@@ -197,6 +238,24 @@ def _containers() -> dict[str, list[Running]]:
                 found.setdefault(host, []).append(
                     Running.of(record, snapshot.observed_at, watchers)
                 )
+    return found
+
+
+def tailnet_presence() -> dict[str, Presence]:
+    """Presence by machine name, as the tailnet last reported it."""
+
+    found: dict[str, Presence] = {}
+    for snapshot in ProviderInventory.objects.filter(kind=TAILNET_KIND):
+        for record in snapshot.records:
+            name = str(record.get("name", ""))
+            if not name:
+                continue
+            found[name] = Presence(
+                online=bool(record.get("online")),
+                last_seen=str(record.get("last_seen", "")),
+                key_expires=str(record.get("key_expires", "")),
+                observed_at=snapshot.observed_at,
+            )
     return found
 
 
