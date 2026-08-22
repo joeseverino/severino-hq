@@ -246,7 +246,15 @@ def machine_catalog() -> tuple[Machine, ...]:
                     )
                 )
             ),
-            containers=tuple(containers.get(name, ())),
+            # Gathered across aliases like everything else here. A machine known
+            # by two names runs one set of containers.
+            containers=tuple(containers.get(name, ()))
+            + tuple(
+                item
+                for alias, target in aliases.items()
+                if target == name
+                for item in containers.get(alias, ())
+            ),
             hostnames=tuple(
                 sorted(
                     set(services.get(name, ()))
@@ -311,7 +319,19 @@ def _same_machine(
         for name, entry in (declared or {}).items()
         for address in entry.addresses
     }
-    by_address.update({address: host for host, address in located.items()})
+    # A declared name wins over the name a sweep filed containers under. Both
+    # describe the same machine, and only one of them was chosen deliberately.
+    for host, address in located.items():
+        by_address.setdefault(address, host)
+    # Which makes the sweep's name an alias rather than a second machine. What
+    # a controller calls the host it found is not always that host's name --
+    # Portainer's own environment is called "local", and a controller filling
+    # that in has only its own hostname to offer. Run the sweep from somewhere
+    # else and every container lands on a machine that is not running them.
+    for host, address in located.items():
+        owner = by_address.get(address)
+        if owner and owner != host:
+            aliases[host] = owner
     for name, presence in (present or {}).items():
         for address in presence.addresses:
             owner = by_address.get(address)

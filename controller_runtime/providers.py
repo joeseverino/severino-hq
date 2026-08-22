@@ -6,6 +6,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -1931,6 +1932,36 @@ def _portainer_headers(connection_ref: str = "") -> dict[str, str]:
     }
 
 
+def _an_address(host: str) -> str:
+    """A name resolved to the address it answers at, where that is possible.
+
+    A credential is written the way an operator types it, which is a hostname.
+    An address is what every other source of a machine reports, so a hostname
+    left unresolved joins to nothing: HQ holds one machine's address from three
+    directions and a name for it from a fourth, and cannot see they are the
+    same machine. Resolving is what makes the fourth comparable to the rest.
+
+    The name is kept when it does not resolve. That is not a failure worth
+    raising -- an unresolvable name still identifies the endpoint consistently,
+    which is most of what this is for.
+    """
+
+    if not host or _looks_like_an_address(host):
+        return host
+    try:
+        return socket.gethostbyname(host)
+    except (OSError, UnicodeError):
+        return host
+
+
+def _looks_like_an_address(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
 def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
     """Every Docker environment, with the machine each one is.
 
@@ -1944,6 +1975,13 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
         f"{_portainer_url(connection_ref)}/endpoints",
         headers=_portainer_headers(connection_ref),
     )
+    # Where Portainer itself is, which is where its local socket is too. Without
+    # this a local environment reports no address at all, and an address is the
+    # one identity every source of a machine agrees on -- so the machine
+    # Portainer runs on was the single one HQ could not recognise by it.
+    portainer_at = _an_address(
+        urllib.parse.urlsplit(_portainer_url(connection_ref)).hostname or ""
+    )
     resolved = []
     for environment in environments or []:
         url = str(environment.get("URL", ""))
@@ -1952,7 +1990,7 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
             {
                 "id": environment.get("Id"),
                 "name": environment.get("Name", ""),
-                "address": address or "",
+                "address": address or portainer_at,
                 "local": not address,
                 "reachable": environment.get("Status") == 1,
             }

@@ -417,3 +417,53 @@ class OneMachineManyNamesTests(TestCase):
         """Not a missed duplicate: HQ declining to claim two things are one."""
 
         self.assertIn("a-stranger", self.names())
+
+
+class WhoeverSweptTests(TestCase):
+    """The name a sweep files containers under is not always a machine's name.
+
+    Portainer calls its own environment "local", and a controller filling that
+    in has nothing to offer but its own hostname. Run the sweep from a laptop
+    and every container on the Docker host is reported as running on the
+    laptop -- a machine that has never run any of them.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={
+                "name": "a-docker-host",
+                "role": "Docker host",
+                "addresses": ["10.0.0.9"],
+            },
+        )
+        containers(
+            {
+                "name": "a-service",
+                "host": "a-laptop-that-swept",
+                "host_address": "10.0.0.9",
+                "state": "running",
+                "connection_ref": "a-portainer",
+            }
+        )
+
+    def test_the_containers_are_on_the_machine_running_them(self):
+        found = machine("a-docker-host")
+
+        self.assertEqual([item.name for item in found.containers], ["a-service"])
+
+    def test_the_machine_that_swept_does_not_become_a_second_row(self):
+        self.assertNotIn(
+            "a-laptop-that-swept", [found.name for found in machine_catalog()]
+        )
+
+    def test_the_declared_name_is_the_one_kept(self):
+        self.assertIn("a-docker-host", [found.name for found in machine_catalog()])
+
+    def test_the_name_the_sweep_used_is_kept_as_an_alias(self):
+        """Discarding it would leave nothing explaining the fold."""
+
+        self.assertIn("a-laptop-that-swept", machine("a-docker-host").aliases)

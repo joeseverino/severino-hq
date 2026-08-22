@@ -120,6 +120,15 @@ def record_inventory(
     Replaced rather than merged: this describes a provider at a moment, and
     merging would keep records that have since been deleted, which is the one
     thing a staleness-aware cache must not do.
+
+    A provider that could not be reached is the exception, and the reason is
+    the same one. "The credential is missing" and "the provider is empty" are
+    different facts, and a sweep that reports the first must not be stored as
+    the second: doing so deletes what HQ knew about a host that never changed,
+    and every surface downstream then says the containers are gone. So a failed
+    report keeps the last records and the moment they were seen, and records
+    only that the provider could not be confirmed. The data ages visibly
+    instead of vanishing silently, which is what ``observed_at`` is for.
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
@@ -131,14 +140,23 @@ def record_inventory(
             # rest of the sweep is still true, and refusing it would make a
             # controller upgrade take the whole inventory down.
             continue
+        reached = bool(report.get("ok", True))
+        seen = {"records": report.get("records") or [], "observed_at": observed_at}
         ProviderInventory.objects.update_or_create(
             kind=kind,
+            # An unreachable provider leaves the last sweep's records and the
+            # moment it took them exactly where they were.
             defaults={
-                "records": report.get("records") or [],
-                "reachable": bool(report.get("ok", True)),
+                "reachable": reached,
                 "error": str(report.get("error", ""))[:500],
-                "observed_at": observed_at,
                 "controller_id": controller_id,
+                **(seen if reached else {}),
+            },
+            create_defaults={
+                "reachable": reached,
+                "error": str(report.get("error", ""))[:500],
+                "controller_id": controller_id,
+                **seen,
             },
         )
         stored.append(kind)
