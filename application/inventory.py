@@ -486,3 +486,43 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
         }
         for snapshot in ProviderInventory.objects.all()
     )
+
+
+def adopt_discovered_containers(*, principal) -> dict[str, Any]:
+    """Watch every container a sweep found on a machine HQ already reaches.
+
+    The same argument as adopting a zone's records: the decision was made when
+    the credential was added. A Portainer that reports seven containers is not
+    asking seven questions -- watching them is what makes them startable,
+    stoppable and visible at all, and a row that cannot do any of that is a
+    row that wastes the operator's time twice, once when they look at it and
+    once when they go somewhere else to act on it.
+
+    Exited containers are watched too, deliberately. A container that is down
+    is exactly the one worth having a start button for, and refusing to watch
+    it would mean HQ could only ever act on what was already working.
+
+    Noise is handled by hiding rather than by not watching -- see ``hidden`` on
+    the spec. The two are different questions: whether HQ can act on a thing,
+    and whether it belongs at the top of a page.
+    """
+
+    from django.core.exceptions import ValidationError
+
+    from .infrastructure import NotFoundError, PolicyError
+
+    adopted: list[str] = []
+    for item in unmanaged():
+        if item.kind != "portainer.container":
+            continue
+        try:
+            result = adopt(
+                AdoptCommand(kind=item.kind, token=item.token), principal=principal
+            )
+        except (NotFoundError, PolicyError, ValidationError, ValueError):
+            # One container that cannot be adopted must not stop the rest. The
+            # next sweep tries again, so this closes itself rather than needing
+            # anybody to notice.
+            continue
+        adopted.append(result.get("resource", {}).get("key", ""))
+    return {"adopted": [key for key in adopted if key]}

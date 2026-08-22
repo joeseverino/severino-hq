@@ -402,3 +402,33 @@ document.addEventListener("click", (event) => {
   const menu = cancel.closest("details[data-menu]");
   if (menu) menu.removeAttribute("open");
 });
+
+// Reachability, answered in place. The form is a real GET to a page that
+// renders the same answer, so it works without this; what this adds is not
+// losing the dialog, the machine behind it and the scroll position every time
+// somebody asks a second question.
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("form[data-whatif]");
+  if (!form || !window.fetch) return;
+  const slot = form.parentElement.querySelector("[data-whatif-result]");
+  if (!slot) return;
+  event.preventDefault();
+  const query = new URLSearchParams(new FormData(form)).toString();
+  slot.setAttribute("aria-busy", "true");
+  fetch(`${form.action}?${query}`, {
+    headers: { "X-Requested-With": "fetch" },
+    credentials: "same-origin",
+  })
+    .then((response) => (response.ok ? response.text() : Promise.reject(response)))
+    .then((html) => {
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const fresh = parsed.querySelector("[data-whatif-result]");
+      if (fresh) slot.replaceWith(fresh);
+    })
+    .catch(() => {
+      // The answer is a page away either way, so a failure here submits for
+      // real rather than leaving the question looking unanswered.
+      form.removeAttribute("data-whatif");
+      form.submit();
+    });
+});

@@ -835,6 +835,57 @@ class MachineListView(LoginRequiredMixin, TemplateView):
         return context
 
 
+def whatif_context(request, default: str = "") -> dict:
+    """Everything the reachability panel needs, wherever it is included.
+
+    One function because the panel appears on more than one page and the two
+    must not drift into disagreeing about what they were asked. ``default``
+    is the device a page is already about, so opening the panel there starts
+    with the question most likely being asked.
+    """
+
+    from application.tailnet import devices, may_reach, ports
+
+    known = devices()
+    asked = {
+        "source": request.GET.get("source", "") or default,
+        "target": request.GET.get("target", "") or default,
+        "port": request.GET.get("port", ""),
+    }
+    context = {
+        "device_names": sorted(known),
+        "ports": ports(),
+        "asked": asked,
+        "whatif_action": request.path,
+    }
+    # Answered only when all three were given. A half-filled form is a question
+    # nobody has asked yet, not one whose answer is "no".
+    if asked["source"] and asked["target"] and asked["port"].isdigit():
+        context["verdict"] = may_reach(
+            asked["source"], asked["target"], int(asked["port"])
+        )
+    return context
+
+
+class TailnetView(LoginRequiredMixin, TemplateView):
+    """The tailnet, and whether one machine may reach another.
+
+    A page because the question has nowhere else to live. Reachability is not a
+    property of any one declaration -- it is the policy's answer about a pair --
+    so it belongs beside the devices rather than on any of them.
+    """
+
+    template_name = "control_plane/tailnet.html"
+
+    def get_context_data(self, **kwargs):
+        from application.tailnet import policy
+
+        context = super().get_context_data(**kwargs)
+        context.update(whatif_context(self.request))
+        context["policy"] = policy()
+        return context
+
+
 class MachineDetailView(LoginRequiredMixin, TemplateView):
     """One machine, and everything that ties to it.
 
@@ -853,6 +904,16 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
             raise Http404("No machine of that name has been reported.")
         context["machine"] = found
         context["container_kind"] = CONTAINER_KIND
+        # The same panel as the tailnet page, started on this machine. Asked
+        # here it is nearly always about this one, so both ends default to it
+        # and changing either is one dropdown rather than three.
+        found = context.get("machine")
+        context.update(
+            whatif_context(
+                self.request,
+                default=found.presence.tailnet_name if found and found.presence else "",
+            )
+        )
         return context
 
 

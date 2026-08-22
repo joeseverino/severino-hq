@@ -1,0 +1,46 @@
+{% comment %}
+One table of containers, used for the ones on show and the ones folded
+away. Included twice rather than written twice, so a column added to one
+cannot go missing from the other.
+{% endcomment %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Container</th>
+      <th>Image</th>
+      <th>Publishes</th>
+      <th>Status</th>
+      <th>State</th>
+    </tr>
+  </thead>
+      <tbody>
+        {% for container in containers %}
+          <tr>
+            <td>
+              {% comment %}
+              The name is the link, because the name is what an operator is
+              looking at. A container HQ watches leads to its declaration; one
+              it only sees is plain text, which is the honest rendering of
+              having nowhere to go yet. Neither needs a column of buttons
+              repeating what the first cell already identifies.
+              {% endcomment %}
+              {% if container.watcher %}
+                <a href="{% url 'control_plane:detail' container.watcher %}"><strong>{{ container.name }}</strong></a>
+              {% else %}
+                <strong>{{ container.name }}</strong>
+              {% endif %}
+              {% comment %}
+              The compose project only when it is not the container's own name.
+              A one-service compose file names the project after the service, so
+              printing both said one thing twice.
+              {% endcomment %}
+              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
+            </td>
+            <td><code>{{ container.image_label }}</code></td>
+            <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{{ container.status }}</td>
+            <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+</table>

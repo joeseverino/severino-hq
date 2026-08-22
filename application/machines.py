@@ -46,6 +46,19 @@ class Presence:
     last_seen: str = ""
     key_expires: str = ""
     addresses: tuple[str, ...] = ()
+    # What the tailnet calls it, which is rarely what HQ does. Worth showing on
+    # the machine's own page: it is the name in the Tailscale console, in
+    # MagicDNS, and in an ACL -- so an operator moving between HQ and any of
+    # those needs the join stated rather than inferred.
+    tailnet_name: str = ""
+    dns_name: str = ""
+    os: str = ""
+    exit_node: bool = False
+    tags: tuple[str, ...] = ()
+    # Who the policy admits, per port. Already swept for the reachability
+    # panel, and the same answer a machine's own page should be able to give
+    # without anybody having to go and ask it.
+    openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
 
     @property
@@ -83,7 +96,22 @@ class Machine:
     # across two rows.
     aliases: tuple[str, ...] = ()
     address: str = ""
+    # Every address HQ knows reaches this machine. A machine on a tailnet has
+    # at least two, and which one is right depends on where the client is --
+    # so a page that prints one of them is answering a question it was not
+    # asked.
+    addresses: tuple[str, ...] = ()
     containers: tuple[Running, ...] = ()
+
+    @property
+    def on_show(self) -> tuple[Running, ...]:
+        return tuple(item for item in self.containers if not item.hidden)
+
+    @property
+    def folded(self) -> tuple[Running, ...]:
+        """Watched exactly like the rest, just not what you came to look at."""
+
+        return tuple(item for item in self.containers if item.hidden)
     hostnames: tuple[str, ...] = ()
     resources: tuple[str, ...] = field(default_factory=tuple)
     # What the tailnet says about it, where the tailnet knows it at all.
@@ -181,6 +209,29 @@ def machine_catalog() -> tuple[Machine, ...]:
                 # declaration right below says otherwise is the page arguing
                 # with itself.
                 or next(iter(declared.get(name, Declared()).addresses), "")
+            ),
+            addresses=tuple(
+                dict.fromkeys(
+                    [
+                        address
+                        for address in (
+                            addresses.get(name, ""),
+                            _address(name, connections),
+                        )
+                        if address
+                    ]
+                    + list(declared.get(name, Declared()).addresses)
+                    + list(
+                        next(
+                            (
+                                present[alias].addresses
+                                for alias, target in aliases.items()
+                                if target == name and alias in present
+                            ),
+                            present.get(name).addresses if present.get(name) else (),
+                        )
+                    )
+                )
             ),
             containers=tuple(containers.get(name, ())),
             hostnames=tuple(
@@ -291,6 +342,16 @@ def tailnet_presence() -> dict[str, Presence]:
                 last_seen=str(record.get("last_seen", "")),
                 key_expires=str(record.get("key_expires", "")),
                 addresses=tuple(str(a) for a in record.get("addresses") or ()),
+                tailnet_name=name,
+                dns_name=str(record.get("dns_name", "")),
+                os=str(record.get("os", "")),
+                exit_node=bool(record.get("exit_node")),
+                tags=tuple(str(tag) for tag in record.get("tags") or ()),
+                openings=tuple(
+                    (int(entry["port"]), tuple(entry.get("who") or ()))
+                    for entry in record.get("reach") or ()
+                    if str(entry.get("port", "")).isdigit()
+                ),
                 observed_at=snapshot.observed_at,
             )
     return found

@@ -2516,3 +2516,12 @@ a.kpi:hover { background: var(--surface-2); }
    ran past the content column, which clips rather than scrolls, so the end of
    the policy was simply not there. */
 .help code, .mail-record-value { overflow-wrap: anywhere; }
+
+/* ── Reachability answer ───────────────────────────────────────── */
+
+.verdict { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 4px; }
+.modal .filter-bar { margin-bottom: 4px; align-items: center; }
+.modal .filter-bar .control-label { margin: 0 2px 0 0; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.section-head h2 { margin-bottom: 8px; }
+.data-table th[scope=row] { width: 180px; font-weight: 600; color: var(--muted); }

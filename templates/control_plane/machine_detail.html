@@ -92,53 +92,94 @@
 {% if machine.containers %}
   <h2>What is running</h2>
   <div class="table-scroll">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Container</th>
-          <th>Image</th>
-          <th>Publishes</th>
-          <th>Status</th>
-          <th>State</th>
-          <th></th>
-        </tr>
-      </thead>
+    {% include "control_plane/_container_rows.html" with containers=machine.on_show %}
+  </div>
+  {% if machine.folded %}
+    {% comment %}
+    Watched exactly like the rest -- start, stop and restart all work -- just
+    not what anybody opened this page to look at. Folded rather than dropped,
+    because a container HQ can act on and does not show is worse than either.
+    {% endcomment %}
+    <details class="fold">
+      <summary>{{ machine.folded|length }} more, kept out of the way</summary>
+      <div class="table-scroll">
+        {% include "control_plane/_container_rows.html" with containers=machine.folded %}
+      </div>
+    </details>
+  {% endif %}
+{% endif %}
+
+{% if machine.presence %}
+  <div class="section-head">
+    <h2>Tailnet</h2>
+    {% comment %}
+    The question sits beside the facts it is asked about rather than under a
+    heading of its own, because it is asked about this machine.
+    {% endcomment %}
+    {% if device_names %}
+      <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ machine.presence.tailnet_name|urlencode }}&amp;target={{ machine.presence.tailnet_name|urlencode }}" data-modal-open="whatif">Policy test</a>
+    {% endif %}
+  </div>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
       <tbody>
-        {% for container in machine.containers %}
+        <tr><th scope="row">Device</th><td>{{ machine.presence.tailnet_name }}</td></tr>
+        {% if machine.presence.dns_name %}
+          <tr><th scope="row">MagicDNS</th><td><code>{{ machine.presence.dns_name }}</code></td></tr>
+        {% endif %}
+        <tr>
+          <th scope="row">State</th>
+          <td>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|slice:":10" }}{% endif %}{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row">Node key</th>
+          <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days }} days, then it leaves the tailnet{% else %}Does not expire{% endif %}</td>
+        </tr>
+        <tr><th scope="row">Runs</th><td>{{ machine.presence.os|default:"—" }}{% if machine.presence.exit_node %} · exit node{% endif %}</td></tr>
+        {% if machine.presence.tags %}
           <tr>
-            <td>
-              <strong>{{ container.name }}</strong>
-              {% comment %}
-              The compose project only when it is not the container's own name.
-              A one-service compose file names the project after the service, so
-              printing both said one thing twice.
-              {% endcomment %}
-              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
-            </td>
-            <td><code>{{ container.image_label }}</code></td>
-            <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
-            <td>{{ container.status }}</td>
-            <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
-            <td>
-              {% comment %}
-              A container HQ watches has a declaration to open and operations
-              to queue against; one it merely sees has neither, and watching it
-              is what changes that. So every row leads somewhere.
-              {% endcomment %}
-              {% if container.watcher %}
-                <a class="subtle-link" href="{% url 'control_plane:detail' container.watcher %}">Open &rarr;</a>
-              {% else %}
-                <form method="post" action="{% url 'control_plane:adopt_record' container_kind container.token %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                  <button type="submit" class="btn ghost">Watch</button>
-                </form>
-              {% endif %}
-            </td>
+            <th scope="row">Tags</th>
+            <td>{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
           </tr>
-        {% endfor %}
+        {% endif %}
+        {% comment %}
+        Every address, here and nowhere else. A machine on a tailnet has a LAN
+        address, a tailnet address and a v6 address; which is the right one to
+        point a record at depends on where the client is, so they belong
+        together in one place rather than crowding the top of the page.
+        {% endcomment %}
+        <tr>
+          <th scope="row">Addresses</th>
+          <td>{% for address in machine.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+        </tr>
       </tbody>
     </table>
   </div>
+
+  {% if machine.presence.openings %}
+    {% comment %}
+    Who the policy lets in, per port. The single most useful thing HQ can say
+    about a machine that nothing else on this page says -- and it is the same
+    answer the policy test gives, shown without having to ask for it.
+    {% endcomment %}
+    <h2>Who can reach it</h2>
+    <div class="table-scroll">
+      <table class="data-table compact-table">
+        <thead><tr><th>Port</th><th>Admitted</th></tr></thead>
+        <tbody>
+          {% for port, who in machine.presence.openings %}
+            <tr>
+              <td><code>{{ port }}</code></td>
+              <td>{% for name in who %}<code>{{ name }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endif %}
+
+{% if device_names %}
+  {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="What the tailnet policy admits, evaluated by Tailscale rather than worked out here." body_template="control_plane/_whatif_form.html" %}
 {% endif %}
 {% endblock %}

@@ -1,0 +1,61 @@
+{% comment %}
+The body of the reachability dialog: one question, three fields, one answer.
+
+Submits to the tailnet page rather than to itself, so the no-JavaScript path --
+following the trigger's real href -- lands somewhere that can render the same
+answer. Defaults come from whoever included it; on a machine's page both ends
+start as that machine, which is the question most often being asked.
+{% endcomment %}
+<form method="get" class="filter-bar" data-whatif action="{% url 'control_plane:tailnet' %}">
+  <label class="control-label" for="whatif-source">From</label>
+  <select id="whatif-source" name="source">
+    {% for name in device_names %}
+      <option value="{{ name }}" {% if name == asked.source %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label class="control-label" for="whatif-target">To</label>
+  <select id="whatif-target" name="target">
+    {% for name in device_names %}
+      <option value="{{ name }}" {% if name == asked.target %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label class="control-label" for="whatif-port">Port</label>
+  <select id="whatif-port" name="port">
+    {% for port in ports %}
+      <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn primary">Ask</button>
+</form>
+
+<div data-whatif-result>
+{% if verdict %}
+  <p class="verdict">
+    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label }}</span>
+    {{ verdict.detail }}
+  </p>
+  {% if verdict.rules %}
+    {% comment %}
+    The rule, not only its conclusion. An answer an operator cannot trace back
+    to a line of policy is one they have to take on faith, and the next thing
+    they want is to go and change it.
+    {% endcomment %}
+    <table class="data-table compact-table">
+      <thead><tr><th>Rule</th><th>Admits</th><th>To</th></tr></thead>
+      <tbody>
+        {% for rule in verdict.rules %}
+          <tr>
+            <td>{% if rule.line %}line {{ rule.line }}{% else %}&mdash;{% endif %}</td>
+            <td>{% for who in rule.who %}<code>{{ who }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for to in rule.to %}<code>{{ to }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endif %}
+</div>
+<p class="muted">
+  What the policy allows. Whether anything is listening is a different question,
+  and this one does not ask it.
+</p>

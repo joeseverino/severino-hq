@@ -137,7 +137,9 @@ class DerivationTests(TestCase):
         }
 
         self.assertEqual(
-            named - {"adguard", "npm", "cloudflare_dns", "portainer", "ssh"}, set()
+            named
+            - {"adguard", "npm", "cloudflare_dns", "portainer", "ssh", "tailscale"},
+            set(),
         )
 
     def test_where_a_stack_can_run_is_what_a_portainer_reaches(self):

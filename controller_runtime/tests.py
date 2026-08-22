@@ -1728,3 +1728,106 @@ class TailnetSweepTests(TestCase):
 
         self.assertFalse(found["tailscale.device"]["ok"])
         self.assertEqual(found["tailscale.device"]["records"], [])
+
+
+class TailnetDeviceTests(TestCase):
+    """Asserting HQ's one decision about a device, and nothing else about it."""
+
+    STATUS = {
+        "Self": {"HostName": "this-node", "ID": "nSELF", "Online": True},
+        "Peer": {
+            "k1": {
+                "HostName": "an-edge",
+                "ID": "nEDGE",
+                "Online": True,
+                "KeyExpiry": "2026-11-04T00:00:00Z",
+            },
+            "k2": {"HostName": "a-server", "ID": "nSERV", "Online": True},
+        },
+    }
+
+    def setUp(self):
+        import tempfile
+
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        reading = Path(self.directory.name) / "tailnet.json"
+        reading.write_text(json.dumps(self.STATUS), encoding="utf-8")
+        patch = mock.patch.object(providers, "TAILNET_STATUS", str(reading))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def spec(self, name="an-edge", disabled=True):
+        return {
+            "connection_ref": "a-tailnet",
+            "name": name,
+            "key_expiry_disabled": disabled,
+        }
+
+    def test_a_device_already_as_declared_is_left_alone(self):
+        """a-server has no expiry, so there is nothing to assert."""
+
+        result = providers.reconcile_tailnet_device(self.spec("a-server"))
+
+        self.assertFalse(result.changed)
+
+    def test_a_dry_run_says_what_it_would_do_and_does_not_do_it(self):
+        with mock.patch.object(providers, "_tailnet_token") as token:
+            result = providers.reconcile_tailnet_device(self.spec(), apply=False)
+
+        self.assertTrue(result.changed)
+        token.assert_not_called()
+
+    def test_the_device_id_comes_from_the_local_reading_not_the_api(self):
+        """The token is spent on the change and on nothing else."""
+
+        self.assertEqual(providers._tailnet_device_id("an-edge"), "nEDGE")
+
+    def test_a_device_the_tailnet_does_not_show_is_refused_by_name(self):
+        with self.assertRaises(providers.ProviderError) as raised:
+            providers.reconcile_tailnet_device(self.spec("a-ghost"))
+
+        self.assertIn("a-ghost", str(raised.exception))
+
+    def test_a_credential_without_the_scope_says_which_scope(self):
+        import urllib.error
+
+        refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
+        with (
+            mock.patch.object(providers, "_tailnet_token", return_value="t"),
+            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers.reconcile_tailnet_device(self.spec())
+
+        self.assertIn("devices:core", str(raised.exception))
+
+    def test_an_api_key_used_as_an_oauth_client_says_so(self):
+        import urllib.error
+
+        refused = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TAILNET_CONNECTION_REF": "a-tailnet",
+                    "TAILNET_PROVIDER": "tailscale",
+                    "TAILNET_CLIENT_ID": "id",
+                    "TAILNET_CLIENT_SECRET": "secret",
+                },
+            ),
+            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers._tailnet_token("a-tailnet")
+
+        self.assertIn("OAuth client", str(raised.exception))
+
+    def test_the_token_is_never_kept(self):
+        """It lasts an hour and a sweep is minutes apart, so caching it would
+        only add an expiry to get wrong."""
+
+        source = Path(providers.__file__).read_text(encoding="utf-8")
+
+        self.assertNotIn("_TOKEN_CACHE", source)
+        self.assertEqual(source.count("def _tailnet_token"), 1)

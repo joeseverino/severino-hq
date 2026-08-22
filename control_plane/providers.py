@@ -366,6 +366,15 @@ class PortainerContainerSpec(ProviderModel):
         title="Container",
         description="The container's name, exactly as Docker reports it.",
     )
+    hidden: bool = Field(
+        default=False,
+        title="Keep it out of the way",
+        description=(
+            "Still watched and still controllable -- just folded away on the "
+            "machine's page. For the ones that are always there and never the "
+            "thing you came to look at."
+        ),
+    )
     serves_ports: list[int] = Field(
         default_factory=list,
         title="Answers on",
@@ -382,6 +391,63 @@ class PortainerContainerSpec(ProviderModel):
         if any(port < 1 or port > 65535 for port in value):
             raise ValueError("A port is between 1 and 65535.")
         return value
+
+
+class TailnetDeviceSpec(ProviderModel):
+    """A machine on the tailnet whose settings HQ keeps, not one it created.
+
+    The same shape as a watched container: the device joined the tailnet by
+    somebody running `tailscale up` on it, and HQ has no business pretending
+    otherwise. What it can hold is the handful of decisions about that device
+    which are made once and then quietly forgotten -- and which have no symptom
+    until the day they matter.
+
+    Named as the tailnet names it. That is often not what HQ calls the machine,
+    and the join between the two is the address they share; using HQ's name here
+    would mean the controller had to guess which device was meant.
+    """
+
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Tailscale",
+        description="The credential HQ changes this device through.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        title="Device",
+        description="The device's name, exactly as the tailnet reports it.",
+    )
+    key_expiry_disabled: bool = Field(
+        default=False,
+        title="Keep it on the tailnet",
+        description=(
+            "A node key expires on a date set when the device joined, and the "
+            "machine keeps running and simply stops being reachable. Turn this "
+            "on for anything that should not go away on its own."
+        ),
+    )
+
+
+class TailnetPolicySpec(ProviderModel):
+    """The tailnet's access policy, as HQ last read it.
+
+    Not something an operator adds here -- it exists because a tailnet does.
+    ``created_from`` keeps it out of the "add a resource" picker for that
+    reason: there is exactly one, and it arrived with the credential.
+    """
+
+    connection_ref: str = Field(default="", max_length=160, title="Tailscale")
+    document: str = Field(
+        default="",
+        title="Policy",
+        description=(
+            "The tailnet's access policy. Saving records what it should be; "
+            "reconciling applies it — and only if it still passes the tests "
+            "written inside it."
+        ),
+    )
 
 
 class MachineSpec(ProviderModel):
@@ -1007,6 +1073,11 @@ class ProviderSpec:
     # recomputed -- otherwise a certificate reports itself in sync against a
     # target that moved underneath it.
     resolution_input: bool = False
+    # The addresses a record makes a name resolve to, where it resolves to an
+    # address at all. Declared by the provider because only it knows which of
+    # its fields is the answer -- and read by anything asking who can reach a
+    # name, which is a property of the address rather than of the record.
+    answers: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # What this declaration holds, as ``(kind, their_field, my_field)``.
     #
     # A domain holds the records published in it, and ceasing to be responsible
@@ -1194,6 +1265,24 @@ def _proxy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
 
 def _proxy_origin(spec: dict[str, Any]) -> str:
     return f"{spec['forward_host']}:{spec['forward_port']}"
+
+
+def _rewrite_answers(spec: dict[str, Any]) -> tuple[str, ...]:
+    answer = str(spec.get("answer", "")).strip()
+    return (answer,) if answer else ()
+
+
+def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
+    """Only the record types that name an address.
+
+    A CNAME resolves to another name, and who can reach *that* is that name's
+    statement to make rather than this one's.
+    """
+
+    if str(spec.get("record_type", "")) not in ("A", "AAAA"):
+        return ()
+    content = str(spec.get("content", "")).strip()
+    return (content,) if content else ()
 
 
 def _rewrite_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1806,6 +1895,39 @@ def _managed_certificate_applies(context: NameContext) -> str:
     )
 
 
+def _tailnet_device_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    name = str(spec.get("name", ""))
+    return (name,) if name else ()
+
+
+def _tailnet_device_key_hint(spec: dict[str, Any]) -> str:
+    return str(spec.get("name", ""))
+
+
+def _tailnet_device_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What HQ asked for about this device, beside what the tailnet reports."""
+
+    wanted = "Stays on the tailnet" if spec.get("key_expiry_disabled") else "Expires"
+    observed = ""
+    if status:
+        observed = (
+            "Stays on the tailnet"
+            if status.get("key_expiry_disabled")
+            else expiry_phrase(str(status.get("key_expires", "")))
+        )
+    return (
+        ("Device", "", str(spec.get("name", ""))),
+        ("Reached through", "", str(spec.get("connection_ref", ""))),
+        ("Node key", wanted, observed),
+    )
+
+
+def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {"name": record.get("name", "")}
+
+
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
@@ -1931,9 +2053,57 @@ _PROVIDERS = (
         # Ports are behind the disclosure because the answer is usually none:
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
-        advanced_fields=("serves_ports",),
+        advanced_fields=("hidden", "serves_ports"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
+    ),
+    ProviderSpec(
+        "tailscale.device",
+        "Keeps a decision about a machine on your tailnet -- the kind that is "
+        "made once and then has no symptom until the day it matters. It does "
+        "not define the device; running Tailscale on the machine did that.",
+        TailnetDeviceSpec,
+        label="Tailnet device",
+        connection_providers=("tailscale",),
+        readout=_tailnet_device_readout,
+        from_record=_tailnet_device_from_record,
+        identity=_tailnet_device_identity,
+        key_hint=_tailnet_device_key_hint,
+        choices="application.provider_choices:tailnet_device",
+        change_effects=(
+            (
+                "key_expiry_disabled",
+                "Saving applies this to the device on the next pass. Turning it "
+                "off gives the device an expiry date again.",
+            ),
+        ),
+        removal_note=lambda spec: (
+            f"HQ stops keeping {spec.get('name', 'this device')} on the tailnet. "
+            "Whatever is set there now stays set; nothing asserts it again."
+        ),
+    ),
+    ProviderSpec(
+        "tailscale.policy",
+        "The tailnet's access policy. HQ reads it, shows what it implies, and "
+        "checks a change against your own tests before applying one.",
+        TailnetPolicySpec,
+        label="Tailnet policy",
+        connection_providers=("tailscale",),
+        hostnames=None,
+        # There is one, it came with the tailnet, and nobody adds a second.
+        created_from="tailnet",
+        change_effects=(
+            (
+                "document",
+                "Saving records it. Reconciling applies it to the tailnet, and "
+                "only if it still passes the tests written inside it.",
+            ),
+        ),
+        readout=lambda spec, status: (
+            ("Grants", "", str(len(status.get("grants", ())) if status else "")),
+            ("Groups", "", str(len(status.get("groups", ())) if status else "")),
+            ("Tests", "", str(len(status.get("tests", ())) if status else "")),
+        ),
     ),
     ProviderSpec(
         "machine",
@@ -1991,6 +2161,7 @@ _PROVIDERS = (
         facet="dns",
         hostnames=_rewrite_hostnames,
         seed=_rewrite_seed,
+        answers=_rewrite_answers,
         from_record=_rewrite_from_record,
         readout=_rewrite_readout,
     ),
@@ -2006,6 +2177,7 @@ _PROVIDERS = (
         facet="dns",
         hostnames=_dns_record_hostnames,
         seed=_dns_record_seed,
+        answers=_dns_record_answers,
         readout=_dns_record_readout,
         from_record=_dns_record_from_record,
         choices="application.provider_choices:dns_record",
