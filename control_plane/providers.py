@@ -560,12 +560,22 @@ class UploadedCertificateSpec(ProviderModel):
         title="Install it on",
         description="Where to deploy it. It can be added to more later.",
     )
+    domains: list[str] = Field(
+        default_factory=list,
+        title="Names it covers",
+        description=(
+            "Read out of the certificate when it is uploaded, and rewritten "
+            "every time a new one is. Narrow it if HQ should treat this as "
+            "covering fewer names than it carries."
+        ),
+    )
 
 
 class ResolvedUploadedCertificateSpec(ProviderModel):
     certificate_name: str = Field(min_length=1, max_length=160)
     install_on: list[str] = Field(min_length=1)
     consumers: list[TLSConsumer] = Field(min_length=1)
+    domains: list[str] = Field(default_factory=list)
 
 
 class AdGuardRewriteSpec(ProviderModel):
@@ -1033,7 +1043,12 @@ class ProviderResolutionContext:
     # rather than queried here so this module stays free of the database and a
     # projection resolving many resources pays for one read.
     delivery_targets: tuple[dict[str, Any], ...] = ()
-    resource_status: Callable[[str, str], dict[str, Any] | None] | None = None
+    # ``(key, kinds) -> status``. Kinds rather than one kind because a proxy
+    # host can be bound to a certificate HQ issued or one it was given, and it
+    # names the resource without saying which it is.
+    resource_status: (
+        Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None
+    ) = None
     # The key of the resource being resolved, where resolution depends on which
     # resource is asking -- a target's name belongs to one certificate, and the
     # rest are named after themselves.
@@ -1147,6 +1162,7 @@ def _resolve_uploaded(
         "certificate_name": authored["certificate_name"],
         "install_on": authored["install_on"],
         "consumers": consumers,
+        "domains": list(authored.get("domains", ())),
     }
 
 
@@ -1156,7 +1172,9 @@ def _resolve_npm(
     certificate_id = None
     resource_key = authored.get("certificate_resource")
     if resource_key and context.resource_status:
-        status = context.resource_status(resource_key, CERTIFICATE_KIND)
+        status = context.resource_status(
+            resource_key, (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
+        )
         certificate_id = status.get("npm_certificate_id") if status else None
     return {**authored, "certificate_id": certificate_id}
 
@@ -1600,10 +1618,10 @@ def _delivery_target_readout(
 
 
 def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    # The names come from the certificate itself, which HQ read when it was
-    # uploaded and recorded on the resource's status. Nothing is declared here,
-    # so before the first observation this covers nothing -- which is true.
-    return ()
+    # The names come from the certificate itself, which HQ reads when it is
+    # uploaded. Nothing is declared here, so before HQ has the artifact this
+    # covers nothing -- which is true.
+    return tuple(spec.get("domains", ()))
 
 
 def _uploaded_certificate_readout(

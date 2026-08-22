@@ -352,11 +352,12 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
     from control_plane.providers import ProviderResolutionContext, resolve_provider_spec
 
-    def resource_status(key: str, kind: str) -> dict[str, Any] | None:
-        certificate = ManagedResource.objects.filter(
-            key=key, kind=kind
-        ).values_list("status", flat=True).first()
-        return certificate
+    def resource_status(key: str, kinds: tuple[str, ...]) -> dict[str, Any] | None:
+        return (
+            ManagedResource.objects.filter(key=key, kind__in=kinds)
+            .values_list("status", flat=True)
+            .first()
+        )
 
     spec = resolve_provider_spec(
         resource.kind,

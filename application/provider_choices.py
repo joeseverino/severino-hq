@@ -22,6 +22,7 @@ from control_plane.providers import (
     DELIVERY_TARGET_KIND,
     DNS_RECORD_TYPES,
     MACHINE_KIND,
+    UPLOADED_CERTIFICATE_KIND,
     NameContext,
 )
 
@@ -37,8 +38,13 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     reconciler does with an empty value.
     """
 
+    # Both kinds. A name no public authority will issue for is served by a
+    # certificate HQ was given rather than one it issued, and offering only the
+    # issued ones meant the proxy that needs it could not be pointed at it from
+    # the form at all -- on the one flow where an uploaded certificate is the
+    # only possible answer.
     managed = ManagedResource.objects.filter(
-        kind=CERTIFICATE_KIND, enabled=True
+        kind__in=(CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND), enabled=True
     ).order_by("key")
     covering = set(context.certificates)
     # The ones that answer for this name first, and marked. With a single
