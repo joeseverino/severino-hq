@@ -24,9 +24,15 @@ import re
 from django.urls import reverse
 
 from control_plane.models import ManagedResource
-from control_plane.providers import PROVIDERS, caa_parts, expiry_phrase
+from control_plane.providers import (
+    CERTIFICATE_KIND,
+    PROVIDERS,
+    UPLOADED_CERTIFICATE_KIND,
+    caa_parts,
+    expiry_phrase,
+)
 
-from .infrastructure import resolved_spec, topology_payload
+from .infrastructure import delivery_targets, resolved_spec
 from .known_hosts import operator, registrable
 
 from .ui import ListRow
@@ -37,7 +43,7 @@ from .zones import ZoneInsight
 # "Let's Encrypt" appears in that provider's summary as prose rather than as
 # something a comparison can read.
 MANAGED_ISSUER = "letsencrypt.org"
-ISSUING_PROVIDER = "tls.certificate"
+ISSUING_PROVIDER = CERTIFICATE_KIND
 
 
 def _in_zone(name: str, zone: str) -> bool:
@@ -101,15 +107,15 @@ def certificates(zone) -> ZoneInsight | None:
     nothing in the certificate registry knows what the zone permits.
     """
 
-    topology = topology_payload()
+    targets = delivery_targets()
     covering = []
     for resource in ManagedResource.objects.filter(
-        kind__in=("tls.certificate", "tls.uploaded_certificate"), enabled=True
+        kind__in=(CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND), enabled=True
     ):
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.hostnames is None:
             continue
-        spec = resolved_spec(resource, topology)
+        spec = resolved_spec(resource, targets)
         try:
             names = tuple(provider.hostnames(spec))
         except (KeyError, TypeError, ValueError):

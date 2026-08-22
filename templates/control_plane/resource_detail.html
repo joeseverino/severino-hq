@@ -130,7 +130,7 @@
 </div>
 
 {% if resource.kind == "tls.certificate" %}
-  {% if topology_error %}<p class="message error">{{ topology_error }}</p>{% endif %}
+  {% if resolution_error %}<p class="message error">{{ resolution_error }}</p>{% endif %}
   <div class="two-col">
     <section class="control-card">
       <h2>Certificate</h2>

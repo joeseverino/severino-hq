@@ -26,6 +26,7 @@ from typing import Any
 from control_plane.providers import (
     caa_parts,
     certificate_covers,
+    controller_capability_registry,
     controller_id,
     normalized_record_content,
     normalized_hostname,
@@ -1874,17 +1875,6 @@ def delete_cloudflare_record(
     )
 
 
-def _zone_locked(
-    spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    del spec, apply, observed
-    raise ProviderError(
-        "Declaring a domain records what HQ is responsible for. Changing the "
-        "zone itself needs a credential with Zone Settings:Edit, which this "
-        "controller does not hold."
-    )
-
-
 def list_cloudflare_zones() -> list[dict[str, Any]]:
     """Every zone the credential can see, declared or not.
 
@@ -2353,17 +2343,6 @@ def _cycle_portainer_container(
     )
 
 
-def _container_locked(
-    spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    del spec, apply, observed
-    raise ProviderError(
-        "There is nothing to converge. A container's definition lives in "
-        "whatever compose file created it; this declaration records that HQ "
-        "watches the container and may cycle it."
-    )
-
-
 def restart_portainer_container(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
@@ -2563,11 +2542,37 @@ def inventory() -> dict[str, Any]:
     return found
 
 
+def _refuses(reason: str):
+    """A handler for an action the registry says this controller will not take.
+
+    The reason is the registry's, not a second copy of it here. A locked action
+    that reached a controller is a bug in whatever queued it, and the operator
+    reading the failure should be told the same thing the declaration form told
+    them.
+    """
+
+    def locked(
+        spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
+    ) -> ProviderResult:
+        del spec, apply, observed
+        raise ProviderError(reason)
+
+    return locked
+
+
+# Locked actions are generated, so a provider declared as locked needs no entry
+# here at all -- and cannot be declared locked while quietly having a handler
+# that acts.
 PROVIDER_ACTIONS = {
+    **{
+        (kind, action): _refuses(policy.reason)
+        for kind, capability in controller_capability_registry().capabilities.items()
+        for action, policy in capability.actions.items()
+        if policy.mode == "locked"
+    },
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
     ("portainer.stack", "reconcile"): reconcile_portainer,
     ("portainer.stack", "delete"): delete_portainer,
-    ("portainer.container", "reconcile"): _container_locked,
     ("portainer.container", "restart"): restart_portainer_container,
     ("portainer.container", "start"): start_portainer_container,
     ("portainer.container", "stop"): stop_portainer_container,
@@ -2578,7 +2583,6 @@ PROVIDER_ACTIONS = {
     ("npm.proxy_host", "delete"): delete_npm,
     ("cloudflare.dns_record", "reconcile"): reconcile_cloudflare_record,
     ("cloudflare.dns_record", "delete"): delete_cloudflare_record,
-    ("cloudflare.zone", "reconcile"): _zone_locked,
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
 }

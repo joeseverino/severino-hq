@@ -1,4 +1,10 @@
-"""Atomic synchronization boundary for HQ's external sources of truth."""
+"""The vault's documentation, brought into HQ as one transaction.
+
+This used to carry an authored topology alongside it, so that HQ's picture of
+the world and the vault's could not disagree. HQ derives that picture now -- from
+what its credentials reach and what it has been told directly -- so there is
+nothing here for a document to say.
+"""
 
 from __future__ import annotations
 
@@ -9,13 +15,11 @@ from django.db import transaction
 
 from .documentation import sync_documentation
 from .security import Principal
-from .topology import sync_topology
 
 
 @dataclass(frozen=True)
 class HQSyncCommand:
     manifest: list[dict[str, Any]]
-    topology: dict[str, Any]
     update_existing: bool = True
     report_orphans: bool = True
     prune_orphans: bool = False
@@ -29,7 +33,7 @@ def execute_hq_sync(
     principal: Principal,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Apply documentation and topology together or apply neither."""
+    """Apply the whole manifest or none of it."""
 
     del expected_updated_at
     documentation = sync_documentation(
@@ -43,9 +47,4 @@ def execute_hq_sync(
     if not documentation["ok"]:
         transaction.set_rollback(True)
         return documentation
-    topology = sync_topology(command.topology, principal=principal)
-    return {
-        "ok": True,
-        "documentation": documentation,
-        "topology": topology,
-    }
+    return {"ok": True, "documentation": documentation}

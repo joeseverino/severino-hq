@@ -11,7 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest
-from control_plane.providers import enabled_controller_actions
+from control_plane.providers import CERTIFICATE_KIND, enabled_controller_actions
 
 from .infrastructure import controller_contract, serialize_operation, serialize_resource
 
@@ -80,7 +80,7 @@ def _automatic_action(
     """Evaluate one declared automatic action without executing it."""
 
     if action == OperationRequest.Action.RECONCILE:
-        if resource.kind == "tls.certificate" and resource.status.get("not_after"):
+        if resource.kind == CERTIFICATE_KIND and resource.status.get("not_after"):
             try:
                 timezone.datetime.fromisoformat(
                     resource.status["not_after"].replace("Z", "+00:00")
@@ -96,7 +96,7 @@ def _automatic_action(
         ):
             return True, "Automatic reconciliation of provider drift.", "drift"
         return False, "", ""
-    if resource.kind == "tls.certificate" and action == OperationRequest.Action.RENEW:
+    if resource.kind == CERTIFICATE_KIND and action == OperationRequest.Action.RENEW:
         not_after = resource.status.get("not_after")
         if not not_after:
             return False, "", ""

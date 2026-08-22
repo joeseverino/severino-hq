@@ -1,11 +1,11 @@
 """Answers that are a matter of live data rather than of type.
 
 Most spec fields are fully described by their annotation: a port is an integer
-between 1 and 65535, a scheme is one of two strings. A topology reference is
-not. It has to name something that exists, and rendering it from the annotation
-alone produced a blank text box that worked only if the operator already knew
-the exact slug -- which meant the certificate form could be filled in correctly
-only by someone who did not need it.
+between 1 and 65535, a scheme is one of two strings. Where a certificate
+installs is not. It has to name something that exists, and rendering it from the
+annotation alone produced a blank text box that worked only if the operator
+already knew the exact slug -- which meant the certificate form could be filled
+in correctly only by someone who did not need it.
 
 Kept out of ``control_plane.providers`` because these read the database and that
 module declares rather than queries. Providers point at these by name, the same
@@ -14,14 +14,16 @@ late-bound way a domain points at its attention provider.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Set as AbstractSet
 
-from control_plane.models import (
-    ManagedResource,
-    ProviderInventory,
-    TopologySnapshot,
+from control_plane.models import ManagedResource, ProviderInventory
+from control_plane.providers import (
+    CERTIFICATE_KIND,
+    DELIVERY_TARGET_KIND,
+    DNS_RECORD_TYPES,
+    MACHINE_KIND,
+    NameContext,
 )
-from control_plane.providers import DNS_RECORD_TYPES, NameContext
 
 from .connections import connections_for, reachable_through
 
@@ -36,7 +38,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     """
 
     managed = ManagedResource.objects.filter(
-        kind="tls.certificate", enabled=True
+        kind=CERTIFICATE_KIND, enabled=True
     ).order_by("key")
     covering = set(context.certificates)
     # The ones that answer for this name first, and marked. With a single
@@ -61,105 +63,56 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
 
 
 def certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
-    """The certificates the topology describes, as ``pki:`` references.
+    """Where a certificate can be installed."""
 
-    Labelled with the names each one covers, because "pki:jseverino-wildcard"
-    does not tell an operator whether it answers for the host they are about to
-    put behind it -- and that is the only question being asked at this point.
-    """
-
-    payload = (
-        TopologySnapshot.objects.filter(pk="topology")
-        .values_list("payload", flat=True)
-        .first()
-    )
-    payload = payload or {}
-    return {
-        "topology_ref": (
-            ("", "Define a new certificate below"),
-            *_certificates(payload),
-        ),
-        "install_on": tuple(_install_targets(payload)),
-    }
+    return {"install_on": tuple(_install_targets())}
 
 
-def _install_targets(payload: dict[str, Any]):
-    """Places a certificate can be installed, learned from where they already are.
+def _install_targets(exclude: AbstractSet[str] = frozenset()):
+    """Every declared delivery target, as the thing an operator picks.
 
     Offered as the targets themselves rather than as deployment settings: an
     operator picks "the edge Caddy", and the directory it wants a certificate in
-    is read back from how it already receives one.
+    is stated once on the target.
     """
 
-    seen: dict[str, str] = {}
-    for dependency in payload.get("dependencies", ()):
-        if dependency.get("relation") != "consumes":
-            continue
-        attributes = dependency.get("attributes") or {}
-        connection_ref = attributes.get("connection_ref")
-        kind = attributes.get("kind")
-        if not connection_ref or not kind or connection_ref in seen:
-            continue
-        seen[connection_ref] = f"{connection_ref} ({kind})"
-    return sorted(seen.items())
+    targets = ManagedResource.objects.filter(
+        kind=DELIVERY_TARGET_KIND, enabled=True
+    ).values_list("spec", flat=True)
+    return sorted(
+        (spec["connection_ref"], f"{spec['name']} ({spec['kind']})")
+        for spec in targets
+        if spec.get("connection_ref") and spec.get("kind") not in exclude
+    )
 
 
-def _certificates(payload: dict[str, Any]):
-    """Only entries a controller could actually issue and deploy.
+def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Which credential reaches the target, and which certificate names it."""
 
-    Not every pki entry is a certificate HQ can manage. An offline root CA is a
-    signing key held on a machine with no network -- it has no domain list and
-    nothing consumes it, and ``_resolve_tls`` refuses it for exactly those
-    reasons. Offered in the menu it looked like a valid answer that failed only
-    after being chosen, which is the worst place to find out.
-    """
-
-    consumed = {
-        dependency.get("to")
-        for dependency in payload.get("dependencies", ())
-        if dependency.get("relation") == "consumes"
+    return {
+        "connection_ref": _connection_choices("npm") + _connection_choices("ssh"),
+        "certificate_resource": (
+            ("", "Nothing yet"),
+            *sorted(
+                (key, key)
+                for key in ManagedResource.objects.filter(
+                    kind=CERTIFICATE_KIND, enabled=True
+                ).values_list("key", flat=True)
+            ),
+        ),
     }
-    for entry in payload.get("pki", ()):
-        identifier = entry.get("id")
-        domains = entry.get("domains") or ()
-        if not identifier or not domains:
-            continue
-        if f"pki:{identifier}" not in consumed:
-            # Nothing declares that it serves this, so there is nowhere to
-            # install it. Resolution treats that as an error, not an empty list.
-            continue
-        covers = ", ".join(domains[:4])
-        if len(domains) > 4:
-            covers += f", +{len(domains) - 4} more"
-        yield (
-            f"pki:{identifier}",
-            f"{entry.get('certificate_name') or identifier} — {covers}",
-        )
 
 
 def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
-    """The same install targets an issued certificate can go to.
+    """The same install targets an issued certificate can go to, less cPanel.
 
     Deploying is deploying: a proxy does not care which authority signed the
-    thing it is asked to serve, so the targets are read back from use exactly
-    the same way.
+    thing it is asked to serve. Shared hosting does -- cPanel will not accept a
+    certificate signed by a private CA, and resolution refuses one, so offering
+    it would put an answer in the menu that fails only after being chosen.
     """
 
-    payload = (
-        TopologySnapshot.objects.filter(pk="topology")
-        .values_list("payload", flat=True)
-        .first()
-    )
-    # Shared hosting is excluded: cPanel will not accept a certificate signed by
-    # a private CA, and resolution refuses one. Offering it would put an answer
-    # in the menu that fails only after being chosen.
-    return {
-        "install_on": tuple(
-            (ref, label)
-            for ref, label in _install_targets(payload or {})
-            if "(cpanel)" not in label
-        )
-    }
+    return {"install_on": tuple(_install_targets(exclude={"cpanel"}))}
 
 
 def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -181,18 +134,18 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     """Where a stack can run, and which Portainer reaches it.
 
     Both menus come from the connection sweep, because a Portainer is the only
-    thing that knows which machines it holds -- a topology lists a printer and a
-    phone as readily as a Docker host, and a machine registered this morning is
-    available whether or not anything has been recorded about it anywhere else.
+    thing that knows which machines it holds -- HQ lists a printer and a phone as
+    readily as a Docker host, and a machine registered this morning is available
+    whether or not anything has been declared about it.
 
     Read from the connection rather than from the containers found on it, so a
     machine that is running nothing is still offered. That is precisely when
     this form is being filled in.
     """
 
-    described = _topology_roles()
+    described = _declared_roles()
     return {
-        # Labelled from the topology where it knows the machine, because
+        # Labelled with what the machine is for where HQ has been told, because
         # Portainer calls its own host "local" and that is nobody's hostname.
         "host": tuple(
             (host, f"{host} — {described[host]}" if described.get(host) else host)
@@ -202,18 +155,15 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     }
 
 
-def _topology_roles() -> dict[str, str]:
-    """What the topology calls each machine, for labelling only."""
+def _declared_roles() -> dict[str, str]:
+    """What each declared machine is for, for labelling only."""
 
-    payload = (
-        TopologySnapshot.objects.filter(pk="topology")
-        .values_list("payload", flat=True)
-        .first()
-    ) or {}
     return {
-        host["id"]: host.get("role", "")
-        for host in payload.get("hosts", ())
-        if host.get("id")
+        spec["name"]: spec.get("role", "")
+        for spec in ManagedResource.objects.filter(
+            kind=MACHINE_KIND, enabled=True
+        ).values_list("spec", flat=True)
+        if spec.get("name")
     }
 
 

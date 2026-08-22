@@ -55,7 +55,6 @@ class ControllerCapabilityRegistry(ProviderModel):
 
 
 class TLSConsumerBase(ProviderModel):
-    topology_ref: str = Field(min_length=1, max_length=255)
     name: str = Field(min_length=1, max_length=160)
     verify_domains: list[str] = Field(default_factory=list)
 
@@ -84,38 +83,120 @@ TLSConsumer = Annotated[
 ]
 
 
+class TLSDeliveryTargetSpec(ProviderModel):
+    """One place a certificate can be installed, and how it arrives there.
+
+    A Caddy host wants its certificate in a particular directory; a cPanel
+    account takes only the names it actually hosts. Those are properties of the
+    target, true of every certificate it will ever serve, so they are stated
+    once here instead of on each certificate that installs there.
+
+    Flat rather than a union per kind, because the form an operator fills is
+    generated from this model's fields: a union has none, and the three shapes
+    differ by one field each.
+    """
+
+    kind: Literal["npm", "caddy", "cpanel"] = Field(
+        title="What it runs",
+        description="Decides how the certificate is delivered and verified.",
+    )
+    connection_ref: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Connection",
+        description="The credential HQ reaches this target through.",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Name it uses there",
+        description=(
+            "What the certificate is called at the target itself. Only the "
+            "certificate below keeps this name; anything else installed here "
+            "is named after itself, so two cannot collide."
+        ),
+    )
+    certificate_resource: str = Field(
+        default="",
+        max_length=160,
+        title="Certificate that owns the name",
+        description=(
+            "Which certificate the name above belongs to. Blank means no "
+            "certificate has claimed it."
+        ),
+    )
+    verify_domains: list[str] = Field(
+        default_factory=list,
+        title="Check these names",
+        description=(
+            "Names HQ connects to here to confirm the certificate really "
+            "arrived. Leave empty to check the ones it covers."
+        ),
+    )
+    certificate_directory: str = Field(
+        default="",
+        max_length=500,
+        title="Certificate directory",
+        description=(
+            "Caddy only. Where on the target the certificate and key are "
+            "written."
+        ),
+    )
+    discover_covered_hosts: bool = Field(
+        default=False,
+        title="Check every proxy host it covers",
+        description=(
+            "Nginx Proxy Manager only. Verify against every proxy host whose "
+            "name this certificate covers, rather than only the names above."
+        ),
+    )
+    install_domains: list[str] = Field(
+        default_factory=list,
+        title="Install only these names",
+        description=(
+            "Shared hosting only. cPanel takes one certificate per name and no "
+            "wildcards. Leave empty to use every non-wildcard name the "
+            "certificate covers."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def kind_decides_which_settings_apply(self):
+        # Refused rather than ignored. A directory typed against an NPM target
+        # would sit there looking configured while nothing ever read it.
+        for field, kind in (
+            ("certificate_directory", "caddy"),
+            ("discover_covered_hosts", "npm"),
+            ("install_domains", "cpanel"),
+        ):
+            if getattr(self, field) and self.kind != kind:
+                raise ValueError(
+                    f"{TLSDeliveryTargetSpec.model_fields[field].title!r} "
+                    f"applies to {kind} targets, and this one is {self.kind}."
+                )
+        if self.kind == "caddy" and not self.certificate_directory:
+            raise ValueError("A Caddy target needs the directory to write to.")
+        return self
+
+
 class TLSCertificateSpec(ProviderModel):
     """One certificate HQ issues, deploys and keeps renewed.
 
-    Either it names a certificate the topology already describes, or it defines
-    one here. Both, because the first is how every certificate got here and the
-    second is the only way a new domain ever gets one: with only the reference,
-    "Add TLS certificate" offered a menu of certificates that already existed
-    and no way to want a different one.
+    Everything about it is stated here: what it is called, which names it
+    covers, and where it installs. It used to be a reference into an authored
+    document instead, which meant the answer to "what does this cover" lived
+    somewhere HQ could read and not edit -- so adding a name was a file change,
+    a sync and a hope, rather than saving a form.
 
     Titles and descriptions live on the model because the form is generated from
     it. Left off, every field was labelled by its own variable name, and an
-    operator was asked for a "Topology ref" -- which names the field correctly
-    and the question not at all.
+    operator was asked for a "Renewal window days" rather than a question.
     """
 
-    topology_ref: str = Field(
-        default="",
-        pattern=r"^(pki:[a-z0-9][a-z0-9-]*)?$",
-        title="Which certificate this is",
-        description=(
-            "This certificate is defined in your topology: its name, the names "
-            "it covers and where it installs all come from there. HQ points at "
-            "that definition and keeps it issued, deployed and renewed. Leave "
-            "it alone unless this resource should track a different "
-            "certificate entirely."
-        ),
-    )
     certificate_name: str = Field(
-        default="",
         max_length=160,
-        pattern=r"^[a-z0-9][a-z0-9-]*$|^$",
-        title="New certificate name",
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        title="Certificate name",
         description="Lowercase, no spaces. Names the certificate's own lineage.",
     )
     domains: list[str] = Field(
@@ -130,8 +211,9 @@ class TLSCertificateSpec(ProviderModel):
         default_factory=list,
         title="Install it on",
         description=(
-            "Where the issued certificate gets deployed. Settings for each are "
-            "taken from how that target already serves your other certificates."
+            "Where the issued certificate gets deployed. How each target "
+            "receives one is set on the target itself, once, and applies to "
+            "every certificate installed there."
         ),
     )
 
@@ -148,35 +230,19 @@ class TLSCertificateSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
-    def one_shape_or_the_other(self):
-        # Domains are not part of the choice. What a certificate covers is
-        # desired state -- the thing an operator changes when a new domain
-        # arrives -- while how a target receives one describes the world and
-        # stays in the topology. Counting `domains` as "defining a new
-        # certificate" meant a certificate imported from the topology could
-        # never have a name added to it in HQ at all.
-        defining = bool(self.certificate_name or self.install_on)
-        if self.topology_ref and defining:
-            raise ValueError(
-                "Name an existing certificate or define a new one, not both."
+    def a_certificate_needs_names_and_somewhere_to_go(self):
+        missing = [
+            label
+            for label, value in (
+                ("the names it covers", self.domains),
+                ("somewhere to install it", self.install_on),
             )
-        if not self.topology_ref and not (defining or self.domains):
+            if not value
+        ]
+        if missing:
             raise ValueError(
-                "Choose an existing certificate, or give a name, its domains "
-                "and where to install it."
+                f"{self.certificate_name} still needs " + " and ".join(missing) + "."
             )
-        if defining:
-            missing = [
-                label
-                for label, value in (
-                    ("a name", self.certificate_name),
-                    ("its domains", self.domains),
-                    ("somewhere to install it", self.install_on),
-                )
-                if not value
-            ]
-            if missing:
-                raise ValueError("A new certificate still needs " + ", ".join(missing) + ".")
         return self
 
 
@@ -300,6 +366,54 @@ class PortainerContainerSpec(ProviderModel):
         title="Container",
         description="The container's name, exactly as Docker reports it.",
     )
+    serves_ports: list[int] = Field(
+        default_factory=list,
+        title="Answers on",
+        description=(
+            "Only for a container sharing the machine's network. Docker "
+            "publishes no ports for those, so HQ cannot see what it answers on "
+            "and cannot tie a proxy to it without being told."
+        ),
+    )
+
+    @field_validator("serves_ports")
+    @classmethod
+    def ports_are_ports(cls, value: list[int]) -> list[int]:
+        if any(port < 1 or port > 65535 for port in value):
+            raise ValueError("A port is between 1 and 65535.")
+        return value
+
+
+class MachineSpec(ProviderModel):
+    """A machine HQ should know about, whether or not it can reach one.
+
+    Most machines need no declaration: a swept Portainer names the ones it
+    manages, and a connection names what it points at. This is for the rest --
+    the printer, the offline CA, the phone -- and for saying what an address
+    belongs to, which is the difference between a proxy forwarding to a machine
+    and a proxy forwarding into the dark.
+    """
+
+    name: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Name",
+        description="What this machine is called everywhere else in HQ.",
+    )
+    role: str = Field(
+        default="",
+        max_length=200,
+        title="What it is for",
+        description="One line. Shown wherever the machine is listed.",
+    )
+    addresses: list[str] = Field(
+        default_factory=list,
+        title="Addresses",
+        description=(
+            "Every address that reaches it — LAN, tailnet, public. A resource "
+            "forwarding to one of these is understood to be pointing here."
+        ),
+    )
 
 
 class PortainerStackEnvVar(ProviderModel):
@@ -318,7 +432,7 @@ class PortainerStackSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Runs on",
-        description="The machine this runs on, as the topology names it.",
+        description="The machine this runs on.",
     )
     name: str = Field(
         min_length=1,
@@ -776,21 +890,6 @@ class ProviderSpec:
     # empty. Required-ness describes the model; this describes the conversation,
     # and only the provider knows which of its own knobs are which.
     advanced_fields: tuple[str, ...] = ()
-    # Groups of fields that are alternatives to one another, as
-    # ``((group_id, fields...), ...)``. A spec whose validator says "this or
-    # that, never both" rendered as one flat list of every field in both, so a
-    # certificate described by the topology showed empty "name it", "domains"
-    # and "install on" boxes beside the reference that actually defined it --
-    # a page that read as though the certificate covered nothing and was
-    # installed nowhere. Declaring the choice lets the form show the branch in
-    # use and fold the other away.
-    alternatives: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    # Fields that say *which* thing this is, and so cannot change once it
-    # exists. Offered on an edit form they invite an answer that makes no
-    # sense: an existing certificate was asked whether it would rather be "a
-    # new certificate defined below", with the fields that would define one
-    # folded out of sight. Shown as a fact instead, and dropped from the form.
-    fixed_after_create: tuple[str, ...] = ()
     # What changing a field actually causes, as ``((field, sentence), ...)``.
     # Saving a new name onto a certificate is not "saving": HQ notices the
     # deployed certificate no longer covers what is declared and re-issues it
@@ -893,6 +992,11 @@ class ProviderSpec:
     # stop managing a domain at all -- removal was refused because the
     # controller implements no delete, which was true and beside the point.
     declaration_only: bool = False
+    # Whether other resources resolve against this one. Saving it changes what
+    # they mean without touching what they say, so their desired state has to be
+    # recomputed -- otherwise a certificate reports itself in sync against a
+    # target that moved underneath it.
+    resolution_input: bool = False
     # What this declaration holds, as ``(kind, their_field, my_field)``.
     #
     # A domain holds the records published in it, and ceasing to be responsible
@@ -925,115 +1029,94 @@ class ProviderSpec:
 
 @dataclass(frozen=True)
 class ProviderResolutionContext:
-    topology: dict[str, Any] | None = None
+    # Every place a certificate can be installed, as HQ holds them. Passed in
+    # rather than queried here so this module stays free of the database and a
+    # projection resolving many resources pays for one read.
+    delivery_targets: tuple[dict[str, Any], ...] = ()
     resource_status: Callable[[str, str], dict[str, Any] | None] | None = None
+    # The key of the resource being resolved, where resolution depends on which
+    # resource is asking -- a target's name belongs to one certificate, and the
+    # rest are named after themselves.
+    resource_key: str = ""
 
 
-def _tls_consumer_profiles(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """How each target is configured to receive a certificate, learned from use.
+def _delivery_target(
+    connection_ref: str, context: ProviderResolutionContext
+) -> dict[str, Any]:
+    for target in context.delivery_targets:
+        if target.get("connection_ref") == connection_ref:
+            return target
+    raise ValueError(
+        f"HQ does not know how {connection_ref!r} receives a certificate. "
+        "Add it as a delivery target first."
+    )
 
-    A Caddy host wants its certificate in a particular directory; a cPanel
-    account is reached through a particular connection. Those are properties of
-    the target, not of any one certificate, and the topology already states them
-    on every ``consumes`` dependency. Reading them back means defining a new
-    certificate does not ask an operator to restate deployment mechanics they
-    have already described once and would only get wrong from memory.
+
+def _consumer_at(
+    target: dict[str, Any],
+    *,
+    certificate_key: str,
+    certificate_name: str,
+    domains: list[str],
+) -> dict[str, Any]:
+    """One certificate's declaration of how it arrives at one target.
+
+    The name is the target's own only for the certificate that owns it. Any
+    other certificate installed there is named after itself, or the second
+    would land on top of the first.
     """
 
-    profiles: dict[str, dict[str, Any]] = {}
-    for dependency in payload.get("dependencies", ()):
-        if dependency.get("relation") != "consumes":
-            continue
-        attributes = dict(dependency.get("attributes") or {})
-        connection_ref = attributes.get("connection_ref")
-        if not connection_ref or "kind" not in attributes:
-            continue
-        profiles.setdefault(
-            connection_ref, {**attributes, "from": dependency.get("from", "")}
-        )
-    return profiles
-
-
-def _resolve_inline_tls(
-    authored: dict[str, Any], payload: dict[str, Any]
-) -> dict[str, Any]:
-    profiles = _tls_consumer_profiles(payload)
-    consumers = []
-    for connection_ref in authored["install_on"]:
-        profile = profiles.get(connection_ref)
-        if profile is None:
-            raise ValueError(
-                f"Nothing in the topology describes how {connection_ref!r} "
-                "receives a certificate, so HQ cannot install one there."
-            )
-        consumer = {
-            "topology_ref": profile["from"],
-            "kind": profile["kind"],
-            "connection_ref": connection_ref,
-            # Named after this certificate rather than the one the profile was
-            # learned from, or two certificates would collide at the target.
-            "name": f"{authored['certificate_name']}-{profile['kind']}",
-            "verify_domains": [],
-        }
-        if profile["kind"] == "caddy":
-            consumer["certificate_directory"] = profile["certificate_directory"]
-        elif profile["kind"] == "npm":
-            consumer["discover_covered_hosts"] = profile.get(
-                "discover_covered_hosts", False
-            )
-        elif profile["kind"] == "cpanel":
-            # Only the names this certificate actually covers; the profile's own
-            # install domains belong to the certificate it was learned from.
-            covered = set(authored["domains"])
-            consumer["install_domains"] = [
-                domain
-                for domain in authored["domains"]
-                if certificate_covers(domain, covered) and "*" not in domain
-            ]
-            if not consumer["install_domains"]:
-                raise ValueError(
-                    "A cPanel target needs at least one non-wildcard name to "
-                    "install against."
-                )
-        consumers.append(consumer)
-    return {
-        "certificate_name": authored["certificate_name"],
-        "domains": authored["domains"],
-        "consumers": consumers,
-        "renewal_window_days": authored["renewal_window_days"],
+    kind = target["kind"]
+    owns_the_name = bool(certificate_key) and (
+        target.get("certificate_resource") == certificate_key
+    )
+    consumer = {
+        "kind": kind,
+        "connection_ref": target["connection_ref"],
+        "name": target["name"] if owns_the_name else f"{certificate_name}-{kind}",
+        "verify_domains": list(target.get("verify_domains") or []),
     }
+    if kind == "caddy":
+        consumer["certificate_directory"] = target["certificate_directory"]
+    elif kind == "npm":
+        consumer["discover_covered_hosts"] = bool(
+            target.get("discover_covered_hosts")
+        )
+    elif kind == "cpanel":
+        # Named here only if this certificate is the one the target lists them
+        # for; otherwise every non-wildcard name it covers, since shared hosting
+        # takes one certificate per name.
+        declared = list(target.get("install_domains") or []) if owns_the_name else []
+        covered = set(domains)
+        consumer["install_domains"] = declared or [
+            domain
+            for domain in domains
+            if certificate_covers(domain, covered) and "*" not in domain
+        ]
+        if not consumer["install_domains"]:
+            raise ValueError(
+                "A cPanel target needs at least one non-wildcard name to "
+                "install against."
+            )
+    return consumer
 
 
 def _resolve_tls(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
-    payload = context.topology
-    topology_ref = authored["topology_ref"]
-    if payload is None:
-        raise ValueError("TLS resolution requires the trusted topology snapshot.")
-    if not topology_ref:
-        return _resolve_inline_tls(authored, payload)
-    certificate_id = topology_ref.removeprefix("pki:")
-    certificate = next(
-        (entry for entry in payload["pki"] if entry["id"] == certificate_id), None
-    )
-    if certificate is None:
-        raise ValueError(f"Topology certificate {topology_ref!r} was not found.")
-    consumers = [
-        {"topology_ref": dependency["from"], **dependency.get("attributes", {})}
-        for dependency in payload["dependencies"]
-        if dependency.get("relation") == "consumes"
-        and dependency.get("to") == topology_ref
-    ]
-    if not consumers:
-        raise ValueError(f"Topology certificate {topology_ref!r} has no consumers.")
+    domains = list(authored["domains"])
     return {
-        "certificate_name": certificate.get("certificate_name", certificate_id),
-        # Authored names win. Blank means HQ has not been asked to own them yet
-        # and the topology's list still stands; saving the form once writes
-        # them here, after which adding a domain is an edit rather than a sync.
-        "domains": authored.get("domains") or certificate.get("domains", []),
-        "consumers": consumers,
+        "certificate_name": authored["certificate_name"],
+        "domains": domains,
+        "consumers": [
+            _consumer_at(
+                _delivery_target(connection_ref, context),
+                certificate_key=context.resource_key,
+                certificate_name=authored["certificate_name"],
+                domains=domains,
+            )
+            for connection_ref in authored["install_on"]
+        ],
         "renewal_window_days": authored["renewal_window_days"],
     }
 
@@ -1041,41 +1124,24 @@ def _resolve_tls(
 def _resolve_uploaded(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
-    """Turn chosen install targets into full consumer declarations.
-
-    Same learning as an inline certificate: how a target receives one is a
-    property of the target, already written on the dependencies that describe
-    how it receives the certificates it has.
-    """
-
-    payload = context.topology
-    if payload is None:
-        raise ValueError("Installing a certificate requires the topology snapshot.")
-    profiles = _tls_consumer_profiles(payload)
     consumers = []
     for connection_ref in authored["install_on"]:
-        profile = profiles.get(connection_ref)
-        if profile is None:
-            raise ValueError(
-                f"Nothing in the topology describes how {connection_ref!r} "
-                "receives a certificate, so HQ cannot install one there."
-            )
-        if profile["kind"] == "cpanel":
+        target = _delivery_target(connection_ref, context)
+        if target["kind"] == "cpanel":
             raise ValueError(
                 "A certificate HQ did not issue cannot be installed on shared "
                 "hosting: cPanel will not accept one signed by a private CA."
             )
-        consumer = {
-            "topology_ref": profile["from"],
-            "kind": profile["kind"],
-            "connection_ref": connection_ref,
-            "name": f"{authored['certificate_name']}-{profile['kind']}",
-            "verify_domains": [],
-        }
-        if profile["kind"] == "caddy":
-            consumer["certificate_directory"] = profile["certificate_directory"]
-        else:
-            consumer["discover_covered_hosts"] = False
+        consumer = _consumer_at(
+            target,
+            certificate_key=context.resource_key,
+            certificate_name=authored["certificate_name"],
+            domains=[],
+        )
+        # A private certificate covers names no public proxy host serves, so
+        # verifying against everything the target covers would check it against
+        # hosts it was never meant to reach.
+        consumer.pop("discover_covered_hosts", None)
         consumers.append(consumer)
     return {
         "certificate_name": authored["certificate_name"],
@@ -1090,7 +1156,7 @@ def _resolve_npm(
     certificate_id = None
     resource_key = authored.get("certificate_resource")
     if resource_key and context.resource_status:
-        status = context.resource_status(resource_key, "tls.certificate")
+        status = context.resource_status(resource_key, CERTIFICATE_KIND)
         certificate_id = status.get("npm_certificate_id") if status else None
     return {**authored, "certificate_id": certificate_id}
 
@@ -1476,6 +1542,79 @@ def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _machine_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    name = str(spec.get("name", ""))
+    return (name,) if name else ()
+
+
+def _machine_key_hint(spec: dict[str, Any]) -> str:
+    return str(spec.get("name", ""))
+
+
+def _machine_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What was declared. Whether it answers is the machine page's to say."""
+
+    return (
+        ("What it is for", "", str(spec.get("role", ""))),
+        ("Addresses", "", ", ".join(spec.get("addresses", ()))),
+    )
+
+
+def _machine_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {"name": record.get("name", ""), "role": record.get("role", "")}
+
+
+def _delivery_target_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    # One target per connection. Two would race each other onto the same host,
+    # and a certificate naming the connection could not say which it meant.
+    connection_ref = str(spec.get("connection_ref", ""))
+    return (connection_ref,) if connection_ref else ()
+
+
+def _delivery_target_key_hint(spec: dict[str, Any]) -> str:
+    return str(spec.get("connection_ref", ""))
+
+
+def _delivery_target_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What was declared about this target. Nothing here is observed.
+
+    A target is a statement about how a place takes a certificate, so there is
+    no drift to show: the certificates installed here are what get reconciled,
+    and each reports its own arrival.
+    """
+
+    settings = {
+        "caddy": ("Certificate directory", spec.get("certificate_directory", "")),
+        "npm": (
+            "Checks every host it covers",
+            "Yes" if spec.get("discover_covered_hosts") else "No",
+        ),
+        "cpanel": ("Installs", ", ".join(spec.get("install_domains", ()))),
+    }.get(str(spec.get("kind", "")))
+    rows = [
+        ("Runs", "", str(spec.get("kind", ""))),
+        ("Reached through", "", str(spec.get("connection_ref", ""))),
+        ("Named there", "", str(spec.get("name", ""))),
+    ]
+    if settings and settings[1]:
+        rows.append((settings[0], "", settings[1]))
+    if spec.get("verify_domains"):
+        rows.append(("Verified at", "", ", ".join(spec["verify_domains"])))
+    return tuple(rows)
+
+
+def _delivery_target_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": record.get("kind", ""),
+        "connection_ref": record.get("connection_ref", ""),
+        "name": record.get("name", ""),
+    }
+
+
 def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     # The names come from the certificate itself, which HQ read when it was
     # uploaded and recorded on the resource's status. Nothing is declared here,
@@ -1677,17 +1816,7 @@ _PROVIDERS = (
         applies=_managed_certificate_applies,
         connection_providers=("cloudflare_dns", "ssh"),
         choices="application.provider_choices:certificate_choices",
-        # topology_ref is not offered when adding one. It exists because every
-        # certificate here predates HQ owning them, and "add the certificate you
-        # already have" is not a thing anyone wants to do -- it is already
-        # managed. Adding means defining a new one; the reference stays visible
-        # on the resources that use it.
-        advanced_fields=("topology_ref", "renewal_window_days"),
-        alternatives=(
-            ("described", ("topology_ref",)),
-            ("defined", ("certificate_name", "install_on")),
-        ),
-        fixed_after_create=("topology_ref",),
+        advanced_fields=("renewal_window_days",),
         change_effects=(
             (
                 "domains",
@@ -1801,6 +1930,46 @@ _PROVIDERS = (
         choices="application.provider_choices:container_stack",
     ),
     ProviderSpec(
+        "machine",
+        "A machine HQ should list even though nothing sweeps it, and the "
+        "addresses that reach it. Machines behind a Portainer or a credential "
+        "are already known and need no entry here.",
+        MachineSpec,
+        label="Machine",
+        declaration_only=True,
+        hostnames=None,
+        readout=_machine_readout,
+        from_record=_machine_from_record,
+        identity=_machine_identity,
+        key_hint=_machine_key_hint,
+        removal_note=lambda spec: (
+            f"{spec.get('name', 'This machine')} stops being a place in HQ. "
+            "Anything forwarding to its addresses reads as pointing nowhere."
+        ),
+    ),
+    ProviderSpec(
+        "tls.delivery_target",
+        "Somewhere a certificate can be installed, and how it gets there. "
+        "Declaring one is what lets a certificate name it as a place to go.",
+        TLSDeliveryTargetSpec,
+        label="Certificate target",
+        connection_providers=("npm", "ssh"),
+        # Nothing to reconcile: this states how a target takes a certificate,
+        # and the certificates that install there are what act on it.
+        declaration_only=True,
+        resolution_input=True,
+        hostnames=None,
+        readout=_delivery_target_readout,
+        from_record=_delivery_target_from_record,
+        identity=_delivery_target_identity,
+        key_hint=_delivery_target_key_hint,
+        choices="application.provider_choices:delivery_target",
+        removal_note=lambda spec: (
+            f"Certificates stop being installed on {spec.get('name', 'this target')}, "
+            "and any that name it can no longer be resolved at all."
+        ),
+    ),
+    ProviderSpec(
         "adguard.rewrite",
         "Makes a hostname resolve to an IP on your network. Created in AdGuard "
         "if it is not there yet.",
@@ -1859,6 +2028,25 @@ _PROVIDERS = (
 )
 
 PROVIDERS = {provider.kind: provider for provider in _PROVIDERS}
+
+# The kinds other modules name directly. Spelled once here, beside the registry
+# that defines them, because a kind mistyped in a filter is a query that finds
+# nothing and reports it as an empty world.
+CERTIFICATE_KIND = "tls.certificate"
+UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"
+CONTAINER_KIND = "portainer.container"
+DELIVERY_TARGET_KIND = "tls.delivery_target"
+MACHINE_KIND = "machine"
+
+for _named in (
+    CERTIFICATE_KIND,
+    UPLOADED_CERTIFICATE_KIND,
+    CONTAINER_KIND,
+    DELIVERY_TARGET_KIND,
+    MACHINE_KIND,
+):
+    if _named not in PROVIDERS:
+        raise ValueError(f"{_named!r} is named as a kind but no provider declares it.")
 
 
 @lru_cache(maxsize=1)

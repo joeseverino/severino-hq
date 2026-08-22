@@ -315,16 +315,15 @@ class SeedTests(TestCase):
     """
 
     def setUp(self):
-        from control_plane.models import ManagedResource, TopologySnapshot
+        from control_plane.models import ManagedResource
 
-        TopologySnapshot.objects.update_or_create(
-            pk="topology",
-            defaults={
-                "schema_version": 1,
-                "checksum": "test",
-                "payload": {
-                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
-                },
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={
+                "name": "a-docker-host",
+                "role": "",
+                "addresses": ["192.168.1.233"],
             },
         )
         ManagedResource.objects.create(
@@ -445,15 +444,14 @@ class AdoptionSafetyTests(TestCase):
                 "serving": True,
             }},
         )
-        from control_plane.models import TopologySnapshot
-
-        TopologySnapshot.objects.update_or_create(
-            pk="topology",
+        ManagedResource.objects.update_or_create(
+            key="a-docker-host",
             defaults={
-                "schema_version": 1,
-                "checksum": "test",
-                "payload": {
-                    "hosts": [{"id": "a-docker-host", "lan_ip": "192.168.1.233"}]
+                "kind": "machine",
+                "spec": {
+                    "name": "a-docker-host",
+                    "role": "",
+                    "addresses": ["192.168.1.233"],
                 },
             },
         )

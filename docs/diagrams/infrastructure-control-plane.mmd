@@ -2,13 +2,13 @@ flowchart TB
     subgraph inputs["Declared inputs"]
         direction LR
         operator["Operator<br/>Web · hq · MCP"]
-        topology["Severino Labs topology<br/>identities + dependencies"]
+        sweeps["Controller sweeps<br/>what each credential reaches"]
         secrets["Severino HQ Production<br/>runtime credentials"]
     end
 
-    topology --> snapshot[("Trusted topology snapshot<br/>validated + checksummed<br/>declares no desired state")]
-    snapshot --> resolver["Provider-owned resolution<br/>authored → runtime schema"]
     operator --> services["HQ application services"]
+    sweeps --> services
+    services --> resolver["Provider-owned resolution<br/>authored → runtime schema"]
     resolver --> services
 
     services --> desired[("Managed resources<br/>desired generation + health<br/>HQ is the only author")]

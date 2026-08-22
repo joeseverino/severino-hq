@@ -32,7 +32,6 @@ from application.infrastructure import (
     serialize_resource,
     serialize_public_status,
     suggest_key,
-    topology_payload,
 )
 from application.inventory import (
     AdoptCommand,
@@ -70,6 +69,7 @@ from core import secrets
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
+    CERTIFICATE_KIND,
     NameContext,
     PROVIDERS,
     normalized_hostname,
@@ -315,7 +315,7 @@ def _origin_machine(resource):
     if provider is None or provider.origin is None:
         return None
     try:
-        origin = provider.origin(resolved_spec(resource, topology_payload()))
+        origin = provider.origin(resolved_spec(resource))
     except (KeyError, TypeError, ValueError):
         return None
     return machine_link(origin) if origin else None
@@ -335,7 +335,7 @@ def _service_links(resource) -> tuple[tuple[str, str], ...]:
     if provider.hostnames is None:
         return ()
     try:
-        names = provider.hostnames(resolved_spec(resource, topology_payload()))
+        names = provider.hostnames(resolved_spec(resource))
     except (KeyError, TypeError, ValueError):
         return ()
     return tuple(
@@ -468,7 +468,7 @@ def _derived_spec(resource) -> dict:
     """
 
     try:
-        resolved = resolved_spec(resource, topology_payload())
+        resolved = resolved_spec(resource)
     except Exception:  # noqa: BLE001 - a form must render without the topology
         return {}
     if not isinstance(resolved, dict):
@@ -1007,10 +1007,10 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     operation["completed_at"]
                 )
         context["resolved_spec"] = self.object.spec
-        if self.object.kind == "tls.certificate":
+        if self.object.kind == CERTIFICATE_KIND:
             try:
                 context["resolved_spec"] = controller_contract(self.object)["resource"]["spec"]
-                context["topology_error"] = ""
+                context["resolution_error"] = ""
                 observed_names: dict[str, set[str]] = {}
                 for observation in self.object.status.get("consumers", []):
                     observed_names.setdefault(observation.get("consumer", ""), set()).add(
@@ -1029,7 +1029,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                     for consumer in context["resolved_spec"]["consumers"]
                 ]
             except (KeyError, ValueError) as exc:
-                context["topology_error"] = str(exc)
+                context["resolution_error"] = str(exc)
         context["diagnostic_status"] = serialize_public_status(self.object.status)
         return context
 
@@ -1105,7 +1105,7 @@ class CertificateDownloadView(LoginRequiredMixin, View):
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         certificate_pem = resource.status.get("certificate_pem", "")
-        if resource.kind != "tls.certificate" or not certificate_pem:
+        if resource.kind != CERTIFICATE_KIND or not certificate_pem:
             return JsonResponse(
                 {"ok": False, "error": "No verified public certificate is available."},
                 status=404,

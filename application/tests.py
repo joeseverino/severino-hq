@@ -174,7 +174,14 @@ class CapabilityTests(TestCase):
         self.assertFalse(updated["created"])
         self.assertEqual(Project.objects.get().name, "Second")
 
-    def test_hq_sync_rolls_back_documentation_when_topology_fails(self):
+    def test_hq_sync_refuses_a_payload_it_no_longer_understands(self):
+        """The topology it used to carry is HQ's own now, so nothing sends one.
+
+        Refused rather than ignored: a caller still sending one is describing a
+        world HQ derives, and accepting it quietly would leave them believing
+        the document still governed something.
+        """
+
         result = execute_capability(
             "hq.sync",
             {
@@ -186,14 +193,7 @@ class CapabilityTests(TestCase):
                         "status": "active",
                     }
                 ],
-                "topology": {
-                    "version": 2,
-                    "hosts": [],
-                    "pki": [],
-                    "externals": [],
-                    "dependencies": [],
-                    "managed_resources": [],
-                },
+                "topology": {"version": 3},
             },
             principal=cli_principal(),
         )

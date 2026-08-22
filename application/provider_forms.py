@@ -167,34 +167,8 @@ class ProviderSpecForm(forms.Form):
 
     advanced_names: tuple[str, ...] = ()
 
-    # ((group_id, field_names), ...) declared by the provider. Exactly one
-    # group describes any given resource.
-    alternative_groups: tuple[tuple[str, tuple[str, ...]], ...] = ()
-
     # The model's own fields, so the form can tell a default from an answer.
     provider_fields: dict = {}
-
-    def _folded_alternative_names(self) -> frozenset[str]:
-        """Field names belonging to a branch this resource is not using.
-
-        The active branch is whichever one the resource actually has values
-        for; a resource being created has none, so the last group wins -- the
-        one that defines something new, which is the only thing "add" can mean.
-        """
-
-        if not self.alternative_groups:
-            return frozenset()
-        active = self.alternative_groups[-1][0]
-        for group_id, names in self.alternative_groups:
-            if any(self.initial.get(name) for name in names):
-                active = group_id
-                break
-        return frozenset(
-            name
-            for group_id, names in self.alternative_groups
-            if group_id != active
-            for name in names
-        )
 
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.
@@ -202,21 +176,8 @@ class ProviderSpecForm(forms.Form):
         A knob is routine while it holds the answer the model would have given
         anyway. Once somebody has set it, it is part of what this resource *is*
         and belongs with the question rather than behind a disclosure.
-
-        This is what made editing a certificate look empty. A certificate that
-        exists only as a topology reference carries that reference in an
-        advanced field, so the form opened on blank "define a new one" boxes
-        with the one field that actually described it folded out of sight --
-        a page that appeared to say the certificate had no configuration at all.
         """
 
-        if field.name in self._folded_alternative_names():
-            # The branch this resource is not defined by. Shown beside the one
-            # that defines it, its empty boxes read as facts -- a certificate
-            # described by the topology appeared to cover no names and be
-            # installed nowhere. Folded away, still reachable, never mistaken
-            # for the answer.
-            return True
         if field.name not in self.advanced_names:
             return False
         model_field = self.provider_fields.get(field.name)
@@ -249,16 +210,7 @@ class ProviderSpecForm(forms.Form):
         the disclosure, because it is no longer routine.
         """
 
-        # The branch this resource is not defined by is not "routine tuning"
-        # -- it is a set of empty boxes describing a different way of making
-        # this thing. Offered behind a disclosure it is still the same
-        # confusion, one click further away, so it is not offered at all.
-        folded = self._folded_alternative_names()
-        return [
-            field
-            for field in self
-            if self._is_routine(field) and field.name not in folded
-        ]
+        return [field for field in self if self._is_routine(field)]
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
@@ -359,12 +311,6 @@ def spec_form_class(
             fields[name].change_effect = effect
 
     if lock_identity:
-        # Which thing this is was decided when it was created. Asking again on
-        # an edit form offers an answer that cannot be given -- an existing
-        # certificate cannot become "a new certificate defined below" -- so
-        # these are dropped here and shown as facts above the form instead.
-        for name in provider.fixed_after_create:
-            fields.pop(name, None)
         for name in identity_fields(kind):
             if name not in fields:
                 continue
@@ -383,7 +329,6 @@ def spec_form_class(
         {
             "provider_kind": kind,
             "advanced_names": provider.advanced_fields,
-            "alternative_groups": provider.alternatives,
             "provider_fields": dict(provider.spec_type.model_fields),
             **fields,
         },

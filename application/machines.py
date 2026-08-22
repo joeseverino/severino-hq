@@ -5,10 +5,10 @@ what a Portainer reports it reaches and in a certificate's install list. This is
 where those meet, so "what is on this machine" is one page rather than four read
 in sequence.
 
-Nothing here is declared. A machine exists because something reported it: a
-credential that reaches it, a container running on it, a service served from it,
-or the topology naming it. That is the whole membership rule, which is why
-adding a VPS is registering it somewhere rather than entering it here.
+A machine exists because something reported it -- a credential that reaches it,
+a container running on it, a service served from it -- or because HQ was told
+about one nothing can reach. Observation first: registering a VPS somewhere is
+what puts it here, and a declaration is for the printer and the offline CA.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from control_plane.providers import PROVIDERS, normalized_hostname
 
-from .services import CONTAINER_KIND, Running, _topology, container_watchers
+from .infrastructure import declared_machines
+from .services import CONTAINER_KIND, Running, container_watchers
 
 
 @dataclass(frozen=True)
@@ -243,9 +244,9 @@ def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
 
 def _roles() -> dict[str, str]:
     return {
-        str(host["id"]): str(host.get("role", ""))
-        for host in (_topology() or {}).get("hosts", ())
-        if host.get("id")
+        str(machine["name"]): str(machine.get("role", ""))
+        for machine in declared_machines()
+        if machine.get("name")
     }
 
 
@@ -260,8 +261,8 @@ def _services_by_host(
     service in full to get it is a query per row and then some.
 
     The address is resolved against what already names machines here -- a
-    container reporting where it runs, a credential pointing somewhere, the
-    topology -- so this adds no query of its own.
+    container reporting where it runs, a credential pointing somewhere, a
+    declared address -- so this adds no query of its own.
     """
 
     located = _by_address(connections, containers)
@@ -306,14 +307,13 @@ def _by_address(
         address = endpoint.rpartition(":")[0] or endpoint
         located.setdefault(address, connection.connection_ref)
         located.setdefault(connection.connection_ref, connection.connection_ref)
-    for host in (_topology() or {}).get("hosts", ()):
-        identifier = str(host.get("id", ""))
-        if not identifier:
+    for machine in declared_machines():
+        name = str(machine.get("name", ""))
+        if not name:
             continue
-        for key in ("id", "lan_ip", "ts_ip", "public_ip"):
-            value = str(host.get(key, "") or "")
-            if value:
-                located.setdefault(value, located.get(identifier, identifier))
+        for address in (name, *machine.get("addresses", ())):
+            if address:
+                located.setdefault(str(address), located.get(name, name))
     return located
 
 
@@ -348,7 +348,7 @@ def container_context(host: str, name: str) -> dict[str, object]:
 
     from control_plane.providers import normalized_hostname
 
-    from .services import _locate, _topology
+    from .services import _locate
 
     found = machine(host)
     running = next(
@@ -358,7 +358,7 @@ def container_context(host: str, name: str) -> dict[str, object]:
     # Resolved the same way a service resolves its own origin, but without
     # assembling every service to ask: the board builds facets, health and
     # certificates for each name, and none of that answers this question.
-    topology = _topology()
+    machines = declared_machines()
     wanted = found.name if found else host
     serves: set[str] = set()
     for resource in ManagedResource.objects.filter(enabled=True):
@@ -372,7 +372,7 @@ def container_context(host: str, name: str) -> dict[str, object]:
             continue
         if not origin:
             continue
-        located = _locate(origin, topology)
+        located = _locate(origin, machines)
         if located.host == wanted and located.container == name:
             serves.update(normalized_hostname(item) for item in names)
     return {

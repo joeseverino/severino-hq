@@ -8,7 +8,7 @@ flowchart LR
     runner["self-hosted runner (homelab)"]
 
     joe -->|edit frontmatter| vault
-    joe -->|hq sync| mcp -->|manifest + topology| cli["hq MCP wrapper"] -->|one atomic capability| hq
+    joe -->|hq sync| mcp -->|manifest| cli["hq MCP wrapper"] -->|one atomic capability| hq
     joe -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq
 
     %% the destination every path converges on — styled by .anchor in the shared theme

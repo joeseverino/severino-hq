@@ -10,15 +10,18 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 
-from control_plane.models import ManagedResource, OperationRequest, TopologySnapshot
+from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import (
+    CERTIFICATE_KIND,
+    DELIVERY_TARGET_KIND,
+    MACHINE_KIND,
     PROVIDERS,
     resolve_provider_spec,
     controller_action_policy,
     enabled_controller_actions,
     validate_spec,
 )
-from control_plane.topology import desired_fingerprint
+from control_plane.desired_state import advance_dependents, desired_fingerprint
 from core.audit import operation_context
 
 from .projection import page_size
@@ -60,26 +63,58 @@ def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
     return {"items": items, "count": len(items)}
 
 
-def topology_payload() -> dict[str, Any] | None:
-    """The imported topology snapshot, or None when nothing has been imported."""
+def _declared(*kinds: str) -> dict[str, tuple[dict[str, Any], ...]]:
+    """The specs of several declaration kinds, in one read.
 
-    return (
-        TopologySnapshot.objects.filter(pk="topology")
-        .values_list("payload", flat=True)
-        .first()
-    )
+    Read once and passed down rather than looked up per resource: a projection
+    resolving fifty declarations wants one query, not fifty -- and asking for
+    two kinds separately is two queries for one page's worth of context.
+    """
+
+    found: dict[str, list[dict[str, Any]]] = {kind: [] for kind in kinds}
+    for kind, spec in ManagedResource.objects.filter(
+        kind__in=kinds, enabled=True
+    ).values_list("kind", "spec"):
+        found[kind].append(spec)
+    return {kind: tuple(specs) for kind, specs in found.items()}
+
+
+def context_for_resolution() -> tuple[
+    tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]
+]:
+    """``(machines, delivery targets)`` -- everything resolution reads, once."""
+
+    declared = _declared(MACHINE_KIND, DELIVERY_TARGET_KIND)
+    return declared[MACHINE_KIND], declared[DELIVERY_TARGET_KIND]
+
+
+def delivery_targets() -> tuple[dict[str, Any], ...]:
+    """Every place HQ knows a certificate can be installed."""
+
+    return _declared(DELIVERY_TARGET_KIND)[DELIVERY_TARGET_KIND]
+
+
+def declared_machines() -> tuple[dict[str, Any], ...]:
+    """Machines HQ has been told about, with the addresses that reach them.
+
+    Most machines need no declaration -- a Portainer names the ones it manages,
+    a credential names what it points at. These are the rest, and they are what
+    turns a forwarding address into somewhere with a name.
+    """
+
+    return _declared(MACHINE_KIND)[MACHINE_KIND]
 
 
 def resolved_spec(
-    resource: ManagedResource, topology: dict[str, Any] | None = None
+    resource: ManagedResource, targets: tuple[dict[str, Any], ...] | None = None
 ) -> dict[str, Any]:
     """The spec as a controller would see it, falling back to the authored one.
 
-    A certificate declares only a topology reference; the names it covers exist
-    only after resolving that. Where resolution cannot happen -- no snapshot
-    imported, a dangling reference -- the authored spec stands in and the
-    certificate covers nothing. That surfaces as an uncovered name, which is
-    exactly true: HQ cannot demonstrate that anything covers it.
+    A certificate names where it installs; the settings each of those places
+    needs live on the place. Where resolution cannot happen -- a target that no
+    longer exists -- the authored spec stands in and the certificate covers
+    nothing. That surfaces as an uncovered name, which is exactly true: HQ
+    cannot demonstrate that anything covers it.
 
     One implementation. The service view and the domain view each had their own,
     and a projection that resolved a spec differently from the one beside it
@@ -93,7 +128,12 @@ def resolved_spec(
         return resolve_provider_spec(
             resource.kind,
             resource.spec,
-            context=ProviderResolutionContext(topology=topology),
+            context=ProviderResolutionContext(
+                delivery_targets=(
+                    delivery_targets() if targets is None else targets
+                ),
+                resource_key=resource.key,
+            ),
         )
     except (KeyError, TypeError, ValueError):
         return resource.spec
@@ -310,12 +350,7 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
-    from control_plane.models import TopologySnapshot
     from control_plane.providers import ProviderResolutionContext, resolve_provider_spec
-
-    topology = TopologySnapshot.objects.filter(pk="topology").values_list(
-        "payload", flat=True
-    ).first()
 
     def resource_status(key: str, kind: str) -> dict[str, Any] | None:
         certificate = ManagedResource.objects.filter(
@@ -327,8 +362,9 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
         resource.kind,
         resource.spec,
         context=ProviderResolutionContext(
-            topology=topology,
+            delivery_targets=delivery_targets(),
             resource_status=resource_status,
+            resource_key=resource.key,
         ),
     )
     return {
@@ -338,7 +374,6 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             "kind": resource.kind,
             "generation": resource.generation,
             "enabled": resource.enabled,
-            "topology_ref": resource.spec.get("topology_ref"),
             "spec": spec,
             # What the provider was last seen holding for this resource. A
             # provider finds its own record by hostname, so renaming one is
@@ -433,22 +468,26 @@ def save_managed_resource(
         resource.kind = command.kind
         resource.spec = validated_spec
         resource.enabled = command.enabled
-        # Fingerprinted here as well as on topology import, through the one
-        # function that knows desired state includes what references resolve to.
-        # Without this an HQ edit would leave the old fingerprint in place, and
-        # the next import would read the difference as the topology having moved.
+        # Desired state is the authored spec plus whatever it resolves to, so a
+        # certificate whose target moved is out of date without having been
+        # edited. One function decides that, and every writer calls it.
         resource.desired_fingerprint = desired_fingerprint(
             resource.kind,
             resource.spec,
             resource.enabled,
-            topology=TopologySnapshot.objects.filter(pk="topology")
-            .values_list("payload", flat=True)
-            .first(),
+            targets=delivery_targets(),
+            resource_key=resource.key,
         )
         if not created and changed:
             resource.generation += 1
         resource.full_clean()
         resource.save()
+        # A target says how a place takes a certificate. Editing one changes
+        # what every certificate installed there resolves to, so their desired
+        # state is recomputed here rather than waiting for each to be saved.
+        provider = PROVIDERS.get(resource.kind)
+        if changed and provider is not None and provider.resolution_input:
+            advance_dependents(delivery_targets())
 
     return {
         "ok": True,
@@ -681,7 +720,7 @@ def request_removal(
 
 
 def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
-    if resource.kind != "tls.certificate":
+    if resource.kind != CERTIFICATE_KIND:
         return False, "Only tls.certificate resources may be renewed."
     if not resource.enabled:
         return False, "The certificate resource is disabled."

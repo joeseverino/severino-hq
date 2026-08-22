@@ -117,12 +117,12 @@ The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate
 is not stored in this public repository. Never disable TLS verification.
 
-The topology inventory is also absent from this public repository. `hq sync`
-asks the Vault MCP for its complete validated manifest and topology projections,
-then submits both in one authenticated `hq.sync` Streamable HTTP MCP call over
-Tailscale. HQ validates both and commits documentation plus the checksummed
-topology snapshot in one transaction. No intermediate payload is written on
-homelab-server, and routine synchronization requires no SSH access.
+`hq sync` asks the Vault MCP for its complete validated manifest, then submits
+it in one authenticated `hq.sync` Streamable HTTP MCP call over Tailscale. HQ
+validates and commits it in one transaction. No intermediate payload is written
+on homelab-server, and routine synchronization requires no SSH access. What HQ
+holds about the infrastructure itself is not synchronized from anywhere: it is
+swept, or declared in HQ.
 
 The gated `main` deployment runs `scripts/install-controller.sh` after the new
 application image is healthy. The installer refreshes controller-only
@@ -145,8 +145,8 @@ automatic actions and drives worker dispatch parity. Its persistent systemd
 timer runs after boot and every five minutes. Each run drains infrastructure
 work and derives
 new work from HQ's verified state: it queues
-renewal inside the configured window and reconciliation for new topology
-generations or drift. TLS reconciliation redistributes the existing lineage;
+renewal inside the configured window and reconciliation for new generations or
+drift. TLS reconciliation redistributes the existing lineage;
 it does not issue. The NPM adapter discovers every enabled proxy host whose
 name is covered by the certificate, replaces their single managed certificate
 binding, reloads them, and live-verifies the shared fingerprint. Transactional

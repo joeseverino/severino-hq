@@ -14,10 +14,10 @@ goes and gets them.
 
 from __future__ import annotations
 
-from control_plane.models import ManagedResource, ProviderConnection, TopologySnapshot
+from control_plane.models import ManagedResource, ProviderConnection
 from control_plane.providers import PROVIDERS, NameContext, certificate_covers
 
-from .infrastructure import resolved_spec
+from .infrastructure import declared_machines, delivery_targets, resolved_spec
 
 
 def name_context(hostname: str) -> NameContext:
@@ -87,12 +87,12 @@ def _origin_for(hostname: str) -> str:
     by declaring it -- the same way it joins the service view.
     """
 
-    topology = _topology()
+    targets = delivery_targets()
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
             continue
-        spec = resolved_spec(resource, topology)
+        spec = resolved_spec(resource, targets)
         try:
             names = {
                 str(name).strip().lower().rstrip(".")
@@ -115,28 +115,20 @@ def _reachable(origin: str) -> str:
     machine is called and what everything inside HQ matches on. A proxy is not
     nginx resolves what it is given, and it has never heard the name.
 
-    Unchanged when the topology knows no address for the machine, which leaves
-    the operator a wrong-looking value to correct rather than a plausible one to
+    Unchanged when HQ knows no address for the machine, which leaves the
+    operator a wrong-looking value to correct rather than a plausible one to
     trust.
     """
 
     host, _, port = origin.rpartition(":")
     if not host or not port:
         return origin
-    for machine in (_topology() or {}).get("hosts", ()):
-        if machine.get("id") != host:
+    for machine in declared_machines():
+        if machine.get("name") != host:
             continue
-        address = machine.get("lan_ip") or machine.get("ts_ip") or ""
-        return f"{address}:{port}" if address else origin
+        addresses = machine.get("addresses") or ()
+        return f"{addresses[0]}:{port}" if addresses else origin
     return origin
-
-
-def _topology() -> dict | None:
-    return (
-        TopologySnapshot.objects.filter(pk="topology")
-        .values_list("payload", flat=True)
-        .first()
-    )
 
 
 def _covering(hostname: str) -> tuple[str, ...]:
@@ -146,17 +138,16 @@ def _covering(hostname: str) -> tuple[str, ...]:
     certificate the page says covers it and the two cannot disagree.
     """
 
-    topology = _topology()
+    targets = delivery_targets()
     found = []
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
         if provider is None or not provider.covers or provider.hostnames is None:
             continue
-        # Resolved, not authored. A certificate defined by a topology reference
-        # carries no domains in its own spec, so the authored form answers "this
-        # covers nothing" about the wildcard covering everything.
+        # Resolved, not authored, so this reads the same names the service page
+        # does -- one rule for what a certificate covers, not two.
         try:
-            names = frozenset(provider.hostnames(resolved_spec(resource, topology)))
+            names = frozenset(provider.hostnames(resolved_spec(resource, targets)))
         except (KeyError, TypeError, ValueError):
             continue
         if certificate_covers(hostname, names):
