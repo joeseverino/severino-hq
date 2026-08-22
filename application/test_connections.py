@@ -649,7 +649,7 @@ class OutwardLinkChoiceTests(TestCase):
         offered, curated = outward_links(self.user)
 
         self.assertFalse(curated)
-        self.assertTrue(len(offered) > 1)
+        self.assertGreater(len(offered), 1)
 
     def test_the_chooser_offers_exactly_what_the_panel_renders(self):
         from .connections import link_choices, outward_links

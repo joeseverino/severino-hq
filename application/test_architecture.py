@@ -544,3 +544,47 @@ class WorkflowSecrecyTests(SimpleTestCase):
         ]
 
         self.assertEqual(offenders, [], "read it from secrets, which are masked")
+
+
+class AssertionPrecisionTests(SimpleTestCase):
+    """A comparison belongs in the assertion, not inside a boolean.
+
+    ``assertTrue(a > b)`` fails with "False is not true", which says nothing
+    about a or b. ``assertGreater(a, b)`` prints both. CodeQL flags this and
+    nothing local did, so it was found in review rather than before it.
+    """
+
+    SPECIFIC = {
+        "Eq": "assertEqual", "NotEq": "assertNotEqual",
+        "Lt": "assertLess", "LtE": "assertLessEqual",
+        "Gt": "assertGreater", "GtE": "assertGreaterEqual",
+        "Is": "assertIs", "IsNot": "assertIsNot",
+        "In": "assertIn", "NotIn": "assertNotIn",
+    }
+
+    def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
+        root = Path(__file__).resolve().parents[1]
+        offenders = []
+        for path in sorted(root.rglob("test*.py")) + sorted(root.rglob("tests.py")):
+            if ".venv" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not node.args:
+                    continue
+                name = getattr(node.func, "attr", "")
+                if name not in ("assertTrue", "assertFalse"):
+                    continue
+                # `any(x > y for …)` is a Call, not a Compare, and is fine:
+                # the comparison is part of the predicate being asserted.
+                if not isinstance(node.args[0], ast.Compare):
+                    continue
+                operator = type(node.args[0].ops[0]).__name__
+                better = self.SPECIFIC.get(operator, "a specific assertion")
+                if name == "assertFalse":
+                    better = "the negated form of " + better
+                offenders.append(
+                    f"{path.relative_to(root)}:{node.lineno} — use {better}"
+                )
+
+        self.assertEqual(offenders, [])
