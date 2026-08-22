@@ -402,3 +402,33 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
                 .select_related("user")[:20]
             )
         return context
+
+
+class ConnectionView(LoginRequiredMixin, TemplateView):
+    """Why this request was allowed to arrive, layer by layer.
+
+    A page rather than only a dialog, for the same reason every other dialog
+    here has one behind it: the panel is an enhancement, and the answer has to
+    exist for somebody who followed the link with script off, or who wants to
+    send it to themselves.
+    """
+
+    template_name = "core/connection.html"
+
+    def get_context_data(self, **kwargs):
+        from application.connection import (
+            addresses_of,
+            addresses_of_hq,
+            connection as describe,
+            headers_of,
+            hops_of,
+        )
+
+        context = super().get_context_data(**kwargs)
+        found = describe(self.request)
+        context["connection"] = found
+        context["addresses"] = addresses_of(found)
+        context["hq_addresses"] = addresses_of_hq(found)
+        context["hops"] = hops_of(self.request)
+        context["headers"] = headers_of(self.request)
+        return context

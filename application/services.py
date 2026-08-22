@@ -62,6 +62,7 @@ from .infrastructure import (
     resource_health,
 )
 from .naming import name_context
+from .reach import UNKNOWN, Reach, reach_of
 from .ui import ListRow
 
 
@@ -283,13 +284,16 @@ class Running:
     # lookup, because a page renders a table of these and a property would be a
     # query per row -- and every row asks the same question of the same table.
     watcher: str = ""
+    # Folded away on the machine's page. Still watched, still controllable --
+    # this is about where it sits, not about whether HQ can act on it.
+    hidden: bool = False
 
     @classmethod
     def of(
         cls,
         record: dict[str, Any],
         observed_at: Any,
-        watchers: dict[tuple[str, str], str] | None = None,
+        watchers: dict[tuple[str, str], tuple[str, bool]] | None = None,
     ) -> "Running":
         host = str(record.get("host", ""))
         name = str(record.get("name", ""))
@@ -308,7 +312,8 @@ class Running:
             portainer_managed=bool(record.get("portainer_managed")),
             connection_ref=str(record.get("connection_ref", "")),
             observed_at=observed_at,
-            watcher=(watchers or {}).get((host, name), ""),
+            watcher=(watchers or {}).get((host, name), ("", False))[0],
+            hidden=(watchers or {}).get((host, name), ("", False))[1],
         )
 
     @property
@@ -446,6 +451,9 @@ class Service:
     # Other names that reach this same service, folded in rather than listed
     # separately. See ``_aliases``.
     aliases: tuple[str, ...] = ()
+    # Who can open a connection to this name, derived from the addresses it
+    # resolves to. Not a declaration anybody makes -- a consequence of one.
+    reach: Reach = UNKNOWN
     # ``(alias, claim)`` for the declarations that make those other names work.
     # Beside the service, never merged into its facets: merged, two CNAMEs read
     # as two records competing for one name.
@@ -624,6 +632,10 @@ def _declarations():
     declared: dict[str, dict[str, list[Claim]]] = {}
     covering: list[tuple[str, frozenset[str], Claim]] = []
     origins: dict[str, str] = {}
+    # Every address each name resolves to, so who can reach it can be derived
+    # rather than recorded. Collected here because this is the one pass that
+    # already reads every enabled declaration.
+    answers: dict[str, list[str]] = {}
 
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
@@ -640,6 +652,7 @@ def _declarations():
                 if names_a_host(name)
             )
             origin = provider.origin(spec) if provider.origin else ""
+            resolves_to = provider.answers(spec) if provider.answers else ()
         except (KeyError, TypeError, ValueError):
             # A spec HQ cannot read is a problem with that resource, and the
             # resource's own health is where it is reported. It must not take
@@ -660,6 +673,7 @@ def _declarations():
             )
             if origin:
                 origins.setdefault(hostname, origin)
+            answers.setdefault(hostname, []).extend(resolves_to)
 
     aliases = _aliases(declared, origins)
     alias_claims: dict[str, list[tuple[str, Claim]]] = {}
@@ -677,7 +691,7 @@ def _declarations():
             for claim in claims:
                 alias_claims.setdefault(target, []).append((alias, claim))
         origins.pop(alias, None)
-    return declared, covering, origins, aliases, alias_claims, machines
+    return declared, covering, origins, aliases, alias_claims, machines, answers
 
 
 def _aliases(declared, origins) -> dict[str, str]:
@@ -709,7 +723,7 @@ def _aliases(declared, origins) -> dict[str, str]:
 def service_catalog() -> tuple[Service, ...]:
     """Every hostname HQ declares, assembled from the resources that name it."""
 
-    declared, covering, origins, aliases, alias_claims, machines = _declarations()
+    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
     projects = _published_projects()
     containers = _container_declarations()
     by_target: dict[str, list[str]] = {}
@@ -720,6 +734,7 @@ def service_catalog() -> tuple[Service, ...]:
             hostname, facets, covering, origins.get(hostname, ""), projects,
             machines, tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())), containers,
+            tuple(answers.get(hostname, ())),
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -743,7 +758,7 @@ def alias_target(hostname: str) -> str:
     """
 
     wanted = _normalise(hostname)
-    _, _, _, aliases, _, _ = _declarations()
+    _, _, _, aliases, _, _, _ = _declarations()
     return aliases.get(wanted, "")
 
 
@@ -763,7 +778,7 @@ def service_or_prospect(hostname: str) -> Service:
     """
 
     wanted = _normalise(hostname)
-    declared, covering, origins, aliases, alias_claims, machines = _declarations()
+    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
     return _assemble(
         wanted,
         declared.get(wanted, {}),
@@ -773,6 +788,7 @@ def service_or_prospect(hostname: str) -> Service:
         machines,
         tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
         tuple(alias_claims.get(wanted, ())),
+        answers=tuple(answers.get(wanted, ())),
     )
 
 
@@ -881,6 +897,7 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
     containers: "dict[tuple[str, str], Any] | None" = None,
+    answers: tuple[str, ...] = (),
 ) -> Service:
     containers = _container_declarations() if containers is None else containers
     origin = _locate(origin_address, machines) if origin_address else None
@@ -918,6 +935,7 @@ def _assemble(
         origin=origin,
         project=projects.get(hostname),
         faults=_faults(facets, origin),
+        reach=reach_of(answers),
     )
 
 
@@ -926,15 +944,20 @@ def _assemble(
 # other reference to it in this module goes through this.
 
 
-def container_watchers() -> dict[tuple[str, str], str]:
-    """Which declaration watches which container, in one query.
+def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
+    """Which declaration watches which container, and whether it is folded away.
 
     Keyed on the identity the provider uses, so a container declared in HQ and
-    the same container found by a sweep are recognised as one thing.
+    the same container found by a sweep are recognised as one thing. Both facts
+    come back together because a page rendering a table of containers asks both
+    of every row, and asking twice is two queries for one join.
     """
 
     return {
-        (resource.spec.get("host", ""), resource.spec.get("name", "")): resource.key
+        (resource.spec.get("host", ""), resource.spec.get("name", "")): (
+            resource.key,
+            bool(resource.spec.get("hidden")),
+        )
         for resource in ManagedResource.objects.filter(
             kind=CONTAINER_KIND, enabled=True
         )

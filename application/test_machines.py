@@ -1,9 +1,12 @@
-"""Machines, and the fact that nothing declares one.
+"""Machines, and where each one's facts come from.
 
-A machine is here because something reported it -- a credential that reaches it,
-a container running on it, a service served from it. That membership rule is the
-whole design: adding a VPS is registering it somewhere rather than entering it
-here, and a machine that stops being any of those things stops being listed.
+Observation first: a machine is here because something reported it -- a
+credential that reaches it, a container running on it, a service served from it
+-- so adding a VPS is registering it somewhere rather than entering it here.
+
+A declaration is the other half, for what nothing can sweep: a printer, an
+offline CA, a phone. It carries what the machine is for and the addresses that
+reach it, and it puts the machine on the board by itself.
 """
 
 from __future__ import annotations
@@ -187,3 +190,280 @@ class MachinePageTests(TestCase):
 
         self.assertNotContains(response, "API_TOKEN")
         self.assertNotContains(response, "PASSWORD")
+
+
+class DeclaredMachineTests(TestCase):
+    """A machine HQ was told about shows what it was told.
+
+    The page printed a role that came from a declaration, said nothing declared
+    the machine, and left the address blank while the same declaration carried
+    two. Three statements about one record, disagreeing.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-laptop",
+            kind="machine",
+            spec={
+                "name": "a-laptop",
+                "role": "Primary admin device",
+                "addresses": ["10.0.0.5", "100.64.0.5"],
+            },
+        )
+
+    def machine(self):
+        from .machines import machine
+
+        return machine("a-laptop")
+
+    def test_it_appears_without_anything_reaching_it(self):
+        self.assertIsNotNone(self.machine())
+
+    def test_it_links_the_declaration_that_describes_it(self):
+        self.assertEqual(self.machine().declaration, "a-laptop")
+
+    def test_it_shows_an_address_it_was_told_about(self):
+        self.assertEqual(self.machine().address, "10.0.0.5")
+
+    def test_a_machine_nobody_declared_links_nothing(self):
+        from control_plane.models import ProviderInventory
+        from django.utils import timezone
+
+        ProviderInventory.objects.create(
+            kind="portainer.container",
+            records=[{"host": "a-docker-host", "name": "web", "ports": [80]}],
+            observed_at=timezone.now(),
+        )
+        from .machines import machine
+
+        found = machine("a-docker-host")
+        self.assertIsNotNone(found)
+        self.assertEqual(found.declaration, "")
+
+
+class TailnetPresenceTests(TestCase):
+    """Whether a machine is up, said by the network rather than by a service.
+
+    Every other reading HQ has is about something running on a machine, so a box
+    that is switched off and a box whose credential expired look identical.
+    """
+
+    def sweep(self, *records):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={"records": list(records), "observed_at": timezone.now()},
+        )
+
+    def device(self, name, *, online=True, key_expires=""):
+        return {"name": name, "online": online, "key_expires": key_expires}
+
+    def test_a_machine_only_the_tailnet_knows_is_still_a_machine(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop"))
+
+        self.assertIsNotNone(machine("a-laptop"))
+
+    def test_it_reports_being_on_the_tailnet(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop", online=True))
+
+        self.assertTrue(machine("a-laptop").presence.online)
+
+    def test_a_machine_that_is_off_says_so_rather_than_going_missing(self):
+        from .machines import machine
+
+        self.sweep(self.device("a-laptop", online=False))
+
+        found = machine("a-laptop")
+        self.assertIsNotNone(found)
+        self.assertFalse(found.presence.online)
+
+    def test_a_machine_with_no_tailnet_record_has_no_presence(self):
+        from control_plane.models import ManagedResource
+
+        from .machines import machine
+
+        ManagedResource.objects.create(
+            key="a-printer", kind="machine", spec={"name": "a-printer"}
+        )
+
+        self.assertIsNone(machine("a-printer").presence)
+
+
+class KeyExpiryTests(TestCase):
+    """A deadline with no symptom until it passes."""
+
+    def sweep(self, name, days):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [
+                    {
+                        "name": name,
+                        "online": True,
+                        "key_expires": (
+                            timezone.now() + timedelta(days=days)
+                        ).isoformat(),
+                    }
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def titles(self):
+        from .attention import tailnet
+
+        return [item.title for item in tailnet()]
+
+    def test_an_expiry_inside_the_window_is_raised(self):
+        self.sweep("an-edge", 30)
+
+        self.assertEqual(len(self.titles()), 1)
+
+    def test_one_far_away_is_not_raised_at_all(self):
+        """A queue that is never empty is one nobody reads."""
+
+        self.sweep("an-edge", 120)
+
+        self.assertEqual(self.titles(), [])
+
+    def test_one_close_enough_is_serious_rather_than_routine(self):
+        from .attention import tailnet
+
+        self.sweep("an-edge", 3)
+
+        self.assertEqual([item.status for item in tailnet()], ["serious"])
+
+    def test_expiry_disabled_is_silent_because_there_is_no_date(self):
+        from django.utils import timezone
+
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [{"name": "a-server", "online": True, "key_expires": ""}],
+                "observed_at": timezone.now(),
+            },
+        )
+
+        self.assertEqual(self.titles(), [])
+
+
+class OneMachineManyNamesTests(TestCase):
+    """A tailnet calls a machine whatever its owner typed into it years ago.
+
+    That is rarely the name HQ uses, so without a join the board grows a second
+    row for a machine it already had -- with the presence on one row and every
+    other fact on the other.
+    """
+
+    def setUp(self):
+        from django.utils import timezone
+
+        from control_plane.models import ManagedResource, ProviderInventory
+
+        ManagedResource.objects.create(
+            key="a-laptop",
+            kind="machine",
+            spec={
+                "name": "a-laptop",
+                "role": "Primary admin device",
+                "addresses": ["10.0.0.5", "100.64.0.5"],
+            },
+        )
+        ProviderInventory.objects.create(
+            kind="tailscale.device",
+            records=[
+                {"name": "Someone's Laptop", "online": True,
+                 "addresses": ["100.64.0.5"]},
+                {"name": "a-stranger", "online": True,
+                 "addresses": ["100.64.0.99"]},
+            ],
+            observed_at=timezone.now(),
+        )
+
+    def names(self):
+        from .machines import machine_catalog
+
+        return [found.name for found in machine_catalog()]
+
+    def test_the_tailnet_name_does_not_become_a_second_machine(self):
+        self.assertNotIn("Someone's Laptop", self.names())
+
+    def test_the_name_hq_already_uses_is_the_one_kept(self):
+        self.assertIn("a-laptop", self.names())
+
+    def test_presence_follows_the_machine_rather_than_the_name(self):
+        from .machines import machine
+
+        self.assertTrue(machine("a-laptop").presence.online)
+
+    def test_a_machine_hq_has_no_address_for_stays_its_own_row(self):
+        """Not a missed duplicate: HQ declining to claim two things are one."""
+
+        self.assertIn("a-stranger", self.names())
+
+
+class WhoeverSweptTests(TestCase):
+    """The name a sweep files containers under is not always a machine's name.
+
+    Portainer calls its own environment "local", and a controller filling that
+    in has nothing to offer but its own hostname. Run the sweep from a laptop
+    and every container on the Docker host is reported as running on the
+    laptop -- a machine that has never run any of them.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={
+                "name": "a-docker-host",
+                "role": "Docker host",
+                "addresses": ["10.0.0.9"],
+            },
+        )
+        containers(
+            {
+                "name": "a-service",
+                "host": "a-laptop-that-swept",
+                "host_address": "10.0.0.9",
+                "state": "running",
+                "connection_ref": "a-portainer",
+            }
+        )
+
+    def test_the_containers_are_on_the_machine_running_them(self):
+        found = machine("a-docker-host")
+
+        self.assertEqual([item.name for item in found.containers], ["a-service"])
+
+    def test_the_machine_that_swept_does_not_become_a_second_row(self):
+        self.assertNotIn(
+            "a-laptop-that-swept", [found.name for found in machine_catalog()]
+        )
+
+    def test_the_declared_name_is_the_one_kept(self):
+        self.assertIn("a-docker-host", [found.name for found in machine_catalog()])
+
+    def test_the_name_the_sweep_used_is_kept_as_an_alias(self):
+        """Discarding it would leave nothing explaining the fold."""
+
+        self.assertIn("a-laptop-that-swept", machine("a-docker-host").aliases)

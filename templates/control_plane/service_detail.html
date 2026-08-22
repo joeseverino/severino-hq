@@ -16,6 +16,11 @@
       {% endcomment %}
       {% if service.aliases %} · also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
       {% if service.project %} · Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
+      {% if service.reach.label %}
+        &middot;
+        <span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}"
+              title="{{ service.reach.detail }}">{{ service.reach.label }}</span>
+      {% endif %}
     </p>
   </div>
   <div class="page-actions">

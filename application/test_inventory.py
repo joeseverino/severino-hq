@@ -86,6 +86,39 @@ class RecordingTests(TestCase):
         self.assertFalse(snapshot.reachable)
         self.assertEqual(snapshot.error, "timed out")
 
+    def test_an_unreachable_provider_does_not_erase_what_it_last_held(self):
+        """"Could not ask" and "nothing there" are different facts.
+
+        A controller run without one provider's credential reports it as
+        unreachable and empty. Storing that as the truth deletes everything HQ
+        knew about a host that never changed, and every page downstream then
+        says its containers are gone.
+        """
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
+            principal=cli_principal(),
+        )
+        first = ProviderInventory.objects.get(kind="adguard.rewrite").observed_at
+
+        record_sweep(
+            {"adguard.rewrite": {"ok": False, "records": [], "error": "no credential"}},
+            principal=cli_principal(),
+        )
+
+        snapshot = ProviderInventory.objects.get(kind="adguard.rewrite")
+        self.assertEqual(len(snapshot.records), 2)
+        # And dated to when they were seen, not to the sweep that missed them,
+        # so the surfaces that age this data tell the truth about it.
+        self.assertEqual(snapshot.observed_at, first)
+
+    def test_a_provider_first_seen_unreachable_is_still_recorded(self):
+        record_sweep(
+            {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
+            principal=cli_principal(),
+        )
+
+        self.assertEqual(ProviderInventory.objects.get(kind="adguard.rewrite").records, [])
+
     def test_a_kind_this_hq_does_not_know_is_ignored_not_rejected(self):
         """A controller ahead of this HQ must not take the whole sweep down."""
         result = record_sweep(

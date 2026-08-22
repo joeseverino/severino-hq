@@ -219,8 +219,58 @@ def assets() -> tuple[Insight, ...]:
     )
 
 
+# A node key lasts 180 days here, so a warning at 75 would sit in the queue for
+# more of the cycle than not, and a queue that is always non-empty is one nobody
+# reads. Forty-five days is several unhurried weekends; fourteen is the point at
+# which it stops being a plan and starts being a date.
+KEY_EXPIRY_ATTENTION_DAYS = 45
+KEY_EXPIRY_SERIOUS_DAYS = 14
+
+
+def tailnet() -> tuple[Insight, ...]:
+    """Machines whose tailnet key runs out soon.
+
+    A deadline nothing else in HQ watches, and one with no symptom until it
+    passes: the machine keeps running, keeps serving, and simply stops being
+    reachable over the tailnet on a date decided months earlier. Devices with
+    expiry disabled are silent here, because for them there is no date.
+    """
+
+    # The presence table, not the whole machine catalogue. Everything shown
+    # here is on the tailnet reading itself, and assembling every machine to
+    # reach it costs the dashboard a query per row for facts it does not use.
+    from .machines import tailnet_presence
+
+    items = []
+    for name, presence in sorted(tailnet_presence().items()):
+        days = presence.key_expiry_days
+        if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
+            continue
+        items.append(
+            Insight(
+                status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
+                eyebrow="Tailnet",
+                title=(
+                    f"{name} leaves the tailnet in {days} days"
+                    if days > 0
+                    else f"{name} has left the tailnet"
+                ),
+                value=str(max(days, 0)),
+                body=(
+                    f"Its node key expires. {name} keeps running and stops "
+                    "being reachable over the tailnet."
+                ),
+                action="Open machine",
+                url=reverse("control_plane:machine", kwargs={"name": name}),
+            )
+        )
+    return tuple(items)
+
+
 def infrastructure() -> tuple[Insight, ...]:
-    """One entry per resource whose reconciled state is not settled.
+    """What infrastructure needs looking at: unsettled state, and deadlines.
+
+    One entry per resource whose reconciled state is not settled.
 
     Per resource rather than a single count: each one links to its own detail
     page, and "three resources need attention" is not actionable without
@@ -248,7 +298,7 @@ def infrastructure() -> tuple[Insight, ...]:
                 url=reverse("control_plane:detail", kwargs={"key": resource.key}),
             )
         )
-    return tuple(items)
+    return tuple(items) + tailnet()
 
 
 def services() -> tuple[Insight, ...]:

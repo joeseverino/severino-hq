@@ -1,0 +1,82 @@
+{% comment %}
+The body of the reachability dialog: one question, three fields, one answer.
+
+Submits to the tailnet page rather than to itself, so the no-JavaScript path --
+following the trigger's real href -- lands somewhere that can render the same
+answer. Defaults come from whoever included it; on a machine's page both ends
+start as that machine, which is the question most often being asked.
+{% endcomment %}
+<form method="get" class="filter-bar" data-whatif action="{% url 'control_plane:tailnet' %}">
+  <label class="control-label" for="whatif-source">From</label>
+  <select id="whatif-source" name="source">
+    {% for name in device_names %}
+      <option value="{{ name }}" {% if name == asked.source %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label class="control-label" for="whatif-target">To</label>
+  <select id="whatif-target" name="target">
+    {% for name in device_names %}
+      <option value="{{ name }}" {% if name == asked.target %}selected{% endif %}>{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label class="control-label" for="whatif-port">Port</label>
+  <select id="whatif-port" name="port">
+    {% for port in ports %}
+      <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn primary">Ask</button>
+</form>
+
+<div data-whatif-result>
+{% if verdict %}
+  <p class="verdict">
+    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label }}</span>
+    {{ verdict.detail }}
+  </p>
+  {% if verdict.rules %}
+    {% comment %}
+    The rule, not only its conclusion. An answer an operator cannot trace back
+    to a line of policy is one they have to take on faith, and the next thing
+    they want is to go and change it.
+    {% endcomment %}
+    <table class="data-table compact-table">
+      <thead><tr><th>Rule</th><th>Admits</th><th>To</th></tr></thead>
+      <tbody>
+        {% for rule in verdict.rules %}
+          <tr>
+            <td>{% if rule.line %}line {{ rule.line }}{% else %}&mdash;{% endif %}</td>
+            <td>{% for who in rule.who %}<code>{{ who }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for to in rule.to %}<code>{{ to }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+  {% if proposal and policy_declaration %}
+    {% comment %}
+    The refusal and the fix, together. Nobody reads "not allowed" and stops
+    there -- the next question is always what it would take, so the grant that
+    would allow it is written out in the policy's own terms and the editor is
+    one click away. It is not applied here: changing the tailnet's access
+    policy is a decision, not a side effect of asking a question.
+    {% endcomment %}
+    <p class="muted">Allowing it would take this grant:</p>
+    <table class="data-table compact-table">
+      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{% for src in proposal.src %}<code>{{ src }}</code>{% endfor %}</td>
+          <td>{% for dst in proposal.dst %}<code>{{ dst }}</code>{% endfor %}</td>
+          <td>{% for ip in proposal.ip %}<code>{{ ip }}</code>{% endfor %}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Add it in the policy editor &rarr;</a></p>
+  {% endif %}
+{% endif %}
+</div>
+<p class="muted">
+  What the policy allows. Whether anything is listening is a different question,
+  and this one does not ask it.
+</p>

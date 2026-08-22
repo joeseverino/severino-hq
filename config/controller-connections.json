@@ -1,6 +1,42 @@
 {
   "schema_version": 1,
   "projections": {
+    "acme": {
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "DIRECTORY_URL": {
+        "source": "field",
+        "label": "website"
+      },
+      "EMAIL": {
+        "source": "field",
+        "label": "email"
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      }
+    },
+    "api_token": {
+      "API_TOKEN": {
+        "source": "field",
+        "id": "credential"
+      },
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      },
+      "URL": {
+        "source": "field",
+        "label": "website"
+      }
+    },
     "login": {
       "CONNECTION_REF": {
         "source": "connection_ref"
@@ -23,8 +59,12 @@
         "id": "username"
       }
     },
-    "api_token": {
-      "API_TOKEN": {
+    "oauth_client": {
+      "CLIENT_ID": {
+        "source": "field",
+        "id": "username"
+      },
+      "CLIENT_SECRET": {
         "source": "field",
         "id": "credential"
       },
@@ -35,10 +75,6 @@
         "source": "field",
         "label": "provider",
         "optional": true
-      },
-      "URL": {
-        "source": "field",
-        "label": "website"
       }
     },
     "ssh_transport": {
@@ -65,24 +101,6 @@
       "USER": {
         "source": "field",
         "label": "user"
-      }
-    },
-    "acme": {
-      "CONNECTION_REF": {
-        "source": "connection_ref"
-      },
-      "DIRECTORY_URL": {
-        "source": "field",
-        "label": "website"
-      },
-      "EMAIL": {
-        "source": "field",
-        "label": "email"
-      },
-      "PROVIDER": {
-        "source": "field",
-        "label": "provider",
-        "optional": true
       }
     }
   }

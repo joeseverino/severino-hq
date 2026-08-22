@@ -613,7 +613,7 @@ class OriginNoteTests(TestCase):
                     context=NameContext(),
                 ),
             ),
-            origin=Origin(address="192.168.1.233:8099", host="a-docker-host",
+            origin=Origin(address="10.0.0.9:8099", host="a-docker-host",
                           container="probe"),
         )
 
@@ -652,7 +652,7 @@ class OriginNoteTests(TestCase):
         service = Service(
             hostname="probe.invalid",
             facets=(Facet(id="runtime", label="Runtime", context=NameContext()),),
-            origin=Origin(address="192.168.1.233:8099", host="a-docker-host"),
+            origin=Origin(address="10.0.0.9:8099", host="a-docker-host"),
         )
 
         self.assertTrue(service.origin_is_news)
@@ -678,7 +678,7 @@ class OriginWordingTests(TestCase):
     def test_a_known_machine_reads_as_itself(self):
         from .services import Origin
 
-        origin = Origin(address="192.168.1.233:8000", host="a-docker-host",
+        origin = Origin(address="10.0.0.9:8000", host="a-docker-host",
                         container="probe")
 
         self.assertEqual(origin.headline, "a-docker-host · probe")
@@ -756,8 +756,8 @@ class PortlessOriginTests(TestCase):
         from .services import _locate
 
         origin = _locate(
-            "192.168.1.233",
-            ({"name": "a-docker-host", "addresses": ["192.168.1.233"]},),
+            "10.0.0.9",
+            ({"name": "a-docker-host", "addresses": ["10.0.0.9"]},),
         )
 
         self.assertEqual(origin.host, "a-docker-host")
@@ -812,7 +812,7 @@ class ParkedNameTests(TestCase):
     def test_a_real_address_is_not(self):
         from .services import Origin, _points_nowhere
 
-        self.assertEqual(_points_nowhere(Origin(address="192.168.1.233:8000")), "")
+        self.assertEqual(_points_nowhere(Origin(address="10.0.0.9:8000")), "")
         self.assertEqual(_points_nowhere(Origin(address="jseverino.pages.dev")), "")
 
     def test_nothing_routed_is_not_a_parked_name(self):

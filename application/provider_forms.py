@@ -400,6 +400,14 @@ def _field_for(field: Any) -> forms.Field:
         validators=(
             [RegexValidator(limits["pattern"])] if limits.get("pattern") else []
         ),
+        # A string the model puts no ceiling on is one that can be long, and a
+        # long value in a one-line box is unreadable and unusable: an access
+        # policy or a compose file arrived as three thousand characters scrolling
+        # past a slot two inches wide. Where a length is declared, the model is
+        # saying it is short, and a single line is right.
+        widget=None if limits.get("max_length") else forms.Textarea(
+            attrs={"rows": 18, "spellcheck": "false", "class": "code"}
+        ),
         **options,
     )
 

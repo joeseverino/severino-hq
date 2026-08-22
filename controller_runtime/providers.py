@@ -6,6 +6,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -1931,6 +1932,36 @@ def _portainer_headers(connection_ref: str = "") -> dict[str, str]:
     }
 
 
+def _an_address(host: str) -> str:
+    """A name resolved to the address it answers at, where that is possible.
+
+    A credential is written the way an operator types it, which is a hostname.
+    An address is what every other source of a machine reports, so a hostname
+    left unresolved joins to nothing: HQ holds one machine's address from three
+    directions and a name for it from a fourth, and cannot see they are the
+    same machine. Resolving is what makes the fourth comparable to the rest.
+
+    The name is kept when it does not resolve. That is not a failure worth
+    raising -- an unresolvable name still identifies the endpoint consistently,
+    which is most of what this is for.
+    """
+
+    if not host or _looks_like_an_address(host):
+        return host
+    try:
+        return socket.gethostbyname(host)
+    except (OSError, UnicodeError):
+        return host
+
+
+def _looks_like_an_address(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
 def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
     """Every Docker environment, with the machine each one is.
 
@@ -1944,6 +1975,13 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
         f"{_portainer_url(connection_ref)}/endpoints",
         headers=_portainer_headers(connection_ref),
     )
+    # Where Portainer itself is, which is where its local socket is too. Without
+    # this a local environment reports no address at all, and an address is the
+    # one identity every source of a machine agrees on -- so the machine
+    # Portainer runs on was the single one HQ could not recognise by it.
+    portainer_at = _an_address(
+        urllib.parse.urlsplit(_portainer_url(connection_ref)).hostname or ""
+    )
     resolved = []
     for environment in environments or []:
         url = str(environment.get("URL", ""))
@@ -1952,7 +1990,7 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
             {
                 "id": environment.get("Id"),
                 "name": environment.get("Name", ""),
-                "address": address or "",
+                "address": address or portainer_at,
                 "local": not address,
                 "reachable": environment.get("Status") == 1,
             }
@@ -2364,12 +2402,661 @@ def stop_portainer_container(
     return _cycle_portainer_container(spec, "stop", apply=apply)
 
 
+TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
+
+
+def local_tailnet_devices() -> list[dict[str, Any]]:
+    """The tailnet as the local daemon sees it, and nothing more.
+
+    Kept apart from the enriched sweep because the two have different costs and
+    different reasons. This one needs no credential and no network call beyond
+    a unix socket, so anything that only wants to know what a device *is* --
+    reconciling one, for instance -- asks this rather than paying for a policy
+    read it will not use.
+    """
+
+    if not TAILNET_STATUS:
+        raise ProviderError(
+            "This controller was not given a tailnet reading, so it cannot say "
+            "which machines are up."
+        )
+    try:
+        raw = Path(TAILNET_STATUS).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ProviderError(
+            "The tailnet reading is missing. It is taken from the local "
+            "daemon before this container starts, and only when there is one."
+        ) from exc
+    try:
+        status = json.loads(raw)
+    except ValueError as exc:
+        raise ProviderError("The tailnet reading is not readable status.") from exc
+    nodes = [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
+    found = [record for record in map(_tailnet_record, nodes) if record]
+    # Which of them took the reading. Every other device is described from its
+    # point of view -- the relay carrying it, the bytes exchanged with it -- so
+    # a reader that cannot tell which one is the observer is reading a set of
+    # measurements with no origin.
+    for record in found[:1]:
+        record["self"] = True
+    return found
+
+
+def list_tailnet_devices() -> list[dict[str, Any]]:
+    """Every machine on the tailnet, with what the policy says about each.
+
+    Read from the daemon this machine is already a peer of rather than from
+    Tailscale's API. There is no credential to hold, render or rotate: a node's
+    view of its own tailnet is something it has by being on it, and a controller
+    that cannot be given a token cannot leak one.
+
+    Handed in as a file rather than fetched here. The daemon's local API is read
+    *and* write, with no read-only mode, so a controller holding its socket
+    could log this machine off the tailnet -- and this is the process that holds
+    every provider credential. It only ever needed the reading, so the reading
+    is what it gets.
+
+    It answers the question no other sweep can. Every other provider reports
+    whether a *service* answered, so a machine whose Portainer token expired and
+    a machine that is switched off are indistinguishable. This tells them apart.
+
+    The local view is deliberately not the whole picture -- tags, the policy
+    file and the tailnet's DNS configuration are control-plane facts the daemon
+    does not hold. What it does hold is presence and key expiry, which are the
+    two that go wrong quietly.
+    """
+
+    devices = local_tailnet_devices()
+    # Who may reach each one, where a credential makes that answerable. Folded
+    # into the device rather than swept separately: it is a fact about that
+    # device, and a second inventory kind would be a second thing to join.
+    reach = _reach_by_device(devices)
+    try:
+        identities = _tailnet_identities(_tailnet_token(""))
+    except ProviderError:
+        identities = {}
+    for device in devices:
+        device["reach"] = reach.get(device["name"], [])
+        identity = identities.get(device["name"], {})
+        device["user"] = identity.get("user", "")
+        device["tags"] = identity.get("tags", [])
+    return devices
+
+
+def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
+    """One machine, keyed by the name the rest of HQ already calls it.
+
+    Every field is optional. Tailscale omits rather than nulls -- a device with
+    expiry disabled has no ``KeyExpiry`` at all, and a machine that has never
+    been seen has no ``LastSeen`` -- so a reader that requires any of them
+    rejects exactly the devices it exists to describe.
+    """
+
+    name = str(node.get("HostName") or "").strip()
+    if not name:
+        return None
+    return {
+        "name": name,
+        # The MagicDNS name, which is how the tailnet addresses it and not
+        # always what the host calls itself.
+        "dns_name": str(node.get("DNSName") or "").rstrip("."),
+        "online": bool(node.get("Online")),
+        "last_seen": str(node.get("LastSeen") or ""),
+        # Absent means expiry is disabled for this device, which is a different
+        # statement from "expires at some unknown time" and is kept distinct.
+        "key_expires": str(node.get("KeyExpiry") or ""),
+        "addresses": [str(address) for address in node.get("TailscaleIPs") or ()],
+        "os": str(node.get("OS") or ""),
+        "exit_node": bool(node.get("ExitNode")),
+        "self": False,
+        # How the traffic actually gets there, which is the part nothing else
+        # can answer. A peer is either reached directly -- the two daemons found
+        # a path through both NATs -- or carried by a relay, and the difference
+        # is a real one an operator otherwise has to shell in to see. Absent
+        # means the peer is idle rather than unreachable: a path is negotiated
+        # when there is traffic, so a machine nobody is talking to has neither.
+        "direct_endpoint": str(node.get("CurAddr") or ""),
+        # Every address this node can be reached at off the tailnet -- the one
+        # its router hands out and the one the internet sees it as. Reported
+        # only for the node taking the reading; a peer's own list is not
+        # something the daemon is told.
+        "endpoints": [str(endpoint) for endpoint in node.get("Addrs") or ()],
+        "relay": str(node.get("Relay") or ""),
+        "last_handshake": str(node.get("LastHandshake") or ""),
+        "active": bool(node.get("Active")),
+        "rx_bytes": int(node.get("RxBytes") or 0),
+        "tx_bytes": int(node.get("TxBytes") or 0),
+    }
+
+
+TAILNET_API = "https://api.tailscale.com/api/v2"
+
+
+def _tailnet_token(connection_ref: str) -> str:
+    """Exchange the OAuth client for a token, every time, and keep none.
+
+    The token lasts an hour and a sweep is minutes apart, so caching it buys
+    nothing and adds an expiry to get wrong. The client itself is the only thing
+    held, and it is held by the vault rather than by this process.
+    """
+
+    prefix = connection_prefix("tailscale", connection_ref)
+    client_id = _required(prefix, "CLIENT_ID")
+    client_secret = _required(prefix, "CLIENT_SECRET")
+    body = urllib.parse.urlencode(
+        {"client_id": client_id, "client_secret": client_secret}
+    ).encode()
+    request = urllib.request.Request(
+        f"{TAILNET_API}/oauth/token",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            token = json.loads(response.read()).get("access_token", "")
+    except urllib.error.HTTPError as exc:
+        raise ProviderError(
+            f"Tailscale refused the credential for {connection_ref} "
+            f"({exc.code}). It has to be an OAuth client, not an API key."
+        ) from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError("Tailscale did not answer the token request.") from exc
+    if not token:
+        raise ProviderError("Tailscale returned no access token.")
+    return token
+
+
+def _tailnet_device_id(name: str) -> str:
+    """The device's stable id, taken from the local daemon rather than the API.
+
+    The reading this controller already has carries it, so finding which device
+    to change costs no call and no credential. The token is spent on the change
+    itself and on nothing else.
+    """
+
+    for node in _tailnet_nodes():
+        if str(node.get("HostName") or "").strip() == name:
+            identifier = str(node.get("ID") or "")
+            if identifier:
+                return identifier
+    raise ProviderError(
+        f"No device called {name!r} is on the tailnet this machine can see."
+    )
+
+
+def reconcile_tailnet_device(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Assert HQ's decision about one device, and report what is true after.
+
+    Only the settings HQ declares are touched. Everything else about the device
+    -- its name, its tags, its routes, whether it is even switched on -- belongs
+    to the machine and to whoever runs it.
+    """
+
+    del observed
+    name = spec["name"]
+    wanted = bool(spec.get("key_expiry_disabled"))
+    current = _tailnet_device_state(name)
+    if current["key_expiry_disabled"] == wanted:
+        return ProviderResult(
+            changed=False,
+            status=current,
+            conditions=[
+                _condition("Ready", True, "Reconciled", "The device is as declared.")
+            ],
+            message="Tailnet device is current.",
+        )
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status=current,
+            conditions=[],
+            message=(
+                f"Key expiry would be {'disabled' if wanted else 'enabled'} for "
+                f"{name}."
+            ),
+        )
+
+    identifier = _tailnet_device_id(name)
+    token = _tailnet_token(spec["connection_ref"])
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/key",
+        data=json.dumps({"keyExpiryDisabled": wanted}).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            raise ProviderError(
+                "This Tailscale credential may not change devices. It needs "
+                "the devices:core scope."
+            ) from exc
+        raise ProviderError(
+            f"Tailscale refused the change to {name} ({exc.code})."
+        ) from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise ProviderError("Tailscale did not answer the change request.") from exc
+
+    return ProviderResult(
+        changed=True,
+        status={**current, "key_expiry_disabled": wanted, "key_expires": ""},
+        conditions=[
+            _condition("Ready", True, "Reconciled", "The device is as declared.")
+        ],
+        message=(
+            f"{name} now stays on the tailnet."
+            if wanted
+            else f"{name} has an expiry date again."
+        ),
+    )
+
+
+def _tailnet_device_state(name: str) -> dict[str, Any]:
+    """What the tailnet currently says about one device."""
+
+    for record in local_tailnet_devices():
+        if record["name"] == name:
+            return {
+                "name": name,
+                "online": record["online"],
+                "key_expires": record["key_expires"],
+                # No expiry is the setting, not an unknown date.
+                "key_expiry_disabled": not record["key_expires"],
+            }
+    raise ProviderError(
+        f"No device called {name!r} is on the tailnet this machine can see."
+    )
+
+
+def _tailnet_nodes() -> list[dict[str, Any]]:
+    """The raw local reading, for the fields the record does not carry."""
+
+    if not TAILNET_STATUS:
+        raise ProviderError("This controller was not given a tailnet reading.")
+    try:
+        status = json.loads(Path(TAILNET_STATUS).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ProviderError("The tailnet reading is missing or unreadable.") from exc
+    return [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
+
+
+def _tailnet_get(token: str, path: str) -> dict[str, Any]:
+    """One tailnet-level read, or nothing if it is not answerable.
+
+    Nothing rather than an exception: these are separate facts about the same
+    tailnet, and losing the whole sweep because one endpoint is unavailable to
+    this credential would trade six answers for none.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/{path}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            found = json.loads(response.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def _tailnet_policy_etag(token: str) -> str:
+    """The version of the policy HQ read, so a write cannot clobber a newer one.
+
+    Without it, two people editing at once means the later save silently wins.
+    Tailscale takes this back as ``If-Match`` and refuses the write instead.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/acl",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.headers.get("etag", "")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+        return ""
+
+
+def reconcile_tailnet_policy(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Apply the declared policy, but only if it still passes its own tests.
+
+    The policy is the tailnet's security boundary, and its failure mode is
+    locking everybody out of everything at once. Tailscale will validate a
+    document on request and run the tests written inside it, so that is the
+    gate: a policy whose tests fail is refused here rather than applied and
+    regretted. The console warns about that; this declines.
+
+    Conditional on the version last read, so a change made somewhere else in
+    the meantime stops this rather than being overwritten by it.
+    """
+
+    del observed
+    wanted = (spec.get("document") or "").strip()
+    if not wanted:
+        return ProviderResult(
+            changed=False,
+            status={},
+            conditions=[],
+            message="No policy is declared, so there is nothing to apply.",
+        )
+    try:
+        document = json.loads(wanted)
+    except ValueError as exc:
+        raise ProviderError("The declared policy is not readable JSON.") from exc
+
+    token = _tailnet_token(spec.get("connection_ref", ""))
+    if _tailnet_policy(token) == document:
+        return ProviderResult(
+            changed=False,
+            status={"applied": True},
+            conditions=[
+                _condition("Ready", True, "Reconciled", "The policy is as declared.")
+            ],
+            message="Tailnet policy is current.",
+        )
+
+    # The gate. Validation runs the tests the document carries, so a change
+    # that would break one is refused before anything is written.
+    check = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/acl/validate",
+        data=json.dumps(document).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(check, timeout=30) as response:
+            verdict = json.loads(response.read() or b"{}")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError("Tailscale could not check the policy.") from exc
+    if verdict:
+        raise ProviderError(
+            "The declared policy does not pass its own tests, so it was not "
+            f"applied: {json.dumps(verdict)[:300]}"
+        )
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status={},
+            conditions=[],
+            message="The policy passes its own tests and would be applied.",
+        )
+
+    etag = _tailnet_policy_etag(token)
+    write = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/acl",
+        data=json.dumps(document).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            **({"If-Match": etag} if etag else {}),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(write, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 412:
+            raise ProviderError(
+                "The policy changed somewhere else since HQ read it, so this "
+                "was not applied. Read it again and make the change on top."
+            ) from exc
+        raise ProviderError(f"Tailscale refused the policy ({exc.code}).") from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise ProviderError("Tailscale did not answer the policy write.") from exc
+
+    return ProviderResult(
+        changed=True,
+        status={"applied": True},
+        conditions=[
+            _condition("Ready", True, "Reconciled", "The policy is as declared.")
+        ],
+        message="Tailnet policy applied after its own tests passed.",
+    )
+
+
+def _tailnet_policy(token: str) -> dict[str, Any]:
+    """The tailnet's policy file, as Tailscale currently holds it."""
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/acl",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        raise ProviderError(
+            f"Tailscale refused the policy read ({exc.code}). The credential "
+            "needs the policy_file scope."
+        ) from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError("Tailscale did not return a readable policy.") from exc
+
+
+def _who_may_reach(policy: dict[str, Any], token: str, target: str) -> list[dict[str, Any]]:
+    """The rules that let anything reach one address and port.
+
+    Asked of Tailscale rather than worked out here. HQ is a reader of this
+    policy and must not become a second implementation of it: an answer derived
+    locally would be believed exactly as much as the real one and wrong in ways
+    nobody would notice until it mattered.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/acl/preview"
+        f"?type=ipport&previewFor={urllib.parse.quote(target)}",
+        data=json.dumps(policy).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read()).get("matches") or []
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+        # One address that cannot be previewed must not lose the others.
+        return []
+
+
+def list_tailnet_policy() -> list[dict[str, Any]]:
+    """The policy itself: who is grouped, what is tagged, and what it grants.
+
+    Read so HQ can show the thing its verdicts come from. A reachability answer
+    an operator cannot trace to a rule is one they have to take on faith, and
+    the rules are small enough to put on a page.
+    """
+
+    try:
+        token = _tailnet_token("")
+        policy = _tailnet_policy(token)
+    except ProviderError:
+        return []
+    return [
+        {
+            "record": "policy",
+            # The document itself, so a declaration can hold it and be compared
+            # against reality without a second read.
+            "document": json.dumps(policy, indent=2, sort_keys=True),
+            "settings": _tailnet_get(token, "settings"),
+            "dns": {
+                **_tailnet_get(token, "dns/preferences"),
+                **_tailnet_get(token, "dns/nameservers"),
+                **_tailnet_get(token, "dns/searchpaths"),
+            },
+            "groups": [
+                {"name": name, "members": sorted(members)}
+                for name, members in sorted((policy.get("groups") or {}).items())
+            ],
+            "tags": [
+                {"name": name, "owners": sorted(owners)}
+                for name, owners in sorted((policy.get("tagOwners") or {}).items())
+            ],
+            "grants": [
+                {
+                    "src": sorted(grant.get("src") or []),
+                    "dst": sorted(grant.get("dst") or []),
+                    "ip": sorted(grant.get("ip") or []),
+                }
+                for grant in policy.get("grants") or []
+            ],
+            "tests": policy.get("tests") or [],
+        }
+    ]
+
+
+def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Who the policy lets reach each device, on the ports worth asking about.
+
+    Swept rather than asked live, because the web process holds no credential
+    and is not going to start: "who can reach this" is answered from what a
+    controller already went and got, the same as every other reading on the
+    page it appears on.
+
+    Silent when there is no Tailscale credential. The devices themselves come
+    from the local daemon and need none, so a controller without one still
+    reports presence and simply cannot say who may reach it.
+    """
+
+    try:
+        token = _tailnet_token("")
+        policy = _tailnet_policy(token)
+    except ProviderError:
+        return {}
+
+    # Groups are flattened here, where the policy is. HQ then answers "may this
+    # device reach that one" by asking whether its identity is in a list --
+    # which is reading Tailscale's answer, not re-deriving it. Expanding groups
+    # in HQ would be the first step toward a second policy engine.
+    members = {
+        group: set(users) for group, users in (policy.get("groups") or {}).items()
+    }
+
+    def flatten(names: list[str]) -> list[str]:
+        out: set[str] = set()
+        for name in names:
+            out.update(members.get(name, {name}))
+        return sorted(out)
+
+    asking = _ports_worth_asking()
+    found: dict[str, list[dict[str, Any]]] = {}
+    for device in devices:
+        # IPv4 only. The policy here is written against v4, and previewing both
+        # families would double every row to say the same thing twice.
+        address = next(
+            (a for a in device["addresses"] if ":" not in a), ""
+        )
+        if not address:
+            continue
+        for port in asking:
+            matches = _who_may_reach(policy, token, f"{address}:{port}")
+            raw = sorted(
+                {name for match in matches for name in (match.get("users") or [])}
+            )
+            if raw:
+                found.setdefault(device["name"], []).append(
+                    {
+                        "port": port,
+                        "who": flatten(raw),
+                        # The rule itself, so a verdict can show what decided it
+                        # rather than only what it decided. Line numbers are the
+                        # policy's own, which is how an operator finds it.
+                        "rules": [
+                            {
+                                "who": sorted(match.get("users") or []),
+                                "to": sorted(match.get("ports") or []),
+                                "line": match.get("lineNumber"),
+                            }
+                            for match in matches
+                        ],
+                    }
+                )
+    return found
+
+
+def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
+    """Each device's own identity: the user that owns it, and its tags.
+
+    From the API rather than the local daemon, which does not report tags. It
+    is what a policy names a device by, so without it "may this reach that" has
+    no way to say which principal is asking.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/devices",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            devices = json.loads(response.read()).get("devices") or []
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+        return {}
+    return {
+        str(device.get("hostname", "")): {
+            "user": str(device.get("user", "")),
+            "tags": sorted(device.get("tags") or []),
+        }
+        for device in devices
+        if device.get("hostname")
+    }
+
+
+# Where the answers start. Asking about all 65535 would be that many calls per
+# device; these are the ports anything is reached on anywhere, and the rest are
+# added from what this machine can actually see listening.
+TAILNET_BASE_PORTS = (22, 53, 80, 443)
+
+
+def _ports_worth_asking() -> tuple[int, ...]:
+    """The ports something here actually listens on, plus the usual few.
+
+    Derived rather than listed. A hardcoded set answers about ports nothing
+    uses and says "cannot say" about the one an operator came to ask about --
+    and the containers on this machine already state which ports they publish,
+    so the set that matters is knowable rather than guessable.
+    """
+
+    found = set(TAILNET_BASE_PORTS)
+    try:
+        for container in list_portainer_containers():
+            found.update(
+                int(port)
+                for port in container.get("ports") or ()
+                if str(port).isdigit() and 0 < int(port) < 65536
+            )
+    except (ProviderError, OSError, ValueError, KeyError):
+        # No Portainer, or it is not answering. The base set still applies, and
+        # a sweep that reports fewer ports is better than one that reports none.
+        pass
+    return tuple(sorted(found))
+
+
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
     "portainer.container": list_portainer_containers,
+    "tailscale.device": list_tailnet_devices,
+    "tailscale.policy": list_tailnet_policy,
 }
 
 
@@ -2585,6 +3272,8 @@ PROVIDER_ACTIONS = {
     ("cloudflare.dns_record", "delete"): delete_cloudflare_record,
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
+    ("tailscale.device", "reconcile"): reconcile_tailnet_device,
+    ("tailscale.policy", "reconcile"): reconcile_tailnet_policy,
 }
 
 

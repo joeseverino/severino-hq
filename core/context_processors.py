@@ -110,3 +110,18 @@ def nav(request):
 
 def auth_config(request):
     return {"OIDC_ENABLED": getattr(settings, "SEVERINO_OIDC_ENABLED", False)}
+
+
+def connection(request):
+    """Which network this request came over, for the header badge.
+
+    Arithmetic on one address and nothing else -- no query, no settings read,
+    no inventory. The badge is on every page, so anything it costs is a cost
+    every page pays; the panel behind it does the expensive part, and only when
+    somebody opens it.
+    """
+
+    from application.connection import channel_of
+    from core.network import client_ip
+
+    return {"CONNECTION_CHANNEL": channel_of(client_ip(request))}

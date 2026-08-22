@@ -85,6 +85,30 @@
         }
       }
     },
+    "tailscale.device": {
+      "actions": {
+        "reconcile": {
+          "mode": "apply",
+          "automatic": true,
+          "verification": {
+            "timeout_seconds": 60,
+            "interval_seconds": 10
+          }
+        }
+      }
+    },
+    "tailscale.policy": {
+      "actions": {
+        "reconcile": {
+          "mode": "apply",
+          "automatic": false,
+          "verification": {
+            "timeout_seconds": 60,
+            "interval_seconds": 10
+          }
+        }
+      }
+    },
     "tls.certificate": {
       "actions": {
         "reconcile": {

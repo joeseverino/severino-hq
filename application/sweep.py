@@ -20,7 +20,11 @@ from typing import Any
 
 from django.db import transaction
 
-from .inventory import record_inventory
+from .inventory import (
+    adopt_discovered,
+    adopt_discovered_containers,
+    record_inventory,
+)
 from .zones import adopt_discovered_records
 
 
@@ -37,4 +41,10 @@ def record_sweep(
     # of the records just recorded, so every declaration it writes starts equal
     # to what the controller actually found and the first reconcile is a no-op.
     adopted = adopt_discovered_records(principal=principal)["adopted"]
+    # Containers too, for the same reason and by the same rule: the decision
+    # was made when the credential was added, not once per container.
+    adopted += adopt_discovered_containers(principal=principal)["adopted"]
+    # The policy too, so it is a declaration an operator can open and change
+    # rather than something only Tailscale's own console can edit.
+    adopted += adopt_discovered("tailscale.policy", principal=principal)["adopted"]
     return {**result, "adopted": adopted}

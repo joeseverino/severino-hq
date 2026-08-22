@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Tailnet · Severino HQ{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Tailnet</h1>
+    <p class="muted">
+      The access policy, and what it allows. The machines themselves are on the
+      machines page; this is what governs reaching them.
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn primary" href="{% url 'control_plane:tailnet' %}" data-modal-open="whatif">Policy test</a>
+    {% if policy_declaration %}
+      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
+    {% endif %}
+    <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
+  </div>
+</div>
+
+{% if policy.known %}
+  <div class="control-summary">
+    <div class="control-metric">
+      <span class="control-label">Grants</span>
+      <strong>{{ policy.grants|length }}</strong>
+    </div>
+    <div class="control-metric">
+      <span class="control-label">Groups</span>
+      <strong>{{ policy.groups|length }}</strong>
+    </div>
+    <div class="control-metric">
+      <span class="control-label">Tags</span>
+      <strong>{{ policy.tags|length }}</strong>
+    </div>
+    <div class="control-metric">
+      <span class="control-label">Its own tests</span>
+      <strong>{{ policy.tests|length }}</strong>
+    </div>
+  </div>
+
+  {% if policy.facts %}
+    <h2>How this tailnet is set up</h2>
+    <div class="table-scroll">
+      <table class="data-table compact-table">
+        <tbody>
+          {% for label, value in policy.facts %}
+            <tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="section-head">
+    <h2>Grants</h2>
+    {% if policy_declaration %}
+      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
+    {% endif %}
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>From</th><th>To</th><th>On</th>{% if policy_declaration %}<th></th>{% endif %}</tr></thead>
+      <tbody>
+        {% for grant in policy.grants %}
+          <tr>
+            <td>{% for src in grant.src %}<code>{{ src }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for dst in grant.dst %}<code>{{ dst }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for ip in grant.ip %}<code>{{ ip }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            {% if policy_declaration %}
+              <td><a class="subtle-link" href="{% url 'control_plane:edit' policy_declaration %}">Edit &rarr;</a></td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Who is who</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Is</th></tr></thead>
+      <tbody>
+        {% for group in policy.groups %}
+          <tr>
+            <td><code>{{ group.name }}</code></td>
+            <td>{{ group.members|join:", " }}</td>
+          </tr>
+        {% endfor %}
+        {% for tag in policy.tags %}
+          <tr>
+            <td><code>{{ tag.name }}</code></td>
+            <td><span class="muted">owned by</span> {{ tag.owners|join:", " }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  {% include "partials/_empty_state.html" with message="No sweep has read the tailnet policy yet." %}
+{% endif %}
+
+{% include "partials/_modal.html" with id="whatif" title="Policy test" lede="What the policy admits, evaluated by Tailscale rather than worked out here." body_template="control_plane/_whatif_form.html" %}
+{% endblock %}

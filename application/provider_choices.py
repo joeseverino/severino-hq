@@ -92,6 +92,33 @@ def _install_targets(exclude: AbstractSet[str] = frozenset()):
     )
 
 
+def tailnet_device(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """The devices the tailnet actually reported, and the credential to use.
+
+    Offered rather than typed: the name has to match what the tailnet calls the
+    device exactly, and that is rarely what anyone would guess -- a laptop is
+    whatever its owner typed into it years ago.
+    """
+
+    from control_plane.models import ProviderInventory
+
+    devices: dict[str, str] = {}
+    for snapshot in ProviderInventory.objects.filter(kind="tailscale.device"):
+        for record in snapshot.records:
+            name = str(record.get("name", ""))
+            if not name:
+                continue
+            devices[name] = (
+                f"{name} — expires {record['key_expires'][:10]}"
+                if record.get("key_expires")
+                else f"{name} — already stays on the tailnet"
+            )
+    return {
+        "name": tuple(sorted(devices.items())),
+        "connection_ref": _connection_choices("tailscale"),
+    }
+
+
 def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Which credential reaches the target, and which certificate names it."""
 

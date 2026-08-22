@@ -31,7 +31,9 @@ install -d -o root -g root -m 0700 "${acme_dir}"
 chown 10001:10001 "${acme_dir}"
 runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
 runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
-trap 'rm -f "${runtime_app_env}"; rm -rf "${runtime_ssh_dir}"' EXIT HUP INT TERM
+runtime_tailnet="$(mktemp /run/severino-hq-controller-tailnet.XXXXXX)"
+trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}"; rm -rf "${runtime_ssh_dir}"' \
+    EXIT HUP INT TERM
 install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 chown 10001:10001 "${runtime_app_env}"
 cp -a "${ssh_dir}/." "${runtime_ssh_dir}/"
@@ -69,6 +71,33 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
+# The tailnet, read from the daemon this machine is already a peer of rather
+# than from Tailscale's API -- so there is no credential for the controller to
+# hold.
+#
+# The answer is fetched here and passed in as a file. The socket itself is not
+# mounted: the daemon's local API is read *and* write, with no read-only mode,
+# so handing it to the container would let the process that holds every
+# provider credential log this machine off the tailnet. It only ever needed the
+# reading. Fetched as root, mounted read-only, owned by nobody the container
+# can become.
+#
+# Written only when the daemon answers. A missing file is a controller that
+# reports the tailnet as unreadable, which is what a machine that is not on one
+# should say.
+if [ -S /var/run/tailscale/tailscaled.sock ] \
+    && curl -fsS --max-time 10 \
+        --unix-socket /var/run/tailscale/tailscaled.sock \
+        -H "Host: local-tailscaled.sock" \
+        http://local-tailscaled.sock/localapi/v0/status \
+        -o "${runtime_tailnet}" 2>/dev/null; then
+    chown 10001:10001 "${runtime_tailnet}"
+    chmod 0400 "${runtime_tailnet}"
+    set -- "$@" \
+        --mount "type=bind,source=${runtime_tailnet},target=/run/severino-hq/tailnet.json,readonly" \
+        --env SEVERINO_TAILNET_STATUS=/run/severino-hq/tailnet.json
+fi
+
 # Forward what the renderer produced, rather than recomputing the same names
 # from a registry. The registry holds the shape a connection can take; which
 # connections exist is the vault's to say, so a list rebuilt here is a second

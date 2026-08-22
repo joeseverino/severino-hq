@@ -1,0 +1,215 @@
+{% comment %}
+The body of the connection panel, shared by the dialog in the header and the
+page it falls back to. Nothing here knows which one it is in.
+{% endcomment %}
+<div class="conn" data-connection-panel>
+  <div class="conn-verdict conn-{{ connection.channel.id }}">
+    <span class="conn-dot" aria-hidden="true"></span>
+    <div class="conn-verdict-text">
+      <p class="conn-headline">{{ connection.channel.label }}</p>
+      <p class="conn-sub">{{ connection.summary }} · {{ connection.transport }}</p>
+    </div>
+    <code class="conn-address">{{ connection.address }}</code>
+  </div>
+
+  {% comment %}
+  The peering itself, drawn as the two ends it has. Every other surface here
+  describes one machine; this one is about the link between two, and a pair of
+  panels facing each other says that faster than a table of the same values.
+  {% endcomment %}
+  <section class="conn-peering">
+    <div class="conn-peer">
+      <span class="conn-peer-role">You</span>
+      <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+      <code>{{ connection.address }}</code>
+      {% if connection.identity.tailnet_user %}
+        <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
+      {% endif %}
+    </div>
+    <div class="conn-link conn-link-{{ connection.path }}">
+      <span class="conn-link-label">{{ connection.path_label }}</span>
+      <span class="conn-link-line" aria-hidden="true"></span>
+      <span class="conn-row-note">{{ connection.transport }}</span>
+    </div>
+    <div class="conn-peer">
+      <span class="conn-peer-role">HQ</span>
+      <strong>{{ connection.serves.name|default:connection.host }}</strong>
+      {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
+      <span class="conn-row-note">{{ connection.host }}</span>
+    </div>
+  </section>
+
+  <div class="conn-cols">
+    <section>
+      <h3>You</h3>
+      <dl class="conn-pairs">
+        <dt>Signed in</dt>
+        <dd>
+          <strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>
+          {% if connection.identity.email %}<code>{{ connection.identity.email }}</code>{% endif %}
+        </dd>
+        <dt>Tailnet account</dt>
+        <dd>
+          {% if connection.identity.tailnet_user %}<code>{{ connection.identity.tailnet_user }}</code>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </dd>
+        <dt>Device</dt>
+        <dd>
+          {% if connection.device %}
+            <strong>{{ connection.device.label }}</strong>
+            {% if connection.device.os %}<span class="conn-row-note">{{ connection.device.os }}</span>{% endif %}
+          {% else %}<span class="muted">unknown to the tailnet</span>{% endif %}
+        </dd>
+        {% if connection.device.dns_name %}
+          <dt>MagicDNS</dt><dd><code>{{ connection.device.dns_name }}</code></dd>
+        {% endif %}
+        {% if connection.device.tags %}
+          <dt>Tags</dt>
+          <dd>{% for tag in connection.device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
+        {% endif %}
+        <dt>Signed in via</dt>
+        <dd>
+          {{ connection.identity.route }}
+          {% if connection.identity.provider %}<code>{{ connection.identity.provider }}</code>{% endif %}
+        </dd>
+        {% if connection.identity.groups %}
+          <dt>Groups</dt>
+          <dd>{% for group in connection.identity.groups %}<code>{{ group }}</code> {% endfor %}</dd>
+        {% endif %}
+        <dt>Rights</dt>
+        <dd>
+          {% if connection.identity.superuser %}superuser
+          {% elif connection.identity.staff %}staff
+          {% else %}standard{% endif %}
+        </dd>
+        {% if connection.identity.last_sign_in %}
+          <dt>Last sign-in</dt><dd><span class="conn-row-note">{{ connection.identity.last_sign_in }}</span></dd>
+        {% endif %}
+        {% if connection.identity.session_expires %}
+          <dt>Session until</dt><dd><span class="conn-row-note">{{ connection.identity.session_expires }}</span></dd>
+        {% endif %}
+      </dl>
+      <p class="conn-agree conn-agree-{{ connection.identity.corroborated|yesno:'yes,no' }}">
+        {% if connection.identity.corroborated %}
+          Two systems that never consult each other, and they agree on who is asking.
+        {% else %}
+          Only the session has an opinion on who is asking.
+        {% endif %}
+      </p>
+    </section>
+
+    <section>
+      <h3>The link</h3>
+      <dl class="conn-pairs">
+        <dt>Path</dt>
+        <dd>
+          <strong>{{ connection.path_label }}</strong>
+          {% if connection.device.direct_endpoint %}<code>{{ connection.device.direct_endpoint }}</code>{% endif %}
+        </dd>
+        <dt>Handshake</dt>
+        <dd>{{ connection.handshake }}</dd>
+        {% if connection.carried %}
+          <dt>Carried</dt><dd>{{ connection.carried }}</dd>
+        {% endif %}
+        <dt>Round trip</dt>
+        <dd>
+          <span data-rtt>—</span>
+          <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
+        </dd>
+        <dt>Encryption</dt><dd>{{ connection.transport }}</dd>
+      </dl>
+    </section>
+  </div>
+
+  <section>
+    <h3>How HQ decided your address</h3>
+    <p class="conn-note">Behind a proxy every request arrives from the proxy, and the caller's address sits in a header anyone can write. Which hop HQ believes is the whole of whether the network gate means anything.</p>
+    <ol class="conn-hops">
+      {% for hop in hops %}
+        <li class="conn-hop conn-hop-{{ hop.role }}">
+          <code>{{ hop.value }}</code>
+          <span class="conn-kind conn-kind-hop-{{ hop.role }}">{{ hop.role }}</span>
+          <span class="conn-row-note">{{ hop.detail }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <section>
+    <h3>Your addresses</h3>
+    <div class="conn-rows">
+      {% for address in addresses %}
+        <div class="conn-row{% if address.current %} conn-current{% endif %}">
+          <code>{{ address.value }}</code>
+          <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
+          <span class="conn-row-note">{{ address.source }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if hq_addresses %}
+    <section>
+      <h3>HQ answers at</h3>
+      <div class="conn-rows">
+        {% for address in hq_addresses %}
+          <div class="conn-row">
+            <code>{{ address.value }}</code>
+            <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
+            <span class="conn-row-note">{{ address.source }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section>
+    <h3>What this request carried</h3>
+    <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
+    <div class="conn-rows">
+      {% for header in headers %}{% if header.used %}
+        <div class="conn-row conn-row-used">
+          <code>{{ header.name }}: {{ header.value }}</code>
+          <span class="conn-kind conn-kind-read">read</span>
+          <span class="conn-row-note">{{ header.purpose }}</span>
+        </div>
+      {% endif %}{% endfor %}
+    </div>
+    <details class="conn-more">
+      <summary>Received but not read</summary>
+      <div class="conn-rows">
+        {% for header in headers %}{% if not header.used %}
+          <div class="conn-row">
+            <code>{{ header.name }}: {{ header.value }}</code>
+            <span class="conn-kind">ignored</span>
+            <span class="conn-row-note"></span>
+          </div>
+        {% endif %}{% endfor %}
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h3>What had to be true</h3>
+    <p class="conn-note">In the order a request meets them. No one of them is the reason HQ is not on the internet.</p>
+    <ol class="conn-layers">
+      {% for layer in connection.layers %}
+        <li class="conn-layer conn-layer-{{ layer.state }}">
+          <details>
+            <summary>
+              <span class="conn-tick" aria-hidden="true">{% if layer.holds %}&check;{% else %}&times;{% endif %}</span>
+              <span class="conn-layer-label">{{ layer.label }}</span>
+              {% if layer.evidence %}<code class="conn-layer-evidence">{{ layer.evidence }}</code>{% endif %}
+            </summary>
+            <p>{{ layer.detail }}</p>
+            {% if layer.rules %}
+              <div class="conn-rules">
+                {% for rule in layer.rules %}<code>{{ rule }}</code>{% endfor %}
+              </div>
+            {% endif %}
+          </details>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>

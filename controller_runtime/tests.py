@@ -1621,3 +1621,213 @@ class MachineNameTests(TestCase):
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-host"})
     def test_the_environment_names_it_when_it_says_so(self):
         self.assertEqual(providers.controller_id(), "a-named-host")
+
+
+class TailnetSweepTests(TestCase):
+    """Reading the tailnet through the daemon this node is already a peer of.
+
+    Every field is optional. Tailscale omits rather than nulls -- a device with
+    expiry disabled carries no ``KeyExpiry`` and one never seen carries no
+    ``LastSeen`` -- so a reader that requires any of them rejects exactly the
+    devices it exists to describe.
+    """
+
+    STATUS = {
+        "Self": {"HostName": "this-node", "Online": True, "OS": "linux"},
+        "Peer": {
+            "k1": {
+                "HostName": "an-edge",
+                "DNSName": "an-edge.example.ts.net.",
+                "Online": True,
+                "KeyExpiry": "2026-11-04T00:00:00Z",
+                "TailscaleIPs": ["100.64.0.2"],
+                "OS": "linux",
+                "ExitNode": True,
+            },
+            "k2": {"HostName": "a-tv", "Online": False, "LastSeen": "2026-07-01T00:00:00Z"},
+        },
+    }
+
+    def sweep(self, status=None, *, path=None):
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            reading = Path(directory) / "tailnet.json"
+            reading.write_text(
+                json.dumps(self.STATUS if status is None else status), encoding="utf-8"
+            )
+            given = str(reading) if path is None else path
+            with mock.patch.object(providers, "TAILNET_STATUS", given):
+                return providers.list_tailnet_devices()
+
+    def by_name(self):
+        return {record["name"]: record for record in self.sweep()}
+
+    def test_the_node_itself_is_one_of_the_machines(self):
+        self.assertIn("this-node", self.by_name())
+
+    def test_presence_comes_across(self):
+        found = self.by_name()
+        self.assertTrue(found["an-edge"]["online"])
+        self.assertFalse(found["a-tv"]["online"])
+
+    def test_a_key_expiry_is_carried_and_its_absence_is_not_invented(self):
+        found = self.by_name()
+        self.assertEqual(found["an-edge"]["key_expires"], "2026-11-04T00:00:00Z")
+        self.assertEqual(found["a-tv"]["key_expires"], "")
+
+    def test_a_device_missing_every_optional_field_is_still_read(self):
+        records = self.sweep({"Self": {"HostName": "bare"}, "Peer": {}})
+
+        self.assertEqual(records[0]["name"], "bare")
+
+    def test_a_nameless_device_is_dropped_rather_than_named_blank(self):
+        records = self.sweep({"Self": {}, "Peer": {"k": {"HostName": ""}}})
+
+        self.assertEqual(records, [])
+
+    def test_a_controller_given_no_reading_says_so(self):
+        """A machine not on a tailnet is a supported way to be."""
+
+        from unittest import mock
+
+        with mock.patch.object(providers, "TAILNET_STATUS", ""):
+            with self.assertRaises(providers.ProviderError) as raised:
+                providers.list_tailnet_devices()
+
+        self.assertIn("not given a tailnet reading", str(raised.exception))
+
+    def test_a_missing_reading_is_reported_rather_than_crashing(self):
+        with self.assertRaises(providers.ProviderError) as raised:
+            self.sweep(path="/nonexistent/tailnet.json")
+
+        self.assertIn("missing", str(raised.exception))
+
+    def test_the_controller_never_holds_the_daemon_socket(self):
+        """The local API is read and write, and this only ever needed reading.
+
+        Asserted on the module rather than trusted: the socket was mounted into
+        this container once, and the process that reads it holds every provider
+        credential HQ has.
+        """
+
+        source = Path(providers.__file__).read_text(encoding="utf-8")
+
+        self.assertNotIn("tailscaled.sock", source)
+
+    def test_an_unreachable_daemon_does_not_take_the_sweep_down(self):
+        """One provider that cannot be read must not lose the other five."""
+
+        from unittest import mock
+
+        with mock.patch.object(
+            providers, "list_tailnet_devices", side_effect=providers.ProviderError("no")
+        ):
+            found = providers.inventory()
+
+        self.assertFalse(found["tailscale.device"]["ok"])
+        self.assertEqual(found["tailscale.device"]["records"], [])
+
+
+class TailnetDeviceTests(TestCase):
+    """Asserting HQ's one decision about a device, and nothing else about it."""
+
+    STATUS = {
+        "Self": {"HostName": "this-node", "ID": "nSELF", "Online": True},
+        "Peer": {
+            "k1": {
+                "HostName": "an-edge",
+                "ID": "nEDGE",
+                "Online": True,
+                "KeyExpiry": "2026-11-04T00:00:00Z",
+            },
+            "k2": {"HostName": "a-server", "ID": "nSERV", "Online": True},
+        },
+    }
+
+    def setUp(self):
+        import tempfile
+
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        reading = Path(self.directory.name) / "tailnet.json"
+        reading.write_text(json.dumps(self.STATUS), encoding="utf-8")
+        patch = mock.patch.object(providers, "TAILNET_STATUS", str(reading))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def spec(self, name="an-edge", disabled=True):
+        return {
+            "connection_ref": "a-tailnet",
+            "name": name,
+            "key_expiry_disabled": disabled,
+        }
+
+    def test_a_device_already_as_declared_is_left_alone(self):
+        """a-server has no expiry, so there is nothing to assert."""
+
+        result = providers.reconcile_tailnet_device(self.spec("a-server"))
+
+        self.assertFalse(result.changed)
+
+    def test_a_dry_run_says_what_it_would_do_and_does_not_do_it(self):
+        with mock.patch.object(providers, "_tailnet_token") as token:
+            result = providers.reconcile_tailnet_device(self.spec(), apply=False)
+
+        self.assertTrue(result.changed)
+        token.assert_not_called()
+
+    def test_the_device_id_comes_from_the_local_reading_not_the_api(self):
+        """The token is spent on the change and on nothing else."""
+
+        self.assertEqual(providers._tailnet_device_id("an-edge"), "nEDGE")
+
+    def test_a_device_the_tailnet_does_not_show_is_refused_by_name(self):
+        with self.assertRaises(providers.ProviderError) as raised:
+            providers.reconcile_tailnet_device(self.spec("a-ghost"))
+
+        self.assertIn("a-ghost", str(raised.exception))
+
+    def test_a_credential_without_the_scope_says_which_scope(self):
+        import urllib.error
+
+        refused = urllib.error.HTTPError("u", 403, "Forbidden", {}, None)
+        with (
+            mock.patch.object(providers, "_tailnet_token", return_value="t"),
+            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers.reconcile_tailnet_device(self.spec())
+
+        self.assertIn("devices:core", str(raised.exception))
+
+    def test_an_api_key_used_as_an_oauth_client_says_so(self):
+        import urllib.error
+
+        refused = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TAILNET_CONNECTION_REF": "a-tailnet",
+                    "TAILNET_PROVIDER": "tailscale",
+                    "TAILNET_CLIENT_ID": "id",
+                    "TAILNET_CLIENT_SECRET": "secret",
+                },
+            ),
+            mock.patch.object(providers.urllib.request, "urlopen", side_effect=refused),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers._tailnet_token("a-tailnet")
+
+        self.assertIn("OAuth client", str(raised.exception))
+
+    def test_the_token_is_never_kept(self):
+        """It lasts an hour and a sweep is minutes apart, so caching it would
+        only add an expiry to get wrong."""
+
+        source = Path(providers.__file__).read_text(encoding="utf-8")
+
+        self.assertNotIn("_TOKEN_CACHE", source)
+        self.assertEqual(source.count("def _tailnet_token"), 1)

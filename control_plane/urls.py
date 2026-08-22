@@ -18,6 +18,7 @@ urlpatterns = [
         name="connections",
     ),
     path("machines/", views.MachineListView.as_view(), name="machines"),
+    path("tailnet/", views.TailnetView.as_view(), name="tailnet"),
     # Before <slug:key>, which would otherwise swallow a machine name.
     path("machines/<str:name>/", views.MachineDetailView.as_view(), name="machine"),
     # Before <str:hostname>, which would otherwise swallow "new" as a name.
