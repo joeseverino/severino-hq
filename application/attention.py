@@ -21,8 +21,6 @@ shape are doing real work:
 from __future__ import annotations
 
 from django.db.models import Count, Q
-from types import SimpleNamespace
-
 from django.urls import reverse
 
 from assets.models import Asset
@@ -248,26 +246,22 @@ def tailnet() -> tuple[Insight, ...]:
         days = presence.key_expiry_days
         if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
             continue
-        found = SimpleNamespace(
-            name=name,
-            url=reverse("control_plane:machine", kwargs={"name": name}),
-        )
         items.append(
             Insight(
                 status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
                 eyebrow="Tailnet",
                 title=(
-                    f"{found.name} leaves the tailnet in {days} days"
+                    f"{name} leaves the tailnet in {days} days"
                     if days > 0
-                    else f"{found.name} has left the tailnet"
+                    else f"{name} has left the tailnet"
                 ),
                 value=str(max(days, 0)),
                 body=(
-                    f"Its node key expires. {found.name} keeps running and stops "
+                    f"Its node key expires. {name} keeps running and stops "
                     "being reachable over the tailnet."
                 ),
                 action="Open machine",
-                url=found.url,
+                url=reverse("control_plane:machine", kwargs={"name": name}),
             )
         )
     return tuple(items)
