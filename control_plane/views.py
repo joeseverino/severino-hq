@@ -57,6 +57,7 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
+from core.network import client_ip
 from application.service_context import sections_for
 from application.services import (
     CONTAINER_KIND,
@@ -933,6 +934,12 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         if found is None:
             raise Http404("No machine of that name has been reported.")
         context["machine"] = found
+        # Whether you are reading this on the machine it describes. HQ already
+        # judged the caller's address for the network gate, and every machine
+        # carries the addresses it answers at -- so the page could always have
+        # known, and said "this machine" while you looked at your own laptop.
+        # Arithmetic on one address: no query, no sweep.
+        context["is_this_device"] = client_ip(self.request) in found.addresses
         context["container_kind"] = CONTAINER_KIND
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
