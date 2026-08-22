@@ -6,7 +6,6 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import io
-import http.client
 import json
 import os
 from pathlib import Path
@@ -2365,37 +2364,22 @@ def stop_portainer_container(
     return _cycle_portainer_container(spec, "stop", apply=apply)
 
 
-TAILNET_SOCKET = os.environ.get(
-    "SEVERINO_TAILSCALE_SOCKET", "/var/run/tailscale/tailscaled.sock"
-)
-
-
-class _DaemonSocket(http.client.HTTPConnection):
-    """HTTP to the tailscale daemon over its local unix socket.
-
-    Spoken directly rather than through the `tailscale` client, so nothing has
-    to be added to a scanned image: no third-party apt source, no pinned binary
-    to keep current, and one less thing between the controller and an answer.
-    The daemon requires this exact Host header and ignores the address.
-    """
-
-    def __init__(self, path: str) -> None:
-        super().__init__("local-tailscaled.sock", timeout=15)
-        self._path = path
-
-    def connect(self) -> None:
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(self.timeout)
-        self.sock.connect(self._path)
+TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
 
 
 def list_tailnet_devices() -> list[dict[str, Any]]:
     """Every machine on the tailnet, as the node this runs on currently sees it.
 
-    Read from the daemon this controller is already a peer of rather than from
+    Read from the daemon this machine is already a peer of rather than from
     Tailscale's API. There is no credential to hold, render or rotate: a node's
     view of its own tailnet is something it has by being on it, and a controller
     that cannot be given a token cannot leak one.
+
+    Handed in as a file rather than fetched here. The daemon's local API is read
+    *and* write, with no read-only mode, so a controller holding its socket
+    could log this machine off the tailnet -- and this is the process that holds
+    every provider credential. It only ever needed the reading, so the reading
+    is what it gets.
 
     It answers the question no other sweep can. Every other provider reports
     whether a *service* answered, so a machine whose Portainer token expired and
@@ -2407,34 +2391,22 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
     two that go wrong quietly.
     """
 
-    try:
-        connection = _DaemonSocket(TAILNET_SOCKET)
-        connection.request(
-            "GET", "/localapi/v0/status", headers={"Host": "local-tailscaled.sock"}
-        )
-        response = connection.getresponse()
-        body = response.read()
-    except (OSError, http.client.HTTPException) as exc:
-        # The daemon's own error text is not repeated: it names socket paths and
-        # occasionally node keys, and this string is stored and rendered.
+    if not TAILNET_STATUS:
         raise ProviderError(
-            "The tailscale daemon did not answer. The controller reads it "
-            f"through {TAILNET_SOCKET}, which has to be reachable from here."
+            "This controller was not given a tailnet reading, so it cannot say "
+            "which machines are up."
+        )
+    try:
+        raw = Path(TAILNET_STATUS).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ProviderError(
+            "The tailnet reading is missing. It is taken from the local "
+            "daemon before this container starts, and only when there is one."
         ) from exc
-    finally:
-        try:
-            connection.close()
-        except (OSError, NameError, UnboundLocalError):
-            pass
-
-    if response.status != 200:
-        raise ProviderError(
-            f"The tailscale daemon refused the status request ({response.status})."
-        )
     try:
-        status = json.loads(body)
+        status = json.loads(raw)
     except ValueError as exc:
-        raise ProviderError("The tailscale daemon returned no readable status.") from exc
+        raise ProviderError("The tailnet reading is not readable status.") from exc
 
     nodes = [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
     return [record for record in map(_tailnet_record, nodes) if record]

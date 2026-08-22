@@ -1648,16 +1648,18 @@ class TailnetSweepTests(TestCase):
         },
     }
 
-    def sweep(self, status=None, code=200):
+    def sweep(self, status=None, *, path=None):
+        import tempfile
         from unittest import mock
 
-        payload = json.dumps(self.STATUS if status is None else status).encode()
-        response = mock.Mock(status=code, read=mock.Mock(return_value=payload))
-        with mock.patch.object(
-            providers, "_DaemonSocket", autospec=True
-        ) as connection:
-            connection.return_value.getresponse.return_value = response
-            return providers.list_tailnet_devices()
+        with tempfile.TemporaryDirectory() as directory:
+            reading = Path(directory) / "tailnet.json"
+            reading.write_text(
+                json.dumps(self.STATUS if status is None else status), encoding="utf-8"
+            )
+            given = str(reading) if path is None else path
+            with mock.patch.object(providers, "TAILNET_STATUS", given):
+                return providers.list_tailnet_devices()
 
     def by_name(self):
         return {record["name"]: record for record in self.sweep()}
@@ -1685,11 +1687,34 @@ class TailnetSweepTests(TestCase):
 
         self.assertEqual(records, [])
 
-    def test_a_refusal_is_reported_without_repeating_the_daemon(self):
-        with self.assertRaises(providers.ProviderError) as raised:
-            self.sweep(code=403)
+    def test_a_controller_given_no_reading_says_so(self):
+        """A machine not on a tailnet is a supported way to be."""
 
-        self.assertIn("refused", str(raised.exception))
+        from unittest import mock
+
+        with mock.patch.object(providers, "TAILNET_STATUS", ""):
+            with self.assertRaises(providers.ProviderError) as raised:
+                providers.list_tailnet_devices()
+
+        self.assertIn("not given a tailnet reading", str(raised.exception))
+
+    def test_a_missing_reading_is_reported_rather_than_crashing(self):
+        with self.assertRaises(providers.ProviderError) as raised:
+            self.sweep(path="/nonexistent/tailnet.json")
+
+        self.assertIn("missing", str(raised.exception))
+
+    def test_the_controller_never_holds_the_daemon_socket(self):
+        """The local API is read and write, and this only ever needed reading.
+
+        Asserted on the module rather than trusted: the socket was mounted into
+        this container once, and the process that reads it holds every provider
+        credential HQ has.
+        """
+
+        source = Path(providers.__file__).read_text(encoding="utf-8")
+
+        self.assertNotIn("tailscaled.sock", source)
 
     def test_an_unreachable_daemon_does_not_take_the_sweep_down(self):
         """One provider that cannot be read must not lose the other five."""
