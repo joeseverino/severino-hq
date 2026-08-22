@@ -490,10 +490,14 @@ class WorkflowSecrecyTests(SimpleTestCase):
         return sorted(root.glob("*.yml"))
 
     def run_block_lines(self, text: str):
-        """Every line inside a ``run:`` script, with its line number.
+        """Every line of every ``run:`` script, with its line number.
 
         Read by indentation rather than parsed, so this needs no YAML library
         and cannot start disagreeing with one about what a block contains.
+
+        A one-line ``run:`` counts. Checking only block scalars is how a
+        ``docker login`` that piped a token straight into a shell went unnoticed
+        by the check written to find exactly that.
         """
 
         lines = text.splitlines()
@@ -507,8 +511,12 @@ class WorkflowSecrecyTests(SimpleTestCase):
                 else:
                     yield number, line
                     continue
-            if stripped.startswith("run:") and stripped.endswith(("|", ">", "|-")):
+            if not stripped.startswith("run:"):
+                continue
+            if stripped.endswith(("|", ">", "|-", ">-")):
                 inside = len(line) - len(line.lstrip())
+            else:
+                yield number, line
 
     def test_no_script_body_interpolates_a_secret_or_a_variable(self):
         offenders = []
