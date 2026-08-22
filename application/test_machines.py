@@ -362,3 +362,58 @@ class KeyExpiryTests(TestCase):
         )
 
         self.assertEqual(self.titles(), [])
+
+
+class OneMachineManyNamesTests(TestCase):
+    """A tailnet calls a machine whatever its owner typed into it years ago.
+
+    That is rarely the name HQ uses, so without a join the board grows a second
+    row for a machine it already had -- with the presence on one row and every
+    other fact on the other.
+    """
+
+    def setUp(self):
+        from django.utils import timezone
+
+        from control_plane.models import ManagedResource, ProviderInventory
+
+        ManagedResource.objects.create(
+            key="a-laptop",
+            kind="machine",
+            spec={
+                "name": "a-laptop",
+                "role": "Primary admin device",
+                "addresses": ["10.0.0.5", "100.64.0.5"],
+            },
+        )
+        ProviderInventory.objects.create(
+            kind="tailscale.device",
+            records=[
+                {"name": "Someone's Laptop", "online": True,
+                 "addresses": ["100.64.0.5"]},
+                {"name": "a-stranger", "online": True,
+                 "addresses": ["100.64.0.99"]},
+            ],
+            observed_at=timezone.now(),
+        )
+
+    def names(self):
+        from .machines import machine_catalog
+
+        return [found.name for found in machine_catalog()]
+
+    def test_the_tailnet_name_does_not_become_a_second_machine(self):
+        self.assertNotIn("Someone's Laptop", self.names())
+
+    def test_the_name_hq_already_uses_is_the_one_kept(self):
+        self.assertIn("a-laptop", self.names())
+
+    def test_presence_follows_the_machine_rather_than_the_name(self):
+        from .machines import machine
+
+        self.assertTrue(machine("a-laptop").presence.online)
+
+    def test_a_machine_hq_has_no_address_for_stays_its_own_row(self):
+        """Not a missed duplicate: HQ declining to claim two things are one."""
+
+        self.assertIn("a-stranger", self.names())

@@ -45,6 +45,7 @@ class Presence:
     online: bool = False
     last_seen: str = ""
     key_expires: str = ""
+    addresses: tuple[str, ...] = ()
     observed_at: Any = None
 
     @property
@@ -128,14 +129,25 @@ def machine_catalog() -> tuple[Machine, ...]:
         for connection in connections
         if connection.reachable
     }
-    aliases, addresses = _same_machine(containers, connections)
+    aliases, addresses = _same_machine(containers, connections, declared, present)
     canonical = sorted(names - set(aliases))
     return tuple(
         Machine(
             name=name,
             role=declared.get(name, Declared()).role,
             declaration=declared.get(name, Declared()).key,
-            presence=present.get(name),
+            # Presence follows the name the tailnet used, which is often not
+            # the name HQ uses. A laptop is "Joseph's MacBook Pro" there and
+            # "mac" here, and it is one machine either way.
+            presence=present.get(name)
+            or next(
+                (
+                    present[alias]
+                    for alias, target in aliases.items()
+                    if target == name and alias in present
+                ),
+                None,
+            ),
             reachable=any(
                 ref in answered
                 for ref in set(reached.get(name, ()))
@@ -191,17 +203,25 @@ def machine_catalog() -> tuple[Machine, ...]:
 def _same_machine(
     containers: dict[str, list[Running]],
     connections: tuple[ProviderConnection, ...],
+    declared: dict[str, "Declared"] | None = None,
+    present: dict[str, Presence] | None = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Names that are one machine, and where that machine is.
 
-    Two credentials name one machine differently and neither is wrong: a
-    Portainer calls a VPS by its environment name, a 1Password SSH item calls it
-    whatever the operator called it. Kept apart, one machine is two rows with
-    half its facts each.
+    Two things name one machine differently and neither is wrong: a Portainer
+    calls a VPS by its environment name, a 1Password SSH item calls it whatever
+    the operator called it, and a tailnet calls it whatever its owner typed into
+    that laptop years ago. Kept apart, one machine is several rows with a
+    fraction of its facts each.
 
-    The address is what both agree on, so it is the identity. The name kept is
-    the one the containers were reported under, because that is the name every
-    declaration's ``host`` field already uses.
+    The address is what they all agree on, so it is the identity. The name kept
+    is the one HQ already uses -- the name containers are reported under, or the
+    name a machine was declared by -- because that is the name every ``host``
+    field and every page already says.
+
+    A machine whose address HQ has never recorded stays its own row. That is not
+    a failure to detect a duplicate; it is HQ declining to assert two things are
+    one when nothing it holds says so.
     """
 
     located = {
@@ -218,6 +238,22 @@ def _same_machine(
         for host, known in located.items():
             if known == address and connection.connection_ref != host:
                 aliases[connection.connection_ref] = host
+
+    # Every address HQ was told a machine answers at, so a tailnet name can be
+    # recognised as one of them. The tailnet is the first source that names
+    # machines HQ already knows without using HQ's name for them.
+    by_address = {
+        address: name
+        for name, entry in (declared or {}).items()
+        for address in entry.addresses
+    }
+    by_address.update({address: host for host, address in located.items()})
+    for name, presence in (present or {}).items():
+        for address in presence.addresses:
+            owner = by_address.get(address)
+            if owner and owner != name:
+                aliases[name] = owner
+                break
     return aliases, located
 
 
@@ -254,6 +290,7 @@ def tailnet_presence() -> dict[str, Presence]:
                 online=bool(record.get("online")),
                 last_seen=str(record.get("last_seen", "")),
                 key_expires=str(record.get("key_expires", "")),
+                addresses=tuple(str(a) for a in record.get("addresses") or ()),
                 observed_at=snapshot.observed_at,
             )
     return found
