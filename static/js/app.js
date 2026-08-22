@@ -559,7 +559,7 @@ const hqShowResponseHeaders = (root) => {
       slot.innerHTML = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
         const value = response.headers.get(name);
         const shown = value
-          ? `<code>${name}: ${value.length > 90 ? `${value.slice(0, 90)}…` : value}</code>`
+          ? `<code>${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}</code>`
           : `<code>${name}</code>`;
         const chip = value
           ? `<span class="conn-kind conn-kind-read">sent</span>`

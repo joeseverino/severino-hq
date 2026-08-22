@@ -2734,3 +2734,10 @@ textarea.code {
 .conn-row-wide { grid-template-columns: minmax(0, 1fr) max-content; }
 .conn-row-wide > code { overflow-wrap: anywhere; }
 .conn-row-wide .conn-row-note { grid-column: 1 / -1; }
+
+/* A row whose value is long and variable -- a header, a policy -- puts its
+   note on its own line. Squeezed into a third column beside a value that can
+   be three hundred characters, the note collapses to one word per line. */
+.conn-row-stacked { grid-template-columns: minmax(0, 1fr) max-content; row-gap: 3px; }
+.conn-row-stacked > code { justify-self: stretch; }
+.conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
