@@ -23,6 +23,7 @@ from .inventory import (
     AdoptCommand,
     AdoptServiceCommand,
     adopt,
+    adopt_discovered,
     adopt_service,
     inventory_state,
     unmanaged,
@@ -447,3 +448,41 @@ class AdoptServiceTests(TestCase):
                 )
 
         self.assertEqual(ManagedResource.objects.count(), 1)
+
+
+class AdoptedIsObservedTests(TestCase):
+    """Adoption is the one write that starts in sync, so it must say so.
+
+    Everything else is born unobserved and waits for a controller to look --
+    correct, because a typed declaration is a claim about a world nobody has
+    checked. An adopted spec was read from the live record moments earlier.
+
+    Left unmarked it stays "never reported" forever: nothing queues a reconcile
+    for a resource that has not drifted, so the first look never comes, and
+    every service assembled from it reads as incomplete while it is running.
+    """
+
+    def setUp(self):
+        record_sweep(
+            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
+        )
+        adopt_discovered("adguard.rewrite", principal=cli_principal())
+        self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
+
+    def test_it_is_not_waiting_to_be_looked_at(self):
+        self.assertEqual(
+            self.resource.observed_generation, self.resource.generation
+        )
+
+    def test_it_carries_when_it_was_seen(self):
+        self.assertIsNotNone(self.resource.last_observed_at)
+
+    def test_its_status_is_what_the_provider_was_holding(self):
+        self.assertEqual(
+            self.resource.status.get("domain"), A_REWRITE["domain"]
+        )
+
+    def test_it_reads_as_healthy_rather_than_merely_recorded(self):
+        from application.infrastructure import resource_health
+
+        self.assertEqual(resource_health(self.resource)["state"], "healthy")

@@ -469,7 +469,7 @@ def adopt(
             f"No unmanaged {command.kind} was last seen for {subject!r}. "
             "It may have been adopted already, or removed at the provider."
         )
-    return save_managed_resource(
+    result = save_managed_resource(
         ManagedResourceCommand(
             key=command.key or suggested_key(found),
             kind=found.kind,
@@ -477,6 +477,53 @@ def adopt(
             enabled=True,
         ),
         principal=principal,
+    )
+    _record_as_observed(result.get("resource", {}).get("key", ""), found)
+    return result
+
+
+def _record_as_observed(key: str, found: "Unmanaged") -> None:
+    """Mark an adopted resource as seen, because it just was.
+
+    Everything else here is born unobserved and waits for a controller to go
+    and look, which is right: a declaration somebody typed is a claim about a
+    world nobody has checked. Adoption is the one case where that is false. The
+    spec was read from the live record moments ago, so a resource created from
+    it is in sync by construction -- that is the entire safety argument for
+    adopting rather than declaring.
+
+    Left unmarked, it says "never reported" forever: nothing queues a
+    reconcile for a resource that has not drifted, so the first look never
+    comes, and a service assembled from it reads as incomplete while every part
+    of it is running.
+    """
+
+    from django.utils import timezone
+
+    from control_plane.models import ManagedResource
+
+    resource = ManagedResource.objects.filter(key=key).first()
+    if resource is None:
+        return
+    resource.observed_generation = resource.generation
+    resource.last_observed_at = timezone.now()
+    # What was found, which for an adopted resource is what was declared.
+    resource.status = dict(found.spec)
+    resource.conditions = [
+        {
+            "type": "Ready",
+            "status": True,
+            "reason": "Adopted",
+            "message": "Adopted from what the provider was holding.",
+        }
+    ]
+    resource.save(
+        update_fields=[
+            "observed_generation",
+            "last_observed_at",
+            "status",
+            "conditions",
+        ]
     )
 
 
