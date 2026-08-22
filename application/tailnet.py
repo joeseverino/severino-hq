@@ -160,10 +160,86 @@ class Policy:
     tags: tuple[dict, ...] = ()
     grants: tuple[dict, ...] = ()
     tests: tuple[dict, ...] = ()
+    settings: dict = field(default_factory=dict)
+    dns: dict = field(default_factory=dict)
+
+    @property
+    def facts(self) -> tuple[tuple[str, str], ...]:
+        """The tailnet's own settings, in the order they matter to an operator.
+
+        Read rather than declared, and phrased as what is true rather than as
+        a field name: ``devicesKeyDurationDays: 180`` is a number, and "keys
+        last 180 days" is the thing somebody came to find out.
+        """
+
+        rows: list[tuple[str, str]] = []
+        nameservers = self.dns.get("dns") or []
+        if nameservers:
+            rows.append(("Resolves through", ", ".join(nameservers)))
+        rows.append(("MagicDNS", "On" if self.dns.get("magicDNS") else "Off"))
+        days = self.settings.get("devicesKeyDurationDays")
+        if days:
+            rows.append(("Node keys last", f"{days} days"))
+        rows.append((
+            "New devices",
+            "Need approval" if self.settings.get("devicesApprovalOn") else "Join without approval",
+        ))
+        rows.append((
+            "New users",
+            "Need approval" if self.settings.get("usersApprovalOn") else "Join without approval",
+        ))
+        rows.append((
+            "Client updates",
+            "Automatic" if self.settings.get("devicesAutoUpdatesOn") else "Manual",
+        ))
+        rows.append((
+            "Policy authored",
+            "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "In Tailscale",
+        ))
+        return tuple(rows)
 
     @property
     def known(self) -> bool:
         return bool(self.groups or self.tags or self.grants)
+
+
+def declaration() -> str:
+    """The key of the policy declaration, when one has been adopted.
+
+    What turns every rule on the page from something to read into something to
+    change: with it, each row can point at the form that edits the document it
+    came from.
+    """
+
+    from control_plane.models import ManagedResource
+
+    return (
+        ManagedResource.objects.filter(kind=POLICY_KIND, enabled=True)
+        .values_list("key", flat=True)
+        .first()
+        or ""
+    )
+
+
+def proposed_grant(source: str, target: str, port: int) -> dict:
+    """The grant that would allow a thing the policy currently refuses.
+
+    Offered rather than applied. It is written in the terms the policy already
+    uses -- a tag where the machine carries one, the owner where it does not --
+    because a grant naming a raw address would work once and then be wrong the
+    first time an address moved.
+    """
+
+    known = devices()
+    who = known.get(source)
+    what = known.get(target)
+    if who is None or what is None:
+        return {}
+    return {
+        "src": [who.tags[0] if who.tags else who.user],
+        "dst": [what.tags[0] if what.tags else what.user],
+        "ip": [f"tcp:{port}"],
+    }
 
 
 def policy() -> Policy:
@@ -176,5 +252,7 @@ def policy() -> Policy:
                 tags=tuple(record.get("tags") or ()),
                 grants=tuple(record.get("grants") or ()),
                 tests=tuple(record.get("tests") or ()),
+                settings=record.get("settings") or {},
+                dns=record.get("dns") or {},
             )
     return Policy()

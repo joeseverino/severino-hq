@@ -2092,6 +2092,11 @@ _PROVIDERS = (
         hostnames=None,
         # There is one, it came with the tailnet, and nobody adds a second.
         created_from="tailnet",
+        # Adopted from the sweep, so the declaration starts byte-identical to
+        # the live policy and editing it is editing what is actually there.
+        from_record=lambda record: {"document": record.get("document", "")},
+        identity=lambda spec: ("tailnet",),
+        key_hint=lambda spec: "tailnet-policy",
         change_effects=(
             (
                 "document",

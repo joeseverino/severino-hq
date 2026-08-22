@@ -844,7 +844,13 @@ def whatif_context(request, default: str = "") -> dict:
     with the question most likely being asked.
     """
 
-    from application.tailnet import devices, may_reach, ports
+    from application.tailnet import (
+        declaration,
+        devices,
+        may_reach,
+        ports,
+        proposed_grant,
+    )
 
     known = devices()
     asked = {
@@ -857,13 +863,21 @@ def whatif_context(request, default: str = "") -> dict:
         "ports": ports(),
         "asked": asked,
         "whatif_action": request.path,
+        "policy_declaration": declaration(),
     }
     # Answered only when all three were given. A half-filled form is a question
     # nobody has asked yet, not one whose answer is "no".
     if asked["source"] and asked["target"] and asked["port"].isdigit():
-        context["verdict"] = may_reach(
-            asked["source"], asked["target"], int(asked["port"])
-        )
+        verdict = may_reach(asked["source"], asked["target"], int(asked["port"]))
+        context["verdict"] = verdict
+        # A refusal is the moment somebody wants to change the policy, so the
+        # grant that would allow it is worked out here rather than left as an
+        # exercise. Shown, never applied: what to do about a denial is the
+        # operator's call and the editor is where it is made.
+        if verdict.known and not verdict.allowed:
+            context["proposal"] = proposed_grant(
+                asked["source"], asked["target"], int(asked["port"])
+            )
     return context
 
 

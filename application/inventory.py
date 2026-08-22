@@ -488,15 +488,38 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
     )
 
 
+def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
+    """Take on every record of one kind that no declaration accounts for.
+
+    One implementation rather than one per kind. The argument is the same each
+    time -- the decision was made when the credential was added, and asking
+    again per record is a question whose answer is always yes -- so the only
+    thing that varies is which sweep it applies to.
+    """
+
+    from django.core.exceptions import ValidationError
+
+    from .infrastructure import NotFoundError, PolicyError
+
+    adopted: list[str] = []
+    for item in unmanaged():
+        if item.kind != kind:
+            continue
+        try:
+            result = adopt(
+                AdoptCommand(kind=item.kind, token=item.token), principal=principal
+            )
+        except (NotFoundError, PolicyError, ValidationError, ValueError):
+            # One record that cannot be adopted must not stop the rest. The
+            # next sweep tries again, so this closes itself rather than needing
+            # anybody to notice.
+            continue
+        adopted.append(result.get("resource", {}).get("key", ""))
+    return {"adopted": [key for key in adopted if key]}
+
+
 def adopt_discovered_containers(*, principal) -> dict[str, Any]:
     """Watch every container a sweep found on a machine HQ already reaches.
-
-    The same argument as adopting a zone's records: the decision was made when
-    the credential was added. A Portainer that reports seven containers is not
-    asking seven questions -- watching them is what makes them startable,
-    stoppable and visible at all, and a row that cannot do any of that is a
-    row that wastes the operator's time twice, once when they look at it and
-    once when they go somewhere else to act on it.
 
     Exited containers are watched too, deliberately. A container that is down
     is exactly the one worth having a start button for, and refusing to watch
@@ -507,22 +530,4 @@ def adopt_discovered_containers(*, principal) -> dict[str, Any]:
     and whether it belongs at the top of a page.
     """
 
-    from django.core.exceptions import ValidationError
-
-    from .infrastructure import NotFoundError, PolicyError
-
-    adopted: list[str] = []
-    for item in unmanaged():
-        if item.kind != "portainer.container":
-            continue
-        try:
-            result = adopt(
-                AdoptCommand(kind=item.kind, token=item.token), principal=principal
-            )
-        except (NotFoundError, PolicyError, ValidationError, ValueError):
-            # One container that cannot be adopted must not stop the rest. The
-            # next sweep tries again, so this closes itself rather than needing
-            # anybody to notice.
-            continue
-        adopted.append(result.get("resource", {}).get("key", ""))
-    return {"adopted": [key for key in adopted if key]}
+    return adopt_discovered("portainer.container", principal=principal)

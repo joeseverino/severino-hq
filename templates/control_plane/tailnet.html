@@ -11,6 +11,9 @@
   </div>
   <div class="page-actions">
     <a class="btn primary" href="{% url 'control_plane:tailnet' %}" data-modal-open="whatif">Policy test</a>
+    {% if policy_declaration %}
+      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
+    {% endif %}
     <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
   </div>
 </div>
@@ -35,16 +38,37 @@
     </div>
   </div>
 
-  <h2>Grants</h2>
+  {% if policy.facts %}
+    <h2>How this tailnet is set up</h2>
+    <div class="table-scroll">
+      <table class="data-table compact-table">
+        <tbody>
+          {% for label, value in policy.facts %}
+            <tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="section-head">
+    <h2>Grants</h2>
+    {% if policy_declaration %}
+      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
+    {% endif %}
+  </div>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
+      <thead><tr><th>From</th><th>To</th><th>On</th>{% if policy_declaration %}<th></th>{% endif %}</tr></thead>
       <tbody>
         {% for grant in policy.grants %}
           <tr>
             <td>{% for src in grant.src %}<code>{{ src }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
             <td>{% for dst in grant.dst %}<code>{{ dst }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
             <td>{% for ip in grant.ip %}<code>{{ ip }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            {% if policy_declaration %}
+              <td><a class="subtle-link" href="{% url 'control_plane:edit' policy_declaration %}">Edit &rarr;</a></td>
+            {% endif %}
           </tr>
         {% endfor %}
       </tbody>

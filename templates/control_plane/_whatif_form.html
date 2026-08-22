@@ -53,6 +53,27 @@ start as that machine, which is the question most often being asked.
       </tbody>
     </table>
   {% endif %}
+  {% if proposal and policy_declaration %}
+    {% comment %}
+    The refusal and the fix, together. Nobody reads "not allowed" and stops
+    there -- the next question is always what it would take, so the grant that
+    would allow it is written out in the policy's own terms and the editor is
+    one click away. It is not applied here: changing the tailnet's access
+    policy is a decision, not a side effect of asking a question.
+    {% endcomment %}
+    <p class="muted">Allowing it would take this grant:</p>
+    <table class="data-table compact-table">
+      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{% for src in proposal.src %}<code>{{ src }}</code>{% endfor %}</td>
+          <td>{% for dst in proposal.dst %}<code>{{ dst }}</code>{% endfor %}</td>
+          <td>{% for ip in proposal.ip %}<code>{{ ip }}</code>{% endfor %}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Add it in the policy editor &rarr;</a></p>
+  {% endif %}
 {% endif %}
 </div>
 <p class="muted">

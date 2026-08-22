@@ -237,6 +237,19 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.tailnet",
+        label="Tailnet",
+        # After machines, because it is about the network they are all on
+        # rather than about any one of them -- and the answers it gives are
+        # only meaningful once you know which machine you are asking about.
+        navigation=(
+            NavigationItem(
+                "Tailnet", "control_plane:tailnet", "control_plane", 133,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.connections",
         label="Connections",
         # Last in the group, and deliberately so. It answers "what can HQ reach

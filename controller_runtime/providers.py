@@ -2626,6 +2626,26 @@ def _tailnet_nodes() -> list[dict[str, Any]]:
     return [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
 
 
+def _tailnet_get(token: str, path: str) -> dict[str, Any]:
+    """One tailnet-level read, or nothing if it is not answerable.
+
+    Nothing rather than an exception: these are separate facts about the same
+    tailnet, and losing the whole sweep because one endpoint is unavailable to
+    this credential would trade six answers for none.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/tailnet/-/{path}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            found = json.loads(response.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
 def _tailnet_policy_etag(token: str) -> str:
     """The version of the policy HQ read, so a write cannot clobber a newer one.
 
@@ -2813,6 +2833,12 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             # The document itself, so a declaration can hold it and be compared
             # against reality without a second read.
             "document": json.dumps(policy, indent=2, sort_keys=True),
+            "settings": _tailnet_get(token, "settings"),
+            "dns": {
+                **_tailnet_get(token, "dns/preferences"),
+                **_tailnet_get(token, "dns/nameservers"),
+                **_tailnet_get(token, "dns/searchpaths"),
+            },
             "groups": [
                 {"name": name, "members": sorted(members)}
                 for name, members in sorted((policy.get("groups") or {}).items())
