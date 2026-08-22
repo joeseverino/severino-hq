@@ -1595,10 +1595,13 @@ def _delivery_target_readout(
         ),
         "cpanel": ("Installs", ", ".join(spec.get("install_domains", ()))),
     }.get(str(spec.get("kind", "")))
+    # Named first because the list beside this shows only the first row, and
+    # the name a certificate goes by at the target is the thing an operator
+    # recognises -- the key already says which connection it is.
     rows = [
+        ("Named there", "", str(spec.get("name", ""))),
         ("Runs", "", str(spec.get("kind", ""))),
         ("Reached through", "", str(spec.get("connection_ref", ""))),
-        ("Named there", "", str(spec.get("name", ""))),
         (
             "That name belongs to",
             "",
@@ -1931,6 +1934,10 @@ _PROVIDERS = (
         identity=_container_identity,
         key_hint=_container_key_hint,
         removal_note=_container_removal_note,
+        # Ports are behind the disclosure because the answer is usually none:
+        # Docker reports them, and only a container sharing the machine's
+        # network has to be told.
+        advanced_fields=("serves_ports",),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
