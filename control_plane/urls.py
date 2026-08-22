@@ -21,6 +21,16 @@ urlpatterns = [
     path("tailnet/", views.TailnetView.as_view(), name="tailnet"),
     # Before <slug:key>, which would otherwise swallow a machine name.
     path("machines/<str:name>/", views.MachineDetailView.as_view(), name="machine"),
+    path(
+        "services/<str:hostname>/pin/",
+        views.ServicePinView.as_view(),
+        name="service_pin",
+    ),
+    path(
+        "services/<str:hostname>/move/",
+        views.ServiceMoveView.as_view(),
+        name="service_move",
+    ),
     # Before <str:hostname>, which would otherwise swallow "new" as a name.
     path("services/new/", views.ServiceStartView.as_view(), name="service_start"),
     path("new/", views.ResourceFormView.as_view(), name="create"),

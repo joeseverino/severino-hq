@@ -27,10 +27,43 @@ template changing.
     </thead>
     <tbody>
       {% for service in services %}
-        <tr>
+        {% comment %}
+        The first row after the favourites gets a rule above it, so the ones
+        kept at the top are visibly a group rather than just the alphabetical
+        head of the same list.
+        {% endcomment %}
+        <tr{% if favourite_count and forloop.counter0 == favourite_count %} class="service-rest"{% endif %}>
           <td>
-            <a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a>
-            {% if service.aliases %}<br><span class="muted">also {% for alias in service.aliases %}{{ alias }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+            <div class="service-name">
+              <form method="post" action="{% url 'control_plane:service_pin' service.hostname %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="pin-toggle{% if service.pinned %} pinned{% endif %}" type="submit"
+                        title="{% if service.pinned %}Remove from favourites{% else %}Keep at the top{% endif %}"
+                        aria-label="{% if service.pinned %}Remove {{ service.hostname }} from favourites{% else %}Keep {{ service.hostname }} at the top{% endif %}">★</button>
+              </form>
+              <a href="{{ service.url }}"><strong>{{ service.hostname }}</strong></a>
+              {% if service.pinned %}
+                <span class="pin-move">
+                  {% if not forloop.first %}
+                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <input type="hidden" name="direction" value="up">
+                      <button type="submit" aria-label="Move {{ service.hostname }} up">↑</button>
+                    </form>
+                  {% endif %}
+                  {% if forloop.counter < favourite_count %}
+                    <form method="post" action="{% url 'control_plane:service_move' service.hostname %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <input type="hidden" name="direction" value="down">
+                      <button type="submit" aria-label="Move {{ service.hostname }} down">↓</button>
+                    </form>
+                  {% endif %}
+                </span>
+              {% endif %}
+            </div>
           </td>
           {% for facet in service.facets %}
             <td>

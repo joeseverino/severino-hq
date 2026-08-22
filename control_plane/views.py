@@ -732,8 +732,12 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
     template_name = "control_plane/service_list.html"
 
     def get_context_data(self, **kwargs):
+        from application.pins import SERVICE, ordered
+
         context = super().get_context_data(**kwargs)
-        context["services"] = service_catalog()
+        favourites = ordered(self.request.user, SERVICE)
+        context["services"] = service_catalog(favourites)
+        context["favourite_count"] = len(favourites)
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
         # touched -- and a facet no provider supplies yet gets none.
@@ -1242,3 +1246,38 @@ class ResourceReportDownloadView(LoginRequiredMixin, View):
 class ProviderSchemaView(LoginRequiredMixin, View):
     def get(self, request):
         return JsonResponse(describe_providers(), json_dumps_params={"indent": 2})
+
+
+class ServicePinView(LoginRequiredMixin, View):
+    """Keep a service at the top of the list, for this operator only.
+
+    A preference, so it never touches a spec: starring a hostname does not
+    bump a generation, queue a reconcile, or change anything about the world.
+    """
+
+    def post(self, request, hostname: str):
+        from application.pins import SERVICE, toggle
+
+        name = normalized_hostname(hostname)
+        if not name:
+            raise Http404("No such service.")
+        toggle(request.user, SERVICE, name)
+        return redirect(safe_next(request) or reverse("control_plane:services"))
+
+
+class ServiceMoveView(LoginRequiredMixin, View):
+    """Move one favourite past its neighbour.
+
+    Up and down rather than dragging: it is one POST, it works without script,
+    and it says out loud which two things swapped -- which a drag does not.
+    """
+
+    def post(self, request, hostname: str):
+        from application.pins import SERVICE, move
+
+        name = normalized_hostname(hostname)
+        if not name:
+            raise Http404("No such service.")
+        delta = -1 if request.POST.get("direction") == "up" else 1
+        move(request.user, SERVICE, name, delta)
+        return redirect(safe_next(request) or reverse("control_plane:services"))

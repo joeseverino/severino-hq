@@ -458,6 +458,9 @@ class Service:
     # Beside the service, never merged into its facets: merged, two CNAMEs read
     # as two records competing for one name.
     alias_claims: tuple[tuple[str, "Claim"], ...] = ()
+    # Whether this operator keeps it at the top. A preference about a person,
+    # never part of what HQ asks the controller to make true.
+    pinned: bool = False
 
     @property
     def alias_summary(self) -> str:
@@ -720,8 +723,14 @@ def _aliases(declared, origins) -> dict[str, str]:
     return found
 
 
-def service_catalog() -> tuple[Service, ...]:
-    """Every hostname HQ declares, assembled from the resources that name it."""
+def service_catalog(favourites: tuple[str, ...] = ()) -> tuple[Service, ...]:
+    """Every hostname HQ declares, assembled from the resources that name it.
+
+    ``favourites`` is the operator's own order for the handful they keep at the
+    top. Applied here rather than in a template so every surface that lists
+    services agrees about what comes first, and so the ordering never becomes
+    a property of a Service -- it is a fact about a person, not a hostname.
+    """
 
     declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
     projects = _published_projects()
@@ -729,7 +738,7 @@ def service_catalog() -> tuple[Service, ...]:
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
         by_target.setdefault(target, []).append(alias)
-    return tuple(
+    found = tuple(
         _assemble(
             hostname, facets, covering, origins.get(hostname, ""), projects,
             machines, tuple(by_target.get(hostname, ())),
@@ -737,6 +746,23 @@ def service_catalog() -> tuple[Service, ...]:
             tuple(answers.get(hostname, ())),
         )
         for hostname, facets in sorted(declared.items())
+    )
+    if not favourites:
+        return found
+    from dataclasses import replace
+
+    rank = {name: index for index, name in enumerate(favourites)}
+    return tuple(
+        sorted(
+            (
+                replace(service, pinned=service.hostname.lower() in rank)
+                for service in found
+            ),
+            key=lambda service: (
+                rank.get(service.hostname.lower(), len(rank)),
+                service.hostname,
+            ),
+        )
     )
 
 

@@ -2741,3 +2741,22 @@ textarea.code {
 .conn-row-stacked { grid-template-columns: minmax(0, 1fr) max-content; row-gap: 3px; }
 .conn-row-stacked > code { justify-self: stretch; }
 .conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
+
+/* ----- Favourites ------------------------------------------------------- */
+
+.service-name { display: flex; align-items: center; gap: 8px; }
+.service-name > form { display: inline-flex; }
+.pin-toggle {
+  background: none; border: 0; box-shadow: none; padding: 0 2px; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--line); /* an empty star, not an absent one */
+}
+.pin-toggle:hover { color: var(--muted-2); }
+.pin-toggle.pinned { color: var(--warn); }
+.pin-move { display: inline-flex; gap: 2px; margin-left: auto; }
+.pin-move button {
+  background: none; border: 0; box-shadow: none; padding: 0 3px; cursor: pointer;
+  font-size: 12px; line-height: 1; color: var(--muted-2);
+}
+.pin-move button:hover { color: var(--ink); }
+/* Where the operator's own order stops and the rest of the estate begins. */
+.data-table tr.service-rest > * { border-top: 2px solid var(--line); }
