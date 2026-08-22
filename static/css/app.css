@@ -2525,3 +2525,11 @@ a.kpi:hover { background: var(--surface-2); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .section-head h2 { margin-bottom: 8px; }
 .data-table th[scope=row] { width: 180px; font-weight: 600; color: var(--muted); }
+
+/* A long value the model puts no ceiling on: a policy document, a compose
+   file. Monospace because it is structured text where alignment carries
+   meaning, and nowrap-free so long lines wrap rather than hide. */
+textarea.code {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5; tab-size: 2;
+}

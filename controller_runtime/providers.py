@@ -2893,6 +2893,7 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
             out.update(members.get(name, {name}))
         return sorted(out)
 
+    asking = _ports_worth_asking()
     found: dict[str, list[dict[str, Any]]] = {}
     for device in devices:
         # IPv4 only. The policy here is written against v4, and previewing both
@@ -2902,7 +2903,7 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
         )
         if not address:
             continue
-        for port in TAILNET_PREVIEW_PORTS:
+        for port in asking:
             matches = _who_may_reach(policy, token, f"{address}:{port}")
             raw = sorted(
                 {name for match in matches for name in (match.get("users") or [])}
@@ -2955,10 +2956,34 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
     }
 
 
-# The ports worth asking about. Every port would be 65535 questions per device;
-# these are the ones something actually listens on around here, and an operator
-# asking about another can ask directly.
-TAILNET_PREVIEW_PORTS = (22, 53, 80, 443, 8000, 8080, 9000)
+# Where the answers start. Asking about all 65535 would be that many calls per
+# device; these are the ports anything is reached on anywhere, and the rest are
+# added from what this machine can actually see listening.
+TAILNET_BASE_PORTS = (22, 53, 80, 443)
+
+
+def _ports_worth_asking() -> tuple[int, ...]:
+    """The ports something here actually listens on, plus the usual few.
+
+    Derived rather than listed. A hardcoded set answers about ports nothing
+    uses and says "cannot say" about the one an operator came to ask about --
+    and the containers on this machine already state which ports they publish,
+    so the set that matters is knowable rather than guessable.
+    """
+
+    found = set(TAILNET_BASE_PORTS)
+    try:
+        for container in list_portainer_containers():
+            found.update(
+                int(port)
+                for port in container.get("ports") or ()
+                if str(port).isdigit() and 0 < int(port) < 65536
+            )
+    except (ProviderError, OSError, ValueError, KeyError):
+        # No Portainer, or it is not answering. The base set still applies, and
+        # a sweep that reports fewer ports is better than one that reports none.
+        pass
+    return tuple(sorted(found))
 
 
 PROVIDER_INVENTORY = {
