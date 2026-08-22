@@ -640,14 +640,19 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
 
 
 def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
-    """The same for HQ's own node, minus the interfaces nobody reaches it on.
+    """Where HQ answers, and where its daemon merely negotiates a tunnel.
 
-    A node reports every address it has, and on a Docker host most of them are
-    bridge gateways: a dozen rows that are all the same fact about container
-    networking and none of them a way to reach HQ. The ones worth printing are
-    the tailnet addresses, the public endpoint, and whichever private address
-    HQ was actually declared at -- the last of which HQ already knows, so the
-    bridges fall away without anything here having to recognise a bridge.
+    Two different facts that a single list of addresses will be read as one.
+    The tailnet addresses are where HQ serves; the endpoints beside them are
+    what Tailscale advertises so two daemons can find a path through NAT, and
+    a public one among them is not a service on the internet -- it is the
+    outside of a router, carrying WireGuard and nothing else. Printed together
+    without saying which is which, that reads as HQ being on the internet.
+
+    A node also reports every bridge gateway a container runtime gave it, which
+    is a dozen rows of the same fact and no way to reach anything. Those fall
+    away by keeping only private addresses HQ was declared at, so nothing here
+    has to recognise a bridge.
     """
 
     serves = found.serves
@@ -655,10 +660,10 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
         return ()
     declared = _declared_addresses(serves.name)
     rows: list[Address | None] = [
-        _address_row(address, "issued by Tailscale") for address in serves.addresses
+        _address_row(address, "HQ answers here") for address in serves.addresses
     ]
     for endpoint in serves.endpoints:
-        row = _address_row(endpoint, "answers here")
+        row = _address_row(endpoint, "carries the encrypted tunnel, never HTTP")
         if row is None:
             continue
         if row.kind == "network" and split_host_port(row.value)[0] not in declared:
@@ -839,16 +844,7 @@ def hops_of(request) -> tuple[Hop, ...]:
         ),
     }
     found = [
-        Hop(
-            value,
-            roles[index],
-            detail[roles[index]]
-            + (
-                " It is the machine that connected."
-                if index == len(chain) - 1
-                else ""
-            ),
-        )
+        Hop(value, roles[index], _hop_detail(detail[roles[index]], value, index, chain))
         for index, value in enumerate(chain)
     ]
     if not settled:
@@ -862,6 +858,27 @@ def hops_of(request) -> tuple[Hop, ...]:
             "here identifies who is actually calling.",
         )
     return tuple(found)
+
+
+def _hop_detail(detail: str, value: str, index: int, chain: list[str]) -> str:
+    """The line for one hop, with what is worth adding about the last one.
+
+    A loopback peer is worth saying out loud rather than filing as one more
+    proxy: it means the proxy handed the request over without it crossing a
+    network at all, so there is no segment between the two for anything to sit
+    on. Any other peer is simply the machine that connected.
+    """
+
+    if index != len(chain) - 1:
+        return detail
+    if channel_of(split_host_port(value)[0]).id == "loopback":
+        return (
+            detail
+            + " It reached HQ over loopback, so the request never crossed a "
+            "network between the proxy and here."
+        )
+    return detail + " It is the machine that connected."
+
 
 
 def _ago(stamp: str) -> str:
