@@ -191,8 +191,14 @@ class StyleContractTests(SimpleTestCase):
 
         # Documentation and private ranges are examples, not places. Anything
         # outside them is somewhere a packet can actually go.
+        #
+        # 192.168.0.0/16 is the exception: a host from it is somebody's actual
+        # machine rather than an example. Only the range's base address passes,
+        # since that appears solely as half of a CIDR. Fixtures wanting a
+        # private address use 10.0.0.0/8, which every classifier here treats
+        # identically.
         reserved = re.compile(
-            r"^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|255\.|"
+            r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|"
             r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
             r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
             r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|"

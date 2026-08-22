@@ -79,15 +79,38 @@ def reach_of(answers: tuple[str, ...]) -> Reach:
     return UNKNOWN
 
 
-def _classify(answer: str) -> Reach:
+def network_of(address: str) -> str:
+    """Which network an address belongs to, as a bare identifier.
+
+    The ranges live here once and every surface that needs to know reads them
+    through this. Two implementations of "is this address on the tailnet" would
+    be believed equally and disagree eventually, and the surfaces asking are a
+    reachability badge and an access decision.
+
+    Returns "" for anything that is not an address, because the callers differ
+    on what that means: a DNS answer that is a name defers to whatever it
+    resolves to, and a caller's address that will not parse is simply not one.
+    """
+
     try:
-        address = ip_address(answer.strip())
+        found = ip_address(str(address or "").strip())
     except ValueError:
-        # A CNAME, or a name pointing at another name. Whoever it resolves to
-        # decides, and that is not this record's statement to make.
-        return UNKNOWN
-    if any(address in network for network in TAILNET):
-        return TAILNET_ONLY
-    if any(address in network for network in PRIVATE):
-        return LOCAL_NETWORK
-    return PUBLIC
+        return ""
+    if found.is_loopback:
+        return "loopback"
+    if any(found in network for network in TAILNET):
+        return "tailnet"
+    if any(found in network for network in PRIVATE):
+        return "network"
+    return "public"
+
+
+def _classify(answer: str) -> Reach:
+    return {
+        "tailnet": TAILNET_ONLY,
+        # A service answering on loopback is reachable from the machine it runs
+        # on, which is the narrowest form of "the network it is on".
+        "loopback": LOCAL_NETWORK,
+        "network": LOCAL_NETWORK,
+        "public": PUBLIC,
+    }.get(network_of(answer), UNKNOWN)

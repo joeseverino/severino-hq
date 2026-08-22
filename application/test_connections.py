@@ -325,7 +325,7 @@ class SeedTests(TestCase):
             spec={
                 "name": "a-docker-host",
                 "role": "",
-                "addresses": ["192.168.1.233"],
+                "addresses": ["10.0.0.9"],
             },
         )
         ManagedResource.objects.create(
@@ -361,7 +361,7 @@ class SeedTests(TestCase):
 
         seeded = PROVIDERS["npm.proxy_host"].seed(name_context("probe.invalid"))
 
-        self.assertEqual(seeded["forward_host"], "192.168.1.233")
+        self.assertEqual(seeded["forward_host"], "10.0.0.9")
 
     def test_nothing_is_seeded_when_nothing_serves_the_name(self):
         from control_plane.providers import PROVIDERS
@@ -430,7 +430,7 @@ class AdoptionSafetyTests(TestCase):
             defaults={"spec": {
                 "domain_names": ["probe.invalid"],
                 "forward_scheme": "http",
-                "forward_host": "192.168.1.233",
+                "forward_host": "10.0.0.9",
                 "forward_port": 8099,
                 "certificate_resource": "",
                 "ssl_forced": True,
@@ -453,7 +453,7 @@ class AdoptionSafetyTests(TestCase):
                 "spec": {
                     "name": "a-docker-host",
                     "role": "",
-                    "addresses": ["192.168.1.233"],
+                    "addresses": ["10.0.0.9"],
                 },
             },
         )

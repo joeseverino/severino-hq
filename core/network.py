@@ -55,26 +55,42 @@ def _networks(cidrs: tuple[str, ...]) -> tuple:
     return tuple(parsed)
 
 
-def parse_ip(value: str):
-    """An address object, or None if this is not one.
+def split_host_port(value: str) -> tuple[str, str]:
+    """An endpoint as its address and its port, either of which may be empty.
 
-    Proxies write ports (`10.0.0.4:53812`) and brackets (`[::1]:8000`) into
-    forwarded headers, and a hop that fails to parse must never be mistaken for
-    a trusted one -- so unparseable input returns None and is treated as
-    untrusted everywhere it is used.
+    Proxies and daemons write ports (`10.0.0.4:53812`) and brackets
+    (`[::1]:8000`) into the values HQ reads back, and every reader of those
+    values needs the same two rules applied the same way. Held here because
+    getting it slightly different somewhere else is how a hop stops matching a
+    trusted proxy while still looking correct.
     """
 
     candidate = str(value or "").strip()
     if not candidate:
-        return None
+        return "", ""
     if candidate.startswith("["):
-        candidate = candidate.partition("]")[0].lstrip("[")
-    elif candidate.count(":") == 1:
+        host, _, rest = candidate.partition("]")
+        return host.lstrip("["), rest.lstrip(":")
+    if candidate.count(":") == 1:
         # host:port for IPv4. A bare IPv6 address has more than one colon, so
         # this cannot truncate one.
-        candidate = candidate.rpartition(":")[0]
+        host, _, port = candidate.rpartition(":")
+        return host, port
+    return candidate, ""
+
+
+def parse_ip(value: str):
+    """An address object, or None if this is not one.
+
+    Unparseable input returns None and is treated as untrusted everywhere it is
+    used: a hop that fails to parse must never be mistaken for a trusted one.
+    """
+
+    host, _ = split_host_port(value)
+    if not host:
+        return None
     try:
-        return ip_address(candidate)
+        return ip_address(host)
     except ValueError:
         return None
 

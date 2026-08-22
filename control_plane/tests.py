@@ -356,7 +356,7 @@ class ProviderContractTests(TestCase):
                 "spec": {
                     "domain_names": ["dev-hq.jseverino.com"],
                     "forward_scheme": "http",
-                    "forward_host": "100.72.194.77",
+                    "forward_host": "100.64.0.7",
                     "forward_port": 70000,
                     "unexpected": "never accepted",
                 },

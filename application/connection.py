@@ -21,14 +21,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone as utc
-from ipaddress import ip_address
-
 from django.conf import settings
 
-from core.network import client_ip
+from core.network import client_ip, split_host_port
 
 from . import tailnet
-from .reach import PRIVATE, TAILNET
+from .reach import network_of
 
 
 @dataclass(frozen=True)
@@ -81,19 +79,20 @@ ELSEWHERE_CHANNEL = Channel(
 
 
 def channel_of(address: str) -> Channel:
-    """Which network an address belongs to. No database, no configuration."""
+    """What to call the network an address is on. No database, no query.
 
-    try:
-        found = ip_address(str(address or "").strip())
-    except ValueError:
-        return ELSEWHERE_CHANNEL
-    if found.is_loopback:
-        return LOOPBACK_CHANNEL
-    if any(found in network for network in TAILNET):
-        return TAILNET_CHANNEL
-    if any(found in network for network in PRIVATE):
-        return NETWORK_CHANNEL
-    return ELSEWHERE_CHANNEL
+    The ranges themselves are `reach`'s: it already decides this for the DNS
+    answers a service resolves to, and an address is on the tailnet or it is
+    not regardless of which surface is asking. What belongs here is only the
+    wording, because these sentences are about a caller rather than a service.
+    """
+
+    return {
+        "tailnet": TAILNET_CHANNEL,
+        "loopback": LOOPBACK_CHANNEL,
+        "network": NETWORK_CHANNEL,
+        "public": ELSEWHERE_CHANNEL,
+    }.get(network_of(address), ELSEWHERE_CHANNEL)
 
 
 @dataclass(frozen=True)
@@ -662,7 +661,7 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
         row = _address_row(endpoint, "answers here")
         if row is None:
             continue
-        if row.kind == "network" and _split_port(row.value)[0] not in declared:
+        if row.kind == "network" and split_host_port(row.value)[0] not in declared:
             continue
         rows.append(row)
     return tuple(_deduplicated(rows))
@@ -671,15 +670,13 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
 def _declared_addresses(name: str) -> frozenset[str]:
     """Every address HQ was told this machine answers at."""
 
-    from control_plane.models import ManagedResource
+    from .infrastructure import declared_machines
 
     return frozenset(
         str(address)
-        for spec in ManagedResource.objects.filter(
-            kind="machine", enabled=True
-        ).values_list("spec", flat=True)
-        if str(spec.get("name", "")) == name
-        for address in spec.get("addresses") or ()
+        for machine in declared_machines()
+        if str(machine.get("name", "")) == name
+        for address in machine.get("addresses") or ()
     )
 
 
@@ -695,7 +692,7 @@ def _deduplicated(rows) -> list[Address]:
     for row in rows:
         if row is None:
             continue
-        host, port = _split_port(row.value)
+        host, port = split_host_port(row.value)
         if host not in found:
             found[host] = row
             ports[host] = []
@@ -711,19 +708,6 @@ def _deduplicated(rows) -> list[Address]:
         )
         for host, row in found.items()
     ]
-
-
-def _split_port(value: str) -> tuple[str, str]:
-    """``host, port``, with IPv6 brackets removed and a bare address unchanged."""
-
-    text = str(value or "").strip()
-    if text.startswith("["):
-        host, _, rest = text.partition("]")
-        return host.lstrip("["), rest.lstrip(":")
-    if text.count(":") == 1:
-        host, _, port = text.rpartition(":")
-        return host, port
-    return text, ""
 
 
 @dataclass(frozen=True)
@@ -880,100 +864,17 @@ def hops_of(request) -> tuple[Hop, ...]:
     return tuple(found)
 
 
-@dataclass(frozen=True)
-class Reading:
-    """A named measurement, for the part of the panel that is diagnostics."""
-
-    label: str
-    value: str
-    detail: str = ""
-
-
-def readings(found: Connection) -> tuple[Reading, ...]:
-    """The numbers behind the sentences, for when the sentences are not enough.
-
-    Reported as what was measured and when, never as a live figure: these come
-    from the last sweep, and a stale number presented as current is the one
-    kind of wrong a diagnostics panel must not be.
-    """
-
-    device = found.device
-    rows = [
-        Reading("Your address", found.address, found.channel.label),
-        Reading("Served by", found.host, "the name this request asked for"),
-    ]
-    if found.serves:
-        rows.append(
-            Reading(
-                "HQ answers as",
-                found.serves.dns_name or found.serves.name,
-                "the node HQ runs on, as its own daemon reports it",
-            )
-        )
-    if device is None:
-        return tuple(rows)
-    rows.extend(
-        [
-            Reading("Your device", device.name, device.os or "unknown platform"),
-            Reading(
-                "MagicDNS name",
-                device.dns_name or "—",
-                "how the tailnet addresses this device",
-            ),
-            Reading(
-                "Path to HQ",
-                {
-                    "direct": "Direct",
-                    "relayed": f"Relayed via {device.relay}",
-                    "idle": "Not currently negotiated",
-                }[device.path],
-                device.direct_endpoint
-                or (
-                    "traffic crosses a relay neither machine owns, still "
-                    "encrypted end to end"
-                    if device.path == "relayed"
-                    else "a path is negotiated when there is traffic"
-                ),
-            ),
-            Reading(
-                "Last handshake",
-                _ago(device.last_handshake),
-                "when the two daemons last agreed keys",
-            ),
-            Reading(
-                "Carried so far",
-                f"{_bytes(device.rx_bytes)} in · {_bytes(device.tx_bytes)} out",
-                "as counted by the node HQ runs on",
-            ),
-            Reading(
-                "Owned by",
-                device.user or "—",
-                "the tailnet account this device belongs to",
-            ),
-            Reading(
-                "Tags",
-                " ".join(device.tags) if device.tags else "—",
-                "what the policy can name this device by",
-            ),
-        ]
-    )
-    return tuple(rows)
-
-
 def _ago(stamp: str) -> str:
     """A timestamp as an age, or as the fact that there has not been one."""
+
+    from django.utils.timesince import timesince
 
     parsed = _parsed(stamp)
     if parsed is None:
         return "—"
-    seconds = int((datetime.now(utc.utc) - parsed).total_seconds())
-    if seconds < 0:
+    if parsed > datetime.now(utc.utc):
         return "just now"
-    for size, unit in ((86400, "day"), (3600, "hour"), (60, "minute")):
-        if seconds >= size:
-            count = seconds // size
-            return f"{count} {unit}{'s' if count != 1 else ''} ago"
-    return f"{seconds} seconds ago"
+    return f"{timesince(parsed)} ago"
 
 
 def _parsed(stamp: str) -> datetime | None:

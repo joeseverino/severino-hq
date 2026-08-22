@@ -15,16 +15,10 @@ from django.utils import timezone
 
 from control_plane.models import ProviderInventory
 
-from .connection import (
-    channel_of,
-    connection,
-    headers_of,
-    hops_of,
-    readings,
-)
+from .connection import channel_of, connection, headers_of, hops_of
 
 A_TAILNET_ADDRESS = "100.64.0.5"
-A_LAN_ADDRESS = "192.168.1.50"
+A_LAN_ADDRESS = "10.0.0.50"
 
 
 def a_tailnet(*devices):
@@ -192,7 +186,7 @@ class IdentityTests(TestCase):
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
-class ReadingTests(TestCase):
+class LinkTests(TestCase):
     def test_a_relayed_peer_is_not_described_as_direct(self):
         a_tailnet(
             a_device(
@@ -202,10 +196,7 @@ class ReadingTests(TestCase):
             a_device("hq-host", "100.64.0.9", observer=True),
         )
 
-        found = readings(connection(a_request()))
-        path = next(row for row in found if row.label == "Path to HQ")
-
-        self.assertIn("Relayed", path.value)
+        self.assertIn("Relayed", connection(a_request()).path_label)
 
     def test_a_direct_peer_is_reported_with_its_endpoint(self):
         a_tailnet(
@@ -216,10 +207,7 @@ class ReadingTests(TestCase):
             a_device("hq-host", "100.64.0.9", observer=True),
         )
 
-        found = readings(connection(a_request()))
-        path = next(row for row in found if row.label == "Path to HQ")
-
-        self.assertEqual(path.value, "Direct")
+        self.assertEqual(connection(a_request()).path_label, "Direct")
 
     def test_a_handshake_that_never_happened_is_not_reported_as_an_age(self):
         """Tailscale writes the zero time for never, which ages to two millennia."""
@@ -232,10 +220,7 @@ class ReadingTests(TestCase):
             a_device("hq-host", "100.64.0.9", observer=True),
         )
 
-        found = readings(connection(a_request()))
-        handshake = next(row for row in found if row.label == "Last handshake")
-
-        self.assertEqual(handshake.value, "—")
+        self.assertEqual(connection(a_request()).handshake, "—")
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -261,7 +246,7 @@ class ConnectionPageTests(TestCase):
 
 @override_settings(
     ALLOWED_HOSTS=["hq.example.test", "testserver"],
-    SEVERINO_TRUSTED_PROXIES=["192.168.0.0/16", "172.16.0.0/12"],
+    SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8", "172.16.0.0/12"],
 )
 class HopTests(TestCase):
     """Which hop HQ believes, and the working shown for it.
@@ -279,7 +264,7 @@ class HopTests(TestCase):
         return hops_of(request)
 
     def test_the_caller_is_the_last_hop_a_known_proxy_observed(self):
-        found = self.hops(peer="192.168.1.233", forwarded="100.64.0.5")
+        found = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")
 
         judged = [hop for hop in found if hop.role == "judged"]
         self.assertEqual([hop.value for hop in judged], ["100.64.0.5"])
@@ -287,7 +272,7 @@ class HopTests(TestCase):
     def test_hops_further_left_are_not_believed(self):
         """Anything past the first unknown hop is text the caller chose."""
 
-        found = self.hops(peer="192.168.1.233", forwarded="203.0.113.9, 100.64.0.5")
+        found = self.hops(peer="10.0.0.9", forwarded="203.0.113.9, 100.64.0.5")
 
         self.assertEqual(found[0].role, "ignored")
         self.assertEqual(found[0].value, "203.0.113.9")
@@ -295,7 +280,7 @@ class HopTests(TestCase):
     def test_a_chain_of_only_proxies_says_nothing_identified_the_caller(self):
         """The shape a proxy that drops the client address produces."""
 
-        found = self.hops(peer="192.168.1.233", forwarded="172.18.0.1")
+        found = self.hops(peer="10.0.0.9", forwarded="172.18.0.1")
 
         judged = next(hop for hop in found if hop.role == "judged")
         self.assertIn("Nothing here identifies", judged.detail)
@@ -308,10 +293,10 @@ class HopTests(TestCase):
         self.assertEqual([hop.value for hop in found], ["203.0.113.9"])
 
     def test_the_chain_reads_in_the_order_the_hops_happened(self):
-        found = self.hops(peer="192.168.1.233", forwarded="100.64.0.5")
+        found = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")
 
         self.assertEqual(
-            [hop.value for hop in found], ["100.64.0.5", "192.168.1.233"]
+            [hop.value for hop in found], ["100.64.0.5", "10.0.0.9"]
         )
 
 
@@ -396,7 +381,7 @@ class CostTests(TestCase):
 
 @override_settings(
     ALLOWED_HOSTS=["hq.example.test", "testserver"],
-    SEVERINO_TRUSTED_PROXIES=["192.168.0.0/16", "172.16.0.0/12"],
+    SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8", "172.16.0.0/12"],
     SEVERINO_ENFORCE_TRUSTED_NETWORK=True,
 )
 class ProxyThatDropsTheCallerTests(TestCase):
@@ -414,7 +399,7 @@ class ProxyThatDropsTheCallerTests(TestCase):
     def found(self):
         request = RequestFactory().get(
             "/connection/", secure=True, HTTP_HOST="hq.example.test",
-            REMOTE_ADDR="192.168.1.233", HTTP_X_FORWARDED_FOR="172.18.0.1",
+            REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR="172.18.0.1",
         )
         request.user = get_user_model()(username="someone")
         return connection(request)
