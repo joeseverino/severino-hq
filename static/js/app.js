@@ -655,3 +655,95 @@ document.addEventListener("DOMContentLoaded", () => {
   const panel = document.querySelector("[data-connection-panel]");
   if (panel && !panel.closest("dialog")) hqShowResponseHeaders(panel);
 });
+
+// The topology is useful HTML before this runs: native disclosures expose
+// detail and every action is a normal link or form. This enhancement makes the
+// same projection explorable by filtering and isolating a node's immediate
+// neighborhood, while creating no client-side topology state of its own.
+document.querySelectorAll("[data-topology]").forEach((workspace) => {
+  const nodes = [...workspace.querySelectorAll("[data-topology-node]")];
+  const lanes = [...workspace.querySelectorAll("[data-topology-lane]")];
+  const ledger = document.getElementById(workspace.dataset.topologyLedger);
+  const edges = [...(ledger?.querySelectorAll("[data-topology-edge]") || [])];
+  const search = workspace.querySelector("[data-topology-search]");
+  const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
+  const status = workspace.querySelector("[data-topology-status]");
+  const reset = workspace.querySelector("[data-topology-reset]");
+  let focused = "";
+
+  const rememberFocus = (nodeId) => {
+    const url = new URL(window.location.href);
+    if (nodeId) url.searchParams.set("focus", nodeId);
+    else url.searchParams.delete("focus");
+    window.history.replaceState({}, "", url);
+  };
+
+  const focus = (nodeId, remember = true) => {
+    focused = nodes.some((node) => node.dataset.topologyNode === nodeId) ? nodeId : "";
+    const selected = nodes.find((node) => node.dataset.topologyNode === focused);
+    const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
+    workspace.classList.toggle("has-focus", Boolean(selected));
+    nodes.forEach((node) => {
+      const id = node.dataset.topologyNode;
+      node.classList.toggle("is-selected", id === focused);
+      node.classList.toggle("is-related", related.has(id));
+      node.classList.toggle(
+        "is-dimmed",
+        Boolean(selected) && id !== focused && !related.has(id) && !node.open,
+      );
+    });
+    edges.forEach((edge) => {
+      const ends = edge.dataset.topologyEdge.split(" ");
+      edge.classList.toggle("is-related", Boolean(selected) && ends.includes(focused));
+    });
+    if (status) {
+      status.textContent = selected
+        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
+        : "Select a node to isolate its immediate relationships. Open it for actions and detail.";
+    }
+    if (remember) rememberFocus(focused);
+  };
+
+  const filter = () => {
+    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
+    nodes.forEach((node) => {
+      const haystack = node.dataset.topologySearchText.toLocaleLowerCase();
+      node.hidden = !shownKinds.has(node.dataset.topologyNodeKind)
+        || !terms.every((term) => haystack.includes(term));
+    });
+    lanes.forEach((lane) => {
+      const visible = [...lane.querySelectorAll("[data-topology-node]")].filter((node) => !node.hidden);
+      lane.hidden = visible.length === 0;
+      const count = lane.querySelector("[data-topology-count]");
+      if (count) count.textContent = visible.length;
+    });
+    const selected = nodes.find((node) => node.dataset.topologyNode === focused);
+    if (selected?.hidden) focus("");
+  };
+
+  nodes.forEach((node) => {
+    node.addEventListener("toggle", () => {
+      if (node.open) {
+        nodes.forEach((other) => {
+          if (other !== node) other.removeAttribute("open");
+        });
+        focus(node.dataset.topologyNode);
+      }
+    });
+  });
+  search?.addEventListener("input", filter);
+  kindControls.forEach((control) => control.addEventListener("change", filter));
+  reset?.addEventListener("click", () => {
+    focus("");
+    nodes.forEach((node) => node.removeAttribute("open"));
+  });
+  search?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      search.value = "";
+      filter();
+    }
+  });
+  filter();
+  if (workspace.dataset.focus) focus(workspace.dataset.focus, false);
+});

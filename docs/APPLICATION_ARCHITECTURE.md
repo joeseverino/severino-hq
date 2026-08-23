@@ -167,6 +167,16 @@ the operator's discovery surface without a host edit. Cross-registry references
 and reversible web routes are composition checks, not work repeated in the
 API/MCP execution path.
 
+The infrastructure Topology workspace is the relational projection of the
+same declarations and observations. `ConnectionSpec` supplies abilities,
+`ConnectionInstance` supplies observed targets and dependencies, controller
+readings identify their observer, and `ManagedResource` supplies desired-state
+nodes. One application function emits the normalized node-and-edge graph used
+by web, HTTP API, and MCP. It stores no snapshot. Its actions point back to
+canonical capabilities and web use cases, so manipulating a node still crosses
+the existing authorization, validation, audit, transaction, policy, and retry
+boundaries rather than editing a parallel graph.
+
 The machine HTTP adapter adds durable retry semantics around that executor.
 Every state-changing capability requires an actor-scoped idempotency key; the
 canonical request hash and exact response commit in the same transaction as the

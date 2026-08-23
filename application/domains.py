@@ -197,6 +197,18 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.topology",
+        label="Topology",
+        # The relational map leads the Infrastructure group because it is the
+        # entry point that explains how every narrower workspace fits together.
+        navigation=(
+            NavigationItem(
+                "Topology", "control_plane:topology", "control_plane", 129,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.services",
         label="Services",
         # Ahead of Resources deliberately. A resource is a declaration a

@@ -230,6 +230,15 @@ explicit HTTP(S) URLs. Import these contracts and `describe_connections` from
 `hq_sdk.connections`; the mutable registry
 and raw provider inventory are deliberately host-only.
 
+Those same instances join the derived topology automatically. An ability's
+explicit `governs_kinds` connect it to managed resources, `targets` become
+observed destinations, and dependencies with an explicit `resource_key` become
+declared-use relationships. Set the optional
+`controller_id` only when the instance is an observation emitted by a distinct
+controller; direct account integrations leave it empty. It is observer identity,
+not credential identity, and must never contain secret material. A plugin needs
+no topology template, route, callback, or host edit.
+
 ## Shared UI contract
 
 Installable modules inherit HQ's design system and should not ship a parallel

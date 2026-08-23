@@ -493,6 +493,7 @@ class TransportTests(TestCase):
         self.assertEqual(data["api_version"], 2)
         self.assertEqual(data["links"]["resources"], "/api/v2/resources/")
         self.assertEqual(data["links"]["connections"], "/api/v2/connections/")
+        self.assertEqual(data["links"]["topology"], "/api/v2/topology/")
 
     def test_v1_does_not_advertise_a_v2_only_resource_route(self):
         with _serving():
@@ -611,6 +612,59 @@ class TransportTests(TestCase):
         self.assertFalse(core["permitted"])
         self.assertEqual(data["groups"], [])
         provider.assert_not_called()
+
+    def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
+        from django.utils import timezone
+        from control_plane.models import ManagedResource, ProviderConnection
+
+        ManagedResource.objects.create(
+            key="api-zone",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "api-cloudflare"},
+        )
+        ProviderConnection.objects.create(
+            connection_ref="api-cloudflare",
+            controller_id="api-controller",
+            provider="cloudflare_dns",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        with (
+            _serving(),
+            patch("application.plugins.plugin_connection_specs", return_value=()),
+        ):
+            response = self.client.get(
+                "/api/v2/topology/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        topology = response.json()["data"]
+        self.assertEqual(topology["schema_version"], 1)
+        self.assertIn("resource:api-zone", {
+            node["id"] for node in topology["nodes"]
+        })
+        self.assertTrue(topology["edges"])
+        resource = next(
+            node for node in topology["nodes"] if node["id"] == "resource:api-zone"
+        )
+        self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
+        self.assertNotIn("token", json.dumps(topology).lower())
+
+    def test_topology_requires_read_before_deriving_any_state(self):
+        with (
+            _serving(),
+            patch("application.topology.connection_catalog") as catalog,
+        ):
+            response = self.client.get(
+                "/api/v2/topology/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+            )
+
+        self.assertEqual(response.status_code, 403)
+        catalog.assert_not_called()
 
     def test_resource_list_and_detail_share_the_declared_contract(self):
         from projects.models import Project

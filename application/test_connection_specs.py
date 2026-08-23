@@ -101,6 +101,7 @@ class ConnectionExecutionTests(TestCase):
         })
         self.assertNotIn("token", connection)
         self.assertNotIn("credential", connection)
+        self.assertEqual(connection["controller_id"], "controller")
 
     def test_scope_coverage_is_derived_for_every_ability(self):
         with mock.patch(
@@ -170,6 +171,7 @@ class ConnectionRegistrationTests(TestCase):
             finance["abilities"][1]["required_scopes"],
             ["transactions:read"],
         )
+        self.assertEqual(finance["abilities"][1]["governs_kinds"], [])
 
     def test_command_center_pluralizes_one_ability(self):
         spec = _finance_spec()
@@ -241,6 +243,35 @@ class ConnectionRegistrationTests(TestCase):
             },
             {"tailscale.device", "tailscale.policy"},
         )
+        self.assertEqual(
+            {
+                ability["name"]: ability["governs_kinds"]
+                for ability in core["abilities"]
+                if ability["name"].startswith("tailscale.")
+            },
+            {
+                "tailscale.device": ["tailscale.device"],
+                "tailscale.policy": ["tailscale.policy"],
+            },
+        )
+
+    def test_invalid_governed_resource_kinds_fail_at_composition(self):
+        broken = replace(
+            _finance_spec(),
+            abilities=(
+                replace(
+                    _finance_spec().abilities[0],
+                    governs_kinds=("not a dotted kind",),
+                ),
+            ),
+        )
+        with (
+            mock.patch(
+                "application.plugins.plugin_connection_specs", return_value=(broken,)
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
+        ):
+            connection_specs()
 
     def test_plugin_connection_names_cannot_shadow_core(self):
         duplicate = ConnectionSpec(
@@ -323,6 +354,18 @@ class ConnectionRegistrationTests(TestCase):
                 "application.plugins.plugin_connection_specs", return_value=(spec,)
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "credential userinfo"),
+        ):
+            list_connections(principal=FINANCE)
+
+    def test_blank_controller_identity_fails_closed(self):
+        spec = _finance_spec()
+        instance = replace(spec.instance_provider()[0], controller_id=" ")
+        spec = replace(spec, instance_provider=lambda: (instance,))
+        with (
+            mock.patch(
+                "application.plugins.plugin_connection_specs", return_value=(spec,)
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "invalid controller id"),
         ):
             list_connections(principal=FINANCE)
 

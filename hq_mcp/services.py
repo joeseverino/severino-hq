@@ -16,6 +16,7 @@ from application.capabilities import (
     execute_capability as execute_application_capability,
 )
 from application.security import mcp_principal
+from application.topology import topology as application_topology
 from application.registry import audit_registry as audit_application_registry
 from application.resources import (
     ResourceNotFound,
@@ -76,6 +77,12 @@ def list_connections() -> dict[str, Any]:
     """List safe cached connection state available to the MCP principal."""
 
     return list_application_connections(principal=mcp_principal())
+
+
+def get_topology() -> dict[str, Any]:
+    """Return the live infrastructure graph with safe canonical actions."""
+
+    return application_topology(principal=mcp_principal())
 
 
 def list_resource(

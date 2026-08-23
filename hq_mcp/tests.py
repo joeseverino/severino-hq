@@ -172,6 +172,25 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("describe_connections"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("list_connections"))
 
+    def test_derived_topology_is_a_registered_safe_read_tool(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="mcp-zone",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            topology = services.get_topology()
+
+        self.assertIn(
+            "resource:mcp-zone", {node["id"] for node in topology["nodes"]}
+        )
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
+        self.assertNotIn("secret", json.dumps(topology).lower())
+
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
         from application.connections import ConnectionSpec
         from application.security import Capability

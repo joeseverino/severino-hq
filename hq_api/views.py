@@ -28,6 +28,7 @@ from application.capabilities import (
     execute_capability,
 )
 from application.connections import describe_connections, list_connections
+from application.topology import topology as application_topology
 from application.security import AuthorizationError
 from application.resources import (
     InvalidResourceInput,
@@ -224,6 +225,7 @@ def root(request, version: int):
     if version >= 2:
         links["resources"] = f"/api/v{version}/resources/"
         links["connections"] = f"/api/v{version}/connections/"
+        links["topology"] = f"/api/v{version}/topology/"
     return _ok(
         {
             "service": "severino-hq",
@@ -294,6 +296,16 @@ def connections(request, version: int):
             "groups": state["groups"],
         }
     )
+
+
+@_endpoint(("GET",))
+def topology(request, version: int):
+    """The live permitted infrastructure graph and its canonical actions."""
+
+    try:
+        return _ok(application_topology(principal=request.principal))
+    except AuthorizationError as exc:
+        return _fail(exc.reason, code=exc.code, status=403)
 
 
 def _resource_failure(exc: Exception) -> HttpResponse:

@@ -47,6 +47,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_catalog
+from application.topology import derive_topology
 from application.machines import container_context, machine, machine_catalog
 from application.services import machine_link
 from application.naming import name_context
@@ -1008,6 +1009,64 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
                 if connection.instance.observed_at is not None
             ),
             default=None,
+        )
+        return context
+
+
+class TopologyView(LoginRequiredMixin, TemplateView):
+    """The live, actionable graph derived by the application layer."""
+
+    template_name = "control_plane/topology.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        topology = derive_topology(principal=web_principal(self.request.user))
+        by_id = {node.id: node for node in topology.nodes}
+        neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
+        for edge in topology.edges:
+            neighbors[edge.source].add(edge.target)
+            neighbors[edge.target].add(edge.source)
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for node in topology.nodes:
+            groups.setdefault(node.kind, []).append(
+                {
+                    "node": node,
+                    "neighbors": " ".join(sorted(neighbors[node.id])),
+                    "degree": len(neighbors[node.id]),
+                }
+            )
+        labels = {
+            "controller": "Controllers",
+            "connection": "Connections",
+            "ability": "Abilities",
+            "resource": "Resources",
+            "target": "Targets",
+            "dependency": "Dependencies",
+        }
+        requested_focus = self.request.GET.get("focus", "")
+        context.update(
+            {
+                "topology": topology,
+                "topology_groups": tuple(
+                    {
+                        "kind": kind,
+                        "label": labels.get(kind, kind.replace("_", " ").title()),
+                        "items": items,
+                    }
+                    for kind, items in groups.items()
+                ),
+                "topology_edges": tuple(
+                    {
+                        "edge": edge,
+                        "source": by_id[edge.source],
+                        "target": by_id[edge.target],
+                    }
+                    for edge in topology.edges
+                ),
+                "focus_node": (
+                    requested_focus if requested_focus in by_id else ""
+                ),
+            }
         )
         return context
 

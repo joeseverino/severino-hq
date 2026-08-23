@@ -82,6 +82,12 @@ records HQ created, HQ can show what it does not manage and adopt it, capturing
 the live settings verbatim so the first reconciliation after adopting changes
 nothing.
 
+HQ also derives one actionable topology from those same contracts: controllers
+carry connections, connections enable abilities and reach targets, and abilities
+govern declared resources. The web explorer, HTTP API, and MCP expose the same
+normalized graph; its actions invoke the existing application capabilities, so
+there is no second source of truth or graph-only mutation path.
+
 ![Infrastructure control plane — HQ authors desired state, a capability-filtered homelab controller reconciles providers and reports back both observed state and full inventory](docs/diagrams/infrastructure-control-plane.png)
 
 <sup>Diagram source: [`docs/diagrams/infrastructure-control-plane.mmd`](docs/diagrams/infrastructure-control-plane.mmd),

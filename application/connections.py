@@ -72,6 +72,10 @@ class ConnectionAbility:
     effect: str = "read"
     required_scopes: tuple[str, ...] = ()
     capability: str = ""
+    # Resource kinds this ability governs. The relation is explicit because an
+    # ability name describes what a connection can do; it is not inherently a
+    # ManagedResource kind, and separate connection families may reuse it.
+    governs_kinds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,9 @@ class ConnectionLink:
 
     label: str
     url: str = ""
+    # Explicit identity for a ManagedResource dependency. A rendered label is
+    # presentation and must never become a join key by coincidence.
+    resource_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -108,6 +115,11 @@ class ConnectionInstance:
     targets: tuple[ConnectionLink, ...] = ()
     dependencies: tuple[ConnectionLink, ...] = ()
     facts: tuple[ConnectionFact, ...] = ()
+    # The observer that supplied this reading. Optional because an extension
+    # may read an account directly rather than through an infrastructure
+    # controller; when present it gives topology a real edge instead of asking
+    # a rendered label to carry identity.
+    controller_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -217,6 +229,7 @@ def _controller_contract() -> tuple[
                 label=spec.label or kind,
                 summary=spec.summary,
                 effect="destructive" if spec.destructive else "infrastructure_change",
+                governs_kinds=(kind,),
             )
         )
         for provider in spec.connection_providers:
@@ -255,7 +268,8 @@ def _controller_instances(
                 ability_names=ability_names.get(reading.provider, ()),
                 targets=targets,
                 dependencies=tuple(
-                    ConnectionLink(key, url) for key, url in reading.resources
+                    ConnectionLink(key, url, resource_key=key)
+                    for key, url in reading.resources
                 ),
                 facts=tuple(
                     fact
@@ -266,6 +280,7 @@ def _controller_instances(
                     )
                     if fact is not None
                 ),
+                controller_id=reading.controller_id,
             )
         )
     return tuple(instances)
@@ -317,6 +332,12 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
     if ability.capability and not DOTTED_NAME.fullmatch(ability.capability):
         raise ImproperlyConfigured(
             f"Connection ability {ability.name!r} has invalid capability."
+        )
+    if len(ability.governs_kinds) != len(set(ability.governs_kinds)) or any(
+        not DOTTED_NAME.fullmatch(kind) for kind in ability.governs_kinds
+    ):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid governed kinds."
         )
 
 
@@ -414,6 +435,13 @@ def _validate_instance(
         raise ImproperlyConfigured(
             f"Connection {instance.id!r} endpoint contains credential userinfo."
         )
+    if not isinstance(instance.controller_id, str) or (
+        instance.controller_id
+        and instance.controller_id != instance.controller_id.strip()
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has an invalid controller id."
+        )
     if len(instance.granted_scopes) != len(set(instance.granted_scopes)) or any(
         not SCOPE_NAME.fullmatch(scope) for scope in instance.granted_scopes
     ):
@@ -432,6 +460,11 @@ def _validate_instance(
             not isinstance(link, ConnectionLink)
             or not link.label.strip()
             or (link.url and not _safe_link_url(link.url))
+            or not isinstance(link.resource_key, str)
+            or (
+                link.resource_key
+                and link.resource_key != link.resource_key.strip()
+            )
             for link in collection
         ):
             raise ImproperlyConfigured(
@@ -527,6 +560,7 @@ def describe_connections() -> dict:
                         "effect": ability.effect,
                         "required_scopes": list(ability.required_scopes),
                         "capability": ability.capability or None,
+                        "governs_kinds": list(ability.governs_kinds),
                     }
                     for ability in spec.abilities
                 ],
@@ -589,6 +623,7 @@ def _serialize_instance(connection: ConnectionView) -> dict:
         "targets": [asdict(link) for link in instance.targets],
         "dependencies": [asdict(link) for link in instance.dependencies],
         "facts": [asdict(fact) for fact in instance.facts],
+        "controller_id": instance.controller_id or None,
     }
 
 

@@ -106,6 +106,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 | `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
+| `GET` | `/api/v2/topology/` | The permitted live graph of controllers, connections, abilities, resources, and observed targets |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -137,6 +138,16 @@ secret material; credential userinfo is rejected before a controller endpoint
 is stored, and again at the output contract for plugin-provided instances. HQ's
 connection providers expose observations of credentials held by their own
 source systems, not the credentials themselves.
+
+The topology endpoint joins those connection observations to the deployed
+ability registry and HQ's managed resources. It is a derived projection, not a
+second inventory: nodes and edges disappear when their source declaration or
+observation disappears. Node `actions` name the existing capability and target
+behind a possible change; they do not create a topology-only mutation path.
+HTTP clients execute those changes through
+`POST /api/v2/capabilities/<name>/`, including the normal schema,
+authorization, audit and idempotency requirements. The projection requires the
+token's `read` grant and contains safe endpoint text, never credentials.
 
 ### Compatibility policy
 
