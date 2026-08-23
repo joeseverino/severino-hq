@@ -12,6 +12,34 @@ page it falls back to. Nothing here knows which one it is in.
     <code class="conn-address">{{ connection.address }}</code>
   </div>
 
+  <section class="conn-decision" aria-label="Admission decision">
+    <div class="conn-decision-head">
+      <div>
+        <h3>Admission decision</h3>
+        <p>Independent controls, evaluated in request order.</p>
+      </div>
+      <strong>{{ connection.summary }}</strong>
+    </div>
+    <ol>
+      {% for layer in connection.layers %}
+        <li>
+          <a class="conn-decision-step conn-decision-step-{{ layer.state }}"
+             href="{% url 'connection' %}"
+             data-connection-control="{{ layer.id }}">
+            <span class="conn-tick" aria-hidden="true">{% if layer.holds %}&check;{% else %}&times;{% endif %}</span>
+            <span>{{ layer.label }}</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <nav class="conn-related" aria-label="Related connection views">
+    <span>Continue through the model</span>
+    <a href="{% url 'control_plane:connections' %}">Outbound authority</a>
+    <a href="{% url 'control_plane:topology' %}">Derived topology</a>
+  </nav>
+
   {% comment %}
   The peering itself, drawn as the two ends it has. Every other surface here
   describes one machine; this one is about the link between two, and a pair of
@@ -171,39 +199,50 @@ page it falls back to. Nothing here knows which one it is in.
     </section>
   {% endif %}
 
-  <section>
-    <h3>What this request carried</h3>
-    <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
-    <div class="conn-rows">
-      {% for header in headers %}{% if header.used %}
-        <div class="conn-row conn-row-wide conn-row-used">
-          <code>{{ header.name }}: {{ header.value }}</code>
-          <span class="conn-kind conn-kind-read">read</span>
-          <span class="conn-row-note">{{ header.purpose }}</span>
+  <details class="conn-protocol" data-connection-protocol>
+    <summary>
+      <span>
+        <strong>Protocol evidence</strong>
+        <small>Request inputs and response security headers</small>
+      </span>
+      <span class="count">On demand</span>
+    </summary>
+    <div class="conn-protocol-body">
+      <section>
+        <h3>What this request carried</h3>
+        <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
+        <div class="conn-rows">
+          {% for header in headers %}{% if header.used %}
+            <div class="conn-row conn-row-wide conn-row-used">
+              <code>{{ header.name }}: {{ header.value }}</code>
+              <span class="conn-kind conn-kind-read">read</span>
+              <span class="conn-row-note">{{ header.purpose }}</span>
+            </div>
+          {% endif %}{% endfor %}
         </div>
-      {% endif %}{% endfor %}
-    </div>
-    <details class="conn-more">
-      <summary>Received but not read</summary>
-      <div class="conn-rows">
-        {% for header in headers %}{% if header.state == "ignored" %}
-          <div class="conn-row conn-row-wide">
-            <code>{{ header.name }}: {{ header.value }}</code>
-            <span class="conn-kind">ignored</span>
-            <span class="conn-row-note"></span>
+        <details class="conn-more">
+          <summary>Received but not read</summary>
+          <div class="conn-rows">
+            {% for header in headers %}{% if header.state == "ignored" %}
+              <div class="conn-row conn-row-wide">
+                <code>{{ header.name }}: {{ header.value }}</code>
+                <span class="conn-kind">ignored</span>
+                <span class="conn-row-note"></span>
+              </div>
+            {% endif %}{% endfor %}
           </div>
-        {% endif %}{% endfor %}
-      </div>
-    </details>
-  </section>
+        </details>
+      </section>
 
-  <section>
-    <h3>What HQ sent back</h3>
-    <p class="conn-note">Read from the response this browser actually received, not from the settings that were meant to produce it.</p>
-    <div class="conn-rows" data-response-headers>
-      <div class="conn-row"><span class="conn-row-note">Reading the response…</span></div>
+      <section>
+        <h3>What HQ sent back</h3>
+        <p class="conn-note">Read from the response this browser actually received, not from the settings that were meant to produce it.</p>
+        <div class="conn-rows" data-response-headers>
+          <div class="conn-row"><span class="conn-row-note">Open protocol evidence to read the response.</span></div>
+        </div>
+      </section>
     </div>
-  </section>
+  </details>
 
   <section>
     <h3>What had to be true</h3>
@@ -211,7 +250,7 @@ page it falls back to. Nothing here knows which one it is in.
     <ol class="conn-layers">
       {% for layer in connection.layers %}
         <li class="conn-layer conn-layer-{{ layer.state }}">
-          <details>
+          <details data-connection-layer="{{ layer.id }}">
             <summary>
               <span class="conn-tick" aria-hidden="true">{% if layer.holds %}&check;{% else %}&times;{% endif %}</span>
               <span class="conn-layer-label">{{ layer.label }}</span>

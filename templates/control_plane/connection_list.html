@@ -3,6 +3,39 @@
 {% block content %}
 {% include "partials/_page_head.html" with title="Connections" lede="Every system HQ can reach, the authority each connection carries, and what depends on it." %}
 
+<section class="card connection-security connection-security-{{ connection_posture.state }}" aria-labelledby="connection-security-title">
+  <div class="connection-security-story">
+    <div>
+      <span class="eyebrow">Security posture</span>
+      <h2 id="connection-security-title">{{ connection_posture.headline }}</h2>
+      <p>{{ connection_posture.summary }}</p>
+    </div>
+    <a class="button button-small" href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect this request</a>
+  </div>
+  <div class="connection-security-metrics" aria-label="Connection security summary">
+    <div>
+      <strong>{{ connection_posture.healthy_count }}<span>/{{ connection_posture.connection_count }}</span></strong>
+      <span>operational</span>
+      {% if connection_posture.attention_count %}<small>{{ connection_posture.attention_count }} need attention</small>{% else %}<small>No reported failures</small>{% endif %}
+    </div>
+    <div>
+      <strong>{{ connection_posture.external_custody_count }}<span>/{{ connection_posture.connection_count }}</span></strong>
+      <span>external custody</span>
+      <small>No credential field in this contract</small>
+    </div>
+    <div>
+      <strong>{{ connection_posture.ability_count }}</strong>
+      <span>assigned abilities</span>
+      <small>{{ connection_posture.scope_verified_count }} scope-verified · {{ connection_posture.scope_unknown_count }} unknown</small>
+    </div>
+    <div>
+      <strong>{{ connection_posture.dependency_count }}</strong>
+      <span>attached workflows</span>
+      <small>Derived from declared dependents</small>
+    </div>
+  </div>
+</section>
+
 <div class="connection-summary" role="group" aria-label="Connection summary">
   <span><strong>{{ connection_count }}</strong> configured</span>
   <span><strong>{{ connection_groups|length }}</strong> connection type{{ connection_groups|length|pluralize }}</span>
@@ -95,4 +128,46 @@
     <p>These connections were reported without a provider kind. Classify them at their secret source so HQ can derive their abilities on the next refresh.</p>
   </div>
 {% endif %}
+
+<details class="card connection-security-advanced">
+  <summary>
+    <span>
+      <span class="eyebrow">Advanced</span>
+      <strong>Security controls and proof</strong>
+      <small>What HQ can establish, what it cannot, and the evidence boundary between them.</small>
+    </span>
+    <span class="count">{{ connection_posture.controls|length }}</span>
+  </summary>
+  <section class="connection-trust-path" aria-labelledby="connection-trust-path-title">
+    <div>
+      <span class="eyebrow">Request-to-resource path</span>
+      <h3 id="connection-trust-path-title">Independent enforcement points</h3>
+      <p>Admission establishes who may reach HQ. Capabilities and provider scopes separately establish what that principal may do.</p>
+    </div>
+    <ol aria-label="Connection enforcement path">
+      <li><span>Ingress</span><strong>{{ connection_posture.channel_label }}{% if connection_posture.secure_transport %} + TLS{% endif %}</strong></li>
+      {% if connection_posture.trusted_proxy_count %}<li><span>Identity chain</span><strong>{{ connection_posture.trusted_proxy_count }} trusted proxy hop{{ connection_posture.trusted_proxy_count|pluralize }}</strong></li>{% endif %}
+      <li class="{% if not connection_posture.network_gate_enforced %}is-attention{% endif %}"><span>PEP</span><strong>Pre-auth network gate</strong></li>
+      <li><span>Principal</span><strong>Authenticated session</strong></li>
+      <li><span>Authorization</span><strong>HQ capability</strong></li>
+      <li class="{% if connection_posture.scope_missing_count %}is-attention{% elif connection_posture.scope_unknown_count %}is-unknown{% endif %}"><span>Least privilege</span><strong>Provider scope</strong></li>
+      <li><span>Resource</span><strong>Declared target</strong></li>
+    </ol>
+  </section>
+  <div class="connection-control-grid">
+    {% for control in connection_posture.controls %}
+      <article class="connection-control connection-control-{{ control.state }}">
+        <header>
+          <h3>{{ control.label }}</h3>
+          <span class="pill pill-{{ control.state }}">
+            {% if control.state == "good" %}Proven{% elif control.state == "serious" %}Needs attention{% elif control.state == "attention" %}Attention{% else %}Transparent{% endif %}
+          </span>
+        </header>
+        <strong>{{ control.evidence }}</strong>
+        <p>{{ control.detail }}</p>
+        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect the full request path</a>{% endif %}
+      </article>
+    {% endfor %}
+  </div>
+</details>
 {% endblock %}

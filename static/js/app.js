@@ -680,29 +680,70 @@ const HQ_RESPONSE_HEADERS = [
 const hqShowResponseHeaders = (root) => {
   const slot = root.querySelector("[data-response-headers]");
   if (!slot || !window.fetch) return;
+  const disclosure = slot.closest("[data-connection-protocol]");
+  if (disclosure && !disclosure.open) return;
+  if (slot.dataset.loaded === "true") return;
+  slot.dataset.loaded = "true";
   fetch(window.location.href, { credentials: "same-origin", cache: "no-store" })
     .then((response) => {
-      slot.innerHTML = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
+      const rows = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
         const value = response.headers.get(name);
-        const shown = value
-          ? `<code>${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}</code>`
-          : `<code>${name}</code>`;
-        const chip = value
-          ? `<span class="conn-kind conn-kind-read">sent</span>`
-          : `<span class="conn-kind conn-kind-elsewhere">absent</span>`;
-        return `<div class="conn-row conn-row-wide">${shown}${chip}<span class="conn-row-note">${purpose}</span></div>`;
-      }).join("");
+        const row = document.createElement("div");
+        row.className = "conn-row conn-row-wide";
+        const shown = document.createElement("code");
+        shown.textContent = value
+          ? `${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}`
+          : name;
+        const chip = document.createElement("span");
+        chip.className = `conn-kind ${value ? "conn-kind-read" : "conn-kind-elsewhere"}`;
+        chip.textContent = value ? "sent" : "absent";
+        const note = document.createElement("span");
+        note.className = "conn-row-note";
+        note.textContent = purpose;
+        row.append(shown, chip, note);
+        return row;
+      });
+      slot.replaceChildren(...rows);
     })
     .catch(() => {
-      slot.innerHTML =
-        '<div class="conn-row"><span class="conn-row-note">The response could not be read back.</span></div>';
+      const row = document.createElement("div");
+      row.className = "conn-row";
+      const note = document.createElement("span");
+      note.className = "conn-row-note";
+      note.textContent = "The response could not be read back.";
+      row.append(note);
+      slot.replaceChildren(row);
     });
 };
+
+// The compact admission rail is an index into the evidence below it. A normal
+// link remains the no-script fallback; when enhanced, open the exact control
+// inside this copy of the shared panel (page or dialog) before scrolling.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("[data-connection-control]");
+  if (!link) return;
+  const panel = link.closest("[data-connection-panel]");
+  const control = panel?.querySelector(
+    `[data-connection-layer="${CSS.escape(link.dataset.connectionControl)}"]`,
+  );
+  if (!control) return;
+  event.preventDefault();
+  control.open = true;
+  control.querySelector("summary")?.focus({ preventScroll: true });
+  control.scrollIntoView({ block: "center" });
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   const panel = document.querySelector("[data-connection-panel]");
   if (panel && !panel.closest("dialog")) hqShowResponseHeaders(panel);
 });
+
+document.addEventListener("toggle", (event) => {
+  const disclosure = event.target;
+  if (!disclosure.matches?.("[data-connection-protocol]") || !disclosure.open) return;
+  const panel = disclosure.closest("[data-connection-panel]");
+  if (panel) hqShowResponseHeaders(panel);
+}, true);
 
 // The topology is useful HTML before this runs: native disclosures expose
 // detail and every action is a normal link or form. This enhancement makes the

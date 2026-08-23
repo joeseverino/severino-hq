@@ -34,7 +34,7 @@ from control_plane.models import (
 )
 from control_plane.providers import PROVIDERS, service_facets
 
-from .contracts import endpoint_has_userinfo
+from .contracts import endpoint_has_private_parts
 
 from .security import Capability, Principal
 
@@ -283,9 +283,9 @@ def record_connections(
         if not connection_ref:
             continue
         endpoint = str(connection.get("endpoint", ""))[:500]
-        if endpoint and endpoint_has_userinfo(endpoint):
+        if endpoint and endpoint_has_private_parts(endpoint):
             raise ValueError(
-                f"Connection {connection_ref!r} endpoint contains credential userinfo."
+                f"Connection {connection_ref!r} endpoint contains private URL parts."
             )
         ProviderConnection.objects.update_or_create(
             controller_id=controller_id,

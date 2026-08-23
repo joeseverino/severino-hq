@@ -134,10 +134,10 @@ family catalog with a token-specific `permitted` flag; `groups` contains
 runtime instances only for families the token may inspect. Runtime state
 includes ability availability, granted and missing scope names, targets,
 dependencies, status, and an ISO 8601 observation time. It never contains
-secret material; credential userinfo is rejected before a controller endpoint
-is stored, and again at the output contract for plugin-provided instances. HQ's
-connection providers expose observations of credentials held by their own
-source systems, not the credentials themselves.
+secret material; URL userinfo, query strings, and fragments are rejected before
+a controller endpoint is stored, and again at the output contract for
+plugin-provided instances. HQ's connection providers expose observations of
+credentials held by their own source systems, not the credentials themselves.
 
 The topology endpoint joins those connection observations to the deployed
 ability registry and HQ's managed resources. It is a derived projection, not a

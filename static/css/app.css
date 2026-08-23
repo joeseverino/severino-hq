@@ -1915,6 +1915,143 @@ a.discovery-link:hover strong { color: var(--accent); }
   font-size: 12.5px;
 }
 .connection-summary strong { color: var(--ink); }
+.connection-security {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--layout-gap);
+  padding: 0;
+  border-top: 3px solid var(--accent);
+}
+.connection-security::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: 280px;
+  height: 180px;
+  background: radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%);
+  pointer-events: none;
+}
+.connection-security-story {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px 18px;
+}
+.connection-security-story h2 { margin: 3px 0 5px; font-size: clamp(20px, 2.2vw, 28px); }
+.connection-security-story p { max-width: 720px; margin: 0; color: var(--muted); }
+.connection-security-story .button { flex: none; }
+.connection-security-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+}
+.connection-security-metrics > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 18px;
+  border-right: 1px solid var(--line);
+}
+.connection-security-metrics > div:last-child { border-right: 0; }
+.connection-security-metrics strong { font-size: 22px; line-height: 1; }
+.connection-security-metrics strong span { color: var(--muted); font-size: 13px; font-weight: 500; }
+.connection-security-metrics > div > span { font-size: 12px; font-weight: 650; }
+.connection-security-metrics small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+.connection-security-serious { border-top-color: var(--danger); }
+.connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
+.connection-security-advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+.connection-security-advanced > summary::-webkit-details-marker { display: none; }
+.connection-security-advanced > summary > span:first-child { display: grid; gap: 2px; }
+.connection-security-advanced > summary strong { font-size: 15px; }
+.connection-security-advanced > summary small { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.connection-security-advanced > summary::after {
+  content: "+";
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+.connection-security-advanced[open] > summary::after { content: "−"; }
+.connection-security-advanced > summary .count { margin-left: auto; }
+.connection-trust-path {
+  display: grid;
+  grid-template-columns: minmax(220px, .7fr) minmax(0, 2fr);
+  gap: 24px;
+  align-items: center;
+  padding: 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.connection-trust-path h3 { margin: 2px 0 5px; font-size: 15px; }
+.connection-trust-path p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.connection-trust-path ol {
+  display: flex;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.connection-trust-path li {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  flex: 1 0 118px;
+  min-height: 58px;
+  padding: 9px 18px 9px 12px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  background: var(--surface);
+}
+.connection-trust-path li:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.connection-trust-path li:last-child { border-right: 1px solid var(--line); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.connection-trust-path li::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%) rotate(45deg);
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+.connection-trust-path li:last-child::after { display: none; }
+.connection-trust-path li > span { color: var(--muted-2); font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.connection-trust-path li > strong { font-size: 11.5px; line-height: 1.25; }
+.connection-trust-path li.is-unknown { box-shadow: inset 0 3px 0 var(--muted-2); }
+.connection-trust-path li.is-attention { box-shadow: inset 0 3px 0 var(--danger); }
+.connection-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  background: var(--line);
+  gap: 1px;
+}
+.connection-control { min-width: 0; padding: 16px 18px; background: var(--surface); }
+.connection-control header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.connection-control h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .045em; color: var(--muted); }
+.connection-control > strong { display: block; margin-bottom: 5px; font-size: 14px; }
+.connection-control p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.connection-control > a { display: inline-block; margin-top: 9px; font-size: 12px; }
+.connection-control-good { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ok) 65%, transparent); }
+.connection-control-attention,
+.connection-control-serious { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 65%, transparent); }
 .connection-group { margin-bottom: var(--layout-gap); }
 .connection-group-head { align-items: flex-start; }
 .connection-group-head h2 { margin-bottom: 3px; }
@@ -2806,6 +2943,15 @@ textarea.code {
    than a short task, and at the shared width every row wrapped onto four
    lines. */
 .modal-wide { width: min(780px, calc(100vw - 32px)); }
+.modal-wide { overscroll-behavior: contain; }
+.modal-wide .modal-head {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  padding: 6px 0;
+  margin-top: -6px;
+  background: var(--surface);
+}
 
 .conn-badge { display: flex; align-items: center; gap: 8px; }
 .conn-dot {
@@ -2840,6 +2986,74 @@ textarea.code {
 .conn-headline { font-size: 16px; font-weight: 650; margin: 0; }
 .conn-sub { margin: 1px 0 0; color: var(--muted); font-size: 12.5px; }
 .conn-address { font-size: 13px; white-space: nowrap; }
+.conn-decision { display: grid; gap: 9px; }
+.conn-decision-head { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.conn-decision-head h3 { margin-bottom: 2px; }
+.conn-decision-head p { margin: 0; color: var(--muted); font-size: 11.5px; }
+.conn-decision-head > strong { color: var(--muted); font-size: 11.5px; font-weight: 550; white-space: nowrap; }
+.conn-decision ol {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  padding: 0 0 3px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.conn-decision li {
+  display: flex;
+  flex: 1 0 132px;
+  min-width: 0;
+}
+.conn-decision-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px;
+  align-items: center;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  background: var(--surface);
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-decoration: none;
+  width: 100%;
+}
+.conn-decision-step:hover { border-color: var(--accent); text-decoration: none; }
+.conn-decision-step-does-not { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: color-mix(in srgb, #f6e2e0 55%, var(--surface)); }
+.conn-decision-step-does-not .conn-tick { background: #f6e2e0; color: var(--danger); }
+.conn-related {
+  display: flex;
+  align-items: center;
+  gap: 7px 12px;
+  flex-wrap: wrap;
+  margin-top: -7px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.conn-related > span { color: var(--muted); }
+.conn-related a { font-weight: 600; }
+.conn-protocol { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.conn-protocol > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.conn-protocol > summary::-webkit-details-marker { display: none; }
+.conn-protocol > summary > span:first-child { display: grid; gap: 2px; }
+.conn-protocol > summary strong { font-size: 13px; }
+.conn-protocol > summary small { color: var(--muted); font-size: 11.5px; }
+.conn-protocol > summary::after { content: "+"; color: var(--muted); font-size: 18px; }
+.conn-protocol[open] > summary::after { content: "−"; }
+.conn-protocol > summary .count { margin-left: auto; }
+.conn-protocol-body { display: grid; gap: 20px; padding: 16px 14px; border-top: 1px solid var(--line); }
 
 /* Two columns of label/value pairs. A grid rather than a table so the labels
    share one width across both columns and the values line up with each other. */
@@ -2927,6 +3141,9 @@ textarea.code {
   .conn-verdict { flex-wrap: wrap; }
   .conn-address { width: 100%; }
   .conn-layer-evidence { display: none; }
+  .conn-decision-head { align-items: start; }
+  .conn-decision-head > strong { max-width: 130px; white-space: normal; text-align: right; }
+  .conn-related > span { flex-basis: 100%; }
   /* Value and kind on one line, the note beneath, rather than three columns
      that cannot each hold an IPv6 address. */
   .conn-row, .conn-hop { grid-template-columns: minmax(0, 1fr) max-content; }
@@ -3043,6 +3260,15 @@ textarea.code {
   .discovery-meta { justify-content: flex-start; max-width: 100%; }
   .connection-group-head { display: grid; gap: 10px; }
   .connection-group-actions { justify-content: flex-start; }
+  .connection-security-story { display: grid; padding: 17px 16px 15px; }
+  .connection-security-story .button { width: max-content; }
+  .connection-security-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .connection-security-metrics > div { padding: 12px 14px; }
+  .connection-security-metrics > div:nth-child(2) { border-right: 0; }
+  .connection-security-metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .connection-control-grid { grid-template-columns: 1fr; }
+  .connection-security-advanced > summary small { max-width: 260px; }
+  .connection-trust-path { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
 }
 
 /* ----- Provider readings ------------------------------------------------ */

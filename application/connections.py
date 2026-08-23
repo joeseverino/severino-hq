@@ -30,7 +30,7 @@ from .contracts import (
     DOTTED_NAME,
     EFFECTS,
     SCOPE_NAME,
-    endpoint_has_userinfo,
+    endpoint_has_private_parts,
 )
 from .security import AuthorizationError, Capability, Principal
 
@@ -477,9 +477,9 @@ def _validate_instance(
         raise ImproperlyConfigured(
             f"Connection {instance.id!r} has an invalid observation time."
         )
-    if instance.endpoint and endpoint_has_userinfo(instance.endpoint):
+    if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
         raise ImproperlyConfigured(
-            f"Connection {instance.id!r} endpoint contains credential userinfo."
+            f"Connection {instance.id!r} endpoint contains private URL parts."
         )
     if not isinstance(instance.controller_id, str) or (
         instance.controller_id

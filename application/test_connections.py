@@ -104,12 +104,23 @@ class RecordingTests(TestCase):
         self.assertEqual(ProviderConnection.objects.count(), 1)
 
     def test_a_credential_bearing_endpoint_is_never_stored(self):
-        with self.assertRaisesRegex(ValueError, "credential userinfo"):
+        with self.assertRaisesRegex(ValueError, "private URL parts"):
             sweep(
                 A_PORTAINER,
                 {
                     **A_DNS_TOKEN,
                     "endpoint": "https://operator:secret@example.test/api",
+                },
+            )
+
+        self.assertEqual(ProviderConnection.objects.count(), 0)
+
+    def test_a_query_string_never_enters_connection_inventory(self):
+        with self.assertRaisesRegex(ValueError, "private URL parts"):
+            sweep(
+                {
+                    **A_DNS_TOKEN,
+                    "endpoint": "https://api.example.test/v1?token=secret",
                 },
             )
 

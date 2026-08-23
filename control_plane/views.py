@@ -50,6 +50,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_catalog
+from application.connection_security import connection_security_posture
 from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
@@ -988,12 +989,9 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         groups = connection_catalog(principal=web_principal(self.request.user))
         context["connection_groups"] = groups
-        connections = [
-            connection
-            for group in groups
-            for connection in group.connections
-        ]
-        context["connection_count"] = len(connections)
+        posture = connection_security_posture(groups, request=self.request)
+        context["connection_posture"] = posture
+        context["connection_count"] = posture.connection_count
         core = next(
             (
                 group
@@ -1010,14 +1008,7 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         # The oldest of them, because the page's honesty depends on the staler
         # half: reporting the newest would describe a controller that is still
         # sweeping as though every row were current.
-        context["observed_at"] = min(
-            (
-                connection.instance.observed_at
-                for connection in connections
-                if connection.instance.observed_at is not None
-            ),
-            default=None,
-        )
+        context["observed_at"] = posture.oldest_observed_at
         return context
 
 

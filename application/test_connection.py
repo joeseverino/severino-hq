@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from control_plane.models import ProviderInventory
 
-from .connection import channel_of, connection, headers_of, hops_of
+from .connection import channel_for_request, channel_of, connection, headers_of, hops_of
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -72,6 +72,15 @@ class ChannelTests(TestCase):
     def test_deciding_the_channel_costs_no_queries(self):
         with self.assertNumQueries(0):
             channel_of(A_TAILNET_ADDRESS)
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8"])
+    def test_deciding_the_request_channel_also_costs_no_queries(self):
+        request = RequestFactory().get(
+            "/", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS
+        )
+
+        with self.assertNumQueries(0):
+            self.assertEqual(channel_for_request(request).id, "tailnet")
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -184,6 +193,32 @@ class IdentityTests(TestCase):
 
         self.assertFalse(connection(a_request(A_LAN_ADDRESS)).identity.corroborated)
 
+    @override_settings(
+        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
+    )
+    def test_a_configured_sso_provider_is_not_attributed_to_a_password_session(self):
+        request = a_request()
+        request.session = {
+            "_auth_user_backend": "django.contrib.auth.backends.ModelBackend"
+        }
+
+        identity = connection(request).identity
+
+        self.assertEqual(identity.route, "password")
+        self.assertEqual(identity.provider, "")
+
+    @override_settings(
+        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
+    )
+    def test_the_provider_that_signed_an_oidc_session_is_named(self):
+        request = a_request()
+        request.session = {"_auth_user_backend": "core.oidc.HQOIDCAuthenticationBackend"}
+
+        identity = connection(request).identity
+
+        self.assertEqual(identity.route, "single sign-on")
+        self.assertEqual(identity.provider, "identity.example.test")
+
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class LinkTests(TestCase):
@@ -242,6 +277,18 @@ class ConnectionPageTests(TestCase):
         response = self.client.get(reverse("connection"))
 
         self.assertContains(response, "data-connection-panel")
+        self.assertContains(response, "Admission decision")
+        self.assertContains(
+            response,
+            "data-connection-control",
+            count=len(response.context["connection"].layers),
+        )
+        self.assertContains(response, "Outbound authority")
+        self.assertContains(response, "Derived topology")
+        self.assertContains(response, "data-connection-protocol")
+        self.assertContains(response, "Open protocol evidence to read the response.")
+        self.assertNotContains(response, 'id="conn-decision-title"')
+        self.assertNotContains(response, 'id="connection-controls"')
 
 
 @override_settings(

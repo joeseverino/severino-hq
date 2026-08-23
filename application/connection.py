@@ -98,6 +98,13 @@ def channel_of(address: str) -> Channel:
     }.get(network_of(address), ELSEWHERE_CHANNEL)
 
 
+def channel_for_request(request) -> Channel:
+    """The caller channel after applying the trusted-proxy decision once."""
+
+    channel = channel_of(client_ip(request))
+    return OPAQUE_CHANNEL if _chain_is_all_proxies(request) else channel
+
+
 @dataclass(frozen=True)
 class Layer:
     """One thing that had to hold, and what HQ can point at to say it did.
@@ -235,14 +242,12 @@ def connection(request) -> Connection:
     """Everything HQ can say about the request in front of it."""
 
     address = client_ip(request)
-    channel = channel_of(address)
     # (see `_serving_device` for why the observer flag is not the answer)
     # A chain that never named the caller is its own answer, and a more useful
     # one than the class its last proxy happens to fall in. Reporting "local
     # network" here would describe the proxy and read as a fact about the
     # person, which is the one confusion this page exists to prevent.
-    if _chain_is_all_proxies(request):
-        channel = OPAQUE_CHANNEL
+    channel = channel_for_request(request)
     # One read of the sweep, answering every question asked of it below.
     known = tailnet.devices()
     device = tailnet.device_at(address, known)
@@ -283,6 +288,9 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
             expiry = session.get_expiry_date().isoformat()
         except (AttributeError, ValueError, TypeError):
             expiry = ""
+    signed_in_by = str(
+        (session or {}).get("_auth_user_backend", "") if session is not None else ""
+    )
     return Identity(
         username=getattr(user, "username", "") or "",
         email=getattr(user, "email", "") or "",
@@ -295,12 +303,12 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
         backends=backends,
         session_expires=expiry,
         tailnet_user=device.user if device else "",
-        signed_in_by=str(
-            (session or {}).get("_auth_user_backend", "") if session is not None else ""
-        ),
+        signed_in_by=signed_in_by,
         # Who vouched for the person, taken from the endpoint HQ actually sends
-        # them to rather than from a name written down beside it.
-        provider=_provider_host(),
+        # them to rather than from a name written down beside it. A configured
+        # provider did not vouch for a password session, so it must not appear
+        # beside that session as though it did.
+        provider=_provider_host() if "OIDC" in signed_in_by else "",
         groups=tuple(
             getattr(user, "groups", None).values_list("name", flat=True)
             if getattr(user, "pk", None)

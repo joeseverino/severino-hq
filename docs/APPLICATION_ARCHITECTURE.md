@@ -169,7 +169,12 @@ machine list adapters do, after authorization. A plugin can therefore add an
 integration without adding host templates or adapter registrations, while a
 search keystroke can never trigger provider I/O. Runtime instances deliberately
 have no secret field and relationship links are restricted to local or HTTP(S)
-destinations.
+destinations. Endpoint metadata is display-only: URL userinfo, query strings,
+and fragments are rejected both when controller inventory enters HQ and when a
+plugin instance leaves its provider. The Connections security posture is a
+query-free projection over that already-authorized catalog and the current
+request; it does not perform a second sweep or claim to attest the external
+router and firewall boundary that the process cannot observe.
 
 The web Command Center is another projection of those three registries, not a
 fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a

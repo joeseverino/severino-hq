@@ -224,10 +224,12 @@ provider is invoked only after authorization and must read local state: it must
 not make a network request merely because a user opened discovery. Instances
 may expose status, safe endpoint text, granted scope names, targets,
 dependencies, and small facts, but never tokens, credentials, authorization
-headers, secret values, or endpoint URL userinfo. `observed_at` is a Python
-`datetime` and serializes as ISO 8601. Links accept only local paths and
-explicit HTTP(S) URLs. Import these contracts and `describe_connections` from
-`hq_sdk.connections`; the mutable registry
+headers, secret values, or private endpoint URL parts. An endpoint is
+display-only metadata, so URL userinfo, query strings, and fragments are all
+rejected rather than filtered by a fallible list of secret parameter names.
+`observed_at` is a Python `datetime` and serializes as ISO 8601. Links accept
+only local paths and explicit HTTP(S) URLs. Import these contracts and
+`describe_connections` from `hq_sdk.connections`; the mutable registry
 and raw provider inventory are deliberately host-only.
 
 Those same instances join the derived topology automatically. An ability's

@@ -353,7 +353,22 @@ class ConnectionRegistrationTests(TestCase):
             mock.patch(
                 "application.plugins.plugin_connection_specs", return_value=(spec,)
             ),
-            self.assertRaisesRegex(ImproperlyConfigured, "credential userinfo"),
+            self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
+        ):
+            list_connections(principal=FINANCE)
+
+    def test_endpoint_queries_fail_closed_before_any_adapter_can_render_them(self):
+        spec = _finance_spec()
+        instance = replace(
+            spec.instance_provider()[0],
+            endpoint="https://api.example.test/link?access_token=secret",
+        )
+        spec = replace(spec, instance_provider=lambda: (instance,))
+        with (
+            mock.patch(
+                "application.plugins.plugin_connection_specs", return_value=(spec,)
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
         ):
             list_connections(principal=FINANCE)
 
@@ -414,6 +429,9 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Sync transactions")
         self.assertContains(response, "Needs scope")
         self.assertContains(response, "Secrets in Plaid")
+        self.assertContains(response, "Security posture")
+        self.assertContains(response, "Security controls and proof")
+        self.assertContains(response, "External edge")
 
     def test_a_plugin_unclassified_kind_does_not_trigger_controller_prose(self):
         spec = _finance_spec()

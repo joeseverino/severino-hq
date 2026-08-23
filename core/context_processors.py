@@ -115,13 +115,13 @@ def auth_config(request):
 def connection(request):
     """Which network this request came over, for the header badge.
 
-    Arithmetic on one address and nothing else -- no query, no settings read,
-    no inventory. The badge is on every page, so anything it costs is a cost
-    every page pays; the panel behind it does the expensive part, and only when
-    somebody opens it.
+    Address arithmetic and the configured proxy ranges only -- no query and no
+    inventory. The badge is on every page, so anything it costs is a cost every
+    page pays; the panel behind it does the expensive part, and only when
+    somebody opens it. Applying the proxy rule here keeps an opaque chain from
+    being mislabeled as a local caller before the panel opens.
     """
 
-    from application.connection import channel_of
-    from core.network import client_ip
+    from application.connection import channel_for_request
 
-    return {"CONNECTION_CHANNEL": channel_of(client_ip(request))}
+    return {"CONNECTION_CHANNEL": channel_for_request(request)}

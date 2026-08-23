@@ -32,12 +32,24 @@ def route_url(route: str) -> str:
         return ""
 
 
-def endpoint_has_userinfo(endpoint: str) -> bool:
-    """Whether an endpoint contains credential-like URL authority fields."""
+def endpoint_has_private_parts(endpoint: str) -> bool:
+    """Whether display metadata carries a URL part that may contain a secret.
+
+    Connection endpoints are identifiers, not request URLs. Query strings and
+    fragments have no place in that contract and are common places for tokens,
+    signatures and one-time credentials to hide. Rejecting the entire part is
+    deterministic and safer than maintaining a list of parameter names that a
+    provider can accidentally outgrow.
+    """
 
     candidate = endpoint if "://" in endpoint else f"//{endpoint}"
     try:
         parsed = urlsplit(candidate)
     except ValueError:
         return True
-    return parsed.username is not None or parsed.password is not None
+    return bool(
+        parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    )
