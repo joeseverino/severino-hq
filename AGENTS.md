@@ -152,12 +152,22 @@ Tests answer "does this behave?". They do not answer "is this still one system?"
 are graph questions, so ask a graph. With the repository indexed in a code
 knowledge graph, four queries carry the bar:
 
+Write the query exactly as given. `is_test` is **not** reliable here — test
+classes carry `is_test: false` — so every one of these excludes tests by
+*path*. Filtering on `is_test` silently counts the test suite and yields a
+number that looks like a regression and is not.
+
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `SIMILAR_TO` pairs, excluding tests | does not grow (currently 7) |
-| Did a function get away from me? | `cognitive >= 22`, excluding tests | no new entries (currently 11) |
-| Hidden O(n²)? | `linear_scan_in_loop >= 1` | 0 |
-| Did I tangle the call graph? | circular `CALLS` (SCC > 1) | no new *confirmed* cycle |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) WHERE NOT a.file_path CONTAINS "test" AND NOT b.file_path CONTAINS "test" RETURN count(r)` | does not grow (currently 9) |
+| Did a function get away from me? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.cognitive >= 22 AND NOT f.file_path CONTAINS "test" AND NOT f.file_path CONTAINS "migrations" RETURN count(f)` | no new entries (currently 7) |
+| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 AND NOT f.file_path CONTAINS "test" RETURN f.qualified_name` | 3, all pre-existing |
+| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | 2, both confirmed false positives |
+
+The two standing cycles resolve `.get()` on a dict to a class method named
+`get`; read the function before believing a third. The three standing
+`linear_scan_in_loop` hits are `plugins._validate_composition`,
+`search._fallback_snippet` and `services._faults`.
 
 Re-index after a change and re-run them; a number that moved the wrong way is a
 finding whether or not the suite is green.

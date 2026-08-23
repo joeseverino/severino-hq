@@ -284,6 +284,62 @@ def resources(request, version: int):
     )
 
 
+def _projection(serve, filter_name: str, name: str, doc: str):
+    """One principal-scoped projection, served with its single narrowing filter.
+
+    `topology` and `findings` are the same adapter: authorize, read one query
+    parameter, hand both to the application layer, and turn a refusal into a
+    403. Written out twice they were flagged as duplicates, which was the graph
+    noticing something true -- an adapter that adds no behaviour of its own
+    should not be copied once per projection.
+
+    An unrecognized filter value is the application's business, not the
+    transport's: both projections answer it by returning everything and saying
+    which filter they applied, so a client can tell "matched nothing" from
+    "never applied".
+    """
+
+    def view(request, version: int):
+        try:
+            return _ok(
+                serve(
+                    principal=request.principal,
+                    **{filter_name: request.GET.get(filter_name, "").strip()},
+                )
+            )
+        except AuthorizationError as exc:
+            return _fail(exc.reason, code=exc.code, status=403)
+
+    # Named explicitly: `_endpoint` copies these onto its wrapper, and the
+    # route-walking security test reads them.
+    view.__name__ = name
+    view.__doc__ = doc
+    return _endpoint(("GET",))(view)
+
+
+topology = _projection(
+    application_topology,
+    "lens",
+    "topology",
+    """The live permitted infrastructure graph and its canonical actions.
+
+    `?lens=` narrows the projection to one declared standing question.
+    """,
+)
+
+findings = _projection(
+    application_findings,
+    "rule",
+    "findings",
+    """What HQ currently claims is wrong, with the evidence and a remedy.
+
+    Derived from the same projection as the topology and narrowed the same way,
+    so a finding can never name something the token could not already read. A
+    remedy is a reference to an existing capability, never a new route.
+    """,
+)
+
+
 @_endpoint(("GET",))
 def connections(request, version: int):
     """Connection contracts plus the safe state this token may inspect."""
@@ -298,41 +354,6 @@ def connections(request, version: int):
             "groups": state["groups"],
         }
     )
-
-
-@_endpoint(("GET",))
-def findings(request, version: int):
-    """What HQ currently claims is wrong, with the evidence and a remedy.
-
-    Derived from the same projection as the topology and narrowed the same way,
-    so a finding can never name something the token could not already read. A
-    remedy is a reference to a capability, not a route.
-    """
-
-    try:
-        return _ok(
-            application_findings(
-                principal=request.principal,
-                rule=request.GET.get("rule", "").strip(),
-            )
-        )
-    except AuthorizationError as exc:
-        return _fail(exc.reason, code=exc.code, status=403)
-
-
-@_endpoint(("GET",))
-def topology(request, version: int):
-    """The live permitted infrastructure graph and its canonical actions."""
-
-    try:
-        return _ok(
-            application_topology(
-                principal=request.principal,
-                lens=request.GET.get("lens", "").strip(),
-            )
-        )
-    except AuthorizationError as exc:
-        return _fail(exc.reason, code=exc.code, status=403)
 
 
 def _resource_failure(exc: Exception) -> HttpResponse:
