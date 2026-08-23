@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase
@@ -158,6 +159,40 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("describe_resources"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("list_resource"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_resource"))
+
+    def test_connections_are_discoverable_without_credential_material(self):
+        described = services.describe_connections()
+        listed = services.list_connections()
+
+        self.assertIn(
+            "infrastructure.controllers",
+            [item["name"] for item in described["connections"]],
+        )
+        self.assertTrue(listed["ok"])
+        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_connections"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("list_connections"))
+
+    def test_connection_state_is_filtered_by_the_mcp_principal(self):
+        from application.connections import ConnectionSpec
+        from application.security import Capability
+
+        provider = mock.Mock(return_value=())
+        spec = ConnectionSpec(
+            "example.infrastructure",
+            "Infrastructure authority",
+            "Requires infrastructure management.",
+            Capability.MANAGE_INFRASTRUCTURE,
+            provider,
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            listed = services.list_connections()
+
+        self.assertNotIn(
+            "example.infrastructure", [group["name"] for group in listed["groups"]]
+        )
+        provider.assert_not_called()
 
 
 class MCPBoundaryTests(TestCase):

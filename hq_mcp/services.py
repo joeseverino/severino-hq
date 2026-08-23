@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from application.dashboard import operating_snapshot
+from application.connections import (
+    describe_connections as describe_application_connections,
+)
+from application.connections import list_connections as list_application_connections
 from application.capabilities import (
     describe_capabilities as describe_application_capabilities,
 )
@@ -60,6 +64,18 @@ def describe_resources() -> dict[str, Any]:
     """Describe every readable HQ resource and its supported operations."""
 
     return describe_application_resources()
+
+
+def describe_connections() -> dict[str, Any]:
+    """Describe installed connection families, abilities, scopes, and routes."""
+
+    return describe_application_connections()
+
+
+def list_connections() -> dict[str, Any]:
+    """List safe cached connection state available to the MCP principal."""
+
+    return list_application_connections(principal=mcp_principal())
 
 
 def list_resource(

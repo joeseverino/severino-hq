@@ -27,6 +27,7 @@ from application.capabilities import (
     describe_capabilities,
     execute_capability,
 )
+from application.connections import describe_connections, list_connections
 from application.security import AuthorizationError
 from application.resources import (
     InvalidResourceInput,
@@ -88,6 +89,20 @@ def _json(payload: dict[str, Any], *, status: int = 200) -> HttpResponse:
 
 def _ok(data: Any, *, status: int = 200) -> HttpResponse:
     return _json({"ok": True, "data": data}, status=status)
+
+
+def _permission_catalog(
+    specs: list[dict[str, Any]], held: set[str] | frozenset[str]
+) -> list[dict]:
+    """Annotate static registry entries without duplicating adapter policy."""
+
+    return [
+        {
+            **spec,
+            "permitted": set(spec["required_capabilities"]) <= held,
+        }
+        for spec in specs
+    ]
 
 
 def _fail(message: str, *, code: str, status: int, details: Any = None) -> HttpResponse:
@@ -208,6 +223,7 @@ def root(request, version: int):
     links = {"capabilities": f"/api/v{version}/capabilities/"}
     if version >= 2:
         links["resources"] = f"/api/v{version}/resources/"
+        links["connections"] = f"/api/v{version}/connections/"
     return _ok(
         {
             "service": "severino-hq",
@@ -259,13 +275,23 @@ def resources(request, version: int):
     return _ok(
         {
             "schema_version": described["schema_version"],
-            "resources": [
-                {
-                    **spec,
-                    "permitted": set(spec["required_capabilities"]) <= held,
-                }
-                for spec in described["resources"]
-            ],
+            "resources": _permission_catalog(described["resources"], held),
+        }
+    )
+
+
+@_endpoint(("GET",))
+def connections(request, version: int):
+    """Connection contracts plus the safe state this token may inspect."""
+
+    described = describe_connections()
+    held = granted(request.token_claims)
+    state = list_connections(principal=request.principal)
+    return _ok(
+        {
+            "schema_version": described["schema_version"],
+            "connections": _permission_catalog(described["connections"], held),
+            "groups": state["groups"],
         }
     )
 

@@ -322,8 +322,11 @@ class SearchView(LoginRequiredMixin, TemplateView):
             total=total,
             discovered_resources=discovery["resources"],
             discovered_commands=discovery["commands"],
+            discovered_connections=discovery["connections"],
             discovery_total=(
-                len(discovery["resources"]) + len(discovery["commands"])
+                len(discovery["resources"])
+                + len(discovery["commands"])
+                + len(discovery["connections"])
             ),
         )
         return ctx

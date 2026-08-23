@@ -4,44 +4,23 @@
 <div class="page-head">
   <div>
     <h1>Command Center</h1>
-    <p class="page-lede">Find any record, open any resource, and discover every operation HQ can perform.</p>
+    <p class="page-lede">Find any record, resource, connection, or operation HQ can perform.</p>
   </div>
 </div>
 
 <form class="filter-bar search-page-form" method="get" data-table-toolbar>
-  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, and commands…" autofocus>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" autofocus>
   <button type="submit">Find</button>
 </form>
 
 <div data-search-results>
   <div class="command-center-grid">
+    {% if not q or discovered_connections %}
+    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections empty_message="No connections are declared yet." %}
+    {% endif %}
+
     {% if not q or discovered_resources %}
-    <section class="card discovery-group">
-      <div class="section-head">
-        <h2>Resources</h2>
-        <span class="count">{{ discovered_resources|length }}</span>
-      </div>
-      {% if discovered_resources %}
-      <ul class="discovery-list">
-        {% for item in discovered_resources %}
-        <li>
-          {% if item.url %}<a class="discovery-link" href="{{ item.url }}">{% else %}<div class="discovery-link">{% endif %}
-            <span class="discovery-main">
-              <strong>{{ item.label }}</strong>
-              <span class="muted">{{ item.summary }}</span>
-            </span>
-            <span class="discovery-meta">
-              <code>{{ item.name }}</code>
-              {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
-            </span>
-          {% if item.url %}</a>{% else %}</div>{% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">No resources match this query.</p>
-      {% endif %}
-    </section>
+    {% include "partials/_discovery_catalog.html" with title="Resources" items=discovered_resources empty_message="No resources match this query." %}
     {% endif %}
 
     {% if not q or discovered_commands %}

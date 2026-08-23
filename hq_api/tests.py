@@ -196,6 +196,55 @@ class CompositionCheckTests(SimpleTestCase):
 
         self.assertEqual([error.id for error in errors], ["hq_api.E003"])
 
+    def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
+        from application.connections import ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            web_route="missing:connections",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E006"])
+
+    def test_a_connection_ability_cannot_name_an_unknown_capability(self):
+        from application.connections import ConnectionAbility, ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            abilities=(
+                ConnectionAbility(
+                    "transactions.sync",
+                    "Sync transactions",
+                    "Refresh transaction history.",
+                    capability="example.transactions.sync",
+                ),
+            ),
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E007"])
+
 
 @override_settings(
     OIDC_ISSUER=ISSUER,
@@ -443,6 +492,7 @@ class TransportTests(TestCase):
         self.assertEqual(data["resource"], RESOURCE)
         self.assertEqual(data["api_version"], 2)
         self.assertEqual(data["links"]["resources"], "/api/v2/resources/")
+        self.assertEqual(data["links"]["connections"], "/api/v2/connections/")
 
     def test_v1_does_not_advertise_a_v2_only_resource_route(self):
         with _serving():
@@ -502,6 +552,65 @@ class TransportTests(TestCase):
         self.assertFalse(audit["permitted"])
         self.assertIn("query_schema", projects["operations"]["list"])
         self.assertEqual(projects["web_route"], "projects:list")
+
+    def test_connections_expose_abilities_and_safe_cached_state(self):
+        from django.utils import timezone
+        from control_plane.models import ProviderConnection
+
+        ProviderConnection.objects.create(
+            connection_ref="api-cloudflare",
+            controller_id="controller",
+            provider="cloudflare_dns",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        with _serving():
+            response = self.client.get(
+                "/api/v2/connections/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        core = next(
+            item
+            for item in data["connections"]
+            if item["name"] == "infrastructure.controllers"
+        )
+        state = next(
+            item
+            for group in data["groups"]
+            for item in group["instances"]
+            if item["id"] == "controller:api-cloudflare"
+        )
+        self.assertTrue(core["permitted"])
+        self.assertIn("cloudflare.dns_record", {
+            ability["name"] for ability in state["abilities"]
+        })
+        self.assertNotIn("token", state)
+
+    def test_connections_never_invoke_a_family_the_token_cannot_read(self):
+        with (
+            _serving(),
+            patch("application.connections._controller_instances") as provider,
+        ):
+            response = self.client.get(
+                "/api/v2/connections/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        core = next(
+            item
+            for item in data["connections"]
+            if item["name"] == "infrastructure.controllers"
+        )
+        self.assertFalse(core["permitted"])
+        self.assertEqual(data["groups"], [])
+        provider.assert_not_called()
 
     def test_resource_list_and_detail_share_the_declared_contract(self):
         from projects.models import Project

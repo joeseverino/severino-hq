@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 import json
 import os
 from pathlib import Path
@@ -318,6 +318,27 @@ class PluginContractTests(TestCase):
             ImproperlyConfigured, "invalid health_provider"
         ):
             installed_plugins()
+
+    def test_invalid_connection_provider_reference_fails_at_startup(self):
+        env, importer = self.load(
+            replace(VALID, connection_provider="not a module reference")
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "invalid connection_provider"
+        ):
+            installed_plugins()
+
+    def test_new_manifest_fields_append_to_the_positional_contract(self):
+        legacy_fields = [
+            field.name
+            for field in fields(PluginManifest)
+            if field.name != "connection_provider"
+        ]
+
+        rebuilt = PluginManifest(*(getattr(VALID, name) for name in legacy_fields))
+
+        self.assertEqual(rebuilt, VALID)
+        self.assertEqual(fields(PluginManifest)[-1].name, "connection_provider")
 
     def test_malformed_url_prefix_fails_at_startup(self):
         env, importer = self.load(

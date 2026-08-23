@@ -28,6 +28,7 @@ plugin = PluginManifest(
     overview_provider="example_notes.projections:domain_overview",
     capability_provider="example_notes.capabilities:specs",
     resource_provider="example_notes.resources:specs",
+    connection_provider="example_notes.connections:specs",
     health_provider="example_notes.health:ready",
     token_authenticated_routes=("api/v1/",),
     operator_capabilities=("notes.read", "notes.write"),
@@ -213,6 +214,21 @@ then connects the operation to its domain in both machine discovery and the
 operator UI, without a second plugin-owned menu or command inventory. Plugins
 use the authorized `list_resource` and `get_resource` SDK functions for reads;
 the host's raw registry and handler callables are intentionally not exported.
+
+Connection providers complete the same declaration chain for external systems.
+Each `ConnectionSpec` names a family, its abilities and provider scopes, the
+capability needed to inspect it, and a zero-argument provider of cached
+`ConnectionInstance` observations. HQ derives the Connections workspace,
+Command Center entry, HTTP catalog, and MCP tools from that one spec. The
+provider is invoked only after authorization and must read local state: it must
+not make a network request merely because a user opened discovery. Instances
+may expose status, safe endpoint text, granted scope names, targets,
+dependencies, and small facts, but never tokens, credentials, authorization
+headers, secret values, or endpoint URL userinfo. `observed_at` is a Python
+`datetime` and serializes as ISO 8601. Links accept only local paths and
+explicit HTTP(S) URLs. Import these contracts and `describe_connections` from
+`hq_sdk.connections`; the mutable registry
+and raw provider inventory are deliberately host-only.
 
 ## Shared UI contract
 

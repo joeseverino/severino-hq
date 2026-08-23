@@ -77,7 +77,9 @@ class ResourceExecutionTests(TestCase):
     def test_command_center_omits_things_the_principal_cannot_use(self):
         outcome = command_center("", principal=NONE)
 
-        self.assertEqual(outcome, {"resources": (), "commands": ()})
+        self.assertEqual(
+            outcome, {"resources": (), "commands": (), "connections": ()}
+        )
 
     def test_unknown_filters_are_rejected_before_the_handler(self):
         with self.assertRaises(InvalidResourceInput):

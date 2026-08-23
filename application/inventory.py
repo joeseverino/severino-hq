@@ -34,6 +34,8 @@ from control_plane.models import (
 )
 from control_plane.providers import PROVIDERS, service_facets
 
+from .contracts import endpoint_has_userinfo
+
 from .security import Capability, Principal
 
 
@@ -272,12 +274,17 @@ def record_connections(
         connection_ref = str(connection.get("connection_ref", "")).strip()
         if not connection_ref:
             continue
+        endpoint = str(connection.get("endpoint", ""))[:500]
+        if endpoint and endpoint_has_userinfo(endpoint):
+            raise ValueError(
+                f"Connection {connection_ref!r} endpoint contains credential userinfo."
+            )
         ProviderConnection.objects.update_or_create(
             controller_id=controller_id,
             connection_ref=connection_ref,
             defaults={
                 "provider": str(connection.get("provider", ""))[:64],
-                "endpoint": str(connection.get("endpoint", ""))[:500],
+                "endpoint": endpoint,
                 "reaches": [
                     str(name) for name in connection.get("reaches") or [] if name
                 ],

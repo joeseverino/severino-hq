@@ -103,26 +103,20 @@ class RecordingTests(TestCase):
 
         self.assertEqual(ProviderConnection.objects.count(), 1)
 
+    def test_a_credential_bearing_endpoint_is_never_stored(self):
+        with self.assertRaisesRegex(ValueError, "credential userinfo"):
+            sweep(
+                A_PORTAINER,
+                {
+                    **A_DNS_TOKEN,
+                    "endpoint": "https://operator:secret@example.test/api",
+                },
+            )
+
+        self.assertEqual(ProviderConnection.objects.count(), 0)
+
 
 class DerivationTests(TestCase):
-    def test_what_a_connection_is_for_comes_from_the_providers(self):
-        """Not stored, so a provider added tomorrow lists itself here.
-
-        The alternative is a table of "portainer means container stacks" kept
-        beside the providers that already say so.
-        """
-
-        sweep(A_PORTAINER)
-
-        self.assertEqual(
-            connection_readings()[0].supplies, ("Container", "Container stack")
-        )
-
-    def test_an_unclassified_connection_claims_nothing(self):
-        sweep({**A_PORTAINER, "provider": ""})
-
-        self.assertEqual(connection_readings()[0].supplies, ())
-
     def test_every_provider_names_connections_the_controller_can_report(self):
         """No provider asks for a kind of connection that cannot exist.
 
@@ -243,6 +237,23 @@ class ConnectionPageTests(TestCase):
 
         self.assertContains(response, "Not yet classified")
         self.assertContains(response, "a-portainer")
+
+    def test_the_workspace_query_cost_does_not_grow_with_connections(self):
+        with self.assertNumQueries(12):
+            self.client.get(reverse("control_plane:connections"))
+
+        sweep(
+            *(
+                {
+                    **A_PORTAINER,
+                    "connection_ref": f"portainer-{index}",
+                    "reaches": [f"host-{index}"],
+                }
+                for index in range(20)
+            )
+        )
+        with self.assertNumQueries(12):
+            self.client.get(reverse("control_plane:connections"))
 
 
 class OfferTests(TestCase):

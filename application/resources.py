@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import inspect
-import re
 from typing import Any, Callable
 
 from django.core.exceptions import ImproperlyConfigured
@@ -19,11 +18,12 @@ from projects.models import Project
 from receipts.models import Receipt
 
 from . import assets, infrastructure, projects, read_models, services
+from .contracts import DJANGO_ROUTE, DOTTED_NAME
 from .plugins import plugin_resource_specs, plugin_search_definitions
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
 
-RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
+RESOURCE_NAME = DOTTED_NAME
 
 
 class ResourceQuery(BaseModel):
@@ -316,9 +316,7 @@ def _validate_search_contract(spec: ResourceSpec) -> None:
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} search scope must use the same name."
         )
-    if spec.web_route and not re.fullmatch(
-        r"(?:[A-Za-z_][\w]*:)*[A-Za-z_][\w]*", spec.web_route
-    ):
+    if spec.web_route and not DJANGO_ROUTE.fullmatch(spec.web_route):
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} has invalid web route {spec.web_route!r}."
         )

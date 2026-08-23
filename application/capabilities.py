@@ -7,7 +7,6 @@ import dataclasses
 from dataclasses import dataclass
 from functools import cache
 import inspect
-import re
 from typing import Any, Callable
 
 from django.core.exceptions import ImproperlyConfigured
@@ -16,6 +15,7 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
+from .contracts import DOTTED_NAME, EFFECTS
 from .deletion import (
     DeleteCommand,
     delete_asset,
@@ -46,10 +46,8 @@ from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 from .plugins import plugin_capability_specs
 
-CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
-CAPABILITY_EFFECTS = frozenset(
-    {"read", "remote_write", "destructive", "infrastructure_change"}
-)
+CAPABILITY_NAME = DOTTED_NAME
+CAPABILITY_EFFECTS = EFFECTS
 
 
 @dataclass(frozen=True)

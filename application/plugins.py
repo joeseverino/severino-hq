@@ -75,6 +75,9 @@ class PluginManifest:
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
+    # Appended so positional manifests built against earlier SDKs cannot have a
+    # later optional value silently rebound to a new field.
+    connection_provider: str = ""
 
 
 def _import(spec: str) -> Any:
@@ -155,6 +158,7 @@ def _validate_providers(manifest: PluginManifest) -> None:
         "attention_provider",
         "capability_provider",
         "resource_provider",
+        "connection_provider",
         "search_provider",
         "health_provider",
     ):
@@ -530,6 +534,10 @@ def plugin_capability_specs() -> tuple[Any, ...]:
 
 def plugin_resource_specs() -> tuple[Any, ...]:
     return _provided("resource_provider")
+
+
+def plugin_connection_specs() -> tuple[Any, ...]:
+    return _provided("connection_provider")
 
 
 def plugin_search_definitions() -> tuple[Any, ...]:

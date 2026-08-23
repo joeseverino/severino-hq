@@ -148,11 +148,21 @@ derives its core definitions from the same specs. Plugin resource names and
 search scopes are collision-checked at composition startup, and handler
 signatures are checked before the first request.
 
-The web Command Center is another projection of those two registries, not a
-third inventory. Its resource links come from `ResourceSpec.web_route`, and a
+External access uses the third declarative registry, `ConnectionSpec`. It says
+which family exists, what abilities and provider scopes it can carry, which
+principal may inspect it, and how to read locally cached instances. Static
+discovery never invokes instance providers; the Connections workspace and
+machine list adapters do, after authorization. A plugin can therefore add an
+integration without adding host templates or adapter registrations, while a
+search keystroke can never trigger provider I/O. Runtime instances deliberately
+have no secret field and relationship links are restricted to local or HTTP(S)
+destinations.
+
+The web Command Center is another projection of those three registries, not a
+fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a
 `CapabilitySpec.subject_resource` connects each operation to the domain it acts
-on. The same query filters resources and commands while global search supplies
-live record hits. A plugin that contributes either spec therefore appears in
+on. The same query filters resources, commands, and connection families while
+global search supplies live record hits. A plugin that contributes any spec appears in
 the operator's discovery surface without a host edit. Cross-registry references
 and reversible web routes are composition checks, not work repeated in the
 API/MCP execution path.
@@ -175,7 +185,7 @@ everything would make the system less honest, not more unified.
 | Authored documentation | Obsidian vault | Validated metadata, relationships, and vault pointers |
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
-| Which connections exist, and what each reaches | 1Password, read by the controller | A timestamped report — never the credential, never a second list |
+| Which connections exist, what they permit, and what each reaches | Owning provider or 1Password/controller | A typed, timestamped `ConnectionInstance` — never the credential, never a second list |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Which machines exist, and what reaches them | Sweeps, plus a declaration for what nothing sweeps | Derived first; declared only where nothing can observe |

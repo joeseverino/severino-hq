@@ -22,6 +22,7 @@ urlpatterns = [
     path("v2/", views.root, {"version": 2}, name="root"),
     path("v2/capabilities/", views.capabilities, {"version": 2}, name="capabilities"),
     path("v2/resources/", views.resources, {"version": 2}, name="resources"),
+    path("v2/connections/", views.connections, {"version": 2}, name="connections"),
     path(
         "v2/resources/<str:name>/",
         views.resource_list,

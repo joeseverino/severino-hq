@@ -341,6 +341,7 @@ class SearchPageTests(_AuthedTestCase):
         content = response.content.decode()
         self.assertContains(response, "Command Center")
         self.assertIn("project.create", content)
+        self.assertIn("infrastructure.controllers", content)
         self.assertIn('href="/projects/"', content)
         self.assertContains(response, "Open Projects")
 

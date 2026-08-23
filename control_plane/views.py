@@ -46,7 +46,7 @@ from application.certificates import (
     UploadCertificateCommand,
     store_certificate,
 )
-from application.connections import connection_readings
+from application.connections import connection_catalog
 from application.machines import container_context, machine, machine_catalog
 from application.services import machine_link
 from application.naming import name_context
@@ -977,20 +977,37 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        readings = connection_readings()
-        context["connections"] = readings
-        context["unlabelled"] = [item for item in readings if not item.provider]
+        groups = connection_catalog(principal=web_principal(self.request.user))
+        context["connection_groups"] = groups
+        connections = [
+            connection
+            for group in groups
+            for connection in group.connections
+        ]
+        context["connection_count"] = len(connections)
+        core = next(
+            (
+                group
+                for group in groups
+                if group.spec.name == "infrastructure.controllers"
+            ),
+            None,
+        )
+        context["unlabelled"] = [
+            connection
+            for connection in (core.connections if core else ())
+            if connection.instance.kind == "unclassified"
+        ]
         # The oldest of them, because the page's honesty depends on the staler
         # half: reporting the newest would describe a controller that is still
         # sweeping as though every row were current.
         context["observed_at"] = min(
-            (item.observed_at for item in readings), default=None
-        )
-        # Which controller reported a connection only matters once there are
-        # two. Printed unconditionally it repeated one machine's name under
-        # every row, which on a phone was a third of the page saying nothing.
-        context["name_the_controller"] = (
-            len({item.controller_id for item in readings}) > 1
+            (
+                connection.instance.observed_at
+                for connection in connections
+                if connection.instance.observed_at is not None
+            ),
+            default=None,
         )
         return context
 

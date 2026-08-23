@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from django.urls import NoReverseMatch, reverse
 
 from .capabilities import capability_specs
+from .connections import connection_specs
 from .resources import ResourceSpec, resource_specs
 from .security import AuthorizationError, Capability, Principal
 
@@ -39,20 +40,28 @@ def _matches(item: DiscoveryItem, query: str) -> bool:
     return all(term in haystack for term in terms)
 
 
-def _resource_url(spec: ResourceSpec) -> str:
-    if not spec.web_route:
+def _route_url(route: str) -> str:
+    if not route:
         return ""
     try:
-        return reverse(spec.web_route)
+        return reverse(route)
     except NoReverseMatch:
         # The system check reports the broken plugin contract at startup. Keep
         # discovery usable if checks were skipped by an unusual process.
         return ""
 
 
+def _resource_url(spec: ResourceSpec) -> str:
+    return _route_url(spec.web_route)
+
+
 def _command_label(name: str) -> str:
     words = name.replace(".", " ").replace("_", " ").split()
     return " ".join(word.upper() if len(word) <= 3 else word.title() for word in words)
+
+
+def _ability_count(count: int) -> str:
+    return f"{count} {'ability' if count == 1 else 'abilities'}"
 
 
 def command_center(query: str, *, principal: Principal) -> dict:
@@ -102,7 +111,24 @@ def command_center(query: str, *, principal: Principal) -> dict:
         for spec in capability_specs()
         if _permitted(spec.required_capabilities, principal)
     )
+    connections = tuple(
+        DiscoveryItem(
+            kind="connection",
+            name=spec.name,
+            label=spec.label,
+            summary=spec.summary,
+            url=_route_url(spec.web_route),
+            destination_label="",
+            badges=(
+                _ability_count(len(spec.abilities)),
+                *((spec.secret_store,) if spec.secret_store else ()),
+            ),
+        )
+        for spec in connection_specs()
+        if _permitted(spec.required_capabilities, principal)
+    )
     return {
         "resources": tuple(item for item in resources if _matches(item, query)),
         "commands": tuple(item for item in commands if _matches(item, query)),
+        "connections": tuple(item for item in connections if _matches(item, query)),
     }
