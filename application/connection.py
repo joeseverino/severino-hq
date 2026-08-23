@@ -23,6 +23,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone as utc
 from django.conf import settings
 
+from functools import cache
+import socket
+
 from core.network import client_ip, split_host_port
 
 from . import tailnet
@@ -233,6 +236,7 @@ def connection(request) -> Connection:
 
     address = client_ip(request)
     channel = channel_of(address)
+    # (see `_serving_device` for why the observer flag is not the answer)
     # A chain that never named the caller is its own answer, and a more useful
     # one than the class its last proxy happens to fall in. Reporting "local
     # network" here would describe the proxy and read as a fact about the
@@ -242,11 +246,11 @@ def connection(request) -> Connection:
     # One read of the sweep, answering every question asked of it below.
     known = tailnet.devices()
     device = tailnet.device_at(address, known)
-    serves = tailnet.observer(known)
     identity = _identity(request, device)
     from .infrastructure import declared_machines
 
     declared = declared_machines()
+    serves = _serving_device(known, declared)
     return Connection(
         address=address,
         channel=channel,
@@ -405,6 +409,9 @@ def _policy_layer(
     if device is None or serves is None:
         return None
     port = _port_of(request)
+    # Names for the lookup, labels for the sentence: the policy is keyed on the
+    # node's registered name, but a person reads the MagicDNS label, and two
+    # phones registered as "localhost" are indistinguishable in the other one.
     verdict = tailnet.may_reach(device.name, serves.name, port, known)
     if not verdict.known:
         return Layer(
@@ -412,7 +419,7 @@ def _policy_layer(
             "The policy admits this device",
             False,
             verdict.detail,
-            evidence=f"{device.name} → {serves.name} on {port}",
+            evidence=f"{device.label} → {serves.label} on {port}",
         )
     return Layer(
         "policy",
@@ -652,6 +659,77 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
             for endpoint in device.endpoints
         )
     return tuple(_deduplicated(rows))
+
+
+@cache
+def _own_addresses() -> frozenset[str]:
+    """Every address this process is actually reachable at.
+
+    Asked of the host rather than of any inventory, because it is the one fact
+    about "where HQ runs" that no sweep can be wrong about. Best effort: a
+    resolver that cannot answer yields nothing, and the caller falls back.
+
+    Cached for the life of the process, because this is a name resolution and
+    the panel that needs it is rendered on every page. Uncached it put a DNS
+    round trip -- and, where a resolver is slow to say no, a timeout -- in
+    front of a request. Where HQ runs does not change without a restart, and a
+    restart is what clears this.
+    """
+
+    found: set[str] = set()
+    try:
+        hostname = socket.gethostname()
+    except OSError:
+        return frozenset()
+    for candidate in (hostname, f"{hostname}.local", "localhost"):
+        try:
+            for _, _, _, _, sockaddr in socket.getaddrinfo(candidate, None):
+                found.add(str(sockaddr[0]).split("%", 1)[0])
+        except OSError:
+            continue
+    return frozenset(found)
+
+
+def _serving_device(
+    known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
+) -> tailnet.Device | None:
+    """The tailnet node HQ is actually running on.
+
+    The obvious answer -- the device the sweep marked ``self`` -- is the device
+    whose *daemon took the reading*, which is the controller's host. Those are
+    the same machine only when HQ and the controller share one, and they are
+    not obliged to: run HQ anywhere else and it introduces itself as the
+    controller's host, then evaluates the reachability verdict against the
+    wrong node, confidently.
+
+    Resolved by address, never by name: a tailnet name, an mDNS name and a
+    declaration key are three strings for one machine, and matching any of them
+    is how the wrong node gets picked.
+
+    It takes two hops, because neither end holds both halves. The host knows
+    the addresses it answers at -- a LAN address, typically, since a tailnet
+    address lives on an interface the hostname does not resolve to. The tailnet
+    knows only its own addresses. The *declaration* is the one place both are
+    written down, so it is the bridge: own address -> declared machine ->
+    tailnet device.
+
+    Falls back to the observer flag when nothing resolves, which keeps a
+    single-host deployment behaving exactly as it did.
+    """
+
+    mine = _own_addresses()
+    if mine:
+        for device in known.values():
+            if mine.intersection(device.addresses):
+                return device
+        for machine in declared:
+            addresses = frozenset(machine.get("addresses") or ())
+            if not mine.intersection(addresses):
+                continue
+            for device in known.values():
+                if addresses.intersection(device.addresses):
+                    return device
+    return tailnet.observer(known)
 
 
 def addresses_of_hq(found: Connection) -> tuple[Address, ...]:

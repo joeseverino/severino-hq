@@ -460,3 +460,86 @@ class DeclinedHeaderTests(TestCase):
         states = [h.state for h in found]
 
         self.assertLess(states.index("declined"), states.index("ignored"))
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class ServingDeviceTests(TestCase):
+    """Which node HQ says it is running on.
+
+    The sweep's ``self`` flag marks the device whose daemon took the reading --
+    the controller's host. That is the same machine as HQ's only when the two
+    share one, and HQ is not obliged to run there.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        # The controller swept from one node; HQ runs on the other.
+        a_tailnet(
+            a_device("example-controller", "100.64.0.9", observer=True),
+            a_device(
+                "example-registered-name",
+                "100.64.0.5",
+                dns_name="example-host.example-tailnet.ts.net",
+            ),
+        )
+        # Only the declaration holds both halves: the address the host answers
+        # at, and the address the tailnet knows it by.
+        ManagedResource.objects.create(
+            key="example-host",
+            kind="machine",
+            spec={
+                "name": "example-host",
+                "addresses": ["192.0.2.10", "100.64.0.5"],
+                "role": "example",
+            },
+        )
+
+    def serving(self, own):
+        from unittest import mock
+
+        from .connection import _serving_device
+        from .infrastructure import declared_machines
+        from . import tailnet
+
+        with mock.patch("application.connection._own_addresses", return_value=frozenset(own)):
+            return _serving_device(tailnet.devices(), declared_machines())
+
+    def test_the_node_hq_runs_on_is_found_by_its_own_address(self):
+        found = self.serving({"100.64.0.5"})
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-registered-name")
+
+    def test_a_lan_only_host_still_resolves_through_its_declaration(self):
+        """The bridge case: the tailnet address is on an interface the host's
+        own hostname does not resolve to, so only the declaration joins them."""
+
+        found = self.serving({"192.0.2.10"})
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-registered-name")
+
+    def test_the_observer_flag_is_not_mistaken_for_where_hq_runs(self):
+        found = self.serving({"192.0.2.10"})
+
+        self.assertNotEqual(found.name, "example-controller")
+
+    def test_a_host_that_cannot_place_itself_falls_back_to_the_observer(self):
+        found = self.serving(set())
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-controller")
+
+    def test_an_unrecognised_address_never_guesses_a_node(self):
+        found = self.serving({"198.51.100.7"})
+
+        self.assertEqual(found.name, "example-controller")
+
+    def test_the_label_is_what_names_a_node_to_a_person(self):
+        """Both sides of the panel must resolve a name the same way."""
+
+        found = self.serving({"100.64.0.5"})
+
+        self.assertEqual(found.label, "example-host")
+        self.assertNotEqual(found.label, found.name)

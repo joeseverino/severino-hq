@@ -38,9 +38,9 @@ page it falls back to. Nothing here knows which one it is in.
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
       {% if connection.serves_url %}
-        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.name|default:connection.host }}</a>
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host }}</a>
       {% else %}
-        <strong>{{ connection.serves.name|default:connection.host }}</strong>
+        <strong>{{ connection.serves.label|default:connection.host }}</strong>
       {% endif %}
       {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
       <span class="conn-row-note">{{ connection.host }}</span>
