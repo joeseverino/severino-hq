@@ -42,3 +42,6 @@ coverage.xml
 # Playwright MCP scratch output: screenshots and page snapshots taken while
 # checking a rendered page. Evidence for a fix, not part of the app.
 .playwright-mcp/
+# Root-level browser captures are scratch evidence too. Product images belong
+# under a named static/media directory, never beside the repository README.
+/*.png

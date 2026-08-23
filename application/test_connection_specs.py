@@ -181,6 +181,67 @@ class ConnectionRegistrationTests(TestCase):
 
         self.assertEqual(discovered["connections"][0].badges[0], "1 ability")
 
+    def test_command_center_finds_a_connection_by_its_declared_ability(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            discovered = command_center("tailscale", principal=READ)
+
+        self.assertEqual(
+            [item.name for item in discovered["connections"]],
+            ["infrastructure.controllers"],
+        )
+        self.assertIn("Tailnet device", discovered["connections"][0].badges)
+        self.assertIn("Tailnet policy", discovered["connections"][0].badges)
+
+    def test_command_center_caps_broad_ability_match_explanations(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            discovered = command_center("e", principal=READ)
+
+        core = next(
+            item
+            for item in discovered["connections"]
+            if item.name == "infrastructure.controllers"
+        )
+        self.assertEqual(len(core.badges), 6)
+        self.assertRegex(core.badges[-1], r"^\+\d+ matching abilities$")
+
+    def test_command_center_explains_terms_matched_across_abilities(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            discovered = command_center("tailnet proxy", principal=READ)
+
+        core = discovered["connections"][0]
+        self.assertIn("Proxy host", core.badges)
+        self.assertIn("Tailnet device", core.badges)
+
+    def test_command_center_does_not_leak_connection_abilities_without_read(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            discovered = command_center("tailscale", principal=NONE)
+
+        self.assertEqual(discovered["connections"], ())
+
+    def test_core_connection_describes_every_tailscale_ability(self):
+        core = next(
+            item
+            for item in describe_connections()["connections"]
+            if item["name"] == "infrastructure.controllers"
+        )
+
+        self.assertEqual(
+            {
+                ability["name"]
+                for ability in core["abilities"]
+                if ability["name"].startswith("tailscale.")
+            },
+            {"tailscale.device", "tailscale.policy"},
+        )
+
     def test_plugin_connection_names_cannot_shadow_core(self):
         duplicate = ConnectionSpec(
             "infrastructure.controllers",

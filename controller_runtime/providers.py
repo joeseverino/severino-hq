@@ -288,27 +288,6 @@ def _npm_api_url(configured_url: str) -> str:
     )
 
 
-def preflight() -> list[dict[str, Any]]:
-    """Every connection answered, or the first one that did not, loudly.
-
-    The same sweep `connections` reports to HQ, read as a gate: this runs before
-    an operation is claimed, and a credential that has stopped working should
-    stop the pass rather than surface a minute later as a failed job.
-    """
-
-    acme_dir = Path(_required("HQ", "ACME_DIR"))
-    if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
-        raise ProviderError("ACME state directory is not writable.")
-    _run(["certbot", "--version"], step="certbot preflight")
-    probed = connections()
-    for connection in probed:
-        if not connection["ok"]:
-            raise ProviderError(
-                f"{connection['connection_ref']}: {connection['detail']}"
-            )
-    return probed
-
-
 def reconcile_npm(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
@@ -856,6 +835,9 @@ ACME_PROPAGATION_SECONDS = os.environ.get("ACME_PROPAGATION_SECONDS", "30")
 
 def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     acme_dir = Path(_required("HQ", "ACME_DIR"))
+    if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
+        raise ProviderError("ACME state directory is not writable.")
+    _run(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
     credentials.write_text(
         "dns_cloudflare_api_token = "
@@ -2590,7 +2572,10 @@ def _tailnet_token(connection_ref: str) -> str:
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            token = json.loads(response.read()).get("access_token", "")
+            payload = json.loads(response.read())
+            if not isinstance(payload, dict):
+                raise ValueError("OAuth response is not an object")
+            token = payload.get("access_token", "")
     except urllib.error.HTTPError as exc:
         raise ProviderError(
             f"Tailscale refused the credential for {connection_ref} "
@@ -3163,6 +3148,13 @@ def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     }
 
 
+def _probe_tailscale(connection_ref: str) -> dict[str, Any]:
+    """Prove the OAuth client is accepted without retaining its access token."""
+
+    _tailnet_token(connection_ref)
+    return {"detail": "OAuth credential accepted.", "reaches": []}
+
+
 def _probe_ssh(connection_ref: str) -> dict[str, Any]:
     _ssh(connection_ref, "preflight")
     transport = _transport(connection_ref)
@@ -3177,10 +3169,13 @@ _CONNECTION_PROBES = {
     "npm": _probe_npm,
     "cloudflare_dns": _probe_cloudflare_dns,
     "portainer": _probe_portainer,
+    "tailscale": _probe_tailscale,
 }
 
+_DEFAULT_CONNECTION_ENDPOINTS = {"tailscale": TAILNET_API}
 
-def _endpoint(prefix: str) -> str:
+
+def _endpoint(prefix: str, provider: str) -> str:
     """Where a connection points, from whichever values its projection produced.
 
     Never a secret: a URL and a host are what an operator needs to recognise
@@ -3194,7 +3189,9 @@ def _endpoint(prefix: str) -> str:
             return url
     host = os.environ.get(f"{prefix}_HOST", "").strip()
     port = os.environ.get(f"{prefix}_PORT", "").strip()
-    return f"{host}:{port}" if host and port else host
+    if host:
+        return f"{host}:{port}" if port else host
+    return _DEFAULT_CONNECTION_ENDPOINTS.get(provider, "")
 
 
 def connections() -> list[dict[str, Any]]:
@@ -3220,7 +3217,7 @@ def connections() -> list[dict[str, Any]]:
         connection = {
             "connection_ref": connection_ref,
             "provider": provider,
-            "endpoint": _endpoint(prefix),
+            "endpoint": _endpoint(prefix, provider),
             "probed": probe is not None,
             "ok": True,
             "detail": "",

@@ -39,6 +39,18 @@ class ControllerConnectionRegistryTests(TestCase):
         self.assertNotIn("ssh-ed25519", serialised)
         self.assertNotRegex(serialised, r"\b\d{1,3}(\.\d{1,3}){3}\b")
 
+    def test_every_remote_provider_has_exactly_one_health_probe(self):
+        from control_plane.providers import PROVIDERS
+
+        declared = {
+            provider
+            for spec in PROVIDERS.values()
+            for provider in spec.connection_providers
+            if provider != "ssh"
+        }
+
+        self.assertEqual(set(providers._CONNECTION_PROBES), declared)
+
 
 def _by_url(routes):
     """Answer a mocked provider request by what it asked for, not by call order.
@@ -292,7 +304,7 @@ class ProviderAdapterTests(TestCase):
     @mock.patch("controller_runtime.providers._run")
     @mock.patch("controller_runtime.providers._ssh")
     @mock.patch("controller_runtime.providers._request")
-    def test_preflight_probes_every_connection_the_environment_carries(
+    def test_connection_sweep_probes_every_credential_the_environment_carries(
         self, request, ssh, _run
     ):
         """Five 1Password items, five probes, and nothing naming any of them.
@@ -316,7 +328,7 @@ class ProviderAdapterTests(TestCase):
             }
         )
 
-        result = providers.preflight()
+        result = providers.connections()
 
         by_ref = {item["connection_ref"]: item for item in result}
         self.assertEqual(
@@ -370,10 +382,69 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(len(found), 1)
         self.assertFalse(found[0]["ok"])
         self.assertIn("Token is not valid.", found[0]["detail"])
-        # And read as a gate rather than as a report, the same failure stops
-        # the pass instead of being carried into an operation.
-        with self.assertRaises(providers.ProviderError):
-            providers.preflight()
+        # The selected action verifies the credential it actually uses, so
+        # this unrelated failure is observable without becoming a global gate.
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "TAILSCALE_CONNECTION_REF": "example-tailnet",
+            "TAILSCALE_PROVIDER": "tailscale",
+            "TAILSCALE_CLIENT_ID": "client-id",
+            "TAILSCALE_CLIENT_SECRET": "client-secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    def test_tailscale_oauth_connection_is_reported_without_secret_material(
+        self, urlopen
+    ):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = b'{"access_token":"short-lived-access-token"}'
+
+        found = providers.connections()
+
+        self.assertEqual(
+            found,
+            [
+                {
+                    "connection_ref": "example-tailnet",
+                    "provider": "tailscale",
+                    "endpoint": providers.TAILNET_API,
+                    "probed": True,
+                    "ok": True,
+                    "detail": "OAuth credential accepted.",
+                    "reaches": [],
+                }
+            ],
+        )
+        urlopen.assert_called_once()
+        self.assertNotIn("client-secret", json.dumps(found))
+        self.assertNotIn("short-lived-access-token", json.dumps(found))
+
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "TAILSCALE_CONNECTION_REF": "example-tailnet",
+            "TAILSCALE_PROVIDER": "tailscale",
+            "TAILSCALE_CLIENT_ID": "client-id",
+            "TAILSCALE_CLIENT_SECRET": "client-secret",
+        },
+        clear=True,
+    )
+    @mock.patch("controller_runtime.providers.urllib.request.urlopen")
+    def test_tailscale_probe_failure_is_isolated_and_safe(self, urlopen):
+        urlopen.side_effect = providers.urllib.error.HTTPError(
+            "https://example.invalid", 401, "Unauthorized", {}, None
+        )
+
+        found = providers.connections()
+
+        self.assertEqual(len(found), 1)
+        self.assertFalse(found[0]["ok"])
+        self.assertIn("example-tailnet", found[0]["detail"])
+        self.assertIn("401", found[0]["detail"])
+        self.assertNotIn("client-secret", json.dumps(found))
 
     @mock.patch.dict(
         "os.environ",
@@ -1046,23 +1117,46 @@ class WorkerTests(TestCase):
         self.assertTrue(command[1].endswith("/manage.py"))
         self.assertNotIn("docker", command)
 
-    @mock.patch("controller_runtime.worker.preflight")
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker._manage")
-    def test_idle_plan_peeks_without_provider_preflight(self, manage, preflight):
+    def test_idle_plan_reports_connections_without_claiming(self, manage, connections):
         manage.return_value = {"ok": True, "operation": None}
 
         self.assertEqual(worker.run_once("test", apply=False), 0)
 
         self.assertEqual(manage.call_args.args[0], "peek")
         self.assertNotIn("claim", manage.call_args.args)
-        preflight.assert_not_called()
+        connections.assert_called_once_with()
+
+    @mock.patch("builtins.print")
+    @mock.patch(
+        "controller_runtime.worker.connections",
+        return_value=[{"connection_ref": "broken", "ok": False}],
+    )
+    @mock.patch("controller_runtime.worker.execute")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_plan_reports_broken_connections_and_returns_failure(
+        self, manage, execute, connections, output
+    ):
+        manage.return_value = {
+            "operation": {"id": "operation-1", "action": "reconcile"},
+            "resource": {"key": "dns", "kind": "adguard.rewrite", "spec": {}},
+        }
+        execute.return_value = providers.ProviderResult(
+            changed=False, status={}, conditions=[], message="Current."
+        )
+
+        self.assertEqual(worker.run_once("test", apply=False), 1)
+
+        payload = json.loads(output.call_args.args[0])
+        self.assertFalse(payload["ok"])
+        self.assertFalse(payload["connections"][0]["ok"])
+        connections.assert_called_once_with()
+        execute.assert_called_once()
 
     @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker._manage")
-    def test_idle_apply_claims_without_provider_preflight(
-        self, manage, preflight, _connections
-    ):
+    def test_idle_apply_claims_after_reporting_findings(self, manage, _connections):
         manage.side_effect = _bridge(
             **{
                 "sweep-due": {"ok": True, "due": True},
@@ -1088,7 +1182,6 @@ class WorkerTests(TestCase):
         self.assertIn("npm.proxy_host:reconcile", arguments)
         self.assertIn("tls.certificate:reconcile", arguments)
         self.assertIn("tls.certificate:renew", arguments)
-        preflight.assert_not_called()
 
     def test_capability_registry_drives_supported_kinds(self):
         """What the controller offers is the registry, minus what is locked.
@@ -1143,11 +1236,10 @@ class WorkerTests(TestCase):
         self.assertEqual(set(providers.PROVIDER_ACTIONS), declared)
 
     @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.preflight", return_value=[])
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
     def test_provider_failure_is_reported_without_secret(
-        self, manage, execute, _preflight, _connections
+        self, manage, execute, _connections
     ):
         manage.side_effect = _bridge(
             **{
@@ -1176,11 +1268,10 @@ class WorkerTests(TestCase):
         self.assertNotIn("password", json.dumps(report_payload).lower())
 
     @mock.patch("controller_runtime.worker.connections", return_value=[])
-    @mock.patch("controller_runtime.worker.preflight")
     @mock.patch("controller_runtime.worker.execute")
     @mock.patch("controller_runtime.worker._manage")
-    def test_claimed_operation_preflights_before_provider_execution(
-        self, manage, execute, preflight, _connections
+    def test_claimed_operation_executes_without_an_unrelated_global_gate(
+        self, manage, execute, connections
     ):
         manage.side_effect = _bridge(
             **{
@@ -1209,7 +1300,7 @@ class WorkerTests(TestCase):
 
         self.assertEqual(worker.run_once("test", apply=True), 0)
 
-        preflight.assert_called_once_with()
+        connections.assert_called_once_with()
         execute.assert_called_once()
 
 
@@ -1822,6 +1913,31 @@ class TailnetDeviceTests(TestCase):
             providers._tailnet_token("a-tailnet")
 
         self.assertIn("OAuth client", str(raised.exception))
+
+    def test_a_malformed_oauth_response_fails_as_a_safe_provider_error(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b"[]"
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TAILNET_CONNECTION_REF": "a-tailnet",
+                    "TAILNET_PROVIDER": "tailscale",
+                    "TAILNET_CLIENT_ID": "id",
+                    "TAILNET_CLIENT_SECRET": "secret",
+                },
+            ),
+            mock.patch.object(
+                providers.urllib.request, "urlopen", return_value=response
+            ),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers._tailnet_token("a-tailnet")
+
+        self.assertEqual(
+            str(raised.exception), "Tailscale did not answer the token request."
+        )
+        self.assertNotIn("secret", str(raised.exception))
 
     def test_the_token_is_never_kept(self):
         """It lasts an hour and a sweep is minutes apart, so caching it would

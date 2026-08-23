@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-from .providers import ProviderError, connections, execute, inventory, preflight
+from .providers import ProviderError, connections, execute, inventory
 from control_plane.providers import (
     controller_id,
     enabled_controller_actions,
@@ -176,9 +176,8 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         pending = _manage(*peek_args)
         operation = pending.get("operation")
         plan = None
-        probed: list[dict[str, Any]] = []
+        probed = connections()
         if operation is not None:
-            probed = preflight()
             resource = pending["resource"]
             result = execute(resource, operation["action"], apply=False)
             plan = {
@@ -188,10 +187,11 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                 "would_change": result.changed,
                 "message": result.message,
             }
+        healthy = all(connection["ok"] for connection in probed)
         print(
             json.dumps(
                 {
-                    "ok": True,
+                    "ok": healthy,
                     "mode": "plan",
                     "claimed": False,
                     "connections": probed,
@@ -199,7 +199,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
                 }
             )
         )
-        return 0
+        return 0 if healthy else 1
 
     _report_findings(controller_id)
     _manage("schedule", "--controller-id", controller_id)
@@ -215,7 +215,6 @@ def run_once(controller_id: str, *, apply: bool) -> int:
     resource = claim["resource"]
     generation = resource["generation"]
     try:
-        preflight()
         resource = _with_material(resource)
         result = execute(resource, operation["action"])
     except ProviderError as exc:

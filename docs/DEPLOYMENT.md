@@ -113,8 +113,12 @@ the zones a DNS token may edit. HQ stores the report, not the credential, and
 or "which domain" is derived from it, so registering a new VPS with Portainer is
 the whole of making it a place HQ can deploy to.
 
+OAuth probes exchange the injected client credential for a short-lived access
+token, discard that token immediately, and report only safe connection health.
+Neither the client secret nor the access token crosses the controller boundary.
+
 The controller trusts internal provider TLS through the host trust store or a
-deployment-provided `SEVERINO_CONTROLLER_CA_FILE`. The internal CA certificate
+deployment-provided `HQ_CONTROLLER_CA_FILE`. The internal CA certificate
 is not stored in this public repository. Never disable TLS verification.
 
 `hq sync` asks the Vault MCP for its complete validated manifest, then submits

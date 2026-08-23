@@ -7,9 +7,12 @@ from dataclasses import dataclass
 from django.urls import NoReverseMatch, reverse
 
 from .capabilities import capability_specs
-from .connections import connection_specs
+from .connections import ConnectionSpec, connection_specs
 from .resources import ResourceSpec, resource_specs
 from .security import AuthorizationError, Capability, Principal
+
+
+_MATCHING_ABILITY_BADGE_LIMIT = 3
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,7 @@ class DiscoveryItem:
     url: str
     destination_label: str
     badges: tuple[str, ...]
+    search_terms: tuple[str, ...] = ()
 
 
 def _permitted(required: tuple[Capability | str, ...], principal: Principal) -> bool:
@@ -33,11 +37,38 @@ def _permitted(required: tuple[Capability | str, ...], principal: Principal) -> 
 
 
 def _matches(item: DiscoveryItem, query: str) -> bool:
+    return _contains_all(
+        (item.name, item.label, item.summary, *item.badges, *item.search_terms),
+        query,
+    )
+
+
+def _contains_all(values: tuple[str, ...], query: str) -> bool:
     terms = query.casefold().split()
-    haystack = " ".join(
-        (item.name, item.label, item.summary, *item.badges)
-    ).casefold()
+    haystack = " ".join(values).casefold()
     return all(term in haystack for term in terms)
+
+
+def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...]:
+    """Name why a connection matched instead of showing an opaque family hit."""
+
+    terms = query.casefold().split()
+    if not terms:
+        return ()
+    labels = tuple(
+        ability.label
+        for ability in spec.abilities
+        if any(
+            term
+            in " ".join((ability.name, ability.label, ability.summary)).casefold()
+            for term in terms
+        )
+    )
+    visible = labels[:_MATCHING_ABILITY_BADGE_LIMIT]
+    hidden = len(labels) - len(visible)
+    if not hidden:
+        return visible
+    return (*visible, f"+{hidden} matching abilities")
 
 
 def _route_url(route: str) -> str:
@@ -122,6 +153,12 @@ def command_center(query: str, *, principal: Principal) -> dict:
             badges=(
                 _ability_count(len(spec.abilities)),
                 *((spec.secret_store,) if spec.secret_store else ()),
+                *_matching_ability_labels(spec, query),
+            ),
+            search_terms=tuple(
+                term
+                for ability in spec.abilities
+                for term in (ability.name, ability.label, ability.summary)
             ),
         )
         for spec in connection_specs()
