@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from unittest import mock
 
@@ -12,9 +13,22 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
 
-from .connections import ConnectionInstance, ConnectionLink, ConnectionSpec
+from .command_center import command_center
+from .connections import (
+    ConnectionAbility,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
 from .security import Capability, Principal
-from .topology import derive_topology, serialize_topology
+from .topology import (
+    apply_lens,
+    derive_topology,
+    lens_for,
+    serialize_topology,
+    topology as serialized_topology,
+    topology_lenses,
+)
 
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -285,3 +299,168 @@ class TopologyPageTests(TestCase):
             )
 
         self.assertEqual(response.context["focus_node"], "")
+
+
+class ConnectionActionTests(TestCase):
+    """A connection offers what its own spec declared, resolved generically."""
+
+    def spec(self, **overrides) -> ConnectionSpec:
+        return ConnectionSpec(
+            "example.declared", "Declared routes",
+            "A synthetic connection family that declares where it can be reached.",
+            Capability.READ,
+            lambda: (ConnectionInstance("one", "One", "example", "good", "Healthy"),),
+            **overrides,
+        )
+
+    def project(self, spec):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=(spec,)):
+            return derive_topology(principal=READ)
+
+    def node(self, spec):
+        return next(n for n in self.project(spec).nodes
+                    if n.id == "connection:example.declared:one")
+
+    def test_every_declared_route_becomes_its_own_action(self):
+        node = self.node(self.spec(
+            management_route="control_plane:list", setup_route="control_plane:create",
+            documentation_url="https://docs.example.test/connections",
+        ))
+        self.assertEqual(
+            [(a.name, a.url) for a in node.actions],
+            [("open", reverse("control_plane:connections")),
+             ("manage", reverse("control_plane:list")),
+             ("set_up", reverse("control_plane:create")),
+             ("documentation", "https://docs.example.test/connections")],
+        )
+
+    def test_the_same_route_twice_is_offered_once(self):
+        node = self.node(self.spec(management_route="control_plane:connections"))
+        self.assertEqual([a.name for a in node.actions], ["open"])
+
+    def test_a_spec_web_route_replaces_the_default_destination(self):
+        node = self.node(self.spec(web_route="control_plane:list"))
+        self.assertEqual(node.url, reverse("control_plane:list"))
+
+    def test_an_ability_naming_a_capability_reports_the_canonical_contract(self):
+        spec = self.spec(abilities=(ConnectionAbility(
+            "example.rotate", "Rotate", "Rotate the credential this connection carries.",
+            effect="infrastructure_change", capability="example.rotate"),))
+        ability = next(n for n in self.project(spec).nodes
+                       if n.id == "ability:example.declared:example.rotate")
+        command = next(a for a in ability.actions if a.name == "command")
+        self.assertEqual(command.capability, "example.rotate")
+        self.assertEqual(command.effect, "infrastructure_change")
+
+    def test_an_ability_without_a_capability_only_relates(self):
+        spec = self.spec(abilities=(ConnectionAbility(
+            "example.inspect", "Inspect", "Read what this connection sees."),))
+        ability = next(n for n in self.project(spec).nodes
+                       if n.id == "ability:example.declared:example.inspect")
+        self.assertEqual([a.name for a in ability.actions], ["focus"])
+
+
+class TopologyLensTests(TestCase):
+    """A lens narrows the one projection; it never derives a second one."""
+
+    def setUp(self):
+        ManagedResource.objects.create(
+            key="observed-zone", kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "example-cloudflare"})
+        self.unobserved = ManagedResource.objects.create(
+            key="lonely-record", kind="adguard.rewrite",
+            spec={"domain": "app.example.test", "answer": "192.0.2.10"})
+        ProviderConnection.objects.create(
+            controller_id="example-controller", connection_ref="example-cloudflare",
+            provider="cloudflare_dns", endpoint="https://api.example.test/client/v4",
+            reaches=["example.com"], reachable=True, probed=True,
+            observed_at=timezone.now())
+
+    def project(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            return derive_topology(principal=READ)
+
+    def narrowed(self, name):
+        lens = lens_for(name)
+        self.assertIsNotNone(lens, f"{name} is not a declared lens")
+        return apply_lens(self.project(), lens)
+
+    def test_every_declared_lens_names_a_distinct_question(self):
+        names = [lens.name for lens in topology_lenses()]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertTrue(all(item.label and item.summary for item in topology_lenses()))
+
+    def test_a_lens_selects_resources_no_connection_reports(self):
+        selected = {n.id for n in self.narrowed("unobserved-resources").nodes}
+        self.assertIn(f"resource:{self.unobserved.key}", selected)
+        self.assertNotIn("resource:observed-zone", selected)
+
+    def test_a_lens_selects_resources_no_ability_governs(self):
+        ManagedResource.objects.create(key="unclaimed-kind", kind="example.unclaimed", spec={})
+        selected = {n.id for n in self.narrowed("ungoverned-resources").nodes}
+        self.assertIn("resource:unclaimed-kind", selected)
+        self.assertNotIn("resource:observed-zone", selected)
+
+    def test_a_lens_finds_what_a_sweep_skipped_while_confirming_siblings(self):
+        """Health describes the last observation's content, never its age."""
+        now = timezone.now()
+        fresh = ManagedResource.objects.create(
+            key="swept-record", kind="adguard.rewrite",
+            spec={"domain": "fresh.example.test", "answer": "192.0.2.20"})
+        skipped = ManagedResource.objects.create(
+            key="skipped-record", kind="adguard.rewrite",
+            spec={"domain": "skipped.example.test", "answer": "192.0.2.21"})
+        ManagedResource.objects.filter(pk=fresh.pk).update(last_observed_at=now)
+        ManagedResource.objects.filter(pk=skipped.pk).update(
+            last_observed_at=now - timedelta(days=4))
+        selected = {n.id for n in self.narrowed("stale-observations").nodes}
+        self.assertIn("resource:skipped-record", selected)
+        self.assertNotIn("resource:swept-record", selected)
+
+    def test_a_narrowed_projection_never_keeps_a_half_present_edge(self):
+        for lens in topology_lenses():
+            with self.subTest(lens=lens.name):
+                narrowed = apply_lens(self.project(), lens)
+                ids = {n.id for n in narrowed.nodes}
+                for edge in narrowed.edges:
+                    self.assertIn(edge.source, ids)
+                    self.assertIn(edge.target, ids)
+
+    def test_a_lens_can_only_narrow_what_the_principal_already_saw(self):
+        whole = self.project()
+        whole_ids = {n.id for n in whole.nodes}
+        for lens in topology_lenses():
+            with self.subTest(lens=lens.name):
+                narrowed = apply_lens(whole, lens)
+                self.assertLessEqual(len(narrowed.nodes), len(whole.nodes))
+                self.assertLessEqual({n.id for n in narrowed.nodes}, whole_ids)
+
+    def test_serialization_names_the_applied_lens_and_every_available_one(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            applied = serialized_topology(principal=READ, lens="unobserved-resources")
+            unknown = serialized_topology(principal=READ, lens="not-a-lens")
+            whole = serialized_topology(principal=READ)
+        self.assertEqual(applied["lens"], "unobserved-resources")
+        self.assertEqual([i["name"] for i in applied["lenses"]],
+                         [lens.name for lens in topology_lenses()])
+        self.assertLess(applied["summary"]["nodes"], whole["summary"]["nodes"])
+        # An unrecognized lens is the whole graph, said out loud.
+        self.assertIsNone(unknown["lens"])
+        self.assertEqual(unknown["summary"], whole["summary"])
+
+    def test_a_lens_costs_no_extra_query(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            with CaptureQueriesContext(database_connection) as whole:
+                serialized_topology(principal=READ)
+            with CaptureQueriesContext(database_connection) as narrowed:
+                serialized_topology(principal=READ, lens="unobserved-resources")
+        self.assertEqual(len(narrowed), len(whole))
+
+    def test_discovery_offers_every_lens_and_withholds_them_without_read(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            offered = command_center("", principal=READ)["views"]
+            denied = command_center("", principal=NONE)["views"]
+            matched = command_center("ability governs", principal=READ)["views"]
+        self.assertEqual([i.name for i in offered], [lens.name for lens in topology_lenses()])
+        self.assertEqual(denied, ())
+        self.assertEqual([i.name for i in matched], ["ungoverned-resources"])

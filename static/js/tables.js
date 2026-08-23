@@ -17,86 +17,44 @@
 
   const selectedIds = new Set(readSelection());
 
-  // Keep column meaning visible while a long table moves under the global
-  // chrome. Native sticky cells cannot cross `.table-scroll` because its
-  // horizontal overflow makes it a scroll container, so one visual-only clone
-  // follows whichever table currently crosses the reading line.
-  const sticky = document.querySelector(".table-scroll")
-    ? document.createElement("div")
-    : null;
-  if (sticky) {
-    sticky.className = "table-sticky-header";
-    sticky.hidden = true;
-    sticky.setAttribute("aria-hidden", "true");
-    sticky.inert = true;
-    document.body.append(sticky);
-  }
-  let stickySource = null;
-  let stickyFrame = null;
-
-  function stickyInset() {
-    const header = document.querySelector(".site-header");
-    let inset = Math.max(0, header?.getBoundingClientRect().bottom || 0);
-    const pageNav = document.querySelector("[data-page-navigation]");
-    const navRect = pageNav?.getBoundingClientRect();
-    if (navRect && navRect.top <= inset + 1 && navRect.bottom > inset) {
-      inset = navRect.bottom;
-    }
-    return inset;
-  }
-
-  function syncStickyHeader() {
-    stickyFrame = null;
-    if (!sticky) return;
-    const inset = stickyInset();
-    const source = [...document.querySelectorAll(".table-scroll")].find((wrapper) => {
+  // A bounded scroll region has to be operable from the keyboard, and a plain
+  // `div` that scrolls is not focusable. This is the whole helper now: the
+  // heading itself is `position: sticky` in the stylesheet, so the browser
+  // pins it on the compositor and there is nothing here to measure, to
+  // schedule, or to fall a frame behind.
+  //
+  // `is-pane` marks a wrapper that is genuinely its own scroll box -- one
+  // holding a table too wide to fit, or one an author capped to a reading
+  // height. Those pin the heading to the box; everything else pins it to the
+  // viewport, and the stylesheet reads this class to tell them apart.
+  function markScrollRegions() {
+    document.querySelectorAll(".table-scroll").forEach((wrapper) => {
       const table = wrapper.querySelector(".data-table");
-      const head = table?.querySelector("thead");
-      if (!head) return false;
-      const headRect = head.getBoundingClientRect();
-      const tableRect = table.getBoundingClientRect();
-      return headRect.top < inset && tableRect.bottom > inset + headRect.height;
+      // Measured off the table, not the wrapper: the wrapper only reports a
+      // scrollable width while it is already a scroll container, and whether it
+      // should be one is exactly the question.
+      const capped = getComputedStyle(wrapper).maxHeight !== "none";
+      const tooWide = !!table && table.scrollWidth > wrapper.clientWidth + 1;
+      const scrolls = capped || tooWide;
+      wrapper.classList.toggle("is-pane", scrolls);
+      if (scrolls) {
+        if (!wrapper.hasAttribute("tabindex")) wrapper.tabIndex = 0;
+        if (!wrapper.hasAttribute("role")) wrapper.setAttribute("role", "region");
+        if (!wrapper.hasAttribute("aria-label")) {
+          const caption = wrapper.querySelector("caption")?.textContent?.trim();
+          wrapper.setAttribute("aria-label", caption || "Scrollable table");
+        }
+      } else {
+        wrapper.removeAttribute("tabindex");
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      }
     });
-
-    if (!source) {
-      sticky.hidden = true;
-      stickySource = null;
-      return;
-    }
-
-    const table = source.querySelector(".data-table");
-    const sourceHeads = [...table.querySelectorAll("thead th")];
-    if (source !== stickySource) {
-      const clone = table.cloneNode(false);
-      clone.removeAttribute("id");
-      clone.append(table.tHead.cloneNode(true));
-      clone.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
-      sticky.replaceChildren(clone);
-      stickySource = source;
-    }
-
-    const cloneTable = sticky.querySelector("table");
-    const cloneHeads = [...cloneTable.querySelectorAll("thead th")];
-    sourceHeads.forEach((head, index) => {
-      const width = head.getBoundingClientRect().width;
-      cloneHeads[index].style.width = `${width}px`;
-      cloneHeads[index].style.minWidth = `${width}px`;
-      cloneHeads[index].style.maxWidth = `${width}px`;
-    });
-    const wrapperRect = source.getBoundingClientRect();
-    cloneTable.style.width = `${table.getBoundingClientRect().width}px`;
-    cloneTable.style.transform = `translateX(${-source.scrollLeft}px)`;
-    sticky.style.insetBlockStart = `${inset}px`;
-    sticky.style.insetInlineStart = `${wrapperRect.left}px`;
-    sticky.style.inlineSize = `${wrapperRect.width}px`;
-    sticky.hidden = false;
   }
 
-  function scheduleStickyHeader() {
-    if (stickyFrame === null) {
-      stickyFrame = window.requestAnimationFrame(syncStickyHeader);
-    }
-  }
+  // Kept under the old name so the places that re-run after a table refresh
+  // keep working.
+  const scheduleStickyHeader = markScrollRegions;
 
   function preserveDisclosureState(next, url) {
     const currentQuery = new URL(window.location.href).searchParams.get("q");
@@ -109,10 +67,8 @@
     });
   }
 
-  if (sticky) {
-    document.addEventListener("scroll", scheduleStickyHeader, true);
-    window.addEventListener("resize", scheduleStickyHeader);
-  }
+  markScrollRegions();
+  window.addEventListener("resize", markScrollRegions);
 
   const persistSelection = () => {
     try {

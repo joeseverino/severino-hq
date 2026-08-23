@@ -927,26 +927,54 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .data-table th, .data-table td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
 .data-table thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
-/* Horizontal overflow necessarily creates a scroll container, which prevents
-   native sticky cells from following the document scroll. The table helper
-   mirrors only the visible heading row into this fixed, non-interactive layer;
-   widths and horizontal position continue to come from the real table. */
-.table-sticky-header {
-  position: fixed;
-  z-index: 8;
-  overflow: hidden;
-  pointer-events: none;
-  box-shadow: 0 3px 8px rgb(24 24 27 / 8%);
+/* A sticky table heading, the way the platform does it.
+
+   `overflow-x: auto` on the wrapper makes the browser compute `overflow-y` to
+   `auto` as well, so the wrapper is a vertical scroll container whether it was
+   asked to be or not -- and a sticky cell pins to its nearest scroll container.
+   That is what pinned the heading to the wrapper and lost it the moment the
+   page scrolled past. But these tables fit: `width: 100%` with wrapping cells
+   means the measured content width equals the client width exactly, so all
+   that `auto` was doing was standing in the way.
+
+   With no scroll container in between, the heading pins to the viewport at the
+   chrome's own height and holds that line for the whole page scroll. Nothing
+   is bounded, nothing traps the wheel, and the browser does it on the
+   compositor -- no clone, no measuring, no scroll handler to arrive late.
+
+   Three details are load-bearing and each is silent when missed: `overflow:
+   hidden` on `.data-table` would make the *table* the nearest scroll container
+   (a box with no scroll range, where the heading never moves); a sticky cell is
+   transparent by default and rows scroll through it; and `border-collapse:
+   collapse` drops borders from sticky cells, so the rule is an inset shadow.
+
+   No `overscroll-behavior` on purpose -- that belongs on dialogs and sheets;
+   on a table it stops scroll chaining and traps the wheel at the last row. */
+@media (min-width: 641px) {
+  .table-scroll:not([data-chart]):not(.is-pane) { overflow: visible; }
+  .table-scroll:not([data-chart]) .data-table { overflow: visible; }
+
+  .table-scroll:not([data-chart]) .data-table thead th {
+    position: sticky;
+    z-index: 2;
+    background: var(--surface-2);
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+  /* The offset must name whichever box the heading actually sticks to. */
+  .table-scroll:not([data-chart]):not(.is-pane) .data-table thead th {
+    inset-block-start: calc(var(--site-header-height) + var(--page-nav-height));
+  }
+  /* A wrapper that IS the scroll container: its top edge, not the chrome's --
+     a chrome-height offset here floats the heading down inside the box and
+     lets rows scroll above it. */
+  .table-scroll:not([data-chart]).is-pane .data-table thead th {
+    inset-block-start: 0;
+  }
+  .table-scroll:not([data-chart]).is-pane:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
-.table-sticky-header[hidden] { display: none; }
-.table-sticky-header .data-table {
-  margin: 0;
-  border-block-end: 1px solid var(--line);
-  border-radius: 0;
-  box-shadow: none;
-}
-.table-sticky-header tbody,
-.table-sticky-header tfoot { display: none; }
 .table-sort-link { display: inline-flex; align-items: center; gap: 5px; color: inherit; white-space: nowrap; }
 .table-sort-link:hover { color: var(--ink); text-decoration: none; }
 .sort-indicator { color: var(--muted-2); font-size: 11px; }
@@ -2526,7 +2554,7 @@ kbd {
   /* Chrome that means nothing on paper: navigation cannot be followed, the
      search box cannot be typed into, buttons cannot be pressed. */
   .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
-  .page-nav, .table-sticky-header,
+  .page-nav,
   .table-controls, .table-filter-menu, .table-selection, .section-foot,
   .btn, button, .job-progress, .page-actions, form,
   /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
@@ -2610,6 +2638,8 @@ kbd {
   .data-table th, .data-table td { border-bottom: 0.5pt solid #666; padding: 4pt 6pt; }
   .data-table thead th { background: none; border-bottom: 1pt solid #000; }
   .table-scroll { overflow: visible; }
+  /* A heading pinned to a viewport that does not exist on paper. */
+  .data-table thead th { position: static; box-shadow: none; }
   /* The chart's scroller, unclipped. On paper there is nothing to scroll,
      and a clipping box that a page break lands inside prints empty. */
   .chart-scroll {
@@ -3109,6 +3139,9 @@ textarea.code {
 .topology-workspace.has-focus .topology-node.is-dimmed { opacity: .24; }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
 .topology-relations > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; }
+/* A fixed reading height inside a disclosure, so this one is a pane: the
+   heading pins to the box. Scroll chaining is kept -- reaching the last edge
+   hands the wheel back to the page. */
 .topology-relations .table-scroll { max-height: 480px; margin-top: 12px; overflow-y: auto; }
 .topology-relations tr.is-related { background: var(--accent-tint); }
 

@@ -191,6 +191,28 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
         self.assertNotIn("secret", json.dumps(topology).lower())
 
+    def test_an_agent_can_ask_the_topology_one_standing_question(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="mcp-lonely", kind="adguard.rewrite",
+            spec={"domain": "app.example.test", "answer": "192.0.2.10"})
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            whole = services.get_topology()
+            narrowed = services.get_topology(lens="unobserved-resources")
+        self.assertEqual(narrowed["lens"], "unobserved-resources")
+        self.assertTrue(narrowed["lenses"])
+        self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
+        self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
+
+    def test_findings_are_a_registered_safe_read_tool(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            found = services.get_findings()
+        self.assertTrue(found["ok"])
+        self.assertTrue(found["rules"])
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_findings"))
+        self.assertNotIn("secret", json.dumps(found).lower())
+
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
         from application.connections import ConnectionSpec
         from application.security import Capability

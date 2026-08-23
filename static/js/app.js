@@ -71,6 +71,26 @@ document.addEventListener("change", (event) => {
 // targets. HQ measures its own chrome and marks the section currently being
 // read; links and history still work as plain HTML when this enhancement is
 // unavailable.
+// The height of the chrome is a fact about every page, not only the ones with
+// a section nav. Measured here so `--site-header-height` is true at every
+// breakpoint -- the header's padding changes on narrow screens, and anything
+// positioned against the stylesheet's static fallback sat a few pixels below
+// it with a gap showing through. Once per load and per resize; nothing reads
+// layout while scrolling.
+(() => {
+  const header = document.querySelector(".site-header");
+  if (!header) return;
+  const measureHeader = () => {
+    document.documentElement.style.setProperty(
+      "--site-header-height",
+      `${header.getBoundingClientRect().height}px`,
+    );
+  };
+  measureHeader();
+  window.addEventListener("resize", measureHeader);
+  window.addEventListener("load", measureHeader);
+})();
+
 (() => {
   const navigation = document.querySelector("[data-page-navigation]");
   if (!navigation) return;
