@@ -430,6 +430,59 @@ class TransportTests(TestCase):
         self.assertIn("$defs", nested)
         self.assertNotIn("$defs", nested["properties"]["payload"])
 
+    def test_resources_are_discoverable_and_flagged_for_this_token(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v2/resources/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+        self.assertEqual(response.status_code, 200)
+        specs = response.json()["data"]["resources"]
+        projects = next(spec for spec in specs if spec["name"] == "projects")
+        audit = next(spec for spec in specs if spec["name"] == "audit")
+        self.assertTrue(projects["permitted"])
+        self.assertFalse(audit["permitted"])
+        self.assertIn("query_schema", projects["operations"]["list"])
+
+    def test_resource_list_and_detail_share_the_declared_contract(self):
+        from projects.models import Project
+
+        project = Project.objects.create(name="Machine readable")
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            listed = self.client.get(
+                "/api/v2/resources/projects/?query=readable", **headers
+            )
+            detail = self.client.get(
+                f"/api/v2/resources/projects/{project.slug}/", **headers
+            )
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["data"]["items"][0]["slug"], project.slug)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["data"]["slug"], project.slug)
+
+    def test_resource_queries_reject_unknown_and_repeated_fields(self):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            unknown = self.client.get(
+                "/api/v2/resources/projects/?limti=10", **headers
+            )
+            repeated = self.client.get(
+                "/api/v2/resources/projects/?limit=1&limit=2", **headers
+            )
+        self.assertEqual(unknown.status_code, 400)
+        self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
+        self.assertEqual(repeated.status_code, 400)
+
+    def test_resource_read_requires_its_declared_grant(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v2/resources/projects/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='example.write')}",
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "forbidden")
+
     def test_v1_remains_compatible_without_an_idempotency_key(self):
         from projects.models import Project
 

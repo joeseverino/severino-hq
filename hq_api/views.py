@@ -28,6 +28,15 @@ from application.capabilities import (
     execute_capability,
 )
 from application.security import AuthorizationError
+from application.resources import (
+    InvalidResourceInput,
+    ResourceNotFound,
+    UnknownResource,
+    UnsupportedResourceOperation,
+    describe_resources,
+    get_resource as get_application_resource,
+    list_resource as list_application_resource,
+)
 
 from .idempotency import (
     IdempotencyConflict,
@@ -204,6 +213,10 @@ def root(request, version: int):
             "resource": settings.SEVERINO_API_RESOURCE,
             "actor": request.principal.actor,
             "granted": sorted(granted(request.token_claims)),
+            "links": {
+                "capabilities": f"/api/v{version}/capabilities/",
+                "resources": "/api/v2/resources/",
+            },
         }
     )
 
@@ -235,6 +248,90 @@ def capabilities(request, version: int):
             ],
         }
     )
+
+
+@_endpoint(("GET",))
+def resources(request, version: int):
+    """Every readable resource, including operations this token may use."""
+
+    described = describe_resources()
+    held = granted(request.token_claims)
+    return _ok(
+        {
+            "schema_version": described["schema_version"],
+            "resources": [
+                {
+                    **spec,
+                    "permitted": set(spec["required_capabilities"]) <= held,
+                }
+                for spec in described["resources"]
+            ],
+        }
+    )
+
+
+def _resource_failure(exc: Exception) -> HttpResponse:
+    if isinstance(exc, UnknownResource):
+        return _fail(str(exc), code="unknown_resource", status=404)
+    if isinstance(exc, ResourceNotFound):
+        return _fail(str(exc), code="not_found", status=404)
+    if isinstance(exc, UnsupportedResourceOperation):
+        return _fail(str(exc), code="unsupported_operation", status=405)
+    if isinstance(exc, InvalidResourceInput):
+        return _fail(
+            str(exc), code="invalid_input", status=400, details=exc.errors
+        )
+    if isinstance(exc, AuthorizationError):
+        return _fail(exc.reason, code=exc.code, status=403)
+    raise exc
+
+
+@_endpoint(("GET",))
+def resource_list(request, version: int, name: str):
+    """List one resource through its declared, schema-validated query."""
+
+    filters: dict[str, str] = {}
+    for key, values in request.GET.lists():
+        if len(values) != 1:
+            return _fail(
+                f"Query field {key!r} may appear only once.",
+                code="invalid_input",
+                status=400,
+            )
+        filters[key] = values[0]
+    try:
+        return _ok(
+            list_application_resource(
+                name, filters, principal=request.principal, strict=False
+            )
+        )
+    except (
+        AuthorizationError,
+        InvalidResourceInput,
+        UnknownResource,
+        UnsupportedResourceOperation,
+    ) as exc:
+        return _resource_failure(exc)
+
+
+@_endpoint(("GET",))
+def resource_detail(request, version: int, name: str, identifier: str):
+    """Get one resource record through its declared identifier contract."""
+
+    try:
+        return _ok(
+            get_application_resource(
+                name, identifier, principal=request.principal, strict=False
+            )
+        )
+    except (
+        AuthorizationError,
+        InvalidResourceInput,
+        ResourceNotFound,
+        UnknownResource,
+        UnsupportedResourceOperation,
+    ) as exc:
+        return _resource_failure(exc)
 
 
 class EnvelopeError(Exception):

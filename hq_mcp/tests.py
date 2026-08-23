@@ -138,6 +138,20 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("list_managed_resources"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_managed_resource"))
 
+    def test_resource_registry_is_discoverable_and_generically_readable(self):
+        project = Project.objects.create(name="Generic resource")
+
+        described = services.describe_resources()
+        listed = services.list_resource("projects", {"query": "generic"})
+        detail = services.get_resource("projects", project.slug)
+
+        self.assertIn("projects", [item["name"] for item in described["resources"]])
+        self.assertEqual(listed["items"][0]["slug"], project.slug)
+        self.assertEqual(detail["slug"], project.slug)
+        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_resources"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("list_resource"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_resource"))
+
 
 class MCPBoundaryTests(TestCase):
     @staticmethod

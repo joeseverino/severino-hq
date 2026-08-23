@@ -27,7 +27,7 @@ plugin = PluginManifest(
     dashboard_provider="example_notes.projections:dashboard_cards",
     overview_provider="example_notes.projections:domain_overview",
     capability_provider="example_notes.capabilities:specs",
-    search_provider="example_notes.projections:search_definitions",
+    resource_provider="example_notes.resources:specs",
     health_provider="example_notes.health:ready",
     token_authenticated_routes=("api/v1/",),
     operator_capabilities=("notes.read", "notes.write"),
@@ -49,6 +49,7 @@ domain; the SDK owns integration mechanics:
 | --- | --- |
 | Manifest and navigation | `hq_sdk.plugin` |
 | Capabilities, principals, strict JSON commands | `hq_sdk.capabilities` |
+| Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Capability-gated Django views | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |
 | Tables, forms, UI projections, global search | matching `hq_sdk.*` module |
@@ -195,6 +196,15 @@ the handler call signature are all part of the host contract. MCP grants must
 also be a subset of the plugin's operator grants. A typo therefore prevents a
 composition from passing its checks instead of becoming a production-only
 request failure or an accidental authority gap.
+
+Resource providers follow the same pattern. Each `ResourceSpec` may expose a
+list handler with a `ResourceQuery` subclass, a detail handler with one stable
+identifier, a `SearchDefinition`, or any useful combination. The host validates
+names, permissions, query and handler compatibility, identifier contracts,
+duplicate resources, and duplicate search scopes at composition startup. API,
+MCP, and global search then derive their surfaces from that spec. The older
+`search_provider` hook remains compatible for search-only plugins; new domains
+should attach search to their resource so the declaration cannot drift.
 
 ## Shared UI contract
 

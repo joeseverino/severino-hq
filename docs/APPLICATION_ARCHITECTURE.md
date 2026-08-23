@@ -44,9 +44,11 @@ The adapter disappears after parsing. The application service validates,
 authorizes, opens the transaction, protects against stale state, writes, audits,
 and returns one stable result. The adapter only chooses how that result looks.
 
-That boundary includes reads. Canonical query projections live in
-`application/read_models.py`; web, MCP, and CLI adapters may filter or render
-those results, but they do not import Django models or rebuild result shapes.
+That boundary includes reads. `application.resources.ResourceSpec` is the
+registry of readable domains; canonical query projections live in their
+application services and in `application/read_models.py`. Web, API, MCP, and
+CLI adapters may filter or render those results, but they do not import Django
+models or rebuild result shapes.
 The projections opt into Django 6.1's `FETCH_RAISE` mode after declaring their
 `select_related()` plans. An omitted relationship therefore fails at the
 projection boundary instead of silently becoming an N+1 query in production.
@@ -84,10 +86,10 @@ cannot expose search without deciding whose authority it acts under.
 `global_search` is the cross-scope use case behind the `/search/` page:
 relevance-ranked hits per scope with FTS5 `snippet()` match extracts,
 returned as structured `(text, is_match)` parts so each renderer escapes
-content and applies markup independently. Presentation metadata (group
-label, title field, badge, timestamp) lives on each `SearchDefinition`, so
-every surface labels a hit the same way. Scopes a principal cannot search
-are omitted from the result, not rendered empty. Contact submissions live
+content and applies markup independently. Presentation metadata (group label,
+title field, badge, timestamp) lives on the `SearchDefinition` carried by its
+`ResourceSpec`, so every surface labels a hit the same way. Scopes a principal
+cannot search are omitted from the result, not rendered empty. Contact submissions live
 in Cloudflare D1, not the local database, so the web view merges them as an
 eighth group beside the registry scopes.
 
@@ -137,6 +139,14 @@ name, effect, required permissions, and application handler. From that registry:
 The generic executor is not generic database access. It can invoke only
 allowlisted operations in the registry, and every operation still crosses the
 typed principal, capability check, and application transaction.
+
+Reads use the parallel `ResourceSpec` contract. One declaration states whether
+a resource is searchable, listable, addressable, or any combination; binds its
+required capabilities; and supplies a strict Pydantic query schema. The API and
+MCP generic readers execute only registered handlers, while the search index
+derives its core definitions from the same specs. Plugin resource names and
+search scopes are collision-checked at composition startup, and handler
+signatures are checked before the first request.
 
 The machine HTTP adapter adds durable retry semantics around that executor.
 Every state-changing capability requires an actor-scoped idempotency key; the

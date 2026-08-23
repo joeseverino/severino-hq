@@ -4,8 +4,9 @@ The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
 phone, a Shortcut, or a cron job can run an HQ capability over HTTP.
 
 It adds **no capability, no domain model, and no business rule**. Every command
-it runs is already in `application/capabilities.py`, which is what keeps four
-adapters from drifting into four behaviours.
+comes from `application/capabilities.py`, and every read comes from
+`application/resources.py`. That keeps four adapters from drifting into four
+behaviours.
 
 ```
 hq_api/security.py   verify a token HQ did not issue
@@ -101,6 +102,9 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/` | Who you are and what you were granted |
 | `GET` | `/api/v2/capabilities/` | Every capability, flagged `permitted` for this token |
 | `POST` | `/api/v2/capabilities/<name>/` | Run one |
+| `GET` | `/api/v2/resources/` | Every read resource, its operations and filter schema |
+| `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
+| `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -112,6 +116,13 @@ HTTP `request_schema`, including target and optimistic-concurrency fields,
 unknown-field rejection, and whether an idempotency key is required. Clients
 can therefore generate and validate requests from the deployed composition's
 actual registry; a plugin does not maintain a parallel API document.
+
+Resource descriptions follow the same rule. A `ResourceSpec` declares its
+label, summary, required permissions, list-query model, stable identifier, and
+optional search projection once. HQ derives the API catalog and read routes,
+the generic MCP tools, and global-search registration from that declaration.
+Unknown filters, repeated URL parameters, unregistered resources, unsupported
+operations, and insufficient grants fail before a domain query runs.
 
 ### Compatibility policy
 

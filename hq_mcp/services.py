@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from application import assets as asset_service
 from application.dashboard import operating_snapshot
 from application.capabilities import (
     describe_capabilities as describe_application_capabilities,
@@ -12,11 +11,14 @@ from application.capabilities import (
 from application.capabilities import (
     execute_capability as execute_application_capability,
 )
-from application import projects as project_service
-from application import infrastructure as infrastructure_service
-from application import services as service_view
 from application.security import mcp_principal
 from application.registry import audit_registry as audit_application_registry
+from application.resources import (
+    ResourceNotFound,
+    describe_resources as describe_application_resources,
+    get_resource as get_application_resource,
+    list_resource as list_application_resource,
+)
 from application import read_models
 from application.reports import export_year_summary as export_application_year_summary
 
@@ -54,6 +56,33 @@ def execute_capability(
     )
 
 
+def describe_resources() -> dict[str, Any]:
+    """Describe every readable HQ resource and its supported operations."""
+
+    return describe_application_resources()
+
+
+def list_resource(
+    name: str, filters: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """List any registered resource with schema-validated filters."""
+
+    return list_application_resource(
+        name, filters, principal=mcp_principal(), strict=True
+    )
+
+
+def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
+    """Get one record from any registered addressable resource."""
+
+    try:
+        return get_application_resource(
+            name, identifier, principal=mcp_principal(), strict=True
+        )
+    except ResourceNotFound as exc:
+        raise NotFoundError(str(exc)) from exc
+
+
 def audit_registry() -> dict[str, Any]:
     """Report Project and Asset rows with no documentation references."""
 
@@ -70,68 +99,64 @@ def list_projects(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ projects, optionally filtered by exact status or text search."""
-    return project_service.list_projects(status=status, query=query, limit=limit)
+    return list_resource(
+        "projects", {"status": status, "query": query, "limit": limit}
+    )
 
 
 def get_project(slug: str) -> dict[str, Any]:
     """Get one project and its documentation, content, asset, and expense links."""
-    try:
-        return project_service.get_project(slug)
-    except project_service.NotFoundError as exc:
-        raise NotFoundError(str(exc)) from exc
+    return get_resource("projects", slug)
 
 
 def list_assets(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List HQ assets, optionally filtered by exact status or text search."""
-    return asset_service.list_assets(status=status, query=query, limit=limit)
+    return list_resource(
+        "assets", {"status": status, "query": query, "limit": limit}
+    )
 
 
 def get_asset(slug: str) -> dict[str, Any]:
     """Get one asset and its project, documentation, content, and expense links."""
-    try:
-        return asset_service.get_asset(slug)
-    except asset_service.NotFoundError as exc:
-        raise NotFoundError(str(exc)) from exc
+    return get_resource("assets", slug)
 
 
 def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
     """List canonical desired and observed infrastructure state."""
-    return infrastructure_service.list_managed_resources(limit=limit)
+    return list_resource("infrastructure.resources", {"limit": limit})
 
 
 def get_managed_resource(key: str) -> dict[str, Any]:
     """Get one managed resource with structured operation evidence."""
-    try:
-        return infrastructure_service.get_managed_resource(key)
-    except infrastructure_service.NotFoundError as exc:
-        raise NotFoundError(str(exc)) from exc
+    return get_resource("infrastructure.resources", key)
 
 
 def list_services() -> dict[str, Any]:
     """List every declared hostname with the state of its DNS, ingress and TLS."""
-    return service_view.list_services()
+    return list_resource("services")
 
 
 def get_service(hostname: str) -> dict[str, Any]:
     """Get one hostname with the resources behind each part of its wiring."""
-    try:
-        return service_view.get_service(hostname)
-    except infrastructure_service.NotFoundError as exc:
-        raise NotFoundError(str(exc)) from exc
+    return get_resource("services", hostname)
 
 
 def list_expenses(
     *, year: int | None = None, category: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     """List expense records with stable relationship identifiers."""
-    return read_models.list_expenses(year=year, category=category, limit=limit)
+    return list_resource(
+        "expenses", {"year": year, "category": category, "limit": limit}
+    )
 
 
 def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
     """List receipt metadata only; never returns receipt file contents or URLs."""
-    return read_models.list_receipts(unmatched_only=unmatched_only, limit=limit)
+    return list_resource(
+        "receipts", {"unmatched_only": unmatched_only, "limit": limit}
+    )
 
 
 def documentation_status() -> dict[str, Any]:
