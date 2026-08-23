@@ -67,6 +67,71 @@ document.addEventListener("change", (event) => {
   if (control?.form) control.form.requestSubmit();
 });
 
+// Dense pages provide only stable section metadata and ordinary fragment
+// targets. HQ measures its own chrome and marks the section currently being
+// read; links and history still work as plain HTML when this enhancement is
+// unavailable.
+(() => {
+  const navigation = document.querySelector("[data-page-navigation]");
+  if (!navigation) return;
+
+  const links = [...navigation.querySelectorAll("[data-page-nav-link]")];
+  const sections = links
+    .map((link) => document.getElementById(link.hash.slice(1)))
+    .filter(Boolean);
+  let frame = null;
+
+  const measure = () => {
+    const header = document.querySelector(".site-header");
+    document.documentElement.style.setProperty(
+      "--site-header-height",
+      `${header?.getBoundingClientRect().height || 0}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--page-nav-height",
+      `${navigation.getBoundingClientRect().height}px`,
+    );
+  };
+
+  const update = () => {
+    frame = null;
+    measure();
+    const threshold =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--site-header-height"))
+      + navigation.getBoundingClientRect().height + 16;
+    let current = sections[0];
+    sections.forEach((section) => {
+      if (section.getBoundingClientRect().top <= threshold) current = section;
+    });
+    // The last section often cannot reach the reading line because the footer
+    // leaves no page below it. At the document end it is nevertheless the
+    // section being read, and the local map should say so.
+    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) {
+      current = sections.at(-1);
+    }
+    links.forEach((link) => {
+      if (current && link.hash === `#${current.id}`) {
+        link.setAttribute("aria-current", "location");
+        const list = link.closest(".page-nav-list");
+        const linkRect = link.getBoundingClientRect();
+        const listRect = list.getBoundingClientRect();
+        if (linkRect.left < listRect.left) list.scrollLeft -= listRect.left - linkRect.left;
+        if (linkRect.right > listRect.right) list.scrollLeft += linkRect.right - listRect.right;
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
+  };
+
+  const schedule = () => {
+    if (frame === null) frame = window.requestAnimationFrame(update);
+  };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  window.addEventListener("hashchange", schedule);
+  schedule();
+})();
+
 // Long-running forms stay ordinary HTML forms: uploads and commands still work
 // without JavaScript and keep Django's redirect/error semantics. Enhancement
 // only makes the committed state explicit, prevents accidental double-submit,

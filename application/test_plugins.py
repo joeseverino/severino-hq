@@ -23,7 +23,7 @@ from .plugins import (
     plugin_token_authenticated_prefixes,
 )
 from .domains import domain_navigation
-from .ui import Insight, Kpi
+from .ui import Insight, Kpi, PageNavigation, PageSection
 
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
@@ -383,10 +383,15 @@ class PluginContractTests(TestCase):
         empty = render_to_string(
             "partials/_empty_state.html", {"message": "No notes have been created."}
         )
+        page_navigation = render_to_string(
+            "partials/_page_navigation.html",
+            {"navigation": PageNavigation((PageSection("notes", "Notes"),))},
+        )
 
         self.assertIn("Shared host interface", page_head)
         self.assertIn('class="kpi is-zero"', kpis)
         self.assertIn("No notes have been created", empty)
+        self.assertIn('href="#notes"', page_navigation)
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
         installed_plugins.cache_clear()

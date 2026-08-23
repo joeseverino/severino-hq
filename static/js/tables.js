@@ -1,6 +1,7 @@
 (() => {
   let requestController = null;
   let searchTimer = null;
+  let tableLocation = `${window.location.pathname}${window.location.search}`;
 
   // Selection is keyed by row id, survives table refreshes and pagination,
   // and persists across full reloads of the same list page for the session.
@@ -15,6 +16,84 @@
   };
 
   const selectedIds = new Set(readSelection());
+
+  // Keep column meaning visible while a long table moves under the global
+  // chrome. Native sticky cells cannot cross `.table-scroll` because its
+  // horizontal overflow makes it a scroll container, so one visual-only clone
+  // follows whichever table currently crosses the reading line.
+  const sticky = document.createElement("div");
+  sticky.className = "table-sticky-header";
+  sticky.hidden = true;
+  sticky.setAttribute("aria-hidden", "true");
+  sticky.inert = true;
+  document.body.append(sticky);
+  let stickySource = null;
+  let stickyFrame = null;
+
+  function stickyInset() {
+    const header = document.querySelector(".site-header");
+    let inset = Math.max(0, header?.getBoundingClientRect().bottom || 0);
+    const pageNav = document.querySelector("[data-page-navigation]");
+    const navRect = pageNav?.getBoundingClientRect();
+    if (navRect && navRect.top <= inset + 1 && navRect.bottom > inset) {
+      inset = navRect.bottom;
+    }
+    return inset;
+  }
+
+  function syncStickyHeader() {
+    stickyFrame = null;
+    const inset = stickyInset();
+    const source = [...document.querySelectorAll(".table-scroll")].find((wrapper) => {
+      const table = wrapper.querySelector(".data-table");
+      const head = table?.querySelector("thead");
+      if (!head) return false;
+      const headRect = head.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      return headRect.top < inset && tableRect.bottom > inset + headRect.height;
+    });
+
+    if (!source) {
+      sticky.hidden = true;
+      stickySource = null;
+      return;
+    }
+
+    const table = source.querySelector(".data-table");
+    const sourceHeads = [...table.querySelectorAll("thead th")];
+    if (source !== stickySource) {
+      const clone = table.cloneNode(false);
+      clone.removeAttribute("id");
+      clone.append(table.tHead.cloneNode(true));
+      clone.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+      sticky.replaceChildren(clone);
+      stickySource = source;
+    }
+
+    const cloneTable = sticky.querySelector("table");
+    const cloneHeads = [...cloneTable.querySelectorAll("thead th")];
+    sourceHeads.forEach((head, index) => {
+      cloneHeads[index].style.width = `${head.getBoundingClientRect().width}px`;
+      cloneHeads[index].style.minWidth = `${head.getBoundingClientRect().width}px`;
+      cloneHeads[index].style.maxWidth = `${head.getBoundingClientRect().width}px`;
+    });
+    const wrapperRect = source.getBoundingClientRect();
+    cloneTable.style.width = `${table.getBoundingClientRect().width}px`;
+    cloneTable.style.transform = `translateX(${-source.scrollLeft}px)`;
+    sticky.style.insetBlockStart = `${inset}px`;
+    sticky.style.insetInlineStart = `${wrapperRect.left}px`;
+    sticky.style.inlineSize = `${wrapperRect.width}px`;
+    sticky.hidden = false;
+  }
+
+  function scheduleStickyHeader() {
+    if (stickyFrame === null) {
+      stickyFrame = window.requestAnimationFrame(syncStickyHeader);
+    }
+  }
+
+  document.addEventListener("scroll", scheduleStickyHeader, true);
+  window.addEventListener("resize", scheduleStickyHeader);
 
   const persistSelection = () => {
     try {
@@ -161,8 +240,10 @@
       document.title = next.title;
       if (history === "push") window.history.pushState({}, "", url);
       if (history === "replace") window.history.replaceState({}, "", url);
+      tableLocation = `${window.location.pathname}${window.location.search}`;
       initializeSelection();
       restoreFocus(focusMemo);
+      scheduleStickyHeader();
     } catch (error) {
       if (error.name !== "AbortError") window.location.assign(url);
     } finally {
@@ -220,8 +301,17 @@
   });
 
   window.addEventListener("popstate", () => {
+    const nextLocation = `${window.location.pathname}${window.location.search}`;
+    // The mobile navigation and other lightweight disclosures use fragments.
+    // Chromium emits popstate for those history entries too; a fragment cannot
+    // change table data, so it must never trigger a fetch or DOM replacement.
+    if (nextLocation === tableLocation) return;
+    tableLocation = nextLocation;
     refreshTable(window.location.href, { history: "none" });
   });
 
-  document.addEventListener("DOMContentLoaded", () => initializeSelection());
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeSelection();
+    scheduleStickyHeader();
+  });
 })();

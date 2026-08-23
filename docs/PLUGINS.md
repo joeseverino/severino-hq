@@ -206,6 +206,7 @@ templates:
 | --- | --- |
 | `base.html` | Authenticated shell, navigation, messages, static assets, and security metadata |
 | `partials/_page_head.html` | Page title, lede, and optional primary action |
+| `partials/_page_navigation.html` | Sticky, responsive local navigation from `hq_sdk.ui.PageNavigation` |
 | `partials/_kpi_grid.html` | Responsive linked or static KPI collection |
 | `partials/_timeline.html` | Chronological linked events from `hq_sdk.ui.Timeline` |
 | `partials/_stacked_bar_chart.html` | Accessible chart from `hq_sdk.ui.StackedBarChart` |
@@ -219,6 +220,18 @@ Plugin templates supply domain content while HQ owns layout behavior, tokens,
 responsive rules, accessibility states, and visual evolution. A new shared
 pattern belongs in HQ first; copying host CSS or markup into every plugin is a
 contract failure.
+
+Wrap a `.data-table` in `.table-scroll`; HQ preserves horizontal scrolling and
+keeps its headings visible through long result sets. The enhancement is visual
+only and inert, so the real table remains the single semantic and interactive
+source—including sorting, selection, and assistive-technology navigation.
+
+Dense pages expose their information architecture with
+`PageNavigation((PageSection("overview", "Overview"), ...))`, include
+`partials/_page_navigation.html`, and put the corresponding stable `id` plus
+`data-page-section` on each section. HQ then owns compact horizontal overflow,
+sticky positioning, scroll-aware current state, and fragment history. Labels
+may change; section IDs are durable links.
 
 ## Routes that authenticate themselves
 

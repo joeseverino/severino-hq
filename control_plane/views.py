@@ -59,6 +59,7 @@ from application.provider_forms import (
 from application.security import safe_next, web_principal
 from core.network import client_ip
 from application.service_context import sections_for
+from application.ui import PageNavigation, PageSection
 from application.services import (
     CONTAINER_KIND,
     alias_target,
@@ -803,6 +804,16 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
         # Everything else HQ holds about this name, gathered by the name. Only
         # here: the board builds every service and needs none of it.
         context["sections"] = sections_for(context["service"])
+        context["page_navigation"] = PageNavigation(
+            (
+                PageSection("overview", "Overview"),
+                *(
+                    PageSection(section.id, section.label)
+                    for section in context["sections"]
+                ),
+                PageSection("resources", "Resources"),
+            )
+        )
         # Two filters, and both are readings rather than opinions: what the
         # controller says it implements for a container, and what the container's
         # current state makes worth asking. Offering all three always means

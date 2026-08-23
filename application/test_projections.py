@@ -22,6 +22,8 @@ from .ui import (
     PLOT_LEFT,
     PLOT_WIDTH,
     ChartSeries,
+    PageNavigation,
+    PageSection,
     Timeline,
     TimelineItem,
     line_chart,
@@ -30,6 +32,26 @@ from .ui import (
 
 
 class UiProjectionTests(TestCase):
+    def test_page_navigation_is_a_stable_accessible_fragment_map(self):
+        navigation = PageNavigation(
+            (PageSection("overview", "Overview"), PageSection("recent-work", "Recent work"))
+        )
+
+        rendered = render_to_string(
+            "partials/_page_navigation.html", {"navigation": navigation}
+        )
+
+        self.assertIn('aria-label="On this page"', rendered)
+        self.assertIn('href="#recent-work"', rendered)
+
+    def test_page_navigation_rejects_ambiguous_or_unsafe_destinations(self):
+        with self.assertRaisesMessage(ValueError, "only lowercase"):
+            PageSection("Recent work", "Recent work")
+        with self.assertRaisesMessage(ValueError, "must be unique"):
+            PageNavigation(
+                (PageSection("overview", "Overview"), PageSection("overview", "Again"))
+            )
+
     def test_timeline_requires_chronological_items_and_renders_links(self):
         item = TimelineItem(
             date(2026, 11, 1),

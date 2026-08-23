@@ -122,6 +122,10 @@ class PageTests(TestCase):
 
         self.assertContains(response, "Delivery")
         self.assertContains(response, "example/a")
+        self.assertContains(response, 'aria-label="On this page"')
+        self.assertContains(response, 'href="#delivery"')
+        self.assertContains(response, 'id="delivery"')
+        self.assertContains(response, 'class="page-head-status ', count=1)
 
     def test_a_service_nothing_else_knows_about_grows_no_bands(self):
         a_service()

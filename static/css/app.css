@@ -51,6 +51,12 @@
      the sections toggle -- so the two cannot drift apart by being sized in
      two places. */
   --control-size: 34px;
+  /* Measured by the enhancement layer because the global header changes shape
+     with its contents. Dense-page navigation and floating table headings both
+     consume the same inset instead of guessing it independently. */
+  --site-header-height: 55px;
+  --page-nav-height: 0px;
+  --motion-fast: 150ms;
   /* Fluid sizes. These scale with the viewport instead of stepping at a
      breakpoint, so the page has no width at which padding or a heading jumps.
      Each replaces a rule that existed only to restate the same value smaller. */
@@ -397,12 +403,84 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .page-head-compact { margin-bottom: 0; }
 .page-head-compact .page-lede { margin-bottom: 0; }
 .page-head h1 { margin: 0; }
+.page-head p { margin: 0; }
 .page-head .page-lede { margin-bottom: 0; }
+.page-head-copy:has(.page-head-status) {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 6px;
+}
+.page-head-copy:has(.page-head-status) h1 { grid-column: 1 / -1; }
+.page-head-status { grid-column: 1; }
+.page-head-copy:has(.page-head-status) p { grid-column: 2; }
 /* Never squeezed by the lede beside it. A flex item defaults to shrinking at
    its content, so a long lede wrapped "Download .md" onto two lines and left
    the two controls beside it different heights. */
 .page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .page-head .page-actions > * { white-space: nowrap; }
+
+/* A page declares its sections; the shell owns how they are traversed. Like
+   the global navigation this is one row at every width, horizontally
+   scrollable when necessary, so adding a section cannot make a page taller
+   before its actual content begins. */
+.page-nav {
+  position: sticky;
+  inset-block-start: var(--site-header-height);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-inline-size: 0;
+  padding-block: 8px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border-block-end: 1px solid var(--line);
+  backdrop-filter: saturate(160%) blur(8px);
+}
+.page-nav-label {
+  flex: none;
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.page-nav-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0 2px;
+  overflow-x: auto;
+  overflow-y: clip;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  list-style: none;
+}
+.page-nav-list::-webkit-scrollbar { display: none; }
+.page-nav-list li { flex: none; }
+.page-nav-list a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 32px;
+  padding-inline: 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  text-decoration: none;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+.page-nav-list a:hover,
+.page-nav-list a:focus-visible { color: var(--ink); background: var(--surface); }
+.page-nav-list a[aria-current="location"] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.page-section { scroll-margin-block-start: calc(var(--site-header-height) + var(--page-nav-height) + 12px); }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge -- otherwise
    the same button lands beside the title on one page and against the right
@@ -849,6 +927,26 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .data-table th, .data-table td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
 .data-table thead th { background: var(--surface-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+/* Horizontal overflow necessarily creates a scroll container, which prevents
+   native sticky cells from following the document scroll. The table helper
+   mirrors only the visible heading row into this fixed, non-interactive layer;
+   widths and horizontal position continue to come from the real table. */
+.table-sticky-header {
+  position: fixed;
+  z-index: 8;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: 0 3px 8px rgb(24 24 27 / 8%);
+}
+.table-sticky-header[hidden] { display: none; }
+.table-sticky-header .data-table {
+  margin: 0;
+  border-block-end: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.table-sticky-header tbody,
+.table-sticky-header tfoot { display: none; }
 .table-sort-link { display: inline-flex; align-items: center; gap: 5px; color: inherit; white-space: nowrap; }
 .table-sort-link:hover { color: var(--ink); text-decoration: none; }
 .sort-indicator { color: var(--muted-2); font-size: 11px; }
@@ -1913,7 +2011,19 @@ a.kpi:hover { background: var(--surface-2); }
   /* The kind sits beside the name rather than under it, for the same reason:
      two short strings, two rows. The lede keeps its own line. */
   .page-head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
-  .page-head > div:first-child > .page-lede { flex: 1 1 100%; }
+  .page-head > div:first-child > p { flex: 1 1 100%; }
+  /* The primary state is emitted once. On a phone it moves beside the title;
+     the supporting reachability line keeps its own row instead of stacking
+     two pills until they touch. Desktop keeps the quieter state-first lede. */
+  .page-head-copy:has(.page-head-status) {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 2px 8px;
+  }
+  .page-head-copy:has(.page-head-status) h1 { grid-column: 1; }
+  .page-head-status { grid-column: 2; justify-self: start; }
+  .page-head-copy:has(.page-head-status) p { grid-column: 1 / -1; }
   /* `margin-left: auto` eats every pixel of free space, and in a wrapping row
      that is enough on its own to push the controls onto a line of their own --
      even when they would have fitted beside the title. `space-between` puts
@@ -1929,6 +2039,16 @@ a.kpi:hover { background: var(--surface-2); }
      which its children wrap -- without it the row stayed at max-content and
      `overflow-x: clip` on the content column cut the last control off. */
   .page-head .page-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; flex-shrink: 1; }
+  /* Page actions use the same compact touch target as the phone header. Four
+     ordinary verbs then fit one row at 390px instead of leaving one button on
+     a second line and spending another 46px before the page begins. Longer
+     sets still wrap because the container keeps its general flex contract. */
+  .page-head .page-actions .btn,
+  .page-head .page-actions button {
+    min-height: var(--control-size);
+    padding: 6px 10px;
+    font-size: 13.5px;
+  }
   .domain-stack-head,
   .domain-head { align-items: flex-start; flex-direction: column; gap: 8px; }
 
@@ -2292,6 +2412,7 @@ a.kpi:hover { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   .job-bar-unknown i { animation: none; inline-size: 100%; opacity: .35; }
   .job-bar i { transition: none; }
+  .page-nav-list a { transition: none; }
 }
 
 /* Shown only on paper. In the document rather than in CSS `content` so it
@@ -2314,6 +2435,7 @@ a.kpi:hover { background: var(--surface-2); }
   /* Chrome that means nothing on paper: navigation cannot be followed, the
      search box cannot be typed into, buttons cannot be pressed. */
   .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
+  .page-nav, .table-sticky-header,
   .table-controls, .table-filter-menu, .table-selection, .section-foot,
   .btn, button, .job-progress, .page-actions, form,
   /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills

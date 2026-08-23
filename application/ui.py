@@ -1,6 +1,7 @@
 """Stable view models consumed by HQ's shared server-rendered UI primitives."""
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -10,6 +11,7 @@ from datetime import date, timedelta
 # Reserved: these never double as categorical series colours, and each is always
 # rendered with its own text so state is never carried by colour alone.
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
+PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
 def ago(moment) -> str:
@@ -24,6 +26,50 @@ def ago(moment) -> str:
     from django.utils.timesince import timesince
 
     return f"{timesince(moment)} ago"
+
+
+@dataclass(frozen=True)
+class PageSection:
+    """One stable destination in a dense page.
+
+    Extensions declare the page's information architecture as data while HQ
+    owns the navigation, responsive overflow, sticky positioning and active
+    state. ``id`` is deliberately a fragment-safe public identifier: links to
+    a section should survive a label being improved later.
+    """
+
+    id: str
+    label: str
+
+    def __post_init__(self) -> None:
+        if not PAGE_SECTION_ID.fullmatch(self.id):
+            raise ValueError(
+                "PageSection id must start with a lowercase letter and contain "
+                "only lowercase letters, numbers and hyphens."
+            )
+        if not self.label.strip():
+            raise ValueError("PageSection label must not be empty.")
+
+    @property
+    def url(self) -> str:
+        return f"#{self.id}"
+
+
+@dataclass(frozen=True)
+class PageNavigation:
+    """The ordered map of a single page, rendered by HQ."""
+
+    items: tuple[PageSection, ...]
+    label: str = "On this page"
+
+    def __post_init__(self) -> None:
+        if not self.items:
+            raise ValueError("PageNavigation needs at least one section.")
+        if not self.label.strip():
+            raise ValueError("PageNavigation label must not be empty.")
+        ids = tuple(item.id for item in self.items)
+        if len(set(ids)) != len(ids):
+            raise ValueError("PageNavigation section ids must be unique.")
 
 
 @dataclass(frozen=True)
