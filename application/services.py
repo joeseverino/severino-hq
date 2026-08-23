@@ -40,7 +40,6 @@ from django.urls import reverse
 
 from control_plane.models import (
     ManagedResource,
-    ProviderConnection,
     ProviderInventory,
 )
 from control_plane.providers import (
@@ -61,6 +60,7 @@ from .infrastructure import (
     resolved_spec,
     resource_health,
 )
+from .locate import Machines, machines_index, split_endpoint
 from .naming import name_context
 from .reach import UNKNOWN, Reach, reach_of
 from .ui import ListRow
@@ -392,9 +392,14 @@ class Origin:
         Worth separating from "unknown host", which is the same missing lookup
         with a very different meaning: an ingress pointing at an address no host
         claims is a thing HQ cannot describe and probably should.
+
+        Read through the shared endpoint parser rather than by looking for a
+        colon. A bare IPv6 answer is full of colons and carries no port at all,
+        and counting them called it an ingress -- after which the address was
+        split at its last colon and matched against nothing.
         """
 
-        return not self.known and ":" not in self.address
+        return not self.known and not split_endpoint(self.address)[1]
 
     @property
     def operator(self) -> str:
@@ -903,15 +908,22 @@ def _container_declarations() -> dict[tuple[str, str], Any]:
     }
 
 
-def machine_link(address: str) -> "MachineLink | None":
+def machine_link(
+    address: str,
+    machines: "tuple[dict[str, Any], ...] | None" = None,
+    at: "_Whereabouts | None" = None,
+) -> "MachineLink | None":
     """The machine an address belongs to, resolved the way a service resolves it.
 
     One resolution, so a page naming where something runs and a page naming what
     runs there cannot disagree about which machine that is.
+
+    A page asking this of every row passes the readings in, because taken here
+    they are three queries per row for facts that are the same on all of them.
     """
 
-    machines = _machines()
-    origin = _locate(address, machines)
+    machines = _machines() if machines is None else machines
+    origin = _locate(address, machines, at)
     if not origin.host:
         return None
     return _machine_for(origin, machines)
@@ -975,6 +987,11 @@ class _Estate:
     projects: dict[str, dict[str, str]]
     machines: tuple[dict[str, Any], ...]
     containers: "dict[tuple[str, str], Any]"
+    # What places an address: whose machine it is, and what answers there. Read
+    # at most once for the whole catalogue -- each service used to ask both
+    # questions of the database on its own behalf -- and not at all by a page
+    # that lists no service.
+    at: "_Whereabouts | None" = None
     in_use: "_CertificatesInUse | None" = None
 
     @classmethod
@@ -986,6 +1003,7 @@ class _Estate:
             projects=_published_projects(),
             machines=machines,
             containers=_container_declarations(),
+            at=whereabouts(machines),
             # Only if something asks. Most services carry a declared
             # certificate and never reach the question; a dashboard listing
             # published sites never asks it at all, and a query nobody needs is
@@ -1008,7 +1026,7 @@ def _assemble(
     machines = estate.machines
     containers = estate.containers
     in_use = estate.in_use
-    origin = _locate(origin_address, machines) if origin_address else None
+    origin = _locate(origin_address, machines, estate.at) if origin_address else None
     context = name_context(hostname)
     # A container declaration names a machine and a container, not a hostname,
     # so nothing tied it to the name it serves -- the runtime card knew the
@@ -1095,6 +1113,47 @@ def _observed(facet_id: str, origin: Origin | None) -> "Running | None":
             ):
                 return Running.of(record, snapshot.observed_at, container_watchers())
     return None
+
+
+class _Whereabouts:
+    """What places an address: whose machine it is, and what answers there.
+
+    Both are estate-wide readings that every address in a pass shares, and both
+    were taken per address: resolving one read the connections, and asking what
+    was listening on it read the container sweep and the container
+    declarations. A catalogue of thirty names paid for all three thirty times,
+    and the loopback case paid once per declared machine on top.
+
+    Read at most once each and only if asked, for the same reason as the
+    certificates below: a dashboard listing no service resolves no address, and
+    a query nobody needs is one every page pays for.
+    """
+
+    def __init__(self, machines: "tuple[dict[str, Any], ...]"):
+        self._machines = machines
+        self._index: "Machines | None" = None
+        self._answering: "dict[tuple[str, Any], list[str]] | None" = None
+
+    def index(self) -> "Machines":
+        if self._index is None:
+            self._index = machines_index(self._machines)
+        return self._index
+
+    def answering(self) -> "dict[tuple[str, Any], list[str]]":
+        if self._answering is None:
+            self._answering = _answering()
+        return self._answering
+
+
+def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> _Whereabouts:
+    """The placements a page resolving more than one address should read once.
+
+    Passed to ``_locate`` and to ``machine_link``. Left out, each of them reads
+    what it needs and throws it away, which is right for a single lookup and is
+    a query budget that grows with the estate in a loop.
+    """
+
+    return _Whereabouts(_machines() if machines is None else machines)
 
 
 class _CertificatesInUse:
@@ -1202,7 +1261,7 @@ def _points_nowhere(origin: Origin | None, dns: "Facet | None" = None) -> str:
         return ""
     if _served_by_the_provider(dns):
         return ""
-    address = origin.address.rpartition(":")[0] or origin.address
+    address = split_endpoint(origin.address)[0] or origin.address
     if address.startswith(_DOCUMENTATION_RANGES):
         return (
             f"{address} is reserved for documentation, so this name resolves to "
@@ -1256,36 +1315,40 @@ def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
     )
 
 
-def _locate(address: str, machines: tuple[dict[str, Any], ...]) -> Origin:
+def _locate(
+    address: str,
+    machines: tuple[dict[str, Any], ...],
+    at: "_Whereabouts | None" = None,
+) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
 
-    A machine declaration maps an address to a name; the container inventory
-    says what is listening on it. Two sources because they answer different
-    questions, and only one is observed: which machine an address belongs to is
-    a thing HQ is told, while what is running on it is a fact a sweep goes and
-    gets.
+    Which machine an address belongs to is ``application.locate``'s question
+    and is asked of it here rather than answered again -- this used to hold one
+    of four separate implementations, and the four disagreed. What is left is
+    the part that is genuinely about a *service*: the loopback case, where the
+    address deliberately names no machine, and the container, which is observed
+    rather than declared.
 
     The container is named only when exactly one claims the port. Ambiguity is
     reported as silence -- a guess printed beside four facts reads as a fifth.
+
+    ``at`` is passed by anything resolving more than one address, because both
+    readings behind this are estate-wide. Left out, they are taken here, which
+    is right for a single lookup and wrong in a loop.
     """
 
-    # An address with no port is all host. `rpartition` puts the whole string
-    # in its last element when the separator is absent, so splitting blind left
-    # the host empty and every portless origin unmatchable -- a DNS answer
-    # naming a machine HQ knows read as somewhere it had never heard of.
-    host_address, separator, port = address.rpartition(":")
-    if not separator:
-        host_address, port = address, ""
+    at = at if at is not None else _Whereabouts(machines)
+    host_address, port = split_endpoint(address)
     # A proxy forwarding to loopback is forwarding to itself: the request never
     # leaves the machine the ingress runs on. No machine is declared at
     # 127.0.0.1 -- every machine is -- so matching by address cannot answer it,
     # and the honest answer is the machine with something listening on that
-    # port. Silence when more than one qualifies, for the reason below.
+    # port. Silence when more than one qualifies, for the reason above.
     if _is_loopback(host_address):
         found = [
             (machine, claimed)
             for machine in machines
-            if (claimed := _listening(str(machine.get("name", "")), port))
+            if (claimed := _listening(str(machine.get("name", "")), port, at))
         ]
         if len(found) == 1:
             machine, claimed = found[0]
@@ -1295,17 +1358,17 @@ def _locate(address: str, machines: tuple[dict[str, Any], ...]) -> Origin:
                 container=claimed[0] if len(claimed) == 1 else "",
             )
         return Origin(address=address)
-    for machine in machines:
-        name = str(machine.get("name", ""))
-        if host_address != name and host_address not in machine.get("addresses", ()):
-            continue
-        claimed = _listening(name, port)
-        return Origin(
-            address=address,
-            host=name,
-            container=claimed[0] if len(claimed) == 1 else "",
-        )
-    return Origin(address=address, host=_connected_machine(host_address))
+    name = at.index().resolve(host_address)
+    if not name:
+        # Nothing HQ holds says what is there. The address stays on the page,
+        # which is the true answer and the one an operator can act on.
+        return Origin(address=address)
+    claimed = _listening(name, port, at)
+    return Origin(
+        address=address,
+        host=name,
+        container=claimed[0] if len(claimed) == 1 else "",
+    )
 
 
 def _is_loopback(address: str) -> bool:
@@ -1316,31 +1379,7 @@ def _is_loopback(address: str) -> bool:
     return network_of(address) == "loopback"
 
 
-def _connected_machine(address: str) -> str:
-    """A machine HQ holds a credential for, matched by where that credential points.
-
-    A declaration is not the only thing that names a machine. A proxy forwarding
-    to the cPanel host read as "unknown host" while the connections page listed
-    that exact address under a name -- HQ knowing the machine well enough to log
-    into it, and not well enough to say what it was called.
-    """
-
-    if not address:
-        return ""
-    for connection in ProviderConnection.objects.all():
-        endpoint = connection.endpoint
-        if not endpoint:
-            continue
-        if "://" in endpoint:
-            endpoint = urlparse(endpoint).hostname or ""
-        else:
-            endpoint = endpoint.rpartition(":")[0] or endpoint
-        if endpoint == address:
-            return connection.connection_ref
-    return ""
-
-
-def _listening(host: str, port: str) -> list[str]:
+def _listening(host: str, port: str, at: "_Whereabouts | None" = None) -> list[str]:
     """Containers answering on one port of one machine, seen or declared.
 
     A container sharing the machine's network publishes nothing for Docker to
@@ -1351,23 +1390,36 @@ def _listening(host: str, port: str) -> list[str]:
 
     if not host or not port.isdigit():
         return []
-    wanted = int(port)
-    observed = {
-        str(record.get("name", ""))
-        for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND)
-        for record in snapshot.records
-        if record.get("host") == host
-        and wanted in (record.get("ports") or [])
-        and record.get("name")
-    }
-    declared = {
-        str(spec.get("name", ""))
-        for spec in ManagedResource.objects.filter(
-            kind=CONTAINER_KIND, enabled=True
-        ).values_list("spec", flat=True)
-        if spec.get("host") == host and wanted in (spec.get("serves_ports") or [])
-    }
-    return sorted(observed | declared)
+    found = at.answering() if at is not None else _answering()
+    return found.get((host, int(port)), [])
+
+
+def _answering() -> dict[tuple[str, Any], list[str]]:
+    """Every container answering on a port of a machine, by that pair.
+
+    Built whole rather than asked per address. The same two tables answer every
+    such question in a pass, and read per question they were the largest part
+    of what a service catalogue spent.
+    """
+
+    found: dict[tuple[str, Any], set[str]] = {}
+
+    def note(host: Any, name: Any, ports: Any) -> None:
+        host = str(host or "")
+        name = str(name or "")
+        if not host or not name:
+            return
+        for port in ports or ():
+            found.setdefault((host, port), set()).add(name)
+
+    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+        for record in snapshot.records:
+            note(record.get("host"), record.get("name"), record.get("ports"))
+    for spec in ManagedResource.objects.filter(
+        kind=CONTAINER_KIND, enabled=True
+    ).values_list("spec", flat=True):
+        note(spec.get("host"), spec.get("name"), spec.get("serves_ports"))
+    return {key: sorted(names) for key, names in found.items()}
 
 
 def _published_projects() -> dict[str, dict[str, str]]:

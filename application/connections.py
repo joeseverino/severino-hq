@@ -166,6 +166,38 @@ class ConnectionView:
     abilities: tuple[ConnectionAbilityState, ...]
 
 
+def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
+    """The machines one connection opens, named wherever HQ honestly can.
+
+    Three ways a credential names a machine, tried in order of how directly it
+    says so: the machines it reports reaching, its own name when that turns out
+    to be a machine, and last the address it points at.
+
+    The last is the one this page was missing. A credential that opens a shell
+    on a machine HQ was told about printed the address and nothing else, on the
+    one page whose subject is what HQ can reach -- while the machine's own page
+    sat one click away under a name.
+
+    Silence when none of the three lands, which leaves the endpoint column
+    saying exactly what HQ knows.
+    """
+
+    reached = tuple(
+        (name, known[name.lower()].url)
+        for name in row.reaches
+        if name.lower() in known
+    )
+    if reached:
+        return reached
+    if row.connection_ref.lower() in known:
+        found = known[row.connection_ref.lower()]
+        return ((found.name, found.url),)
+    name = located.at(row.endpoint)
+    if name and name.lower() in known:
+        return ((name, known[name.lower()].url),)
+    return ()
+
+
 def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
 
@@ -173,9 +205,32 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
 
     from control_plane.models import ManagedResource
 
+    from .locate import index_of
     from .machines import machine_catalog
 
-    known = {item.name.lower(): item for item in machine_catalog()}
+    catalog = machine_catalog()
+    # Every name the board has for a machine, its own and the ones it folded
+    # in. A credential whose ref turned out to be a second name for a machine
+    # already on the board linked nowhere, because only the kept name was here
+    # -- the row said "reaches nothing HQ has a page for" about a machine whose
+    # page it had just been folded into.
+    known = {item.name.lower(): item for item in catalog}
+    # A kept name is never displaced by somebody else's alias: the board chose
+    # the kept name deliberately, and an alias that happens to collide with one
+    # would otherwise send that machine's row to a different page.
+    for item in catalog:
+        for alias in item.aliases:
+            known.setdefault(alias.lower(), item)
+    # And by address, through the same resolver every other surface uses, so a
+    # credential pointing at a machine HQ knows names it rather than printing a
+    # bare endpoint. The catalogue's own addresses are the evidence: a machine
+    # is whatever the board decided it was, joined on a fact rather than on the
+    # label a template happens to render.
+    located = index_of(
+        declared=[
+            {"name": item.name, "addresses": item.addresses} for item in catalog
+        ]
+    )
     using: dict[str, list[tuple[str, str]]] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
         ref = str(resource.spec.get("connection_ref", "")).strip()
@@ -197,16 +252,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             probed=row.probed,
             detail=row.detail,
             observed_at=row.observed_at,
-            machines=tuple(
-                (name, known[name.lower()].url)
-                for name in row.reaches
-                if name.lower() in known
-            )
-            or (
-                ((row.connection_ref, known[row.connection_ref.lower()].url),)
-                if row.connection_ref.lower() in known
-                else ()
-            ),
+            machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
         )
         for row in ProviderConnection.objects.all()

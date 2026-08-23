@@ -239,7 +239,11 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "a-portainer")
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):
-        with self.assertNumQueries(12):
+        # Twelve until the four address-to-machine resolvers became one; the
+        # page stopped paying for the duplicate read. The property under test is
+        # that the number does not grow with the number of connections, not the
+        # number itself.
+        with self.assertNumQueries(11):
             self.client.get(reverse("control_plane:connections"))
 
         sweep(
@@ -252,7 +256,7 @@ class ConnectionPageTests(TestCase):
                 for index in range(20)
             )
         )
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(11):
             self.client.get(reverse("control_plane:connections"))
 
 

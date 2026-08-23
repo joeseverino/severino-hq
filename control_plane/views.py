@@ -21,6 +21,8 @@ from application.infrastructure import (
     PolicyError,
     certificate_renewal_allowed,
     controller_contract,
+    declared_machines,
+    delivery_targets,
     operation_summary,
     request_certificate_renewal,
     request_lifecycle,
@@ -49,7 +51,7 @@ from application.certificates import (
 from application.connections import connection_catalog
 from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
-from application.services import machine_link
+from application.services import machine_link, whereabouts
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -312,17 +314,21 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
 
 
-def _origin_machine(resource):
-    """The machine a resource forwards to, if its provider says where it serves."""
+def _origin_machine(resource, machines=None, at=None, targets=None):
+    """The machine a resource forwards to, if its provider says where it serves.
+
+    The readings are passed in by a page asking this of every row, where taking
+    them here is the same four queries repeated once per resource.
+    """
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:
         return None
     try:
-        origin = provider.origin(resolved_spec(resource))
+        origin = provider.origin(resolved_spec(resource, targets))
     except (KeyError, TypeError, ValueError):
         return None
-    return machine_link(origin) if origin else None
+    return machine_link(origin, machines, at) if origin else None
 
 
 def _service_links(resource) -> tuple[tuple[str, str], ...]:
@@ -1085,8 +1091,17 @@ class InfrastructureListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Read once for the whole page. Every row that forwards somewhere asks
+        # the same question of the same few tables, and asked per row it is a
+        # query budget that grows with the estate.
+        machines = declared_machines()
+        targets = delivery_targets()
+        at = whereabouts(machines)
         for resource in context["resources"]:
             resource.control_health = resource_health(resource)
+            # Where it sends traffic, named rather than addressed, matching
+            # what the resource's own page has always said.
+            resource.origin_machine = _origin_machine(resource, machines, at, targets)
             # What it is, in the provider's own words. A list of keys alone
             # said "jseverino-com-caa-2" twenty times over -- names HQ invented,
             # each describing nothing.

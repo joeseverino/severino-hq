@@ -696,16 +696,21 @@ def _machine_url(addresses, declared) -> str:
     By address, because the tailnet's name for a machine is rarely the one HQ
     uses -- a laptop is whatever its owner typed into it years ago -- and the
     address is the one thing every source of a machine agrees on.
+
+    Resolved through the shared index, over the declarations this page has
+    already read, so it costs no query. This once intersected two sets of
+    strings, which meant an address recorded with a port on one side and
+    without on the other failed to match a machine HQ had both halves of.
     """
 
     from django.urls import reverse
 
-    wanted = {str(address) for address in addresses or ()}
-    if not wanted:
-        return ""
-    for machine in declared:
-        name = str(machine.get("name", ""))
-        if name and wanted & {str(a) for a in machine.get("addresses") or ()}:
+    from .locate import index_of
+
+    index = index_of(declared=declared)
+    for address in addresses or ():
+        name = index.at(address)
+        if name:
             return reverse("control_plane:machine", kwargs={"name": name})
     return ""
 

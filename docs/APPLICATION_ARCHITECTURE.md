@@ -384,6 +384,24 @@ service view, the generated create-and-edit forms, adoption — is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
+**One address-to-machine resolver, in `application/locate.py`.** Every surface
+that draws a line between two things HQ knows — a proxy and the box it forwards
+to, a credential and the machine it opens, a service and where it runs — is
+asking the same question, and four modules used to answer it independently. The
+four disagreed: one handled loopback, one consulted credentials, one read only
+declarations, one intersected sets of strings, so the same address named a
+machine on one page and nothing on the next. Surfaces now differ only in what
+evidence they hand the resolver, never in how it reads one.
+
+Two invariants keep that from re-splitting. **Names and addresses are separate
+namespaces**, because a machine may legitimately be named like an address while
+another answers at it, and one dictionary silently keeps whichever was written
+last. And **endpoints are parsed in one place** — `core.network.split_host_port`
+— because splitting at the last colon is right for `host:port` and wrong for
+every IPv6 form. A rendered label is never a join key; the resolver joins on
+declared addresses, sweep readings and connection endpoints, all of which are
+facts rather than presentation.
+
 **Identity is declared separately from hostnames**, and the distinction is not
 academic. While every provider held exactly one record per name — an AdGuard
 rewrite, an NPM proxy host — "the same hostname" and "the same record" were the

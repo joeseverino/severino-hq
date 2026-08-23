@@ -23,7 +23,7 @@ from django.utils.dateparse import parse_datetime
 
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 
-from .infrastructure import declared_machines
+from .locate import Machines, index_of, points_at_host
 from control_plane.providers import MACHINE_KIND, PROVIDERS, normalized_hostname
 
 from .services import CONTAINER_KIND, Running, container_watchers
@@ -156,7 +156,19 @@ def machine_catalog() -> tuple[Machine, ...]:
     reached = _reached(connections)
     declared = _declarations()
     present = tailnet_presence()
-    services = _services_by_host(connections, containers)
+    # One index over everything this page has already read, and the same one
+    # every other surface resolves an address through. Built here rather than
+    # queried again because the readings above are exactly its evidence.
+    addresses = _host_addresses(containers)
+    index = index_of(
+        declared=[
+            {"name": name, "addresses": entry.addresses}
+            for name, entry in declared.items()
+        ],
+        hosts=addresses,
+        connections=connections,
+    )
+    services = _services_by_host(index)
     resources = _resources_by_host()
     # A declared machine counts on its own. It used to have to be reached or
     # running something as well, because the declarations came from a document
@@ -170,7 +182,7 @@ def machine_catalog() -> tuple[Machine, ...]:
         for connection in connections
         if connection.reachable
     }
-    aliases, addresses = _same_machine(containers, connections, declared, present)
+    aliases = _same_machine(index, addresses, connections, present)
     canonical = sorted(names - set(aliases))
     return tuple(
         Machine(
@@ -272,13 +284,23 @@ def machine_catalog() -> tuple[Machine, ...]:
     )
 
 
+def _host_addresses(containers: dict[str, list[Running]]) -> dict[str, str]:
+    """Where the sweep says each name it filed containers under actually is."""
+
+    return {
+        host: found[0].host_address
+        for host, found in containers.items()
+        if found and found[0].host_address
+    }
+
+
 def _same_machine(
-    containers: dict[str, list[Running]],
+    index: Machines,
+    located: dict[str, str],
     connections: tuple[ProviderConnection, ...],
-    declared: dict[str, "Declared"] | None = None,
     present: dict[str, Presence] | None = None,
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Names that are one machine, and where that machine is.
+) -> dict[str, str]:
+    """Names that are one machine.
 
     Two things name one machine differently and neither is wrong: a Portainer
     calls a VPS by its environment name, a 1Password SSH item calls it whatever
@@ -286,59 +308,52 @@ def _same_machine(
     that laptop years ago. Kept apart, one machine is several rows with a
     fraction of its facts each.
 
-    The address is what they all agree on, so it is the identity. The name kept
-    is the one HQ already uses -- the name containers are reported under, or the
-    name a machine was declared by -- because that is the name every ``host``
-    field and every page already says.
+    The address is what they all agree on, so it is the identity -- and the
+    index is what turns an address into the one name kept for it, so the fold
+    here and the machine a proxy is said to forward to are the same judgement.
+    This used to compare address strings it had split itself, which meant a
+    machine recorded once as ``10.0.0.5`` and once as ``10.0.0.5:22`` was two
+    machines, and one recorded at a bracketed IPv6 endpoint was two more.
+
+    The name kept is the index's: a declaration first, then the name containers
+    are reported under, then a credential's -- most deliberate first.
 
     A machine whose address HQ has never recorded stays its own row. That is not
     a failure to detect a duplicate; it is HQ declining to assert two things are
     one when nothing it holds says so.
     """
 
-    located = {
-        host: found[0].host_address
-        for host, found in containers.items()
-        if found and found[0].host_address
-    }
     aliases: dict[str, str] = {}
+    # A credential that opens a shell at an address something else already
+    # claims is a second name for that machine, not a second machine. Compared
+    # only against container sweeps before, which is why a declared machine and
+    # the SSH credential reaching it sat side by side as two rows -- the
+    # declaration holding the role and the address, the credential holding
+    # everything served from it.
     for connection in connections:
-        endpoint = connection.endpoint
-        if not endpoint or "://" in endpoint:
+        if not points_at_host(connection.endpoint):
             continue
-        address = endpoint.rpartition(":")[0] or endpoint
-        for host, known in located.items():
-            if known == address and connection.connection_ref != host:
-                aliases[connection.connection_ref] = host
-
-    # Every address HQ was told a machine answers at, so a tailnet name can be
-    # recognised as one of them. The tailnet is the first source that names
-    # machines HQ already knows without using HQ's name for them.
-    by_address = {
-        address: name
-        for name, entry in (declared or {}).items()
-        for address in entry.addresses
-    }
-    # A declared name wins over the name a sweep filed containers under. Both
-    # describe the same machine, and only one of them was chosen deliberately.
+        owner = index.at(connection.endpoint)
+        if owner and owner != connection.connection_ref:
+            aliases[connection.connection_ref] = owner
+    # What a controller calls the host it found is not always that host's name
+    # -- Portainer's own environment is called "local", and a controller
+    # filling that in has only its own hostname to offer. Run the sweep from
+    # somewhere else and every container lands on a machine that is not
+    # running them.
     for host, address in located.items():
-        by_address.setdefault(address, host)
-    # Which makes the sweep's name an alias rather than a second machine. What
-    # a controller calls the host it found is not always that host's name --
-    # Portainer's own environment is called "local", and a controller filling
-    # that in has only its own hostname to offer. Run the sweep from somewhere
-    # else and every container lands on a machine that is not running them.
-    for host, address in located.items():
-        owner = by_address.get(address)
+        owner = index.at(address)
         if owner and owner != host:
             aliases[host] = owner
+    # The tailnet is the first source that names machines HQ already knows
+    # without using HQ's name for them.
     for name, presence in (present or {}).items():
         for address in presence.addresses:
-            owner = by_address.get(address)
+            owner = index.at(address)
             if owner and owner != name:
                 aliases[name] = owner
                 break
-    return aliases, located
+    return aliases
 
 
 def machine(name: str) -> Machine | None:
@@ -409,7 +424,7 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
         # which is what an ssh_transport projection produces and nothing else
         # does -- so a machine HQ can log into is a machine whether or not
         # anything else ever mentions it.
-        if connection.endpoint and "://" not in connection.endpoint:
+        if points_at_host(connection.endpoint):
             found.setdefault(connection.connection_ref, set()).add(
                 connection.connection_ref
             )
@@ -442,9 +457,8 @@ def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
     for connection in connections:
         if connection.connection_ref != name:
             continue
-        endpoint = connection.endpoint
-        if endpoint and "://" not in endpoint:
-            return endpoint
+        if points_at_host(connection.endpoint):
+            return connection.endpoint
     return ""
 
 
@@ -473,22 +487,21 @@ def _declarations() -> dict[str, Declared]:
     }
 
 
-def _services_by_host(
-    connections: tuple[ProviderConnection, ...],
-    containers: dict[str, list[Running]],
-) -> dict[str, set[str]]:
+def _services_by_host(index: Machines) -> dict[str, set[str]]:
     """Which names are served from which machine.
 
     Read straight off the declarations that answer "and then what serves it".
     A board of machines needs one field from each service, and assembling every
     service in full to get it is a query per row and then some.
 
-    The address is resolved against what already names machines here -- a
-    container reporting where it runs, a credential pointing somewhere, a
-    declared address -- so this adds no query of its own.
+    The origin is resolved through the same index every other surface uses, so
+    the machine this board files a name under and the machine that name's own
+    page says it is served from cannot disagree. They did: this once kept its
+    own map, in which a name and an address shared a namespace and a credential
+    outranked a declaration, so a service appeared under the credential's name
+    on the board and under the declared machine's on the service page.
     """
 
-    located = _by_address(connections, containers)
     found: dict[str, set[str]] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
@@ -501,8 +514,7 @@ def _services_by_host(
             continue
         if not origin:
             continue
-        address, separator, _ = origin.rpartition(":")
-        host = located.get(address if separator else origin, "")
+        host = index.resolve(origin)
         if not host:
             continue
         for name in names:
@@ -510,34 +522,6 @@ def _services_by_host(
             if hostname:
                 found.setdefault(host, set()).add(hostname)
     return found
-
-
-def _by_address(
-    connections: tuple[ProviderConnection, ...],
-    containers: dict[str, list[Running]],
-) -> dict[str, str]:
-    """Every way of naming a machine, pointing at the one name kept for it."""
-
-    located: dict[str, str] = {}
-    for host, found in containers.items():
-        located[host] = host
-        if found and found[0].host_address:
-            located[found[0].host_address] = host
-    for connection in connections:
-        endpoint = connection.endpoint
-        if not endpoint or "://" in endpoint:
-            continue
-        address = endpoint.rpartition(":")[0] or endpoint
-        located.setdefault(address, connection.connection_ref)
-        located.setdefault(connection.connection_ref, connection.connection_ref)
-    for machine in declared_machines():
-        name = str(machine.get("name", ""))
-        if not name:
-            continue
-        for address in (name, *machine.get("addresses", ())):
-            if address:
-                located.setdefault(str(address), located.get(name, name))
-    return located
 
 
 def _resources_by_host() -> dict[str, set[str]]:
@@ -571,7 +555,8 @@ def container_context(host: str, name: str) -> dict[str, object]:
 
     from control_plane.providers import normalized_hostname
 
-    from .services import _locate
+    from .infrastructure import declared_machines
+    from .services import _locate, whereabouts
 
     found = machine(host)
     running = next(
@@ -582,6 +567,7 @@ def container_context(host: str, name: str) -> dict[str, object]:
     # assembling every service to ask: the board builds facets, health and
     # certificates for each name, and none of that answers this question.
     machines = declared_machines()
+    at = whereabouts(machines)
     wanted = found.name if found else host
     serves: set[str] = set()
     for resource in ManagedResource.objects.filter(enabled=True):
@@ -595,7 +581,7 @@ def container_context(host: str, name: str) -> dict[str, object]:
             continue
         if not origin:
             continue
-        located = _locate(origin, machines)
+        located = _locate(origin, machines, at)
         if located.host == wanted and located.container == name:
             serves.update(normalized_hostname(item) for item in names)
     return {
