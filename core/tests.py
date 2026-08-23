@@ -335,6 +335,23 @@ class NavigationSmokeTests(_AuthedTestCase):
 
 
 class SearchPageTests(_AuthedTestCase):
+    def test_empty_search_is_the_derived_command_center(self):
+        response = self.client.get("/search/")
+
+        content = response.content.decode()
+        self.assertContains(response, "Command Center")
+        self.assertIn("project.create", content)
+        self.assertIn('href="/projects/"', content)
+        self.assertContains(response, "Open Projects")
+
+    def test_query_filters_commands_as_well_as_records(self):
+        response = self.client.get("/search/", {"q": "certificate.renew"})
+
+        content = response.content.decode()
+        self.assertIn("certificate.renew", content)
+        self.assertNotIn("project.create", content)
+        self.assertNotIn("No resources match this query.", content)
+
     def test_results_highlight_matches_and_skip_empty_scopes(self):
         from unittest import mock
 

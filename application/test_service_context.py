@@ -17,7 +17,7 @@ from control_plane.models import ManagedResource
 from core.models import AuditLog
 from projects.models import Project
 
-from .service_context import sections_for
+from .service_context import ServiceSection, sections_for
 from .services import service_or_prospect
 
 
@@ -148,3 +148,7 @@ class PageTests(TestCase):
             [resolve.__name__ for resolve in SECTIONS],
             ["_delivery", "_activity"],
         )
+
+    def test_service_section_ids_share_the_page_navigation_contract(self):
+        with self.assertRaisesRegex(ValueError, "valid page section id"):
+            ServiceSection("Not valid", "Broken", (), ())

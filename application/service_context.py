@@ -28,6 +28,7 @@ from django.urls import reverse
 
 from core.models import AuditLog
 from .services import projects_by_hostname
+from .ui import PAGE_SECTION_ID
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,12 @@ class ServiceSection:
     # data so a section that gains an action -- redeploy, open the run -- needs
     # no template change.
     actions: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not PAGE_SECTION_ID.fullmatch(self.id):
+            raise ValueError("ServiceSection id must be a valid page section id.")
+        if not self.label.strip():
+            raise ValueError("ServiceSection label must not be empty.")
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:

@@ -205,6 +205,9 @@ def _endpoint(methods: tuple[str, ...]):
 def root(request, version: int):
     """What this is, and what the presented credential may actually do."""
 
+    links = {"capabilities": f"/api/v{version}/capabilities/"}
+    if version >= 2:
+        links["resources"] = f"/api/v{version}/resources/"
     return _ok(
         {
             "service": "severino-hq",
@@ -213,10 +216,7 @@ def root(request, version: int):
             "resource": settings.SEVERINO_API_RESOURCE,
             "actor": request.principal.actor,
             "granted": sorted(granted(request.token_claims)),
-            "links": {
-                "capabilities": f"/api/v{version}/capabilities/",
-                "resources": "/api/v2/resources/",
-            },
+            "links": links,
         }
     )
 

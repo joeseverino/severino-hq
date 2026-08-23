@@ -146,6 +146,13 @@ class ServiceTests(TestCase):
         detail = services.get_resource("projects", project.slug)
 
         self.assertIn("projects", [item["name"] for item in described["resources"]])
+        projects = next(item for item in described["resources"] if item["name"] == "projects")
+        self.assertEqual(projects["web_route"], "projects:list")
+        capabilities = services.describe_capabilities()["capabilities"]
+        project_create = next(
+            item for item in capabilities if item["name"] == "project.create"
+        )
+        self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(detail["slug"], project.slug)
         self.assertIsNotNone(mcp._tool_manager.get_tool("describe_resources"))

@@ -205,6 +205,14 @@ duplicate resources, and duplicate search scopes at composition startup. API,
 MCP, and global search then derive their surfaces from that spec. The older
 `search_provider` hook remains compatible for search-only plugins; new domains
 should attach search to their resource so the declaration cannot drift.
+Set `web_route` to the resource's list route to make it directly reachable from
+the Command Center. It must reverse without arguments; HQ checks that contract
+at startup and renders plain discovery text as a fail-safe if checks were
+bypassed. A capability may set `subject_resource` to that resource's name; HQ
+then connects the operation to its domain in both machine discovery and the
+operator UI, without a second plugin-owned menu or command inventory. Plugins
+use the authorized `list_resource` and `get_resource` SDK functions for reads;
+the host's raw registry and handler callables are intentionally not exported.
 
 ## Shared UI contract
 

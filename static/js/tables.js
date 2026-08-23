@@ -21,12 +21,16 @@
   // chrome. Native sticky cells cannot cross `.table-scroll` because its
   // horizontal overflow makes it a scroll container, so one visual-only clone
   // follows whichever table currently crosses the reading line.
-  const sticky = document.createElement("div");
-  sticky.className = "table-sticky-header";
-  sticky.hidden = true;
-  sticky.setAttribute("aria-hidden", "true");
-  sticky.inert = true;
-  document.body.append(sticky);
+  const sticky = document.querySelector(".table-scroll")
+    ? document.createElement("div")
+    : null;
+  if (sticky) {
+    sticky.className = "table-sticky-header";
+    sticky.hidden = true;
+    sticky.setAttribute("aria-hidden", "true");
+    sticky.inert = true;
+    document.body.append(sticky);
+  }
   let stickySource = null;
   let stickyFrame = null;
 
@@ -43,6 +47,7 @@
 
   function syncStickyHeader() {
     stickyFrame = null;
+    if (!sticky) return;
     const inset = stickyInset();
     const source = [...document.querySelectorAll(".table-scroll")].find((wrapper) => {
       const table = wrapper.querySelector(".data-table");
@@ -73,9 +78,10 @@
     const cloneTable = sticky.querySelector("table");
     const cloneHeads = [...cloneTable.querySelectorAll("thead th")];
     sourceHeads.forEach((head, index) => {
-      cloneHeads[index].style.width = `${head.getBoundingClientRect().width}px`;
-      cloneHeads[index].style.minWidth = `${head.getBoundingClientRect().width}px`;
-      cloneHeads[index].style.maxWidth = `${head.getBoundingClientRect().width}px`;
+      const width = head.getBoundingClientRect().width;
+      cloneHeads[index].style.width = `${width}px`;
+      cloneHeads[index].style.minWidth = `${width}px`;
+      cloneHeads[index].style.maxWidth = `${width}px`;
     });
     const wrapperRect = source.getBoundingClientRect();
     cloneTable.style.width = `${table.getBoundingClientRect().width}px`;
@@ -92,8 +98,21 @@
     }
   }
 
-  document.addEventListener("scroll", scheduleStickyHeader, true);
-  window.addEventListener("resize", scheduleStickyHeader);
+  function preserveDisclosureState(next, url) {
+    const currentQuery = new URL(window.location.href).searchParams.get("q");
+    const nextQuery = new URL(url, window.location.href).searchParams.get("q");
+    if (!currentQuery || !nextQuery) return;
+    document.querySelectorAll("details[data-preserve-open]").forEach((details) => {
+      const key = details.dataset.preserveOpen;
+      const replacement = next.querySelector(`[data-preserve-open="${key}"]`);
+      if (replacement) replacement.open = details.open;
+    });
+  }
+
+  if (sticky) {
+    document.addEventListener("scroll", scheduleStickyHeader, true);
+    window.addEventListener("resize", scheduleStickyHeader);
+  }
 
   const persistSelection = () => {
     try {
@@ -219,6 +238,7 @@
       if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
       const next = new DOMParser().parseFromString(await response.text(), "text/html");
       const focusMemo = captureFocus();
+      preserveDisclosureState(next, url);
       pinColumnWidths(next);
       const selectors = [
         "[data-table-toolbar]",

@@ -151,6 +151,52 @@ class GrantTests(SimpleTestCase):
         self.assertEqual(principal.actor, "example-automation")
 
 
+class CompositionCheckTests(SimpleTestCase):
+    def test_an_unresolvable_resource_route_is_a_named_startup_error(self):
+        from application.resources import ResourceSpec
+        from .checks import capability_contract_check
+
+        resource = ResourceSpec(
+            "example.records",
+            "Records",
+            "Synthetic records.",
+            "read",
+            web_route="missing:list",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E004"])
+        self.assertIn("missing:list", errors[0].msg)
+
+    def test_a_capability_cannot_reference_an_unknown_resource(self):
+        from application.capabilities import CapabilitySpec
+        from application.projects import ProjectCommand, save_project
+        from application.resources import ResourceSpec
+        from .checks import capability_contract_check
+
+        capability = CapabilitySpec(
+            "example.create",
+            "Create a synthetic record.",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            save_project,
+            subject_resource="example.missing",
+        )
+        resource = ResourceSpec("example.records", "Records", "Records.", "read")
+        with (
+            patch("hq_api.checks.capability_specs", return_value=(capability,)),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E003"])
+
+
 @override_settings(
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
@@ -396,6 +442,17 @@ class TransportTests(TestCase):
         self.assertEqual(data["actor"], "example-automation")
         self.assertEqual(data["resource"], RESOURCE)
         self.assertEqual(data["api_version"], 2)
+        self.assertEqual(data["links"]["resources"], "/api/v2/resources/")
+
+    def test_v1_does_not_advertise_a_v2_only_resource_route(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v1/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
+            )
+
+        links = response.json()["data"]["links"]
+        self.assertEqual(links["capabilities"], "/api/v1/capabilities/")
+        self.assertNotIn("resources", links)
 
     def test_capabilities_flag_what_this_token_may_run(self):
         with _serving():
@@ -411,6 +468,7 @@ class TransportTests(TestCase):
         project_create = next(spec for spec in specs if spec["name"] == "project.create")
         self.assertTrue(project_create["idempotency_key_required"])
         self.assertFalse(project_create["request_schema"]["additionalProperties"])
+        self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(
             project_create["request_schema"]["properties"]["payload"],
             project_create["input_schema"],
@@ -443,6 +501,7 @@ class TransportTests(TestCase):
         self.assertTrue(projects["permitted"])
         self.assertFalse(audit["permitted"])
         self.assertIn("query_schema", projects["operations"]["list"])
+        self.assertEqual(projects["web_route"], "projects:list")
 
     def test_resource_list_and_detail_share_the_declared_contract(self):
         from projects.models import Project

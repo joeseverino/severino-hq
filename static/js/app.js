@@ -178,6 +178,19 @@ document.querySelectorAll("dialog.modal").forEach((dialog) => {
   });
 });
 
+// The command center is global, so its shortcut is global too. The header
+// field remains a normal GET form; this only removes the click needed to reach
+// it and leaves local table search's `/` shortcut untouched.
+document.addEventListener("keydown", (event) => {
+  if (!(event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
+  if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+  const search = document.querySelector(".global-search input[type=search]");
+  if (!search) return;
+  event.preventDefault();
+  search.focus();
+  search.select();
+});
+
 // Dropzones. The file input already is the click and drop target, so this adds
 // only what the browser will not: the drag highlight, and telling the operator
 // which files are staged before they commit to importing them.

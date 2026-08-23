@@ -116,6 +116,8 @@ HTTP `request_schema`, including target and optimistic-concurrency fields,
 unknown-field rejection, and whether an idempotency key is required. Clients
 can therefore generate and validate requests from the deployed composition's
 actual registry; a plugin does not maintain a parallel API document.
+The optional `resource` field names the `ResourceSpec` the operation acts on,
+giving clients a stable way to connect discovery, reads, and available writes.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
 label, summary, required permissions, list-query model, stable identifier, and

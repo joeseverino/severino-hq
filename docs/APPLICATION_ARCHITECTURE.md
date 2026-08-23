@@ -148,6 +148,15 @@ derives its core definitions from the same specs. Plugin resource names and
 search scopes are collision-checked at composition startup, and handler
 signatures are checked before the first request.
 
+The web Command Center is another projection of those two registries, not a
+third inventory. Its resource links come from `ResourceSpec.web_route`, and a
+`CapabilitySpec.subject_resource` connects each operation to the domain it acts
+on. The same query filters resources and commands while global search supplies
+live record hits. A plugin that contributes either spec therefore appears in
+the operator's discovery surface without a host edit. Cross-registry references
+and reversible web routes are composition checks, not work repeated in the
+API/MCP execution path.
+
 The machine HTTP adapter adds durable retry semantics around that executor.
 Every state-changing capability requires an actor-scoped idempotency key; the
 canonical request hash and exact response commit in the same transaction as the

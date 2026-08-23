@@ -6,7 +6,6 @@ from application.resources import (
     describe_resources,
     get_resource,
     list_resource,
-    resource_registry,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "describe_resources",
     "get_resource",
     "list_resource",
-    "resource_registry",
 ]

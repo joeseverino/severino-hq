@@ -19,6 +19,7 @@ from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from application.connections import link_choices, outward_links
+from application.command_center import command_center
 from application.dashboard import operating_snapshot
 from application.plugins import plugin_health
 from application.search import global_search
@@ -298,10 +299,11 @@ class SearchView(LoginRequiredMixin, TemplateView):
         groups: list[dict] = []
         contacts: list = []
         total = 0
+        principal = web_principal(self.request.user)
         if q:
             outcome = global_search(
                 q,
-                principal=web_principal(self.request.user),
+                principal=principal,
                 limit_per_scope=self.result_limit,
             )
             groups = outcome["groups"]
@@ -311,12 +313,18 @@ class SearchView(LoginRequiredMixin, TemplateView):
             except D1Error:
                 contacts = []
             total += len(contacts)
+        discovery = command_center(q, principal=principal)
         ctx.update(
             q=q,
             search_query=q,
             groups=groups,
             contacts=contacts,
             total=total,
+            discovered_resources=discovery["resources"],
+            discovered_commands=discovery["commands"],
+            discovery_total=(
+                len(discovery["resources"]) + len(discovery["commands"])
+            ),
         )
         return ctx
 

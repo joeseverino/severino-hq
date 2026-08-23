@@ -77,6 +77,7 @@ class ResourceSpec:
     identifier_type: type = str
     not_found_errors: tuple[type[Exception], ...] = ()
     search: SearchDefinition | None = None
+    web_route: str = ""
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -101,6 +102,7 @@ CORE_RESOURCE_SPECS = (
             ("name", "slug", "description", "technologies_used", "notes"),
             label="Projects", title_field="name",
         ),
+        web_route="projects:list",
     ),
     ResourceSpec(
         "assets",
@@ -117,6 +119,7 @@ CORE_RESOURCE_SPECS = (
             ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
             label="Assets", title_field="item_name",
         ),
+        web_route="assets:list",
     ),
     ResourceSpec(
         "content",
@@ -128,6 +131,7 @@ CORE_RESOURCE_SPECS = (
             ("title", "slug", "topic", "tags", "notes"),
             label="Content", title_field="title",
         ),
+        web_route="content:list",
     ),
     ResourceSpec(
         "documentation",
@@ -139,6 +143,7 @@ CORE_RESOURCE_SPECS = (
             ("doc_id", "title", "system_service", "obsidian_path", "github_path", "notes"),
             label="Docs", title_field="title", badge_field="doc_id",
         ),
+        web_route="docs_index:list",
     ),
     ResourceSpec(
         "expenses",
@@ -152,6 +157,7 @@ CORE_RESOURCE_SPECS = (
             ("vendor", "item", "category", "business_purpose", "notes"),
             label="Expenses",
         ),
+        web_route="expenses:list",
     ),
     ResourceSpec(
         "receipts",
@@ -165,6 +171,7 @@ CORE_RESOURCE_SPECS = (
             ("original_filename", "vendor", "notes"),
             label="Receipts",
         ),
+        web_route="receipts:list",
     ),
     ResourceSpec(
         "audit",
@@ -176,6 +183,7 @@ CORE_RESOURCE_SPECS = (
             ("action", "object_type", "object_id", "object_repr", "operation_id", "message"),
             label="Audit log", timestamp_field="created_at",
         ),
+        web_route="core:audit_list",
     ),
     ResourceSpec(
         "infrastructure.resources",
@@ -187,6 +195,7 @@ CORE_RESOURCE_SPECS = (
         infrastructure.get_managed_resource,
         "key",
         not_found_errors=(infrastructure.NotFoundError,),
+        web_route="control_plane:list",
     ),
     ResourceSpec(
         "services",
@@ -198,6 +207,7 @@ CORE_RESOURCE_SPECS = (
         services.get_service,
         "hostname",
         not_found_errors=(services.NotFoundError,),
+        web_route="control_plane:services",
     ),
 )
 
@@ -306,6 +316,12 @@ def _validate_search_contract(spec: ResourceSpec) -> None:
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} search scope must use the same name."
         )
+    if spec.web_route and not re.fullmatch(
+        r"(?:[A-Za-z_][\w]*:)*[A-Za-z_][\w]*", spec.web_route
+    ):
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} has invalid web route {spec.web_route!r}."
+        )
 
 
 def _validate_resource_spec(spec: ResourceSpec) -> None:
@@ -363,6 +379,7 @@ def describe_resources() -> dict[str, Any]:
                 "name": spec.name,
                 "label": spec.label,
                 "summary": spec.summary,
+                "web_route": spec.web_route or None,
                 "required_capabilities": list(_capability_names(spec)),
                 "operations": {
                     "list": (

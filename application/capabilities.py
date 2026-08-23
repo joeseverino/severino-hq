@@ -88,6 +88,7 @@ class CapabilitySpec:
     command_type: type
     handler: Callable
     target_kind: str | None = None
+    subject_resource: str | None = None
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -108,6 +109,7 @@ _SPECS = (
         Capability.SYNC_DOCUMENTATION,
         HQSyncCommand,
         execute_hq_sync,
+        subject_resource="documentation",
     ),
     CapabilitySpec(
         "project.create",
@@ -116,6 +118,7 @@ _SPECS = (
         Capability.WRITE_PROJECTS,
         ProjectCommand,
         save_project,
+        subject_resource="projects",
     ),
     CapabilitySpec(
         "project.upsert",
@@ -124,6 +127,7 @@ _SPECS = (
         Capability.WRITE_PROJECTS,
         ProjectCommand,
         upsert_project,
+        subject_resource="projects",
     ),
     CapabilitySpec(
         "project.update",
@@ -133,6 +137,7 @@ _SPECS = (
         ProjectCommand,
         save_project,
         "slug",
+        "projects",
     ),
     CapabilitySpec(
         "asset.create",
@@ -141,6 +146,7 @@ _SPECS = (
         Capability.WRITE_ASSETS,
         AssetCommand,
         save_asset,
+        subject_resource="assets",
     ),
     CapabilitySpec(
         "asset.upsert",
@@ -149,6 +155,7 @@ _SPECS = (
         Capability.WRITE_ASSETS,
         AssetCommand,
         upsert_asset,
+        subject_resource="assets",
     ),
     CapabilitySpec(
         "asset.update",
@@ -158,6 +165,7 @@ _SPECS = (
         AssetCommand,
         save_asset,
         "slug",
+        "assets",
     ),
     CapabilitySpec(
         "content.create",
@@ -166,6 +174,7 @@ _SPECS = (
         Capability.WRITE_CONTENT,
         ContentCommand,
         save_content,
+        subject_resource="content",
     ),
     CapabilitySpec(
         "content.update",
@@ -175,6 +184,7 @@ _SPECS = (
         ContentCommand,
         save_content,
         "slug",
+        "content",
     ),
     CapabilitySpec(
         "expense.create",
@@ -183,6 +193,7 @@ _SPECS = (
         Capability.WRITE_EXPENSES,
         ExpenseCommand,
         save_expense,
+        subject_resource="expenses",
     ),
     CapabilitySpec(
         "expense.update",
@@ -192,6 +203,7 @@ _SPECS = (
         ExpenseCommand,
         save_expense,
         "integer",
+        "expenses",
     ),
     CapabilitySpec(
         "documentation.create",
@@ -200,6 +212,7 @@ _SPECS = (
         Capability.WRITE_DOCUMENTATION,
         DocumentationCommand,
         save_documentation,
+        subject_resource="documentation",
     ),
     CapabilitySpec(
         "documentation.update",
@@ -209,6 +222,7 @@ _SPECS = (
         DocumentationCommand,
         save_documentation,
         "doc_id",
+        "documentation",
     ),
     CapabilitySpec(
         "documentation.sync",
@@ -217,6 +231,7 @@ _SPECS = (
         Capability.SYNC_DOCUMENTATION,
         DocumentationSyncCommand,
         execute_documentation_sync,
+        subject_resource="documentation",
     ),
     CapabilitySpec(
         "receipt.update",
@@ -226,6 +241,7 @@ _SPECS = (
         ReceiptMetadataCommand,
         update_receipt,
         "integer",
+        "receipts",
     ),
     CapabilitySpec(
         "project.delete",
@@ -235,6 +251,7 @@ _SPECS = (
         DeleteCommand,
         delete_project,
         "slug",
+        "projects",
     ),
     CapabilitySpec(
         "asset.delete",
@@ -244,6 +261,7 @@ _SPECS = (
         DeleteCommand,
         delete_asset,
         "slug",
+        "assets",
     ),
     CapabilitySpec(
         "content.delete",
@@ -253,6 +271,7 @@ _SPECS = (
         DeleteCommand,
         delete_content,
         "slug",
+        "content",
     ),
     CapabilitySpec(
         "expense.delete",
@@ -262,6 +281,7 @@ _SPECS = (
         DeleteCommand,
         delete_expense,
         "integer",
+        "expenses",
     ),
     CapabilitySpec(
         "documentation.delete",
@@ -271,6 +291,7 @@ _SPECS = (
         DeleteCommand,
         delete_documentation,
         "doc_id",
+        "documentation",
     ),
     CapabilitySpec(
         "receipt.delete",
@@ -280,6 +301,7 @@ _SPECS = (
         DeleteCommand,
         delete_receipt,
         "integer",
+        "receipts",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",
@@ -288,6 +310,7 @@ _SPECS = (
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
         save_managed_resource,
+        subject_resource="infrastructure.resources",
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
@@ -297,6 +320,7 @@ _SPECS = (
         ManagedResourceCommand,
         save_managed_resource,
         "key",
+        "infrastructure.resources",
     ),
     CapabilitySpec(
         "infrastructure.reconcile",
@@ -306,6 +330,7 @@ _SPECS = (
         OperationCommand,
         request_reconcile,
         "key",
+        "infrastructure.resources",
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -315,6 +340,7 @@ _SPECS = (
         OperationCommand,
         request_removal,
         "key",
+        "infrastructure.resources",
     ),
     CapabilitySpec(
         "certificate.renew",
@@ -324,6 +350,7 @@ _SPECS = (
         OperationCommand,
         request_certificate_renewal,
         "key",
+        "infrastructure.resources",
     ),
 )
 
@@ -357,6 +384,12 @@ def _validate_capability_spec(spec: CapabilitySpec) -> None:
     if spec.target_kind is not None and spec.target_kind not in TARGET_KINDS:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid target {spec.target_kind!r}."
+        )
+    if spec.subject_resource is not None and not CAPABILITY_NAME.fullmatch(
+        spec.subject_resource
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has invalid resource {spec.subject_resource!r}."
         )
     required = [
         item.value if isinstance(item, Capability) else item
@@ -428,6 +461,7 @@ def describe_capabilities() -> dict[str, Any]:
                     for capability in spec.required_capabilities
                 ],
                 "target": spec.target_kind,
+                "resource": spec.subject_resource,
                 "input_schema": _command_schema(spec.command_type),
             }
             for spec in capability_specs()
