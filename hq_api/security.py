@@ -151,10 +151,16 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     # client_id for a client-credentials grant, sub for a user-delegated one.
     # Whichever it is lands in the audit log as the actor, so an import can
     # always be traced back to the credential that caused it.
-    actor = (
-        claims.get("client_id")
-        or claims.get("azp")
-        or claims.get("sub")
-        or "unknown-client"
-    )
-    return Principal(str(actor), INTERFACE, frozenset(permissions))
+    #
+    # Refused rather than defaulted. A token carrying none of these used to
+    # become the literal actor "unknown-client", which rode into the audit log
+    # and into the idempotency partition key, where two unrelated credentials
+    # would share one namespace. A verified action nobody can be attributed to
+    # is worse than a rejected one.
+    actor = claims.get("client_id") or claims.get("azp") or claims.get("sub")
+    if not str(actor or "").strip():
+        raise AuthorizationError(
+            "This token names no client. Its `client_id`, `azp` or `sub` claim "
+            "is what HQ records as the actor for everything it does."
+        )
+    return Principal(str(actor).strip(), INTERFACE, frozenset(permissions))

@@ -246,12 +246,20 @@ def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]
     Compared on the fields the declaration carries. A provider hands back more
     than was asked for -- an id it assigned, a status it keeps -- and requiring
     those to appear in a spec nobody wrote would report drift on every record.
+
+    Fields the provider declared ``unobservable`` are skipped: a blank it was
+    never able to fill is not a disagreement. Comparing them anyway made every
+    NPM proxy host that named a certificate differ forever, which
+    ``confirm_observed`` rightly refused to call observed -- so the resource
+    kept its last reconcile's condition and read healthy while no sweep had
+    confirmed it since.
     """
 
+    unobservable = PROVIDERS[kind].unobservable_fields
     return all(
         str(found.get(field, "")) == str(value)
         for field, value in declared.items()
-        if field in found
+        if field in found and field not in unobservable
     )
 
 

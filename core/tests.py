@@ -266,6 +266,7 @@ class OIDCBackendTests(TestCase):
                 backend.verify_claims(
                     {
                         "email": "joe@example.com",
+                        "email_verified": True,
                         "groups": [],
                     }
                 )

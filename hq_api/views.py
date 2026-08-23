@@ -28,6 +28,7 @@ from application.capabilities import (
     execute_capability,
 )
 from application.connections import describe_connections, list_connections
+from application.findings import findings as application_findings
 from application.topology import topology as application_topology
 from application.security import AuthorizationError
 from application.resources import (
@@ -226,6 +227,7 @@ def root(request, version: int):
         links["resources"] = f"/api/v{version}/resources/"
         links["connections"] = f"/api/v{version}/connections/"
         links["topology"] = f"/api/v{version}/topology/"
+        links["findings"] = f"/api/v{version}/findings/"
     return _ok(
         {
             "service": "severino-hq",
@@ -299,11 +301,36 @@ def connections(request, version: int):
 
 
 @_endpoint(("GET",))
+def findings(request, version: int):
+    """What HQ currently claims is wrong, with the evidence and a remedy.
+
+    Derived from the same projection as the topology and narrowed the same way,
+    so a finding can never name something the token could not already read. A
+    remedy is a reference to a capability, not a route.
+    """
+
+    try:
+        return _ok(
+            application_findings(
+                principal=request.principal,
+                rule=request.GET.get("rule", "").strip(),
+            )
+        )
+    except AuthorizationError as exc:
+        return _fail(exc.reason, code=exc.code, status=403)
+
+
+@_endpoint(("GET",))
 def topology(request, version: int):
     """The live permitted infrastructure graph and its canonical actions."""
 
     try:
-        return _ok(application_topology(principal=request.principal))
+        return _ok(
+            application_topology(
+                principal=request.principal,
+                lens=request.GET.get("lens", "").strip(),
+            )
+        )
     except AuthorizationError as exc:
         return _fail(exc.reason, code=exc.code, status=403)
 

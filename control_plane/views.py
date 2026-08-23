@@ -47,7 +47,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_catalog
-from application.topology import derive_topology
+from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
 from application.services import machine_link
 from application.naming import name_context
@@ -1021,6 +1021,9 @@ class TopologyView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         topology = derive_topology(principal=web_principal(self.request.user))
+        active_lens = lens_for(self.request.GET.get("lens", "").strip())
+        if active_lens is not None:
+            topology = apply_lens(topology, active_lens)
         by_id = {node.id: node for node in topology.nodes}
         neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
         for edge in topology.edges:
@@ -1063,9 +1066,13 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                     }
                     for edge in topology.edges
                 ),
+                # A lens can exclude the node a shared link focused. Validating
+                # focus against the narrowed set keeps the two composable.
                 "focus_node": (
                     requested_focus if requested_focus in by_id else ""
                 ),
+                "topology_lenses": topology_lenses(),
+                "active_lens": active_lens,
             }
         )
         return context

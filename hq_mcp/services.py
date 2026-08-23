@@ -16,6 +16,7 @@ from application.capabilities import (
     execute_capability as execute_application_capability,
 )
 from application.security import mcp_principal
+from application.findings import findings as application_findings
 from application.topology import topology as application_topology
 from application.registry import audit_registry as audit_application_registry
 from application.resources import (
@@ -79,10 +80,24 @@ def list_connections() -> dict[str, Any]:
     return list_application_connections(principal=mcp_principal())
 
 
-def get_topology() -> dict[str, Any]:
-    """Return the live infrastructure graph with safe canonical actions."""
+def get_findings(rule: str = "") -> dict[str, Any]:
+    """What HQ currently claims is wrong, with evidence and suggested remedies.
 
-    return application_topology(principal=mcp_principal())
+    Each remedy names an existing capability and target; run one with
+    `execute_capability`. A remedy absent means this principal cannot run it.
+    """
+
+    return application_findings(principal=mcp_principal(), rule=rule.strip())
+
+
+def get_topology(lens: str = "") -> dict[str, Any]:
+    """Return the live infrastructure graph with safe canonical actions.
+
+    Pass a lens name to narrow it to one standing question; the payload always
+    lists every available lens under ``lenses``.
+    """
+
+    return application_topology(principal=mcp_principal(), lens=lens.strip())
 
 
 def list_resource(

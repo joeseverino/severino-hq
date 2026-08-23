@@ -11,5 +11,11 @@ class ControlPlaneConfig(AppConfig):
 
         from .models import ManagedResource, OperationRequest
 
-        register_audit(ManagedResource, "Managed resource")
+        register_audit(
+            ManagedResource,
+            "Managed resource",
+            # A sweep stamps this on every declaration it confirms. That is HQ
+            # reporting that it looked, not the world reporting that it moved.
+            observation=("last_observed_at",),
+        )
         register_audit(OperationRequest, "Infrastructure operation")

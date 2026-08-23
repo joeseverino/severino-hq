@@ -4,13 +4,35 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, SuspiciousOperation
 
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
+
+    def verify_token(self, token, **kwargs):
+        """Check who the token was minted for, which the library does not.
+
+        `mozilla_django_oidc` decodes with `verify_aud: False` and passes no
+        issuer, so every RS256 token signed by a key in the provider's JWKS
+        verifies here -- including one minted for a different client. HQ's own
+        machine API already pins both; this is the browser path meeting it.
+        """
+
+        payload = super().verify_token(token, **kwargs)
+        audience = payload.get("aud")
+        allowed = {audience} if isinstance(audience, str) else set(audience or ())
+        client_id = settings.OIDC_RP_CLIENT_ID
+        if client_id not in allowed:
+            raise SuspiciousOperation("The ID token was issued for another client.")
+        if len(allowed) > 1 and payload.get("azp") != client_id:
+            raise SuspiciousOperation("The ID token was authorized for another party.")
+        issuer = getattr(settings, "OIDC_ISSUER", "")
+        if issuer and payload.get("iss") != issuer:
+            raise SuspiciousOperation("The ID token came from another issuer.")
+        return payload
 
     def verify_claims(self, claims):
         preferred_username = claims.get("preferred_username", "").strip()
@@ -23,8 +45,11 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         groups = set(claims.get("groups") or [])
 
         if allowed_emails or allowed_groups:
+            # An unverified address is a claim the person made about
+            # themselves, not one the provider stands behind.
+            verified_email = email if claims.get("email_verified") is True else ""
             return bool(groups & allowed_groups) or (
-                bool(email) and email in allowed_emails
+                bool(verified_email) and verified_email in allowed_emails
             )
 
         raise PermissionDenied(

@@ -10,8 +10,9 @@ mutation that could drift from the thing it claims to represent.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 from hashlib import sha256
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlencode
 
 from django.urls import reverse
@@ -19,7 +20,13 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import CERTIFICATE_KIND, PROVIDERS, controller_action_policy
 
-from .connections import ConnectionGroup, ConnectionLink, connection_catalog
+from .connections import (
+    ConnectionGroup,
+    ConnectionLink,
+    ConnectionSpec,
+    connection_catalog,
+)
+from .contracts import route_url
 from .infrastructure import certificate_renewal_allowed, resource_health
 from .security import AuthorizationError, Capability, Principal
 
@@ -49,6 +56,35 @@ class TopologyNode:
     status_label: str = ""
     detail: str = ""
     url: str = ""
+    # What this node is an instance of -- a provider kind, or the connection
+    # family that emitted it. The subtitle already reads as this, but a subtitle
+    # is a rendered label and must never become a join key; grouping siblings
+    # needs identity.
+    kind_key: str = ""
+    # When this was last observed, ISO 8601, or "" when nothing observes it.
+    # Health describes the content of the last observation and says nothing
+    # about its age, so a thing observed once and never again reads healthy
+    # forever. This is the fact that distinguishes the two.
+    observed_at: str = ""
+    # What was asked for, and what was last confirmed back. Between them the
+    # whole of triage: equal means a reconcile already ran against this exact
+    # declaration, so a difference the world still shows is the declaration
+    # being wrong rather than the convergence being late.
+    declared_revision: int = 0
+    observed_revision: int = 0
+    # The reason on the active condition, verbatim. "Observed" was written by a
+    # sweep that saw this; "Reconciled" was written by a reconcile and says
+    # nothing about whether a sweep has confirmed it since.
+    reason: str = ""
+    # Whether HQ is converging this at all. A disabled declaration is not a
+    # finding: nobody asked for it to be true.
+    managed: bool = True
+    # Fields this declaration asserts that the last observation did not echo
+    # back, excluding the ones the provider declared it cannot report. Drift is
+    # compared only across fields present in both, so a field the reading omits
+    # is unverified rather than agreed -- the difference between "we set this"
+    # and "we checked this".
+    unconfirmed_fields: tuple[str, ...] = ()
     actions: tuple[TopologyAction, ...] = ()
 
 
@@ -209,12 +245,93 @@ def _link_node(link: ConnectionLink, *, kind: str) -> TopologyNode:
     )
 
 
+_CONNECTION_ROUTES = (
+    ("open", "Open connections", "web_route"),
+    ("manage", "Manage", "management_route"),
+    ("set_up", "Set up", "setup_route"),
+)
+
+
+def _connection_actions(spec: ConnectionSpec) -> tuple[TopologyAction, ...]:
+    """Derive a connection's actions from what its spec declared, and no more.
+
+    Every one is a link to a page that enforces its own authorization. The
+    effect stays ``read`` because that is all this projection can honestly
+    claim: the spec names a destination, not what an operator will do there.
+    """
+
+    actions = []
+    seen: set[str] = set()
+    for name, label, field in _CONNECTION_ROUTES:
+        url = route_url(getattr(spec, field))
+        # A family whose management page *is* its connections page should offer
+        # one button, not the same href twice under two names.
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        actions.append(TopologyAction(name, label, "read", url))
+    if spec.documentation_url:
+        actions.append(
+            TopologyAction(
+                "documentation", "Documentation", "read", spec.documentation_url
+            )
+        )
+    return tuple(actions)
+
+
+def _ability_actions(ability, ability_id: str) -> tuple[TopologyAction, ...]:
+    """Relate an ability to the graph, and to the capability it names.
+
+    An ability that declares a capability is describing an executable contract
+    HQ already owns. Naming it makes the relationship machine-readable without
+    the graph acquiring a way to run it.
+    """
+
+    actions = [
+        TopologyAction("focus", "Show relationships", "read", _focus_url(ability_id))
+    ]
+    if ability.capability:
+        actions.append(
+            TopologyAction(
+                "command",
+                "Open command",
+                ability.effect,
+                f"{route_url('search')}?{urlencode({'q': ability.capability})}",
+                capability=ability.capability,
+            )
+        )
+    return tuple(actions)
+
+
+def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
+    """What this declaration asserts that the last reading did not echo back.
+
+    Drift is compared only across fields present in *both*, so a field the
+    reading omits is never judged -- it is unverified rather than agreed.
+    Fields the provider declared it cannot report are excluded: those are a
+    known gap rather than a silent one.
+    """
+
+    if not resource.last_observed_at or not isinstance(resource.status, dict):
+        return ()
+    unobservable = set(getattr(provider, "unobservable_fields", ()) or ())
+    return tuple(
+        sorted(
+            field
+            for field in (resource.spec or {})
+            if field not in resource.status and field not in unobservable
+        )
+    )
+
+
 def _connection_nodes(
     groups: tuple[ConnectionGroup, ...],
     nodes: dict[str, TopologyNode],
     edges: dict[str, TopologyEdge],
 ) -> None:
     for group in groups:
+        spec_actions = _connection_actions(group.spec)
+        connection_url = spec_actions[0].url if spec_actions else ""
         # A declared ability exists even when no controller currently reports a
         # matching connection. Keeping it in the graph makes the difference
         # between unsupported and temporarily unobserved explicit, and keeps
@@ -230,20 +347,12 @@ def _connection_nodes(
                     subtitle=ability.name,
                     detail=ability.summary,
                     url=_focus_url(ability_id),
-                    actions=(
-                        TopologyAction(
-                            "focus",
-                            "Show relationships",
-                            "read",
-                            _focus_url(ability_id),
-                        ),
-                    ),
+                    actions=_ability_actions(ability, ability_id),
                 ),
             )
         for connection in group.connections:
             instance = connection.instance
             connection_id = f"connection:{group.spec.name}:{instance.id}"
-            connection_url = reverse("control_plane:connections")
             nodes[connection_id] = TopologyNode(
                 id=connection_id,
                 kind="connection",
@@ -253,9 +362,11 @@ def _connection_nodes(
                 status_label=instance.status_label,
                 detail=instance.detail,
                 url=connection_url,
-                actions=(
-                    TopologyAction("open", "Open connections", "read", connection_url),
+                kind_key=group.spec.name,
+                observed_at=(
+                    instance.observed_at.isoformat() if instance.observed_at else ""
                 ),
+                actions=spec_actions,
             )
             if instance.controller_id:
                 controller_id = _derived_id("controller", instance.controller_id)
@@ -268,9 +379,9 @@ def _connection_nodes(
                         subtitle="Controller",
                         url=connection_url,
                         actions=(
-                            TopologyAction(
-                                "open", "Open connections", "read", connection_url
-                            ),
+                            (TopologyAction("open", "Open connections", "read", connection_url),)
+                            if connection_url
+                            else ()
                         ),
                     ),
                 )
@@ -331,6 +442,17 @@ def derive_topology(*, principal: Principal) -> Topology:
             status_label=status_label,
             detail=detail,
             url=reverse("control_plane:detail", kwargs={"key": resource.key}),
+            kind_key=resource.kind,
+            observed_at=(
+                resource.last_observed_at.isoformat()
+                if resource.last_observed_at
+                else ""
+            ),
+            declared_revision=resource.generation,
+            observed_revision=resource.observed_generation,
+            reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),
+            managed=resource.enabled,
+            unconfirmed_fields=_unconfirmed(resource, provider),
             actions=_resource_actions(resource, principal),
         )
 
@@ -364,13 +486,185 @@ def derive_topology(*, principal: Principal) -> Topology:
     return Topology(ordered_nodes, ordered_edges)
 
 
-def serialize_topology(topology: Topology) -> dict[str, Any]:
+@dataclass(frozen=True)
+class TopologyLens:
+    """A standing question about the graph, answered from the graph itself.
+
+    A lens owns no inventory and runs no query. It selects ids out of a
+    projection already derived and already authorized, so a lens can only ever
+    narrow what a principal sees -- never widen it.
+    """
+
+    name: str
+    label: str
+    summary: str
+    select: Callable[[Topology], frozenset[str]]
+
+
+_ATTENTION_STATES = frozenset({"attention", "serious"})
+
+# How far behind its own kind's latest observation a node may fall before the
+# gap means it was skipped rather than swept a moment later. Sweeps write one
+# timestamp for everything they confirm, so siblings land together.
+_STALE_AFTER = timedelta(hours=1)
+
+
+def _incoming_kinds(topology: Topology) -> dict[str, set[str]]:
+    incoming: dict[str, set[str]] = {}
+    for edge in topology.edges:
+        incoming.setdefault(edge.target, set()).add(edge.kind)
+    return incoming
+
+
+def _without_inbound(topology: Topology, kind: str, edge_kind: str) -> frozenset[str]:
+    """Nodes of one kind that nothing currently relates to in one way.
+
+    The absence is the finding: a resource nothing observes and a resource
+    nothing governs are different gaps, and neither is visible from a node in
+    isolation.
+    """
+
+    incoming = _incoming_kinds(topology)
+    return frozenset(
+        node.id
+        for node in topology.nodes
+        if node.kind == kind and edge_kind not in incoming.get(node.id, frozenset())
+    )
+
+
+def _needs_attention(topology: Topology) -> frozenset[str]:
+    return frozenset(
+        node.id for node in topology.nodes if node.status in _ATTENTION_STATES
+    )
+
+
+def _unobserved_resources(topology: Topology) -> frozenset[str]:
+    return _without_inbound(topology, "resource", "used_by")
+
+
+def _ungoverned_resources(topology: Topology) -> frozenset[str]:
+    return _without_inbound(topology, "resource", "governs")
+
+
+def _unobserved_abilities(topology: Topology) -> frozenset[str]:
+    return _without_inbound(topology, "ability", "enables")
+
+
+def _unresolved_dependencies(topology: Topology) -> frozenset[str]:
+    return frozenset(node.id for node in topology.nodes if node.kind == "dependency")
+
+
+def _stale_observations(topology: Topology) -> frozenset[str]:
+    """Nodes a sweep passed over while it confirmed their siblings.
+
+    Compared against the newest observation of the same ``kind_key`` rather
+    than the clock. A kind on a slower cadence is not stale, it is slower, and
+    an absolute threshold cannot tell those apart.
+    """
+
+    latest: dict[str, datetime] = {}
+    seen: dict[str, datetime] = {}
+    for node in topology.nodes:
+        if not node.observed_at or not node.kind_key:
+            continue
+        try:
+            observed = datetime.fromisoformat(node.observed_at)
+        except ValueError:
+            continue
+        seen[node.id] = observed
+        newest = latest.get(node.kind_key)
+        if newest is None or observed > newest:
+            latest[node.kind_key] = observed
+    return frozenset(
+        node.id
+        for node in topology.nodes
+        if node.id in seen and latest[node.kind_key] - seen[node.id] > _STALE_AFTER
+    )
+
+
+def _isolated(topology: Topology) -> frozenset[str]:
+    related: set[str] = set()
+    for edge in topology.edges:
+        related.add(edge.source)
+        related.add(edge.target)
+    return frozenset(node.id for node in topology.nodes if node.id not in related)
+
+
+# Derived from node kinds and edge kinds alone, so an extension that emits a
+# resource or an ability answers them without knowing they exist. Nothing here
+# names a domain, a provider, or an installed package.
+TOPOLOGY_LENSES: tuple[TopologyLens, ...] = (
+    TopologyLens("attention", "Needs attention",
+        "Everything currently reported as pending, drifted, degraded, or unreachable.",
+        _needs_attention),
+    TopologyLens("unobserved-resources", "Resources no connection reports",
+        "Declared resources that no live connection currently names as a dependency.",
+        _unobserved_resources),
+    TopologyLens("ungoverned-resources", "Resources no ability governs",
+        "Declared resources whose kind no connection ability claims to govern.",
+        _ungoverned_resources),
+    TopologyLens("unobserved-abilities", "Abilities with no live connection",
+        "Abilities a provider declared that no current observation enables.",
+        _unobserved_abilities),
+    TopologyLens("unresolved-dependencies", "Unresolved dependencies",
+        "Things a connection depends on that HQ holds no declaration for.",
+        _unresolved_dependencies),
+    TopologyLens("stale-observations", "Left behind by the last sweep",
+        "Things observed materially longer ago than others of their own kind.",
+        _stale_observations),
+    TopologyLens("isolated", "Nodes with no relationships",
+        "Anything nothing else currently reaches, governs, carries, or uses.",
+        _isolated),
+)
+
+_LENS_BY_NAME = {lens.name: lens for lens in TOPOLOGY_LENSES}
+
+
+def topology_lenses() -> tuple[TopologyLens, ...]:
+    """Every standing question any adapter may ask of the topology."""
+
+    return TOPOLOGY_LENSES
+
+
+def lens_for(name: str) -> TopologyLens | None:
+    """Resolve a requested lens, or ``None`` when no declaration claims it."""
+
+    return _LENS_BY_NAME.get(name)
+
+
+def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
+    """Narrow a derived projection to one lens, keeping only surviving edges.
+
+    An edge whose other end the lens excluded is dropped rather than left
+    dangling: every adapter resolves an edge's endpoints against the node set.
+    """
+
+    selected = lens.select(topology)
+    return Topology(
+        tuple(node for node in topology.nodes if node.id in selected),
+        tuple(
+            edge
+            for edge in topology.edges
+            if edge.source in selected and edge.target in selected
+        ),
+    )
+
+
+def serialize_topology(
+    topology: Topology, *, lens: TopologyLens | None = None
+) -> dict[str, Any]:
     counts: dict[str, int] = {}
     for node in topology.nodes:
         counts[node.kind] = counts.get(node.kind, 0) + 1
     return {
         "ok": True,
         "schema_version": 1,
+        # Which lens produced this payload, and every lens that could have.
+        "lens": lens.name if lens else None,
+        "lenses": [
+            {"name": item.name, "label": item.label, "summary": item.summary}
+            for item in TOPOLOGY_LENSES
+        ],
         "summary": {
             "nodes": len(topology.nodes),
             "edges": len(topology.edges),
@@ -381,7 +675,11 @@ def serialize_topology(topology: Topology) -> dict[str, Any]:
     }
 
 
-def topology(*, principal: Principal) -> dict[str, Any]:
+def topology(*, principal: Principal, lens: str = "") -> dict[str, Any]:
     """Return the shared serialized projection for machine delivery adapters."""
 
-    return serialize_topology(derive_topology(principal=principal))
+    selected = lens_for(lens) if lens else None
+    projection = derive_topology(principal=principal)
+    if selected is not None:
+        projection = apply_lens(projection, selected)
+    return serialize_topology(projection, lens=selected)

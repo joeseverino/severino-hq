@@ -3020,6 +3020,16 @@ textarea.code {
 
 /* ----- Derived topology ------------------------------------------------- */
 
+/* A lens is chosen by following a link, so these are the shared chip primitive
+   with one modifier for the current choice. aria-current carries it for anyone
+   the border weight does not reach. */
+.topology-lenses { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.topology-lenses .scope-chip.is-active {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+}
+.topology-lenses .scope-chip.is-active:hover { color: #fff; border-color: var(--accent); }
+.topology-lens-note { margin: 0 0 10px; font-size: 13px; }
+
 .topology-summary {
   display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
   padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius);

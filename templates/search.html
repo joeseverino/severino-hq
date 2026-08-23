@@ -23,6 +23,14 @@
     {% include "partials/_discovery_catalog.html" with title="Resources" items=discovered_resources empty_message="No resources match this query." %}
     {% endif %}
 
+    {% if not q or discovered_views %}
+    {% include "partials/_discovery_catalog.html" with title="Views" items=discovered_views empty_message="No views match this query." %}
+    {% endif %}
+
+    {% if not q or discovered_checks %}
+    {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks empty_message="No checks match this query." %}
+    {% endif %}
+
     {% if not q or discovered_commands %}
     <details class="card discovery-group discovery-commands" data-preserve-open="command-center-commands"{% if q %} open{% endif %}>
       <summary class="section-head">

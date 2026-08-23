@@ -13,6 +13,15 @@
   </div>
 </div>
 
+<nav class="topology-lenses" aria-label="Topology views">
+  <a class="scope-chip{% if not active_lens %} is-active{% endif %}" href="{% url 'control_plane:topology' %}"{% if not active_lens %} aria-current="page"{% endif %}>Everything</a>
+  {% for lens in topology_lenses %}
+    <a class="scope-chip{% if active_lens.name == lens.name %} is-active{% endif %}" href="?lens={{ lens.name|urlencode }}#map" title="{{ lens.summary }}"{% if active_lens.name == lens.name %} aria-current="page"{% endif %}>{{ lens.label }}</a>
+  {% endfor %}
+</nav>
+
+{% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary }}</p>{% endif %}
+
 <div class="topology-summary" role="group" aria-label="Topology summary">
   <span><strong>{{ topology.nodes|length }}</strong> nodes</span>
   <span><strong>{{ topology.edges|length }}</strong> relationships</span>
@@ -87,7 +96,11 @@
         </div>
       </section>
     {% empty %}
-      {% include "partials/_empty_state.html" with message="Nothing has been declared or observed yet." %}
+      {% if active_lens %}
+        {% include "partials/_empty_state.html" with message="Nothing currently matches this view." %}
+      {% else %}
+        {% include "partials/_empty_state.html" with message="Nothing has been declared or observed yet." %}
+      {% endif %}
     {% endfor %}
   </div>
 </section>

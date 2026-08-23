@@ -78,7 +78,13 @@ class ResourceExecutionTests(TestCase):
         outcome = command_center("", principal=NONE)
 
         self.assertEqual(
-            outcome, {"resources": (), "commands": (), "connections": ()}
+            outcome, {
+                "resources": (),
+                "commands": (),
+                "connections": (),
+                "views": (),
+                "checks": (),
+            }
         )
 
     def test_unknown_filters_are_rejected_before_the_handler(self):
