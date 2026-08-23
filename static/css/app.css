@@ -371,6 +371,13 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
   color: var(--ink);
   text-decoration: none;
 }
+.user-menu-panel .user-menu-action-items { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.user-menu-count {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  background: var(--accent-tint); color: var(--accent); font-size: 11px;
+  font-weight: 700; line-height: 18px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Layout ─────────────────────────────────────────────────────── */
 
@@ -898,11 +905,11 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
   margin-bottom: 16px;
   box-shadow: var(--shadow-sm);
 }
-.filter-bar input[type=search], .filter-bar select, .filter-bar input[type=text] {
+.content input[type=search], .filter-bar select, .filter-bar input[type=text] {
   padding: 6px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; font: inherit; font-size: 13.5px;
 }
 .filter-bar input[type=search] { flex: 1 1 240px; }
-.filter-bar input:focus, .filter-bar select:focus { outline: 2px solid var(--accent-tint); outline-offset: -1px; border-color: var(--accent-2); }
+.content input[type=search]:focus, .filter-bar input:focus, .filter-bar select:focus { outline: 2px solid var(--accent-tint); outline-offset: -1px; border-color: var(--accent-2); }
 
 /* ── Data table ─────────────────────────────────────────────────── */
 
@@ -1315,6 +1322,22 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-action { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .attention-value { font-size: 13px; font-weight: 650; color: var(--ink-2); white-space: nowrap; font-feature-settings: "tnum"; }
 .attention-clear { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+.action-items-card { padding-top: 10px; }
+
+.finding-list { display: grid; gap: 12px; }
+.finding-card { border-left: 3px solid var(--line); }
+.finding-card.is-serious { border-left-color: var(--danger); }
+.finding-card.is-attention { border-left-color: var(--warn); }
+.finding-card .section-head { align-items: flex-start; }
+.finding-card .section-head > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.finding-card h2 { margin: 0; color: var(--ink); font-size: 15px; letter-spacing: 0; text-transform: none; }
+.finding-card > p { margin: 0; color: var(--ink-2); line-height: 1.55; }
+.finding-evidence { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; margin: 14px 0 0; background: var(--line-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); overflow: hidden; }
+.finding-evidence > div { min-width: 0; padding: 9px 10px; background: var(--surface-2); }
+.finding-evidence dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .045em; }
+.finding-evidence dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 13px; }
+.finding-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.finding-actions form { display: inline-flex; }
 
 @media (max-width: 720px) {
   .attention-row { grid-template-columns: 1fr auto; }
@@ -3146,6 +3169,11 @@ textarea.code {
 .topology-relations tr.is-related { background: var(--accent-tint); }
 
 @media (max-width: 760px) {
+  .topology-lenses {
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px;
+    overscroll-behavior-inline: contain; scrollbar-width: thin;
+  }
+  .topology-lenses .scope-chip { flex: 0 0 auto; }
   .topology-toolbar { align-items: stretch; }
   .topology-search { flex-basis: 100%; }
   .topology-kind-filters { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }

@@ -64,6 +64,19 @@ health, and structured operation evidence without provider credentials. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
+Priority work has one source: every domain's `Insight` provider is composed by
+`domain_attention_items()`. The dashboard preview, `/action-items/`, and the
+machine snapshot project that same queue; none owns a parallel inbox. Derived
+topology findings enter through the infrastructure provider and drill into an
+evidence/remedy surface, where remedies remain references to registered
+capabilities rather than a second mutation path.
+
+Large projections run inside `application.projection.projection_scope()`. A
+reading may be reused while one answer is assembled and is discarded when that
+scope exits, eliminating repeated joins/counts without serving process-cached
+state to a later request. The dashboard's contact rows, unread total, and
+upstream health likewise arrive from one D1 request.
+
 The dashboard projection has an executable query budget. Growth that adds an
 unbounded query or N+1 relationship fetch fails CI before it becomes an
 operator-visible latency regression.

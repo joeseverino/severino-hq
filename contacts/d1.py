@@ -85,6 +85,25 @@ def get_recent_submissions(limit: int = 4) -> list[dict]:
     )
 
 
+def get_dashboard_state(limit: int = 4) -> tuple[list[dict], int]:
+    """Recent submissions and the unread total from one D1 request."""
+
+    rows = query(
+        "SELECT id, created_at, name, email, status, country, "
+        "SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) OVER () AS unread_count "
+        "FROM contact_submissions ORDER BY id DESC LIMIT ?",
+        [limit],
+    )
+    unread = int(rows[0].get("unread_count", 0)) if rows else 0
+    return (
+        [
+            {key: value for key, value in row.items() if key != "unread_count"}
+            for row in rows
+        ],
+        unread,
+    )
+
+
 def get_unread_count() -> int:
     """Return the number of unread contact submissions."""
     results = query(

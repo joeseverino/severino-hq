@@ -6,6 +6,8 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import (
+    ActionItemCountView,
+    ActionItemsView,
     DashboardLinkChoiceView,
     ConnectionView,
     DashboardView,
@@ -39,6 +41,8 @@ urlpatterns = [
     ),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
+    path("action-items/", ActionItemsView.as_view(), name="action_items"),
+    path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(
         "dashboard/links/",

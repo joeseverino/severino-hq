@@ -197,6 +197,16 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.findings",
+        label="Findings",
+        navigation=(
+            NavigationItem(
+                "Findings", "control_plane:findings", "control_plane", 128,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.topology",
         label="Topology",
         # The relational map leads the Infrastructure group because it is the

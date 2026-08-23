@@ -133,12 +133,16 @@ available in the header.
 - The top navigation highlights the active section and stays on one row on
   desktop. If the viewport is narrow, the nav scrolls horizontally instead of
   wrapping into stacked links.
-- Account actions (Admin, Sign out) sit in a dropdown under your username,
-  keeping the header nav compact.
+- Operator utilities (Action items, Admin, Sign out) sit in a dropdown under
+  your username, keeping the domain nav compact. Dashboard and Action items
+  show the current queue count on that entry without making unrelated pages
+  assemble the queue just to render the header.
 - Header search goes to `/search/` and searches projects, content, docs,
   assets, expenses, and receipts.
-- The dashboard "needs attention" queue links to filtered cleanup views for
-  docs needing review and draft content.
+- `/action-items/` is the complete cross-domain queue. The dashboard is its
+  compact preview; host domains and installed extensions emit the same Insight
+  contract, and derived infrastructure findings link through to their evidence
+  and safe existing remedies.
 - Dashboard quick actions link to the common create/import flows: new expense,
   upload receipt, new project, new content, and Docs manifest import.
 - Relationship health counts are status indicators, not blockers; non-zero

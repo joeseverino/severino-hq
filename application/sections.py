@@ -32,6 +32,7 @@ from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
 
+from .projection import read_once
 from .services import service_reading
 
 Card = dict[str, Any]
@@ -70,10 +71,13 @@ def projects_needing_output():
 
 
 def projects_reading() -> dict[str, int]:
-    return {
-        "active": active_projects().count(),
-        "needing_output": projects_needing_output().count(),
-    }
+    return read_once(
+        "sections.projects",
+        lambda: {
+            "active": active_projects().count(),
+            "needing_output": projects_needing_output().count(),
+        },
+    )
 
 
 def projects() -> tuple[Card, ...]:
@@ -105,7 +109,13 @@ def published_content():
 
 
 def content_reading() -> dict[str, int]:
-    return {"drafts": draft_content().count(), "published": published_content().count()}
+    return read_once(
+        "sections.content",
+        lambda: {
+            "drafts": draft_content().count(),
+            "published": published_content().count(),
+        },
+    )
 
 
 def content() -> tuple[Card, ...]:
@@ -129,7 +139,10 @@ def docs_needing_review():
 
 
 def documentation_reading() -> dict[str, int]:
-    return {"needing_review": docs_needing_review().count()}
+    return read_once(
+        "sections.documentation",
+        lambda: {"needing_review": docs_needing_review().count()},
+    )
 
 
 def documentation() -> tuple[Card, ...]:
@@ -162,7 +175,7 @@ def fiscal_year_start(today=None):
     return start
 
 
-def expenses_reading() -> dict[str, Any]:
+def _expenses_reading() -> dict[str, Any]:
     today = timezone.localdate()
     totals = Expense.objects.filter(
         date__range=(fiscal_year_start(today), today)
@@ -177,6 +190,10 @@ def expenses_reading() -> dict[str, Any]:
         "deductible": totals["deductible"] or ZERO_MONEY,
         "year": today.year,
     }
+
+
+def expenses_reading() -> dict[str, Any]:
+    return read_once("sections.expenses", _expenses_reading)
 
 
 def expenses() -> tuple[Card, ...]:

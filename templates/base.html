@@ -89,7 +89,7 @@
           aria-label="Find anything"
         >
       </form>
-      <details class="user-menu" data-menu>
+      <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}">
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -98,6 +98,10 @@
           </svg>
         </summary>
         <div class="user-menu-panel">
+          <a class="user-menu-action-items" href="{% url 'action_items' %}">
+            <span>Action items</span>
+            <span class="user-menu-count" data-action-count{% if not show_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
+          </a>
           <a href="{% url 'admin:index' %}">Admin</a>
           {% comment %}
           A real link to the page that answers this, so it works with the dialog

@@ -62,6 +62,7 @@ from .infrastructure import (
 )
 from .locate import Machines, machines_index, split_endpoint
 from .naming import name_context
+from .projection import read_once
 from .reach import UNKNOWN, Reach, reach_of
 from .ui import ListRow
 
@@ -771,7 +772,7 @@ def _aliases(declared, origins) -> dict[str, str]:
     return found
 
 
-def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
+def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     """Every hostname HQ declares, assembled from the resources that name it.
 
     ``favorites`` is the operator's own order for the handful they keep at the
@@ -813,6 +814,15 @@ def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
                 service.hostname,
             ),
         )
+    )
+
+
+def service_catalog(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
+    """Every derived service, read once while a larger projection is assembled."""
+
+    return read_once(
+        f"services.catalog:{'|'.join(favorites)}",
+        lambda: _service_catalog(favorites),
     )
 
 

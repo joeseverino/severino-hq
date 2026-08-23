@@ -4,6 +4,7 @@ import uuid
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -49,6 +50,7 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_catalog
+from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
 from application.services import machine_link, whereabouts
@@ -1079,6 +1081,69 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 ),
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,
+            }
+        )
+        return context
+
+
+class FindingsView(LoginRequiredMixin, TemplateView):
+    """Evidence and safe existing actions for claims from the live topology."""
+
+    template_name = "control_plane/findings.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        principal = web_principal(self.request.user)
+        topology = derive_topology(principal=principal)
+        requested_rule = self.request.GET.get("rule", "").strip()
+        active_rule = rule_for(requested_rule)
+        raised = derive_findings(
+            topology,
+            principal=principal,
+            rule=active_rule.name if active_rule else "",
+        )
+        by_id = {node.id: node for node in topology.nodes}
+        entries = []
+        for finding in raised:
+            subject = by_id.get(finding.subject)
+            topology_url = ""
+            if subject is not None:
+                topology_url = (
+                    f"{reverse('control_plane:topology')}?"
+                    f"{urlencode({'focus': subject.id})}#map"
+                )
+            remedies = []
+            if subject is not None:
+                for remedy in finding.remedies:
+                    action = next(
+                        (
+                            candidate
+                            for candidate in subject.actions
+                            if candidate.capability == remedy.capability
+                            and candidate.target == remedy.target
+                        ),
+                        None,
+                    )
+                    if action is not None:
+                        remedies.append(action)
+            entries.append(
+                {
+                    "finding": finding,
+                    "subject": subject,
+                    "topology_url": topology_url,
+                    "remedies": tuple(remedies),
+                }
+            )
+
+        counts: dict[str, int] = {}
+        for finding in raised:
+            counts[finding.severity] = counts.get(finding.severity, 0) + 1
+        context.update(
+            {
+                "finding_entries": tuple(entries),
+                "finding_rules": finding_rules(),
+                "active_rule": active_rule,
+                "finding_counts": counts,
             }
         )
         return context

@@ -14,8 +14,9 @@ from typing import Any
 from django.utils import timezone
 
 from . import sections
-from .attention import contacts_state
+from .attention import CONTACTS_STATE_KEY, contacts_state
 from .domains import domain_attention_items, domain_dashboard_cards
+from .projection import projection_scope
 from .read_models import recent_activity
 
 
@@ -42,8 +43,16 @@ def work_queue() -> list[dict[str, Any]]:
     ]
 
 
-def operating_snapshot() -> dict[str, Any]:
+def operating_snapshot(
+    *, contacts: tuple[int, str] | None = None
+) -> dict[str, Any]:
     """Return the one canonical KPI, work-queue, and activity projection."""
+    seed = {CONTACTS_STATE_KEY: contacts} if contacts is not None else None
+    with projection_scope(seed):
+        return _operating_snapshot()
+
+
+def _operating_snapshot() -> dict[str, Any]:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
     content = sections.content_reading()

@@ -31,6 +31,34 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMenus(null);
 });
 
+// The queue spans every installed domain and may include remote reads. Asking
+// for its count in the base context would make every page pay that cost before
+// first paint. The dashboard and queue already know it; everywhere else loads
+// it only when the operator opens the menu that displays it.
+document.querySelectorAll("details[data-action-count-url]").forEach((menu) => {
+  menu.addEventListener("toggle", async () => {
+    const badge = menu.querySelector("[data-action-count]");
+    if (!menu.open || menu.dataset.actionCountLoaded || !badge) return;
+    if (!badge.hidden) {
+      menu.dataset.actionCountLoaded = "true";
+      return;
+    }
+    menu.dataset.actionCountLoaded = "loading";
+    try {
+      const response = await fetch(menu.dataset.actionCountUrl, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`Action count returned ${response.status}`);
+      const payload = await response.json();
+      badge.textContent = String(payload.count);
+      badge.hidden = false;
+      menu.dataset.actionCountLoaded = "true";
+    } catch (_error) {
+      delete menu.dataset.actionCountLoaded;
+    }
+  });
+});
+
 // Hover-to-open, for pointers only. On touch there is no hover: the first tap
 // would open a menu and the second would be needed to follow a link, so those
 // devices keep plain click behaviour.

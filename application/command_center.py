@@ -83,8 +83,8 @@ def _lens_url(name: str) -> str:
 
 
 def _finding_url(name: str) -> str:
-    base = route_url("control_plane:topology")
-    return f"{base}?{urlencode({'finding': name})}" if base else ""
+    base = route_url("control_plane:findings")
+    return f"{base}?{urlencode({'rule': name})}" if base else ""
 
 
 def _command_label(name: str) -> str:

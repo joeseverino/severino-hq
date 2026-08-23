@@ -8,6 +8,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from .d1 import get_dashboard_state
+
 SUBMISSION = {
     "id": 1,
     "created_at": "2026-07-18 12:00:00",
@@ -104,3 +106,25 @@ class ContactViewTests(TestCase):
         self.assertRedirects(
             response, reverse("contacts:list"), fetch_redirect_response=False
         )
+
+
+class ContactProjectionTests(TestCase):
+    @patch("contacts.d1.query")
+    def test_dashboard_rows_and_unread_total_share_one_query(self, query):
+        query.return_value = [
+            {
+                "id": 4,
+                "name": "Jane",
+                "status": "unread",
+                "created_at": "2026-08-23",
+                "email": "jane@example.com",
+                "country": "US",
+                "unread_count": 9,
+            }
+        ]
+
+        rows, unread = get_dashboard_state(limit=4)
+
+        query.assert_called_once()
+        self.assertEqual(unread, 9)
+        self.assertNotIn("unread_count", rows[0])

@@ -7,6 +7,7 @@ app_name = "control_plane"
 
 urlpatterns = [
     path("", views.InfrastructureListView.as_view(), name="list"),
+    path("findings/", views.FindingsView.as_view(), name="findings"),
     path("topology/", views.TopologyView.as_view(), name="topology"),
     path("providers.json", views.ProviderSchemaView.as_view(), name="providers"),
     # Before <slug:key>, which would otherwise swallow "services" as a resource

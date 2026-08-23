@@ -721,6 +721,15 @@ class InfrastructureViewsTests(TestCase):
         self.assertEqual(report.status_code, 200)
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
+    def test_findings_page_explains_the_claim_and_its_evidence(self):
+        response = self.client.get(reverse("control_plane:findings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Findings")
+        self.assertContains(response, "Nothing has ever observed tls.certificate")
+        self.assertContains(response, "Records of this kind")
+        self.assertContains(response, reverse("action_items"))
+
     def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
         OperationRequest.objects.create(
             resource=self.resource,

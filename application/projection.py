@@ -14,7 +14,9 @@ would have to be found on the day an API is asked for something other than ISO.
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Callable, Iterator, Mapping, TypeVar
 
 from django.db.models import Q
 
@@ -24,6 +26,48 @@ from django.db.models import Q
 # web, the API and the MCP, and the last of those is driven by a model that will
 # cheerfully ask for a million records and then try to read them.
 MAX_PAGE_SIZE = 100
+
+_T = TypeVar("_T")
+_MISSING = object()
+_READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar(
+    "hq_projection_read_scope", default=None
+)
+
+
+@contextmanager
+def projection_scope(seed: Mapping[str, Any] | None = None) -> Iterator[None]:
+    """Share exact read results for one assembled projection, then forget them.
+
+    This is request/use-case memoisation, not a process cache. Nested composers
+    reuse the active scope and the outermost caller clears it in ``finally``,
+    so two consumers assembling one answer cannot disagree or repeat a read,
+    while the next request always sees current state.
+    """
+
+    current = _READ_SCOPE.get()
+    if current is not None:
+        if seed:
+            current.update(seed)
+        yield
+        return
+    token = _READ_SCOPE.set(dict(seed or {}))
+    try:
+        yield
+    finally:
+        _READ_SCOPE.reset(token)
+
+
+def read_once(key: str, loader: Callable[[], _T]) -> _T:
+    """Load once inside ``projection_scope``; behave normally outside one."""
+
+    scope = _READ_SCOPE.get()
+    if scope is None:
+        return loader()
+    found = scope.get(key, _MISSING)
+    if found is _MISSING:
+        found = loader()
+        scope[key] = found
+    return found
 
 
 def page_size(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:

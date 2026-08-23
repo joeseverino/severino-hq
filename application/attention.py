@@ -27,13 +27,16 @@ from assets.models import Asset
 from contacts.d1 import D1Error, get_unread_count
 from content.models import ContentItem
 from control_plane.models import ManagedResource
-from docs_index.models import DocumentationRecord
 from expenses.models import Expense
-from projects.models import Project
 from receipts.models import Receipt
 
+from .findings import derive_findings
 from .infrastructure import resource_health
+from .projection import read_once
+from .security import cli_principal
 from .services import service_catalog
+from . import sections
+from .topology import derive_topology
 from .ui import Insight
 
 # Reconciliation states that mean the declared world and the real one disagree.
@@ -43,6 +46,7 @@ from .ui import Insight
 # an operator about. Pending clears itself on the next pass; degraded and
 # unknown do not.
 UNSETTLED_RESOURCE_STATES = frozenset({"degraded", "unknown"})
+CONTACTS_STATE_KEY = "attention.contacts-state"
 
 
 def _backlog(
@@ -75,15 +79,7 @@ def _backlog(
 
 def projects() -> tuple[Insight, ...]:
     return _backlog(
-        count=(
-            Project.objects.filter(status=Project.Status.ACTIVE)
-            .annotate(
-                content_count=Count("content_items", distinct=True),
-                doc_count=Count("documentation_records", distinct=True),
-            )
-            .filter(Q(content_count=0) | Q(doc_count=0))
-            .count()
-        ),
+        count=sections.projects_reading()["needing_output"],
         eyebrow="Projects",
         title="Active projects need output",
         body="Active work with no content or documentation recorded against it.",
@@ -94,7 +90,7 @@ def projects() -> tuple[Insight, ...]:
 
 def documentation() -> tuple[Insight, ...]:
     return _backlog(
-        count=DocumentationRecord.objects.needing_review().count(),
+        count=sections.documentation_reading()["needing_review"],
         eyebrow="Docs",
         title="Docs need review",
         body="Documentation past its review interval, so it may no longer be true.",
@@ -106,9 +102,7 @@ def documentation() -> tuple[Insight, ...]:
 def content() -> tuple[Insight, ...]:
     return (
         *_backlog(
-            count=ContentItem.objects.filter(
-                status=ContentItem.Status.DRAFT
-            ).count(),
+            count=sections.content_reading()["drafts"],
             eyebrow="Content",
             title="Draft content",
             body="Written but not published.",
@@ -132,7 +126,7 @@ def content() -> tuple[Insight, ...]:
     )
 
 
-def contacts_state() -> tuple[int, str]:
+def _contacts_state() -> tuple[int, str]:
     """Unread submissions and the upstream's health, from one D1 read.
 
     The single place HQ asks D1 how many submissions are waiting. The snapshot
@@ -140,19 +134,18 @@ def contacts_state() -> tuple[int, str]:
     it here, so the two can never disagree about whether contacts is reachable,
     and a test has one thing to patch.
 
-    Deliberately not memoised. Both readers run within one dashboard render, so
-    this is two D1 round trips where one would do -- but a cache here silently
-    served a stale count to anything that had already read it in the same
-    process, including tests, which then passed while asserting the wrong
-    number. A visible extra call beats an invisible wrong answer. If this
-    becomes worth optimising, the fix is to report upstream health *as* an
-    attention item so the queue is the only reader, not to add a TTL.
+    The public function below memoises only inside one projection scope. There
+    is no process lifetime and therefore no stale value for a later request.
     """
 
     try:
         return get_unread_count(), "ok"
     except D1Error:
         return 0, "unavailable"
+
+
+def contacts_state() -> tuple[int, str]:
+    return read_once(CONTACTS_STATE_KEY, _contacts_state)
 
 
 def contacts() -> tuple[Insight, ...]:
@@ -278,9 +271,61 @@ def infrastructure() -> tuple[Insight, ...]:
     simply cannot vouch for yet.
     """
 
-    items = []
-    for resource in ManagedResource.objects.filter(enabled=True):
-        health = resource_health(resource)
+    principal = cli_principal()
+    topology = derive_topology(principal=principal)
+    resources = tuple(ManagedResource.objects.filter(enabled=True))
+    health_by_key = {resource.key: resource_health(resource) for resource in resources}
+    actionable_keys = {
+        resource.key
+        for resource in resources
+        if health_by_key[resource.key]["state"] not in {"pending", "declared"}
+    }
+    actionable_kinds = {
+        resource.kind for resource in resources if resource.key in actionable_keys
+    }
+    findings = tuple(
+        finding
+        for finding in derive_findings(topology, principal=principal)
+        if (
+            finding.subject.removeprefix("resource:") in actionable_keys
+            if finding.subject
+            else not finding.scope or finding.scope in actionable_kinds
+        )
+    )
+    items = (
+        [
+            Insight(
+                status=(
+                    "serious"
+                    if any(finding.severity == "serious" for finding in findings)
+                    else "attention"
+                ),
+                eyebrow="Finding",
+                title="Infrastructure findings",
+                value=str(len(findings)),
+                body=(
+                    f"{len(findings)} claim{'s' if len(findings) != 1 else ''} "
+                    "derived from the live topology. Open the evidence to see "
+                    "every affected subject or kind."
+                ),
+                action="Review evidence",
+                url=reverse("control_plane:findings"),
+                magnitude=len(findings),
+            )
+        ]
+        if findings
+        else []
+    )
+    covered_resources = {
+        finding.subject.removeprefix("resource:")
+        for finding in findings
+        if finding.subject.startswith("resource:")
+    }
+    covered_kinds = {finding.scope for finding in findings if finding.scope}
+    for resource in resources:
+        if resource.key in covered_resources or resource.kind in covered_kinds:
+            continue
+        health = health_by_key[resource.key]
         if health["state"] not in UNSETTLED_RESOURCE_STATES:
             continue
         items.append(
