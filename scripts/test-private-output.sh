@@ -21,7 +21,7 @@ success_output="$("${repo_dir}/scripts/run-private.sh" \
     'Production preflight' "${success_log}" "${emitter}" 2>&1)"
 [ "${success_output}" = "Production preflight passed." ]
 grep -q 'runtime-inventory-marker' "${success_log}"
-[ "$(stat -f '%Lp' "${success_log}" 2>/dev/null || stat -c '%a' "${success_log}")" = 600 ]
+[ "$(stat -c '%a' "${success_log}" 2>/dev/null || stat -f '%Lp' "${success_log}")" = 600 ]
 
 failure_log="${work_dir}/failure.log"
 set +e
