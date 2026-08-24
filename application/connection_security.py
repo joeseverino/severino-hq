@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from django.conf import settings
 
@@ -47,14 +48,194 @@ class ConnectionSecurityPosture:
     oldest_observed_at: datetime | None
     ability_count: int
     scope_verified_count: int
+    scope_capability_only_count: int
     scope_missing_count: int
     scope_unknown_count: int
     external_custody_count: int
     dependency_count: int
 
 
+def _unattested_edge() -> SecurityControl:
+    return SecurityControl(
+        "edge",
+        "External edge",
+        "neutral",
+        "Not attested here",
+        "HQ has not received a provider observation that proves a source policy "
+        "for this hostname.",
+    )
+
+
+def _unattested_tailnet_policy() -> SecurityControl:
+    return SecurityControl(
+        "tailnet-policy",
+        "Tailscale policy",
+        "neutral",
+        "Not observed",
+        "No current Tailscale policy observation is available.",
+    )
+
+
+def _tailnet_only(policy: dict[str, Any]) -> bool:
+    clients = policy.get("clients")
+    if not isinstance(clients, list):
+        return False
+    rules = [
+        (str(rule.get("directive", "")).lower(), str(rule.get("address", "")).lower())
+        for rule in clients
+        if isinstance(rule, dict)
+    ]
+    return (
+        rules
+        == [
+            ("allow", "100.64.0.0/10"),
+            ("allow", "fd7a:115c:a1e0::/48"),
+            ("deny", "all"),
+        ]
+        and policy.get("satisfy_any") is False
+        and policy.get("pass_auth") is False
+        and policy.get("authorization_count") == 0
+    )
+
+
+def _ingress_control(hostname: str, snapshot) -> SecurityControl:
+    host = hostname.partition(":")[0].strip().lower().rstrip(".")
+    if snapshot is None:
+        return _unattested_edge()
+    record = next(
+        (
+            item
+            for item in snapshot.records
+            if isinstance(item, dict)
+            and host
+            in {
+                str(name).strip().lower().rstrip(".")
+                for name in item.get("domain_names") or ()
+            }
+        ),
+        None,
+    )
+    if record is None:
+        return _unattested_edge()
+    if not snapshot.reachable:
+        return SecurityControl(
+            "edge",
+            "Ingress policy",
+            "neutral",
+            "Last proof is aging",
+            "The NPM connection is not currently reachable. HQ keeps the last "
+            "observation visible without presenting it as current proof.",
+        )
+    if not record.get("access_list_id"):
+        return SecurityControl(
+            "edge",
+            "Ingress policy",
+            "serious",
+            "No source restriction",
+            "NPM reports no access list on this hostname.",
+        )
+    policy = record.get("access_policy")
+    if not isinstance(policy, dict):
+        return SecurityControl(
+            "edge",
+            "Ingress policy",
+            "neutral",
+            "Rules not yet observed",
+            "NPM reports an assigned policy, but the cached sweep predates "
+            "rule-level evidence.",
+        )
+    if not _tailnet_only(policy):
+        return SecurityControl(
+            "edge",
+            "Ingress policy",
+            "serious",
+            "Not Tailnet-only",
+            "The assigned NPM policy does not exactly allow both Tailscale "
+            "address ranges and then deny every other source without proxy auth.",
+        )
+    return SecurityControl(
+        "edge",
+        "Ingress policy",
+        "good",
+        "Tailnet ranges · deny all",
+        "NPM's authenticated API reports that this hostname allows Tailscale "
+        "IPv4 and IPv6 sources, denies everything else, and passes no proxy "
+        "credentials to HQ.",
+    )
+
+
+def _tailnet_policy_control(snapshot) -> SecurityControl:
+    if snapshot is None:
+        return _unattested_tailnet_policy()
+    if not snapshot.reachable:
+        return SecurityControl(
+            "tailnet-policy",
+            "Tailscale policy",
+            "neutral",
+            "Last proof is aging",
+            "The Tailscale policy connection is not currently reachable. HQ "
+            "keeps the prior observation visible without calling it current.",
+        )
+    record = next(
+        (
+            item
+            for item in snapshot.records
+            if isinstance(item, dict) and item.get("record") == "policy"
+        ),
+        None,
+    )
+    if record is None:
+        return _unattested_tailnet_policy()
+    grants = record.get("grants") if isinstance(record.get("grants"), list) else []
+    tests = record.get("tests") if isinstance(record.get("tests"), list) else []
+    return SecurityControl(
+        "tailnet-policy",
+        "Tailscale policy",
+        "good",
+        (
+            f"Observed · {len(grants)} grant{'s' if len(grants) != 1 else ''} · "
+            f"{len(tests)} test{'s' if len(tests) != 1 else ''}"
+        ),
+        "HQ read the active policy through its scoped Tailscale connection. "
+        "The request inspector applies its device-to-HQ verdict to this request.",
+    )
+
+
+def observed_ingress_control(hostname: str) -> SecurityControl:
+    """Derive one hostname's edge control from the cached NPM observation."""
+
+    from control_plane.models import ProviderInventory
+
+    return _ingress_control(
+        hostname, ProviderInventory.objects.filter(kind="npm.proxy_host").first()
+    )
+
+
+def observed_connection_controls(
+    hostname: str,
+) -> tuple[SecurityControl, SecurityControl]:
+    """Read both provider controls in one constant local-cache query."""
+
+    from control_plane.models import ProviderInventory
+
+    snapshots = {
+        row.kind: row
+        for row in ProviderInventory.objects.filter(
+            kind__in=("npm.proxy_host", "tailscale.policy")
+        )
+    }
+    return (
+        _tailnet_policy_control(snapshots.get("tailscale.policy")),
+        _ingress_control(hostname, snapshots.get("npm.proxy_host")),
+    )
+
+
 def connection_security_posture(
-    groups: tuple[ConnectionGroup, ...], *, request
+    groups: tuple[ConnectionGroup, ...],
+    *,
+    request,
+    tailnet_policy: SecurityControl | None = None,
+    edge: SecurityControl | None = None,
 ) -> ConnectionSecurityPosture:
     """Derive security posture from already-authorized, already-cached input."""
 
@@ -75,7 +256,14 @@ def connection_security_posture(
         for connection in connections
     )
     unverified = len(connections) - healthy - attention
-    scope_verified = sum(state.available is True for state in states)
+    scope_verified = sum(
+        state.available is True and bool(state.ability.required_scopes)
+        for state in states
+    )
+    scope_capability_only = sum(
+        state.available is True and not state.ability.required_scopes
+        for state in states
+    )
     scope_missing = sum(state.available is False for state in states)
     scope_unknown = sum(state.available is None for state in states)
     external_custody = sum(
@@ -92,6 +280,8 @@ def connection_security_posture(
     trusted_proxies = sum(hop.role == "proxy" for hop in hops)
     forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR", ""))
     ingress_holds = gate and channel.private and secure
+    tailnet_policy_control = tailnet_policy or _unattested_tailnet_policy()
+    edge_control = edge or _unattested_edge()
 
     controls = (
         SecurityControl(
@@ -104,6 +294,7 @@ def connection_security_posture(
             if gate
             else "This deployment is not enforcing HQ's trusted-network gate.",
         ),
+        tailnet_policy_control,
         SecurityControl(
             "transport",
             "Transport",
@@ -136,7 +327,9 @@ def connection_security_posture(
         SecurityControl(
             "credentials",
             "Credential custody",
-            "good" if connections and external_custody == len(connections) else "neutral",
+            "good"
+            if connections and external_custody == len(connections)
+            else "neutral",
             f"{external_custody} of {len(connections)} externally custodied",
             "Credential values have no field in the connection contract. "
             "Families emit identifiers and cached observations and name the "
@@ -155,13 +348,20 @@ def connection_security_posture(
         SecurityControl(
             "scope",
             "Least-privilege evidence",
-            "attention" if scope_missing else "neutral" if scope_unknown else "good",
+            "attention"
+            if scope_missing
+            else "neutral"
+            if scope_unknown or scope_capability_only
+            else "good",
             (
-                f"{scope_verified} verified · {scope_missing} missing · "
-                f"{scope_unknown} unknown"
+                f"{scope_verified} provider-scoped · "
+                f"{scope_capability_only} capability-only · "
+                f"{scope_missing} missing · {scope_unknown} unknown"
             ),
-            "Each ability is checked against the scopes its connection reported. "
-            "Unknown stays unknown; it is never presented as permission."
+            "Provider-scoped abilities are checked against reported grants. "
+            "Capability-only means the provider contract exposes no granular "
+            "scope for that ability; HQ authorization still applies. Unknown "
+            "and missing scope evidence never become permission."
             if states
             else "No connection abilities have been declared yet.",
         ),
@@ -181,15 +381,7 @@ def connection_security_posture(
             "This page derives its answer from stored observations; opening it "
             "does not probe providers or open a secret store.",
         ),
-        SecurityControl(
-            "edge",
-            "External edge",
-            "neutral",
-            "Not attested here",
-            "HQ cannot infer router, firewall, or public port-forwarding state "
-            "from an application request. The request-path inspector proves "
-            "what HQ can see without pretending to prove the rest.",
-        ),
+        edge_control,
     )
 
     if ingress_holds and channel.id == "tailnet":
@@ -200,9 +392,13 @@ def connection_security_posture(
         headline = "Ingress needs attention. Authority stays explicit."
     state = (
         "serious"
-        if not ingress_holds or attention or scope_missing
+        if not ingress_holds
+        or attention
+        or scope_missing
+        or tailnet_policy_control.state == "serious"
+        or edge_control.state == "serious"
         else "neutral"
-        if unverified or scope_unknown
+        if unverified or scope_unknown or scope_capability_only
         else "good"
     )
     return ConnectionSecurityPosture(
@@ -225,6 +421,7 @@ def connection_security_posture(
         oldest_observed_at=min(observed, default=None),
         ability_count=len(states),
         scope_verified_count=scope_verified,
+        scope_capability_only_count=scope_capability_only,
         scope_missing_count=scope_missing,
         scope_unknown_count=scope_unknown,
         external_custody_count=external_custody,

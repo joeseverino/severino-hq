@@ -150,6 +150,10 @@ class LayerTests(TestCase):
         self.assertEqual(found.channel.id, "network")
         self.assertEqual(found.path_label, "Via forwarding peer")
         self.assertEqual(found.identity.tailnet_user, "")
+        forwarder = self.layer(found, "forwarder")
+        self.assertFalse(forwarder.holds)
+        self.assertTrue(forwarder.conclusive)
+        self.assertIn("not in HQ's exact proxy allowlist", forwarder.detail)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
@@ -162,6 +166,11 @@ class LayerTests(TestCase):
         self.assertTrue(found.forwarded)
         self.assertEqual(found.peer_label, "a-laptop")
         self.assertEqual(found.address, A_TAILNET_ADDRESS)
+        forwarder = self.layer(found, "forwarder")
+        self.assertTrue(forwarder.holds)
+        self.assertTrue(forwarder.conclusive)
+        self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
+        self.assertEqual(forwarder.mechanism, "Exact proxy allowlist")
 
     def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
         found = connection(a_request(A_LAN_ADDRESS, secure=True))
@@ -391,6 +400,21 @@ class ConnectionPageTests(TestCase):
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class AddressEvidenceTests(TestCase):
+    def test_received_lan_and_public_endpoints_are_both_shown_and_labelled(self):
+        a_tailnet(
+            a_device(
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                endpoints=["10.0.0.50:41641", "198.51.100.8:41641"],
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        rows = {row.value: row for row in addresses_of(connection(a_request()))}
+
+        self.assertEqual(rows["10.0.0.50:41641"].label, "Local network")
+        self.assertEqual(rows["198.51.100.8:41641"].label, "Public")
+
     def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
         a_tailnet(
             a_device(
@@ -466,7 +490,7 @@ class HopTests(TestCase):
         found = self.hops(peer="10.0.0.9", forwarded="172.18.0.1")
 
         judged = next(hop for hop in found if hop.role == "judged")
-        self.assertIn("Nothing here identifies", judged.detail)
+        self.assertIn("no distinct caller address was supplied", judged.detail)
 
     def test_a_forwarded_header_from_an_unknown_peer_is_not_believed(self):
         """Otherwise a caller picks the address HQ judges them by."""

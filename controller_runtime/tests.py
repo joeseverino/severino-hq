@@ -886,6 +886,55 @@ class ProviderAdapterTests(TestCase):
             "proxy.example",
         )
 
+    @mock.patch("controller_runtime.providers._request")
+    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch.dict("os.environ", {"NPM_URL": "https://npm.example.test"}, clear=True)
+    def test_npm_inventory_emits_safe_ingress_policy_evidence(self, _token, request):
+        request.side_effect = [
+            [
+                {
+                    "domain_names": ["hq.example.test"],
+                    "access_list_id": 4,
+                    "certificate_id": 0,
+                }
+            ],
+            [
+                {
+                    "id": 4,
+                    "name": "Tailnet only",
+                    "satisfy_any": False,
+                    "pass_auth": False,
+                    "items": [
+                        {
+                            "username": "must-not-leave-provider",
+                            "hint": "m***",
+                            "password": "",
+                        }
+                    ],
+                    "clients": [
+                        {"directive": "allow", "address": "100.64.0.0/10"},
+                        {"directive": "deny", "address": "all"},
+                    ],
+                }
+            ],
+            [],
+        ]
+
+        found = providers.list_npm()[0]["access_policy"]
+
+        self.assertEqual(found["authorization_count"], 1)
+        self.assertEqual(
+            found["clients"],
+            [
+                {"directive": "allow", "address": "100.64.0.0/10"},
+                {"directive": "deny", "address": "all"},
+            ],
+        )
+        serialized = json.dumps(found).lower()
+        self.assertNotIn("must-not-leave-provider", serialized)
+        self.assertNotIn("password", serialized)
+        self.assertNotIn("hint", serialized)
+
     @mock.patch("controller_runtime.providers.renew_tls")
     def test_renew_plan_never_mutates(self, renew):
         result = providers.execute(

@@ -50,7 +50,10 @@ from application.certificates import (
     store_certificate,
 )
 from application.connections import connection_catalog
-from application.connection_security import connection_security_posture
+from application.connection_security import (
+    connection_security_posture,
+    observed_connection_controls,
+)
 from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
@@ -1021,7 +1024,13 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         groups = connection_catalog(principal=web_principal(self.request.user))
         context["connection_groups"] = groups
-        posture = connection_security_posture(groups, request=self.request)
+        tailnet_policy, edge = observed_connection_controls(self.request.get_host())
+        posture = connection_security_posture(
+            groups,
+            request=self.request,
+            tailnet_policy=tailnet_policy,
+            edge=edge,
+        )
         context["connection_posture"] = posture
         context["connection_count"] = posture.connection_count
         core = next(

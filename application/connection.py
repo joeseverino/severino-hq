@@ -319,7 +319,8 @@ def connection(request) -> Connection:
     address = client_ip(request)
     peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
     forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR"))
-    untrusted_forwarding = forwarded and not is_trusted_proxy(peer)
+    forwarding_trusted = forwarded and is_trusted_proxy(peer)
+    untrusted_forwarding = forwarded and not forwarding_trusted
     # (see `_serving_device` for why the observer flag is not the answer)
     # A chain that never named the caller is its own answer, and a more useful
     # one than the class its last proxy happens to fall in. Reporting "local
@@ -369,6 +370,8 @@ def connection(request) -> Connection:
             identity,
             known,
             forwarded=forwarded,
+            forwarding_trusted=forwarding_trusted,
+            forwarding_peer=peer,
         ),
     )
 
@@ -396,8 +399,17 @@ def displayed_client_ip(request) -> str:
 def _chain_is_all_proxies(request) -> bool:
     """Whether the forwarded chain identified anybody at all."""
 
-    return any(hop.role == "judged" and "Nothing here identifies" in hop.detail
-               for hop in hops_of(request))
+    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
+    forwarded = [
+        split_host_port(hop.strip())[0]
+        for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
+        if hop.strip()
+    ]
+    return (
+        bool(forwarded)
+        and is_trusted_proxy(peer)
+        and all(is_trusted_proxy(hop) for hop in forwarded)
+    )
 
 
 def _identity(request, device: tailnet.Device | None) -> Identity:
@@ -467,6 +479,8 @@ def _layers(
     known: dict[str, tailnet.Device],
     *,
     forwarded: bool,
+    forwarding_trusted: bool,
+    forwarding_peer: str,
 ) -> tuple[Layer, ...]:
     """The independent things that each had to hold, outermost first.
 
@@ -480,7 +494,13 @@ def _layers(
         _channel_layer(address, channel),
         *_policy_layers(device, forwarder, serves, request, known, forwarded),
         _device_layer(device),
-        _forwarder_layer(forwarder) if forwarded else None,
+        _forwarder_layer(
+            forwarder,
+            trusted=forwarding_trusted,
+            peer=forwarding_peer,
+        )
+        if forwarded
+        else None,
         _gate_layer(channel),
         _sign_in_layer(identity),
         _session_layer(request, identity),
@@ -668,26 +688,40 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
     )
 
 
-def _forwarder_layer(device: tailnet.Device | None) -> Layer:
+def _forwarder_layer(
+    device: tailnet.Device | None, *, trusted: bool, peer: str
+) -> Layer:
+    if not trusted:
+        return Layer(
+            "forwarder",
+            "The forwarding peer is explicitly trusted",
+            False,
+            "The socket peer is not in HQ's exact proxy allowlist, so its "
+            "forwarded identity is ignored.",
+            evidence=peer,
+            boundary="Forwarding identity",
+            mechanism="Exact proxy allowlist",
+        )
     if device is None:
         return Layer(
             "forwarder",
-            "The forwarding peer is a known node",
-            False,
-            "The socket peer is trusted as a proxy, but the Tailnet sweep did "
-            "not resolve it to a node. HQ cannot independently name the hop.",
+            "The forwarding peer is explicitly trusted",
+            True,
+            "The socket peer is in HQ's exact proxy allowlist. A local reverse "
+            "proxy does not need to be a separate Tailnet node to be trusted.",
+            evidence=peer,
             boundary="Forwarding identity",
-            mechanism="Socket peer and Tailnet inventory",
-            conclusive=False,
+            mechanism="Exact proxy allowlist",
         )
     return Layer(
         "forwarder",
-        "The forwarding peer is a known node",
+        "The forwarding peer is explicitly trusted",
         True,
-        f"{device.label} owns the Tailnet address that opened the socket to HQ.",
+        f"{device.label} owns the allowlisted Tailnet address that opened the "
+        "socket to HQ.",
         evidence=device.dns_name or device.name,
         boundary="Forwarding identity",
-        mechanism="WireGuard node key",
+        mechanism="Exact proxy allowlist and WireGuard node key",
     )
 
 
@@ -1168,12 +1202,10 @@ def hops_of(request) -> tuple[Hop, ...]:
             Hop(
                 peer,
                 "judged",
-                "The machine that actually connected. No forwarded header is "
-                "being believed, because this peer is not a proxy HQ was told "
-                "about."
+                "The socket peer is not in HQ's proxy allowlist, so any "
+                "forwarded client address is ignored."
                 if forwarded
-                else "The machine that actually connected, and the only "
-                "address involved.",
+                else "The socket peer is the caller address HQ evaluates.",
             ),
         )
     # Walked right to left, the way it is decided: from the hop the trusted
@@ -1194,7 +1226,10 @@ def hops_of(request) -> tuple[Hop, ...]:
             roles[index] = "judged"
             settled = True
     detail = {
-        "proxy": "A proxy HQ was told to believe, so not taken as the caller.",
+        "proxy": (
+            "Local reverse proxy. HQ accepts client-address headers only from "
+            "this exact socket peer."
+        ),
         "judged": "The closest address to the caller that HQ can prove.",
         "ignored": (
             "Further from the connection than the address HQ settled on, so it "
@@ -1202,7 +1237,7 @@ def hops_of(request) -> tuple[Hop, ...]:
         ),
     }
     found = [
-        Hop(value, roles[index], _hop_detail(detail[roles[index]], value, index, chain))
+        Hop(value, roles[index], detail[roles[index]])
         for index, value in enumerate(chain)
     ]
     if not settled:
@@ -1211,32 +1246,10 @@ def hops_of(request) -> tuple[Hop, ...]:
         found[-1] = Hop(
             judged,
             "judged",
-            "Every hop in the chain was a proxy HQ knows, so the machine that "
-            "connected is as close to the caller as this request gets. Nothing "
-            "here identifies who is actually calling.",
+            "Every address in the chain is in HQ's proxy allowlist, so no "
+            "distinct caller address was supplied. HQ evaluates the socket peer.",
         )
     return tuple(found)
-
-
-def _hop_detail(detail: str, value: str, index: int, chain: list[str]) -> str:
-    """The line for one hop, with what is worth adding about the last one.
-
-    A loopback peer is worth saying out loud rather than filing as one more
-    proxy: it means the proxy handed the request over without it crossing a
-    network at all, so there is no segment between the two for anything to sit
-    on. Any other peer is simply the machine that connected.
-    """
-
-    if index != len(chain) - 1:
-        return detail
-    if channel_of(split_host_port(value)[0]).id == "loopback":
-        return (
-            detail
-            + " It reached HQ over loopback, so the request never crossed a "
-            "network between the proxy and here."
-        )
-    return detail + " It is the machine that connected."
-
 
 
 def _ago(stamp: str) -> str:

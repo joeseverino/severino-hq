@@ -599,7 +599,7 @@ def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...
 def _ability_state(
     ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
-    if not instance.scopes_known:
+    if ability.required_scopes and not instance.scopes_known:
         return ConnectionAbilityState(ability, None)
     missing = tuple(
         scope

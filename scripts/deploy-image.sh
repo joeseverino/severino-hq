@@ -92,6 +92,13 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
 done
 
 echo "New image did not become healthy." >&2
-docker logs --tail 50 severino-hq >&2 || true
+# Application logs can contain runtime inventory even when they contain no
+# credential. Preserve the failure evidence on the host without publishing it
+# through the self-hosted Actions runner.
+sudo install -d -o root -g root -m 0700 /var/log/severino-hq
+sudo "${app_dir}/scripts/run-private.sh" \
+    "Application failure diagnostics" \
+    /var/log/severino-hq/application-failure.log \
+    docker logs --tail 50 severino-hq || true
 rollback
 exit 1

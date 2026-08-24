@@ -1552,6 +1552,7 @@ def list_npm() -> list[dict[str, Any]]:
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     records = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
+    access_policies = _npm_access_policies(base_url, headers)
     # Only the fields HQ can express, plus the identity. The rest is NPM's
     # business, and copying a whole provider object into HQ would make this an
     # inventory of NPM rather than a list of what HQ could manage.
@@ -1582,13 +1583,52 @@ def list_npm() -> list[dict[str, Any]]:
         {
             **{field: record.get(field) for field in fields},
             "certificate": served_by.get(record.get("certificate_id"), {}),
+            "access_policy": access_policies.get(record.get("access_list_id")),
         }
         for record in records
         if record.get("domain_names")
     ]
 
 
-def _npm_certificates(base_url: str, headers: dict[str, str]) -> dict[Any, dict[str, Any]]:
+def _npm_access_policies(
+    base_url: str, headers: dict[str, str]
+) -> dict[Any, dict[str, Any]]:
+    """Safe ingress rules, stripped of every authorization identity."""
+
+    try:
+        records = _request(
+            f"{base_url}/nginx/access-lists?expand=items,clients", headers=headers
+        )
+    except (ProviderError, OSError, ValueError, KeyError):
+        # A policy endpoint unavailable on an older NPM must not erase every
+        # proxy host. The missing evidence stays unknown until the next sweep.
+        return {}
+    return {
+        record["id"]: {
+            "name": str(record.get("name", "")),
+            "satisfy_any": bool(record.get("satisfy_any", False)),
+            "pass_auth": bool(record.get("pass_auth", False)),
+            # Counts prove that NPM is not adding a second login without
+            # carrying usernames, password hints, or any other auth material
+            # into HQ's safe observation cache.
+            "authorization_count": len(record.get("items") or ()),
+            "clients": [
+                {
+                    "directive": str(client.get("directive", "")),
+                    "address": str(client.get("address", "")),
+                }
+                for client in record.get("clients") or ()
+                if client.get("directive") and client.get("address")
+            ],
+        }
+        for record in records
+        if isinstance(record, dict) and isinstance(record.get("id"), int)
+    }
+
+
+def _npm_certificates(
+    base_url: str, headers: dict[str, str]
+) -> dict[Any, dict[str, Any]]:
     """Every certificate the proxy holds, by the id a host refers to it with.
 
     Reported as an attribute of the host that serves it rather than as an
