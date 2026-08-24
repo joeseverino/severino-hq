@@ -145,6 +145,9 @@ name, effect, required permissions, and application handler. From that registry:
   success/error envelope;
 - the authenticated Streamable HTTP MCP endpoint exposes that catalog and
   executor to the web-independent CLI and agents;
+- the Command Center derives an authorized browser form and machine-contract
+  view for every capability, including plugin capabilities, without a
+  capability-specific view or template;
 - management commands remain an in-process break-glass adapter over the same
   registry; and
 - tests derive their contract assertions from the emitted schemas.
@@ -160,6 +163,11 @@ MCP generic readers execute only registered handlers, while the search index
 derives its core definitions from the same specs. Plugin resource names and
 search scopes are collision-checked at composition startup, and handler
 signatures are checked before the first request.
+
+Managed infrastructure uses that same search projection. Provider and kind
+names such as `tailscale` or `cloudflare` therefore return the locally stored,
+clickable resources alongside the connection family that can reach them;
+Command Center keystrokes never invoke a provider.
 
 External access uses the third declarative registry, `ConnectionSpec`. It says
 which family exists, what abilities and provider scopes it can carry, which
@@ -179,11 +187,25 @@ router and firewall boundary that the process cannot observe.
 The web Command Center is another projection of those three registries, not a
 fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a
 `CapabilitySpec.subject_resource` connects each operation to the domain it acts
-on. The same query filters resources, commands, and connection families while
-global search supplies live record hits. A plugin that contributes any spec appears in
-the operator's discovery surface without a host edit. Cross-registry references
-and reversible web routes are composition checks, not work repeated in the
-API/MCP execution path.
+on. A matching `ConnectionAbility.subject_resource` plus `governs_kinds`
+connects a searched external-system ability to the registered commands that can
+act on those kinds; `ConnectionAbility.capability` names an exact command when
+the operation is not resource-shaped. This is a registry join, not a command
+invented from a credential scope: only a real typed handler can become
+executable. Every permitted command links to one generic execution surface. The host
+derives its controls from the canonical JSON Schema, rejects unknown and
+repeated form fields, uses the registered operator-facing target label, and
+derives eligible target choices through the authorized local `ResourceSpec`
+query; opening a command never calls a provider. A zero-network browser preview
+reflects the selected target and reason beside the registered handler, resource,
+authority, effect, and execution notes, then invokes `execute_capability`; it
+does not reimplement a handler. Retry keys are generated and hidden,
+infrastructure/destructive effects require explicit confirmation, and
+successful writes use POST/Redirect/GET. The same query
+filters resources, commands, and connection families while global search
+supplies live record hits. A plugin that contributes any spec appears in both
+discovery and execution without a host edit. Cross-registry references and
+reversible web routes are composition checks, not work repeated in an adapter.
 
 The infrastructure Topology workspace is the relational projection of the
 same declarations and observations. `ConnectionSpec` supplies abilities,
@@ -195,13 +217,13 @@ canonical capabilities and web use cases, so manipulating a node still crosses
 the existing authorization, validation, audit, transaction, policy, and retry
 boundaries rather than editing a parallel graph.
 
-The machine HTTP adapter adds durable retry semantics around that executor.
+The HTTP API and Command Center add durable retry semantics around that executor.
 Every state-changing capability requires an actor-scoped idempotency key; the
 canonical request hash and exact response commit in the same transaction as the
 domain operation. A dropped response or process restart can therefore be
-retried without repeating a non-idempotent plugin write. This transport guard
+retried without repeating a non-idempotent plugin write. This adapter guard
 does not replace domain idempotency, which continues to protect the same use
-case when invoked through web, MCP, or CLI.
+case when invoked through any interface.
 
 ## Source-of-truth map
 

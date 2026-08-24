@@ -41,7 +41,7 @@ from application.resources import (
     list_resource as list_application_resource,
 )
 
-from .idempotency import (
+from application.idempotency import (
     IdempotencyConflict,
     InvalidIdempotencyKey,
     execute_once,

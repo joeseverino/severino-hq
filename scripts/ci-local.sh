@@ -132,10 +132,14 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   run "makemigrations --check" "$python_bin" manage.py makemigrations --check --dry-run
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
-      "'$python_bin' -m coverage run manage.py test >/dev/null 2>&1 && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
+      "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test >/dev/null 2>&1 && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
     measured="$("$python_bin" -m coverage report --format=total 2>/dev/null || echo '')"
     claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
-    if [ -n "$measured" ] && [ "$measured" != "$claimed" ]; then
+    python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    badge_python="${PYTHON_VERSIONS%% *}"
+    if [ "$python_version" != "$badge_python" ]; then
+      ok "coverage measured ${measured}% (the README quotes Python ${badge_python})"
+    elif [ -n "$measured" ] && [ "$measured" != "$claimed" ]; then
       bad "README badge says ${claimed}%, this run measured ${measured}%"
     elif [ -n "$measured" ]; then
       ok "README coverage badge agrees with the measured ${measured}%"

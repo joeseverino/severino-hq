@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
-
 from dataclasses import dataclass
 from functools import cache
 import inspect
@@ -33,6 +31,7 @@ from .documentation import (
 )
 from .expenses import ExpenseCommand, save_expense
 from .infrastructure import (
+    CERTIFICATE_KIND,
     ManagedResourceCommand,
     OperationCommand,
     request_certificate_renewal,
@@ -87,6 +86,11 @@ class CapabilitySpec:
     handler: Callable
     target_kind: str | None = None
     subject_resource: str | None = None
+    target_label: str = ""
+    target_help: str = ""
+    target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
+    execution_notes: tuple[str, ...] = ()
+    target_initial_fields: tuple[str, ...] = ()
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -136,6 +140,8 @@ _SPECS = (
         save_project,
         "slug",
         "projects",
+        target_label="Project slug",
+        target_help="The project to update.",
     ),
     CapabilitySpec(
         "asset.create",
@@ -164,6 +170,8 @@ _SPECS = (
         save_asset,
         "slug",
         "assets",
+        target_label="Asset slug",
+        target_help="The asset to update.",
     ),
     CapabilitySpec(
         "content.create",
@@ -183,6 +191,8 @@ _SPECS = (
         save_content,
         "slug",
         "content",
+        target_label="Content slug",
+        target_help="The content item to update.",
     ),
     CapabilitySpec(
         "expense.create",
@@ -202,6 +212,8 @@ _SPECS = (
         save_expense,
         "integer",
         "expenses",
+        target_label="Expense ID",
+        target_help="The expense to update.",
     ),
     CapabilitySpec(
         "documentation.create",
@@ -221,6 +233,8 @@ _SPECS = (
         save_documentation,
         "doc_id",
         "documentation",
+        target_label="Document ID",
+        target_help="The documentation record to update.",
     ),
     CapabilitySpec(
         "documentation.sync",
@@ -240,6 +254,8 @@ _SPECS = (
         update_receipt,
         "integer",
         "receipts",
+        target_label="Receipt ID",
+        target_help="The receipt to update.",
     ),
     CapabilitySpec(
         "project.delete",
@@ -250,6 +266,8 @@ _SPECS = (
         delete_project,
         "slug",
         "projects",
+        target_label="Project slug",
+        target_help="The project to delete.",
     ),
     CapabilitySpec(
         "asset.delete",
@@ -260,6 +278,8 @@ _SPECS = (
         delete_asset,
         "slug",
         "assets",
+        target_label="Asset slug",
+        target_help="The asset to delete.",
     ),
     CapabilitySpec(
         "content.delete",
@@ -270,6 +290,8 @@ _SPECS = (
         delete_content,
         "slug",
         "content",
+        target_label="Content slug",
+        target_help="The content item to delete.",
     ),
     CapabilitySpec(
         "expense.delete",
@@ -280,6 +302,8 @@ _SPECS = (
         delete_expense,
         "integer",
         "expenses",
+        target_label="Expense ID",
+        target_help="The expense to delete.",
     ),
     CapabilitySpec(
         "documentation.delete",
@@ -290,6 +314,8 @@ _SPECS = (
         delete_documentation,
         "doc_id",
         "documentation",
+        target_label="Document ID",
+        target_help="The documentation record to delete.",
     ),
     CapabilitySpec(
         "receipt.delete",
@@ -300,6 +326,8 @@ _SPECS = (
         delete_receipt,
         "integer",
         "receipts",
+        target_label="Receipt ID",
+        target_help="The receipt to delete.",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",
@@ -319,6 +347,9 @@ _SPECS = (
         save_managed_resource,
         "key",
         "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The managed infrastructure resource to update.",
+        target_initial_fields=("key", "kind", "spec", "enabled"),
     ),
     CapabilitySpec(
         "infrastructure.reconcile",
@@ -329,6 +360,8 @@ _SPECS = (
         request_reconcile,
         "key",
         "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The managed infrastructure resource to reconcile.",
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -339,6 +372,8 @@ _SPECS = (
         request_removal,
         "key",
         "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The managed infrastructure resource to remove.",
     ),
     CapabilitySpec(
         "certificate.renew",
@@ -349,8 +384,17 @@ _SPECS = (
         request_certificate_renewal,
         "key",
         "infrastructure.resources",
+        target_label="Certificate key",
+        target_help="The managed certificate to renew.",
+        target_query=(("kind", CERTIFICATE_KIND),),
+        execution_notes=(
+            "Read the selected certificate declaration and evaluate renewal policy.",
+            "Queue one renewal request for the controller; provider work runs outside this page request.",
+            "Return the queued operation and policy decision, attributed to this operator.",
+        ),
     ),
 )
+
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
     specs = (*_SPECS, *plugin_capability_specs())
@@ -383,6 +427,42 @@ def _validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid target {spec.target_kind!r}."
         )
+    if not isinstance(spec.target_label, str) or not isinstance(spec.target_help, str):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has invalid target presentation metadata."
+        )
+    if spec.target_query and (not spec.target_kind or not spec.subject_resource):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has a target query without a target resource."
+        )
+    if any(
+        not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str)
+        for item in spec.target_query
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has an invalid target query."
+        )
+    if any(
+        not isinstance(note, str) or not note.strip() for note in spec.execution_notes
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has an invalid execution note."
+        )
+    try:
+        schema = command_schema(spec.command_type)
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} command type cannot emit JSON Schema."
+        ) from exc
+    command_fields = set(schema.get("properties", {}))
+    if (
+        len(spec.target_initial_fields) != len(set(spec.target_initial_fields))
+        or any(field not in command_fields for field in spec.target_initial_fields)
+        or (spec.target_initial_fields and not spec.target_kind)
+    ):
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} has invalid target initial fields."
+        )
     if spec.subject_resource is not None and not CAPABILITY_NAME.fullmatch(
         spec.subject_resource
     ):
@@ -404,12 +484,6 @@ def _validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} repeats a required capability."
         )
-    try:
-        _command_schema(spec.command_type)
-    except Exception as exc:
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} command type cannot emit JSON Schema."
-        ) from exc
     if not callable(spec.handler):
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
 
@@ -426,10 +500,22 @@ def _validate_capability_spec(spec: CapabilitySpec) -> None:
 
 
 @cache
-def _command_schema(command_type: type) -> dict[str, Any]:
+def command_schema(command_type: type) -> dict[str, Any]:
     """Build an immutable command type's schema once per process."""
 
-    return TypeAdapter(command_type).json_schema()
+    schema = TypeAdapter(command_type).json_schema()
+    # Every adapter rejects unknown input through ``_refuse_unknown_fields``.
+    # Publish that same closed-world rule so generated forms and machine
+    # clients do not have to discover it only after submission.
+    schema.setdefault("additionalProperties", False)
+    return schema
+
+
+def capability_label(name: str) -> str:
+    """Human label for a stable dotted capability name."""
+
+    words = name.replace(".", " ").replace("_", " ").split()
+    return " ".join(word.upper() if len(word) <= 3 else word.title() for word in words)
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
@@ -452,15 +538,23 @@ def describe_capabilities() -> dict[str, Any]:
         "capabilities": [
             {
                 "name": spec.name,
+                "label": capability_label(spec.name),
                 "summary": spec.summary,
                 "effect": spec.effect,
                 "required_capabilities": [
-                    capability.value if isinstance(capability, Capability) else capability
+                    capability.value
+                    if isinstance(capability, Capability)
+                    else capability
                     for capability in spec.required_capabilities
                 ],
                 "target": spec.target_kind,
+                "target_label": spec.target_label,
+                "target_help": spec.target_help,
+                "target_query": dict(spec.target_query),
+                "execution_notes": list(spec.execution_notes),
+                "target_initial_fields": list(spec.target_initial_fields),
                 "resource": spec.subject_resource,
-                "input_schema": _command_schema(spec.command_type),
+                "input_schema": command_schema(spec.command_type),
             }
             for spec in capability_specs()
         ],
@@ -526,17 +620,18 @@ def execute_capability(
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:
     """A field the command does not have is an error, not a no-op.
 
-    Pydantic drops what a dataclass has no room for, so a caller sending a
+    A caller sending a
     misspelled field -- or one this capability used to take and no longer does
     -- got back a success about work it did not ask for.
     """
 
-    known = {field.name for field in dataclasses.fields(spec.command_type)}
+    # CapabilitySpec accepts host dataclasses and plugin StrictCommand models.
+    # Their JSON Schema is already the shared adapter contract, so it is also
+    # the single source of field names.
+    known = set(command_schema(spec.command_type).get("properties", {}))
     unknown = sorted(set(payload) - known)
     if unknown:
-        raise ValueError(
-            f"{spec.name} does not take {', '.join(unknown)}."
-        )
+        raise ValueError(f"{spec.name} does not take {', '.join(unknown)}.")
 
 
 def _error(code: str, message: str, details: Any = None) -> dict[str, Any]:

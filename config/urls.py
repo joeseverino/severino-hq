@@ -16,6 +16,7 @@ from core.views import (
     health_live,
     health_ready,
 )
+from core.command_views import CommandView
 from application.plugins import plugin_urlpatterns
 
 urlpatterns = [
@@ -50,6 +51,7 @@ urlpatterns = [
         name="dashboard_links",
     ),
     path("search/", SearchView.as_view(), name="search"),
+    path("commands/<str:name>/", CommandView.as_view(), name="command"),
     path("projects/", include("projects.urls")),
     path("content/", include("content.urls")),
     path("docs/", include("docs_index.urls")),

@@ -26,7 +26,7 @@ page it falls back to. Nothing here knows which one it is in.
           <a class="conn-decision-step conn-decision-step-{{ layer.state }}"
              href="{% url 'connection' %}"
              data-connection-control="{{ layer.id }}">
-            <span class="conn-tick" aria-hidden="true">{% if layer.holds %}&check;{% else %}&times;{% endif %}</span>
+            <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
             <span>{{ layer.label }}</span>
           </a>
         </li>
@@ -49,12 +49,14 @@ page it falls back to. Nothing here knows which one it is in.
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
       {% if connection.machine_url %}
-        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.device.label|default:"Unknown device" }}</a>
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label }}</a>
       {% else %}
-        <strong>{{ connection.device.label|default:"Unknown device" }}</strong>
+        <strong>{{ connection.peer_label }}</strong>
       {% endif %}
-      <code>{{ connection.address }}</code>
-      {% if connection.identity.tailnet_user %}
+      <code>{{ connection.peer_address }}</code>
+      {% if connection.reported_device %}
+        <span class="conn-row-note">reported by the forwarding hop</span>
+      {% elif connection.identity.tailnet_user %}
         <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
       {% endif %}
     </div>
@@ -91,17 +93,22 @@ page it falls back to. Nothing here knows which one it is in.
         </dd>
         <dt>Device</dt>
         <dd>
-          {% if connection.device %}
-            <strong>{{ connection.device.label }}</strong>
-            {% if connection.device.os %}<span class="conn-row-note">{{ connection.device.os }}</span>{% endif %}
+          {% if connection.untrusted_forwarding and connection.reported_device %}
+            <strong>{{ connection.caller_device.label }}</strong>
+            {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
+            <span class="conn-row-note">correlated from forwarded evidence; not used for admission</span>
+          {% elif connection.caller_device %}
+            <strong>{{ connection.caller_device.label }}</strong>
+            {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
+          {% elif connection.untrusted_forwarding %}<span class="muted">not resolved past the proxy</span>
           {% else %}<span class="muted">unknown to the tailnet</span>{% endif %}
         </dd>
-        {% if connection.device.dns_name %}
-          <dt>MagicDNS</dt><dd><code>{{ connection.device.dns_name }}</code></dd>
+        {% if connection.caller_device.dns_name %}
+          <dt>MagicDNS</dt><dd><code>{{ connection.caller_device.dns_name }}</code></dd>
         {% endif %}
-        {% if connection.device.tags %}
+        {% if connection.caller_device.tags %}
           <dt>Tags</dt>
-          <dd>{% for tag in connection.device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
+          <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
         {% endif %}
         <dt>Signed in via</dt>
         <dd>
@@ -119,19 +126,17 @@ page it falls back to. Nothing here knows which one it is in.
           {% else %}standard{% endif %}
         </dd>
         {% if connection.identity.last_sign_in %}
-          <dt>Last sign-in</dt><dd><span class="conn-row-note">{{ connection.identity.last_sign_in }}</span></dd>
+          <dt>Last sign-in</dt><dd><time datetime="{{ connection.identity.last_sign_in|date:'c' }}">{{ connection.identity.last_sign_in|date:"M j, Y, g:i a" }}</time></dd>
         {% endif %}
         {% if connection.identity.session_expires %}
-          <dt>Session until</dt><dd><span class="conn-row-note">{{ connection.identity.session_expires }}</span></dd>
+          <dt>Session until</dt><dd><time datetime="{{ connection.identity.session_expires|date:'c' }}">{{ connection.identity.session_expires|date:"M j, Y, g:i a" }}</time></dd>
         {% endif %}
       </dl>
-      <p class="conn-agree conn-agree-{{ connection.identity.corroborated|yesno:'yes,no' }}">
-        {% if connection.identity.corroborated %}
-          Two systems that never consult each other, and they agree on who is asking.
-        {% else %}
+      {% if not connection.identity.corroborated %}
+        <p class="conn-agree conn-agree-no">
           Only the session has an opinion on who is asking.
-        {% endif %}
-      </p>
+        </p>
+      {% endif %}
     </section>
 
     <section>
@@ -140,64 +145,94 @@ page it falls back to. Nothing here knows which one it is in.
         <dt>Path</dt>
         <dd>
           <strong>{{ connection.path_label }}</strong>
-          {% if connection.device.direct_endpoint %}<code>{{ connection.device.direct_endpoint }}</code>{% endif %}
         </dd>
-        <dt>Handshake</dt>
+        {% if connection.caller_device.direct_endpoint %}
+          <dt>WireGuard endpoint</dt>
+          <dd>
+            <code>{{ connection.caller_device.direct_endpoint }}</code>
+          </dd>
+        {% endif %}
+        <dt>Last handshake</dt>
         <dd>{{ connection.handshake }}</dd>
         {% if connection.carried %}
-          <dt>Carried</dt><dd>{{ connection.carried }}</dd>
+          <dt>Node traffic</dt><dd>{{ connection.carried }}</dd>
         {% endif %}
-        <dt>Round trip</dt>
+        <dt>Browser round trip</dt>
         <dd>
           <span data-rtt>—</span>
           <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
         </dd>
-        <dt>Encryption</dt><dd>{{ connection.transport }}</dd>
+        <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
       </dl>
     </section>
   </div>
 
-  <section>
-    <h3>How HQ decided your address</h3>
-    <p class="conn-note">Behind a proxy every request arrives from the proxy, and the caller's address sits in a header anyone can write. Which hop HQ believes is the whole of whether the network gate means anything.</p>
-    <ol class="conn-hops">
-      {% for hop in hops %}
-        <li class="conn-hop conn-hop-{{ hop.role }}">
-          <code>{{ hop.value }}</code>
-          <span class="conn-kind conn-kind-hop-{{ hop.role }}">{{ hop.role }}</span>
-          <span class="conn-row-note">{{ hop.detail }}</span>
-        </li>
-      {% endfor %}
-    </ol>
-  </section>
-
-  <section>
-    <h3>Your addresses</h3>
-    <div class="conn-rows">
-      {% for address in addresses %}
-        <div class="conn-row{% if address.current %} conn-current{% endif %}">
-          <code>{{ address.value }}</code>
-          <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
-          <span class="conn-row-note">{{ address.source }}</span>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-
-  {% if hq_addresses %}
-    <section>
-      <h3>HQ answers at</h3>
-      <div class="conn-rows">
-        {% for address in hq_addresses %}
-          <div class="conn-row">
-            <code>{{ address.value }}</code>
-            <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
-            <span class="conn-row-note">{{ address.source }}</span>
-          </div>
-        {% endfor %}
+  <details class="conn-protocol conn-path-details">
+    <summary>
+      <span>
+        <strong>Connection path</strong>
+        <small>Every hop and the trust decision HQ made about it</small>
+      </span>
+      <span class="count">{{ hops|length }} hop{{ hops|length|pluralize }}</span>
+    </summary>
+    <div class="conn-protocol-body">
+      <div>
+        <h3>How HQ decided your address</h3>
+        <p class="conn-note">Behind a proxy every request arrives from the proxy, and the caller's address sits in a header anyone can write. Which hop HQ believes is the whole of whether the network gate means anything.</p>
+        <ol class="conn-hops">
+          {% for hop in hops %}
+            <li class="conn-hop conn-hop-{{ hop.role }}">
+              <code>{{ hop.value }}</code>
+              <span class="conn-kind conn-kind-hop-{{ hop.role }}">{{ hop.role }}</span>
+              <span class="conn-row-note">{{ hop.detail }}</span>
+            </li>
+          {% endfor %}
+        </ol>
       </div>
-    </section>
-  {% endif %}
+    </div>
+  </details>
+
+  <details class="conn-protocol conn-addresses">
+    <summary>
+      <span>
+        <strong>Addresses</strong>
+        <small>The identities and interfaces behind both ends</small>
+      </span>
+      <span class="count">{{ addresses|length }} yours{% if hq_addresses %} · {{ hq_addresses|length }} HQ{% endif %}</span>
+    </summary>
+    <div class="conn-protocol-body">
+      <section>
+        <h3>Your address evidence</h3>
+        {% if connection.tailnet_observed_at %}
+          <p class="conn-note">Tailnet snapshot: <time datetime="{{ connection.tailnet_observed_at|date:'c' }}">{{ connection.tailnet_observed_at|date:"M j, Y, g:i a" }}</time></p>
+        {% endif %}
+        <div class="conn-rows">
+          {% for address in addresses %}
+            <div class="conn-row{% if address.current %} conn-current{% endif %}">
+              <code>{{ address.value }}</code>
+              <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
+              <span class="conn-row-note">{{ address.source }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if hq_addresses %}
+        <section>
+          <h3>HQ answers at</h3>
+          <div class="conn-rows">
+            {% for address in hq_addresses %}
+              <div class="conn-row">
+                <code>{{ address.value }}</code>
+                <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
+                <span class="conn-row-note">{{ address.source }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
+  </details>
 
   <details class="conn-protocol" data-connection-protocol>
     <summary>
@@ -244,27 +279,43 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
   </details>
 
-  <section>
-    <h3>What had to be true</h3>
-    <p class="conn-note">In the order a request meets them. No one of them is the reason HQ is not on the internet.</p>
-    <ol class="conn-layers">
-      {% for layer in connection.layers %}
-        <li class="conn-layer conn-layer-{{ layer.state }}">
-          <details data-connection-layer="{{ layer.id }}">
-            <summary>
-              <span class="conn-tick" aria-hidden="true">{% if layer.holds %}&check;{% else %}&times;{% endif %}</span>
-              <span class="conn-layer-label">{{ layer.label }}</span>
-              {% if layer.evidence %}<code class="conn-layer-evidence">{{ layer.evidence }}</code>{% endif %}
-            </summary>
-            <p>{{ layer.detail }}</p>
-            {% if layer.rules %}
-              <div class="conn-rules">
-                {% for rule in layer.rules %}<code>{{ rule }}</code>{% endfor %}
+  <details class="conn-protocol conn-security-layers" data-connection-layers>
+    <summary>
+      <span>
+        <strong>Security layers</strong>
+        <small>Live controls from exposure through the application session</small>
+      </span>
+      <span class="count">{{ connection.summary }}</span>
+    </summary>
+    <div class="conn-protocol-body">
+      <p class="conn-note">Evaluated in the order this request met them. Each result names its evidence and the mechanism that produced it; no single green check is treated as the whole defence.</p>
+      <ol class="conn-layers">
+        {% for layer in connection.layers %}
+          <li class="conn-layer conn-layer-{{ layer.state }}">
+            <details data-connection-layer="{{ layer.id }}">
+              <summary>
+                <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
+                <span class="conn-layer-boundary">{{ layer.boundary }}</span>
+                <span class="conn-layer-label">{{ layer.label }}</span>
+                {% if layer.evidence %}<code class="conn-layer-evidence">{{ layer.evidence }}</code>{% endif %}
+              </summary>
+              <div class="conn-layer-body">
+                <p>{{ layer.detail }}</p>
+                <dl>
+                  <dt>Verified by</dt>
+                  <dd>{{ layer.mechanism }}</dd>
+                </dl>
+                {% if layer.rules %}
+                  <div class="conn-rules">
+                    {% for rule in layer.rules %}<code>{{ rule }}</code>{% endfor %}
+                  </div>
+                {% endif %}
               </div>
-            {% endif %}
-          </details>
-        </li>
-      {% endfor %}
-    </ol>
-  </section>
+            </details>
+          </li>
+        {% endfor %}
+      </ol>
+      <p class="conn-scope-note"><strong>Scope:</strong> this is request-path evidence. Storage, backup, and secret custody belong to their resources and are never inferred from a browser request.</p>
+    </div>
+  </details>
 </div>

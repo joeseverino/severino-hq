@@ -33,7 +33,7 @@
       CSS can style an anchor but not rewrite where it goes -- and a control
       that only ever opens is a control that appears broken on the second tap.
       {% endcomment %}
-      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections">
+      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections" aria-controls="primary-navigation" aria-expanded="false">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
@@ -47,7 +47,7 @@
           <rect x="0" y="10" width="16" height="2" rx="1"/>
         </svg>
       </a>
-      <nav class="primary-nav">
+      <nav class="primary-nav" id="primary-navigation">
         {% for entry in nav_entries %}
           {% if entry.kind == "group" %}
             {% comment %}Shared name makes the groups a native exclusive

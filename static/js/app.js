@@ -7,6 +7,36 @@
 // of the next one -- so a menu now says for itself that it dismisses, and the
 // third case fixed itself before anyone noticed it.
 const DISMISSIBLE_MENUS = "details[data-menu]";
+const sectionMenuOpen = document.querySelector(".nav-toggle-open");
+const sectionMenuClose = document.querySelector(".nav-toggle-close");
+const sectionMenuBackdrop = document.querySelector(".nav-backdrop");
+
+function setSectionMenu(open, { restoreFocus = false } = {}) {
+  document.body.classList.toggle("nav-is-open", open);
+  sectionMenuOpen?.setAttribute("aria-expanded", String(open));
+  if (restoreFocus) {
+    const control = open ? sectionMenuClose : sectionMenuOpen;
+    control?.focus({ preventScroll: true });
+  }
+}
+
+sectionMenuOpen?.addEventListener("click", (event) => {
+  event.preventDefault();
+  closeMenus(null);
+  // A pointer already communicates where the interaction happened. Move
+  // focus only for keyboard activation, otherwise mobile Safari paints a
+  // persistent focus ring around the replacement close control.
+  setSectionMenu(true, { restoreFocus: event.detail === 0 });
+});
+
+[sectionMenuClose, sectionMenuBackdrop].forEach((control) => {
+  control?.addEventListener("click", (event) => {
+    event.preventDefault();
+    setSectionMenu(false, {
+      restoreFocus: control === sectionMenuClose && event.detail === 0,
+    });
+  });
+});
 
 function closeMenus(except) {
   document.querySelectorAll(DISMISSIBLE_MENUS).forEach((menu) => {
@@ -21,14 +51,25 @@ document.addEventListener("click", (event) => {
   const menu = event.target.closest(DISMISSIBLE_MENUS);
   // A click pins the menu open, so a hover-opened panel does not evaporate the
   // moment the pointer leaves on its way to the item being clicked.
-  if (menu && event.target.closest("summary")) menu.dataset.pinned = "true";
+  if (menu && event.target.closest("summary")) {
+    menu.dataset.pinned = "true";
+    // Category disclosures live inside the mobile section drawer. They must
+    // be allowed to open without dismissing their own parent; peer menus such
+    // as the user menu still dismiss the drawer.
+    if (!menu.closest(".primary-nav")) setSectionMenu(false);
+  }
   // The clicked menu is left alone -- the browser handles its own summary
   // toggle. Every other open menu closes, so two panels are never stacked.
   closeMenus(menu);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeMenus(null);
+  if (event.key === "Escape") {
+    closeMenus(null);
+    if (document.body.classList.contains("nav-is-open")) {
+      setSectionMenu(false, { restoreFocus: true });
+    }
+  }
 });
 
 // The queue spans every installed domain and may include remote reads. Asking
@@ -198,6 +239,41 @@ document.addEventListener("submit", (event) => {
 
   const status = form.querySelector("[data-submit-status]");
   if (status) status.hidden = false;
+});
+
+// A command preview reads controls already on the page. It performs no fetch,
+// creates no second command model, and leaves the server-rendered fallback in
+// place; the deployed capability remains the only source of execution truth.
+document.querySelectorAll("form[data-command-form]").forEach((form) => {
+  const preview = form.parentElement?.querySelector("[data-command-preview]");
+  if (!preview) return;
+
+  const update = () => {
+    preview.querySelectorAll("[data-command-value]").forEach((output) => {
+      const control = form.elements.namedItem(output.dataset.commandValue);
+      if (!(control instanceof HTMLInputElement
+        || control instanceof HTMLTextAreaElement
+        || control instanceof HTMLSelectElement)) return;
+      let value = control.value.trim();
+      if (control instanceof HTMLSelectElement && value) {
+        value = control.selectedOptions[0]?.textContent?.trim() || value;
+      }
+      output.textContent = value || output.dataset.empty;
+    });
+  };
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
+  const target = form.elements.namedItem("__target");
+  if (form.hasAttribute("data-command-hydrate-target")
+    && target instanceof HTMLSelectElement) {
+    target.addEventListener("change", () => {
+      if (!target.value) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set("target", target.value);
+      window.location.assign(url);
+    });
+  }
+  update();
 });
 
 // Modals. A trigger is always a real link to a page that does the same job, so
@@ -611,16 +687,29 @@ const hqRoundTrip = (() => {
   const render = (slot, runs) => {
     const best = Math.min(...runs);
     const worst = Math.max(...runs);
+    let live = slot.querySelector(".conn-live");
+    if (!live) {
+      live = document.createElement("span");
+      live.className = "conn-live";
+      const pulse = document.createElement("span");
+      pulse.className = "conn-pulse";
+      const value = document.createElement("strong");
+      const samples = document.createElement("span");
+      samples.className = "conn-samples";
+      live.append(pulse, value, samples);
+      slot.replaceChildren(live);
+    }
+    live.querySelector("strong").textContent = `${best.toFixed(1)} ms`;
+    const samples = live.querySelector(".conn-samples");
     // Each bar relative to the slowest sample, so the shape shows variation
     // rather than an absolute scale nobody can read at this size.
-    const bars = runs
-      .slice(-12)
-      .map((run) => `<i style="--at: ${Math.max(12, (run / worst) * 100)}"></i>`)
-      .join("");
-    slot.innerHTML =
-      `<span class="conn-live"><span class="conn-pulse"></span>` +
-      `<strong>${best.toFixed(1)} ms</strong>` +
-      `<span class="conn-samples">${bars}</span></span>`;
+    samples.replaceChildren(
+      ...runs.slice(-12).map((run) => {
+        const bar = document.createElement("i");
+        bar.style.setProperty("--at", `${Math.max(12, (run / worst) * 100)}`);
+        return bar;
+      }),
+    );
   };
 
   const start = (slot, endpoint) => {

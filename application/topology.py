@@ -26,22 +26,10 @@ from .connections import (
     ConnectionSpec,
     connection_catalog,
 )
-from .contracts import route_url
+from .action_links import ActionLink as TopologyAction
+from .action_links import capability_action_link, connection_action_links
 from .infrastructure import certificate_renewal_allowed, resource_health
 from .security import AuthorizationError, Capability, Principal
-
-
-@dataclass(frozen=True)
-class TopologyAction:
-    """One safe way to inspect or change the canonical object behind a node."""
-
-    name: str
-    label: str
-    effect: str
-    url: str
-    method: str = "GET"
-    capability: str = ""
-    target: str = ""
 
 
 @dataclass(frozen=True)
@@ -245,13 +233,6 @@ def _link_node(link: ConnectionLink, *, kind: str) -> TopologyNode:
     )
 
 
-_CONNECTION_ROUTES = (
-    ("open", "Open connections", "web_route"),
-    ("manage", "Manage", "management_route"),
-    ("set_up", "Set up", "setup_route"),
-)
-
-
 def _connection_actions(spec: ConnectionSpec) -> tuple[TopologyAction, ...]:
     """Derive a connection's actions from what its spec declared, and no more.
 
@@ -260,26 +241,12 @@ def _connection_actions(spec: ConnectionSpec) -> tuple[TopologyAction, ...]:
     claim: the spec names a destination, not what an operator will do there.
     """
 
-    actions = []
-    seen: set[str] = set()
-    for name, label, field in _CONNECTION_ROUTES:
-        url = route_url(getattr(spec, field))
-        # A family whose management page *is* its connections page should offer
-        # one button, not the same href twice under two names.
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        actions.append(TopologyAction(name, label, "read", url))
-    if spec.documentation_url:
-        actions.append(
-            TopologyAction(
-                "documentation", "Documentation", "read", spec.documentation_url
-            )
-        )
-    return tuple(actions)
+    return connection_action_links(spec)
 
 
-def _ability_actions(ability, ability_id: str) -> tuple[TopologyAction, ...]:
+def _ability_actions(
+    ability, ability_id: str, principal: Principal
+) -> tuple[TopologyAction, ...]:
     """Relate an ability to the graph, and to the capability it names.
 
     An ability that declares a capability is describing an executable contract
@@ -290,16 +257,14 @@ def _ability_actions(ability, ability_id: str) -> tuple[TopologyAction, ...]:
     actions = [
         TopologyAction("focus", "Show relationships", "read", _focus_url(ability_id))
     ]
-    if ability.capability:
-        actions.append(
-            TopologyAction(
-                "command",
-                "Open command",
-                ability.effect,
-                f"{route_url('search')}?{urlencode({'q': ability.capability})}",
-                capability=ability.capability,
-            )
-        )
+    command = capability_action_link(
+        ability.capability,
+        ability.effect,
+        "Open command",
+        principal=principal,
+    )
+    if command is not None:
+        actions.append(command)
     return tuple(actions)
 
 
@@ -328,6 +293,7 @@ def _connection_nodes(
     groups: tuple[ConnectionGroup, ...],
     nodes: dict[str, TopologyNode],
     edges: dict[str, TopologyEdge],
+    principal: Principal,
 ) -> None:
     for group in groups:
         spec_actions = _connection_actions(group.spec)
@@ -347,7 +313,7 @@ def _connection_nodes(
                     subtitle=ability.name,
                     detail=ability.summary,
                     url=_focus_url(ability_id),
-                    actions=_ability_actions(ability, ability_id),
+                    actions=_ability_actions(ability, ability_id, principal),
                 ),
             )
         for connection in group.connections:
@@ -457,7 +423,7 @@ def derive_topology(*, principal: Principal) -> Topology:
         )
 
     groups = connection_catalog(principal=principal)
-    _connection_nodes(groups, nodes, edges)
+    _connection_nodes(groups, nodes, edges, principal)
 
     resources_by_kind: dict[str, list[str]] = {}
     for resource in resources:

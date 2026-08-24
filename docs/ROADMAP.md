@@ -29,17 +29,15 @@ exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
 now both validate against. The MCP runs locally on the Mac; git-crypt keys
 never go on the server.
 
-### HQ typed control plane — read foundation shipped
+### HQ typed control plane — registry-driven execution shipped
 
 HQ now serves a stateless Streamable HTTP MCP endpoint directly over Tailscale.
-Its first tool surface is deliberately read-only: projects, assets, expenses,
-receipt metadata, documentation status, recent activity, and health. The
-endpoint is source-network restricted, Host checked, Origin checked, and
-bearer authenticated. It does not wrap SSH or management commands.
-
-Narrow mutation tools remain a later phase. They require a shared service
-layer, idempotency keys, validation previews, structured errors, and an
-explicit MCP audit event before they ship.
+Its reads and narrow mutations come from the same resource and capability
+registries used by the HTTP API, CLI, and Command Center. The endpoint is
+source-network restricted, Host checked, Origin checked, and bearer
+authenticated. Writes are schema validated, capability authorized, audited,
+atomic, and durably idempotent. It does not wrap SSH, management commands, or
+generic model access.
 
 ### Consulting & client side
 

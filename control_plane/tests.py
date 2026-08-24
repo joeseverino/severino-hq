@@ -28,7 +28,7 @@ from application.infrastructure import (
 )
 from application.security import cli_principal, mcp_principal
 
-from .models import ManagedResource, OperationRequest
+from .models import ManagedResource, OperationRequest, ProviderConnection
 from .providers import (
     NPMProxyHostSpec,
     describe_providers,
@@ -446,6 +446,47 @@ class InfrastructureWebTests(TestCase):
         self.assertNotContains(response, "BEGIN CERTIFICATE")
         self.assertContains(response, "certificate_available")
         self.assertContains(response, "True")
+
+    def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
+        ManagedResource.objects.create(
+            key="homelab-server",
+            kind="machine",
+            spec={"name": "homelab-server", "addresses": ["100.64.0.9"]},
+        )
+        ManagedResource.objects.create(
+            key="app-server",
+            kind="machine",
+            spec={"name": "app-server", "addresses": ["100.64.0.10"]},
+        )
+        ProviderConnection.objects.create(
+            connection_ref="an-npm",
+            controller_id="homelab-server",
+            provider="npm",
+            endpoint="https://npm.example.test",
+            reaches=["app-server"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        proxy = ManagedResource.objects.create(
+            key="an-app-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["app.example.test"],
+                "forward_scheme": "http",
+                "forward_host": "100.64.0.10",
+                "forward_port": 8000,
+            },
+        )
+
+        response = self.client.get(
+            reverse("control_plane:detail", kwargs={"key": proxy.key})
+        )
+
+        self.assertEqual(response.context["provider_machine"]["name"], "homelab-server")
+        self.assertEqual(response.context["origin_machine"].name, "app-server")
+        self.assertContains(response, "Runs on")
+        self.assertContains(response, "Forwards to")
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {

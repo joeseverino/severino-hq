@@ -192,8 +192,8 @@ their private package even if the host is their only current consumer.
 
 Capability providers fail closed too. HQ validates every contributed
 `CapabilitySpec` before describing or invoking the registry: names, effects,
-required permissions, target kinds, command JSON Schema, duplicate names, and
-the handler call signature are all part of the host contract. MCP grants must
+required permissions, target kinds and labels, command JSON Schema, duplicate
+names, and the handler call signature are all part of the host contract. MCP grants must
 also be a subset of the plugin's operator grants. A typo therefore prevents a
 composition from passing its checks instead of becoming a production-only
 request failure or an accidental authority gap.
@@ -211,9 +211,23 @@ the Command Center. It must reverse without arguments; HQ checks that contract
 at startup and renders plain discovery text as a fail-safe if checks were
 bypassed. A capability may set `subject_resource` to that resource's name; HQ
 then connects the operation to its domain in both machine discovery and the
-operator UI, without a second plugin-owned menu or command inventory. Plugins
+operator UI, without a second plugin-owned menu or command inventory. The
+Command Center also derives a browser execution form from the command schema.
+For targeted commands, set `target_label` and `target_help` to explain the
+identifier in operator language (for example, `Record slug`), while
+`target_kind` continues to define its machine type. Set `target_query` when the
+subject resource can list eligible targets locally; HQ checks the filter against
+that resource's strict query contract and turns the result into an authorized
+choice control. `execution_notes` may describe the registered read, queue, and
+provider boundary shown in the live, zero-network execution preview. Fields named
+`idempotency_key` are generated and hidden in the browser; HQ separately wraps
+all state-changing browser submissions in durable replay protection. Plugins
 use the authorized `list_resource` and `get_resource` SDK functions for reads;
 the host's raw registry and handler callables are intentionally not exported.
+For a replacement-style targeted command, `target_initial_fields` names command
+fields that HQ should hydrate from the selected resource detail. Selection
+performs one authorized local read, carries the record's `updated_at` into the
+concurrency safeguard, and never contacts the provider.
 
 Connection providers complete the same declaration chain for external systems.
 Each `ConnectionSpec` names a family, its abilities and provider scopes, the
@@ -231,6 +245,19 @@ rejected rather than filtered by a fallible list of secret parameter names.
 only local paths and explicit HTTP(S) URLs. Import these contracts and
 `describe_connections` from `hq_sdk.connections`; the mutable registry
 and raw provider inventory are deliberately host-only.
+
+An ability may set `subject_resource` to the `ResourceSpec` it governs and list
+its provider kinds in `governs_kinds`. Command Center then discovers registered
+commands against that resource whose target filters include one of those kinds.
+For an operation that does not map through a resource, set `capability` to the
+exact `CapabilitySpec` name. Composition refuses unknown resource and capability
+references. Scope coverage decides whether the observed connection can perform
+the declared ability; it never fabricates an executable command from token text
+alone, so every offered mutation still has a schema, handler, authorization,
+audit, and idempotency boundary. Command discovery remains declaration-driven,
+so a temporarily missing or stale observation does not erase a supported
+workflow; Connections reports its current readiness separately. Searching never
+contacts the provider.
 
 Those same instances join the derived topology automatically. An ability's
 explicit `governs_kinds` connect it to managed resources, `targets` become

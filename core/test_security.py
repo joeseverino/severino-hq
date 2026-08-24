@@ -9,7 +9,7 @@ whose loss is invisible in review of the change that causes it.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
 
@@ -491,6 +491,30 @@ class StaticAssetBoundaryTests(SimpleTestCase):
 
 
 class ResponseHeaderTests(TestCase):
+    @override_settings(
+        SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+        SEVERINO_TRUSTED_PROXIES=[PROXY],
+    )
+    def test_only_a_trusted_proxy_can_assert_https(self):
+        from django.http import HttpResponse
+        from core.network import TrustedNetworkMiddleware
+
+        observed = []
+        middleware = TrustedNetworkMiddleware(
+            lambda request: observed.append(request.is_secure()) or HttpResponse()
+        )
+        stranger = RequestFactory().get(
+            "/", REMOTE_ADDR="100.64.0.77", HTTP_X_FORWARDED_PROTO="https"
+        )
+        proxy = RequestFactory().get(
+            "/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_PROTO="https"
+        )
+
+        middleware(stranger)
+        middleware(proxy)
+
+        self.assertEqual(observed, [False, True])
+
     def test_the_browser_boundary_headers_are_present(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="127.0.0.1")
         self.assertEqual(response["X-Frame-Options"], "DENY")

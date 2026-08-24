@@ -31,11 +31,41 @@ def _route_error(owner: str, name: str, route: str, error_id: str):
     return None
 
 
+def _target_query_errors(capabilities, resource_by_name):
+    errors = []
+    for capability in capabilities:
+        if not capability.target_query or not capability.subject_resource:
+            continue
+        resource = resource_by_name.get(capability.subject_resource)
+        if resource is None:
+            continue
+        if not resource.list_handler or not resource.list_query_type:
+            errors.append(
+                Error(
+                    f"Capability {capability.name!r} cannot derive targets from "
+                    f"unlistable resource {resource.name!r}.",
+                    id="hq_api.E008",
+                )
+            )
+            continue
+        try:
+            resource.list_query_type.model_validate(
+                dict(capability.target_query), strict=True
+            )
+        except Exception as exc:
+            errors.append(
+                Error(
+                    f"Capability {capability.name!r} has an invalid target query "
+                    f"for {resource.name!r}: {exc}",
+                    id="hq_api.E008",
+                )
+            )
+    return errors
+
+
 @register(Tags.compatibility)
 def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
-    capabilities, errors = _registry(
-        capability_specs, "capability", "hq_api.E001"
-    )
+    capabilities, errors = _registry(capability_specs, "capability", "hq_api.E001")
     resources, resource_errors = _registry(resource_specs, "resource", "hq_api.E002")
     connections, connection_errors = _registry(
         connection_specs, "connection", "hq_api.E005"
@@ -45,7 +75,8 @@ def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
     if errors:
         return errors
 
-    known_resources = {spec.name for spec in resources}
+    resource_by_name = {spec.name: spec for spec in resources}
+    known_resources = set(resource_by_name)
     missing_resources = sorted(
         {
             spec.subject_resource
@@ -61,6 +92,7 @@ def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
                 id="hq_api.E003",
             )
         )
+    errors.extend(_target_query_errors(capabilities, resource_by_name))
     for spec in resources:
         error = _route_error("Resource", spec.name, spec.web_route, "hq_api.E004")
         if error:
@@ -85,6 +117,23 @@ def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
                 "Connection abilities reference unknown capabilities: "
                 f"{', '.join(unknown_abilities)}.",
                 id="hq_api.E007",
+            )
+        )
+    unknown_ability_resources = sorted(
+        {
+            ability.subject_resource
+            for spec in connections
+            for ability in spec.abilities
+            if ability.subject_resource
+            and ability.subject_resource not in known_resources
+        }
+    )
+    if unknown_ability_resources:
+        errors.append(
+            Error(
+                "Connection abilities reference unknown resources: "
+                f"{', '.join(unknown_ability_resources)}.",
+                id="hq_api.E009",
             )
         )
     return errors

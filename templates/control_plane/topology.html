@@ -80,10 +80,10 @@
                       {% if action.method == "POST" %}
                         <form action="{{ action.url }}" method="post">
                           {% csrf_token %}
-                          <button type="submit" class="btn compact{% if action.effect == 'infrastructure_change' %} primary{% endif %}">{{ action.label }}</button>
+                          <button type="submit" class="btn compact{% if action.effect == 'infrastructure_change' or action.recommended %} primary{% endif %}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</button>
                         </form>
                       {% else %}
-                        <a class="btn compact{% if action.effect == 'destructive' %} danger{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
+                        <a class="btn compact{% if action.effect == 'destructive' %} danger{% elif action.recommended %} primary{% endif %}" href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>
                       {% endif %}
                     {% endfor %}
                   </div>

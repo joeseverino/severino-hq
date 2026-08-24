@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ command_label }} · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head command-page-head">
+  <div>
+    <span class="eyebrow">Command Center</span>
+    <h1>{{ command_label }}</h1>
+    <p class="page-lede">{{ command.summary }}</p>
+  </div>
+  <div class="page-actions">
+    {% if resource_url %}<a class="btn" href="{{ resource_url }}">Open {{ resource_label }}</a>{% endif %}
+    <a class="btn" href="{% url 'search' %}?q={{ command.name|urlencode }}">All commands</a>
+  </div>
+</div>
+
+<div class="command-contract" role="group" aria-label="Command contract">
+  <span class="scope-chip scope-{{ command.effect }}">{{ effect_label }}</span>
+  <code>{{ command.name }}</code>
+  {% if command.target_kind %}<span>Acts on <strong>{{ command.target_label|default:"an existing record" }}</strong></span>{% else %}<span>No existing target required</span>{% endif %}
+</div>
+
+{% if result %}
+<section class="card command-result command-result-good" aria-labelledby="command-result-title">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Execution result</span>
+      <h2 id="command-result-title">Command completed</h2>
+    </div>
+    {% if result.replayed %}<span class="scope-chip">Safely replayed</span>{% else %}<span class="pill pill-good">Committed once</span>{% endif %}
+  </div>
+  <pre><code>{{ result_json }}</code></pre>
+</section>
+{% endif %}
+
+<div class="command-layout">
+  <section class="card command-runner">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Authorized execution</span>
+        <h2>Run command</h2>
+      </div>
+    </div>
+
+    {% if command.effect == "destructive" %}
+      <div class="notice notice-serious"><strong>Destructive operation</strong><p>This can remove data. HQ validates the command's exact confirmation and prevents accidental retries.</p></div>
+    {% elif command.effect == "infrastructure_change" %}
+      <div class="notice notice-attention"><strong>External change</strong><p>This may queue or perform work outside HQ. HQ protects it against double-clicks and network retries.</p></div>
+    {% elif command.effect == "remote_write" %}
+      <p class="muted command-effect-note">This changes HQ state through the same atomic, audited application service used by API, MCP, and CLI.</p>
+    {% endif %}
+
+    <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Running…">
+      {% csrf_token %}
+      {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+      {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="command-fields">
+        {% for field in form.primary_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+      </div>
+      {% if form.advanced_fields %}
+        <details class="command-advanced">
+          <summary><strong>Advanced safeguards</strong> <span class="muted">Optional concurrency control</span></summary>
+          <div class="command-fields">
+            {% for field in form.advanced_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+          </div>
+        </details>
+      {% endif %}
+      <section class="command-preview" data-command-preview aria-labelledby="command-preview-title">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Execution preview</span>
+            <h3 id="command-preview-title">What HQ will do</h3>
+          </div>
+          <span class="muted">Updates locally as you fill the form</span>
+        </div>
+        <dl class="command-preview-live">
+          {% if command.target_kind %}
+            <div><dt>Target</dt><dd><output data-command-value="__target" data-empty="Select a target above">Select a target above</output></dd></div>
+          {% endif %}
+          {% if has_reason %}
+            <div><dt>Reason</dt><dd><output data-command-value="reason" data-empty="No reason provided">No reason provided</output></dd></div>
+          {% endif %}
+        </dl>
+        <div class="command-preview-path">
+          <div><span class="muted">Registered path</span><code>{{ command.name }} → {{ handler_name }}</code></div>
+          {% if resource_label %}<div><span class="muted">Uses</span><strong>{{ resource_label }}</strong>{% if target_catalog_count is not None %}<small>{{ target_catalog_count }} eligible target{{ target_catalog_count|pluralize }} from HQ's authorized local catalog</small>{% endif %}</div>{% endif %}
+          <div><span class="muted">Authority</span>{% for capability in required_capabilities %}<code>{{ capability }}</code>{% endfor %}</div>
+          <div><span class="muted">Effect</span><strong>{{ effect_outcome }}</strong></div>
+        </div>
+        {% if command.execution_notes %}
+          <ol class="command-preview-steps">
+            {% for note in command.execution_notes %}<li>{{ note }}</li>{% endfor %}
+          </ol>
+        {% endif %}
+      </section>
+      {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
+      <div class="form-actions">
+        <button class="btn primary" type="submit">Run {{ command_label }}</button>
+        <span class="muted" data-submit-status hidden role="status">HQ is validating and executing this command…</span>
+      </div>
+    </form>
+  </section>
+
+  <aside class="command-evidence">
+    <section class="card">
+      <span class="eyebrow">Enforcement path</span>
+      <ol class="command-enforcement">
+        <li><strong>Authorization</strong><span>Checked before the schema is disclosed.</span></li>
+        <li><strong>Strict input</strong><span>Unknown and repeated fields are refused.</span></li>
+        <li><strong>Canonical validation</strong><span>The registered command type decides validity.</span></li>
+        <li><strong>Atomic execution</strong><span>The registered application handler owns the write.</span></li>
+        <li><strong>Retry protection</strong><span>A repeated submission returns the original result without running twice.</span></li>
+        <li><strong>Audit attribution</strong><span>The web principal and interface reach the same audit boundary.</span></li>
+      </ol>
+    </section>
+    <details class="card command-schema">
+      <summary><strong>Machine contract</strong> <span class="muted">The same JSON Schema exposed to API and MCP</span></summary>
+      <pre><code>{{ schema_json }}</code></pre>
+    </details>
+  </aside>
+</div>
+{% endblock %}

@@ -183,8 +183,11 @@
     outside a collapsed disclosure — and the service page, where the rest of
     what answers for that name lives, could only be reached by typing its URL.
     {% endcomment %}
+    {% if provider_machine %}
+      <p class="muted">Runs on <a href="{{ provider_machine.url }}">{{ provider_machine.name }}</a></p>
+    {% endif %}
     {% if origin_machine %}
-      <p class="muted">Runs on <a href="{{ origin_machine.url }}">{{ origin_machine.name }}</a></p>
+      <p class="muted">Forwards to <a href="{{ origin_machine.url }}">{{ origin_machine.name }}</a></p>
     {% endif %}
     {% if service_links %}
       <p class="muted">

@@ -7,10 +7,18 @@ import inspect
 from typing import Any, Callable
 
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 
 from assets.models import Asset
 from content.models import ContentItem
+from control_plane.models import ManagedResource
 from core.models import AuditLog
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
@@ -37,6 +45,23 @@ class BoundedQuery(ResourceQuery):
     # query schema rejects nonsensical pages without giving this adapter a
     # second, drift-prone copy of that maximum.
     limit: int = Field(default=50, ge=1)
+
+
+class InfrastructureResourceQuery(BoundedQuery):
+    kind: str | None = None
+    kinds: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("kinds")
+    @classmethod
+    def valid_kinds(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        kinds = value.split(",")
+        if not kinds or any(not DOTTED_NAME.fullmatch(kind) for kind in kinds):
+            raise ValueError("kinds must be comma-separated dotted resource kinds")
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("kinds must not repeat a resource kind")
+        return value
 
 
 class ProjectQuery(BoundedQuery):
@@ -98,9 +123,12 @@ CORE_RESOURCE_SPECS = (
         "slug",
         not_found_errors=(projects.NotFoundError,),
         search=SearchDefinition(
-            "projects", Project, "slug",
+            "projects",
+            Project,
+            "slug",
             ("name", "slug", "description", "technologies_used", "notes"),
-            label="Projects", title_field="name",
+            label="Projects",
+            title_field="name",
         ),
         web_route="projects:list",
     ),
@@ -115,9 +143,12 @@ CORE_RESOURCE_SPECS = (
         "slug",
         not_found_errors=(assets.NotFoundError,),
         search=SearchDefinition(
-            "assets", Asset, "slug",
+            "assets",
+            Asset,
+            "slug",
             ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
-            label="Assets", title_field="item_name",
+            label="Assets",
+            title_field="item_name",
         ),
         web_route="assets:list",
     ),
@@ -127,9 +158,12 @@ CORE_RESOURCE_SPECS = (
         "Content records indexed by HQ.",
         Capability.READ,
         search=SearchDefinition(
-            "content", ContentItem, "slug",
+            "content",
+            ContentItem,
+            "slug",
             ("title", "slug", "topic", "tags", "notes"),
-            label="Content", title_field="title",
+            label="Content",
+            title_field="title",
         ),
         web_route="content:list",
     ),
@@ -139,9 +173,20 @@ CORE_RESOURCE_SPECS = (
         "Sensitivity-aware documentation pointers indexed by HQ.",
         Capability.READ,
         search=SearchDefinition(
-            "documentation", DocumentationRecord, "doc_id",
-            ("doc_id", "title", "system_service", "obsidian_path", "github_path", "notes"),
-            label="Docs", title_field="title", badge_field="doc_id",
+            "documentation",
+            DocumentationRecord,
+            "doc_id",
+            (
+                "doc_id",
+                "title",
+                "system_service",
+                "obsidian_path",
+                "github_path",
+                "notes",
+            ),
+            label="Docs",
+            title_field="title",
+            badge_field="doc_id",
         ),
         web_route="docs_index:list",
     ),
@@ -153,7 +198,9 @@ CORE_RESOURCE_SPECS = (
         read_models.list_expenses,
         ExpenseQuery,
         search=SearchDefinition(
-            "expenses", Expense, "pk",
+            "expenses",
+            Expense,
+            "pk",
             ("vendor", "item", "category", "business_purpose", "notes"),
             label="Expenses",
         ),
@@ -167,7 +214,9 @@ CORE_RESOURCE_SPECS = (
         read_models.list_receipts,
         ReceiptQuery,
         search=SearchDefinition(
-            "receipts", Receipt, "pk",
+            "receipts",
+            Receipt,
+            "pk",
             ("original_filename", "vendor", "notes"),
             label="Receipts",
         ),
@@ -179,9 +228,19 @@ CORE_RESOURCE_SPECS = (
         "Security-sensitive audit events indexed by HQ.",
         Capability.READ_AUDIT_LOG,
         search=SearchDefinition(
-            "audit", AuditLog, "pk",
-            ("action", "object_type", "object_id", "object_repr", "operation_id", "message"),
-            label="Audit log", timestamp_field="created_at",
+            "audit",
+            AuditLog,
+            "pk",
+            (
+                "action",
+                "object_type",
+                "object_id",
+                "object_repr",
+                "operation_id",
+                "message",
+            ),
+            label="Audit log",
+            timestamp_field="created_at",
         ),
         web_route="core:audit_list",
     ),
@@ -191,10 +250,19 @@ CORE_RESOURCE_SPECS = (
         "Canonical desired and observed infrastructure state.",
         Capability.READ,
         infrastructure.list_managed_resources,
-        BoundedQuery,
+        InfrastructureResourceQuery,
         infrastructure.get_managed_resource,
         "key",
         not_found_errors=(infrastructure.NotFoundError,),
+        search=SearchDefinition(
+            "infrastructure.resources",
+            ManagedResource,
+            "key",
+            ("key", "kind", "spec", "status", "conditions"),
+            label="Infrastructure resources",
+            title_field="key",
+            badge_field="kind",
+        ),
         web_route="control_plane:list",
     ),
     ResourceSpec(
@@ -249,8 +317,10 @@ def _validate_resource_identity(spec: ResourceSpec) -> None:
             f"Resource {spec.name!r} must declare a label and summary."
         )
     required = _capability_names(spec)
-    if not required or len(required) != len(set(required)) or any(
-        not RESOURCE_NAME.fullmatch(item) for item in required
+    if (
+        not required
+        or len(required) != len(set(required))
+        or any(not RESOURCE_NAME.fullmatch(item) for item in required)
     ):
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} must declare unique valid capabilities."
@@ -335,7 +405,9 @@ def resource_specs() -> tuple[ResourceSpec, ...]:
         _validate_resource_spec(spec)
     names = [spec.name for spec in specs]
     if len(names) != len(set(names)):
-        raise ImproperlyConfigured("Duplicate resource name across HQ core and plugins.")
+        raise ImproperlyConfigured(
+            "Duplicate resource name across HQ core and plugins."
+        )
     return specs
 
 
@@ -387,7 +459,9 @@ def describe_resources() -> dict[str, Any]:
                         if spec.list_query_type
                         else None
                     ),
-                    "get": ({"identifier": spec.identifier} if spec.identifier else None),
+                    "get": (
+                        {"identifier": spec.identifier} if spec.identifier else None
+                    ),
                     "search": ({"scope": spec.search.scope} if spec.search else None),
                 },
             }

@@ -345,7 +345,11 @@ class SearchPageTests(_AuthedTestCase):
         self.assertIn("project.create", content)
         self.assertIn("infrastructure.controllers", content)
         self.assertIn('href="/projects/"', content)
-        self.assertContains(response, "Open Projects")
+        self.assertIn('href="/commands/project.create/"', content)
+        self.assertIn(
+            '<a class="discovery-link" href="/commands/project.create/">', content
+        )
+        self.assertNotIn("Open command", content)
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})

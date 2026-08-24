@@ -51,15 +51,21 @@ class OperationCommand:
     reason: str = ""
 
 
-def list_managed_resources(*, limit: int = 50) -> dict[str, Any]:
+def list_managed_resources(
+    *, limit: int = 50, kind: str | None = None, kinds: str | None = None
+) -> dict[str, Any]:
     """List canonical public infrastructure state without provider credentials."""
     # The shared bound, not a fourth spelling of it. Written out here with the
     # ceiling as a literal, this module would have kept its own limit on the day
     # the shared one moved.
-    items = [
-        serialize_resource(resource)
-        for resource in ManagedResource.objects.all()[: page_size(limit)]
-    ]
+    resources = ManagedResource.objects.all()
+    if kind and kinds:
+        raise ValueError("Choose either kind or kinds, not both.")
+    if kind:
+        resources = resources.filter(kind=kind)
+    elif kinds:
+        resources = resources.filter(kind__in=kinds.split(","))
+    items = [serialize_resource(resource) for resource in resources[: page_size(limit)]]
     return {"items": items, "count": len(items)}
 
 
@@ -129,9 +135,7 @@ def resolved_spec(
             resource.kind,
             resource.spec,
             context=ProviderResolutionContext(
-                delivery_targets=(
-                    delivery_targets() if targets is None else targets
-                ),
+                delivery_targets=(delivery_targets() if targets is None else targets),
                 resource_key=resource.key,
             ),
         )
@@ -208,9 +212,7 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "status": serialize_public_status(resource.status),
         "conditions": resource.conditions,
         "last_observed_at": (
-            resource.last_observed_at.isoformat()
-            if resource.last_observed_at
-            else None
+            resource.last_observed_at.isoformat() if resource.last_observed_at else None
         ),
         "updated_at": resource.updated_at.isoformat(),
     }
@@ -218,7 +220,9 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
 
 def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
     """Return public observations without embedding downloadable artifacts."""
-    public_status = {key: value for key, value in status.items() if key != "certificate_pem"}
+    public_status = {
+        key: value for key, value in status.items() if key != "certificate_pem"
+    }
     if status.get("certificate_pem"):
         public_status["certificate_available"] = True
     return public_status
@@ -302,19 +306,21 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
     conditions = result.get("conditions") or []
     evidence = status.get("consumers") or []
     affected = [item for item in evidence if item.get("matches_expected") is False]
-    condition = next(
-        (item for item in conditions if item.get("status") is True), None
-    )
+    condition = next((item for item in conditions if item.get("status") is True), None)
     message = result.get("message") or operation.reason
 
     if operation.state == OperationRequest.State.QUEUED:
         headline = "Waiting for the controller"
-        guidance = "HQ will claim this automatically; no manual server action is needed."
+        guidance = (
+            "HQ will claim this automatically; no manual server action is needed."
+        )
     elif operation.state == OperationRequest.State.CLAIMED:
         headline = "Controller is applying and verifying the change"
         guidance = "The operation is leased; wait for verification before retrying."
     elif operation.state == OperationRequest.State.FAILED:
-        headline = (condition or {}).get("message") or message or "Provider operation failed"
+        headline = (
+            (condition or {}).get("message") or message or "Provider operation failed"
+        )
         guidance = (
             "Review the affected targets and provider reason, correct the canonical "
             "desired state or provider access, then reconcile again."
@@ -400,9 +406,7 @@ def _can_change_the_public_internet(kind: str) -> bool:
     it". A provider whose every action is locked cannot, by construction.
     """
 
-    return any(
-        action_kind == kind for action_kind, _ in enabled_controller_actions()
-    )
+    return any(action_kind == kind for action_kind, _ in enabled_controller_actions())
 
 
 @transaction.atomic
@@ -692,9 +696,7 @@ def request_lifecycle(
         actor=principal.actor,
         operation=f"infrastructure.{action}.request",
     ):
-        return _queue_operation(
-            resource, command, principal=principal, action=action
-        )
+        return _queue_operation(resource, command, principal=principal, action=action)
 
 
 def request_removal(

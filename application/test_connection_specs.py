@@ -28,6 +28,16 @@ from .security import Capability, Principal
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 NONE = Principal("nobody", "test", frozenset())
 FINANCE = Principal("finance", "test", frozenset({"example.finance.read"}))
+FINANCE_OPERATOR = Principal(
+    "finance-operator",
+    "test",
+    frozenset({"example.finance.read", Capability.WRITE_PROJECTS}),
+)
+INFRA_OPERATOR = Principal(
+    "infrastructure-operator",
+    "test",
+    frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}),
+)
 
 
 def _finance_spec() -> ConnectionSpec:
@@ -96,9 +106,10 @@ class ConnectionExecutionTests(TestCase):
         connection = core["instances"][0]
 
         self.assertEqual(connection["label"], "example-cloudflare")
-        self.assertIn("cloudflare.dns_record", {
-            ability["name"] for ability in connection["abilities"]
-        })
+        self.assertIn(
+            "cloudflare.dns_record",
+            {ability["name"] for ability in connection["abilities"]},
+        )
         self.assertNotIn("token", connection)
         self.assertNotIn("credential", connection)
         self.assertEqual(connection["controller_id"], "controller")
@@ -110,10 +121,11 @@ class ConnectionExecutionTests(TestCase):
         ):
             groups = connection_catalog(principal=FINANCE)
 
-        finance = next(group for group in groups if group.spec.name == "example.finance")
+        finance = next(
+            group for group in groups if group.spec.name == "example.finance"
+        )
         states = {
-            state.ability.name: state
-            for state in finance.connections[0].abilities
+            state.ability.name: state for state in finance.connections[0].abilities
         }
         self.assertTrue(states["accounts.read"].available)
         self.assertFalse(states["transactions.sync"].available)
@@ -135,6 +147,64 @@ class ConnectionExecutionTests(TestCase):
         self.assertTrue(states)
         self.assertTrue(all(state.available is None for state in states))
         self.assertTrue(all(state.missing_scopes == () for state in states))
+
+    def test_missing_scope_derives_one_real_management_next_step(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(_finance_spec(),),
+        ):
+            connection = connection_catalog(principal=FINANCE)[0].connections[0]
+
+        action = connection.recommended_action
+        self.assertIsNotNone(action)
+        self.assertEqual(action.name, "manage")
+        self.assertEqual(action.label, "Review access")
+        self.assertIn("1 required provider scope is missing", action.reason)
+
+    def test_a_command_link_requires_scope_evidence_and_hq_authority(self):
+        base = _finance_spec()
+        ability = replace(base.abilities[0], capability="project.create")
+        instance = replace(
+            base.instance_provider()[0],
+            ability_names=(ability.name,),
+        )
+        spec = replace(
+            base,
+            abilities=(ability,),
+            instance_provider=lambda: (instance,),
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            reader = connection_catalog(principal=FINANCE)[0].connections[0]
+            operator = connection_catalog(principal=FINANCE_OPERATOR)[0].connections[0]
+
+        self.assertIsNone(reader.abilities[0].action)
+        action = operator.abilities[0].action
+        self.assertIsNotNone(action)
+        self.assertEqual(action.capability, "project.create")
+        self.assertEqual(action.url, "/commands/project.create/")
+
+    def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(_finance_spec(),),
+        ):
+            payload = list_connections(principal=FINANCE)
+
+        instance = payload["groups"][0]["instances"][0]
+        self.assertEqual(
+            [action["name"] for action in instance["actions"]],
+            ["open", "manage", "relationships"],
+        )
+        self.assertTrue(
+            next(
+                action["recommended"]
+                for action in instance["actions"]
+                if action["name"] == "manage"
+            )
+        )
+        self.assertNotIn("secret", str(instance["actions"]).casefold())
 
     def test_connection_families_authorize_before_calling_their_provider(self):
         provider = mock.Mock(return_value=())
@@ -163,7 +233,8 @@ class ConnectionRegistrationTests(TestCase):
             described = describe_connections()
 
         finance = next(
-            item for item in described["connections"]
+            item
+            for item in described["connections"]
             if item["name"] == "example.finance"
         )
         self.assertEqual(finance["secret_store"], "Plaid")
@@ -175,7 +246,14 @@ class ConnectionRegistrationTests(TestCase):
 
     def test_command_center_pluralizes_one_ability(self):
         spec = _finance_spec()
-        spec = replace(spec, abilities=spec.abilities[:1])
+        instance = replace(
+            spec.instance_provider()[0], ability_names=(spec.abilities[0].name,)
+        )
+        spec = replace(
+            spec,
+            abilities=spec.abilities[:1],
+            instance_provider=lambda: (instance,),
+        )
         with mock.patch(
             "application.plugins.plugin_connection_specs", return_value=(spec,)
         ):
@@ -184,9 +262,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertEqual(discovered["connections"][0].badges[0], "1 ability")
 
     def test_command_center_finds_a_connection_by_its_declared_ability(self):
-        with mock.patch(
-            "application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("tailscale", principal=READ)
 
         self.assertEqual(
@@ -196,10 +272,30 @@ class ConnectionRegistrationTests(TestCase):
         self.assertIn("Tailnet device", discovered["connections"][0].badges)
         self.assertIn("Tailnet policy", discovered["connections"][0].badges)
 
+    def test_matching_ability_derives_its_authorized_commands(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            discovered = command_center("tailscale", principal=INFRA_OPERATOR)
+
+        commands = {item.name: item for item in discovered["commands"]}
+        self.assertEqual(
+            set(commands),
+            {
+                "infrastructure.resource.create",
+                "infrastructure.resource.update",
+                "infrastructure.reconcile",
+                "infrastructure.resource.remove",
+            },
+        )
+        self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)
+        self.assertEqual(
+            commands["infrastructure.reconcile"].url,
+            "/commands/infrastructure.reconcile/"
+            "?kind=tailscale.device&kind=tailscale.policy",
+        )
+        self.assertNotIn("certificate.renew", commands)
+
     def test_command_center_caps_broad_ability_match_explanations(self):
-        with mock.patch(
-            "application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("e", principal=READ)
 
         core = next(
@@ -211,9 +307,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertRegex(core.badges[-1], r"^\+\d+ matching abilities$")
 
     def test_command_center_explains_terms_matched_across_abilities(self):
-        with mock.patch(
-            "application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("tailnet proxy", principal=READ)
 
         core = discovered["connections"][0]
@@ -221,9 +315,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertIn("Tailnet device", core.badges)
 
     def test_command_center_does_not_leak_connection_abilities_without_read(self):
-        with mock.patch(
-            "application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("tailscale", principal=NONE)
 
         self.assertEqual(discovered["connections"], ())
@@ -242,6 +334,13 @@ class ConnectionRegistrationTests(TestCase):
                 if ability["name"].startswith("tailscale.")
             },
             {"tailscale.device", "tailscale.policy"},
+        )
+        self.assertTrue(
+            all(
+                ability["subject_resource"] == "infrastructure.resources"
+                for ability in core["abilities"]
+                if ability["name"].startswith("tailscale.")
+            )
         )
         self.assertEqual(
             {

@@ -8,6 +8,8 @@ what follows takes a fact away and asserts the page notices.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -15,7 +17,15 @@ from django.utils import timezone
 
 from control_plane.models import ProviderInventory
 
-from .connection import channel_for_request, channel_of, connection, headers_of, hops_of
+from .connection import (
+    addresses_of,
+    addresses_of_hq,
+    channel_for_request,
+    channel_of,
+    connection,
+    headers_of,
+    hops_of,
+)
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -113,12 +123,78 @@ class LayerTests(TestCase):
             found = connection(a_request())
 
         self.assertTrue(found.holds, [layer.id for layer in found.failing])
+        self.assertTrue(all(layer.boundary for layer in found.layers))
+        self.assertTrue(all(layer.mechanism for layer in found.layers))
 
     def test_a_request_off_the_tailnet_says_so(self):
         with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True):
             found = connection(a_request(A_LAN_ADDRESS))
 
         self.assertFalse(self.layer(found, "channel").holds)
+
+    def test_an_undeclared_forwarding_peer_is_not_labeled_as_the_caller(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        with override_settings(SEVERINO_TRUSTED_PROXIES=[]):
+            found = connection(request)
+
+        self.assertTrue(found.untrusted_forwarding)
+        self.assertTrue(found.forwarded)
+        self.assertIsNone(found.device)
+        self.assertEqual(found.reported_device.label, "a-laptop")
+        self.assertEqual(found.caller_device.label, "a-laptop")
+        self.assertEqual(found.peer_label, "a-laptop")
+        self.assertEqual(found.peer_address, A_TAILNET_ADDRESS)
+        self.assertEqual(found.address, A_LAN_ADDRESS)
+        self.assertEqual(found.channel.id, "network")
+        self.assertEqual(found.path_label, "Via forwarding peer")
+        self.assertEqual(found.identity.tailnet_user, "")
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        found = connection(request)
+
+        self.assertFalse(found.untrusted_forwarding)
+        self.assertTrue(found.forwarded)
+        self.assertEqual(found.peer_label, "a-laptop")
+        self.assertEqual(found.address, A_TAILNET_ADDRESS)
+
+    def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
+        found = connection(a_request(A_LAN_ADDRESS, secure=True))
+
+        layer = self.layer(found, "transport")
+        self.assertTrue(layer.holds)
+        self.assertEqual(layer.evidence, "TLS")
+        self.assertEqual(found.transport, "TLS")
+
+    def test_a_plain_tailnet_request_names_wireguard_as_its_transport(self):
+        found = connection(a_request(secure=False))
+
+        layer = self.layer(found, "transport")
+        self.assertTrue(layer.holds)
+        self.assertEqual(layer.evidence, "WireGuard only")
+        self.assertEqual(found.transport, "WireGuard only")
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_a_proxied_tailnet_request_names_each_encrypted_segment(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        found = connection(request)
+
+        self.assertEqual(found.transport_path, "TLS to proxy · WireGuard to HQ")
+
+    def test_a_plain_lan_request_claims_no_verified_encryption(self):
+        found = connection(a_request(A_LAN_ADDRESS, secure=False))
+
+        layer = self.layer(found, "transport")
+        self.assertFalse(layer.holds)
+        self.assertEqual(layer.evidence, "No verified encryption")
+        self.assertEqual(found.transport, "No verified encryption")
 
     def test_the_gate_reports_when_it_is_not_being_enforced(self):
         """The check that would otherwise be a sentence rather than a fact."""
@@ -170,6 +246,16 @@ class LayerTests(TestCase):
         found = connection(a_request())
 
         self.assertFalse(self.layer(found, "policy").holds)
+        self.assertTrue(self.layer(found, "policy").conclusive)
+
+    def test_a_policy_question_the_sweep_did_not_ask_is_unverified_not_denied(self):
+        found = connection(a_request(host="hq.example.test:8443"))
+
+        layer = self.layer(found, "policy")
+        self.assertFalse(layer.holds)
+        self.assertFalse(layer.conclusive)
+        self.assertEqual(layer.state, "unknown")
+        self.assertIn("unverified", found.summary)
 
     def test_a_device_nothing_swept_is_not_reported_as_a_known_node(self):
         found = connection(a_request("100.64.0.77"))
@@ -286,9 +372,59 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "Outbound authority")
         self.assertContains(response, "Derived topology")
         self.assertContains(response, "data-connection-protocol")
+        self.assertContains(response, "data-connection-layers")
+        self.assertContains(response, "Storage, backup, and secret custody")
+        self.assertContains(response, "The identities and interfaces behind both ends")
         self.assertContains(response, "Open protocol evidence to read the response.")
         self.assertNotContains(response, 'id="conn-decision-title"')
         self.assertNotContains(response, 'id="connection-controls"')
+
+    def test_identity_dates_use_hqs_normal_date_format(self):
+        self.client.force_login(self.user)
+        self.user.last_login = datetime(2026, 8, 23, 21, 12, tzinfo=UTC)
+        self.user.save(update_fields=("last_login",))
+
+        response = self.client.get(reverse("connection"))
+
+        self.assertContains(response, "Aug 23, 2026, 4:12 p.m.")
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class AddressEvidenceTests(TestCase):
+    def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
+        a_tailnet(
+            a_device(
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                direct_endpoint="192.0.2.50:41641",
+                endpoints=["192.0.2.50:41641"],
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        found = connection(a_request())
+        rows = addresses_of(found)
+
+        self.assertIsNotNone(found.tailnet_observed_at)
+        self.assertIn(
+            "the last Tailnet sweep observed this tunnel endpoint",
+            {row.source for row in rows},
+        )
+
+    def test_hq_tunnel_endpoints_are_not_presented_as_service_addresses(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS),
+            a_device(
+                "hq-host",
+                "100.64.0.9",
+                observer=True,
+                endpoints=["192.0.2.9:41641"],
+            ),
+        )
+
+        rows = addresses_of_hq(connection(a_request()))
+
+        self.assertEqual([row.value for row in rows], ["100.64.0.9"])
 
 
 @override_settings(
@@ -551,6 +687,26 @@ class ServingDeviceTests(TestCase):
 
         with mock.patch("application.connection._own_addresses", return_value=frozenset(own)):
             return _serving_device(tailnet.devices(), declared_machines())
+
+    def test_locating_hq_never_puts_dns_in_the_request_path(self):
+        from unittest import mock
+
+        from .connection import _own_addresses
+
+        _own_addresses.cache_clear()
+        try:
+            with (
+                mock.patch(
+                    "application.connection.socket.getaddrinfo",
+                    side_effect=AssertionError("DNS must not be consulted"),
+                ),
+                mock.patch(
+                    "application.connection.socket.socket", side_effect=OSError
+                ),
+            ):
+                self.assertEqual(_own_addresses(), frozenset({"127.0.0.1", "::1"}))
+        finally:
+            _own_addresses.cache_clear()
 
     def test_the_node_hq_runs_on_is_found_by_its_own_address(self):
         found = self.serving({"100.64.0.5"})

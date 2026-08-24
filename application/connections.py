@@ -32,6 +32,13 @@ from .contracts import (
     SCOPE_NAME,
     endpoint_has_private_parts,
 )
+from .action_links import (
+    ActionLink,
+    capability_action_link,
+    connection_action_links,
+    connection_relationship_link,
+    recommend_connection_action,
+)
 from .security import AuthorizationError, Capability, Principal
 
 
@@ -76,6 +83,10 @@ class ConnectionAbility:
     # ability name describes what a connection can do; it is not inherently a
     # ManagedResource kind, and separate connection families may reuse it.
     governs_kinds: tuple[str, ...] = ()
+    # The canonical resource catalog these governed kinds belong to. Commands
+    # against that resource can then be discovered from this ability without a
+    # provider-specific command list.
+    subject_resource: str = ""
 
 
 @dataclass(frozen=True)
@@ -158,12 +169,28 @@ class ConnectionAbilityState:
     ability: ConnectionAbility
     available: bool | None
     missing_scopes: tuple[str, ...] = ()
+    action: ActionLink | None = None
 
 
 @dataclass(frozen=True)
 class ConnectionView:
     instance: ConnectionInstance
     abilities: tuple[ConnectionAbilityState, ...]
+    actions: tuple[ActionLink, ...] = ()
+
+    @property
+    def recommended_action(self) -> ActionLink | None:
+        return next((action for action in self.actions if action.recommended), None)
+
+    @property
+    def other_actions(self) -> tuple[ActionLink, ...]:
+        """Useful row actions, excluding this page and the promoted next move."""
+
+        return tuple(
+            action
+            for action in self.actions
+            if action.name != "open" and not action.recommended
+        )
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
@@ -183,9 +210,7 @@ def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
     """
 
     reached = tuple(
-        (name, known[name.lower()].url)
-        for name in row.reaches
-        if name.lower() in known
+        (name, known[name.lower()].url) for name in row.reaches if name.lower() in known
     )
     if reached:
         return reached
@@ -227,9 +252,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
     # is whatever the board decided it was, joined on a fact rather than on the
     # label a template happens to render.
     located = index_of(
-        declared=[
-            {"name": item.name, "addresses": item.addresses} for item in catalog
-        ]
+        declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
     )
     using: dict[str, list[tuple[str, str]]] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
@@ -276,6 +299,7 @@ def _controller_contract() -> tuple[
                 summary=spec.summary,
                 effect="destructive" if spec.destructive else "infrastructure_change",
                 governs_kinds=(kind,),
+                subject_resource="infrastructure.resources",
             )
         )
         for provider in spec.connection_providers:
@@ -305,7 +329,9 @@ def _controller_instances(
                 status=(
                     "serious"
                     if not reading.reachable
-                    else "good" if reading.probed else "neutral"
+                    else "good"
+                    if reading.probed
+                    else "neutral"
                 ),
                 status_label=reading.status,
                 detail=reading.detail,
@@ -385,6 +411,10 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
         raise ImproperlyConfigured(
             f"Connection ability {ability.name!r} has invalid governed kinds."
         )
+    if ability.subject_resource and not DOTTED_NAME.fullmatch(ability.subject_resource):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has an invalid subject resource."
+        )
 
 
 def _validate_connection_spec(spec: ConnectionSpec) -> None:
@@ -399,8 +429,10 @@ def _validate_connection_spec(spec: ConnectionSpec) -> None:
             f"Connection {spec.name!r} needs a label and summary."
         )
     required = _capability_names(spec)
-    if not required or len(required) != len(set(required)) or any(
-        not DOTTED_NAME.fullmatch(item) for item in required
+    if (
+        not required
+        or len(required) != len(set(required))
+        or any(not DOTTED_NAME.fullmatch(item) for item in required)
     ):
         raise ImproperlyConfigured(
             f"Connection {spec.name!r} must declare unique valid capabilities."
@@ -424,9 +456,7 @@ def _validate_connection_spec(spec: ConnectionSpec) -> None:
         _validate_ability(spec, ability)
     names = [ability.name for ability in spec.abilities]
     if len(names) != len(set(names)):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} repeats an ability name."
-        )
+        raise ImproperlyConfigured(f"Connection {spec.name!r} repeats an ability name.")
 
 
 def connection_specs() -> tuple[ConnectionSpec, ...]:
@@ -459,7 +489,11 @@ def _validate_instance(
         raise ImproperlyConfigured(
             f"Connection {spec.name!r} emitted a non-ConnectionInstance."
         )
-    if not instance.id.strip() or not instance.label.strip() or not instance.kind.strip():
+    if (
+        not instance.id.strip()
+        or not instance.label.strip()
+        or not instance.kind.strip()
+    ):
         raise ImproperlyConfigured(
             f"Connection {spec.name!r} emitted an incomplete instance."
         )
@@ -468,9 +502,7 @@ def _validate_instance(
             f"Connection {instance.id!r} has invalid status {instance.status!r}."
         )
     if not instance.status_label.strip():
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has no status label."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
     if instance.observed_at is not None and not isinstance(
         instance.observed_at, datetime
     ):
@@ -507,10 +539,7 @@ def _validate_instance(
             or not link.label.strip()
             or (link.url and not _safe_link_url(link.url))
             or not isinstance(link.resource_key, str)
-            or (
-                link.resource_key
-                and link.resource_key != link.resource_key.strip()
-            )
+            or (link.resource_key and link.resource_key != link.resource_key.strip())
             for link in collection
         ):
             raise ImproperlyConfigured(
@@ -522,9 +551,7 @@ def _validate_instance(
         or not fact.value.strip()
         for fact in instance.facts
     ):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has an invalid fact."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
     return instance
 
 
@@ -543,26 +570,13 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     for spec in connection_specs():
         if not _permitted(spec, principal):
             continue
-        instances = tuple(
-            _validate_instance(spec, instance) for instance in spec.instance_provider()
-        )
-        ids = [instance.id for instance in instances]
-        if len(ids) != len(set(ids)):
-            raise ImproperlyConfigured(
-                f"Connection {spec.name!r} emitted duplicate instance ids."
-            )
+        instances = _connection_instances(spec)
         abilities = {ability.name: ability for ability in spec.abilities}
         groups.append(
             ConnectionGroup(
                 spec,
                 tuple(
-                    ConnectionView(
-                        instance,
-                        tuple(
-                            _ability_state(abilities[name], instance)
-                            for name in instance.ability_names
-                        ),
-                    )
+                    _connection_view(spec, instance, abilities, principal)
                     for instance in instances
                 ),
             )
@@ -570,8 +584,20 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     return tuple(groups)
 
 
+def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:
+    instances = tuple(
+        _validate_instance(spec, instance) for instance in spec.instance_provider()
+    )
+    ids = [instance.id for instance in instances]
+    if len(ids) != len(set(ids)):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} emitted duplicate instance ids."
+        )
+    return instances
+
+
 def _ability_state(
-    ability: ConnectionAbility, instance: ConnectionInstance
+    ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
     if not instance.scopes_known:
         return ConnectionAbilityState(ability, None)
@@ -580,7 +606,50 @@ def _ability_state(
         for scope in ability.required_scopes
         if scope not in instance.granted_scopes
     )
-    return ConnectionAbilityState(ability, not missing, missing)
+    available = not missing
+    return ConnectionAbilityState(
+        ability,
+        available,
+        missing,
+        capability_action_link(
+            ability.capability,
+            ability.effect,
+            f"Use {ability.label}",
+            principal=principal,
+        )
+        if available
+        else None,
+    )
+
+
+def _connection_view(
+    spec: ConnectionSpec,
+    instance: ConnectionInstance,
+    abilities: dict[str, ConnectionAbility],
+    principal: Principal,
+) -> ConnectionView:
+    states = tuple(
+        _ability_state(abilities[name], instance, principal)
+        for name in instance.ability_names
+    )
+    actions = connection_action_links(spec)
+    relationship = connection_relationship_link(spec.name, instance.id)
+    if relationship is not None:
+        actions = (*actions, relationship)
+    actions = (
+        *actions,
+        *(state.action for state in states if state.action is not None),
+    )
+    return ConnectionView(
+        instance,
+        states,
+        recommend_connection_action(
+            actions,
+            unhealthy=instance.status != "good",
+            missing_scope_count=sum(len(state.missing_scopes) for state in states),
+            unknown_scope_count=sum(state.available is None for state in states),
+        ),
+    )
 
 
 def describe_connections() -> dict:
@@ -607,6 +676,7 @@ def describe_connections() -> dict:
                         "required_scopes": list(ability.required_scopes),
                         "capability": ability.capability or None,
                         "governs_kinds": list(ability.governs_kinds),
+                        "subject_resource": ability.subject_resource or None,
                     }
                     for ability in spec.abilities
                 ],
@@ -630,8 +700,7 @@ def list_connections(*, principal: Principal) -> dict:
                 "summary": group.spec.summary,
                 "secret_store": group.spec.secret_store or None,
                 "instances": [
-                    _serialize_instance(connection)
-                    for connection in group.connections
+                    _serialize_instance(connection) for connection in group.connections
                 ],
             }
             for group in groups
@@ -663,6 +732,8 @@ def _serialize_instance(connection: ConnectionView) -> dict:
                 "available": state.available,
                 "missing_scopes": list(state.missing_scopes),
                 "capability": state.ability.capability or None,
+                "subject_resource": state.ability.subject_resource or None,
+                "action": asdict(state.action) if state.action else None,
             }
             for state in connection.abilities
         ],
@@ -670,6 +741,7 @@ def _serialize_instance(connection: ConnectionView) -> dict:
         "dependencies": [asdict(link) for link in instance.dependencies],
         "facts": [asdict(fact) for fact in instance.facts],
         "controller_id": instance.controller_id or None,
+        "actions": [asdict(action) for action in connection.actions],
     }
 
 
@@ -756,7 +828,11 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     from .services import public_sites
 
     offered = [
-        {"label": "Health endpoint", "sub": "liveness", "href": reverse("health_ready")},
+        {
+            "label": "Health endpoint",
+            "sub": "liveness",
+            "href": reverse("health_ready"),
+        },
         *(
             {"label": label, "sub": sub or "console", "href": href}
             for label, sub, href in consoles()
@@ -770,9 +846,7 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     chosen = pinned(user, DASHBOARD_LINK)
     if not chosen:
         return offered, False
-    return [
-        item for item in offered if item["href"].lower() in chosen
-    ] or offered, True
+    return [item for item in offered if item["href"].lower() in chosen] or offered, True
 
 
 def link_choices(user=None) -> list[dict[str, object]]:
@@ -786,9 +860,7 @@ def link_choices(user=None) -> list[dict[str, object]]:
 
     chosen = pinned(user, DASHBOARD_LINK)
     offered, _ = outward_links(None)
-    return [
-        {**item, "chosen": item["href"].lower() in chosen} for item in offered
-    ]
+    return [{**item, "chosen": item["href"].lower() in chosen} for item in offered]
 
 
 def operator_links() -> list[dict[str, str]]:

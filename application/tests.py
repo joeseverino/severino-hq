@@ -19,6 +19,7 @@ from expenses.models import Expense
 from receipts.models import Receipt
 from core.models import AuditLog
 from hq_mcp.server import mcp
+from hq_sdk.capabilities import StrictCommand
 from projects.models import Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from docs_index.models import DocumentationRecord
@@ -45,6 +46,28 @@ from .security import (
 
 
 class CapabilityTests(TestCase):
+    def test_plugin_strict_commands_execute_through_the_host(self):
+        class ExampleCommand(StrictCommand):
+            value: str = "works"
+
+        spec = CapabilitySpec(
+            "example.read",
+            "Read an example.",
+            "read",
+            "example.read",
+            ExampleCommand,
+            lambda command, **kwargs: {"ok": True, "value": command.value},
+        )
+        principal = Principal("test", "test", frozenset({"example.read"}))
+
+        with mock.patch(
+            "application.capabilities.capability_registry",
+            return_value={spec.name: spec},
+        ):
+            result = execute_capability(spec.name, {}, principal=principal)
+
+        self.assertEqual(result, {"ok": True, "value": "works"})
+
     def test_registry_emits_stable_json_schemas_and_effects(self):
         first = describe_capabilities()
         second = describe_capabilities()

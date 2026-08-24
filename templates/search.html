@@ -41,7 +41,7 @@
       <ul class="discovery-list">
         {% for item in discovered_commands %}
         <li>
-          <div class="discovery-link">
+          <a class="discovery-link" href="{{ item.url }}">
             <span class="discovery-main">
               <strong>{{ item.label }}</strong>
               <span class="muted">{{ item.summary }}</span>
@@ -49,9 +49,8 @@
             <span class="discovery-meta">
               <code>{{ item.name }}</code>
               {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
-              {% if item.url %}<a class="discovery-destination" href="{{ item.url }}">Open {{ item.destination_label }} <span aria-hidden="true">→</span></a>{% endif %}
             </span>
-          </div>
+          </a>
         </li>
         {% endfor %}
       </ul>

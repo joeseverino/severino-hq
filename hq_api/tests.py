@@ -166,6 +166,7 @@ class CompositionCheckTests(SimpleTestCase):
         with (
             patch("hq_api.checks.capability_specs", return_value=()),
             patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
         ):
             errors = capability_contract_check(None)
 
@@ -191,10 +192,46 @@ class CompositionCheckTests(SimpleTestCase):
         with (
             patch("hq_api.checks.capability_specs", return_value=(capability,)),
             patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
         ):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E003"])
+
+    def test_a_target_query_must_match_its_resource_contract(self):
+        from application.capabilities import CapabilitySpec
+        from application.projects import ProjectCommand, save_project
+        from application.resources import ProjectQuery, ResourceSpec
+        from .checks import capability_contract_check
+
+        capability = CapabilitySpec(
+            "example.update",
+            "Update a synthetic record.",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            save_project,
+            target_kind="slug",
+            subject_resource="example.records",
+            target_query=(("unknown", "value"),),
+        )
+        resource = ResourceSpec(
+            "example.records",
+            "Records",
+            "Records.",
+            "read",
+            list_handler=lambda **kwargs: {"items": [], "count": 0},
+            list_query_type=ProjectQuery,
+            identifier="slug",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=(capability,)),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E008"])
 
     def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
         from application.connections import ConnectionSpec
@@ -244,6 +281,34 @@ class CompositionCheckTests(SimpleTestCase):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E007"])
+
+    def test_a_connection_ability_cannot_name_an_unknown_resource(self):
+        from application.connections import ConnectionAbility, ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            abilities=(
+                ConnectionAbility(
+                    "transactions.read",
+                    "Read transactions",
+                    "Read transaction history.",
+                    subject_resource="example.missing",
+                ),
+            ),
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E009"])
 
 
 @override_settings(
@@ -339,9 +404,7 @@ class TransportTests(TestCase):
     def test_retrying_a_machine_write_replays_the_committed_response(self):
         from projects.models import Project
 
-        body = {
-            "payload": {"name": "Once", "slug": "once", "status": "active"}
-        }
+        body = {"payload": {"name": "Once", "slug": "once", "status": "active"}}
         with _serving():
             first = self._post(
                 "project.create",
@@ -516,7 +579,9 @@ class TransportTests(TestCase):
         # Nothing in HQ core is grantable by `example.write` alone, so a token
         # scoped to it must not come back permitted for anything here.
         self.assertFalse([spec for spec in specs if spec["permitted"]])
-        project_create = next(spec for spec in specs if spec["name"] == "project.create")
+        project_create = next(
+            spec for spec in specs if spec["name"] == "project.create"
+        )
         self.assertTrue(project_create["idempotency_key_required"])
         self.assertFalse(project_create["request_schema"]["additionalProperties"])
         self.assertEqual(project_create["resource"], "projects")
@@ -524,7 +589,9 @@ class TransportTests(TestCase):
             project_create["request_schema"]["properties"]["payload"],
             project_create["input_schema"],
         )
-        project_update = next(spec for spec in specs if spec["name"] == "project.update")
+        project_update = next(
+            spec for spec in specs if spec["name"] == "project.update"
+        )
         self.assertEqual(project_update["request_schema"]["required"], ["target"])
         nested = views._request_schema(
             {
@@ -587,9 +654,9 @@ class TransportTests(TestCase):
             if item["id"] == "controller:api-cloudflare"
         )
         self.assertTrue(core["permitted"])
-        self.assertIn("cloudflare.dns_record", {
-            ability["name"] for ability in state["abilities"]
-        })
+        self.assertIn(
+            "cloudflare.dns_record", {ability["name"] for ability in state["abilities"]}
+        )
         self.assertNotIn("token", state)
 
     def test_connections_never_invoke_a_family_the_token_cannot_read(self):
@@ -643,9 +710,7 @@ class TransportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         topology = response.json()["data"]
         self.assertEqual(topology["schema_version"], 1)
-        self.assertIn("resource:api-zone", {
-            node["id"] for node in topology["nodes"]
-        })
+        self.assertIn("resource:api-zone", {node["id"] for node in topology["nodes"]})
         self.assertTrue(topology["edges"])
         resource = next(
             node for node in topology["nodes"] if node["id"] == "resource:api-zone"
@@ -686,9 +751,7 @@ class TransportTests(TestCase):
     def test_resource_queries_reject_unknown_and_repeated_fields(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
-            unknown = self.client.get(
-                "/api/v2/resources/projects/?limti=10", **headers
-            )
+            unknown = self.client.get("/api/v2/resources/projects/?limti=10", **headers)
             repeated = self.client.get(
                 "/api/v2/resources/projects/?limit=1&limit=2", **headers
             )

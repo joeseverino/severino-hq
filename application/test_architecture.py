@@ -144,6 +144,25 @@ class StyleContractTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[1]
         return (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
+    @staticmethod
+    def _script() -> str:
+        root = Path(__file__).resolve().parents[1]
+        return (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
+
+    def test_mobile_section_disclosures_keep_their_parent_drawer_open(self):
+        """Opening a category must not dismiss the drawer containing it."""
+
+        script = self._script()
+        self.assertIn(
+            'if (!menu.closest(".primary-nav")) setSectionMenu(false);',
+            script,
+        )
+        css = self._stylesheet()
+        self.assertIn(
+            ".nav-is-open .primary-nav .nav-group > summary",
+            css,
+        )
+
     def test_every_referenced_custom_property_is_defined(self):
         import re
 

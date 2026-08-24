@@ -6,6 +6,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 
 from core.models import TimestampedModel
 
@@ -41,6 +42,9 @@ class ManagedResource(TimestampedModel):
 
     def __str__(self) -> str:
         return self.key
+
+    def get_absolute_url(self) -> str:
+        return reverse("control_plane:detail", kwargs={"key": self.key})
 
 
 class ProviderInventory(TimestampedModel):

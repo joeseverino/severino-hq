@@ -63,7 +63,6 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
-from core.network import client_ip
 from application.service_context import sections_for
 from application.ui import PageNavigation, PageSection
 from application.services import (
@@ -332,6 +331,37 @@ def _origin_machine(resource, machines=None, at=None, targets=None):
     except (KeyError, TypeError, ValueError):
         return None
     return machine_link(origin, machines, at) if origin else None
+
+
+def _provider_machine(resource):
+    """The one machine hosting the provider that manages this resource.
+
+    The resource's origin is where it sends traffic. The provider connection
+    is where the proxy, DNS server, or controller itself runs. Conflating those
+    two edges made an NPM proxy look as though it ran on its upstream service.
+    """
+
+    from application.connections import connection_readings
+    from application.machines import machine_catalog
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None:
+        return None
+    catalog = machine_catalog()
+    known = {item.name.lower(): item for item in catalog}
+    for item in catalog:
+        for alias in item.aliases:
+            known.setdefault(alias.lower(), item)
+    matches = {
+        (machine.name, machine.url)
+        for reading in connection_readings()
+        if reading.provider in provider.connection_providers
+        if (machine := known.get(reading.controller_id.lower())) is not None
+    }
+    if len(matches) != 1:
+        return None
+    name, url = matches.pop()
+    return {"name": name, "url": url}
 
 
 def _service_links(resource) -> tuple[tuple[str, str], ...]:
@@ -960,7 +990,9 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         # carries the addresses it answers at -- so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        context["is_this_device"] = client_ip(self.request) in found.addresses
+        from application.connection import displayed_client_ip
+
+        context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["container_kind"] = CONTAINER_KIND
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
@@ -1210,6 +1242,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         # provider that declares an origin is one whose thing runs on a machine,
         # so the machine is a link rather than an address printed in a readout.
         context["origin_machine"] = _origin_machine(self.object)
+        context["provider_machine"] = _provider_machine(self.object)
         # A container declares identity and nothing else, so everything worth
         # opening the page for is a join: which machine that name is, what the
         # container is doing, and which services reach it through the ports it

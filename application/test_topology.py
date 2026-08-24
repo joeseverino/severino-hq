@@ -313,9 +313,9 @@ class ConnectionActionTests(TestCase):
             **overrides,
         )
 
-    def project(self, spec):
+    def project(self, spec, principal=READ):
         with mock.patch("application.plugins.plugin_connection_specs", return_value=(spec,)):
-            return derive_topology(principal=READ)
+            return derive_topology(principal=principal)
 
     def node(self, spec):
         return next(n for n in self.project(spec).nodes
@@ -345,12 +345,21 @@ class ConnectionActionTests(TestCase):
     def test_an_ability_naming_a_capability_reports_the_canonical_contract(self):
         spec = self.spec(abilities=(ConnectionAbility(
             "example.rotate", "Rotate", "Rotate the credential this connection carries.",
-            effect="infrastructure_change", capability="example.rotate"),))
-        ability = next(n for n in self.project(spec).nodes
+            effect="infrastructure_change", capability="infrastructure.reconcile"),))
+        ability = next(n for n in self.project(spec, MANAGE).nodes
                        if n.id == "ability:example.declared:example.rotate")
         command = next(a for a in ability.actions if a.name == "command")
-        self.assertEqual(command.capability, "example.rotate")
+        self.assertEqual(command.capability, "infrastructure.reconcile")
         self.assertEqual(command.effect, "infrastructure_change")
+
+    def test_an_ability_never_advertises_a_command_the_principal_cannot_run(self):
+        spec = self.spec(abilities=(ConnectionAbility(
+            "example.rotate", "Rotate", "Rotate the credential this connection carries.",
+            effect="infrastructure_change", capability="infrastructure.reconcile"),))
+        ability = next(n for n in self.project(spec, READ).nodes
+                       if n.id == "ability:example.declared:example.rotate")
+
+        self.assertEqual([a.name for a in ability.actions], ["focus"])
 
     def test_an_ability_without_a_capability_only_relates(self):
         spec = self.spec(abilities=(ConnectionAbility(

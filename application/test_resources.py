@@ -6,6 +6,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
 from projects.models import Project
+from control_plane.models import ManagedResource
 
 from .command_center import command_center
 from .resources import (
@@ -54,7 +55,8 @@ class ResourceExecutionTests(TestCase):
             item for item in outcome["commands"] if item.name == "certificate.renew"
         )
 
-        self.assertEqual(renewal.url, "/infrastructure/")
+        self.assertEqual(renewal.url, "/commands/certificate.renew/")
+        self.assertEqual(renewal.destination_label, "")
         self.assertEqual(renewal.badges, ("infrastructure change",))
 
     def test_command_center_degrades_an_unusable_plugin_route_to_text(self):
@@ -78,18 +80,42 @@ class ResourceExecutionTests(TestCase):
         outcome = command_center("", principal=NONE)
 
         self.assertEqual(
-            outcome, {
+            outcome,
+            {
                 "resources": (),
                 "commands": (),
                 "connections": (),
                 "views": (),
                 "checks": (),
-            }
+            },
         )
 
     def test_unknown_filters_are_rejected_before_the_handler(self):
         with self.assertRaises(InvalidResourceInput):
             list_resource("projects", {"limti": 10}, principal=READ)
+
+    def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
+        ManagedResource.objects.create(key="device", kind="tailscale.device", spec={})
+        ManagedResource.objects.create(key="policy", kind="tailscale.policy", spec={})
+        ManagedResource.objects.create(key="zone", kind="cloudflare.zone", spec={})
+
+        with self.assertNumQueries(1):
+            listed = list_resource(
+                "infrastructure.resources",
+                {"kinds": "tailscale.device,tailscale.policy"},
+                principal=READ,
+            )
+
+        self.assertEqual(
+            {item["key"] for item in listed["items"]}, {"device", "policy"}
+        )
+
+    def test_infrastructure_kinds_filter_rejects_invalid_or_repeated_kinds(self):
+        for value in ("not a kind", "tailscale.device,tailscale.device"):
+            with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
+                list_resource(
+                    "infrastructure.resources", {"kinds": value}, principal=READ
+                )
 
     def test_every_operation_authorizes_before_reading(self):
         with self.assertRaises(AuthorizationError):

@@ -356,6 +356,22 @@ class ProviderAdapterTests(TestCase):
         self.assertEqual(ssh.call_count, 2)
         self.assertNotIn("secret-c", json.dumps(result))
 
+    @mock.patch("controller_runtime.providers._cloudflare_paged")
+    def test_one_sweep_reuses_successful_provider_reads_and_then_forgets_them(
+        self, paged
+    ):
+        paged.return_value = [{"id": "zone-1", "name": "example.test"}]
+
+        with providers.provider_snapshot():
+            first = providers._cloudflare_zones()
+            second = providers._cloudflare_zones()
+
+        third = providers._cloudflare_zones()
+
+        self.assertIs(first, second)
+        self.assertEqual(third, first)
+        self.assertEqual(paged.call_count, 2)
+
     @mock.patch.dict(
         "os.environ",
         {

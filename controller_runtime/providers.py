@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 import hashlib
 import io
@@ -22,7 +25,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from control_plane.providers import (
     caa_parts,
@@ -35,6 +38,33 @@ from control_plane.providers import (
 
 
 logger = logging.getLogger("severino.controller")
+
+_SnapshotValue = TypeVar("_SnapshotValue")
+_PROVIDER_SNAPSHOT: ContextVar[dict[tuple[object, ...], object] | None] = ContextVar(
+    "provider_snapshot", default=None
+)
+
+
+@contextmanager
+def provider_snapshot() -> Iterator[None]:
+    """Share successful reads only for one logically atomic provider sweep."""
+
+    token = _PROVIDER_SNAPSHOT.set({})
+    try:
+        yield
+    finally:
+        _PROVIDER_SNAPSHOT.reset(token)
+
+
+def _snapshot_value(
+    key: tuple[object, ...], load: Callable[[], _SnapshotValue]
+) -> _SnapshotValue:
+    snapshot = _PROVIDER_SNAPSHOT.get()
+    if snapshot is None:
+        return load()
+    if key not in snapshot:
+        snapshot[key] = load()
+    return cast(_SnapshotValue, snapshot[key])
 
 
 class ProviderError(RuntimeError):
@@ -264,18 +294,22 @@ def _npm_url(connection_ref: str = "") -> str:
 
 def _npm_token(base_url: str, connection_ref: str = "") -> str:
     prefix = connection_prefix("npm", connection_ref)
-    result = _request(
-        f"{base_url}/tokens",
-        method="POST",
-        payload={
-            "identity": _required(prefix, "USERNAME"),
-            "secret": _required(prefix, "PASSWORD"),
-        },
-    )
-    token = result.get("token", "") if isinstance(result, dict) else ""
-    if not token:
-        raise ProviderError("NPM authentication did not return a token.")
-    return token
+
+    def exchange() -> str:
+        result = _request(
+            f"{base_url}/tokens",
+            method="POST",
+            payload={
+                "identity": _required(prefix, "USERNAME"),
+                "secret": _required(prefix, "PASSWORD"),
+            },
+        )
+        token = result.get("token", "") if isinstance(result, dict) else ""
+        if not token:
+            raise ProviderError("NPM authentication did not return a token.")
+        return token
+
+    return _snapshot_value(("npm-token", base_url, prefix), exchange)
 
 
 def _npm_api_url(configured_url: str) -> str:
@@ -1683,7 +1717,9 @@ def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
 
 
 def _cloudflare_zones() -> list[dict[str, Any]]:
-    return _cloudflare_paged("/zones")
+    return _snapshot_value(
+        ("cloudflare-zones",), lambda: _cloudflare_paged("/zones")
+    )
 
 
 _ZONE_IDS: dict[str, str] = {}
@@ -1980,7 +2016,7 @@ def _looks_like_an_address(host: str) -> bool:
     return True
 
 
-def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
+def _load_portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
     """Every Docker environment, with the machine each one is.
 
     Portainer names its own local environment `local`, which is nobody's
@@ -2014,6 +2050,13 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
             }
         )
     return resolved
+
+
+def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
+    return _snapshot_value(
+        ("portainer-environments", connection_ref),
+        lambda: _load_portainer_environments(connection_ref),
+    )
 
 
 def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str, Any]:
@@ -2279,7 +2322,7 @@ def delete_portainer(
     )
 
 
-def list_portainer_containers() -> list[dict[str, Any]]:
+def _list_portainer_containers() -> list[dict[str, Any]]:
     """Every container Portainer can see, on every machine it reaches.
 
     Containers rather than stacks, and reported as such. A stack listing
@@ -2325,6 +2368,10 @@ def list_portainer_containers() -> list[dict[str, Any]]:
                     )
                 )
     return records
+
+
+def list_portainer_containers() -> list[dict[str, Any]]:
+    return _snapshot_value(("portainer-containers",), _list_portainer_containers)
 
 
 def _portainer_container_id(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -2551,41 +2598,46 @@ TAILNET_API = "https://api.tailscale.com/api/v2"
 
 
 def _tailnet_token(connection_ref: str) -> str:
-    """Exchange the OAuth client for a token, every time, and keep none.
+    """Exchange once per sweep and retain no token beyond that snapshot.
 
-    The token lasts an hour and a sweep is minutes apart, so caching it buys
-    nothing and adds an expiry to get wrong. The client itself is the only thing
-    held, and it is held by the vault rather than by this process.
+    The token lasts an hour, but a process-wide cache adds expiry and revocation
+    behavior to get wrong. One sweep needs it several times, so that sweep shares
+    one exchange and drops the result when its snapshot closes. The client itself
+    remains held by the vault rather than by this process.
     """
 
     prefix = connection_prefix("tailscale", connection_ref)
-    client_id = _required(prefix, "CLIENT_ID")
-    client_secret = _required(prefix, "CLIENT_SECRET")
-    body = urllib.parse.urlencode(
-        {"client_id": client_id, "client_secret": client_secret}
-    ).encode()
-    request = urllib.request.Request(
-        f"{TAILNET_API}/oauth/token",
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read())
-            if not isinstance(payload, dict):
-                raise ValueError("OAuth response is not an object")
-            token = payload.get("access_token", "")
-    except urllib.error.HTTPError as exc:
-        raise ProviderError(
-            f"Tailscale refused the credential for {connection_ref} "
-            f"({exc.code}). It has to be an OAuth client, not an API key."
-        ) from exc
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        raise ProviderError("Tailscale did not answer the token request.") from exc
-    if not token:
-        raise ProviderError("Tailscale returned no access token.")
-    return token
+
+    def exchange() -> str:
+        client_id = _required(prefix, "CLIENT_ID")
+        client_secret = _required(prefix, "CLIENT_SECRET")
+        body = urllib.parse.urlencode(
+            {"client_id": client_id, "client_secret": client_secret}
+        ).encode()
+        request = urllib.request.Request(
+            f"{TAILNET_API}/oauth/token",
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.loads(response.read())
+                if not isinstance(payload, dict):
+                    raise ValueError("OAuth response is not an object")
+                token = payload.get("access_token", "")
+        except urllib.error.HTTPError as exc:
+            raise ProviderError(
+                f"Tailscale refused the credential for {connection_ref} "
+                f"({exc.code}). It has to be an OAuth client, not an API key."
+            ) from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise ProviderError("Tailscale did not answer the token request.") from exc
+        if not token:
+            raise ProviderError("Tailscale returned no access token.")
+        return token
+
+    return _snapshot_value(("tailscale-token", prefix), exchange)
 
 
 def _tailnet_device_id(name: str) -> str:

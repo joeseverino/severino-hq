@@ -120,6 +120,15 @@ can therefore generate and validate requests from the deployed composition's
 actual registry; a plugin does not maintain a parallel API document.
 The optional `resource` field names the `ResourceSpec` the operation acts on,
 giving clients a stable way to connect discovery, reads, and available writes.
+Targeted capabilities may also publish `target_label`, `target_help`, and a
+strict `target_query`. These let generated operator surfaces name the target in
+domain language and derive eligible choices from the capability's registered
+resource without provider I/O; `target` remains the machine identifier
+contract. Optional `execution_notes` explain the registered steps an operator
+is authorizing without creating a second execution plan. Optional
+`target_initial_fields` declare which same-named command fields the browser may
+hydrate from an authorized target detail; this is presentation metadata and
+does not change the machine payload contract.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
 label, summary, required permissions, list-query model, stable identifier, and
@@ -138,6 +147,10 @@ secret material; URL userinfo, query strings, and fragments are rejected before
 a controller endpoint is stored, and again at the output contract for
 plugin-provided instances. HQ's connection providers expose observations of
 credentials held by their own source systems, not the credentials themselves.
+An ability may name its governed resource catalog and kinds, or one exact
+capability. Command Center joins those declarations to the capability catalog;
+scope coverage reports availability but does not synthesize unregistered API
+operations.
 
 The topology endpoint joins those connection observations to the deployed
 ability registry and HQ's managed resources. It is a derived projection, not a

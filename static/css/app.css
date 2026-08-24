@@ -1035,7 +1035,7 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 .search-summary p { margin: 0; }
 .search-scopes { display: flex; gap: 6px; flex-wrap: wrap; }
 .scope-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; text-decoration: none; }
-.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
+a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 .scope-chip .count { font-weight: 600; }
 .search-group { margin-bottom: 14px; scroll-margin-top: 70px; }
 .search-hits { list-style: none; margin: 0; padding: 0; }
@@ -1781,6 +1781,14 @@ a.kpi:hover { background: var(--surface-2); }
 .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint); }
 .field textarea { resize: vertical; min-height: 80px; }
 .field .help { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.field .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  line-height: 1.4;
+}
+.check-row input { flex: 0 0 auto; margin-top: 3px; }
 .field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--danger); }
 .errors { color: var(--danger); margin: 4px 0 0; padding-left: 16px; font-size: 13px; }
 .form-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -1906,6 +1914,157 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .discovery-meta code { font-size: 10.5px; overflow-wrap: anywhere; }
 .command-hint { margin: 4px 0 0; }
+.command-page-head { align-items: flex-start; }
+.command-contract {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  margin: calc(var(--stack-gap) * -.35) 0 var(--layout-gap);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.command-contract code { color: var(--ink-2); }
+.command-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: var(--layout-gap);
+  align-items: start;
+}
+.command-layout > * { min-width: 0; }
+.command-runner { margin: 0; }
+.command-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+.command-fields .field { margin: 0; min-width: 0; }
+.command-fields textarea,
+.command-fields .command-confirm { grid-column: 1 / -1; }
+.command-fields textarea { resize: vertical; }
+.command-effect-note { margin: 0 0 14px; }
+.command-advanced {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.command-advanced summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.command-advanced[open] summary { margin-bottom: 12px; }
+.command-preview {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.command-preview .section-head { align-items: flex-start; }
+.command-preview .section-head h3 { margin: 1px 0 0; font-size: 17px; }
+.command-preview .section-head > .muted { font-size: 11.5px; }
+.command-preview-live {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.command-preview-live > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.command-preview-live dt,
+.command-preview-path .muted { font-size: 10.5px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.command-preview-live dd { margin: 3px 0 0; overflow-wrap: anywhere; font-weight: 600; }
+.command-preview-path {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--line);
+}
+.command-preview-path > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.command-preview-path code { overflow-wrap: anywhere; }
+.command-preview-path small { color: var(--muted); line-height: 1.4; }
+.command-preview-steps {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 22px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.command-confirm {
+  padding: 12px 14px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+}
+.command-runner .notice {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+}
+.command-runner .notice-serious {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+.command-runner .notice p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+.command-evidence { display: grid; gap: var(--layout-gap); }
+.command-evidence > * { margin: 0; }
+.command-enforcement {
+  display: grid;
+  gap: 0;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: enforcement;
+}
+.command-enforcement li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 0 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  counter-increment: enforcement;
+}
+.command-enforcement li::before {
+  content: counter(enforcement);
+  grid-row: 1 / span 2;
+  color: var(--accent);
+  font: 600 11px/1.7 ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+.command-enforcement span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.command-schema summary { display: grid; gap: 2px; cursor: pointer; }
+.command-schema pre,
+.command-result pre {
+  max-height: 28rem;
+  margin: 14px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.command-result { margin-bottom: var(--layout-gap); border-left: 3px solid var(--ok); }
+.command-result .section-head { align-items: flex-start; }
+.command-result .section-head h2 { margin-bottom: 0; }
+.scope-read { border-color: var(--line); }
+.scope-remote_write { border-color: var(--accent); color: var(--accent); }
+.scope-infrastructure_change { border-color: var(--warn); color: var(--warn); }
+.scope-destructive { border-color: var(--danger); color: var(--danger); }
 .connection-summary {
   display: flex;
   gap: 8px 18px;
@@ -2074,6 +2233,13 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more summary { color: var(--accent); cursor: pointer; font-size: 12px; }
 .connection-more[open] summary { margin-bottom: 5px; }
 .connection-scope-summary { display: block; margin-top: 8px; }
+.connection-next { min-width: 180px; }
+.connection-next > .muted { display: block; max-width: 240px; margin-top: 5px; font-size: 11.5px; line-height: 1.35; }
+.connection-actions { margin-top: 7px; }
+.connection-actions > summary { color: var(--accent); cursor: pointer; font-size: 12px; }
+.connection-actions > span { display: grid; justify-items: start; gap: 5px; margin-top: 6px; }
+.connection-actions a { font-size: 12px; font-weight: 600; }
+.connection-direct-action { font-size: 12px; font-weight: 600; }
 kbd {
   border: 1px solid var(--line);
   border-bottom-width: 2px;
@@ -2154,16 +2320,19 @@ kbd {
    visible instead of none of them. */
 @media (max-width: 1080px) {
   .nav-toggle-open { display: inline-flex; }
-  .site-header:target .nav-toggle-open { display: none; }
+  .site-header:target .nav-toggle-open,
+  .nav-is-open .nav-toggle-open { display: none; }
   .nav-toggle-close { display: none; }
-  .site-header:target .nav-toggle-close { display: inline-flex; }
+  .site-header:target .nav-toggle-close,
+  .nav-is-open .nav-toggle-close { display: inline-flex; }
   /* Under the header, over the page, and only while open. It has to be below
      the header's own z-index: the header is a stacking context, so a control
      inside it can never be raised above a backdrop that sits higher -- and a
      backdrop covering the toggle means the button that closes the menu is not
      clickable, only the sheet on top of it. Below the header, tapping the
      toggle closes it deliberately and tapping anywhere else closes it too. */
-  .site-header:target ~ .nav-backdrop {
+  .site-header:target ~ .nav-backdrop,
+  .nav-is-open .nav-backdrop {
     display: block; position: fixed; inset: 0; z-index: 9;
   }
   /* Matches the collapsed search button and the account chip exactly. It was
@@ -2175,8 +2344,14 @@ kbd {
     background: var(--surface-2); color: var(--ink-2);
   }
   .nav-toggle:hover { background: var(--surface); text-decoration: none; }
+  .nav-toggle:focus:not(:focus-visible) { outline: none; }
+  .nav-toggle:focus-visible {
+    outline: 2px solid var(--accent-2);
+    outline-offset: 2px;
+  }
   .primary-nav { display: none; }
-  .site-header:target .primary-nav {
+  .site-header:target .primary-nav,
+  .nav-is-open .primary-nav {
     display: flex;
     position: absolute;
     top: calc(100% - 2px);
@@ -2189,23 +2364,39 @@ kbd {
     gap: 1px;
     margin: 0;
     padding: 5px;
+    max-height: calc(100dvh - var(--site-header-height) - 12px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
     box-shadow: 0 8px 24px rgba(20, 20, 30, .12);
   }
   .site-header:target .primary-nav > a,
-  .site-header:target .primary-nav .nav-group > summary { padding: 9px 10px; font-size: 14px; }
+  .site-header:target .primary-nav .nav-group > summary,
+  .nav-is-open .primary-nav > a,
+  .nav-is-open .primary-nav .nav-group > summary {
+    min-height: 44px;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
 
   /* A section's own links fly out beside the list, not inside it. Opening one
      in place pushed every section below it down the panel, so reaching the
      next section meant first closing the one that had opened on the way past.
      The list is anchored to the right edge, so the room is to its left. */
-  .site-header:target .primary-nav .nav-group-panel {
+  .site-header:target .primary-nav .nav-group-panel,
+  .nav-is-open .primary-nav .nav-group-panel {
     top: -5px;
     right: calc(100% + 6px);
     left: auto;
     min-width: 168px;
+  }
+  .site-header:target .primary-nav .nav-group-panel a,
+  .nav-is-open .primary-nav .nav-group-panel a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
   }
 
 }
@@ -2942,14 +3133,22 @@ textarea.code {
 /* Wider than a normal dialog because this one is a table of readings rather
    than a short task, and at the shared width every row wrapped onto four
    lines. */
-.modal-wide { width: min(780px, calc(100vw - 32px)); }
-.modal-wide { overscroll-behavior: contain; }
+.modal-wide {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
 .modal-wide .modal-head {
   position: sticky;
   z-index: 5;
   top: 0;
-  padding: 6px 0;
-  margin-top: -6px;
+  /* Cover the panel's top padding too. Without this, scrolled connection
+     evidence paints in the strip above the sticky heading on mobile Safari. */
+  padding: 18px 0 10px;
+  margin-top: -18px;
   background: var(--surface);
 }
 
@@ -3024,6 +3223,8 @@ textarea.code {
 .conn-decision-step:hover { border-color: var(--accent); text-decoration: none; }
 .conn-decision-step-does-not { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: color-mix(in srgb, #f6e2e0 55%, var(--surface)); }
 .conn-decision-step-does-not .conn-tick { background: #f6e2e0; color: var(--danger); }
+.conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, #f4ead8 45%, var(--surface)); }
+.conn-decision-step-unknown .conn-tick { background: #f4ead8; color: var(--warn); }
 .conn-related {
   display: flex;
   align-items: center;
@@ -3101,7 +3302,8 @@ textarea.code {
 .conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
 .conn-layer summary {
-  display: flex; align-items: center; gap: 10px;
+  display: grid; grid-template-columns: auto minmax(88px, .55fr) minmax(150px, 1fr) minmax(0, .9fr);
+  align-items: center; gap: 10px;
   padding: 9px 13px; cursor: pointer; list-style: none;
 }
 .conn-layer summary::-webkit-details-marker { display: none; }
@@ -3111,12 +3313,26 @@ textarea.code {
   background: #e2efe6; color: var(--ok);
 }
 .conn-layer-does-not .conn-tick { background: #f6e2e0; color: var(--danger); }
+.conn-layer-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
+.conn-layer-unknown .conn-tick { background: #f4ead8; color: var(--warn); }
+.conn-layer-boundary {
+  color: var(--muted); font-size: 10px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+}
 .conn-layer-label { font-weight: 550; font-size: 13.5px; }
 .conn-layer-evidence {
-  margin-left: auto; font-size: 11.5px; color: var(--muted);
-  max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  justify-self: end; font-size: 11.5px; color: var(--muted);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.conn-layer p { margin: 0 13px 11px 40px; font-size: 13px; color: var(--ink-2); }
+.conn-layer-body { margin: 0 13px 11px 40px; display: grid; gap: 8px; }
+.conn-layer-body p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.conn-layer-body dl { display: flex; gap: 8px; margin: 0; font-size: 11.5px; }
+.conn-layer-body dt { color: var(--muted); }
+.conn-layer-body dd { margin: 0; font-weight: 600; }
+.conn-scope-note {
+  margin: 0; padding-top: 12px; border-top: 1px solid var(--line-2);
+  color: var(--muted); font-size: 11.5px;
+}
 
 /* A live reading, so it reads as a measurement being taken rather than a
    number that was true once. */
@@ -3188,10 +3404,18 @@ textarea.code {
    only dimension there is. */
 @media (max-width: 560px) {
   .modal-wide {
-    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    position: fixed; inset: 0;
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: none;
     margin: 0; border: 0; border-radius: 0;
   }
-  .modal-wide .modal-panel { height: 100%; overflow-y: auto; }
+  .modal-wide .modal-panel {
+    min-height: 100%;
+    padding-top: 0;
+  }
+  .modal-wide .modal-head {
+    margin-top: 0;
+    padding-top: max(18px, env(safe-area-inset-top));
+  }
 }
 
 .conn-kind-read { background: var(--accent-tint); color: var(--accent); }
@@ -3395,6 +3619,10 @@ textarea.code {
 .topology-relations tr.is-related { background: var(--accent-tint); }
 
 @media (max-width: 760px) {
+  .command-layout { grid-template-columns: minmax(0, 1fr); }
+  .command-contract { margin-top: 0; }
+  .command-evidence { grid-template-columns: minmax(0, 1fr); }
+  .command-preview-path { grid-template-columns: minmax(0, 1fr); }
   .topology-lenses {
     flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px;
     overscroll-behavior-inline: contain; scrollbar-width: thin;
