@@ -256,12 +256,28 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cosign verify \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp \
-              "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/" \
-            "$HOST_IMAGE" > /dev/null
-          echo "host image signature verified: $HOST_IMAGE"
+          # Retried, because the host build pushes the image and signs it in
+          # two steps and this job is watching for the push. On a pull request
+          # the two workflows run concurrently, so the manifest can exist for a
+          # few seconds before its signature does -- which is indistinguishable
+          # from an unsigned image on the first attempt and is not one.
+          for attempt in $(seq 1 12); do
+            if cosign verify \
+                 --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                 --certificate-identity-regexp \
+                   "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/" \
+                 "$HOST_IMAGE" > /dev/null 2>&1; then
+              echo "host image signature verified"
+              exit 0
+            fi
+            [ "$attempt" -eq 1 ] && echo "waiting for the host image signature..."
+            sleep 15
+          done
+          echo "::error title=Host image is not signed::No signature by this \
+          repository's ci workflow appeared for the host image within three \
+          minutes. An image published under this name by anything else must \
+          not become the base of a composition."
+          exit 1
 
       - name: Find the latest admission for each extension
         env:
