@@ -26,7 +26,7 @@
     <div>
       <strong>{{ connection_posture.ability_count }}</strong>
       <span>assigned abilities</span>
-      <small>{{ connection_posture.scope_verified_count }} scope-verified · {{ connection_posture.scope_unknown_count }} unknown</small>
+      <small>{{ connection_posture.scope_verified_count }} provider-scoped · {{ connection_posture.scope_capability_only_count }} capability-only{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}</small>
     </div>
     <div>
       <strong>{{ connection_posture.dependency_count }}</strong>

@@ -82,6 +82,13 @@ def env_secret(name: str) -> str:
 
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
+# The canonical name of this platform, for anything that leaves it -- a printed
+# page, an exported file, the host a plain-HTTP request is sent back to.
+# Deliberately not derived from the request: a brief printed from a laptop is
+# the same document as one printed from the server, and it should not tell a
+# reader to visit a host they cannot reach.
+SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
@@ -103,6 +110,28 @@ CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
+# The `__Host-` prefix is a rule the *browser* enforces, and the only cookie
+# hardening that survives an attacker who controls a sibling name. Secure,
+# HttpOnly and SameSite all describe a cookie HQ set; none of them stop
+# something at another host under this domain from setting a cookie of the same
+# name that HQ then reads back as its own. A prefixed cookie may only be set
+# over HTTPS, for the exact host, at path `/`, with no Domain -- so a sibling
+# cannot write one at all, and the ambiguity is gone rather than mitigated.
+#
+# Derived from the Secure flag rather than declared, because a browser silently
+# refuses to store a `__Host-` cookie that is not Secure. Hard-coding the name
+# would work in production and break every plain-HTTP development session, in
+# the way that looks like sign-in is broken rather than like a cookie was
+# rejected.
+SESSION_COOKIE_NAME = "__Host-sessionid" if SESSION_COOKIE_SECURE else "sessionid"
+CSRF_COOKIE_NAME = "__Host-csrftoken" if CSRF_COOKIE_SECURE else "csrftoken"
+# Stated rather than inherited. Django's default is already `Lax`, and `Lax` is
+# the correct answer here -- `Strict` would withhold the session cookie on the
+# top-level redirect back from the identity provider, which is sign-in itself.
+# Written down so that reasoning is visible to the next person to consider
+# tightening it, and so the connection page can report a value HQ chose.
+SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
 # How long a signed-in session lasts. Django's default is two weeks, and HQ
 # never spoke to Pocket ID again after `auth.login` -- the group allowlist in
 # `core.oidc.verify_claims` runs at sign-in and nowhere else. Disabling an
@@ -121,20 +150,68 @@ SECURE_PROXY_SSL_HEADER = (
 # A year, on by default. HQ is HTTPS-only behind the proxy, and the header
 # costs nothing until a browser has already reached it over TLS once.
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "31536000"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS")
+# Subdomains included by default, because the guarantee is about the name and
+# everything under it. Nothing is served under HQ's host, so this costs nothing
+# today and forecloses a plain-HTTP sibling appearing there later.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=True
+)
+# Preload stays opt-in. It is a submission to a list baked into browsers, is
+# slow to undo, and is meaningless for a name the public internet cannot
+# resolve -- which is deliberately true of this deployment.
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 
-# SECURE_SSL_REDIRECT is deliberately left unset (Django would warn W008). The
-# TLS-terminating reverse proxy (NPM/Caddy) handles http->https; a Django-level
-# redirect would also break the container healthcheck, which probes
-# http://127.0.0.1:8000 inside the network namespace. The decision is encoded
-# here so `check --deploy --fail-level WARNING` can be a hard CI gate.
-SILENCED_SYSTEM_CHECKS = ["security.W008"]
+# HQ binds a plain HTTP port, and behind a TLS proxy that port stays reachable
+# by anything that can route to the host -- so the browser UI had two front
+# doors: the proxied HTTPS name, and the raw port with no TLS, no HSTS, and
+# none of the proxy's own source restrictions.
+#
+# Told that a proxy terminates TLS, HQ now refuses the second one: a request
+# that did not arrive as HTTPS is redirected to the canonical name. The
+# healthcheck is exempt because it deliberately probes the raw port from inside
+# the container's own network namespace, which is the one caller for whom plain
+# HTTP is the correct request.
+#
+# Keyed on the proxy flag rather than on `not DEBUG`: a deployment that
+# terminates TLS itself, or genuinely serves plain HTTP on a private segment,
+# should not be redirected to a scheme nothing is listening on.
+SECURE_SSL_REDIRECT = env_bool("DJANGO_BEHIND_TLS_PROXY")
+SECURE_SSL_HOST = SEVERINO_SITE_HOST if SECURE_SSL_REDIRECT else None
+SECURE_REDIRECT_EXEMPT = [r"^health/"]
+
+# W008 fires only where the redirect is genuinely off -- a deployment with no
+# TLS proxy in front of it, which is development. Silenced conditionally rather
+# than always, so `check --deploy --fail-level WARNING` still has an opinion
+# about the production posture instead of being told not to look.
+SILENCED_SYSTEM_CHECKS = [] if SECURE_SSL_REDIRECT else ["security.W008"]
+
+# Where the browser sends a policy violation. One path, named once, because the
+# policy references it and the URLconf has to route it.
+SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
 # Inline styles remain allowed for Django admin compatibility, while application
 # templates keep styles in the static bundle.
+#
+# `require-trusted-types-for` is the one directive here that is not about where
+# content may come from. Every other line describes an origin; this one removes
+# a class of bug. With it, assigning a string to `innerHTML`, `outerHTML`,
+# `srcdoc` or a script URL -- or handing one to `DOMParser` -- throws instead of
+# parsing, so a DOM-based cross-site scripting sink cannot execute even if one
+# is introduced.
+#
+# `trusted-types` names exactly one policy and does not permit duplicates. HQ's
+# progressive enhancement is server-rendered HTML swapped in, so one place does
+# have to turn a response body into markup; `hq-fragment` in `static/js/app.js`
+# is that place and the only one. Because the name is taken and cannot be
+# claimed twice, script that gets onto the page cannot create a policy of its
+# own to reach a sink with -- which is the property that makes a single
+# audited sink worth more than a blanket ban nobody could satisfy.
+#
+# Django admin's bundled jQuery writes HTML through `innerHTML` on every page
+# it renders, so the admin -- and only the admin -- runs the policy below
+# without these two directives.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
     "script-src": [CSP.SELF, CSP.NONCE],
@@ -146,6 +223,23 @@ SECURE_CSP = {
     "base-uri": [CSP.SELF],
     "form-action": [CSP.SELF],
     "frame-ancestors": [CSP.NONE],
+    "require-trusted-types-for": ["'script'"],
+    "trusted-types": ["hq-fragment"],
+    # Both spellings. `report-to` is the current one and needs the
+    # Reporting-Endpoints header that `core.middleware` sends; `report-uri` is
+    # deprecated and is what most browsers still act on. A policy nobody
+    # reports on is a policy nobody knows is being probed.
+    "report-to": ["csp"],
+    "report-uri": [SEVERINO_CSP_REPORT_PATH],
+}
+
+# The admin, minus the directive its bundled jQuery cannot satisfy. Spelled as
+# a derivation rather than a second literal policy, so tightening the real one
+# cannot leave a stale copy behind serving the admin a weaker boundary.
+SEVERINO_ADMIN_CSP = {
+    key: value
+    for key, value in SECURE_CSP.items()
+    if key not in {"require-trusted-types-for", "trusted-types"}
 }
 
 # ----- Who may reach HQ at all ------------------------------------------------
@@ -156,21 +250,31 @@ SECURE_CSP = {
 SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool(
     "SEVERINO_ENFORCE_TRUSTED_NETWORK", default=True
 )
-# Tailscale hands out addresses from the carrier-grade NAT range; RFC 1918 and
-# loopback cover the LAN, Docker's bridge networks and the healthcheck. Spelled
-# out as the default rather than left to configuration, so a deployment that
-# sets nothing is still closed to the public internet.
+# The tailnet and loopback, and nothing else.
+#
+# The private LAN ranges used to be here too, and they were the whole rule
+# quietly undone. "Reachable from a private network" sounds like a small
+# widening of "reachable from the VPN", but a home LAN is not a trust boundary:
+# it holds a television, a printer, whatever a guest joined, and any of them
+# reaching HQ's port passes a gate whose entire job is to decide who may.
+#
+# The tailnet is the boundary this deployment actually maintains -- every peer
+# on it is an enrolled device with a key and a policy -- so it is the one HQ
+# states. Loopback stays because the container healthcheck probes it from
+# inside its own network namespace, and a reverse proxy on the same host
+# reaches HQ there.
+#
+# Spelled out as the default rather than left to configuration, so a deployment
+# that sets nothing is closed to everything but its VPN. A deployment whose
+# network genuinely is the boundary adds its ranges explicitly, which is a
+# decision someone made rather than one that shipped.
 SEVERINO_TRUSTED_NETWORKS = env_list(
     "SEVERINO_TRUSTED_NETWORKS",
     default=[
         "127.0.0.0/8",
         "::1/128",
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
         "100.64.0.0/10",  # Tailscale (CGNAT)
         "fd7a:115c:a1e0::/48",  # Tailscale (IPv6 ULA)
-        "fc00::/7",  # unique local addresses
     ],
 )
 # Whose `X-Forwarded-For` HQ believes. Narrower than the networks above on
@@ -238,6 +342,9 @@ MIDDLEWARE = [
     # before sessions / auth do any work.
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
+    # Immediately inside the policy middleware, because that is the only place
+    # a per-response override can still be attached. See the class docstring.
+    "core.middleware.AdminPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -357,6 +464,13 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
     # views read a bearer token and answer 401; a 302 to an HTML login page is
     # the wrong answer for a Shortcut, which cannot fill one in.
     "/api/",
+    # A browser reporting a policy violation is not a person signing in. The
+    # report is sent without credentials by specification, so requiring a
+    # session here would mean HQ never hears about a violation on the one page
+    # where a violation matters most -- the sign-in form. It stays behind the
+    # network gate like everything else, and the view stores nothing it was
+    # not sent.
+    SEVERINO_CSP_REPORT_PATH,
 )
 
 # Pocket ID / OIDC SSO is how a person signs in.
@@ -592,11 +706,6 @@ LOGGING = {
 # ----- App-specific ------------------------------------------------------------
 
 SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
-# The canonical name of this platform, for anything that leaves it -- a printed
-# page, an exported file. Deliberately not derived from the request: a brief
-# printed from a laptop is the same document as one printed from the server,
-# and it should not tell a reader to visit a host they cannot reach.
-SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
 SEVERINO_FISCAL_YEAR_START_MONTH = int(
     os.environ.get("SEVERINO_FISCAL_YEAR_START_MONTH", "1")
 )
@@ -612,6 +721,30 @@ if SEVERINO_DOC_REVIEW_INTERVAL_DAYS < 1:
 # Cloudflare D1 — the jseverino.com contact-form submissions live in a
 # Cloudflare D1 database, not HQ's SQLite. The contacts app reads/writes it
 # over the D1 HTTP API.
+# Public DNS and reverse-DNS lookups. The one question HQ cannot answer from
+# the inside: a resolver on this network follows the internal rewrites and
+# reports the opposite of what the public internet sees.
+#
+# Unauthenticated by design -- no credential of HQ's travels with a lookup,
+# which is what makes it acceptable for the web process to make the call
+# rather than routing it through the controller. Blanking the endpoint
+# disables every lookup surface fail-closed.
+SEVERINO_LOOKUP_ENDPOINT = os.environ.get(
+    "SEVERINO_LOOKUP_ENDPOINT", "https://dns-lookup.com"
+)
+# Short on purpose. This runs in the request path of a page an operator is
+# waiting on, and a lookup that has not answered in a few seconds is one the
+# page should report as unavailable rather than keep waiting for.
+SEVERINO_LOOKUP_TIMEOUT_SECONDS = env_int("SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6)
+# Who holds an address, read from the registries that allocated it rather than
+# from anyone's copy of them. `rdap.org` is the bootstrap service: it redirects
+# to whichever regional registry actually holds the block.
+SEVERINO_RDAP_ENDPOINT = os.environ.get("SEVERINO_RDAP_ENDPOINT", "https://rdap.org")
+# Whether the machine account may spend an external lookup. Off by default, in
+# the same family as every other MCP switch: an unattended caller reaching a
+# third party is a decision a deployment makes, not a default.
+SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
+
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_D1_DATABASE_ID = os.environ.get("CLOUDFLARE_D1_DATABASE_ID", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")

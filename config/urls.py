@@ -5,14 +5,18 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from django.conf import settings
+
 from core.views import (
     ActionItemCountView,
     ActionItemsView,
     DashboardLinkChoiceView,
     ConnectionView,
     DashboardView,
+    PublicAddressView,
     SearchView,
     ThrottledLoginView,
+    csp_report,
     health_live,
     health_ready,
 )
@@ -22,6 +26,14 @@ from application.plugins import plugin_urlpatterns
 urlpatterns = [
     path("health/live/", health_live, name="health_live"),
     path("health/ready/", health_ready, name="health_ready"),
+    # Where the browser reports a policy it refused to follow. The path is in
+    # the policy itself, so it is taken from the same setting the policy is
+    # built from rather than written twice.
+    path(
+        settings.SEVERINO_CSP_REPORT_PATH.lstrip("/"),
+        csp_report,
+        name="csp_report",
+    ),
     # Django admin ships its own sign-in form. Routed to the login HQ
     # controls so there is exactly one sign-in path, with one set of rules.
     path(
@@ -45,6 +57,11 @@ urlpatterns = [
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
     path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),
     path("connection/", ConnectionView.as_view(), name="connection"),
+    path(
+        "connection/address/",
+        PublicAddressView.as_view(),
+        name="tool_public_address",
+    ),
     path(
         "dashboard/links/",
         DashboardLinkChoiceView.as_view(),

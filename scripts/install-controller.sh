@@ -7,6 +7,8 @@ readonly app_dir="/opt/apps/severino-hq"
 readonly unit_dir="${app_dir}/deploy/systemd"
 readonly systemd_dir="/etc/systemd/system"
 readonly env_file="${app_dir}/secrets/severino_controller_env"
+readonly private_log_dir="/var/log/severino-hq"
+readonly private_run="${app_dir}/scripts/run-private.sh"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "install-controller.sh must run as root." >&2
@@ -28,8 +30,19 @@ systemd-analyze verify \
     "${unit_dir}/severino-hq-backup.service" \
     "${unit_dir}/severino-hq-backup.timer"
 
-"${app_dir}/scripts/run-controller.sh"
-docker exec severino-hq python manage.py sync_content_index --json
+# These commands intentionally return rich machine JSON: locally useful,
+# inappropriate in the public Actions stream inherited by a self-hosted deploy.
+# Keep each latest result on the host with root-only permissions and expose only
+# a fixed status line plus the original exit code to the deployment gate.
+install -d -o root -g root -m 0700 "${private_log_dir}"
+"${private_run}" \
+    "Controller connection preflight" \
+    "${private_log_dir}/controller-preflight.log" \
+    "${app_dir}/scripts/run-controller.sh"
+"${private_run}" \
+    "Content index preflight" \
+    "${private_log_dir}/content-index-preflight.log" \
+    docker exec severino-hq python manage.py sync_content_index --json
 
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.service" \

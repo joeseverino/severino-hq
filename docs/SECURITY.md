@@ -4,6 +4,12 @@
 
 - Single-user / very-small internal app.
 - Tailscale-only network exposure. No path from the public internet.
+- Tailnet-only is stated by the application, not only inherited from the
+  network. The shipped `SEVERINO_TRUSTED_NETWORKS` default is Tailscale's IPv4
+  and IPv6 ranges plus loopback — deliberately **not** RFC 1918. A LAN holds
+  printers, televisions and guests; it is not a boundary anyone maintains, and
+  a host firewall that is the only thing enforcing the rule is one `ufw
+  disable` from silently admitting all of it.
 - Django authentication required on **every** URL except `/accounts/login/`,
   `/accounts/logout/`, `/oidc/`, and `/static/`.
 - No public registration. New users are created via `manage.py createsuperuser`
@@ -14,18 +20,42 @@
 - `DEBUG=False` enforced when `DJANGO_SECRET_KEY` is set; missing key in
   production raises a startup error.
 - `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` come from environment variables.
-- `SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE` default ON in production.
+- `SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE` default ON in production,
+  and where they are on the cookies are named `__Host-sessionid` and
+  `__Host-csrftoken`. The prefix is enforced by the browser rather than by HQ:
+  no other host or path under the domain can set a cookie of that name, so a
+  session cannot be planted by a neighbour for HQ to read back.
 - `SECURE_BROWSER_XSS_FILTER`, `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
-  DENY`, `Referrer-Policy: same-origin` enabled.
-- `SECURE_PROXY_SSL_HEADER` is wired up when `DJANGO_BEHIND_TLS_PROXY=1`.
+  DENY`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy:
+  same-origin` and `Cross-Origin-Resource-Policy: same-origin` enabled. The
+  static mount sets the last two itself, because it sits above the Django
+  middleware that sets them everywhere else.
+- `SECURE_PROXY_SSL_HEADER` is wired up when `DJANGO_BEHIND_TLS_PROXY=1`, and
+  so is the redirect that keeps the plain port HQ binds from being a second
+  front door. Only the healthcheck path is exempt, because it deliberately
+  probes that port from inside the container's own network namespace.
 - Django's native Content Security Policy middleware enforces same-origin
   assets, nonce-authorized scripts, no object embedding, and no framing.
   Application JavaScript is external; a regression test rejects inline scripts
   and event handlers before they can weaken the policy.
+- The policy also requires Trusted Types, so assigning a string to `innerHTML`,
+  `outerHTML`, `srcdoc` or a script URL throws instead of parsing — a DOM-based
+  XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
+  means no policy can be declared to opt back out. It costs nothing today
+  because every dynamic node HQ builds uses `createElement`/`textContent`.
+  Django admin's bundled jQuery cannot meet it, so `core.middleware`'s
+  `AdminPolicyMiddleware` drops that one directive for `/admin/` and nothing
+  else; a test asserts the relaxation stays that narrow.
+- Violations are reported back. The policy carries `report-to` and `report-uri`
+  pointing at `/csp-report/`, which records the directive, the blocked URI and
+  the reporting address to the audit log — bounded body size, truncated fields,
+  and one row per distinct complaint per hour. It is the only way HQ learns
+  that a directive enforced in someone else's browser has stopped holding.
 - Django 6.1's secure default rejects legacy cookies using the ambiguous
   pre-6.0.6 signing-salt derivation.
-- HSTS off by default; turn it on (`DJANGO_HSTS_SECONDS=31536000`) only after
-  verifying TLS works end-to-end.
+- HSTS on by default for a year, including subdomains. Preload stays opt-in:
+  it is slow to undo and meaningless for a name the public internet cannot
+  resolve.
 - `LoginRequiredMiddleware` redirects anonymous users to login for every URL
   outside the small allowlist.
 - Receipt files:
@@ -72,6 +102,18 @@
 - [ ] Caddy / Nginx / Tailscale Serve terminates TLS.
 - [ ] `DJANGO_BEHIND_TLS_PROXY=1`, `DJANGO_SESSION_COOKIE_SECURE=1`,
       `DJANGO_CSRF_COOKIE_SECURE=1`.
+- [ ] `DJANGO_HSTS_SECONDS` is **not** left at `0`. The connection page's
+      "There is one way in, and it is encrypted" layer reads the live setting
+      and says so when it is off; a deployment that once set it to zero while
+      TLS was being sorted out will otherwise keep telling browsers that plain
+      HTTP is worth trying, indefinitely.
+- [ ] The container runs with `read_only: true`, `cap_drop: ALL`,
+      `no-new-privileges`, a pids limit and a memory limit. `/tmp` is the only
+      writable path outside the volumes.
+- [ ] The host image and the composed image are cosign-signed by this
+      repository's own workflows, the composition verifies the host image
+      before building on it, and the deploy verifies the composition before
+      recreating the container.
 - [ ] `SEVERINO_DATABASE_PATH`, `SEVERINO_MEDIA_ROOT`, `SEVERINO_EXPORTS_ROOT`
       live outside the app code directory and are writable only by the service
       user (`chmod 750`).
@@ -136,7 +178,12 @@
 
 ## What v1 deliberately does NOT do
 
-- Talk to the public internet from the app server. No outbound calls.
+- Talk to the public internet from the app server *with a credential*. The
+  outbound calls HQ does make are narrow and named: Cloudflare D1 for contact
+  submissions, the content index, and the two public-registry lookups behind
+  `lookup.name` / `lookup.address`. Only the first two carry a token; the
+  lookups carry none, which is why they are allowed to run in the web process
+  rather than being queued through the controller like provider work.
 - Run a WordPress plugin, customer portal, or public webhooks.
 - Decrypt git-crypted Obsidian content. The vault stays separate.
 - Store credentials, API tokens, or secrets in models. The documentation

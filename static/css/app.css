@@ -3449,6 +3449,33 @@ textarea.code {
 .conn-row-stacked > code { justify-self: stretch; }
 .conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
 
+/* Which network the tailnet link is riding over. A definition list pairs one
+   term with one value, and this value is three things -- a verdict, why it
+   matters, and sometimes an address worth asking about -- so the cell stacks
+   rather than fighting the grid for a single line. */
+/* Named for the question it answers, not for the mechanism: `.conn-peering`
+   was already the You-to-HQ strip at the top of this panel, and reusing it
+   here silently overrode that element's own grid.
+
+   Not `justify-items: start`. The cell inherits `overflow-wrap: anywhere`
+   from `.conn-pairs dd`, so a grid item sized to fit-content resolves to
+   min-content -- and with that wrap rule min-content is one character. The
+   verdict rendered as a column of single letters. */
+.conn-carriage { display: grid; gap: 3px; }
+.conn-carriage > strong { font-weight: 600; }
+/* Riding over the internet is not a fault, so it is not red. It is the one
+   state where the path is public and the operator may want to look further,
+   which is what the accent marks. */
+.conn-carriage-internet > strong { color: var(--accent); }
+.conn-carriage-relay > strong { color: var(--warn); }
+.conn-carriage-unknown > strong { color: var(--muted); }
+.conn-carriage .conn-more { width: 100%; }
+/* The verdict is the answer; the reasoning is available, not imposed. Four
+   lines of prose under every row turned a scannable panel into an essay, and
+   the explanation is only wanted when the verdict is surprising. */
+.conn-why > summary { padding: 2px 0; }
+.conn-why > p { margin: 2px 0 0; }
+
 /* ----- Favourites ------------------------------------------------------- */
 
 .service-name { display: flex; align-items: center; gap: 8px; }
@@ -3638,4 +3665,54 @@ textarea.code {
 @media (prefers-reduced-motion: reduce) {
   .topology-node { transition: none; }
   .topology-map { scroll-behavior: auto; }
+}
+
+/* ----- Tools ------------------------------------------------------------ */
+
+/* One nav entry holds every tool, so the tabs are the only thing telling an
+   operator what else is in here. They are links with a real href rather than
+   scripted panels: a tool with a result is a URL worth keeping. */
+.tool-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 6px; }
+.tool-tab {
+  padding: 7px 14px; border-radius: 8px; font-size: 13.5px; font-weight: 550;
+  color: var(--muted); text-decoration: none; border: 1px solid transparent;
+}
+.tool-tab:hover { background: var(--surface-2); color: var(--ink); }
+.tool-tab-current {
+  background: var(--surface-2); color: var(--ink); border-color: var(--line-2);
+}
+.tool-summary { max-width: 68ch; margin: 0 0 18px; }
+/* Two tools side by side where there is room, stacked where there is not.
+   Neither is primary, so neither takes the wider column. */
+.lookup-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.lookup-form { display: flex; gap: 10px; align-items: flex-end; margin: 12px 0 16px; flex-wrap: wrap; }
+.lookup-form .field { flex: 1 1 200px; }
+/* The input and its button share a line, so the spacing that separates
+   stacked fields is what knocked them out of alignment: `flex-end` lines up
+   margin boxes, and a 14px margin under the field plus 12px above the actions
+   put the button 26px below the box it belongs to. The field takes the
+   existing `.compact` modifier; the actions give up their stack margin here. */
+.lookup-form .form-actions { margin-top: 0; }
+.tool-intro > :last-child, .tool-result > :last-child { margin-bottom: 0; }
+
+/* Side-by-side tools have to agree on where their rows are, and left to
+   themselves they do not: each card is its own grid, so a three-line
+   explanation on one side pushes its input below the input on the other and
+   the two forms sit at different heights.
+
+   Subgrid is what makes the bands shared rather than coincidental -- intro,
+   form and result line up across every card in the row no matter how the
+   prose wraps, at any width, without anyone measuring text.
+
+   Only once the cards are actually side by side. Stacked in one column there
+   is nothing to align to, and spanning three parent rows there would overlap
+   them. */
+@supports (grid-template-rows: subgrid) {
+  @media (min-width: 760px) {
+    .lookup-grid { grid-template-rows: auto auto auto; }
+    .lookup-grid > .card {
+      display: grid; grid-row: span 3; grid-template-rows: subgrid;
+      align-content: start;
+    }
+  }
 }

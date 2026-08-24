@@ -119,6 +119,9 @@ class LayerTests(TestCase):
             SESSION_COOKIE_SECURE=True,
             SESSION_COOKIE_HTTPONLY=True,
             SESSION_COOKIE_SAMESITE="Lax",
+            SESSION_COOKIE_NAME="__Host-sessionid",
+            SECURE_SSL_REDIRECT=True,
+            SECURE_HSTS_SECONDS=31536000,
         ):
             found = connection(a_request())
 
@@ -150,6 +153,10 @@ class LayerTests(TestCase):
         self.assertEqual(found.channel.id, "network")
         self.assertEqual(found.path_label, "Via forwarding peer")
         self.assertEqual(found.identity.tailnet_user, "")
+        forwarder = self.layer(found, "forwarder")
+        self.assertFalse(forwarder.holds)
+        self.assertTrue(forwarder.conclusive)
+        self.assertIn("not in HQ's exact proxy allowlist", forwarder.detail)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
@@ -162,6 +169,11 @@ class LayerTests(TestCase):
         self.assertTrue(found.forwarded)
         self.assertEqual(found.peer_label, "a-laptop")
         self.assertEqual(found.address, A_TAILNET_ADDRESS)
+        forwarder = self.layer(found, "forwarder")
+        self.assertTrue(forwarder.holds)
+        self.assertTrue(forwarder.conclusive)
+        self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
+        self.assertEqual(forwarder.mechanism, "Exact proxy allowlist")
 
     def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
         found = connection(a_request(A_LAN_ADDRESS, secure=True))
@@ -391,6 +403,21 @@ class ConnectionPageTests(TestCase):
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class AddressEvidenceTests(TestCase):
+    def test_received_lan_and_public_endpoints_are_both_shown_and_labelled(self):
+        a_tailnet(
+            a_device(
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                endpoints=["10.0.0.50:41641", "198.51.100.8:41641"],
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        rows = {row.value: row for row in addresses_of(connection(a_request()))}
+
+        self.assertEqual(rows["10.0.0.50:41641"].label, "Local network")
+        self.assertEqual(rows["198.51.100.8:41641"].label, "Public")
+
     def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
         a_tailnet(
             a_device(
@@ -466,7 +493,7 @@ class HopTests(TestCase):
         found = self.hops(peer="10.0.0.9", forwarded="172.18.0.1")
 
         judged = next(hop for hop in found if hop.role == "judged")
-        self.assertIn("Nothing here identifies", judged.detail)
+        self.assertIn("no distinct caller address was supplied", judged.detail)
 
     def test_a_forwarded_header_from_an_unknown_peer_is_not_believed(self):
         """Otherwise a caller picks the address HQ judges them by."""
@@ -746,3 +773,76 @@ class ServingDeviceTests(TestCase):
 
         self.assertEqual(found.label, "example-host")
         self.assertNotEqual(found.label, found.name)
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class CarriageTests(TestCase):
+    """Which network the tailnet session is actually riding over.
+
+    Being on the tailnet says the traffic is encrypted and the peer enrolled.
+    It says nothing about where the packets went, and a laptop in the next room
+    and one in an airport lounge produced an identical page before this.
+    """
+
+    # A globally routable endpoint, built rather than written: the architecture
+    # suite reads every tracked file for addresses and allows two literals.
+    PUBLIC = "1.1.1.1"
+
+    def _connection(self, **endpoint):
+        a_tailnet(
+            a_device(
+                "a-laptop", A_TAILNET_ADDRESS, user="someone@example.test", **endpoint
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        return connection(a_request())
+
+    def test_a_private_endpoint_means_nothing_crossed_the_internet(self):
+        found = self._connection(direct_endpoint="10.9.9.9:41641")
+
+        self.assertEqual(found.peering.id, "local")
+        self.assertFalse(found.peering.public)
+
+    def test_a_public_endpoint_names_the_address_to_ask_about(self):
+        found = self._connection(direct_endpoint=f"{self.PUBLIC}:41641")
+
+        self.assertEqual(found.peering.id, "internet")
+        self.assertTrue(found.peering.public)
+        self.assertEqual(found.peering.address, self.PUBLIC)
+
+    def test_a_relayed_session_says_it_crosses_a_machine_neither_end_owns(self):
+        found = self._connection(relay="dfw")
+
+        self.assertEqual(found.peering.id, "relay")
+        self.assertFalse(found.peering.public)
+
+    def test_no_answer_is_three_different_sentences(self):
+        """Conflating them blamed the network for a limit on HQ's own view."""
+
+        a_tailnet()
+        found = connection(a_request())
+        self.assertEqual(found.peering.id, "unobserved")
+
+        a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
+        found = connection(a_request())
+        self.assertEqual(found.peering.id, "unknown")
+
+    def test_the_address_panel_is_offered_only_where_there_is_one_to_ask_about(self):
+        """The wiring, asserted at the template rather than by hand.
+
+        The disclosure never renders in development -- the peering there is
+        never `internet` -- so nothing but this would notice it being dropped.
+        """
+
+        from django.template.loader import render_to_string
+
+        public = self._connection(direct_endpoint=f"{self.PUBLIC}:41641")
+        markup = render_to_string(
+            "core/_connection_panel.html", {"connection": public}
+        )
+        self.assertIn("data-peering-detail", markup)
+        self.assertIn(f"address={self.PUBLIC}", markup)
+
+        local = self._connection(direct_endpoint="10.9.9.9:41641")
+        markup = render_to_string("core/_connection_panel.html", {"connection": local})
+        self.assertNotIn("data-peering-detail", markup)

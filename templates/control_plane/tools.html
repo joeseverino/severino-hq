@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Tools · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+  {% include "partials/_page_head.html" with title="Tools" lede="Questions answered by asking somebody outside this network." %}
+
+  {% if tabs %}
+    <nav class="tool-tabs" aria-label="Tools">
+      {% for entry in tabs %}
+        <a href="?tab={{ entry.id }}"
+           class="tool-tab{% if entry.id == tab.id %} tool-tab-current{% endif %}"
+           {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label }}</a>
+      {% endfor %}
+    </nav>
+    <p class="muted tool-summary">{{ tab.summary }}</p>
+    {% include tab.template %}
+  {% else %}
+    <p class="muted">No tools are available to this account.</p>
+  {% endif %}
+{% endblock %}

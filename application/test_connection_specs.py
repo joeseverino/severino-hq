@@ -148,6 +148,27 @@ class ConnectionExecutionTests(TestCase):
         self.assertTrue(all(state.available is None for state in states))
         self.assertTrue(all(state.missing_scopes == () for state in states))
 
+    def test_an_ability_without_provider_scopes_is_capability_authorized(self):
+        spec = _finance_spec()
+        ability = replace(spec.abilities[0], required_scopes=())
+        instance = replace(
+            spec.instance_provider()[0],
+            scopes_known=False,
+            ability_names=(ability.name,),
+        )
+        spec = replace(
+            spec,
+            abilities=(ability,),
+            instance_provider=lambda: (instance,),
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            state = connection_catalog(principal=FINANCE)[0].connections[0].abilities[0]
+
+        self.assertTrue(state.available)
+        self.assertEqual(state.missing_scopes, ())
+
     def test_missing_scope_derives_one_real_management_next_step(self):
         with mock.patch(
             "application.plugins.plugin_connection_specs",

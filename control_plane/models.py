@@ -7,6 +7,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import TimestampedModel
 
@@ -221,3 +222,29 @@ class OperationRequest(TimestampedModel):
 
     def __str__(self) -> str:
         return f"{self.resource.key}: {self.action} ({self.state})"
+
+
+class AddressReading(models.Model):
+    """What the public registries last said about one address.
+
+    Kept because the answer barely moves. An allocation changes when a block is
+    transferred between organisations; a PTR record changes when someone
+    reconfigures a network. Neither happens between two page loads, and
+    re-asking on every load spends a stranger's rate limit to be told the same
+    thing -- and tells them, each time, which addresses HQ is interested in.
+
+    A cache rather than declared state: nothing here is HQ's to be right about,
+    the row is disposable, and an operator who thinks it has gone stale can ask
+    again. Stored by address so the connection panel and the tools page share
+    one answer rather than each keeping their own.
+    """
+
+    address = models.GenericIPAddressField(primary_key=True)
+    reading = models.JSONField(default=dict)
+    observed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("-observed_at",)
+
+    def __str__(self) -> str:
+        return f"{self.address} ({self.observed_at:%Y-%m-%d})"

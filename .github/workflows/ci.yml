@@ -291,8 +291,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing below. The workflow's own OIDC identity is what ends up
+      # in the certificate, which is the whole point: the signature says which
+      # workflow, in which repository, at which commit, produced this image.
+      id-token: write
     outputs:
       image: ${{ steps.build.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to GHCR
@@ -301,6 +306,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
       - name: Build and push
         id: build
         env:
@@ -325,6 +332,21 @@ jobs:
             docker push "$IMAGE:latest"
           fi
           echo "image=$IMAGE:$TAG" >> "$GITHUB_OUTPUT"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
+      # An admitted extension wheel already carries a signature naming the
+      # workflow that produced it, and the composition refuses to install one
+      # that does not. The image those wheels are installed *into* carried
+      # nothing -- so the part of the system that runs everything was the one
+      # part taken on trust. This is the other half of that check.
+      #
+      # Signed by digest, not by tag: a tag is a pointer somebody can move, and
+      # a signature over a pointer proves nothing about what it points at now.
+      - name: Sign the host image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$DIGEST"
 
   scan:
     name: scan

@@ -15,6 +15,13 @@ class Capability(StrEnum):
     # separately from baseline reads so a least-privilege adapter principal
     # (e.g. MCP) never gets it implicitly.
     READ_AUDIT_LOG = "read_audit_log"
+    # An outbound read, gated apart from baseline READ for the same reason
+    # READ_AUDIT_LOG is: `mcp_principal` holds READ unconditionally, so folding
+    # this into it would let the machine account spend a third party's rate
+    # limit and disclose what HQ is asking about, with nobody having decided
+    # that. Operators hold every capability; MCP holds this one only if a
+    # deployment says so.
+    LOOK_UP_PUBLIC_RECORDS = "look_up_public_records"
     WRITE_PROJECTS = "write_projects"
     WRITE_ASSETS = "write_assets"
     WRITE_CONTENT = "write_content"
@@ -53,6 +60,23 @@ class Principal:
     actor: str
     interface: str
     capabilities: frozenset[Capability | str]
+
+    def permits(self, *capabilities: Capability | str) -> bool:
+        """Whether this principal holds every capability named.
+
+        The question `require` answers by raising. Both exist because callers
+        divide cleanly in two: a handler enforcing authority wants the
+        exception, and a surface deciding whether to draw a control wants a
+        boolean -- and a surface that has to catch an exception to render a
+        menu ends up catching it in more places than it should.
+        """
+
+        try:
+            for capability in capabilities:
+                self.require(capability)
+        except AuthorizationError:
+            return False
+        return True
 
     def require(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
@@ -131,6 +155,12 @@ def mcp_principal() -> Principal:
         capabilities.add(Capability.MANAGE_INFRASTRUCTURE)
     if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
         capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
+    # A read, but an outbound one. It leaves the tailnet, spends somebody
+    # else's rate limit, and tells a third party what HQ was asked about --
+    # none of which a baseline read does, and none of which an unattended
+    # caller should start doing because a capability was folded into READ.
+    if getattr(settings, "SEVERINO_MCP_ENABLE_LOOKUP", False):
+        capabilities.add(Capability.LOOK_UP_PUBLIC_RECORDS)
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))
 
 

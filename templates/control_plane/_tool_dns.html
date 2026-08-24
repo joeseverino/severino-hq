@@ -1,0 +1,113 @@
+{% load nav_tags %}
+<div class="lookup-grid">
+  <section class="card">
+    <div class="tool-intro">
+      <h2>A name</h2>
+      <p class="help">Asked of a resolver outside this network.</p>
+    </div>
+    <form method="get" class="lookup-form">
+      <input type="hidden" name="tab" value="dns">
+      <div class="field compact">
+        <label for="lookup-name">Hostname</label>
+        <input type="text" name="name" id="lookup-name" spellcheck="false"
+               autocomplete="off" placeholder="example.com"
+               value="{{ asked|dictkey:'lookup.name' }}">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Look up</button>
+      </div>
+    </form>
+
+    <div class="tool-result">
+    {% with reading=results|dictkey:"lookup.name" %}
+      {% if reading %}
+        {% if reading.ok %}
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Type</th><th>Name</th><th>Answer</th></tr></thead>
+              <tbody>
+                {% for answer in reading.answers %}
+                  <tr>
+                    <td><code>{{ answer.type }}</code></td>
+                    <td>{{ answer.name }}</td>
+                    <td><code>{{ answer.value }}</code></td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="3" class="muted">No records. This name does not resolve publicly.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if reading.resolver %}
+            <p class="help">Answered by {{ reading.resolver }}.</p>
+          {% endif %}
+        {% else %}
+          <p class="help">{{ reading.message|default:"That lookup could not be completed." }}</p>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="tool-intro">
+      <h2>An address</h2>
+      <p class="help">Reverse DNS and the registry allocation.</p>
+    </div>
+    <form method="get" class="lookup-form">
+      <input type="hidden" name="tab" value="dns">
+      <div class="field compact">
+        <label for="lookup-address">IP address</label>
+        <input type="text" name="address" id="lookup-address" spellcheck="false"
+               autocomplete="off" placeholder="1.1.1.1"
+               value="{{ asked|dictkey:'lookup.address' }}">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Look up</button>
+      </div>
+    </form>
+
+    <div class="tool-result">
+    {% with reading=results|dictkey:"lookup.address" %}
+      {% if reading %}
+        {% if reading.ok %}
+          <dl class="conn-pairs">
+            <dt>Address</dt>
+            <dd><code>{{ reading.address }}</code> IPv{{ reading.version }}</dd>
+            {% if reading.hostnames %}
+              <dt>Reverse DNS</dt>
+              <dd>{% for hostname in reading.hostnames %}<code>{{ hostname }}</code> {% endfor %}</dd>
+            {% endif %}
+            {% if reading.allocation.organisation %}
+              <dt>Allocated to</dt>
+              <dd><strong>{{ reading.allocation.organisation }}</strong></dd>
+            {% endif %}
+            {% if reading.allocation.prefixes %}
+              <dt>Block</dt>
+              <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix }}</code> {% endfor %}</dd>
+            {% endif %}
+            {% if reading.allocation.range %}
+              <dt>Range</dt><dd>{{ reading.allocation.range }}</dd>
+            {% endif %}
+            {% if reading.allocation.handle %}
+              <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle }}</code></dd>
+            {% endif %}
+            {% if reading.note %}
+              <dt>Note</dt><dd class="muted">{{ reading.note }}</dd>
+            {% endif %}
+          </dl>
+          {% if reading.observed_at %}
+            <p class="help">
+              From
+              <time datetime="{{ reading.observed_at|date:'c' }}">{{ reading.observed_at|date:"M j, Y, g:i a" }}</time>
+              <a href="?tab=dns&amp;address={{ asked|dictkey:'lookup.address'|urlencode }}&amp;refresh=1">Refresh</a>
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="help">{{ reading.message|default:"That lookup could not be completed." }}</p>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+    </div>
+  </section>
+</div>
