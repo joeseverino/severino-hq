@@ -64,15 +64,15 @@ CAPABILITY_STATUS = {
 }
 
 
-def _reject_json_constant(value: str):
-    raise ValueError(f"{value} is not valid JSON")
+def _reject_json_constant(_value: str):
+    raise ValueError("Invalid JSON constant")
 
 
 def _strict_json_object(pairs):
     value = {}
     for key, item in pairs:
         if key in value:
-            raise ValueError(f"Duplicate JSON field {key!r}")
+            raise ValueError("Duplicate JSON field")
         value[key] = item
     return value
 

@@ -10,7 +10,7 @@ a projection never advertises authority its principal does not hold.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import Protocol
 from urllib.parse import urlencode
 
 from django.urls import NoReverseMatch, reverse
@@ -18,8 +18,14 @@ from django.urls import NoReverseMatch, reverse
 from .contracts import route_url
 from .security import AuthorizationError, Principal
 
-if TYPE_CHECKING:
-    from .connections import ConnectionSpec
+
+class ConnectionLinkSpec(Protocol):
+    """The route fields needed to render connection actions without a registry import."""
+
+    web_route: str
+    management_route: str
+    setup_route: str
+    documentation_url: str
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,7 @@ _CONNECTION_ROUTES = (
 )
 
 
-def connection_action_links(spec: ConnectionSpec) -> tuple[ActionLink, ...]:
+def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
     """Resolve only the destinations a connection family declared."""
 
     actions = []
