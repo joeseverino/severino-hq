@@ -1,5 +1,34 @@
 "use strict";
 
+// The one place in HQ where a string becomes markup.
+//
+// Progressive enhancement here is server-rendered HTML: a fragment is fetched
+// and swapped in, so parsing a response is unavoidable -- and
+// `DOMParser.parseFromString` is a Trusted Types sink, which is exactly the
+// point. The content policy names one policy and does not allow duplicates,
+// so this is the only one that can ever exist on the page. Every other sink
+// still throws, and script that gets itself onto the page cannot mint the
+// permission to reach one, because the name is already taken and the object
+// below is not reachable from anywhere else.
+//
+// What it accepts is narrow by construction rather than by inspection: every
+// caller passes the body of a same-origin response HQ itself rendered. A
+// string from anywhere else has no route to here.
+const hqParseDocument = (() => {
+  let policy = { createHTML: (html) => html };
+  try {
+    policy = window.trustedTypes.createPolicy("hq-fragment", {
+      createHTML: (html) => html,
+    });
+  } catch {
+    // A browser without Trusted Types, or a policy already created. Parsing
+    // still has to work either way; where the browser does enforce, the
+    // pass-through is what the sink refuses.
+  }
+  return (html) =>
+    new DOMParser().parseFromString(policy.createHTML(html), "text/html");
+})();
+
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
 // than by remembering to extend a hardcoded query. That query was extended
@@ -418,7 +447,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
       headers: { "X-Fragment": "calendar" },
     });
     if (!response.ok) return false;
-    const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
+    const parsed = hqParseDocument(await response.text());
     const next = parsed.getElementById(card.id);
     if (!next) return false;
     card.replaceWith(next);
@@ -578,7 +607,7 @@ document.addEventListener("submit", (event) => {
     .then((html) => {
       // The server answers with the panel it just changed, so the page shows
       // what was stored rather than what the browser believes was stored.
-      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const parsed = hqParseDocument(html);
       const fresh = parsed.querySelector(".ext-links");
       const current = document.querySelector(".ext-links");
       if (fresh && current) current.replaceWith(fresh);
@@ -623,7 +652,7 @@ document.addEventListener("submit", (event) => {
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
     .then((html) => {
-      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const parsed = hqParseDocument(html);
       const fresh = parsed.querySelector("[data-whatif-result]");
       if (fresh) slot.replaceWith(fresh);
     })
@@ -651,9 +680,9 @@ document.addEventListener("click", (event) => {
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
     .then((html) => {
-      const panel = new DOMParser()
-        .parseFromString(html, "text/html")
-        .querySelector("[data-connection-panel]");
+      const panel = hqParseDocument(html).querySelector(
+        "[data-connection-panel]",
+      );
       if (!panel) return;
       slot.replaceWith(panel);
       hqWatchRoundTrip(panel);
@@ -763,7 +792,21 @@ const HQ_RESPONSE_HEADERS = [
   ["x-frame-options", "Refuses to be framed by another site"],
   ["referrer-policy", "How much of this URL travels to anywhere you click"],
   ["cross-origin-opener-policy", "Keeps other origins out of this browsing context"],
+  ["cross-origin-resource-policy", "Refuses to be loaded as a subresource elsewhere"],
   ["permissions-policy", "Which device capabilities this page may ask for"],
+  ["reporting-endpoints", "Where the browser sends a policy it refused to follow"],
+];
+
+// The directives worth calling out by name, because the policy is one long
+// header and the interesting parts of it are the two that stop a class of bug
+// rather than naming an origin. Read from the policy the browser was actually
+// sent, so a directive dropped in configuration shows as absent here.
+const HQ_POLICY_DIRECTIVES = [
+  ["require-trusted-types-for", "Assigning a string to a DOM sink throws instead of parsing"],
+  ["frame-ancestors 'none'", "Nothing may frame this page"],
+  ["object-src 'none'", "No plugins or embedded objects"],
+  ["base-uri 'self'", "Injected markup cannot re-point every relative URL"],
+  ["form-action 'self'", "A form cannot be made to submit somewhere else"],
 ];
 
 const hqShowResponseHeaders = (root) => {
@@ -773,25 +816,45 @@ const hqShowResponseHeaders = (root) => {
   if (disclosure && !disclosure.open) return;
   if (slot.dataset.loaded === "true") return;
   slot.dataset.loaded = "true";
+  const hqEvidenceRow = (label, present, purpose, chipText) => {
+    const row = document.createElement("div");
+    row.className = "conn-row conn-row-wide";
+    const shown = document.createElement("code");
+    shown.textContent = label;
+    const chip = document.createElement("span");
+    chip.className = `conn-kind ${present ? "conn-kind-read" : "conn-kind-elsewhere"}`;
+    chip.textContent = chipText;
+    const note = document.createElement("span");
+    note.className = "conn-row-note";
+    note.textContent = purpose;
+    row.append(shown, chip, note);
+    return row;
+  };
+
   fetch(window.location.href, { credentials: "same-origin", cache: "no-store" })
     .then((response) => {
       const rows = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
         const value = response.headers.get(name);
-        const row = document.createElement("div");
-        row.className = "conn-row conn-row-wide";
-        const shown = document.createElement("code");
-        shown.textContent = value
-          ? `${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}`
-          : name;
-        const chip = document.createElement("span");
-        chip.className = `conn-kind ${value ? "conn-kind-read" : "conn-kind-elsewhere"}`;
-        chip.textContent = value ? "sent" : "absent";
-        const note = document.createElement("span");
-        note.className = "conn-row-note";
-        note.textContent = purpose;
-        row.append(shown, chip, note);
-        return row;
+        return hqEvidenceRow(
+          value
+            ? `${name}: ${value.length > 76 ? `${value.slice(0, 76)}…` : value}`
+            : name,
+          value,
+          purpose,
+          value ? "sent" : "absent",
+        );
       });
+      // The policy is one header long enough to be truncated above, and its
+      // most consequential directives are the ones a reader would never spot
+      // in it. Named individually, and read back from the same response, so
+      // "the policy says so" is checkable rather than asserted.
+      const policy = response.headers.get("content-security-policy") || "";
+      for (const [directive, purpose] of HQ_POLICY_DIRECTIVES) {
+        const present = policy.includes(directive);
+        rows.push(
+          hqEvidenceRow(directive, present, purpose, present ? "enforced" : "absent"),
+        );
+      }
       slot.replaceChildren(...rows);
     })
     .catch(() => {
@@ -804,6 +867,40 @@ const hqShowResponseHeaders = (root) => {
       slot.replaceChildren(row);
     });
 };
+
+// What the public internet says about the address this session is riding over,
+// fetched when the disclosure is opened and never before. The same rule the
+// rest of this page keeps: drawing the connection must not depend on asking
+// anybody anything.
+const hqShowPublicAddress = (disclosure) => {
+  const slot = disclosure.querySelector("[data-peering-source]");
+  if (!slot || slot.dataset.loaded || !window.fetch) return;
+  slot.dataset.loaded = "true";
+  fetch(slot.dataset.peeringSource, { credentials: "same-origin" })
+    .then((response) => (response.ok ? response.text() : Promise.reject(response)))
+    .then((html) => {
+      const rows = hqParseDocument(html).body;
+      slot.replaceChildren(...rows.childNodes);
+    })
+    .catch(() => {
+      const row = document.createElement("div");
+      row.className = "conn-row";
+      const note = document.createElement("span");
+      note.className = "conn-row-note";
+      note.textContent = "The lookup could not be reached.";
+      row.append(note);
+      slot.replaceChildren(row);
+    });
+};
+
+document.addEventListener(
+  "toggle",
+  (event) => {
+    if (!event.target.matches?.("[data-peering-detail]") || !event.target.open) return;
+    hqShowPublicAddress(event.target);
+  },
+  true,
+);
 
 // The compact admission rail is an index into the evidence below it. A normal
 // link remains the no-script fallback; when enhanced, open the exact control

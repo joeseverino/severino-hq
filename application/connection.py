@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone as utc
 from django.conf import settings
+from django.utils.csp import CSP
 
 from functools import cache
 import socket
@@ -136,6 +137,120 @@ class Layer:
         if not self.conclusive:
             return "unknown"
         return "holds" if self.holds else "does-not"
+
+
+@dataclass(frozen=True)
+class Peering:
+    """Which network the tailnet link itself is running over.
+
+    Being on the tailnet says the traffic is encrypted and the peer is
+    enrolled. It says nothing about where the packets went, and the two are
+    routinely confused: a laptop in the same room and a laptop in an airport
+    lounge produce an identical page everywhere else in HQ, because both are
+    "on the tailnet over WireGuard".
+
+    Tailscale already knows the difference and HQ already stores the answer --
+    the endpoint the two nodes negotiated. A private address means they found
+    each other on the same network and nothing crossed the internet; a public
+    one means this session is riding over it from that address; a relayed path
+    means they could not reach each other at all and the traffic is going
+    through a machine neither end owns.
+
+    Derived here rather than resolved: no lookup, no egress, and nothing that
+    could put DNS in the path of rendering this page.
+    """
+
+    id: str
+    label: str
+    detail: str
+    # The public address this session is arriving from, where there is one.
+    # Empty for every other state, which is what the surfaces key off: there is
+    # nothing to say about the address of a link that never left the house.
+    address: str = ""
+
+    @property
+    def public(self) -> bool:
+        return self.id == "internet"
+
+
+PEERING_UNKNOWN = Peering(
+    "unknown",
+    "Not established",
+    "This device is on the tailnet, but no direct or relayed path is currently "
+    "negotiated, so HQ cannot say which network the session is riding over.",
+)
+# Not the same statement, and conflating the two was the first thing this row
+# got wrong. "No peering" is a fact about the device; this is a fact about
+# HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
+# proxy and declines to attribute the request to any device at all -- so it has
+# nothing to read a peering from, which is not evidence that none exists.
+PEERING_UNATTRIBUTED = Peering(
+    "unattributed",
+    "Not visible from here",
+    "The request reached HQ through a forwarding peer it has not been told to "
+    "trust, so HQ judges the proxy rather than the caller and attributes the "
+    "session to no device. The tailnet peering behind that proxy is real; this "
+    "deployment simply cannot see past it to report on it.",
+)
+# The sweep is what fills the device inventory, and an instance that has never
+# run one -- a fresh development database, a deployment whose Tailscale
+# connection is not configured -- resolves nothing. Saying "not established"
+# there would blame the network for an empty table.
+PEERING_UNOBSERVED = Peering(
+    "unobserved",
+    "No tailnet observation",
+    "HQ holds no swept tailnet inventory, so it cannot match this address to a "
+    "device or report how the session is carried. Configure the Tailscale "
+    "connection, or wait for the next sweep.",
+)
+
+
+def _peering(device: tailnet.Device | None) -> Peering:
+    if device is None:
+        return PEERING_UNKNOWN
+    if device.path == "relayed":
+        return Peering(
+            "relay",
+            f"Relayed via {device.relay}" if device.relay else "Relayed",
+            "The two nodes could not open a direct path to each other, so "
+            "Tailscale is forwarding this session through one of its relays. "
+            "The relay carries ciphertext and holds no key to it, but the "
+            "traffic does cross a machine neither end owns.",
+        )
+    endpoint = device.direct_endpoint
+    if not endpoint:
+        return PEERING_UNKNOWN
+    host, _ = split_host_port(endpoint)
+    where = network_of(host)
+    if where in {"network", "loopback"}:
+        return Peering(
+            "local",
+            "Over your own network",
+            "The two nodes negotiated a direct path on the same private "
+            "network, so this session is not crossing the internet at all. "
+            "WireGuard still encrypts it end to end.",
+            address=host,
+        )
+    if where == "public":
+        return Peering(
+            "internet",
+            "Over the public internet",
+            "The two nodes negotiated a direct path across the internet, so "
+            "this session is riding over it from the address below. WireGuard "
+            "encrypts every packet, and nothing between the two ends can read "
+            "it -- but the path is a public one.",
+            address=host,
+        )
+    # A tailnet-range endpoint means the peering is itself being carried by
+    # another tailnet hop. Rare, and worth naming rather than guessing at.
+    return Peering(
+        "indirect",
+        "Over another tailnet hop",
+        "The negotiated endpoint is itself a tailnet address, so this session "
+        "is being carried by another node on the tailnet rather than by a "
+        "network HQ can name.",
+        address=host,
+    )
 
 
 @dataclass(frozen=True)
@@ -305,6 +420,29 @@ class Connection:
             f"{_bytes(self.caller_device.rx_bytes)} in · "
             f"{_bytes(self.caller_device.tx_bytes)} out"
         )
+
+    @property
+    def peering(self) -> Peering:
+        """Which network this tailnet session is actually riding over.
+
+        Three ways there is no answer, and they are different sentences. HQ
+        may not be able to see the caller at all (an untrusted proxy in front
+        of it), may have nothing swept to look the caller up in, or may know
+        the device perfectly well and find no path negotiated. Only the last
+        of those is a statement about the tailnet.
+        """
+
+        if self.caller_device is None:
+            if self.untrusted_forwarding or self.forwarded:
+                return PEERING_UNATTRIBUTED
+            # HQ's own node comes from the same sweep as everyone else's. Not
+            # finding itself there means the inventory is empty rather than
+            # that this caller is missing from it -- read from a field the
+            # page already holds, so distinguishing the two costs no query.
+            if self.serves is None:
+                return PEERING_UNOBSERVED
+            return PEERING_UNKNOWN
+        return _peering(self.caller_device)
 
     @property
     def tailnet_observed_at(self) -> datetime | None:
@@ -505,6 +643,8 @@ def _layers(
         _sign_in_layer(identity),
         _session_layer(request, identity),
         _transport_layer(request, channel),
+        _canonical_layer(),
+        _browser_layer(),
     ]
     return tuple(layer for layer in found if layer is not None)
 
@@ -801,26 +941,122 @@ def _session_layer(request, identity: Identity) -> Layer:
     secure = bool(getattr(settings, "SESSION_COOKIE_SECURE", False))
     http_only = bool(getattr(settings, "SESSION_COOKIE_HTTPONLY", False))
     same_site = str(getattr(settings, "SESSION_COOKIE_SAMESITE", "") or "")
-    holds = secure and http_only and bool(same_site)
+    name = str(getattr(settings, "SESSION_COOKIE_NAME", "") or "")
+    # The `__Host-` prefix is the only one of these the browser enforces
+    # against somebody else. The other three describe the cookie HQ set; this
+    # one is a promise no sibling host can have written it.
+    prefixed = name.startswith("__Host-")
+    holds = secure and http_only and bool(same_site) and prefixed
     stated = [
         f"Secure={'on' if secure else 'off'}",
         f"HttpOnly={'on' if http_only else 'off'}",
         f"SameSite={same_site or 'unset'}",
+        name or "unnamed",
     ]
     return Layer(
         "session",
-        "The session cannot be read or sent elsewhere",
+        "The session cannot be read, sent elsewhere, or forged by a neighbour",
         holds,
         (
             "The session cookie is not sent over plain HTTP, cannot be read by "
-            "script, and is not attached to requests another site starts."
+            "script, is not attached to requests another site starts, and "
+            "carries the `__Host-` prefix -- so the browser refuses to store "
+            "one of this name from any other host or path, and nothing under "
+            "this domain can plant a session for HQ to read back."
             if holds
             else "The session cookie is missing at least one of the flags that "
-            "keep it from being read or replayed."
+            "keep it from being read, replayed, or set by a neighbouring host."
         ),
         evidence=" · ".join(stated),
         boundary="Session",
         mechanism="Cookie policy",
+    )
+
+
+def _browser_layer() -> Layer:
+    """What HQ tells the browser it is allowed to do with this page.
+
+    Every other layer on this page is about reaching HQ. This one is about what
+    happens after: the page is the last place a credential is held, and the
+    policy is the only boundary HQ cannot check from the inside -- it is
+    enforced in someone else's browser, and a directive that has quietly
+    stopped applying looks exactly like one that is quietly working. So the
+    policy is stated here, and violations are reported back.
+    """
+
+    policy = dict(getattr(settings, "SECURE_CSP", {}) or {})
+    trusted_types = "'script'" in (policy.get("require-trusted-types-for") or ())
+    scripts = tuple(policy.get("script-src") or ())
+    nonce_only = CSP.NONCE in scripts and CSP.UNSAFE_INLINE not in scripts
+    framed = tuple(policy.get("frame-ancestors") or ()) == (CSP.NONE,)
+    reports = bool(policy.get("report-uri") or policy.get("report-to"))
+    holds = trusted_types and nonce_only and framed
+    stated = [
+        "Trusted Types" if trusted_types else "no Trusted Types",
+        "nonce scripts" if nonce_only else "inline scripts",
+        "no framing" if framed else "framing allowed",
+        "reported" if reports else "unreported",
+    ]
+    return Layer(
+        "browser",
+        "The page cannot run what HQ did not send",
+        holds,
+        (
+            "Script runs only from this origin or under a nonce minted for "
+            "this one response, the page cannot be framed, and Trusted Types "
+            "makes assigning a string to a DOM sink throw rather than parse -- "
+            "so a cross-site scripting bug has nowhere to execute even if one "
+            "is introduced. The browser reports anything it refuses, which is "
+            "the only way HQ learns a directive stopped holding."
+            if holds
+            else "The content policy is missing at least one of the directives "
+            "that keep this page from running script HQ did not send."
+        ),
+        evidence=" · ".join(stated),
+        boundary="Browser boundary",
+        mechanism="Content Security Policy",
+    )
+
+
+def _canonical_layer() -> Layer:
+    """Whether plain HTTP is a way in, and whether the browser is told it isn't.
+
+    HQ binds a plain port and a proxy terminates TLS in front of it, so "the
+    site is HTTPS" is a fact about the proxy rather than about HQ. Two things
+    make it a fact about HQ: refusing a request that did not arrive as HTTPS,
+    and telling the browser never to try plain HTTP for this name again.
+    """
+
+    redirected = bool(getattr(settings, "SECURE_SSL_REDIRECT", False))
+    hsts = int(getattr(settings, "SECURE_HSTS_SECONDS", 0) or 0)
+    subdomains = bool(getattr(settings, "SECURE_HSTS_INCLUDE_SUBDOMAINS", False))
+    holds = redirected and hsts > 0
+    stated = [
+        "plain HTTP redirected" if redirected else "plain HTTP served",
+        f"HSTS {hsts // 86400} days" if hsts else "HSTS not sent",
+    ]
+    if hsts and subdomains:
+        stated.append("subdomains included")
+    return Layer(
+        "canonical",
+        "There is one way in, and it is encrypted",
+        holds,
+        (
+            "A request that did not arrive over TLS is sent to the canonical "
+            "name, so the plain port HQ binds is not a second front door. The "
+            "browser is told to refuse plain HTTP for this name from now on, "
+            "which closes the one request that would otherwise be made in the "
+            "clear -- the first one, before any redirect."
+            if holds
+            else "HQ is serving plain HTTP on the port it binds"
+            if not redirected
+            else "HQ redirects plain HTTP, but sends no HSTS header, so the "
+            "first request a browser makes to this name can still be made in "
+            "the clear before the redirect answers it."
+        ),
+        evidence=" · ".join(stated),
+        boundary="Transport",
+        mechanism="HTTPS redirect and HSTS",
     )
 
 

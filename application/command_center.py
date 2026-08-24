@@ -15,7 +15,7 @@ from .connections import (
 )
 from .contracts import route_url
 from .resources import ResourceSpec, resource_specs
-from .security import AuthorizationError, Capability, Principal
+from .security import Capability, Principal
 from .findings import finding_rules
 from .topology import topology_lenses
 
@@ -42,12 +42,7 @@ class CommandRelation:
 
 
 def _permitted(required: tuple[Capability | str, ...], principal: Principal) -> bool:
-    try:
-        for capability in required:
-            principal.require(capability)
-    except AuthorizationError:
-        return False
-    return True
+    return principal.permits(*required)
 
 
 def _matches(item: DiscoveryItem, query: str) -> bool:

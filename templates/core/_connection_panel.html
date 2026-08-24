@@ -146,6 +146,27 @@ page it falls back to. Nothing here knows which one it is in.
         <dd>
           <strong>{{ connection.path_label }}</strong>
         </dd>
+        <dt>Carried over</dt>
+        <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
+          <strong>{{ connection.peering.label }}</strong>
+          <details class="conn-more conn-why">
+            <summary aria-label="Why this says that">Why</summary>
+            <p class="conn-row-note">{{ connection.peering.detail }}</p>
+          </details>
+          {% if connection.peering.public %}
+            <details class="conn-more" data-peering-detail>
+              <summary>
+                About <code>{{ connection.peering.address }}</code>
+              </summary>
+              <div class="conn-rows"
+                   data-peering-source="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}">
+                <div class="conn-row">
+                  <span class="conn-row-note">Looked up when you open this, not when the page is built.</span>
+                </div>
+              </div>
+            </details>
+          {% endif %}
+        </dd>
         {% if connection.caller_device.direct_endpoint %}
           <dt>WireGuard endpoint</dt>
           <dd>

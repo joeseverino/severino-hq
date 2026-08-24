@@ -101,6 +101,14 @@ jobs:
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      # Keyless signing of the published composition. Granted to this job
+      # alone: the deploy job verifies signatures and never makes one, and a
+      # self-hosted runner has no business holding an identity that can.
+      id-token: write
     outputs:
       image: ${{ steps.publish.outputs.image }}
     steps:
@@ -228,6 +236,33 @@ jobs:
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "host image: ${image%:*}@$digest"
 
+      # Installed once for the whole job: the host image is verified with it
+      # below, every extension admission is verified with it before install,
+      # and the published composition is signed with it at the end.
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+
+      - name: Verify the host image was built by this repository
+        # Every extension wheel is verified against a declared signer before it
+        # is installed. Until this step the image it was installed *into* was
+        # taken on trust -- resolved by a tag derived from a commit, which says
+        # who *should* have built it and proves nothing about who did.
+        #
+        # The identity is pinned to this repository's own `ci` workflow, so an
+        # image pushed to the same name by anything else fails here rather than
+        # becoming the base of a production composition.
+        env:
+          HOST_IMAGE: ${{ steps.host.outputs.image }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp \
+              "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/" \
+            "$HOST_IMAGE" > /dev/null
+          echo "host image signature verified: $HOST_IMAGE"
+
       - name: Find the latest admission for each extension
         env:
           # Fine-grained token with read access to the private extension repos'
@@ -338,12 +373,6 @@ jobs:
           repository: joeseverino/cordon
           ref: ${{ env.CORDON_COMMIT }}
           path: cordon
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
-        if: >-
-          github.event_name != 'schedule' ||
-          steps.fingerprint.outputs.changed == 'true'
 
       - name: Install pinned Cordon dependencies
         if: >-
@@ -488,6 +517,21 @@ jobs:
           digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
+      # The artifact production actually runs. Every input to it is now signed
+      # and verified -- the host image by the step near the top of this job,
+      # each extension wheel by its admission bundle -- and this is the output
+      # those checks were for. Deploy verifies this signature before it
+      # recreates the container, so an image pushed to this name by anything
+      # other than this workflow cannot become production.
+      - name: Sign the published composition
+        if: >-
+          env.IS_RELEASE == 'true' &&
+          (github.event_name != 'schedule' ||
+           steps.fingerprint.outputs.changed == 'true')
+        env:
+          IMAGE: ${{ steps.publish.outputs.image }}
+        run: cosign sign --yes "$IMAGE"
+
   deploy:
     name: Deploy composition
     needs: compose
@@ -534,6 +578,31 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      - name: Verify the image was composed by this workflow
+        # The last point at which anything can be checked. Everything upstream
+        # of here happens on GitHub's runners; this is the machine in the house
+        # about to run the result, and until now it ran whatever digest it was
+        # handed.
+        #
+        # Verified against the identity of this workflow in this repository, so
+        # a digest pushed to the composition name by any other means -- another
+        # workflow, a stolen registry token, a hand `docker push` -- stops here
+        # instead of becoming production. Output is discarded: the certificate
+        # payload names the image, and the interesting part is whether this
+        # step exits zero.
+        env:
+          IMAGE: ${{ needs.compose.outputs.image }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp \
+              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/" \
+            "$IMAGE" > /dev/null
+          echo "composition signature verified"
       - name: Sync deploy checkout
         run: git -C /opt/apps/severino-hq pull --ff-only
       - name: Deploy exact image with health rollback

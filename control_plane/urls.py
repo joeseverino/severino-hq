@@ -19,6 +19,8 @@ urlpatterns = [
         views.ConnectionListView.as_view(),
         name="connections",
     ),
+    # Before <slug:key>, which would otherwise swallow "tools" as a resource key.
+    path("tools/", views.ToolsView.as_view(), name="tools"),
     path("machines/", views.MachineListView.as_view(), name="machines"),
     path("tailnet/", views.TailnetView.as_view(), name="tailnet"),
     # Before <slug:key>, which would otherwise swallow a machine name.

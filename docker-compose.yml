@@ -38,9 +38,25 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Nothing HQ does at runtime writes to the image. State lives in the four
+    # volumes below and the doorbell directory; migrations and collectstatic
+    # write into those. A read-only root means an exploited process cannot
+    # leave anything behind for the next boot to run -- the difference between
+    # an incident and a persistent one. The controller is a separate
+    # `docker run` from the same image and is unaffected by this.
+    read_only: true
+    # The one writable path the runtime genuinely needs: Python's tempfile
+    # default, used by exports and by the suite when it runs inside the image.
+    # noexec/nosuid because a temporary file here has no business being either.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
     # A runaway request loop should degrade HQ, not the DNS server and the
     # reverse proxy sharing this VM.
     pids_limit: 512
+    # The same argument as pids_limit, for the other resource a runaway request
+    # exhausts first. Generous for what HQ does; small enough that the VM keeps
+    # answering DNS while HQ is having a bad time.
+    mem_limit: 1g
     environment:
       # Inside the container we always use these paths; the .env file may
       # override them for non-container deploys.

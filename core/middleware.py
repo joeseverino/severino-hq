@@ -46,13 +46,27 @@ class RequestContextMiddleware:
             response = self.get_response(request)
             response["X-Request-ID"] = request_id
             # Django has settings for the other browser-boundary headers but
-            # not this one. HQ uses none of these APIs, and an operator console
-            # holding provider credentials has no reason to leave them
+            # not these three. HQ uses none of these APIs, and an operator
+            # console holding provider credentials has no reason to leave them
             # available to anything that manages to run in the page.
             response.setdefault(
                 "Permissions-Policy",
                 "geolocation=(), microphone=(), camera=(), usb=(), payment=(), "
                 "interest-cohort=()",
+            )
+            # Nothing here is meant to be read by another origin. Django's
+            # default opener policy already isolates the browsing context;
+            # this is the other half -- another site cannot pull a page, an
+            # export or a receipt into its own document as a subresource, so a
+            # cross-origin read cannot be laundered through an <img> or a
+            # <script> tag and measured.
+            response.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+            # Where `report-to` in the policy resolves to. Named `csp` because
+            # that is the group the policy references; the endpoint is on this
+            # origin, so a report never leaves the tailnet.
+            response.setdefault(
+                "Reporting-Endpoints",
+                f'csp="{settings.SEVERINO_CSP_REPORT_PATH}"',
             )
             if not request.path.startswith("/health/") or response.status_code >= 500:
                 _request_logger.info(
@@ -68,6 +82,41 @@ class RequestContextMiddleware:
             return response
         finally:
             request_logging.reset_request_id(token)
+
+
+class AdminPolicyMiddleware:
+    """Run Django admin under the one directive its own JavaScript cannot meet.
+
+    The application policy requires Trusted Types, which makes assigning a
+    string to `innerHTML` throw rather than parse. HQ's own scripts never do
+    that; admin's bundled jQuery does, on every page it renders. The choice was
+    between weakening the policy everywhere for one surface and scoping the
+    relaxation to that surface, and this is the second.
+
+    A middleware rather than a decorator because the admin routes a view per
+    registered model and generates most of them -- a decorator that has to be
+    remembered on each is one that will eventually be missed, silently, and the
+    admin page that missed it simply stops working.
+
+    Ordered immediately after Django's CSP middleware, which is what makes this
+    work at all: response middleware runs outermost-last, so the override has
+    to be attached by something *inside* the middleware that reads it.
+    """
+
+    # Where the admin is mounted. A test asserts this against the URLconf
+    # rather than trusting the two to stay in step: a prefix that stops
+    # matching does not fail, it silently serves the admin a policy its own
+    # scripts cannot satisfy, and the page is blank.
+    prefix = "/admin/"
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.path.startswith(self.prefix):
+            response._csp_config = settings.SEVERINO_ADMIN_CSP
+        return response
 
 
 def get_current_user():

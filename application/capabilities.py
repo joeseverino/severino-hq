@@ -39,6 +39,12 @@ from .infrastructure import (
     request_removal,
     save_managed_resource,
 )
+from .lookup import (
+    AddressCommand,
+    NameCommand,
+    look_up_address,
+    look_up_name,
+)
 from .projects import ProjectCommand, save_project, upsert_project
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
@@ -391,6 +397,40 @@ _SPECS = (
             "Read the selected certificate declaration and evaluate renewal policy.",
             "Queue one renewal request for the controller; provider work runs outside this page request.",
             "Return the queued operation and policy decision, attributed to this operator.",
+        ),
+    ),
+    # The first two capabilities that read something HQ does not hold. Both are
+    # `read`, so neither takes an idempotency key and neither writes: asking a
+    # registry the same question twice is the same question twice.
+    CapabilitySpec(
+        "lookup.name",
+        "Ask a public resolver what the internet returns for a hostname.",
+        "read",
+        Capability.LOOK_UP_PUBLIC_RECORDS,
+        NameCommand,
+        look_up_name,
+        execution_notes=(
+            "Validate the hostname before anything leaves this machine.",
+            "Ask one resolver outside this network, so internal rewrites cannot "
+            "answer a question about the public internet.",
+            "Return the records as the resolver gave them, with no TTL: this "
+            "provider reports a constant, which is not a measurement.",
+        ),
+    ),
+    CapabilitySpec(
+        "lookup.address",
+        "Ask what name and which allocation a public address belongs to.",
+        "read",
+        Capability.LOOK_UP_PUBLIC_RECORDS,
+        AddressCommand,
+        look_up_address,
+        execution_notes=(
+            "Refuse a private address locally; nothing outside can describe it, "
+            "and asking would disclose it for no answer.",
+            "Read reverse DNS, which the address holder publishes and which "
+            "usually carries a brand name.",
+            "Read the RDAP allocation, which the registry publishes and which "
+            "carries the company. Either registry may fail without the other.",
         ),
     ),
 )

@@ -192,7 +192,7 @@
         return;
       }
       if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
-      const next = new DOMParser().parseFromString(await response.text(), "text/html");
+      const next = hqParseDocument(await response.text());
       const focusMemo = captureFocus();
       preserveDisclosureState(next, url);
       pinColumnWidths(next);

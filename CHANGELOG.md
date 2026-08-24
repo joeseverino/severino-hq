@@ -87,8 +87,45 @@ follow [SemVer](https://semver.org/) once we publish a tagged release.
 - Dashboard quick actions for common create/import flows.
 - Relationship health counts on the dashboard.
 - Active navigation state in the main header.
+- Trusted Types across the application. Assigning a string to a DOM sink now
+  throws rather than parsing; one named policy, `hq-fragment`, is the single
+  audited place a same-origin response body becomes markup, and duplicates are
+  refused so injected script cannot mint a second one. Django admin runs
+  without that directive and only that directive.
+- `/csp-report/` records what the browser refused, with a bounded body,
+  truncated fields, and one row per distinct complaint per hour. It is the only
+  way HQ learns that a policy enforced in someone else's browser stopped
+  holding.
+- Two connection layers: whether there is exactly one encrypted way in
+  (HTTPS redirect plus HSTS), and what the page is allowed to run. The protocol
+  panel now names the individual directives the browser was sent, read back
+  from the response it actually received.
 
 ### Changed
+
+- The trusted-network default is the tailnet and loopback. RFC 1918 is no
+  longer shipped as trusted: a LAN holds printers, televisions and guests, and
+  a host firewall that is the only thing enforcing the rule is one command away
+  from silently admitting all of it. A deployment whose network genuinely is
+  the boundary now says so explicitly.
+- `DJANGO_BEHIND_TLS_PROXY` also turns on the redirect to the canonical HTTPS
+  name, so the plain port HQ binds stops being a second front door. The
+  healthcheck path is exempt; `security.W008` is now silenced only where the
+  redirect is genuinely off.
+- HSTS defaults to a year including subdomains, rather than off pending manual
+  enablement that outlived the reason for it.
+- Session and CSRF cookies carry the `__Host-` prefix wherever they are Secure.
+- `Cross-Origin-Resource-Policy: same-origin` on every response, including the
+  static mount that sits above the Django middleware.
+- The web container runs with a read-only root filesystem, a tmpfs `/tmp`, and
+  a memory limit, alongside the capability and privilege restrictions it
+  already had.
+- The host image and the composed image are cosign-signed by the workflows that
+  build them; the composition verifies the host image before building on it and
+  the deploy verifies the composition before recreating the container.
+- Static assets are never far-future cached in development. The version token
+  hashes the source tree while the mount serves the collected one, so an
+  edit-then-load could pin stale bytes under a fresh URL permanently.
 
 - Header layout now uses a fixed desktop grid with a horizontally scrollable
   nav track, keeping the brand, nav, search, and user controls on one row

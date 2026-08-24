@@ -246,6 +246,21 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         attention_provider="application.attention:infrastructure",
     ),
     DomainDescriptor(
+        id="hq.tools",
+        label="Tools",
+        # One entry, however many tools. Every other Infrastructure section
+        # reads something HQ holds; these read what the world holds, which is
+        # the question an operator has while looking at the rest. Tools are
+        # tabs inside this rather than siblings beside it, so the twentieth
+        # costs no more of the bar than the first.
+        navigation=(
+            NavigationItem(
+                "Tools", "control_plane:tools", "control_plane", 133,
+                "Infrastructure",
+            ),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.machines",
         label="Machines",
         # Between the things HQ manages and the credentials it manages them

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import URLPattern, URLResolver, get_resolver
+from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from django.utils import timezone
 
 from core.models import AuditLog
@@ -117,6 +117,28 @@ class TrustedNetworkTests(TestCase):
         body = response.content.decode().lower()
         for leak in ("100.64", "192.168", "10.0.0", "tailnet", "cidr"):
             self.assertNotIn(leak, body)
+
+    def test_the_private_lan_is_not_the_boundary(self):
+        """The regression this default exists to prevent.
+
+        A home LAN holds a television, a printer, and whatever a guest joined.
+        Trusting those ranges reads like a small widening of "reachable from
+        the VPN" and is actually the whole rule undone -- so it is asserted
+        here rather than left to whoever next edits the list.
+        """
+
+        for address in ("10.9.9.9", "172.20.4.4"):
+            with self.subTest(address=address):
+                response = self.client.get("/health/live/", REMOTE_ADDR=address)
+                self.assertEqual(response.status_code, 403)
+
+    def test_a_deployment_can_still_declare_its_own_network(self):
+        """Stricter by default is not the same as unconfigurable."""
+
+        with override_settings(SEVERINO_TRUSTED_NETWORKS=["10.9.9.0/24"]):
+            response = self.client.get("/health/live/", REMOTE_ADDR="10.9.9.9")
+
+        self.assertEqual(response.status_code, 200)
 
 
 class LoginThrottleTests(TestCase):
@@ -346,6 +368,11 @@ class RouteExposureTests(SimpleTestCase):
                 "/oidc/",  # the SSO handshake itself
                 "/static/",
                 "/api/",  # bearer-token authenticated, tested above
+                # A browser reporting a refused policy sends no credentials,
+                # so requiring a session here would silence the reports that
+                # matter most -- the ones from the sign-in page. It stores
+                # nothing it was not sent and answers 204 either way.
+                "/csp-report/",
             },
         )
 
@@ -447,6 +474,65 @@ class ReceiptUploadHardeningTests(TestCase):
         self.assertNotIn("attachment", response.get("Content-Disposition", ""))
 
 
+class StaticCachingTests(SimpleTestCase):
+    """Far-future caching is a production property, not a development one."""
+
+    def _cache_control(self, *, debug, versioned):
+        import asyncio
+        from unittest.mock import patch
+
+        from core.static import CachedStaticFiles
+
+        class _Response:
+            status_code = 200
+
+            def __init__(self):
+                self.headers = {}
+
+        files = CachedStaticFiles(directory=".", check_dir=False)
+        scope = {"query_string": b"v=abc" if versioned else b""}
+        with (
+            override_settings(DEBUG=debug),
+            patch.object(
+                CachedStaticFiles.__bases__[0],
+                "get_response",
+                new=_returns(_Response()),
+            ),
+        ):
+            response = asyncio.run(files.get_response("app.js", scope))
+        return response.headers["Cache-Control"]
+
+    def test_production_pins_a_versioned_asset_forever(self):
+        self.assertEqual(
+            self._cache_control(debug=False, versioned=True),
+            "public, max-age=31536000, immutable",
+        )
+
+    def test_development_never_pins_anything(self):
+        """The trap this closes cost an hour to find once.
+
+        The version token hashes the source tree; this mount serves the
+        collected one. In development those are only in step just after
+        `collectstatic`, so an edit-then-load hands the browser the new URL
+        with the old bytes and tells it to keep them forever. Every later
+        edit is then invisible, and it presents as the application not
+        running the code on disk rather than as a caching problem.
+        """
+
+        for versioned in (True, False):
+            with self.subTest(versioned=versioned):
+                self.assertEqual(
+                    self._cache_control(debug=True, versioned=versioned), "no-cache"
+                )
+
+
+def _returns(value):
+    async def _get_response(self, path, scope):
+        return value
+
+    return _get_response
+
+
 @override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
 class StaticAssetBoundaryTests(SimpleTestCase):
     """The gate must not have a hole where Starlette mounts things."""
@@ -494,6 +580,12 @@ class ResponseHeaderTests(TestCase):
     @override_settings(
         SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
         SEVERINO_TRUSTED_PROXIES=[PROXY],
+        # Who may reach HQ is a different question from whose word HQ takes
+        # about the scheme, and this test is about the second. With the gate
+        # on, neither request would get far enough to have an answer -- the
+        # gate has its own tests above, and this one would silently become an
+        # assertion about them instead.
+        SEVERINO_ENFORCE_TRUSTED_NETWORK=False,
     )
     def test_only_a_trusted_proxy_can_assert_https(self):
         from django.http import HttpResponse
@@ -557,3 +649,240 @@ class ReturnDestinationTests(TestCase):
             "/domains/example.com/pin/", {"next": "/domains/example.com/"}
         )
         self.assertEqual(response["Location"], "/domains/example.com/")
+
+
+class BrowserBoundaryTests(TestCase):
+    """What HQ tells the browser it may do with a page holding credentials."""
+
+    def test_the_policy_forbids_writing_html_into_the_dom(self):
+        """Trusted Types, asserted because its whole value is being absent-proof.
+
+        The directive costs nothing while no script assigns a string to a DOM
+        sink, which is exactly why it would be dropped without anyone noticing
+        -- and the day it is dropped is the day a sink can be introduced with
+        no browser objecting.
+        """
+
+        policy = self.client.get("/accounts/login/")["Content-Security-Policy"]
+
+        self.assertIn("require-trusted-types-for 'script'", policy)
+        # Exactly one policy name, and `allow-duplicates` absent. Both halves
+        # matter: the name is the single audited place a response body becomes
+        # markup, and refusing duplicates is what stops injected script from
+        # creating a second policy to reach a sink with.
+        self.assertIn("trusted-types hq-fragment;", f"{policy};")
+        self.assertNotIn("allow-duplicates", policy)
+
+    def test_only_the_shared_helper_turns_a_string_into_markup(self):
+        """The directive is worth exactly as much as this stays true.
+
+        Five call sites used to build a `DOMParser` each. Any one of them
+        added back is a second sink, and the policy would still say the same
+        reassuring thing in the header.
+        """
+
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent / "static" / "js"
+        sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
+        sinks = ("parseFromString", "createPolicy")
+
+        for name, text in sources.items():
+            for sink in sinks:
+                with self.subTest(file=name, sink=sink):
+                    self.assertLessEqual(
+                        text.count(f"{sink}("),
+                        1 if name == "app.js" else 0,
+                        f"{name} reaches a Trusted Types sink outside the helper",
+                    )
+
+    def test_the_policy_names_somewhere_to_report_a_violation(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertIn("report-uri /csp-report/", response["Content-Security-Policy"])
+        self.assertIn('csp="/csp-report/"', response["Reporting-Endpoints"])
+
+    def test_nothing_here_may_be_loaded_by_another_origin(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
+
+    def test_the_admin_keeps_the_policy_minus_only_what_it_cannot_meet(self):
+        """The scoped exception, pinned so it stays scoped.
+
+        Admin's bundled jQuery writes HTML through `innerHTML`, so it cannot
+        run under Trusted Types. The relaxation is allowed to remove that and
+        nothing else -- a second directive quietly joining it would make the
+        admin a hole in a policy the rest of the application still advertises.
+        """
+
+        application = self.client.get("/accounts/login/")
+        admin = self.client.get("/admin/", follow=False)
+
+        relaxed = set(_directives(application["Content-Security-Policy"]))
+        relaxed -= set(_directives(admin["Content-Security-Policy"]))
+        self.assertEqual(relaxed, {"require-trusted-types-for", "trusted-types"})
+
+    def test_the_middleware_guards_the_prefix_the_urlconf_actually_uses(self):
+        """A prefix that stops matching does not fail; it serves a blank admin."""
+
+        from core.middleware import AdminPolicyMiddleware
+
+        self.assertEqual(
+            AdminPolicyMiddleware.prefix,
+            reverse("admin:index"),
+        )
+
+
+def _directives(policy):
+    return [directive.split()[0] for directive in policy.split(";") if directive.strip()]
+
+
+class CookiePrefixTests(SimpleTestCase):
+    """A cookie no neighbouring host can have written."""
+
+    def test_a_secure_deployment_prefixes_the_cookies_it_sets(self):
+        names = _cookie_names(secure=True)
+
+        self.assertEqual(names, ("__Host-sessionid", "__Host-csrftoken"))
+
+    def test_a_plain_http_deployment_does_not(self):
+        """The browser refuses to store a `__Host-` cookie that is not Secure.
+
+        Hard-coding the prefix would work in production and silently break
+        every plain-HTTP development session, in the way that looks like
+        sign-in is broken rather than like a cookie was rejected.
+        """
+
+        names = _cookie_names(secure=False)
+
+        self.assertEqual(names, ("sessionid", "csrftoken"))
+
+
+def _cookie_names(*, secure):
+    """The names settings.py derives, evaluated the way settings.py does."""
+
+    return (
+        "__Host-sessionid" if secure else "sessionid",
+        "__Host-csrftoken" if secure else "csrftoken",
+    )
+
+
+@override_settings(SEVERINO_TRUSTED_NETWORKS=["100.64.0.0/10", "127.0.0.0/8"])
+class PolicyReportTests(TestCase):
+    """The one boundary HQ cannot check from the inside."""
+
+    def setUp(self):
+        self.client = Client(REMOTE_ADDR="100.64.0.1")
+
+    def report(self, payload, content_type="application/csp-report"):
+        return self.client.post(
+            "/csp-report/", data=payload, content_type=content_type
+        )
+
+    def test_a_violation_is_recorded_without_a_session(self):
+        response = self.report(
+            '{"csp-report": {"effective-directive": "script-src",'
+            ' "blocked-uri": "https://evil.test/x.js",'
+            ' "document-uri": "https://hq.test/"}}'
+        )
+
+        self.assertEqual(response.status_code, 204)
+        event = AuditLog.objects.get(object_type="ContentSecurityPolicy")
+        self.assertEqual(event.metadata["directive"], "script-src")
+        self.assertEqual(event.metadata["blocked"], "https://evil.test/x.js")
+
+    def test_the_reporting_api_shape_is_read_too(self):
+        self.report(
+            '[{"type": "csp-violation", "body": {"effectiveDirective":'
+            ' "img-src", "blockedURL": "https://evil.test/x.png"}}]',
+            content_type="application/reports+json",
+        )
+
+        self.assertEqual(
+            AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1
+        )
+
+    def test_the_same_complaint_does_not_write_a_row_per_page_load(self):
+        for _ in range(5):
+            self.report(
+                '{"csp-report": {"effective-directive": "script-src",'
+                ' "blocked-uri": "inline"}}'
+            )
+
+        self.assertEqual(
+            AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1
+        )
+
+    def test_nonsense_is_discarded_without_comment(self):
+        for payload in ("not json", "[]", "{}", '{"csp-report": {}}', '"a"'):
+            with self.subTest(payload=payload):
+                response = self.report(payload)
+                self.assertEqual(response.status_code, 204)
+
+        self.assertFalse(
+            AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists()
+        )
+
+    def test_a_flood_cannot_be_used_to_write_a_large_row(self):
+        self.report(
+            '{"csp-report": {"effective-directive": "%s"}}' % ("a" * 32_000)
+        )
+
+        self.assertFalse(
+            AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists()
+        )
+
+    def test_a_long_field_is_kept_but_bounded(self):
+        self.report(
+            '{"csp-report": {"effective-directive": "script-src",'
+            ' "blocked-uri": "https://evil.test/%s"}}' % ("a" * 2_000)
+        )
+
+        event = AuditLog.objects.get(object_type="ContentSecurityPolicy")
+        self.assertEqual(len(event.metadata["blocked"]), 200)
+
+    def test_it_is_not_a_readable_surface(self):
+        self.assertEqual(self.client.get("/csp-report/").status_code, 405)
+
+    def test_it_is_still_behind_the_network_gate(self):
+        response = Client(REMOTE_ADDR="203.0.113.9").post(
+            "/csp-report/", data="{}", content_type="application/csp-report"
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+
+class CanonicalEntryTests(TestCase):
+    """The plain port HQ binds must not be a second front door."""
+
+    @override_settings(
+        SECURE_SSL_REDIRECT=True,
+        SECURE_SSL_HOST="hq.example.com",
+        SECURE_REDIRECT_EXEMPT=[r"^health/"],
+        ALLOWED_HOSTS=["hq.example.com", "testserver"],
+    )
+    def test_a_plain_request_is_sent_to_the_canonical_name(self):
+        response = self.client.get("/accounts/login/", REMOTE_ADDR="100.64.0.1")
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response["Location"], "https://hq.example.com/accounts/login/"
+        )
+
+    @override_settings(
+        SECURE_SSL_REDIRECT=True,
+        SECURE_SSL_HOST="hq.example.com",
+        SECURE_REDIRECT_EXEMPT=[r"^health/"],
+    )
+    def test_the_container_probe_is_exempt(self):
+        """It probes the raw port from inside its own network namespace.
+
+        The one caller for whom plain HTTP is the correct request. Redirecting
+        it would make the container permanently unhealthy, which is how this
+        redirect was left off in the first place.
+        """
+
+        response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
+
+        self.assertEqual(response.status_code, 200)
