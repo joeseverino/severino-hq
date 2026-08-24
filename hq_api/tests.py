@@ -151,6 +151,166 @@ class GrantTests(SimpleTestCase):
         self.assertEqual(principal.actor, "example-automation")
 
 
+class CompositionCheckTests(SimpleTestCase):
+    def test_an_unresolvable_resource_route_is_a_named_startup_error(self):
+        from application.resources import ResourceSpec
+        from .checks import capability_contract_check
+
+        resource = ResourceSpec(
+            "example.records",
+            "Records",
+            "Synthetic records.",
+            "read",
+            web_route="missing:list",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E004"])
+        self.assertIn("missing:list", errors[0].msg)
+
+    def test_a_capability_cannot_reference_an_unknown_resource(self):
+        from application.capabilities import CapabilitySpec
+        from application.projects import ProjectCommand, save_project
+        from application.resources import ResourceSpec
+        from .checks import capability_contract_check
+
+        capability = CapabilitySpec(
+            "example.create",
+            "Create a synthetic record.",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            save_project,
+            subject_resource="example.missing",
+        )
+        resource = ResourceSpec("example.records", "Records", "Records.", "read")
+        with (
+            patch("hq_api.checks.capability_specs", return_value=(capability,)),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E003"])
+
+    def test_a_target_query_must_match_its_resource_contract(self):
+        from application.capabilities import CapabilitySpec
+        from application.projects import ProjectCommand, save_project
+        from application.resources import ProjectQuery, ResourceSpec
+        from .checks import capability_contract_check
+
+        capability = CapabilitySpec(
+            "example.update",
+            "Update a synthetic record.",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            save_project,
+            target_kind="slug",
+            subject_resource="example.records",
+            target_query=(("unknown", "value"),),
+        )
+        resource = ResourceSpec(
+            "example.records",
+            "Records",
+            "Records.",
+            "read",
+            list_handler=lambda **kwargs: {"items": [], "count": 0},
+            list_query_type=ProjectQuery,
+            identifier="slug",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=(capability,)),
+            patch("hq_api.checks.resource_specs", return_value=(resource,)),
+            patch("hq_api.checks.connection_specs", return_value=()),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E008"])
+
+    def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
+        from application.connections import ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            web_route="missing:connections",
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E006"])
+
+    def test_a_connection_ability_cannot_name_an_unknown_capability(self):
+        from application.connections import ConnectionAbility, ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            abilities=(
+                ConnectionAbility(
+                    "transactions.sync",
+                    "Sync transactions",
+                    "Refresh transaction history.",
+                    capability="example.transactions.sync",
+                ),
+            ),
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E007"])
+
+    def test_a_connection_ability_cannot_name_an_unknown_resource(self):
+        from application.connections import ConnectionAbility, ConnectionSpec
+        from .checks import capability_contract_check
+
+        connection = ConnectionSpec(
+            "example.finance",
+            "Finance",
+            "Financial institutions.",
+            "read",
+            lambda: (),
+            abilities=(
+                ConnectionAbility(
+                    "transactions.read",
+                    "Read transactions",
+                    "Read transaction history.",
+                    subject_resource="example.missing",
+                ),
+            ),
+        )
+        with (
+            patch("hq_api.checks.capability_specs", return_value=()),
+            patch("hq_api.checks.resource_specs", return_value=()),
+            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+        ):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E009"])
+
+
 @override_settings(
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
@@ -244,9 +404,7 @@ class TransportTests(TestCase):
     def test_retrying_a_machine_write_replays_the_committed_response(self):
         from projects.models import Project
 
-        body = {
-            "payload": {"name": "Once", "slug": "once", "status": "active"}
-        }
+        body = {"payload": {"name": "Once", "slug": "once", "status": "active"}}
         with _serving():
             first = self._post(
                 "project.create",
@@ -396,6 +554,19 @@ class TransportTests(TestCase):
         self.assertEqual(data["actor"], "example-automation")
         self.assertEqual(data["resource"], RESOURCE)
         self.assertEqual(data["api_version"], 2)
+        self.assertEqual(data["links"]["resources"], "/api/v2/resources/")
+        self.assertEqual(data["links"]["connections"], "/api/v2/connections/")
+        self.assertEqual(data["links"]["topology"], "/api/v2/topology/")
+
+    def test_v1_does_not_advertise_a_v2_only_resource_route(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v1/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
+            )
+
+        links = response.json()["data"]["links"]
+        self.assertEqual(links["capabilities"], "/api/v1/capabilities/")
+        self.assertNotIn("resources", links)
 
     def test_capabilities_flag_what_this_token_may_run(self):
         with _serving():
@@ -408,14 +579,19 @@ class TransportTests(TestCase):
         # Nothing in HQ core is grantable by `example.write` alone, so a token
         # scoped to it must not come back permitted for anything here.
         self.assertFalse([spec for spec in specs if spec["permitted"]])
-        project_create = next(spec for spec in specs if spec["name"] == "project.create")
+        project_create = next(
+            spec for spec in specs if spec["name"] == "project.create"
+        )
         self.assertTrue(project_create["idempotency_key_required"])
         self.assertFalse(project_create["request_schema"]["additionalProperties"])
+        self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(
             project_create["request_schema"]["properties"]["payload"],
             project_create["input_schema"],
         )
-        project_update = next(spec for spec in specs if spec["name"] == "project.update")
+        project_update = next(
+            spec for spec in specs if spec["name"] == "project.update"
+        )
         self.assertEqual(project_update["request_schema"]["required"], ["target"])
         nested = views._request_schema(
             {
@@ -429,6 +605,168 @@ class TransportTests(TestCase):
         )
         self.assertIn("$defs", nested)
         self.assertNotIn("$defs", nested["properties"]["payload"])
+
+    def test_resources_are_discoverable_and_flagged_for_this_token(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v2/resources/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+        self.assertEqual(response.status_code, 200)
+        specs = response.json()["data"]["resources"]
+        projects = next(spec for spec in specs if spec["name"] == "projects")
+        audit = next(spec for spec in specs if spec["name"] == "audit")
+        self.assertTrue(projects["permitted"])
+        self.assertFalse(audit["permitted"])
+        self.assertIn("query_schema", projects["operations"]["list"])
+        self.assertEqual(projects["web_route"], "projects:list")
+
+    def test_connections_expose_abilities_and_safe_cached_state(self):
+        from django.utils import timezone
+        from control_plane.models import ProviderConnection
+
+        ProviderConnection.objects.create(
+            connection_ref="api-cloudflare",
+            controller_id="controller",
+            provider="cloudflare_dns",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        with _serving():
+            response = self.client.get(
+                "/api/v2/connections/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        core = next(
+            item
+            for item in data["connections"]
+            if item["name"] == "infrastructure.controllers"
+        )
+        state = next(
+            item
+            for group in data["groups"]
+            for item in group["instances"]
+            if item["id"] == "controller:api-cloudflare"
+        )
+        self.assertTrue(core["permitted"])
+        self.assertIn(
+            "cloudflare.dns_record", {ability["name"] for ability in state["abilities"]}
+        )
+        self.assertNotIn("token", state)
+
+    def test_connections_never_invoke_a_family_the_token_cannot_read(self):
+        with (
+            _serving(),
+            patch("application.connections._controller_instances") as provider,
+        ):
+            response = self.client.get(
+                "/api/v2/connections/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        core = next(
+            item
+            for item in data["connections"]
+            if item["name"] == "infrastructure.controllers"
+        )
+        self.assertFalse(core["permitted"])
+        self.assertEqual(data["groups"], [])
+        provider.assert_not_called()
+
+    def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
+        from django.utils import timezone
+        from control_plane.models import ManagedResource, ProviderConnection
+
+        ManagedResource.objects.create(
+            key="api-zone",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "api-cloudflare"},
+        )
+        ProviderConnection.objects.create(
+            connection_ref="api-cloudflare",
+            controller_id="api-controller",
+            provider="cloudflare_dns",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        with (
+            _serving(),
+            patch("application.plugins.plugin_connection_specs", return_value=()),
+        ):
+            response = self.client.get(
+                "/api/v2/topology/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        topology = response.json()["data"]
+        self.assertEqual(topology["schema_version"], 1)
+        self.assertIn("resource:api-zone", {node["id"] for node in topology["nodes"]})
+        self.assertTrue(topology["edges"])
+        resource = next(
+            node for node in topology["nodes"] if node["id"] == "resource:api-zone"
+        )
+        self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
+        self.assertNotIn("token", json.dumps(topology).lower())
+
+    def test_topology_requires_read_before_deriving_any_state(self):
+        with (
+            _serving(),
+            patch("application.topology.connection_catalog") as catalog,
+        ):
+            response = self.client.get(
+                "/api/v2/topology/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
+            )
+
+        self.assertEqual(response.status_code, 403)
+        catalog.assert_not_called()
+
+    def test_resource_list_and_detail_share_the_declared_contract(self):
+        from projects.models import Project
+
+        project = Project.objects.create(name="Machine readable")
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            listed = self.client.get(
+                "/api/v2/resources/projects/?query=readable", **headers
+            )
+            detail = self.client.get(
+                f"/api/v2/resources/projects/{project.slug}/", **headers
+            )
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["data"]["items"][0]["slug"], project.slug)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["data"]["slug"], project.slug)
+
+    def test_resource_queries_reject_unknown_and_repeated_fields(self):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            unknown = self.client.get("/api/v2/resources/projects/?limti=10", **headers)
+            repeated = self.client.get(
+                "/api/v2/resources/projects/?limit=1&limit=2", **headers
+            )
+        self.assertEqual(unknown.status_code, 400)
+        self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
+        self.assertEqual(repeated.status_code, 400)
+
+    def test_resource_read_requires_its_declared_grant(self):
+        with _serving():
+            response = self.client.get(
+                "/api/v2/resources/projects/",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='example.write')}",
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "forbidden")
 
     def test_v1_remains_compatible_without_an_idempotency_key(self):
         from projects.models import Project

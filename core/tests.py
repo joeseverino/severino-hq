@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from asgiref.sync import async_to_sync
@@ -266,6 +267,7 @@ class OIDCBackendTests(TestCase):
                 backend.verify_claims(
                     {
                         "email": "joe@example.com",
+                        "email_verified": True,
                         "groups": [],
                     }
                 )
@@ -335,6 +337,28 @@ class NavigationSmokeTests(_AuthedTestCase):
 
 
 class SearchPageTests(_AuthedTestCase):
+    def test_empty_search_is_the_derived_command_center(self):
+        response = self.client.get("/search/")
+
+        content = response.content.decode()
+        self.assertContains(response, "Command Center")
+        self.assertIn("project.create", content)
+        self.assertIn("infrastructure.controllers", content)
+        self.assertIn('href="/projects/"', content)
+        self.assertIn('href="/commands/project.create/"', content)
+        self.assertIn(
+            '<a class="discovery-link" href="/commands/project.create/">', content
+        )
+        self.assertNotIn("Open command", content)
+
+    def test_query_filters_commands_as_well_as_records(self):
+        response = self.client.get("/search/", {"q": "certificate.renew"})
+
+        content = response.content.decode()
+        self.assertIn("certificate.renew", content)
+        self.assertNotIn("project.create", content)
+        self.assertNotIn("No resources match this query.", content)
+
     def test_results_highlight_matches_and_skip_empty_scopes(self):
         from unittest import mock
 
@@ -354,7 +378,58 @@ class SearchPageTests(_AuthedTestCase):
 
 
 class DashboardWorkflowTests(_AuthedTestCase):
-    def test_dashboard_surfaces_degraded_infrastructure(self):
+    def test_action_items_is_the_full_existing_queue_and_filters_it(self):
+        Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
+
+        with patch("application.attention.get_unread_count", return_value=0):
+            response = self.client.get("/action-items/")
+            filtered = self.client.get(
+                "/action-items/", {"status": "serious", "q": "project"}
+            )
+
+        self.assertContains(response, "Active projects need output")
+        self.assertContains(response, 'href="/projects/?needs_output=1"')
+        self.assertContains(response, "Action items")
+        self.assertNotContains(filtered, "Active projects need output")
+
+    def test_profile_count_is_lazy_off_dashboard(self):
+        Project.objects.create(name="Count me", status=Project.Status.ACTIVE)
+
+        page = self.client.get("/projects/")
+        with (
+            patch("application.attention.get_unread_count", return_value=0),
+            patch("application.domains.extension_domains", return_value=()),
+        ):
+            count = self.client.get("/action-items/count/")
+
+        self.assertContains(page, 'data-action-count hidden')
+        self.assertEqual(count.json()["count"], 1)
+
+    def test_dashboard_uses_one_combined_contact_read(self):
+        state = (
+            [
+                {
+                    "id": 7,
+                    "name": "One call",
+                    "status": "unread",
+                    "created_at": "2026-08-23",
+                }
+            ],
+            3,
+        )
+        with (
+            patch("core.views.get_dashboard_state", return_value=state) as combined,
+            patch("application.attention.get_unread_count") as separate,
+        ):
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        combined.assert_called_once_with(limit=4)
+        separate.assert_not_called()
+        self.assertContains(response, "One call")
+        self.assertContains(response, "3")
+
+    def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
@@ -375,14 +450,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/")
 
-        self.assertContains(
-            response,
-            "jseverino-wildcard: Certificate expires tomorrow.",
-        )
-        self.assertContains(
-            response,
-            "/infrastructure/jseverino-wildcard/",
-        )
+        self.assertContains(response, "Infrastructure findings")
+        self.assertContains(response, "/infrastructure/findings/")
 
     def test_dashboard_surfaces_missing_project_output_once_in_queue(self):
         Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)

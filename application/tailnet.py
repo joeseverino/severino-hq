@@ -15,6 +15,7 @@ guessing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from control_plane.models import ProviderInventory
 
@@ -45,6 +46,7 @@ class Device:
     endpoints: tuple[str, ...] = ()
     key_expires: str = ""
     exit_node: bool = False
+    observed_at: datetime | None = None
 
     @property
     def label(self) -> str:
@@ -152,6 +154,7 @@ def devices() -> dict[str, Device]:
                 ),
                 key_expires=str(record.get("key_expires", "")),
                 exit_node=bool(record.get("exit_node")),
+                observed_at=snapshot.observed_at,
             )
     return found
 

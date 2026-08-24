@@ -27,9 +27,21 @@ from application.capabilities import (
     describe_capabilities,
     execute_capability,
 )
+from application.connections import describe_connections, list_connections
+from application.findings import findings as application_findings
+from application.topology import topology as application_topology
 from application.security import AuthorizationError
+from application.resources import (
+    InvalidResourceInput,
+    ResourceNotFound,
+    UnknownResource,
+    UnsupportedResourceOperation,
+    describe_resources,
+    get_resource as get_application_resource,
+    list_resource as list_application_resource,
+)
 
-from .idempotency import (
+from application.idempotency import (
     IdempotencyConflict,
     InvalidIdempotencyKey,
     execute_once,
@@ -52,15 +64,15 @@ CAPABILITY_STATUS = {
 }
 
 
-def _reject_json_constant(value: str):
-    raise ValueError(f"{value} is not valid JSON")
+def _reject_json_constant(_value: str):
+    raise ValueError("Invalid JSON constant")
 
 
 def _strict_json_object(pairs):
     value = {}
     for key, item in pairs:
         if key in value:
-            raise ValueError(f"Duplicate JSON field {key!r}")
+            raise ValueError("Duplicate JSON field")
         value[key] = item
     return value
 
@@ -79,6 +91,20 @@ def _json(payload: dict[str, Any], *, status: int = 200) -> HttpResponse:
 
 def _ok(data: Any, *, status: int = 200) -> HttpResponse:
     return _json({"ok": True, "data": data}, status=status)
+
+
+def _permission_catalog(
+    specs: list[dict[str, Any]], held: set[str] | frozenset[str]
+) -> list[dict]:
+    """Annotate static registry entries without duplicating adapter policy."""
+
+    return [
+        {
+            **spec,
+            "permitted": set(spec["required_capabilities"]) <= held,
+        }
+        for spec in specs
+    ]
 
 
 def _fail(message: str, *, code: str, status: int, details: Any = None) -> HttpResponse:
@@ -196,6 +222,12 @@ def _endpoint(methods: tuple[str, ...]):
 def root(request, version: int):
     """What this is, and what the presented credential may actually do."""
 
+    links = {"capabilities": f"/api/v{version}/capabilities/"}
+    if version >= 2:
+        links["resources"] = f"/api/v{version}/resources/"
+        links["connections"] = f"/api/v{version}/connections/"
+        links["topology"] = f"/api/v{version}/topology/"
+        links["findings"] = f"/api/v{version}/findings/"
     return _ok(
         {
             "service": "severino-hq",
@@ -204,6 +236,7 @@ def root(request, version: int):
             "resource": settings.SEVERINO_API_RESOURCE,
             "actor": request.principal.actor,
             "granted": sorted(granted(request.token_claims)),
+            "links": links,
         }
     )
 
@@ -235,6 +268,156 @@ def capabilities(request, version: int):
             ],
         }
     )
+
+
+@_endpoint(("GET",))
+def resources(request, version: int):
+    """Every readable resource, including operations this token may use."""
+
+    described = describe_resources()
+    held = granted(request.token_claims)
+    return _ok(
+        {
+            "schema_version": described["schema_version"],
+            "resources": _permission_catalog(described["resources"], held),
+        }
+    )
+
+
+def _projection(serve, filter_name: str, name: str, doc: str):
+    """One principal-scoped projection, served with its single narrowing filter.
+
+    `topology` and `findings` are the same adapter: authorize, read one query
+    parameter, hand both to the application layer, and turn a refusal into a
+    403. Written out twice they were flagged as duplicates, which was the graph
+    noticing something true -- an adapter that adds no behaviour of its own
+    should not be copied once per projection.
+
+    An unrecognized filter value is the application's business, not the
+    transport's: both projections answer it by returning everything and saying
+    which filter they applied, so a client can tell "matched nothing" from
+    "never applied".
+    """
+
+    def view(request, version: int):
+        try:
+            return _ok(
+                serve(
+                    principal=request.principal,
+                    **{filter_name: request.GET.get(filter_name, "").strip()},
+                )
+            )
+        except AuthorizationError as exc:
+            return _fail(exc.reason, code=exc.code, status=403)
+
+    # Named explicitly: `_endpoint` copies these onto its wrapper, and the
+    # route-walking security test reads them.
+    view.__name__ = name
+    view.__doc__ = doc
+    return _endpoint(("GET",))(view)
+
+
+topology = _projection(
+    application_topology,
+    "lens",
+    "topology",
+    """The live permitted infrastructure graph and its canonical actions.
+
+    `?lens=` narrows the projection to one declared standing question.
+    """,
+)
+
+findings = _projection(
+    application_findings,
+    "rule",
+    "findings",
+    """What HQ currently claims is wrong, with the evidence and a remedy.
+
+    Derived from the same projection as the topology and narrowed the same way,
+    so a finding can never name something the token could not already read. A
+    remedy is a reference to an existing capability, never a new route.
+    """,
+)
+
+
+@_endpoint(("GET",))
+def connections(request, version: int):
+    """Connection contracts plus the safe state this token may inspect."""
+
+    described = describe_connections()
+    held = granted(request.token_claims)
+    state = list_connections(principal=request.principal)
+    return _ok(
+        {
+            "schema_version": described["schema_version"],
+            "connections": _permission_catalog(described["connections"], held),
+            "groups": state["groups"],
+        }
+    )
+
+
+def _resource_failure(exc: Exception) -> HttpResponse:
+    if isinstance(exc, UnknownResource):
+        return _fail(str(exc), code="unknown_resource", status=404)
+    if isinstance(exc, ResourceNotFound):
+        return _fail(str(exc), code="not_found", status=404)
+    if isinstance(exc, UnsupportedResourceOperation):
+        return _fail(str(exc), code="unsupported_operation", status=405)
+    if isinstance(exc, InvalidResourceInput):
+        return _fail(
+            str(exc), code="invalid_input", status=400, details=exc.errors
+        )
+    if isinstance(exc, AuthorizationError):
+        return _fail(exc.reason, code=exc.code, status=403)
+    raise exc
+
+
+@_endpoint(("GET",))
+def resource_list(request, version: int, name: str):
+    """List one resource through its declared, schema-validated query."""
+
+    filters: dict[str, str] = {}
+    for key, values in request.GET.lists():
+        if len(values) != 1:
+            return _fail(
+                f"Query field {key!r} may appear only once.",
+                code="invalid_input",
+                status=400,
+            )
+        filters[key] = values[0]
+    try:
+        return _ok(
+            list_application_resource(
+                name, filters, principal=request.principal, strict=False
+            )
+        )
+    except (
+        AuthorizationError,
+        InvalidResourceInput,
+        UnknownResource,
+        UnsupportedResourceOperation,
+    ) as exc:
+        return _resource_failure(exc)
+
+
+@_endpoint(("GET",))
+def resource_detail(request, version: int, name: str, identifier: str):
+    """Get one resource record through its declared identifier contract."""
+
+    try:
+        return _ok(
+            get_application_resource(
+                name, identifier, principal=request.principal, strict=False
+            )
+        )
+    except (
+        AuthorizationError,
+        InvalidResourceInput,
+        ResourceNotFound,
+        UnknownResource,
+        UnsupportedResourceOperation,
+    ) as exc:
+        return _resource_failure(exc)
 
 
 class EnvelopeError(Exception):

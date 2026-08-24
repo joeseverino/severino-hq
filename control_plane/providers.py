@@ -982,6 +982,20 @@ class ProviderSpec:
     # and a guaranteed failure on create: the reconciler refuses to create an
     # HTTPS host with no certificate to bind, a minute later, in a job result.
     required_on_create: tuple[str, ...] = ()
+    # Fields the provider structurally cannot report back, so a sweep must not
+    # be read as disagreeing about them.
+    #
+    # ``from_record`` serves two callers with opposite readings of a blank. To
+    # adoption it means "say nothing and keep what is there"; to the drift
+    # comparison it means "the live record says empty". An NPM proxy host is
+    # the case: NPM holds a numeric certificate id, not an HQ resource key, so
+    # every host that named a certificate compared unequal forever and was
+    # skipped by ``confirm_observed`` while still reading healthy.
+    unobservable_fields: tuple[str, ...] = ()
+    # One record shaped exactly as this provider's sweep reports them, for the
+    # contract tests to rebuild a spec from. It lives beside the provider
+    # because a list the tests keep is a list that goes stale.
+    sample_record: dict[str, Any] | None = None
     # What sorts of connection stand behind this, matching what the controller
     # calls them. This is the join between a declaration and the credentials
     # that would carry it out: it tells a form which connections to offer, and
@@ -1992,6 +2006,9 @@ _PROVIDERS = (
         ),
         choices="application.provider_choices:proxy_choices",
         required_on_create=("certificate_resource",),
+        # NPM answers with a certificate id, never an HQ resource key, so
+        # `_proxy_from_record` blanks this and a sweep cannot speak to it.
+        unobservable_fields=("certificate_resource",),
         advanced_fields=(
             "http2",
             "websocket",
@@ -2009,6 +2026,15 @@ _PROVIDERS = (
         origin=_proxy_origin,
         seed=_proxy_seed,
         from_record=_proxy_from_record,
+        sample_record={
+            "domain_names": ["shop.example.com"], "forward_scheme": "http",
+            "forward_host": "10.0.0.20", "forward_port": 3000,
+            "ssl_forced": True, "http2_support": True,
+            "allow_websocket_upgrade": False, "caching_enabled": False,
+            "block_exploits": True, "access_list_id": 0, "advanced_config": "",
+            "hsts_enabled": False, "hsts_subdomains": False,
+            "trust_forwarded_proto": False, "enabled": True,
+        },
         readout=_proxy_readout,
     ),
     ProviderSpec(
@@ -2033,6 +2059,12 @@ _PROVIDERS = (
         seed=_stack_seed,
         readout=_stack_readout,
         from_record=_stack_from_record,
+        sample_record={
+            "stack": "example-stack", "host": "example-host",
+            "connection_ref": "example-portainer",
+            "compose": "services:\\n  web:\\n    image: example/web:1\\n",
+            "hostnames": ["shop.example.com"], "port": 3000,
+        },
         choices="application.provider_choices:container_stack",
     ),
     ProviderSpec(
@@ -2051,6 +2083,10 @@ _PROVIDERS = (
         # place its identity is known.
         readout=_container_readout,
         from_record=_container_from_record,
+        sample_record={
+            "name": "example-web", "host": "example-host",
+            "connection_ref": "example-portainer",
+        },
         identity=_container_identity,
         key_hint=_container_key_hint,
         removal_note=_container_removal_note,
@@ -2071,6 +2107,7 @@ _PROVIDERS = (
         connection_providers=("tailscale",),
         readout=_tailnet_device_readout,
         from_record=_tailnet_device_from_record,
+        sample_record={"name": "example-device", "document": ""},
         identity=_tailnet_device_identity,
         key_hint=_tailnet_device_key_hint,
         choices="application.provider_choices:tailnet_device",
@@ -2099,6 +2136,7 @@ _PROVIDERS = (
         # Adopted from the sweep, so the declaration starts byte-identical to
         # the live policy and editing it is editing what is actually there.
         from_record=lambda record: {"document": record.get("document", "")},
+        sample_record={"document": ""},
         identity=lambda spec: ("tailnet",),
         key_hint=lambda spec: "tailnet-policy",
         change_effects=(
@@ -2172,6 +2210,7 @@ _PROVIDERS = (
         seed=_rewrite_seed,
         answers=_rewrite_answers,
         from_record=_rewrite_from_record,
+        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
         readout=_rewrite_readout,
     ),
     ProviderSpec(
@@ -2189,6 +2228,11 @@ _PROVIDERS = (
         answers=_dns_record_answers,
         readout=_dns_record_readout,
         from_record=_dns_record_from_record,
+        sample_record={
+            "zone": "example.com", "name": "www.example.com",
+            "record_type": "A", "content": "203.0.113.10", "ttl": 300,
+            "proxied": False, "priority": None,
+        },
         choices="application.provider_choices:dns_record",
         identity=_dns_record_identity,
         key_hint=_dns_record_key_hint,
@@ -2208,6 +2252,7 @@ _PROVIDERS = (
         hostnames=None,
         readout=_zone_readout,
         from_record=_zone_from_record,
+        sample_record={"zone": "example.com", "connection_ref": "example-dns"},
         choices="application.provider_choices:zone",
         identity=_zone_identity,
         key_hint=_zone_key_hint,

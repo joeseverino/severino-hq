@@ -29,6 +29,13 @@
             value is one click away on the resource itself.
             {% endcomment %}
             {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
+            {% comment %}
+            The address a proxy forwards to is an address, and the row said
+            only that. HQ usually knows whose address it is — the detail page
+            has named the machine for a while — so the board says it too, and
+            still prints the address above where it cannot.
+            {% endcomment %}
+            {% if resource.origin_machine %}<br><span class="muted">on <a href="{{ resource.origin_machine.url }}">{{ resource.origin_machine.name }}</a></span>{% endif %}
           </td>
           <td><code>{{ resource.kind }}</code></td>
           <td>

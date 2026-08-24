@@ -3,10 +3,10 @@
 {% block title %}{{ service.hostname }} · Services{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>
+  <div class="page-head-copy">
     <h1>{{ service.hostname }}</h1>
+    <span class="page-head-status pill pill-{{ service.status }}">{{ service.status_label }}</span>
     <p class="muted">
-      <span class="pill pill-{{ service.status }}">{{ service.status_label }}</span>
       {% comment %}
       Named here rather than given rows of their own. A CNAME to a name HQ
       already serves is the same service reached another way, and listed
@@ -14,10 +14,10 @@
       certificate and its own "not routed" — describing something that is not
       separate from anything.
       {% endcomment %}
-      {% if service.aliases %} · also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
-      {% if service.project %} · Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
+      {% if service.aliases %}Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+      {% if service.project %}{% if service.aliases %} &middot; {% endif %}Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
       {% if service.reach.label %}
-        &middot;
+        {% if service.aliases or service.project %}&middot;{% endif %}
         <span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}"
               title="{{ service.reach.detail }}">{{ service.reach.label }}</span>
       {% endif %}
@@ -56,6 +56,10 @@
     <a class="btn" href="{% url 'control_plane:services' %}">All services</a>
   </div>
 </div>
+
+{% include "partials/_page_navigation.html" with navigation=page_navigation %}
+
+<section id="overview" class="page-section" aria-label="Overview" data-page-section>
 
 {% comment %}
 Faults, not health. Each is a statement about how two declarations relate, so no
@@ -258,6 +262,7 @@ answering. That is a claim about the row, so it reads under it.
   {% endif %}
 </p>
 {% endif %}
+</section>
 
 {% comment %}
 What else HQ holds about this name. Each band is a section the registry produced,
@@ -265,6 +270,7 @@ rendered through the host's own row primitive — so a section HQ gains later
 appears here without this template learning anything about it.
 {% endcomment %}
 {% for section in sections %}
+<section id="{{ section.id }}" class="page-section" data-page-section>
   <h2>{{ section.label }}</h2>
   <div class="table-scroll">
     <table class="data-table">
@@ -291,8 +297,10 @@ appears here without this template learning anything about it.
   {% for label, url in section.actions %}
     <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
   {% endfor %}
+</section>
 {% endfor %}
 
+<section id="resources" class="page-section" data-page-section>
 <h2>Resources behind this name</h2>
 <div class="table-scroll">
   <table class="data-table">
@@ -345,4 +353,5 @@ it is not what anyone opened this page to read.
     </div>
   </details>
 {% endif %}
+</section>
 {% endblock %}

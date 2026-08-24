@@ -44,9 +44,11 @@ The adapter disappears after parsing. The application service validates,
 authorizes, opens the transaction, protects against stale state, writes, audits,
 and returns one stable result. The adapter only chooses how that result looks.
 
-That boundary includes reads. Canonical query projections live in
-`application/read_models.py`; web, MCP, and CLI adapters may filter or render
-those results, but they do not import Django models or rebuild result shapes.
+That boundary includes reads. `application.resources.ResourceSpec` is the
+registry of readable domains; canonical query projections live in their
+application services and in `application/read_models.py`. Web, API, MCP, and
+CLI adapters may filter or render those results, but they do not import Django
+models or rebuild result shapes.
 The projections opt into Django 6.1's `FETCH_RAISE` mode after declaring their
 `select_related()` plans. An omitted relationship therefore fails at the
 projection boundary instead of silently becoming an N+1 query in production.
@@ -61,6 +63,19 @@ exposes it as `dashboard_snapshot`. Infrastructure reads are likewise shared:
 health, and structured operation evidence without provider credentials. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
+
+Priority work has one source: every domain's `Insight` provider is composed by
+`domain_attention_items()`. The dashboard preview, `/action-items/`, and the
+machine snapshot project that same queue; none owns a parallel inbox. Derived
+topology findings enter through the infrastructure provider and drill into an
+evidence/remedy surface, where remedies remain references to registered
+capabilities rather than a second mutation path.
+
+Large projections run inside `application.projection.projection_scope()`. A
+reading may be reused while one answer is assembled and is discarded when that
+scope exits, eliminating repeated joins/counts without serving process-cached
+state to a later request. The dashboard's contact rows, unread total, and
+upstream health likewise arrive from one D1 request.
 
 The dashboard projection has an executable query budget. Growth that adds an
 unbounded query or N+1 relationship fetch fails CI before it becomes an
@@ -84,10 +99,10 @@ cannot expose search without deciding whose authority it acts under.
 `global_search` is the cross-scope use case behind the `/search/` page:
 relevance-ranked hits per scope with FTS5 `snippet()` match extracts,
 returned as structured `(text, is_match)` parts so each renderer escapes
-content and applies markup independently. Presentation metadata (group
-label, title field, badge, timestamp) lives on each `SearchDefinition`, so
-every surface labels a hit the same way. Scopes a principal cannot search
-are omitted from the result, not rendered empty. Contact submissions live
+content and applies markup independently. Presentation metadata (group label,
+title field, badge, timestamp) lives on the `SearchDefinition` carried by its
+`ResourceSpec`, so every surface labels a hit the same way. Scopes a principal
+cannot search are omitted from the result, not rendered empty. Contact submissions live
 in Cloudflare D1, not the local database, so the web view merges them as an
 eighth group beside the registry scopes.
 
@@ -130,6 +145,9 @@ name, effect, required permissions, and application handler. From that registry:
   success/error envelope;
 - the authenticated Streamable HTTP MCP endpoint exposes that catalog and
   executor to the web-independent CLI and agents;
+- the Command Center derives an authorized browser form and machine-contract
+  view for every capability, including plugin capabilities, without a
+  capability-specific view or template;
 - management commands remain an in-process break-glass adapter over the same
   registry; and
 - tests derive their contract assertions from the emitted schemas.
@@ -138,13 +156,74 @@ The generic executor is not generic database access. It can invoke only
 allowlisted operations in the registry, and every operation still crosses the
 typed principal, capability check, and application transaction.
 
-The machine HTTP adapter adds durable retry semantics around that executor.
+Reads use the parallel `ResourceSpec` contract. One declaration states whether
+a resource is searchable, listable, addressable, or any combination; binds its
+required capabilities; and supplies a strict Pydantic query schema. The API and
+MCP generic readers execute only registered handlers, while the search index
+derives its core definitions from the same specs. Plugin resource names and
+search scopes are collision-checked at composition startup, and handler
+signatures are checked before the first request.
+
+Managed infrastructure uses that same search projection. Provider and kind
+names such as `tailscale` or `cloudflare` therefore return the locally stored,
+clickable resources alongside the connection family that can reach them;
+Command Center keystrokes never invoke a provider.
+
+External access uses the third declarative registry, `ConnectionSpec`. It says
+which family exists, what abilities and provider scopes it can carry, which
+principal may inspect it, and how to read locally cached instances. Static
+discovery never invokes instance providers; the Connections workspace and
+machine list adapters do, after authorization. A plugin can therefore add an
+integration without adding host templates or adapter registrations, while a
+search keystroke can never trigger provider I/O. Runtime instances deliberately
+have no secret field and relationship links are restricted to local or HTTP(S)
+destinations. Endpoint metadata is display-only: URL userinfo, query strings,
+and fragments are rejected both when controller inventory enters HQ and when a
+plugin instance leaves its provider. The Connections security posture is a
+query-free projection over that already-authorized catalog and the current
+request; it does not perform a second sweep or claim to attest the external
+router and firewall boundary that the process cannot observe.
+
+The web Command Center is another projection of those three registries, not a
+fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a
+`CapabilitySpec.subject_resource` connects each operation to the domain it acts
+on. A matching `ConnectionAbility.subject_resource` plus `governs_kinds`
+connects a searched external-system ability to the registered commands that can
+act on those kinds; `ConnectionAbility.capability` names an exact command when
+the operation is not resource-shaped. This is a registry join, not a command
+invented from a credential scope: only a real typed handler can become
+executable. Every permitted command links to one generic execution surface. The host
+derives its controls from the canonical JSON Schema, rejects unknown and
+repeated form fields, uses the registered operator-facing target label, and
+derives eligible target choices through the authorized local `ResourceSpec`
+query; opening a command never calls a provider. A zero-network browser preview
+reflects the selected target and reason beside the registered handler, resource,
+authority, effect, and execution notes, then invokes `execute_capability`; it
+does not reimplement a handler. Retry keys are generated and hidden,
+infrastructure/destructive effects require explicit confirmation, and
+successful writes use POST/Redirect/GET. The same query
+filters resources, commands, and connection families while global search
+supplies live record hits. A plugin that contributes any spec appears in both
+discovery and execution without a host edit. Cross-registry references and
+reversible web routes are composition checks, not work repeated in an adapter.
+
+The infrastructure Topology workspace is the relational projection of the
+same declarations and observations. `ConnectionSpec` supplies abilities,
+`ConnectionInstance` supplies observed targets and dependencies, controller
+readings identify their observer, and `ManagedResource` supplies desired-state
+nodes. One application function emits the normalized node-and-edge graph used
+by web, HTTP API, and MCP. It stores no snapshot. Its actions point back to
+canonical capabilities and web use cases, so manipulating a node still crosses
+the existing authorization, validation, audit, transaction, policy, and retry
+boundaries rather than editing a parallel graph.
+
+The HTTP API and Command Center add durable retry semantics around that executor.
 Every state-changing capability requires an actor-scoped idempotency key; the
 canonical request hash and exact response commit in the same transaction as the
 domain operation. A dropped response or process restart can therefore be
-retried without repeating a non-idempotent plugin write. This transport guard
+retried without repeating a non-idempotent plugin write. This adapter guard
 does not replace domain idempotency, which continues to protect the same use
-case when invoked through web, MCP, or CLI.
+case when invoked through any interface.
 
 ## Source-of-truth map
 
@@ -156,7 +235,7 @@ everything would make the system less honest, not more unified.
 | Authored documentation | Obsidian vault | Validated metadata, relationships, and vault pointers |
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
-| Which connections exist, and what each reaches | 1Password, read by the controller | A timestamped report — never the credential, never a second list |
+| Which connections exist, what they permit, and what each reaches | Owning provider or 1Password/controller | A typed, timestamped `ConnectionInstance` — never the credential, never a second list |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Which machines exist, and what reaches them | Sweeps, plus a declaration for what nothing sweeps | Derived first; declared only where nothing can observe |
@@ -344,6 +423,24 @@ from a record the provider already holds. Everything derived from that — the
 service view, the generated create-and-edit forms, adoption — is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
+
+**One address-to-machine resolver, in `application/locate.py`.** Every surface
+that draws a line between two things HQ knows — a proxy and the box it forwards
+to, a credential and the machine it opens, a service and where it runs — is
+asking the same question, and four modules used to answer it independently. The
+four disagreed: one handled loopback, one consulted credentials, one read only
+declarations, one intersected sets of strings, so the same address named a
+machine on one page and nothing on the next. Surfaces now differ only in what
+evidence they hand the resolver, never in how it reads one.
+
+Two invariants keep that from re-splitting. **Names and addresses are separate
+namespaces**, because a machine may legitimately be named like an address while
+another answers at it, and one dictionary silently keeps whichever was written
+last. And **endpoints are parsed in one place** — `core.network.split_host_port`
+— because splitting at the last colon is right for `host:port` and wrong for
+every IPv6 form. A rendered label is never a join key; the resolver joins on
+declared addresses, sweep readings and connection endpoints, all of which are
+facts rather than presentation.
 
 **Identity is declared separately from hostnames**, and the distinction is not
 academic. While every provider held exactly one record per name — an AdGuard

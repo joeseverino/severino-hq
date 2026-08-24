@@ -8,6 +8,8 @@ what follows takes a fact away and asserts the page notices.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -15,7 +17,15 @@ from django.utils import timezone
 
 from control_plane.models import ProviderInventory
 
-from .connection import channel_of, connection, headers_of, hops_of
+from .connection import (
+    addresses_of,
+    addresses_of_hq,
+    channel_for_request,
+    channel_of,
+    connection,
+    headers_of,
+    hops_of,
+)
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -73,6 +83,15 @@ class ChannelTests(TestCase):
         with self.assertNumQueries(0):
             channel_of(A_TAILNET_ADDRESS)
 
+    @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8"])
+    def test_deciding_the_request_channel_also_costs_no_queries(self):
+        request = RequestFactory().get(
+            "/", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS
+        )
+
+        with self.assertNumQueries(0):
+            self.assertEqual(channel_for_request(request).id, "tailnet")
+
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class LayerTests(TestCase):
@@ -104,12 +123,78 @@ class LayerTests(TestCase):
             found = connection(a_request())
 
         self.assertTrue(found.holds, [layer.id for layer in found.failing])
+        self.assertTrue(all(layer.boundary for layer in found.layers))
+        self.assertTrue(all(layer.mechanism for layer in found.layers))
 
     def test_a_request_off_the_tailnet_says_so(self):
         with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True):
             found = connection(a_request(A_LAN_ADDRESS))
 
         self.assertFalse(self.layer(found, "channel").holds)
+
+    def test_an_undeclared_forwarding_peer_is_not_labeled_as_the_caller(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        with override_settings(SEVERINO_TRUSTED_PROXIES=[]):
+            found = connection(request)
+
+        self.assertTrue(found.untrusted_forwarding)
+        self.assertTrue(found.forwarded)
+        self.assertIsNone(found.device)
+        self.assertEqual(found.reported_device.label, "a-laptop")
+        self.assertEqual(found.caller_device.label, "a-laptop")
+        self.assertEqual(found.peer_label, "a-laptop")
+        self.assertEqual(found.peer_address, A_TAILNET_ADDRESS)
+        self.assertEqual(found.address, A_LAN_ADDRESS)
+        self.assertEqual(found.channel.id, "network")
+        self.assertEqual(found.path_label, "Via forwarding peer")
+        self.assertEqual(found.identity.tailnet_user, "")
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        found = connection(request)
+
+        self.assertFalse(found.untrusted_forwarding)
+        self.assertTrue(found.forwarded)
+        self.assertEqual(found.peer_label, "a-laptop")
+        self.assertEqual(found.address, A_TAILNET_ADDRESS)
+
+    def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
+        found = connection(a_request(A_LAN_ADDRESS, secure=True))
+
+        layer = self.layer(found, "transport")
+        self.assertTrue(layer.holds)
+        self.assertEqual(layer.evidence, "TLS")
+        self.assertEqual(found.transport, "TLS")
+
+    def test_a_plain_tailnet_request_names_wireguard_as_its_transport(self):
+        found = connection(a_request(secure=False))
+
+        layer = self.layer(found, "transport")
+        self.assertTrue(layer.holds)
+        self.assertEqual(layer.evidence, "WireGuard only")
+        self.assertEqual(found.transport, "WireGuard only")
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_a_proxied_tailnet_request_names_each_encrypted_segment(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META["HTTP_X_FORWARDED_FOR"] = A_TAILNET_ADDRESS
+
+        found = connection(request)
+
+        self.assertEqual(found.transport_path, "TLS to proxy · WireGuard to HQ")
+
+    def test_a_plain_lan_request_claims_no_verified_encryption(self):
+        found = connection(a_request(A_LAN_ADDRESS, secure=False))
+
+        layer = self.layer(found, "transport")
+        self.assertFalse(layer.holds)
+        self.assertEqual(layer.evidence, "No verified encryption")
+        self.assertEqual(found.transport, "No verified encryption")
 
     def test_the_gate_reports_when_it_is_not_being_enforced(self):
         """The check that would otherwise be a sentence rather than a fact."""
@@ -161,6 +246,16 @@ class LayerTests(TestCase):
         found = connection(a_request())
 
         self.assertFalse(self.layer(found, "policy").holds)
+        self.assertTrue(self.layer(found, "policy").conclusive)
+
+    def test_a_policy_question_the_sweep_did_not_ask_is_unverified_not_denied(self):
+        found = connection(a_request(host="hq.example.test:8443"))
+
+        layer = self.layer(found, "policy")
+        self.assertFalse(layer.holds)
+        self.assertFalse(layer.conclusive)
+        self.assertEqual(layer.state, "unknown")
+        self.assertIn("unverified", found.summary)
 
     def test_a_device_nothing_swept_is_not_reported_as_a_known_node(self):
         found = connection(a_request("100.64.0.77"))
@@ -183,6 +278,32 @@ class IdentityTests(TestCase):
         """The shape a stolen session would have."""
 
         self.assertFalse(connection(a_request(A_LAN_ADDRESS)).identity.corroborated)
+
+    @override_settings(
+        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
+    )
+    def test_a_configured_sso_provider_is_not_attributed_to_a_password_session(self):
+        request = a_request()
+        request.session = {
+            "_auth_user_backend": "django.contrib.auth.backends.ModelBackend"
+        }
+
+        identity = connection(request).identity
+
+        self.assertEqual(identity.route, "password")
+        self.assertEqual(identity.provider, "")
+
+    @override_settings(
+        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
+    )
+    def test_the_provider_that_signed_an_oidc_session_is_named(self):
+        request = a_request()
+        request.session = {"_auth_user_backend": "core.oidc.HQOIDCAuthenticationBackend"}
+
+        identity = connection(request).identity
+
+        self.assertEqual(identity.route, "single sign-on")
+        self.assertEqual(identity.provider, "identity.example.test")
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -242,6 +363,68 @@ class ConnectionPageTests(TestCase):
         response = self.client.get(reverse("connection"))
 
         self.assertContains(response, "data-connection-panel")
+        self.assertContains(response, "Admission decision")
+        self.assertContains(
+            response,
+            "data-connection-control",
+            count=len(response.context["connection"].layers),
+        )
+        self.assertContains(response, "Outbound authority")
+        self.assertContains(response, "Derived topology")
+        self.assertContains(response, "data-connection-protocol")
+        self.assertContains(response, "data-connection-layers")
+        self.assertContains(response, "Storage, backup, and secret custody")
+        self.assertContains(response, "The identities and interfaces behind both ends")
+        self.assertContains(response, "Open protocol evidence to read the response.")
+        self.assertNotContains(response, 'id="conn-decision-title"')
+        self.assertNotContains(response, 'id="connection-controls"')
+
+    def test_identity_dates_use_hqs_normal_date_format(self):
+        self.client.force_login(self.user)
+        self.user.last_login = datetime(2026, 8, 23, 21, 12, tzinfo=UTC)
+        self.user.save(update_fields=("last_login",))
+
+        response = self.client.get(reverse("connection"))
+
+        self.assertContains(response, "Aug 23, 2026, 4:12 p.m.")
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class AddressEvidenceTests(TestCase):
+    def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
+        a_tailnet(
+            a_device(
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                direct_endpoint="192.0.2.50:41641",
+                endpoints=["192.0.2.50:41641"],
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        found = connection(a_request())
+        rows = addresses_of(found)
+
+        self.assertIsNotNone(found.tailnet_observed_at)
+        self.assertIn(
+            "the last Tailnet sweep observed this tunnel endpoint",
+            {row.source for row in rows},
+        )
+
+    def test_hq_tunnel_endpoints_are_not_presented_as_service_addresses(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS),
+            a_device(
+                "hq-host",
+                "100.64.0.9",
+                observer=True,
+                endpoints=["192.0.2.9:41641"],
+            ),
+        )
+
+        rows = addresses_of_hq(connection(a_request()))
+
+        self.assertEqual([row.value for row in rows], ["100.64.0.9"])
 
 
 @override_settings(
@@ -460,3 +643,106 @@ class DeclinedHeaderTests(TestCase):
         states = [h.state for h in found]
 
         self.assertLess(states.index("declined"), states.index("ignored"))
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class ServingDeviceTests(TestCase):
+    """Which node HQ says it is running on.
+
+    The sweep's ``self`` flag marks the device whose daemon took the reading --
+    the controller's host. That is the same machine as HQ's only when the two
+    share one, and HQ is not obliged to run there.
+    """
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        # The controller swept from one node; HQ runs on the other.
+        a_tailnet(
+            a_device("example-controller", "100.64.0.9", observer=True),
+            a_device(
+                "example-registered-name",
+                "100.64.0.5",
+                dns_name="example-host.example-tailnet.ts.net",
+            ),
+        )
+        # Only the declaration holds both halves: the address the host answers
+        # at, and the address the tailnet knows it by.
+        ManagedResource.objects.create(
+            key="example-host",
+            kind="machine",
+            spec={
+                "name": "example-host",
+                "addresses": ["192.0.2.10", "100.64.0.5"],
+                "role": "example",
+            },
+        )
+
+    def serving(self, own):
+        from unittest import mock
+
+        from .connection import _serving_device
+        from .infrastructure import declared_machines
+        from . import tailnet
+
+        with mock.patch("application.connection._own_addresses", return_value=frozenset(own)):
+            return _serving_device(tailnet.devices(), declared_machines())
+
+    def test_locating_hq_never_puts_dns_in_the_request_path(self):
+        from unittest import mock
+
+        from .connection import _own_addresses
+
+        _own_addresses.cache_clear()
+        try:
+            with (
+                mock.patch(
+                    "application.connection.socket.getaddrinfo",
+                    side_effect=AssertionError("DNS must not be consulted"),
+                ),
+                mock.patch(
+                    "application.connection.socket.socket", side_effect=OSError
+                ),
+            ):
+                self.assertEqual(_own_addresses(), frozenset({"127.0.0.1", "::1"}))
+        finally:
+            _own_addresses.cache_clear()
+
+    def test_the_node_hq_runs_on_is_found_by_its_own_address(self):
+        found = self.serving({"100.64.0.5"})
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-registered-name")
+
+    def test_a_lan_only_host_still_resolves_through_its_declaration(self):
+        """The bridge case: the tailnet address is on an interface the host's
+        own hostname does not resolve to, so only the declaration joins them."""
+
+        found = self.serving({"192.0.2.10"})
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-registered-name")
+
+    def test_the_observer_flag_is_not_mistaken_for_where_hq_runs(self):
+        found = self.serving({"192.0.2.10"})
+
+        self.assertNotEqual(found.name, "example-controller")
+
+    def test_a_host_that_cannot_place_itself_falls_back_to_the_observer(self):
+        found = self.serving(set())
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "example-controller")
+
+    def test_an_unrecognised_address_never_guesses_a_node(self):
+        found = self.serving({"198.51.100.7"})
+
+        self.assertEqual(found.name, "example-controller")
+
+    def test_the_label_is_what_names_a_node_to_a_person(self):
+        """Both sides of the panel must resolve a name the same way."""
+
+        found = self.serving({"100.64.0.5"})
+
+        self.assertEqual(found.label, "example-host")
+        self.assertNotEqual(found.label, found.name)

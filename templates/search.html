@@ -1,22 +1,69 @@
 {% extends "base.html" %}
-{% block title %}Search · {{ SITE_NAME }}{% endblock %}
+{% block title %}Command Center · {{ SITE_NAME }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Search</h1>
-    <p class="page-lede">One query across every HQ record — ranked by relevance, matches highlighted.</p>
+    <h1>Command Center</h1>
+    <p class="page-lede">Find any record, resource, connection, or operation HQ can perform.</p>
   </div>
 </div>
 
 <form class="filter-bar search-page-form" method="get" data-table-toolbar>
-  <input type="search" name="q" value="{{ q }}" placeholder="Search HQ…" autofocus>
-  <button type="submit">Search</button>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" autofocus>
+  <button type="submit">Find</button>
 </form>
 
 <div data-search-results>
+  <div class="command-center-grid">
+    {% if not q or discovered_connections %}
+    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections empty_message="No connections are declared yet." %}
+    {% endif %}
+
+    {% if not q or discovered_resources %}
+    {% include "partials/_discovery_catalog.html" with title="Resources" items=discovered_resources empty_message="No resources match this query." %}
+    {% endif %}
+
+    {% if not q or discovered_views %}
+    {% include "partials/_discovery_catalog.html" with title="Views" items=discovered_views empty_message="No views match this query." %}
+    {% endif %}
+
+    {% if not q or discovered_checks %}
+    {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks empty_message="No checks match this query." %}
+    {% endif %}
+
+    {% if not q or discovered_commands %}
+    <details class="card discovery-group discovery-commands" data-preserve-open="command-center-commands"{% if q %} open{% endif %}>
+      <summary class="section-head">
+        <h2>Commands</h2>
+        <span class="count">{{ discovered_commands|length }}</span>
+      </summary>
+      {% if discovered_commands %}
+      <ul class="discovery-list">
+        {% for item in discovered_commands %}
+        <li>
+          <a class="discovery-link" href="{{ item.url }}">
+            <span class="discovery-main">
+              <strong>{{ item.label }}</strong>
+              <span class="muted">{{ item.summary }}</span>
+            </span>
+            <span class="discovery-meta">
+              <code>{{ item.name }}</code>
+              {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No commands match this query.</p>
+      {% endif %}
+    </details>
+    {% endif %}
+  </div>
+
 {% if q %}
   <div class="search-summary">
-    <p class="muted">{{ total }} result{{ total|pluralize }} for <strong>{{ q }}</strong></p>
+    <p class="muted">{{ total }} record{{ total|pluralize }} for <strong>{{ q }}</strong></p>
     {% if total %}
     <nav class="search-scopes" aria-label="Result groups">
       {% for group in groups %}{% if group.count %}
@@ -78,16 +125,14 @@
   </section>
   {% endif %}
 
-  {% if not total %}
+  {% if not total and not discovery_total %}
   <div class="empty">
-    <p>No results for <strong>{{ q }}</strong>. Prefix matching starts at two characters — try fewer or shorter terms.</p>
+    <p>No records, resources, or commands match <strong>{{ q }}</strong>.</p>
+    <p class="muted">Try a domain, operation, identifier, or shorter term.</p>
   </div>
   {% endif %}
 {% else %}
-  <div class="empty">
-    <p>Search projects, content, docs, assets, expenses, receipts, contacts, and the audit log.</p>
-    <p class="muted">Results are ranked by relevance with matched terms highlighted.</p>
-  </div>
+  <p class="command-hint muted"><kbd>⌘ K</kbd> opens this search from anywhere. Type a domain such as <strong>projects</strong>, or an operation such as <strong>sync</strong>.</p>
 {% endif %}
 </div>
 {% endblock %}

@@ -4,6 +4,7 @@ import uuid
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -21,6 +22,8 @@ from application.infrastructure import (
     PolicyError,
     certificate_renewal_allowed,
     controller_contract,
+    declared_machines,
+    delivery_targets,
     operation_summary,
     request_certificate_renewal,
     request_lifecycle,
@@ -46,9 +49,12 @@ from application.certificates import (
     UploadCertificateCommand,
     store_certificate,
 )
-from application.connections import connection_readings
+from application.connections import connection_catalog
+from application.connection_security import connection_security_posture
+from application.findings import derive_findings, finding_rules, rule_for
+from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
 from application.machines import container_context, machine, machine_catalog
-from application.services import machine_link
+from application.services import machine_link, whereabouts
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -57,8 +63,8 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
-from core.network import client_ip
 from application.service_context import sections_for
+from application.ui import PageNavigation, PageSection
 from application.services import (
     CONTAINER_KIND,
     alias_target,
@@ -310,17 +316,52 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
 
 
-def _origin_machine(resource):
-    """The machine a resource forwards to, if its provider says where it serves."""
+def _origin_machine(resource, machines=None, at=None, targets=None):
+    """The machine a resource forwards to, if its provider says where it serves.
+
+    The readings are passed in by a page asking this of every row, where taking
+    them here is the same four queries repeated once per resource.
+    """
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:
         return None
     try:
-        origin = provider.origin(resolved_spec(resource))
+        origin = provider.origin(resolved_spec(resource, targets))
     except (KeyError, TypeError, ValueError):
         return None
-    return machine_link(origin) if origin else None
+    return machine_link(origin, machines, at) if origin else None
+
+
+def _provider_machine(resource):
+    """The one machine hosting the provider that manages this resource.
+
+    The resource's origin is where it sends traffic. The provider connection
+    is where the proxy, DNS server, or controller itself runs. Conflating those
+    two edges made an NPM proxy look as though it ran on its upstream service.
+    """
+
+    from application.connections import connection_readings
+    from application.machines import machine_catalog
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None:
+        return None
+    catalog = machine_catalog()
+    known = {item.name.lower(): item for item in catalog}
+    for item in catalog:
+        for alias in item.aliases:
+            known.setdefault(alias.lower(), item)
+    matches = {
+        (machine.name, machine.url)
+        for reading in connection_readings()
+        if reading.provider in provider.connection_providers
+        if (machine := known.get(reading.controller_id.lower())) is not None
+    }
+    if len(matches) != 1:
+        return None
+    name, url = matches.pop()
+    return {"name": name, "url": url}
 
 
 def _service_links(resource) -> tuple[tuple[str, str], ...]:
@@ -803,6 +844,16 @@ class ServiceDetailView(LoginRequiredMixin, TemplateView):
         # Everything else HQ holds about this name, gathered by the name. Only
         # here: the board builds every service and needs none of it.
         context["sections"] = sections_for(context["service"])
+        context["page_navigation"] = PageNavigation(
+            (
+                PageSection("overview", "Overview"),
+                *(
+                    PageSection(section.id, section.label)
+                    for section in context["sections"]
+                ),
+                PageSection("resources", "Resources"),
+            )
+        )
         # Two filters, and both are readings rather than opinions: what the
         # controller says it implements for a container, and what the container's
         # current state makes worth asking. Offering all three always means
@@ -939,7 +990,9 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         # carries the addresses it answers at -- so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        context["is_this_device"] = client_ip(self.request) in found.addresses
+        from application.connection import displayed_client_ip
+
+        context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["container_kind"] = CONTAINER_KIND
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
@@ -966,20 +1019,155 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        readings = connection_readings()
-        context["connections"] = readings
-        context["unlabelled"] = [item for item in readings if not item.provider]
+        groups = connection_catalog(principal=web_principal(self.request.user))
+        context["connection_groups"] = groups
+        posture = connection_security_posture(groups, request=self.request)
+        context["connection_posture"] = posture
+        context["connection_count"] = posture.connection_count
+        core = next(
+            (
+                group
+                for group in groups
+                if group.spec.name == "infrastructure.controllers"
+            ),
+            None,
+        )
+        context["unlabelled"] = [
+            connection
+            for connection in (core.connections if core else ())
+            if connection.instance.kind == "unclassified"
+        ]
         # The oldest of them, because the page's honesty depends on the staler
         # half: reporting the newest would describe a controller that is still
         # sweeping as though every row were current.
-        context["observed_at"] = min(
-            (item.observed_at for item in readings), default=None
+        context["observed_at"] = posture.oldest_observed_at
+        return context
+
+
+class TopologyView(LoginRequiredMixin, TemplateView):
+    """The live, actionable graph derived by the application layer."""
+
+    template_name = "control_plane/topology.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        topology = derive_topology(principal=web_principal(self.request.user))
+        active_lens = lens_for(self.request.GET.get("lens", "").strip())
+        if active_lens is not None:
+            topology = apply_lens(topology, active_lens)
+        by_id = {node.id: node for node in topology.nodes}
+        neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
+        for edge in topology.edges:
+            neighbors[edge.source].add(edge.target)
+            neighbors[edge.target].add(edge.source)
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for node in topology.nodes:
+            groups.setdefault(node.kind, []).append(
+                {
+                    "node": node,
+                    "neighbors": " ".join(sorted(neighbors[node.id])),
+                    "degree": len(neighbors[node.id]),
+                }
+            )
+        labels = {
+            "controller": "Controllers",
+            "connection": "Connections",
+            "ability": "Abilities",
+            "resource": "Resources",
+            "target": "Targets",
+            "dependency": "Dependencies",
+        }
+        requested_focus = self.request.GET.get("focus", "")
+        context.update(
+            {
+                "topology": topology,
+                "topology_groups": tuple(
+                    {
+                        "kind": kind,
+                        "label": labels.get(kind, kind.replace("_", " ").title()),
+                        "items": items,
+                    }
+                    for kind, items in groups.items()
+                ),
+                "topology_edges": tuple(
+                    {
+                        "edge": edge,
+                        "source": by_id[edge.source],
+                        "target": by_id[edge.target],
+                    }
+                    for edge in topology.edges
+                ),
+                # A lens can exclude the node a shared link focused. Validating
+                # focus against the narrowed set keeps the two composable.
+                "focus_node": (
+                    requested_focus if requested_focus in by_id else ""
+                ),
+                "topology_lenses": topology_lenses(),
+                "active_lens": active_lens,
+            }
         )
-        # Which controller reported a connection only matters once there are
-        # two. Printed unconditionally it repeated one machine's name under
-        # every row, which on a phone was a third of the page saying nothing.
-        context["name_the_controller"] = (
-            len({item.controller_id for item in readings}) > 1
+        return context
+
+
+class FindingsView(LoginRequiredMixin, TemplateView):
+    """Evidence and safe existing actions for claims from the live topology."""
+
+    template_name = "control_plane/findings.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        principal = web_principal(self.request.user)
+        topology = derive_topology(principal=principal)
+        requested_rule = self.request.GET.get("rule", "").strip()
+        active_rule = rule_for(requested_rule)
+        raised = derive_findings(
+            topology,
+            principal=principal,
+            rule=active_rule.name if active_rule else "",
+        )
+        by_id = {node.id: node for node in topology.nodes}
+        entries = []
+        for finding in raised:
+            subject = by_id.get(finding.subject)
+            topology_url = ""
+            if subject is not None:
+                topology_url = (
+                    f"{reverse('control_plane:topology')}?"
+                    f"{urlencode({'focus': subject.id})}#map"
+                )
+            remedies = []
+            if subject is not None:
+                for remedy in finding.remedies:
+                    action = next(
+                        (
+                            candidate
+                            for candidate in subject.actions
+                            if candidate.capability == remedy.capability
+                            and candidate.target == remedy.target
+                        ),
+                        None,
+                    )
+                    if action is not None:
+                        remedies.append(action)
+            entries.append(
+                {
+                    "finding": finding,
+                    "subject": subject,
+                    "topology_url": topology_url,
+                    "remedies": tuple(remedies),
+                }
+            )
+
+        counts: dict[str, int] = {}
+        for finding in raised:
+            counts[finding.severity] = counts.get(finding.severity, 0) + 1
+        context.update(
+            {
+                "finding_entries": tuple(entries),
+                "finding_rules": finding_rules(),
+                "active_rule": active_rule,
+                "finding_counts": counts,
+            }
         )
         return context
 
@@ -991,8 +1179,17 @@ class InfrastructureListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Read once for the whole page. Every row that forwards somewhere asks
+        # the same question of the same few tables, and asked per row it is a
+        # query budget that grows with the estate.
+        machines = declared_machines()
+        targets = delivery_targets()
+        at = whereabouts(machines)
         for resource in context["resources"]:
             resource.control_health = resource_health(resource)
+            # Where it sends traffic, named rather than addressed, matching
+            # what the resource's own page has always said.
+            resource.origin_machine = _origin_machine(resource, machines, at, targets)
             # What it is, in the provider's own words. A list of keys alone
             # said "jseverino-com-caa-2" twenty times over -- names HQ invented,
             # each describing nothing.
@@ -1045,6 +1242,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         # provider that declares an origin is one whose thing runs on a machine,
         # so the machine is a link rather than an address printed in a readout.
         context["origin_machine"] = _origin_machine(self.object)
+        context["provider_machine"] = _provider_machine(self.object)
         # A container declares identity and nothing else, so everything worth
         # opening the page for is a join: which machine that name is, what the
         # container is doing, and which services reach it through the ports it

@@ -16,10 +16,30 @@ Portainer rather than of editing anything here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime
+import inspect
+from typing import Callable
 
+from django.core.exceptions import ImproperlyConfigured
 from control_plane.models import ProviderConnection
 from control_plane.providers import PROVIDERS
+
+from .contracts import (
+    DJANGO_ROUTE,
+    DOTTED_NAME,
+    EFFECTS,
+    SCOPE_NAME,
+    endpoint_has_private_parts,
+)
+from .action_links import (
+    ActionLink,
+    capability_action_link,
+    connection_action_links,
+    connection_relationship_link,
+    recommend_connection_action,
+)
+from .security import AuthorizationError, Capability, Principal
 
 
 @dataclass(frozen=True)
@@ -34,11 +54,7 @@ class ConnectionReading:
     reachable: bool
     probed: bool
     detail: str
-    observed_at: object
-    # The kinds of thing this connection is what makes possible. Derived from
-    # the providers rather than stored, so a provider added tomorrow lists
-    # itself against the connections that could serve it.
-    supplies: tuple[str, ...]
+    observed_at: datetime
     # The machines this reaches, as (name, url). What a credential opens is the
     # most useful thing about it and the page named them as plain text.
     machines: tuple[tuple[str, str], ...] = ()
@@ -53,18 +69,158 @@ class ConnectionReading:
         return "reachable" if self.probed else "unprobed"
 
 
-def _supplies(provider: str) -> tuple[str, ...]:
-    """Which resource kinds this sort of connection can stand behind."""
+@dataclass(frozen=True)
+class ConnectionAbility:
+    """One thing a connection permits HQ to do, without credential material."""
 
-    if not provider:
-        return ()
-    return tuple(
-        sorted(
-            spec.label or kind
-            for kind, spec in PROVIDERS.items()
-            if provider in spec.connection_providers
+    name: str
+    label: str
+    summary: str
+    effect: str = "read"
+    required_scopes: tuple[str, ...] = ()
+    capability: str = ""
+    # Resource kinds this ability governs. The relation is explicit because an
+    # ability name describes what a connection can do; it is not inherently a
+    # ManagedResource kind, and separate connection families may reuse it.
+    governs_kinds: tuple[str, ...] = ()
+    # The canonical resource catalog these governed kinds belong to. Commands
+    # against that resource can then be discovered from this ability without a
+    # provider-specific command list.
+    subject_resource: str = ""
+
+
+@dataclass(frozen=True)
+class ConnectionLink:
+    """A safe relationship from a connection to something HQ can name."""
+
+    label: str
+    url: str = ""
+    # Explicit identity for a ManagedResource dependency. A rendered label is
+    # presentation and must never become a join key by coincidence.
+    resource_key: str = ""
+
+
+@dataclass(frozen=True)
+class ConnectionFact:
+    """A small provider-owned fact that is useful in a generic connection row."""
+
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
+class ConnectionInstance:
+    """One configured connection as its owning domain last observed it."""
+
+    id: str
+    label: str
+    kind: str
+    status: str
+    status_label: str
+    detail: str = ""
+    endpoint: str = ""
+    observed_at: datetime | None = None
+    granted_scopes: tuple[str, ...] = ()
+    scopes_known: bool = False
+    ability_names: tuple[str, ...] = ()
+    targets: tuple[ConnectionLink, ...] = ()
+    dependencies: tuple[ConnectionLink, ...] = ()
+    facts: tuple[ConnectionFact, ...] = ()
+    # The observer that supplied this reading. Optional because an extension
+    # may read an account directly rather than through an infrastructure
+    # controller; when present it gives topology a real edge instead of asking
+    # a rendered label to carry identity.
+    controller_id: str = ""
+
+
+@dataclass(frozen=True)
+class ConnectionSpec:
+    """One declaration of a connection family and its cached instance provider."""
+
+    name: str
+    label: str
+    summary: str
+    required_capability: Capability | str | tuple[Capability | str, ...]
+    instance_provider: Callable[[], tuple[ConnectionInstance, ...]]
+    abilities: tuple[ConnectionAbility, ...] = ()
+    web_route: str = "control_plane:connections"
+    management_route: str = ""
+    setup_route: str = ""
+    documentation_url: str = ""
+    secret_store: str = ""
+
+    @property
+    def required_capabilities(self) -> tuple[Capability | str, ...]:
+        if isinstance(self.required_capability, tuple):
+            return self.required_capability
+        return (self.required_capability,)
+
+
+@dataclass(frozen=True)
+class ConnectionGroup:
+    """A permitted spec beside the instances it produced."""
+
+    spec: ConnectionSpec
+    connections: tuple["ConnectionView", ...]
+
+
+@dataclass(frozen=True)
+class ConnectionAbilityState:
+    ability: ConnectionAbility
+    available: bool | None
+    missing_scopes: tuple[str, ...] = ()
+    action: ActionLink | None = None
+
+
+@dataclass(frozen=True)
+class ConnectionView:
+    instance: ConnectionInstance
+    abilities: tuple[ConnectionAbilityState, ...]
+    actions: tuple[ActionLink, ...] = ()
+
+    @property
+    def recommended_action(self) -> ActionLink | None:
+        return next((action for action in self.actions if action.recommended), None)
+
+    @property
+    def other_actions(self) -> tuple[ActionLink, ...]:
+        """Useful row actions, excluding this page and the promoted next move."""
+
+        return tuple(
+            action
+            for action in self.actions
+            if action.name != "open" and not action.recommended
         )
+
+
+def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
+    """The machines one connection opens, named wherever HQ honestly can.
+
+    Three ways a credential names a machine, tried in order of how directly it
+    says so: the machines it reports reaching, its own name when that turns out
+    to be a machine, and last the address it points at.
+
+    The last is the one this page was missing. A credential that opens a shell
+    on a machine HQ was told about printed the address and nothing else, on the
+    one page whose subject is what HQ can reach -- while the machine's own page
+    sat one click away under a name.
+
+    Silence when none of the three lands, which leaves the endpoint column
+    saying exactly what HQ knows.
+    """
+
+    reached = tuple(
+        (name, known[name.lower()].url) for name in row.reaches if name.lower() in known
     )
+    if reached:
+        return reached
+    if row.connection_ref.lower() in known:
+        found = known[row.connection_ref.lower()]
+        return ((found.name, found.url),)
+    name = located.at(row.endpoint)
+    if name and name.lower() in known:
+        return ((name, known[name.lower()].url),)
+    return ()
 
 
 def connection_readings() -> tuple[ConnectionReading, ...]:
@@ -74,9 +230,30 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
 
     from control_plane.models import ManagedResource
 
+    from .locate import index_of
     from .machines import machine_catalog
 
-    known = {item.name.lower(): item for item in machine_catalog()}
+    catalog = machine_catalog()
+    # Every name the board has for a machine, its own and the ones it folded
+    # in. A credential whose ref turned out to be a second name for a machine
+    # already on the board linked nowhere, because only the kept name was here
+    # -- the row said "reaches nothing HQ has a page for" about a machine whose
+    # page it had just been folded into.
+    known = {item.name.lower(): item for item in catalog}
+    # A kept name is never displaced by somebody else's alias: the board chose
+    # the kept name deliberately, and an alias that happens to collide with one
+    # would otherwise send that machine's row to a different page.
+    for item in catalog:
+        for alias in item.aliases:
+            known.setdefault(alias.lower(), item)
+    # And by address, through the same resolver every other surface uses, so a
+    # credential pointing at a machine HQ knows names it rather than printing a
+    # bare endpoint. The catalogue's own addresses are the evidence: a machine
+    # is whatever the board decided it was, joined on a fact rather than on the
+    # label a template happens to render.
+    located = index_of(
+        declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
+    )
     using: dict[str, list[tuple[str, str]]] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
         ref = str(resource.spec.get("connection_ref", "")).strip()
@@ -98,21 +275,474 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             probed=row.probed,
             detail=row.detail,
             observed_at=row.observed_at,
-            supplies=_supplies(row.provider),
-            machines=tuple(
-                (name, known[name.lower()].url)
-                for name in row.reaches
-                if name.lower() in known
-            )
-            or (
-                ((row.connection_ref, known[row.connection_ref.lower()].url),)
-                if row.connection_ref.lower() in known
-                else ()
-            ),
+            machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
         )
         for row in ProviderConnection.objects.all()
     )
+
+
+def _controller_contract() -> tuple[
+    tuple[ConnectionAbility, ...], dict[str, tuple[str, ...]]
+]:
+    """Derive abilities and their connection kinds in one provider scan."""
+
+    abilities = []
+    by_provider: dict[str, list[str]] = {}
+    for kind, spec in sorted(PROVIDERS.items()):
+        if not spec.connection_providers:
+            continue
+        abilities.append(
+            ConnectionAbility(
+                name=kind,
+                label=spec.label or kind,
+                summary=spec.summary,
+                effect="destructive" if spec.destructive else "infrastructure_change",
+                governs_kinds=(kind,),
+                subject_resource="infrastructure.resources",
+            )
+        )
+        for provider in spec.connection_providers:
+            by_provider.setdefault(provider, []).append(kind)
+    return tuple(abilities), {
+        provider: tuple(kinds) for provider, kinds in by_provider.items()
+    }
+
+
+def _controller_instances(
+    ability_names: dict[str, tuple[str, ...]],
+) -> tuple[ConnectionInstance, ...]:
+    instances = []
+    readings = connection_readings()
+    name_controller = len({item.controller_id for item in readings}) > 1
+    for reading in readings:
+        targets = (
+            tuple(ConnectionLink(name, url) for name, url in reading.machines)
+            if reading.machines
+            else tuple(ConnectionLink(name) for name in reading.reaches)
+        )
+        instances.append(
+            ConnectionInstance(
+                id=f"{reading.controller_id}:{reading.connection_ref}",
+                label=reading.connection_ref,
+                kind=reading.provider or "unclassified",
+                status=(
+                    "serious"
+                    if not reading.reachable
+                    else "good"
+                    if reading.probed
+                    else "neutral"
+                ),
+                status_label=reading.status,
+                detail=reading.detail,
+                endpoint=reading.endpoint,
+                observed_at=reading.observed_at,
+                ability_names=ability_names.get(reading.provider, ()),
+                targets=targets,
+                dependencies=tuple(
+                    ConnectionLink(key, url, resource_key=key)
+                    for key, url in reading.resources
+                ),
+                facts=tuple(
+                    fact
+                    for fact in (
+                        ConnectionFact("Controller", reading.controller_id)
+                        if name_controller and reading.controller_id
+                        else None,
+                    )
+                    if fact is not None
+                ),
+                controller_id=reading.controller_id,
+            )
+        )
+    return tuple(instances)
+
+
+def _controller_connection_spec() -> ConnectionSpec:
+    abilities, ability_names = _controller_contract()
+    return ConnectionSpec(
+        name="infrastructure.controllers",
+        label="Infrastructure connections",
+        summary="Credentials rendered to controllers and the systems they can reach.",
+        required_capability=Capability.READ,
+        instance_provider=lambda: _controller_instances(ability_names),
+        abilities=abilities,
+        secret_store="1Password",
+    )
+
+
+def _capability_names(spec: ConnectionSpec) -> tuple[str, ...]:
+    return tuple(
+        item.value if isinstance(item, Capability) else item
+        for item in spec.required_capabilities
+    )
+
+
+def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
+    if not isinstance(ability, ConnectionAbility):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} returned a non-ConnectionAbility."
+        )
+    if not DOTTED_NAME.fullmatch(ability.name):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} has invalid ability {ability.name!r}."
+        )
+    if not ability.label.strip() or not ability.summary.strip():
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} needs a label and summary."
+        )
+    if ability.effect not in EFFECTS:
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid effect {ability.effect!r}."
+        )
+    if len(ability.required_scopes) != len(set(ability.required_scopes)) or any(
+        not SCOPE_NAME.fullmatch(scope) for scope in ability.required_scopes
+    ):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid required scopes."
+        )
+    if ability.capability and not DOTTED_NAME.fullmatch(ability.capability):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid capability."
+        )
+    if len(ability.governs_kinds) != len(set(ability.governs_kinds)) or any(
+        not DOTTED_NAME.fullmatch(kind) for kind in ability.governs_kinds
+    ):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid governed kinds."
+        )
+    if ability.subject_resource and not DOTTED_NAME.fullmatch(ability.subject_resource):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has an invalid subject resource."
+        )
+
+
+def _validate_connection_spec(spec: ConnectionSpec) -> None:
+    if not isinstance(spec, ConnectionSpec):
+        raise ImproperlyConfigured(
+            "A connection provider returned something other than ConnectionSpec."
+        )
+    if not DOTTED_NAME.fullmatch(spec.name):
+        raise ImproperlyConfigured(f"Invalid connection name {spec.name!r}.")
+    if not spec.label.strip() or not spec.summary.strip():
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} needs a label and summary."
+        )
+    required = _capability_names(spec)
+    if (
+        not required
+        or len(required) != len(set(required))
+        or any(not DOTTED_NAME.fullmatch(item) for item in required)
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} must declare unique valid capabilities."
+        )
+    try:
+        inspect.signature(spec.instance_provider).bind()
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} instance provider must take no arguments."
+        ) from exc
+    for route in (spec.web_route, spec.management_route, spec.setup_route):
+        if route and not DJANGO_ROUTE.fullmatch(route):
+            raise ImproperlyConfigured(
+                f"Connection {spec.name!r} has invalid route {route!r}."
+            )
+    if spec.documentation_url and not _safe_link_url(spec.documentation_url):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} has an invalid documentation URL."
+        )
+    for ability in spec.abilities:
+        _validate_ability(spec, ability)
+    names = [ability.name for ability in spec.abilities]
+    if len(names) != len(set(names)):
+        raise ImproperlyConfigured(f"Connection {spec.name!r} repeats an ability name.")
+
+
+def connection_specs() -> tuple[ConnectionSpec, ...]:
+    from .plugins import plugin_connection_specs
+
+    specs = (_controller_connection_spec(), *plugin_connection_specs())
+    for spec in specs:
+        _validate_connection_spec(spec)
+    names = [spec.name for spec in specs]
+    if len(names) != len(set(names)):
+        raise ImproperlyConfigured(
+            "Duplicate connection name across HQ core and plugins."
+        )
+    return specs
+
+
+def _permitted(spec: ConnectionSpec, principal: Principal) -> bool:
+    try:
+        for capability in spec.required_capabilities:
+            principal.require(capability)
+    except AuthorizationError:
+        return False
+    return True
+
+
+def _validate_instance(
+    spec: ConnectionSpec, instance: ConnectionInstance
+) -> ConnectionInstance:
+    if not isinstance(instance, ConnectionInstance):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} emitted a non-ConnectionInstance."
+        )
+    if (
+        not instance.id.strip()
+        or not instance.label.strip()
+        or not instance.kind.strip()
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} emitted an incomplete instance."
+        )
+    if instance.status not in {"good", "attention", "serious", "neutral"}:
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has invalid status {instance.status!r}."
+        )
+    if not instance.status_label.strip():
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
+    if instance.observed_at is not None and not isinstance(
+        instance.observed_at, datetime
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has an invalid observation time."
+        )
+    if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} endpoint contains private URL parts."
+        )
+    if not isinstance(instance.controller_id, str) or (
+        instance.controller_id
+        and instance.controller_id != instance.controller_id.strip()
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has an invalid controller id."
+        )
+    if len(instance.granted_scopes) != len(set(instance.granted_scopes)) or any(
+        not SCOPE_NAME.fullmatch(scope) for scope in instance.granted_scopes
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has invalid granted scopes."
+        )
+    known = {ability.name for ability in spec.abilities}
+    unknown = sorted(set(instance.ability_names) - known)
+    if unknown:
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} references unknown abilities: "
+            f"{', '.join(unknown)}."
+        )
+    for collection in (instance.targets, instance.dependencies):
+        if any(
+            not isinstance(link, ConnectionLink)
+            or not link.label.strip()
+            or (link.url and not _safe_link_url(link.url))
+            or not isinstance(link.resource_key, str)
+            or (link.resource_key and link.resource_key != link.resource_key.strip())
+            for link in collection
+        ):
+            raise ImproperlyConfigured(
+                f"Connection {instance.id!r} has an invalid relationship."
+            )
+    if any(
+        not isinstance(fact, ConnectionFact)
+        or not fact.label.strip()
+        or not fact.value.strip()
+        for fact in instance.facts
+    ):
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
+    return instance
+
+
+def _safe_link_url(url: str) -> bool:
+    """Allow explicit web URLs and local paths, never executable schemes."""
+
+    return url.startswith(("http://", "https://")) or (
+        url.startswith("/") and not url.startswith("//")
+    )
+
+
+def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
+    """Every permitted connection family and its locally cached instances."""
+
+    groups = []
+    for spec in connection_specs():
+        if not _permitted(spec, principal):
+            continue
+        instances = _connection_instances(spec)
+        abilities = {ability.name: ability for ability in spec.abilities}
+        groups.append(
+            ConnectionGroup(
+                spec,
+                tuple(
+                    _connection_view(spec, instance, abilities, principal)
+                    for instance in instances
+                ),
+            )
+        )
+    return tuple(groups)
+
+
+def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:
+    instances = tuple(
+        _validate_instance(spec, instance) for instance in spec.instance_provider()
+    )
+    ids = [instance.id for instance in instances]
+    if len(ids) != len(set(ids)):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} emitted duplicate instance ids."
+        )
+    return instances
+
+
+def _ability_state(
+    ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
+) -> ConnectionAbilityState:
+    if not instance.scopes_known:
+        return ConnectionAbilityState(ability, None)
+    missing = tuple(
+        scope
+        for scope in ability.required_scopes
+        if scope not in instance.granted_scopes
+    )
+    available = not missing
+    return ConnectionAbilityState(
+        ability,
+        available,
+        missing,
+        capability_action_link(
+            ability.capability,
+            ability.effect,
+            f"Use {ability.label}",
+            principal=principal,
+        )
+        if available
+        else None,
+    )
+
+
+def _connection_view(
+    spec: ConnectionSpec,
+    instance: ConnectionInstance,
+    abilities: dict[str, ConnectionAbility],
+    principal: Principal,
+) -> ConnectionView:
+    states = tuple(
+        _ability_state(abilities[name], instance, principal)
+        for name in instance.ability_names
+    )
+    actions = connection_action_links(spec)
+    relationship = connection_relationship_link(spec.name, instance.id)
+    if relationship is not None:
+        actions = (*actions, relationship)
+    actions = (
+        *actions,
+        *(state.action for state in states if state.action is not None),
+    )
+    return ConnectionView(
+        instance,
+        states,
+        recommend_connection_action(
+            actions,
+            unhealthy=instance.status != "good",
+            missing_scope_count=sum(len(state.missing_scopes) for state in states),
+            unknown_scope_count=sum(state.available is None for state in states),
+        ),
+    )
+
+
+def describe_connections() -> dict:
+    return {
+        "ok": True,
+        "schema_version": 1,
+        "connections": [
+            {
+                "name": spec.name,
+                "label": spec.label,
+                "summary": spec.summary,
+                "required_capabilities": list(_capability_names(spec)),
+                "web_route": spec.web_route or None,
+                "management_route": spec.management_route or None,
+                "setup_route": spec.setup_route or None,
+                "documentation_url": spec.documentation_url or None,
+                "secret_store": spec.secret_store or None,
+                "abilities": [
+                    {
+                        "name": ability.name,
+                        "label": ability.label,
+                        "summary": ability.summary,
+                        "effect": ability.effect,
+                        "required_scopes": list(ability.required_scopes),
+                        "capability": ability.capability or None,
+                        "governs_kinds": list(ability.governs_kinds),
+                        "subject_resource": ability.subject_resource or None,
+                    }
+                    for ability in spec.abilities
+                ],
+            }
+            for spec in connection_specs()
+        ],
+    }
+
+
+def list_connections(*, principal: Principal) -> dict:
+    """Serialize safe connection state for machine adapters; never credentials."""
+
+    groups = connection_catalog(principal=principal)
+    return {
+        "ok": True,
+        "schema_version": 1,
+        "groups": [
+            {
+                "name": group.spec.name,
+                "label": group.spec.label,
+                "summary": group.spec.summary,
+                "secret_store": group.spec.secret_store or None,
+                "instances": [
+                    _serialize_instance(connection) for connection in group.connections
+                ],
+            }
+            for group in groups
+        ],
+    }
+
+
+def _serialize_instance(connection: ConnectionView) -> dict:
+    instance = connection.instance
+    return {
+        "id": instance.id,
+        "label": instance.label,
+        "kind": instance.kind,
+        "status": instance.status,
+        "status_label": instance.status_label,
+        "detail": instance.detail,
+        "endpoint": instance.endpoint or None,
+        "observed_at": (
+            instance.observed_at.isoformat() if instance.observed_at else None
+        ),
+        "scopes_known": instance.scopes_known,
+        "granted_scopes": list(instance.granted_scopes),
+        "abilities": [
+            {
+                "name": state.ability.name,
+                "label": state.ability.label,
+                "effect": state.ability.effect,
+                "required_scopes": list(state.ability.required_scopes),
+                "available": state.available,
+                "missing_scopes": list(state.missing_scopes),
+                "capability": state.ability.capability or None,
+                "subject_resource": state.ability.subject_resource or None,
+                "action": asdict(state.action) if state.action else None,
+            }
+            for state in connection.abilities
+        ],
+        "targets": [asdict(link) for link in instance.targets],
+        "dependencies": [asdict(link) for link in instance.dependencies],
+        "facts": [asdict(fact) for fact in instance.facts],
+        "controller_id": instance.controller_id or None,
+        "actions": [asdict(action) for action in connection.actions],
+    }
 
 
 def connections_for(provider: str) -> tuple[ProviderConnection, ...]:
@@ -198,7 +828,11 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     from .services import public_sites
 
     offered = [
-        {"label": "Health endpoint", "sub": "liveness", "href": reverse("health_ready")},
+        {
+            "label": "Health endpoint",
+            "sub": "liveness",
+            "href": reverse("health_ready"),
+        },
         *(
             {"label": label, "sub": sub or "console", "href": href}
             for label, sub, href in consoles()
@@ -212,9 +846,7 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     chosen = pinned(user, DASHBOARD_LINK)
     if not chosen:
         return offered, False
-    return [
-        item for item in offered if item["href"].lower() in chosen
-    ] or offered, True
+    return [item for item in offered if item["href"].lower() in chosen] or offered, True
 
 
 def link_choices(user=None) -> list[dict[str, object]]:
@@ -228,9 +860,7 @@ def link_choices(user=None) -> list[dict[str, object]]:
 
     chosen = pinned(user, DASHBOARD_LINK)
     offered, _ = outward_links(None)
-    return [
-        {**item, "chosen": item["href"].lower() in chosen} for item in offered
-    ]
+    return [{**item, "chosen": item["href"].lower() in chosen} for item in offered]
 
 
 def operator_links() -> list[dict[str, str]]:

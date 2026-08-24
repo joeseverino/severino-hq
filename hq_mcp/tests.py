@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase
@@ -137,6 +138,102 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("dashboard_snapshot"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("list_managed_resources"))
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_managed_resource"))
+
+    def test_resource_registry_is_discoverable_and_generically_readable(self):
+        project = Project.objects.create(name="Generic resource")
+
+        described = services.describe_resources()
+        listed = services.list_resource("projects", {"query": "generic"})
+        detail = services.get_resource("projects", project.slug)
+
+        self.assertIn("projects", [item["name"] for item in described["resources"]])
+        projects = next(item for item in described["resources"] if item["name"] == "projects")
+        self.assertEqual(projects["web_route"], "projects:list")
+        capabilities = services.describe_capabilities()["capabilities"]
+        project_create = next(
+            item for item in capabilities if item["name"] == "project.create"
+        )
+        self.assertEqual(project_create["resource"], "projects")
+        self.assertEqual(listed["items"][0]["slug"], project.slug)
+        self.assertEqual(detail["slug"], project.slug)
+        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_resources"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("list_resource"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_resource"))
+
+    def test_connections_are_discoverable_without_credential_material(self):
+        described = services.describe_connections()
+        listed = services.list_connections()
+
+        self.assertIn(
+            "infrastructure.controllers",
+            [item["name"] for item in described["connections"]],
+        )
+        self.assertTrue(listed["ok"])
+        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_connections"))
+        self.assertIsNotNone(mcp._tool_manager.get_tool("list_connections"))
+
+    def test_derived_topology_is_a_registered_safe_read_tool(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="mcp-zone",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            topology = services.get_topology()
+
+        self.assertIn(
+            "resource:mcp-zone", {node["id"] for node in topology["nodes"]}
+        )
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
+        self.assertNotIn("secret", json.dumps(topology).lower())
+
+    def test_an_agent_can_ask_the_topology_one_standing_question(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="mcp-lonely", kind="adguard.rewrite",
+            spec={"domain": "app.example.test", "answer": "192.0.2.10"})
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            whole = services.get_topology()
+            narrowed = services.get_topology(lens="unobserved-resources")
+        self.assertEqual(narrowed["lens"], "unobserved-resources")
+        self.assertTrue(narrowed["lenses"])
+        self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
+        self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
+
+    def test_findings_are_a_registered_safe_read_tool(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            found = services.get_findings()
+        self.assertTrue(found["ok"])
+        self.assertTrue(found["rules"])
+        self.assertIsNotNone(mcp._tool_manager.get_tool("get_findings"))
+        self.assertNotIn("secret", json.dumps(found).lower())
+
+    def test_connection_state_is_filtered_by_the_mcp_principal(self):
+        from application.connections import ConnectionSpec
+        from application.security import Capability
+
+        provider = mock.Mock(return_value=())
+        spec = ConnectionSpec(
+            "example.infrastructure",
+            "Infrastructure authority",
+            "Requires infrastructure management.",
+            Capability.MANAGE_INFRASTRUCTURE,
+            provider,
+        )
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            listed = services.list_connections()
+
+        self.assertNotIn(
+            "example.infrastructure", [group["name"] for group in listed["groups"]]
+        )
+        provider.assert_not_called()
 
 
 class MCPBoundaryTests(TestCase):

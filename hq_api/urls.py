@@ -21,6 +21,22 @@ urlpatterns = [
     ),
     path("v2/", views.root, {"version": 2}, name="root"),
     path("v2/capabilities/", views.capabilities, {"version": 2}, name="capabilities"),
+    path("v2/resources/", views.resources, {"version": 2}, name="resources"),
+    path("v2/connections/", views.connections, {"version": 2}, name="connections"),
+    path("v2/topology/", views.topology, {"version": 2}, name="topology"),
+    path("v2/findings/", views.findings, {"version": 2}, name="findings"),
+    path(
+        "v2/resources/<str:name>/",
+        views.resource_list,
+        {"version": 2},
+        name="resource-list",
+    ),
+    path(
+        "v2/resources/<str:name>/<str:identifier>/",
+        views.resource_detail,
+        {"version": 2},
+        name="resource-detail",
+    ),
     path(
         "v2/capabilities/<str:name>/",
         views.execute,

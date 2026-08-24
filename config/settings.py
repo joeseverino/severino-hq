@@ -103,6 +103,13 @@ CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
+# How long a signed-in session lasts. Django's default is two weeks, and HQ
+# never spoke to Pocket ID again after `auth.login` -- the group allowlist in
+# `core.oidc.verify_claims` runs at sign-in and nowhere else. Disabling an
+# account or revoking a passkey changed nothing for a fortnight. Absolute
+# rather than sliding: a write per request shows up in the flat-query budgets,
+# and SessionRefresh below is what re-checks the provider.
+SESSION_COOKIE_AGE = env_int("SEVERINO_SESSION_SECONDS", 12 * 60 * 60)
 CSRF_COOKIE_HTTPONLY = False  # Django needs JS access for the token header
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -171,9 +178,19 @@ SEVERINO_TRUSTED_NETWORKS = env_list(
 # which is a far stronger claim to accept. The TLS proxy is on the LAN; a
 # tailnet peer is a client, not infrastructure, and must not be able to
 # nominate the address HQ judges it by.
+#
+# Loopback only by default, because the paragraph above is the rule and the
+# private ranges were the exception that swallowed it. HQ binds the host's
+# network namespace, so any peer on the LAN or tailnet can reach the port
+# directly and, if trusted, name whatever address it likes. That address is
+# written into the audit log as the source of a failed sign-in and read back
+# out by the throttle -- so trusting a range corrupts the evidence and the gate
+# that reads it, together and invisibly.
+#
+# A deployment behind a proxy names that proxy explicitly; see .env.example.
 SEVERINO_TRUSTED_PROXIES = env_list(
     "SEVERINO_TRUSTED_PROXIES",
-    default=["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    default=["127.0.0.0/8", "::1/128"],
 )
 
 # Sign-in throttling for the break-glass password path. Read back out of the
@@ -345,6 +362,16 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
 # Pocket ID / OIDC SSO is how a person signs in.
 SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
 
+# Re-check a live session against Pocket ID once its ID token ages out, which
+# is what makes revoking somebody there take effect here. Inserted rather than
+# declared inline because the flag is read below the middleware list.
+if SEVERINO_OIDC_ENABLED:
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
+        "mozilla_django_oidc.middleware.SessionRefresh",
+    )
+OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = env_int("SEVERINO_OIDC_RENEW_SECONDS", 15 * 60)
+
 # The password form exists only where SSO does not.
 #
 # Derived rather than configured, because the two set independently is how a
@@ -378,7 +405,12 @@ SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com").rstrip("/")
 OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
-OIDC_RP_SCOPES = "openid profile groups"
+# The `email` scope is requested only when an email allowlist is configured.
+# Without it the claim never arrives, so SEVERINO_OIDC_ALLOWED_EMAILS could be
+# set and simply never match -- failing closed, but silently.
+OIDC_RP_SCOPES = "openid profile groups" + (
+    " email" if SEVERINO_OIDC_ALLOWED_EMAILS else ""
+)
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
@@ -425,6 +457,11 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
+# Whether HQ may queue a repair for a finding on its own. Off by default: the
+# first release of anything that acts unattended should be watched proposing
+# before it is trusted acting. Even on, it only ever queues -- the controller
+# still pulls and claims, so no provider credential nears the web process.
+SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
 SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
 # Mirroring the vault documentation index is gated separately from the broad
 # write flag: it is the one write wanted routinely, and bundling it meant the

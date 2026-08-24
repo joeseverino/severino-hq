@@ -9,7 +9,7 @@ whose loss is invisible in review of the change that causes it.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
 
@@ -26,8 +26,22 @@ class _FakeRequest:
             self.META["HTTP_X_FORWARDED_FOR"] = forwarded
 
 
+@override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
 class ClientAddressTests(SimpleTestCase):
     """Who HQ believes the caller is."""
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=["127.0.0.0/8", "::1/128"])
+    def test_the_shipped_default_does_not_believe_the_lan(self):
+        """The regression guard for a whole-range default.
+
+        HQ binds the host network namespace, so a LAN or tailnet peer can reach
+        the port without passing the proxy. Trusting the range let any of them
+        name the address written into the audit log as the source of a failed
+        sign-in -- the same rows the throttle reads back.
+        """
+
+        request = _FakeRequest("10.9.9.9", forwarded="203.0.113.9")
+        self.assertEqual(client_ip(request), "10.9.9.9")
 
     def test_peer_is_used_when_there_is_no_proxy(self):
         self.assertEqual(client_ip(_FakeRequest("100.101.102.103")), "100.101.102.103")
@@ -62,7 +76,9 @@ class ClientAddressTests(SimpleTestCase):
         self.assertIsNone(parse_ip(""))
 
 
-@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
+@override_settings(
+    SEVERINO_ENFORCE_TRUSTED_NETWORK=True, SEVERINO_TRUSTED_PROXIES=[PROXY]
+)
 class TrustedNetworkTests(TestCase):
     """Who may reach HQ at all."""
 
@@ -431,6 +447,7 @@ class ReceiptUploadHardeningTests(TestCase):
         self.assertNotIn("attachment", response.get("Content-Disposition", ""))
 
 
+@override_settings(SEVERINO_TRUSTED_PROXIES=[PROXY])
 class StaticAssetBoundaryTests(SimpleTestCase):
     """The gate must not have a hole where Starlette mounts things."""
 
@@ -474,6 +491,30 @@ class StaticAssetBoundaryTests(SimpleTestCase):
 
 
 class ResponseHeaderTests(TestCase):
+    @override_settings(
+        SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+        SEVERINO_TRUSTED_PROXIES=[PROXY],
+    )
+    def test_only_a_trusted_proxy_can_assert_https(self):
+        from django.http import HttpResponse
+        from core.network import TrustedNetworkMiddleware
+
+        observed = []
+        middleware = TrustedNetworkMiddleware(
+            lambda request: observed.append(request.is_secure()) or HttpResponse()
+        )
+        stranger = RequestFactory().get(
+            "/", REMOTE_ADDR="100.64.0.77", HTTP_X_FORWARDED_PROTO="https"
+        )
+        proxy = RequestFactory().get(
+            "/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_PROTO="https"
+        )
+
+        middleware(stranger)
+        middleware(proxy)
+
+        self.assertEqual(observed, [False, True])
+
     def test_the_browser_boundary_headers_are_present(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="127.0.0.1")
         self.assertEqual(response["X-Frame-Options"], "DENY")

@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from application.search import apply_search, global_search, search_ids, search_records
 from application.security import AuthorizationError, cli_principal, mcp_principal
+from control_plane.models import ManagedResource
 from core.models import AuditLog
 from projects.models import Project
 
@@ -141,6 +142,25 @@ class GlobalSearchTests(TestCase):
         self.assertIn(True, [hit for _, hit in item["snippet"]])
         matched = "".join(t for t, hit in item["snippet"] if hit).lower()
         self.assertIn("vault", matched)
+
+    def test_infrastructure_kind_finds_real_local_records_without_provider_io(self):
+        resource = ManagedResource.objects.create(
+            key="example-tailnet-node",
+            kind="tailscale.device",
+            spec={"name": "Example node"},
+        )
+
+        outcome = global_search("tailscale", principal=OPERATOR)
+
+        group = next(
+            item
+            for item in outcome["groups"]
+            if item["scope"] == "infrastructure.resources"
+        )
+        (item,) = group["items"]
+        self.assertEqual(item["title"], resource.key)
+        self.assertEqual(item["badge"], "tailscale.device")
+        self.assertEqual(item["url"], resource.get_absolute_url())
 
     def test_docs_use_title_not_str_and_carry_doc_id_badge(self):
         from docs_index.models import DocumentationRecord

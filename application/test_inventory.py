@@ -14,6 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from core.models import AuditLog
 from control_plane.models import ManagedResource, ProviderInventory
 from control_plane.providers import PROVIDERS, validate_spec
 
@@ -598,3 +599,168 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
         self.assertEqual(
             ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at, before
         )
+
+
+def _adoptable():
+    """Every provider a sweep can rebuild a spec for, with its sample record."""
+
+    return [(kind, p) for kind, p in sorted(PROVIDERS.items())
+            if p.from_record and p.sample_record]
+
+
+class UnobservableFieldTests(TestCase):
+    """A blank the provider could never fill is not a disagreement.
+
+    NPM answers with a certificate id, not an HQ resource key, so
+    `_proxy_from_record` blanks `certificate_resource`. Compared as a value,
+    every proxy host that named a certificate differed from its declaration
+    forever -- and `confirm_observed` rightly refuses to call drift observed, so
+    those resources kept the condition their last reconcile wrote and no sweep
+    ever confirmed them again. They read healthy the whole time.
+    """
+
+    def setUp(self):
+        self.principal = cli_principal()
+        self.resource = ManagedResource.objects.create(
+            key="secured-proxy", kind="npm.proxy_host",
+            spec={**PROVIDERS["npm.proxy_host"].from_record(A_PROXY),
+                  "certificate_resource": "example-wildcard"})
+
+    def sweep(self, record=None):
+        record_sweep(a_sweep(**{"npm.proxy_host": [record or A_PROXY]}),
+                     principal=self.principal)
+        self.resource.refresh_from_db()
+
+    def test_a_host_naming_a_certificate_is_confirmed_by_a_sweep(self):
+        self.assertIsNone(self.resource.last_observed_at)
+        self.sweep()
+        self.assertIsNotNone(self.resource.last_observed_at)
+        self.assertEqual(self.resource.conditions[0]["reason"], "Observed")
+
+    def test_the_certificate_a_sweep_cannot_see_is_never_erased(self):
+        self.sweep()
+        self.assertEqual(self.resource.spec["certificate_resource"], "example-wildcard")
+
+    def test_drift_in_an_observable_field_is_still_refused(self):
+        """The fix must not become a blanket exemption for the whole record."""
+        self.sweep({**A_PROXY, "forward_port": 9999})
+        self.assertIsNone(self.resource.last_observed_at)
+
+    def test_every_unobservable_field_names_a_real_field_of_its_spec(self):
+        for kind, provider in PROVIDERS.items():
+            for field in provider.unobservable_fields:
+                with self.subTest(kind=kind, field=field):
+                    self.assertIn(field, provider.spec_type.model_fields)
+
+    def test_every_adoptable_provider_supplies_a_record_to_check(self):
+        """The guard must cover the registry, not a list kept by hand.
+
+        This began as two kinds in a literal while eight providers could be
+        adopted, so the bug it exists for was unguarded in six of them and
+        nothing said so.
+        """
+        adoptable = {k for k, p in PROVIDERS.items() if p.from_record}
+        sampled = {k for k, p in PROVIDERS.items() if p.sample_record}
+        self.assertEqual(adoptable - sampled, set())
+
+    def test_a_provider_blanking_a_field_it_declares_must_say_so(self):
+        for kind, provider in _adoptable():
+            rebuilt = provider.from_record(provider.sample_record)
+            for field, value in rebuilt.items():
+                if value != "" or field not in provider.spec_type.model_fields:
+                    continue
+                if provider.sample_record.get(field, "") == "":
+                    continue  # the record itself was blank; nothing was invented
+                with self.subTest(kind=kind, field=field):
+                    self.assertIn(field, provider.unobservable_fields,
+                        f"{kind}.{field} is blanked by from_record but not declared "
+                        "unobservable, so a declaration naming it is never confirmed")
+
+    def test_an_unobservable_field_that_does_round_trip_is_a_false_exemption(self):
+        """Exemptions accrete, and each one forgives drift forever."""
+        for kind, provider in _adoptable():
+            rebuilt = provider.from_record(provider.sample_record)
+            for field in provider.unobservable_fields:
+                supplied = provider.sample_record.get(field, "")
+                if supplied == "":
+                    continue
+                with self.subTest(kind=kind, field=field):
+                    self.assertNotEqual(str(rebuilt.get(field, "")), str(supplied))
+
+    def test_a_swept_record_confirms_the_declaration_it_matches(self):
+        """The invariant, asked of every adoptable provider.
+
+        This is the test that fails the day any provider acquires a blanked
+        field, whether or not anyone thought about that field.
+        """
+        for kind, provider in _adoptable():
+            with self.subTest(kind=kind):
+                spec = provider.from_record(provider.sample_record)
+                resource = ManagedResource.objects.create(
+                    key=f"sample-{kind.replace('.', '-')}", kind=kind, spec=spec)
+                record_sweep(a_sweep(**{kind: [provider.sample_record]}),
+                             principal=cli_principal())
+                resource.refresh_from_db()
+                self.assertIsNotNone(resource.last_observed_at,
+                    f"a {kind} declaration was not confirmed by a sweep of the "
+                    "very record it was built from")
+                self.assertEqual(resource.conditions[0]["reason"], "Observed")
+
+
+class ObservationIsNotAnEventTests(TestCase):
+    """A sweep confirming nothing changed must not write an audit row.
+
+    `confirm_observed` stamps `last_observed_at` on every declaration it
+    matches, every pass. Audited as a change that is one row per resource per
+    sweep -- at a sixty-second interval, thousands a day saying "checked, still
+    fine", with every real event buried among them.
+    """
+
+    def setUp(self):
+        self.principal = cli_principal()
+        self.resource = ManagedResource.objects.create(
+            key="watched", kind="adguard.rewrite", spec=dict(A_REWRITE))
+        AuditLog.objects.all().delete()
+
+    def sweep(self, record=None):
+        record_sweep(a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}),
+                     principal=self.principal)
+        self.resource.refresh_from_db()
+
+    def updates(self):
+        return AuditLog.objects.filter(object_type="Managed resource",
+                                       action=AuditLog.Action.UPDATED)
+
+    def test_confirming_an_unchanged_declaration_writes_no_audit_row(self):
+        # The first sweep is a real event: status, conditions and the observed
+        # generation all move from empty to observed. Every sweep after it
+        # changes only the stamp, and those are the thousands of rows.
+        self.sweep()
+        AuditLog.objects.all().delete()
+        for _ in range(5):
+            self.sweep()
+        self.assertIsNotNone(self.resource.last_observed_at)
+        self.assertEqual(self.updates().count(), 0)
+
+    def test_the_stamp_is_still_written_so_staleness_still_works(self):
+        """Silencing the event must not silence the fact it records."""
+        self.sweep()
+        first = self.resource.last_observed_at
+        AuditLog.objects.all().delete()
+        self.sweep()
+        self.assertIsNotNone(first)
+        self.assertGreaterEqual(self.resource.last_observed_at, first)
+
+    def test_a_sweep_that_finds_something_different_is_still_an_event(self):
+        self.sweep()
+        AuditLog.objects.all().delete()
+        self.sweep()
+        self.assertEqual(self.updates().count(), 0, "a quiet sweep is not an event")
+        ManagedResource.objects.filter(pk=self.resource.pk).update(
+            spec={**A_REWRITE, "answer": "10.0.0.99"})
+        self.sweep({**A_REWRITE, "answer": "10.0.0.99"})
+        self.assertEqual(self.updates().count(), 1)
+        changed = self.updates().first().metadata["changes"]
+        # The stamp rides along with the real change rather than vanishing.
+        self.assertIn("status", changed)
+        self.assertIn("last_observed_at", changed)

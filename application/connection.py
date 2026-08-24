@@ -23,7 +23,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone as utc
 from django.conf import settings
 
-from core.network import client_ip, split_host_port
+from functools import cache
+import socket
+
+from core.network import client_ip, is_trusted_proxy, split_host_port
 
 from . import tailnet
 from .reach import network_of
@@ -95,6 +98,13 @@ def channel_of(address: str) -> Channel:
     }.get(network_of(address), ELSEWHERE_CHANNEL)
 
 
+def channel_for_request(request) -> Channel:
+    """The caller channel after applying the trusted-proxy decision once."""
+
+    channel = channel_of(client_ip(request))
+    return OPAQUE_CHANNEL if _chain_is_all_proxies(request) else channel
+
+
 @dataclass(frozen=True)
 class Layer:
     """One thing that had to hold, and what HQ can point at to say it did.
@@ -110,11 +120,21 @@ class Layer:
     holds: bool
     detail: str
     evidence: str = ""
+    # The security boundary and concrete mechanism this verdict belongs to.
+    # These are emitted with the verdict so every UI can explain the same
+    # decision without maintaining a second taxonomy beside it.
+    boundary: str = ""
+    mechanism: str = ""
+    # False means the evidence source did not answer this question. That is
+    # neither a pass nor a denial and must never be rendered as either one.
+    conclusive: bool = True
     # The rules behind the verdict, where the thing deciding it had rules.
     rules: tuple[str, ...] = ()
 
     @property
     def state(self) -> str:
+        if not self.conclusive:
+            return "unknown"
         return "holds" if self.holds else "does-not"
 
 
@@ -127,7 +147,7 @@ class Identity:
     full_name: str = ""
     sso_only: bool = False
     backends: tuple[str, ...] = ()
-    session_expires: str = ""
+    session_expires: datetime | None = None
     tailnet_user: str = ""
     # Which backend actually signed this session in, rather than which ones are
     # installed. Django records it on the session at login, so it is the one
@@ -137,7 +157,7 @@ class Identity:
     groups: tuple[str, ...] = ()
     staff: bool = False
     superuser: bool = False
-    last_sign_in: str = ""
+    last_sign_in: datetime | None = None
     token_expires: str = ""
 
     @property
@@ -170,6 +190,12 @@ class Connection:
     device: tailnet.Device | None
     serves: tailnet.Device | None
     identity: Identity
+    # A device correlated from a forwarded address that HQ will show as
+    # evidence but will not use for admission until the forwarding peer is a
+    # declared proxy. Keeping it separate from ``device`` prevents display
+    # knowledge from quietly becoming authorization knowledge.
+    reported_device: tailnet.Device | None = None
+    reported_address: str = ""
     layers: tuple[Layer, ...] = ()
     secure_transport: bool = False
     host: str = ""
@@ -177,89 +203,194 @@ class Connection:
     # address each one answers at. A tailnet name is rarely the name HQ uses,
     # so this is resolved by address rather than by matching the two names.
     machine_url: str = ""
+    machine_name: str = ""
+    forwarder_name: str = ""
+    forwarder_url: str = ""
+    forwarded: bool = False
     serves_url: str = ""
     # What HQ was told about its machines, read once and answering every
     # relationship this page draws: which machine each end of the link is, and
     # which of a node's addresses are ones HQ was actually declared at.
     declared: tuple = ()
+    untrusted_forwarding: bool = False
 
     @property
     def holds(self) -> bool:
-        return all(layer.holds for layer in self.layers)
+        return all(layer.holds and layer.conclusive for layer in self.layers)
 
     @property
     def failing(self) -> tuple[Layer, ...]:
-        return tuple(layer for layer in self.layers if not layer.holds)
+        return tuple(
+            layer for layer in self.layers if layer.conclusive and not layer.holds
+        )
+
+    @property
+    def unverified(self) -> tuple[Layer, ...]:
+        return tuple(layer for layer in self.layers if not layer.conclusive)
 
     @property
     def summary(self) -> str:
         if self.holds:
             return f"{len(self.layers)} of {len(self.layers)} checks hold"
-        return f"{len(self.failing)} of {len(self.layers)} checks do not hold"
+        parts = []
+        if self.failing:
+            parts.append(f"{len(self.failing)} failed")
+        if self.unverified:
+            parts.append(f"{len(self.unverified)} unverified")
+        return " · ".join(parts)
 
     @property
     def transport(self) -> str:
-        """Both encryptions named, since the point is that there are two."""
+        """The encryption this request can actually prove."""
 
-        return "WireGuard + TLS" if self.secure_transport else "WireGuard only"
+        if self.channel.id == "tailnet":
+            return "WireGuard + TLS" if self.secure_transport else "WireGuard only"
+        return "TLS" if self.secure_transport else "No verified encryption"
+
+    @property
+    def transport_path(self) -> str:
+        """Which segment each encrypted transport protects."""
+
+        if self.forwarded and self.channel.id == "tailnet" and self.secure_transport:
+            return f"TLS to {self.forwarder_name or 'proxy'} · WireGuard to HQ"
+        if self.channel.id == "tailnet" and self.secure_transport:
+            return "WireGuard + TLS end to end"
+        return self.transport
+
+    @property
+    def caller_device(self) -> tailnet.Device | None:
+        """The device shown as You, without changing the admission device.
+
+        A forwarding peer is a hop, not the caller. Until that peer is trusted,
+        its report can identify the diagram's endpoint but never satisfy an
+        admission check or corroborate the signed-in person.
+        """
+
+        return self.reported_device if self.untrusted_forwarding else self.device
+
+    @property
+    def peer_label(self) -> str:
+        peer = self.caller_device
+        return peer.label if peer else "Device not resolved"
+
+    @property
+    def peer_address(self) -> str:
+        return self.reported_address if self.reported_device else self.address
 
     @property
     def path(self) -> str:
-        return self.device.path if self.device else "unknown"
+        return self.caller_device.path if self.caller_device else "unknown"
 
     @property
     def path_label(self) -> str:
-        if self.device is None:
+        if self.forwarded:
+            return f"Via {self.forwarder_name or 'forwarding peer'}"
+        if self.caller_device is None:
             return "Unknown"
         return {
             "direct": "Direct",
-            "relayed": f"Relayed via {self.device.relay}",
+            "relayed": f"Relayed via {self.caller_device.relay}",
             "idle": "Not negotiated",
-        }[self.device.path]
+        }[self.caller_device.path]
 
     @property
     def handshake(self) -> str:
-        return _ago(self.device.last_handshake) if self.device else "—"
+        return _ago(self.caller_device.last_handshake) if self.caller_device else "—"
 
     @property
     def carried(self) -> str:
-        if self.device is None:
+        if self.caller_device is None:
             return ""
-        return f"{_bytes(self.device.rx_bytes)} in · {_bytes(self.device.tx_bytes)} out"
+        return (
+            f"{_bytes(self.caller_device.rx_bytes)} in · "
+            f"{_bytes(self.caller_device.tx_bytes)} out"
+        )
+
+    @property
+    def tailnet_observed_at(self) -> datetime | None:
+        """When the device/path evidence was last swept from Tailscale."""
+
+        return self.caller_device.observed_at if self.caller_device else None
 
 
 def connection(request) -> Connection:
     """Everything HQ can say about the request in front of it."""
 
     address = client_ip(request)
-    channel = channel_of(address)
+    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
+    forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR"))
+    untrusted_forwarding = forwarded and not is_trusted_proxy(peer)
+    # (see `_serving_device` for why the observer flag is not the answer)
     # A chain that never named the caller is its own answer, and a more useful
     # one than the class its last proxy happens to fall in. Reporting "local
     # network" here would describe the proxy and read as a fact about the
     # person, which is the one confusion this page exists to prevent.
-    if _chain_is_all_proxies(request):
-        channel = OPAQUE_CHANNEL
+    channel = channel_for_request(request)
     # One read of the sweep, answering every question asked of it below.
     known = tailnet.devices()
     device = tailnet.device_at(address, known)
-    serves = tailnet.observer(known)
-    identity = _identity(request, device)
+    forwarder = tailnet.device_at(peer, known) if forwarded else None
+    reported_address = displayed_client_ip(request) if untrusted_forwarding else ""
+    reported_device = tailnet.device_at(reported_address, known)
+    identity = _identity(request, None if untrusted_forwarding else device)
     from .infrastructure import declared_machines
 
     declared = declared_machines()
+    serves = _serving_device(known, declared)
+    peer_device = reported_device if untrusted_forwarding else device
+    machine_name = _machine_name(peer_device.addresses if peer_device else (), declared)
+    forwarder_name = _machine_name((peer,), declared) if forwarded else ""
+    serves_name = _machine_name(serves.addresses if serves else (), declared)
     return Connection(
         address=address,
         channel=channel,
         device=device,
+        reported_device=reported_device,
+        reported_address=reported_address,
         serves=serves,
-        machine_url=_machine_url(device.addresses if device else (address,), declared),
-        serves_url=_machine_url(serves.addresses if serves else (), declared),
+        machine_url=_machine_url(machine_name),
+        machine_name=machine_name,
+        forwarder_name=forwarder_name,
+        forwarder_url=_machine_url(forwarder_name),
+        forwarded=forwarded,
+        serves_url=_machine_url(serves_name),
         declared=declared,
         identity=identity,
+        untrusted_forwarding=untrusted_forwarding,
         secure_transport=bool(request.is_secure()),
         host=request.get_host(),
-        layers=_layers(request, address, channel, device, serves, identity, known),
+        layers=_layers(
+            request,
+            address,
+            channel,
+            device,
+            forwarder,
+            serves,
+            identity,
+            known,
+            forwarded=forwarded,
+        ),
     )
+
+
+def displayed_client_ip(request) -> str:
+    """The best caller address HQ may display without authorizing from it.
+
+    ``client_ip`` remains the sole source for admission. When an undeclared
+    proxy reports a caller, the rightmost forwarded hop may still be correlated
+    for explanatory UI; keeping this function explicitly presentation-only
+    prevents that useful knowledge from quietly becoming network authority.
+    """
+
+    peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
+    forwarded = [
+        hop.strip()
+        for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
+        if hop.strip()
+    ]
+    if forwarded and not is_trusted_proxy(peer):
+        return split_host_port(forwarded[-1])[0]
+    return client_ip(request)
 
 
 def _chain_is_all_proxies(request) -> bool:
@@ -273,12 +404,15 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
     user = getattr(request, "user", None)
     backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
     session = getattr(request, "session", None)
-    expiry = ""
+    expiry = None
     if session is not None:
         try:
-            expiry = session.get_expiry_date().isoformat()
+            expiry = session.get_expiry_date()
         except (AttributeError, ValueError, TypeError):
-            expiry = ""
+            expiry = None
+    signed_in_by = str(
+        (session or {}).get("_auth_user_backend", "") if session is not None else ""
+    )
     return Identity(
         username=getattr(user, "username", "") or "",
         email=getattr(user, "email", "") or "",
@@ -291,12 +425,12 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
         backends=backends,
         session_expires=expiry,
         tailnet_user=device.user if device else "",
-        signed_in_by=str(
-            (session or {}).get("_auth_user_backend", "") if session is not None else ""
-        ),
+        signed_in_by=signed_in_by,
         # Who vouched for the person, taken from the endpoint HQ actually sends
-        # them to rather than from a name written down beside it.
-        provider=_provider_host(),
+        # them to rather than from a name written down beside it. A configured
+        # provider did not vouch for a password session, so it must not appear
+        # beside that session as though it did.
+        provider=_provider_host() if "OIDC" in signed_in_by else "",
         groups=tuple(
             getattr(user, "groups", None).values_list("name", flat=True)
             if getattr(user, "pk", None)
@@ -304,11 +438,7 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
         ),
         staff=bool(getattr(user, "is_staff", False)),
         superuser=bool(getattr(user, "is_superuser", False)),
-        last_sign_in=(
-            getattr(user, "last_login", None).isoformat()
-            if getattr(user, "last_login", None)
-            else ""
-        ),
+        last_sign_in=getattr(user, "last_login", None),
         token_expires=str(
             (session or {}).get("oidc_id_token_expiration", "")
             if session is not None
@@ -331,9 +461,12 @@ def _layers(
     address: str,
     channel: Channel,
     device: tailnet.Device | None,
+    forwarder: tailnet.Device | None,
     serves: tailnet.Device | None,
     identity: Identity,
     known: dict[str, tailnet.Device],
+    *,
+    forwarded: bool,
 ) -> tuple[Layer, ...]:
     """The independent things that each had to hold, outermost first.
 
@@ -345,12 +478,13 @@ def _layers(
     found = [
         _name_layer(request),
         _channel_layer(address, channel),
-        _policy_layer(device, serves, request, known),
+        *_policy_layers(device, forwarder, serves, request, known, forwarded),
         _device_layer(device),
+        _forwarder_layer(forwarder) if forwarded else None,
         _gate_layer(channel),
         _sign_in_layer(identity),
         _session_layer(request, identity),
-        _transport_layer(request),
+        _transport_layer(request, channel),
     ]
     return tuple(layer for layer in found if layer is not None)
 
@@ -374,6 +508,8 @@ def _name_layer(request) -> Layer:
             "does not keep anyone away from HQ."
         ),
         evidence=host if not answers else f"{host} → {', '.join(answers)}",
+        boundary="Exposure",
+        mechanism="Authoritative DNS",
     )
 
 
@@ -384,16 +520,20 @@ def _channel_layer(address: str, channel: Channel) -> Layer:
         channel.id == "tailnet",
         channel.detail,
         evidence=address,
+        boundary="Network",
+        mechanism="Tailnet address space",
     )
 
 
-def _policy_layer(
+def _policy_layers(
     device: tailnet.Device | None,
+    forwarder: tailnet.Device | None,
     serves: tailnet.Device | None,
     request,
     known: dict[str, tailnet.Device],
-) -> Layer | None:
-    """Whether the tailnet's own policy admits this device to this port.
+    forwarded: bool,
+) -> tuple[Layer, ...]:
+    """Every independently authorized Tailnet segment in this request path.
 
     Being on the tailnet is not being allowed to reach everything on it, and
     that distinction is the one people assume away. Answered by Tailscale
@@ -402,21 +542,64 @@ def _policy_layer(
     believed exactly as much as the real one and wrong where nobody looks.
     """
 
-    if device is None or serves is None:
-        return None
-    port = _port_of(request)
-    verdict = tailnet.may_reach(device.name, serves.name, port, known)
-    if not verdict.known:
-        return Layer(
+    if not forwarded:
+        layer = _policy_layer(
             "policy",
             "The policy admits this device",
+            device,
+            serves,
+            _port_of(request),
+            known,
+        )
+        return (layer,) if layer else ()
+
+    edge = _policy_layer(
+        "edge-policy",
+        "The policy admits you to the proxy",
+        device,
+        forwarder,
+        443 if request.is_secure() else 80,
+        known,
+    )
+    service = _policy_layer(
+        "service-policy",
+        "The policy admits the proxy to HQ",
+        forwarder,
+        serves,
+        _server_port(request),
+        known,
+    )
+    return tuple(layer for layer in (edge, service) if layer is not None)
+
+
+def _policy_layer(
+    layer_id: str,
+    label: str,
+    source: tailnet.Device | None,
+    target: tailnet.Device | None,
+    port: int,
+    known: dict[str, tailnet.Device],
+) -> Layer | None:
+    if source is None or target is None:
+        return None
+    # Names for the lookup, labels for the sentence: the policy is keyed on the
+    # node's registered name, but a person reads the MagicDNS label, and two
+    # phones registered as "localhost" are indistinguishable in the other one.
+    verdict = tailnet.may_reach(source.name, target.name, port, known)
+    if not verdict.known:
+        return Layer(
+            layer_id,
+            label,
             False,
             verdict.detail,
-            evidence=f"{device.name} → {serves.name} on {port}",
+            evidence=f"{source.label} → {target.label} on {port}",
+            boundary="Zero trust policy",
+            mechanism="Tailscale grants",
+            conclusive=False,
         )
     return Layer(
-        "policy",
-        "The policy admits this device",
+        layer_id,
+        label,
         verdict.allowed,
         verdict.detail,
         evidence=", ".join(verdict.via) or f"port {port}",
@@ -429,6 +612,8 @@ def _policy_layer(
             f"{' '.join(rule.get('to') or ['?'])}"
             for rule in verdict.rules
         ),
+        boundary="Zero trust policy",
+        mechanism="Tailscale grants",
     )
 
 
@@ -440,6 +625,13 @@ def _port_of(request) -> int:
     return 443 if request.is_secure() else 80
 
 
+def _server_port(request) -> int:
+    """The port the forwarding peer actually reached on HQ."""
+
+    value = str(request.META.get("SERVER_PORT", "") or "")
+    return int(value) if value.isdigit() else _port_of(request)
+
+
 def _device_layer(device: tailnet.Device | None) -> Layer:
     if device is None:
         return Layer(
@@ -448,6 +640,8 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
             False,
             "No device on the tailnet answers at this address, so HQ cannot "
             "say which machine is asking.",
+            boundary="Device identity",
+            mechanism="Tailnet node inventory",
         )
     carried = (
         f"carried by the {device.relay} relay"
@@ -469,6 +663,31 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
         f"{device.user or 'nobody in particular'}, and is talking to HQ "
         f"{carried}.{expiry}",
         evidence=device.dns_name or device.name,
+        boundary="Device identity",
+        mechanism="WireGuard node key",
+    )
+
+
+def _forwarder_layer(device: tailnet.Device | None) -> Layer:
+    if device is None:
+        return Layer(
+            "forwarder",
+            "The forwarding peer is a known node",
+            False,
+            "The socket peer is trusted as a proxy, but the Tailnet sweep did "
+            "not resolve it to a node. HQ cannot independently name the hop.",
+            boundary="Forwarding identity",
+            mechanism="Socket peer and Tailnet inventory",
+            conclusive=False,
+        )
+    return Layer(
+        "forwarder",
+        "The forwarding peer is a known node",
+        True,
+        f"{device.label} owns the Tailnet address that opened the socket to HQ.",
+        evidence=device.dns_name or device.name,
+        boundary="Forwarding identity",
+        mechanism="WireGuard node key",
     )
 
 
@@ -501,6 +720,8 @@ def _gate_layer(channel: Channel) -> Layer:
             "rather than the caller's, so it is admitting the proxy. Anyone "
             "who can reach that proxy passes this check.",
             evidence="judging a proxy",
+            boundary="Application edge",
+            mechanism="Pre-auth network gate",
         )
     return Layer(
         "gate",
@@ -516,6 +737,8 @@ def _gate_layer(channel: Channel) -> Layer:
             "the address a request comes from is not being checked at all."
         ),
         evidence="enforced" if enforced else "not enforced",
+        boundary="Application edge",
+        mechanism="Pre-auth network gate",
     )
 
 
@@ -533,6 +756,8 @@ def _sign_in_layer(identity: Identity) -> Layer:
             "somebody in here."
         ),
         evidence=", ".join(name.rpartition(".")[2] for name in identity.backends),
+        boundary="Human identity",
+        mechanism="Authentication backends",
     )
 
 
@@ -560,23 +785,38 @@ def _session_layer(request, identity: Identity) -> Layer:
             "keep it from being read or replayed."
         ),
         evidence=" · ".join(stated),
+        boundary="Session",
+        mechanism="Cookie policy",
     )
 
 
-def _transport_layer(request) -> Layer:
-    return Layer(
-        "transport",
-        "The connection is encrypted twice",
-        bool(request.is_secure()),
-        (
+def _transport_layer(request, channel: Channel) -> Layer:
+    tls = bool(request.is_secure())
+    tailnet = channel.id == "tailnet"
+    if tailnet and tls:
+        detail = (
             "Tailscale encrypts the link between the two machines end to end, "
             "and TLS encrypts this request inside it. Either alone would do; "
             "neither depends on the other being sound."
-            if request.is_secure()
-            else "This request is not over TLS, so only the tailnet is "
-            "encrypting it."
-        ),
-        evidence="WireGuard + TLS" if request.is_secure() else "WireGuard only",
+        )
+        evidence = "WireGuard + TLS"
+    elif tailnet:
+        detail = "The tailnet encrypts this request with WireGuard, without TLS inside it."
+        evidence = "WireGuard only"
+    elif tls:
+        detail = "TLS encrypts this request, but the caller is not on the tailnet."
+        evidence = "TLS"
+    else:
+        detail = "HQ cannot verify an encrypted transport for this request."
+        evidence = "No verified encryption"
+    return Layer(
+        "transport",
+        "The transport is encrypted",
+        tls or tailnet,
+        detail,
+        evidence=evidence,
+        boundary="Transport",
+        mechanism="WireGuard and TLS",
     )
 
 
@@ -631,94 +871,145 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
     -- and this is the only surface that puts them beside each other.
     """
 
+    current = found.peer_address
+    current_source = (
+        "reported by the forwarding hop; not used for admission"
+        if found.untrusted_forwarding
+        else "this request arrived from it"
+    )
     rows: list[Address | None] = [
-        _address_row(found.address, "this request arrived from it", current=True)
+        _address_row(current, current_source, current=True)
     ]
-    device = found.device
+    device = found.caller_device
     if device is not None:
         rows.extend(
             _address_row(address, "issued to this device by Tailscale")
             for address in device.addresses
-            if address != found.address
+            if address != current
         )
         rows.append(
             _address_row(
                 device.direct_endpoint,
-                "the path HQ's node is using to reach this device",
+                "the last Tailnet sweep observed this tunnel endpoint",
             )
         )
         rows.extend(
-            _address_row(endpoint, "this device reports answering here")
+            _address_row(endpoint, "the last Tailnet sweep observed this endpoint")
             for endpoint in device.endpoints
         )
     return tuple(_deduplicated(rows))
 
 
-def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
-    """Where HQ answers, and where its daemon merely negotiates a tunnel.
+@cache
+def _own_addresses() -> frozenset[str]:
+    """Every address this process is actually reachable at.
 
-    Two different facts that a single list of addresses will be read as one.
-    The tailnet addresses are where HQ serves; the endpoints beside them are
-    what Tailscale advertises so two daemons can find a path through NAT, and
-    a public one among them is not a service on the internet -- it is the
-    outside of a router, carrying WireGuard and nothing else. Printed together
-    without saying which is which, that reads as HQ being on the internet.
+    Asked of the host rather than of any inventory, because it is the one fact
+    about "where HQ runs" that no sweep can be wrong about. A UDP socket is
+    only connected locally -- it sends no packet -- and exposes the address
+    the kernel would route from without putting DNS in a request path.
 
-    A node also reports every bridge gateway a container runtime gave it, which
-    is a dozen rows of the same fact and no way to reach anything. Those fall
-    away by keeping only private addresses HQ was declared at, so nothing here
-    has to recognise a bridge.
+    Cached for the life of the process. Where HQ runs does not change without
+    a restart, and a restart is what clears this.
     """
+
+    found = {"127.0.0.1", "::1"}
+    for family, destination in (
+        (socket.AF_INET, "192.0.2.1"),
+        (socket.AF_INET6, "2001:db8::1"),
+    ):
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as probe:
+                probe.connect((destination, 9))
+                found.add(str(probe.getsockname()[0]).split("%", 1)[0])
+        except OSError:
+            continue
+    return frozenset(found)
+
+
+def _serving_device(
+    known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
+) -> tailnet.Device | None:
+    """The tailnet node HQ is actually running on.
+
+    The obvious answer -- the device the sweep marked ``self`` -- is the device
+    whose *daemon took the reading*, which is the controller's host. Those are
+    the same machine only when HQ and the controller share one, and they are
+    not obliged to: run HQ anywhere else and it introduces itself as the
+    controller's host, then evaluates the reachability verdict against the
+    wrong node, confidently.
+
+    Resolved by address, never by name: a tailnet name, an mDNS name and a
+    declaration key are three strings for one machine, and matching any of them
+    is how the wrong node gets picked.
+
+    It takes two hops, because neither end holds both halves. The host knows
+    the addresses it answers at -- a LAN address, typically, since a tailnet
+    address lives on an interface the hostname does not resolve to. The tailnet
+    knows only its own addresses. The *declaration* is the one place both are
+    written down, so it is the bridge: own address -> declared machine ->
+    tailnet device.
+
+    Falls back to the observer flag when nothing resolves, which keeps a
+    single-host deployment behaving exactly as it did.
+    """
+
+    mine = _own_addresses()
+    if mine:
+        for device in known.values():
+            if mine.intersection(device.addresses):
+                return device
+        for machine in declared:
+            addresses = frozenset(machine.get("addresses") or ())
+            if not mine.intersection(addresses):
+                continue
+            for device in known.values():
+                if addresses.intersection(device.addresses):
+                    return device
+    return tailnet.observer(known)
+
+
+def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
+    """The stable tailnet addresses assigned to the device serving HQ."""
 
     serves = found.serves
     if serves is None:
         return ()
-    declared = _declared_addresses(serves.name, found.declared)
     rows: list[Address | None] = [
         _address_row(address, "HQ answers here") for address in serves.addresses
     ]
-    # The addresses HQ was declared at, where the tailnet also reports reaching
-    # the node there. Not the rest of what the daemon advertises: those are
-    # endpoints for finding a path through NAT, one of them the outside of a
-    # router, and none of them anything HQ serves on. Printed under a heading
-    # about where HQ answers, a public one of those says HQ is on the internet.
-    for endpoint in serves.endpoints:
-        row = _address_row(endpoint, "HQ answers here")
-        if row is None or split_host_port(row.value)[0] not in declared:
-            continue
-        rows.append(row)
     return tuple(_deduplicated(rows))
 
 
-def _machine_url(addresses, declared) -> str:
-    """The page for the machine answering at any of these addresses.
+def _machine_name(addresses, declared) -> str:
+    """The declared machine answering at any of these addresses.
 
     By address, because the tailnet's name for a machine is rarely the one HQ
     uses -- a laptop is whatever its owner typed into it years ago -- and the
     address is the one thing every source of a machine agrees on.
+
+    Resolved through the shared index, over the declarations this page has
+    already read, so it costs no query. This once intersected two sets of
+    strings, which meant an address recorded with a port on one side and
+    without on the other failed to match a machine HQ had both halves of.
     """
 
-    from django.urls import reverse
+    from .locate import index_of
 
-    wanted = {str(address) for address in addresses or ()}
-    if not wanted:
-        return ""
-    for machine in declared:
-        name = str(machine.get("name", ""))
-        if name and wanted & {str(a) for a in machine.get("addresses") or ()}:
-            return reverse("control_plane:machine", kwargs={"name": name})
+    index = index_of(declared=declared)
+    for address in addresses or ():
+        name = index.at(address)
+        if name:
+            return name
     return ""
 
 
-def _declared_addresses(name: str, declared) -> frozenset[str]:
-    """Every address HQ was told this machine answers at."""
+def _machine_url(name: str) -> str:
+    if not name:
+        return ""
+    from django.urls import reverse
 
-    return frozenset(
-        str(address)
-        for machine in declared
-        if str(machine.get("name", "")) == name
-        for address in machine.get("addresses") or ()
-    )
+    return reverse("control_plane:machine", kwargs={"name": name})
 
 
 def _deduplicated(rows) -> list[Address]:

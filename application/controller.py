@@ -121,6 +121,55 @@ def _automatic_action(
 
 
 @transaction.atomic
+def _finding_repairs(controller_id: str, now) -> list[str]:
+    """Queue repairs for findings the controller contract already runs itself.
+
+    A second source of due work beside `_automatic_action`, which cannot see
+    this class of fault: it asks "has the declaration changed, or is something
+    reporting broken?" and the failure it misses is the one where nothing
+    changed and nothing looked broken.
+    """
+
+    from django.conf import settings
+
+    if not getattr(settings, "SEVERINO_FINDINGS_AUTO_REMEDY", False):
+        return []
+    from .findings import auto_remediable
+    from .security import cli_principal
+
+    queued: list[str] = []
+    for repair in auto_remediable(principal=cli_principal()):
+        resource = ManagedResource.objects.select_for_update().filter(
+            key=repair.resource_key, enabled=True
+        ).first()
+        if resource is None:
+            continue
+        # Keyed on the evidence, not the attempt.
+        idempotency_key = (
+            f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:"
+            f"{now.date().isoformat()}"
+        )[:200]
+        if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
+            continue
+        if OperationRequest.objects.filter(
+            resource=resource,
+            action=OperationRequest.Action.RECONCILE,
+            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
+        ).exists():
+            continue
+        OperationRequest.objects.create(
+            resource=resource,
+            action=OperationRequest.Action.RECONCILE,
+            requested_actor=controller_id,
+            requested_interface="controller",
+            reason=repair.reason,
+            idempotency_key=idempotency_key,
+            input={"generation": resource.generation},
+        )
+        queued.append(resource.key)
+    return queued
+
+
 def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     """Queue work declared automatic by the validated controller contract."""
     scheduled: list[str] = []
@@ -169,7 +218,10 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             input={"generation": resource.generation},
         )
         scheduled.append(str(operation.id))
-    return {"ok": True, "scheduled": scheduled}
+    # The second source, after the contract-driven pass so anything already
+    # queued is deduped by the guards above rather than queued twice.
+    repaired = _finding_repairs(controller_id, now)
+    return {"ok": True, "scheduled": scheduled, "repaired": repaired}
 
 
 @transaction.atomic

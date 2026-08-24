@@ -13,7 +13,6 @@ from typing import Any, Callable
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
 
 from core.audit import operation_context, record_event
 from core.models import AuditLog
@@ -22,7 +21,7 @@ from projects.models import PROJECT_CATEGORY_CHOICES, Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
 from .security import Capability, Principal
-from .projection import iso, page_size
+from .projection import addressable, iso, listing
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -99,29 +98,20 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
 def list_projects(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
-    qs = Project.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(description__icontains=query)
-            | Q(technologies_used__icontains=query)
-        )
-    items = [
-        serialize_project(project)
-        for project in qs.order_by("slug")[: page_size(limit)]
-    ]
-    return {"items": items, "count": len(items)}
+    return listing(
+        Project,
+        serialize_project,
+        search=("name", "slug", "description", "technologies_used"),
+        status=status,
+        query=query,
+        limit=limit,
+    )
 
 
 def get_project(slug: str) -> dict[str, Any]:
-    try:
-        project = Project.objects.get(slug=slug)
-    except Project.DoesNotExist as exc:
-        raise NotFoundError(f"Project {slug!r} was not found.") from exc
-    return serialize_project(project, relationships=True)
+    return addressable(
+        Project, serialize_project, slug, label="Project", missing=NotFoundError
+    )
 
 
 def refresh_project(

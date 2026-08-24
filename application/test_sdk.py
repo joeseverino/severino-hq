@@ -12,6 +12,7 @@ from django.views import View
 from pydantic import ValidationError
 
 from application.capabilities import CapabilitySpec
+from application.connections import ConnectionSpec
 from application.plugins import NavigationItem, PluginManifest
 from application.security import Principal
 from core.models import AuditLog
@@ -61,6 +62,16 @@ class SdkContractTests(SimpleTestCase):
         from hq_sdk.capabilities import CapabilitySpec as SdkCapabilitySpec
 
         self.assertIs(SdkCapabilitySpec, CapabilitySpec)
+
+    def test_connection_spec_is_available_from_the_sdk(self):
+        from hq_sdk.connections import (
+            ConnectionSpec as SdkConnectionSpec,
+            describe_connections as sdk_describe_connections,
+        )
+        from application.connections import describe_connections
+
+        self.assertIs(SdkConnectionSpec, ConnectionSpec)
+        self.assertIs(sdk_describe_connections, describe_connections)
 
 
 class _AllowedView(CapabilityRequiredMixin, View):

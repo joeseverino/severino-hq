@@ -59,6 +59,7 @@ class PluginManifest:
     # so a thing that needs doing is visible without opening its own page.
     attention_provider: str = ""
     capability_provider: str = ""
+    resource_provider: str = ""
     search_provider: str = ""
     health_provider: str = ""
     # Optional. Routes under this plugin's own url_prefix that carry their own
@@ -74,6 +75,9 @@ class PluginManifest:
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
+    # Appended so positional manifests built against earlier SDKs cannot have a
+    # later optional value silently rebound to a new field.
+    connection_provider: str = ""
 
 
 def _import(spec: str) -> Any:
@@ -153,6 +157,8 @@ def _validate_providers(manifest: PluginManifest) -> None:
         "overview_provider",
         "attention_provider",
         "capability_provider",
+        "resource_provider",
+        "connection_provider",
         "search_provider",
         "health_provider",
     ):
@@ -524,6 +530,14 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
 
 def plugin_capability_specs() -> tuple[Any, ...]:
     return _provided("capability_provider")
+
+
+def plugin_resource_specs() -> tuple[Any, ...]:
+    return _provided("resource_provider")
+
+
+def plugin_connection_specs() -> tuple[Any, ...]:
+    return _provided("connection_provider")
 
 
 def plugin_search_definitions() -> tuple[Any, ...]:

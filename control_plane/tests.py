@@ -28,7 +28,7 @@ from application.infrastructure import (
 )
 from application.security import cli_principal, mcp_principal
 
-from .models import ManagedResource, OperationRequest
+from .models import ManagedResource, OperationRequest, ProviderConnection
 from .providers import (
     NPMProxyHostSpec,
     describe_providers,
@@ -447,6 +447,47 @@ class InfrastructureWebTests(TestCase):
         self.assertContains(response, "certificate_available")
         self.assertContains(response, "True")
 
+    def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
+        ManagedResource.objects.create(
+            key="homelab-server",
+            kind="machine",
+            spec={"name": "homelab-server", "addresses": ["100.64.0.9"]},
+        )
+        ManagedResource.objects.create(
+            key="app-server",
+            kind="machine",
+            spec={"name": "app-server", "addresses": ["100.64.0.10"]},
+        )
+        ProviderConnection.objects.create(
+            connection_ref="an-npm",
+            controller_id="homelab-server",
+            provider="npm",
+            endpoint="https://npm.example.test",
+            reaches=["app-server"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        proxy = ManagedResource.objects.create(
+            key="an-app-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["app.example.test"],
+                "forward_scheme": "http",
+                "forward_host": "100.64.0.10",
+                "forward_port": 8000,
+            },
+        )
+
+        response = self.client.get(
+            reverse("control_plane:detail", kwargs={"key": proxy.key})
+        )
+
+        self.assertEqual(response.context["provider_machine"]["name"], "homelab-server")
+        self.assertEqual(response.context["origin_machine"].name, "app-server")
+        self.assertContains(response, "Runs on")
+        self.assertContains(response, "Forwards to")
+
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {
             "certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"
@@ -720,6 +761,15 @@ class InfrastructureViewsTests(TestCase):
         )
         self.assertEqual(report.status_code, 200)
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
+
+    def test_findings_page_explains_the_claim_and_its_evidence(self):
+        response = self.client.get(reverse("control_plane:findings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Findings")
+        self.assertContains(response, "Nothing has ever observed tls.certificate")
+        self.assertContains(response, "Records of this kind")
+        self.assertContains(response, reverse("action_items"))
 
     def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
         OperationRequest.objects.create(

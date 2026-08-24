@@ -17,11 +17,14 @@ from projects.models import Project
 
 from .dashboard import operating_snapshot
 from .infrastructure import get_managed_resource, operation_summary
+from .projection import projection_scope, read_once
 from .read_models import change_feed
 from .ui import (
     PLOT_LEFT,
     PLOT_WIDTH,
     ChartSeries,
+    PageNavigation,
+    PageSection,
     Timeline,
     TimelineItem,
     line_chart,
@@ -30,6 +33,26 @@ from .ui import (
 
 
 class UiProjectionTests(TestCase):
+    def test_page_navigation_is_a_stable_accessible_fragment_map(self):
+        navigation = PageNavigation(
+            (PageSection("overview", "Overview"), PageSection("recent-work", "Recent work"))
+        )
+
+        rendered = render_to_string(
+            "partials/_page_navigation.html", {"navigation": navigation}
+        )
+
+        self.assertIn('aria-label="On this page"', rendered)
+        self.assertIn('href="#recent-work"', rendered)
+
+    def test_page_navigation_rejects_ambiguous_or_unsafe_destinations(self):
+        with self.assertRaisesMessage(ValueError, "only lowercase"):
+            PageSection("Recent work", "Recent work")
+        with self.assertRaisesMessage(ValueError, "must be unique"):
+            PageNavigation(
+                (PageSection("overview", "Overview"), PageSection("overview", "Again"))
+            )
+
     def test_timeline_requires_chronological_items_and_renders_links(self):
         item = TimelineItem(
             date(2026, 11, 1),
@@ -339,7 +362,7 @@ class ChartAxisSpanTests(TestCase):
 # domain: a single fixed budget is wrong by construction the moment an extension
 # is installed, and it failed exactly that way in the composed image while
 # passing everywhere else.
-HOST_QUERY_BUDGET = 34
+HOST_QUERY_BUDGET = 31
 PER_EXTENSION_QUERY_BUDGET = 10
 
 
@@ -369,14 +392,8 @@ class DashboardProjectionTests(TestCase):
 
         # The snapshot assembles the whole page -- KPIs, the composed queue, the
         # card row and the recent lists -- in one call, so this covers all of it
-        # rather than a part. Six are a section's reading answered once for its
-        # card and once for the KPI block. Six more are the service view, which
-        # is a join rather than a table: resources, the topology snapshot and
-        # published projects, derived once for the queue and once for the card.
-        # On local SQLite that is microseconds, and the duplication is visible
-        # here rather than hidden behind a cache that could go stale -- the last
-        # cache tried here served a stale count to a test, which then passed
-        # while asserting the wrong answer.
+        # rather than a part. Section readings and the service join are shared
+        # only for this projection; a later snapshot always reads again.
         with patch("application.domains.extension_domains", return_value=()):
             queries = self._snapshot_queries()
 
@@ -475,6 +492,20 @@ class DashboardProjectionTests(TestCase):
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
+
+
+class ProjectionScopeTests(TestCase):
+    def test_one_projection_reuses_a_read_and_the_next_reads_fresh(self):
+        values = iter(("first", "second"))
+
+        def loader():
+            return next(values)
+
+        with projection_scope():
+            self.assertEqual(read_once("example", loader), "first")
+            self.assertEqual(read_once("example", loader), "first")
+        with projection_scope():
+            self.assertEqual(read_once("example", loader), "second")
 
 
 class ChangeFeedTests(TestCase):

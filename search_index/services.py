@@ -5,7 +5,9 @@ from __future__ import annotations
 from django.db import transaction
 
 from .models import SearchDocument
-from .registry import DEFINITIONS, SearchDefinition
+from application.search_contracts import SearchDefinition
+
+from .registry import DEFINITIONS
 
 
 def index_instance(definition: SearchDefinition, instance) -> None:

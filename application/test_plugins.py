@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 import json
 import os
 from pathlib import Path
@@ -23,7 +23,7 @@ from .plugins import (
     plugin_token_authenticated_prefixes,
 )
 from .domains import domain_navigation
-from .ui import Insight, Kpi
+from .ui import Insight, Kpi, PageNavigation, PageSection
 
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
@@ -319,6 +319,27 @@ class PluginContractTests(TestCase):
         ):
             installed_plugins()
 
+    def test_invalid_connection_provider_reference_fails_at_startup(self):
+        env, importer = self.load(
+            replace(VALID, connection_provider="not a module reference")
+        )
+        with env, importer, self.assertRaisesRegex(
+            ImproperlyConfigured, "invalid connection_provider"
+        ):
+            installed_plugins()
+
+    def test_new_manifest_fields_append_to_the_positional_contract(self):
+        legacy_fields = [
+            field.name
+            for field in fields(PluginManifest)
+            if field.name != "connection_provider"
+        ]
+
+        rebuilt = PluginManifest(*(getattr(VALID, name) for name in legacy_fields))
+
+        self.assertEqual(rebuilt, VALID)
+        self.assertEqual(fields(PluginManifest)[-1].name, "connection_provider")
+
     def test_malformed_url_prefix_fails_at_startup(self):
         env, importer = self.load(
             replace(VALID, url_prefix="/notes", urlconf="example.urls")
@@ -383,10 +404,15 @@ class PluginContractTests(TestCase):
         empty = render_to_string(
             "partials/_empty_state.html", {"message": "No notes have been created."}
         )
+        page_navigation = render_to_string(
+            "partials/_page_navigation.html",
+            {"navigation": PageNavigation((PageSection("notes", "Notes"),))},
+        )
 
         self.assertIn("Shared host interface", page_head)
         self.assertIn('class="kpi is-zero"', kpis)
         self.assertIn("No notes have been created", empty)
+        self.assertIn('href="#notes"', page_navigation)
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
         installed_plugins.cache_clear()

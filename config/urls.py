@@ -6,6 +6,8 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import (
+    ActionItemCountView,
+    ActionItemsView,
     DashboardLinkChoiceView,
     ConnectionView,
     DashboardView,
@@ -14,6 +16,7 @@ from core.views import (
     health_live,
     health_ready,
 )
+from core.command_views import CommandView
 from application.plugins import plugin_urlpatterns
 
 urlpatterns = [
@@ -39,6 +42,8 @@ urlpatterns = [
     ),
     path("oidc/", include("mozilla_django_oidc.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
+    path("action-items/", ActionItemsView.as_view(), name="action_items"),
+    path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(
         "dashboard/links/",
@@ -46,6 +51,7 @@ urlpatterns = [
         name="dashboard_links",
     ),
     path("search/", SearchView.as_view(), name="search"),
+    path("commands/<str:name>/", CommandView.as_view(), name="command"),
     path("projects/", include("projects.urls")),
     path("content/", include("content.urls")),
     path("docs/", include("docs_index.urls")),

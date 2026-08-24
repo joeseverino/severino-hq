@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 The internal operating system behind Severino Labs. A host that composes
@@ -82,6 +82,12 @@ records HQ created, HQ can show what it does not manage and adopt it, capturing
 the live settings verbatim so the first reconciliation after adopting changes
 nothing.
 
+HQ also derives one actionable topology from those same contracts: controllers
+carry connections, connections enable abilities and reach targets, and abilities
+govern declared resources. The web explorer, HTTP API, and MCP expose the same
+normalized graph; its actions invoke the existing application capabilities, so
+there is no second source of truth or graph-only mutation path.
+
 ![Infrastructure control plane — HQ authors desired state, a capability-filtered homelab controller reconciles providers and reports back both observed state and full inventory](docs/diagrams/infrastructure-control-plane.png)
 
 <sup>Diagram source: [`docs/diagrams/infrastructure-control-plane.mmd`](docs/diagrams/infrastructure-control-plane.mmd),
@@ -127,12 +133,16 @@ available in the header.
 - The top navigation highlights the active section and stays on one row on
   desktop. If the viewport is narrow, the nav scrolls horizontally instead of
   wrapping into stacked links.
-- Account actions (Admin, Sign out) sit in a dropdown under your username,
-  keeping the header nav compact.
+- Operator utilities (Action items, Admin, Sign out) sit in a dropdown under
+  your username, keeping the domain nav compact. Dashboard and Action items
+  show the current queue count on that entry without making unrelated pages
+  assemble the queue just to render the header.
 - Header search goes to `/search/` and searches projects, content, docs,
   assets, expenses, and receipts.
-- The dashboard "needs attention" queue links to filtered cleanup views for
-  docs needing review and draft content.
+- `/action-items/` is the complete cross-domain queue. The dashboard is its
+  compact preview; host domains and installed extensions emit the same Insight
+  contract, and derived infrastructure findings link through to their evidence
+  and safe existing remedies.
 - Dashboard quick actions link to the common create/import flows: new expense,
   upload receipt, new project, new content, and Docs manifest import.
 - Relationship health counts are status indicators, not blockers; non-zero

@@ -17,11 +17,11 @@ rather than a zero. The queue total leads, because it is the only figure here
 that summarises every domain at once.
 {% endcomment %}
 <section class="kpi-grid">
-  <div class="kpi {% if not action_queue_count %}is-zero{% endif %}">
+  <a class="kpi {% if not action_queue_count %}is-zero{% endif %}" href="{% url 'action_items' %}">
     <span class="label">Open items</span>
     <span class="value">{{ action_queue_count }}</span>
     <span class="muted">{{ action_queue_group_count }} area{{ action_queue_group_count|pluralize }}</span>
-  </div>
+  </a>
   {% for card in dashboard_cards %}
     <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
       <span class="label">{{ card.label }}</span>
@@ -49,11 +49,11 @@ that summarises every domain at once.
     <section class="card priority-card">
       <div class="section-head">
         <h2>Priority queue</h2>
-        {% if action_queue_count %}<span class="count">{{ action_queue_count }} items</span>{% endif %}
+        <a class="count" href="{% url 'action_items' %}">{% if action_queue_count %}{{ action_queue_count }} item{{ action_queue_count|pluralize }}{% else %}Open{% endif %} &rarr;</a>
       </div>
       {% if action_queue_count %}
         <ul class="action-list action-list-compact">
-          {% for item in action_queue %}
+          {% for item in action_queue|slice:":5" %}
             {% if item.count %}
               <li>
                 <a href="{{ item.url }}">
@@ -64,6 +64,7 @@ that summarises every domain at once.
             {% endif %}
           {% endfor %}
         </ul>
+        {% if action_queue_group_count > 5 %}<p class="section-foot"><a href="{% url 'action_items' %}">All {{ action_queue_group_count }} areas &rarr;</a></p>{% endif %}
       {% else %}
         <div class="empty compact"><p>No cleanup items right now.</p></div>
       {% endif %}

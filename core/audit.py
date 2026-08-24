@@ -123,7 +123,13 @@ def audit_operation(*, operation: str, principal=None, operation_id: str = ""):
         yield
 
 
-def register_audit(model, type_label: str, *, redact: Iterable[str] = ()) -> None:
+def register_audit(
+    model,
+    type_label: str,
+    *,
+    redact: Iterable[str] = (),
+    observation: Iterable[str] = (),
+) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
     `redact` names fields whose values must never reach the log. The field is
@@ -135,6 +141,12 @@ def register_audit(model, type_label: str, *, redact: Iterable[str] = ()) -> Non
         return
     _AUDITED_MODELS[model] = type_label
     secret = frozenset(redact)
+    # Fields that record HQ *looking*, not the world changing. A sweep confirms
+    # hundreds of declarations per pass and stamps the time on each; audited as
+    # changes that is a row per resource per sweep saying "checked, still fine",
+    # burying every real event. The stamp is still written and still read by the
+    # staleness rules; it is just not an event on its own.
+    looked = frozenset(observation)
 
     @receiver(post_init, sender=model, weak=False)
     def _on_init(sender, instance, **kwargs):
@@ -154,6 +166,12 @@ def register_audit(model, type_label: str, *, redact: Iterable[str] = ()) -> Non
             # A save that changed nothing is not an event. Django writes
             # every field on every `save()`, so an unchanged re-submit would
             # otherwise leave a row saying "Updated" and meaning nothing.
+            # Nor is a save that only recorded having looked. Dropped after the
+            # diff rather than before it, so the timestamp still appears beside
+            # a real change and only disappears when it is the whole story.
+            if looked and changes and set(changes) <= looked:
+                instance._audit_snapshot = _snapshot(instance)
+                return
             if not changes:
                 return
         record_event(

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Topology · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Topology</h1>
+    <p class="muted">Live relationships derived from what HQ declares, what controllers observe, and what each connection can do.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn primary" href="{% url 'control_plane:create' %}">Add resource</a>
+    <a class="btn" href="{% url 'control_plane:list' %}">Resources</a>
+    <a class="btn" href="{% url 'control_plane:connections' %}">Connections</a>
+  </div>
+</div>
+
+<nav class="topology-lenses" aria-label="Topology views">
+  <a class="scope-chip{% if not active_lens %} is-active{% endif %}" href="{% url 'control_plane:topology' %}"{% if not active_lens %} aria-current="page"{% endif %}>Everything</a>
+  {% for lens in topology_lenses %}
+    <a class="scope-chip{% if active_lens.name == lens.name %} is-active{% endif %}" href="?lens={{ lens.name|urlencode }}#map" title="{{ lens.summary }}"{% if active_lens.name == lens.name %} aria-current="page"{% endif %}>{{ lens.label }}</a>
+  {% endfor %}
+</nav>
+
+{% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary }}</p>{% endif %}
+
+<div class="topology-summary" role="group" aria-label="Topology summary">
+  <span><strong>{{ topology.nodes|length }}</strong> nodes</span>
+  <span><strong>{{ topology.edges|length }}</strong> relationships</span>
+  {% for group in topology_groups %}<span><strong>{{ group.items|length }}</strong> {{ group.label|lower }}</span>{% endfor %}
+</div>
+
+<section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
+  <div class="topology-toolbar" role="group" aria-label="Topology controls">
+    <label class="topology-search">
+      <span class="visually-hidden">Filter topology</span>
+      <input type="search" placeholder="Filter nodes…" data-topology-search autocomplete="off">
+    </label>
+    <fieldset class="topology-kind-filters">
+      <legend class="visually-hidden">Node types</legend>
+      {% for group in topology_groups %}
+        <label><input type="checkbox" value="{{ group.kind }}" data-topology-kind checked> {{ group.label }}</label>
+      {% endfor %}
+    </fieldset>
+    <button class="btn ghost compact" type="button" data-topology-reset>Reset focus</button>
+  </div>
+
+  <p class="topology-hint muted" aria-live="polite" data-topology-status>Select a node to isolate its immediate relationships. Open it for actions and detail.</p>
+
+  <div class="topology-map" id="map" tabindex="-1">
+    {% for group in topology_groups %}
+      <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
+        <header>
+          <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
+          <h2 id="topology-{{ group.kind }}">{{ group.label }}</h2>
+          <span class="count" data-topology-count>{{ group.items|length }}</span>
+        </header>
+        <div class="topology-node-list">
+          {% for item in group.items %}
+            <details
+              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
+              data-topology-node="{{ item.node.id }}"
+              data-topology-node-kind="{{ item.node.kind }}"
+              data-topology-neighbors="{{ item.neighbors }}"
+              data-topology-search-text="{{ item.node.label }} {{ item.node.subtitle }} {{ item.node.detail }}"
+              name="topology-node"
+              {% if item.node.id == focus_node %}open{% endif %}
+            >
+              <summary>
+                <span class="topology-node-title">
+                  <strong>{{ item.node.label }}</strong>
+                  <small>{{ item.node.subtitle }}</small>
+                </span>
+                <span class="topology-node-degree" title="{{ item.degree }} direct relationship{{ item.degree|pluralize }}">{{ item.degree }}</span>
+              </summary>
+              <div class="topology-node-body">
+                {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
+                {% if item.node.detail %}<p class="muted">{{ item.node.detail }}</p>{% endif %}
+                {% if item.node.actions %}
+                  <div class="topology-node-actions">
+                    {% for action in item.node.actions %}
+                      {% if action.method == "POST" %}
+                        <form action="{{ action.url }}" method="post">
+                          {% csrf_token %}
+                          <button type="submit" class="btn compact{% if action.effect == 'infrastructure_change' or action.recommended %} primary{% endif %}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</button>
+                        </form>
+                      {% else %}
+                        <a class="btn compact{% if action.effect == 'destructive' %} danger{% elif action.recommended %} primary{% endif %}" href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </details>
+          {% empty %}
+            <p class="muted">Nothing observed in this layer.</p>
+          {% endfor %}
+        </div>
+      </section>
+    {% empty %}
+      {% if active_lens %}
+        {% include "partials/_empty_state.html" with message="Nothing currently matches this view." %}
+      {% else %}
+        {% include "partials/_empty_state.html" with message="Nothing has been declared or observed yet." %}
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<details class="card topology-relations" id="topology-relations">
+  <summary><strong>Relationship ledger</strong> <span class="muted">Every exact edge behind the explorer</span></summary>
+  <div class="table-scroll">
+    <table class="data-table stacks">
+      <thead><tr><th>From</th><th>Relationship</th><th>To</th><th>State</th></tr></thead>
+      <tbody>
+        {% for item in topology_edges %}
+          <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
+            <td data-label="From"><a href="?focus={{ item.source.id|urlencode }}#map">{{ item.source.label }}</a><br><code>{{ item.source.kind }}</code></td>
+            <td data-label="Relationship">{{ item.edge.label }}</td>
+            <td data-label="To"><a href="?focus={{ item.target.id|urlencode }}#map">{{ item.target.label }}</a><br><code>{{ item.target.kind }}</code></td>
+            <td data-label="State"><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="muted">Relationships appear when controllers report connections or resources are declared.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endblock %}

@@ -19,7 +19,9 @@ from django.utils import formats
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from application.connections import link_choices, outward_links
-from application.dashboard import operating_snapshot
+from application.command_center import command_center
+from application.dashboard import operating_snapshot, work_queue
+from application.projection import projection_scope
 from application.plugins import plugin_health
 from application.search import global_search
 from application.security import safe_next, web_principal
@@ -27,7 +29,7 @@ from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
 from contacts.d1 import (
     D1Error,
-    get_recent_submissions,
+    get_dashboard_state,
     search_submissions,
 )
 from .models import AuditLog
@@ -185,10 +187,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         try:
-            recent_contacts = get_recent_submissions(limit=4)
+            recent_contacts, unread_contacts = get_dashboard_state(limit=4)
+            contacts = (unread_contacts, "ok")
         except D1Error:
             recent_contacts = []
-        snapshot = operating_snapshot()
+            contacts = (0, "unavailable")
+        snapshot = operating_snapshot(contacts=contacts)
         for project in snapshot["active_projects"]:
             project["updated_at"] = datetime.fromisoformat(project["updated_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
@@ -282,10 +286,63 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             action_queue=action_queue,
             action_queue_count=snapshot["priority_count"],
             action_queue_group_count=snapshot["priority_group_count"],
+            profile_action_count=snapshot["priority_count"],
+            show_action_count=True,
             this_year=snapshot["year"],
             dashboard_cards=snapshot["cards"],
         )
         return ctx
+
+
+class ActionItemsView(LoginRequiredMixin, TemplateView):
+    """The full human surface for HQ's one composed attention queue."""
+
+    template_name = "action_items.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get("q", "").strip().casefold()
+        status = self.request.GET.get("status", "").strip()
+        source = self.request.GET.get("source", "").strip()
+        with projection_scope():
+            all_items = work_queue()
+        items = [
+            item
+            for item in all_items
+            if (not status or item["status"] == status)
+            and (not source or item["source_id"] == source)
+            and (
+                not query
+                or query
+                in " ".join(
+                    (item["source"], item["label"], item["detail"])
+                ).casefold()
+            )
+        ]
+        sources = tuple(
+            {item["source_id"]: item["source"] for item in all_items}.items()
+        )
+        context.update(
+            action_items=items,
+            action_item_total=sum(item["count"] for item in items),
+            action_item_group_total=len(items),
+            profile_action_count=sum(item["count"] for item in all_items),
+            show_action_count=True,
+            action_sources=sources,
+            action_query=self.request.GET.get("q", "").strip(),
+            action_status=status,
+            action_source=source,
+        )
+        return context
+
+
+class ActionItemCountView(LoginRequiredMixin, View):
+    """Compute the header badge only when an operator opens its menu."""
+
+    def get(self, request):
+        with projection_scope():
+            count = sum(item["count"] for item in work_queue())
+        return JsonResponse({"count": count})
 
 
 class SearchView(LoginRequiredMixin, TemplateView):
@@ -298,10 +355,11 @@ class SearchView(LoginRequiredMixin, TemplateView):
         groups: list[dict] = []
         contacts: list = []
         total = 0
+        principal = web_principal(self.request.user)
         if q:
             outcome = global_search(
                 q,
-                principal=web_principal(self.request.user),
+                principal=principal,
                 limit_per_scope=self.result_limit,
             )
             groups = outcome["groups"]
@@ -311,12 +369,25 @@ class SearchView(LoginRequiredMixin, TemplateView):
             except D1Error:
                 contacts = []
             total += len(contacts)
+        discovery = command_center(q, principal=principal)
         ctx.update(
             q=q,
             search_query=q,
             groups=groups,
             contacts=contacts,
             total=total,
+            discovered_resources=discovery["resources"],
+            discovered_commands=discovery["commands"],
+            discovered_connections=discovery["connections"],
+            discovered_views=discovery["views"],
+            discovered_checks=discovery["checks"],
+            discovery_total=(
+                len(discovery["resources"])
+                + len(discovery["commands"])
+                + len(discovery["connections"])
+                + len(discovery["views"])
+                + len(discovery["checks"])
+            ),
         )
         return ctx
 

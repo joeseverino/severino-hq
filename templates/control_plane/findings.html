@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Findings · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Findings</h1>
+    <p class="page-lede">Claims derived from the live topology, with the exact evidence and safe existing actions behind each one.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'action_items' %}">Action items</a>
+    <a class="btn" href="{% url 'control_plane:topology' %}">Topology</a>
+  </div>
+</div>
+
+<nav class="topology-lenses" aria-label="Finding rules">
+  <a class="scope-chip{% if not active_rule %} is-active{% endif %}" href="{% url 'control_plane:findings' %}"{% if not active_rule %} aria-current="page"{% endif %}>Everything</a>
+  {% for rule in finding_rules %}
+    <a class="scope-chip{% if active_rule.name == rule.name %} is-active{% endif %}" href="?rule={{ rule.name|urlencode }}"{% if active_rule.name == rule.name %} aria-current="page"{% endif %}>{{ rule.title }}</a>
+  {% endfor %}
+</nav>
+
+<div class="topology-summary" role="status">
+  <span><strong>{{ finding_entries|length }}</strong> finding{{ finding_entries|length|pluralize }}</span>
+  {% if finding_counts.serious %}<span><strong>{{ finding_counts.serious }}</strong> serious</span>{% endif %}
+  {% if finding_counts.attention %}<span><strong>{{ finding_counts.attention }}</strong> attention</span>{% endif %}
+</div>
+
+<div class="finding-list">
+  {% for entry in finding_entries %}
+    <article class="card finding-card is-{{ entry.finding.severity }}">
+      <div class="section-head">
+        <div>
+          <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity }}</span>
+          <h2>{{ entry.finding.title }}</h2>
+        </div>
+        {% if entry.topology_url %}<a class="btn compact" href="{{ entry.topology_url }}">Show in topology</a>{% endif %}
+      </div>
+      <p>{{ entry.finding.explanation }}</p>
+      {% if entry.finding.evidence %}
+        <dl class="finding-evidence">
+          {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+        </dl>
+      {% endif %}
+      {% if entry.remedies %}
+        <div class="finding-actions">
+          {% for action in entry.remedies %}
+            {% if action.method == "POST" %}
+              <form action="{{ action.url }}" method="post">{% csrf_token %}<button type="submit" class="btn compact primary">{{ action.label }}</button></form>
+            {% else %}
+              <a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </article>
+  {% empty %}
+    {% include "partials/_empty_state.html" with message="No derived findings match this view." %}
+  {% endfor %}
+</div>
+{% endblock %}

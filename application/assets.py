@@ -8,14 +8,13 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Q
 
 from assets.models import Asset
 from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from projects.models import Project
 from .security import Capability, Principal
-from .projection import iso, page_size
+from .projection import addressable, iso, listing
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -94,27 +93,20 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
 def list_assets(
     *, status: str | None = None, query: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
-    qs = Asset.objects.all()
-    if status:
-        qs = qs.filter(status=status)
-    if query:
-        qs = qs.filter(
-            Q(item_name__icontains=query)
-            | Q(slug__icontains=query)
-            | Q(vendor__icontains=query)
-        )
-    items = [
-        serialize_asset(asset) for asset in qs.order_by("slug")[: page_size(limit)]
-    ]
-    return {"items": items, "count": len(items)}
+    return listing(
+        Asset,
+        serialize_asset,
+        search=("item_name", "slug", "vendor"),
+        status=status,
+        query=query,
+        limit=limit,
+    )
 
 
 def get_asset(slug: str) -> dict[str, Any]:
-    try:
-        asset = Asset.objects.get(slug=slug)
-    except Asset.DoesNotExist as exc:
-        raise NotFoundError(f"Asset {slug!r} was not found.") from exc
-    return serialize_asset(asset, relationships=True)
+    return addressable(
+        Asset, serialize_asset, slug, label="Asset", missing=NotFoundError
+    )
 
 
 @transaction.atomic

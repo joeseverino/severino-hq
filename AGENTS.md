@@ -152,12 +152,31 @@ Tests answer "does this behave?". They do not answer "is this still one system?"
 are graph questions, so ask a graph. With the repository indexed in a code
 knowledge graph, four queries carry the bar:
 
+Write the query exactly as given, and mind two traps in this engine.
+
+`is_test` is **not** reliable — test classes carry `is_test: false`, so any
+filter on it silently counts the whole suite and reports a regression that is
+not one. And `NOT <prop> CONTAINS "..."` returns **no rows at all** rather than
+the complement, so a negated filter reads as a clean bar when it measured
+nothing. Both of those cost real time to discover. Filter positively, or return
+the rows and exclude test paths by eye.
+
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `SIMILAR_TO` pairs, excluding tests | does not grow (currently 7) |
-| Did a function get away from me? | `cognitive >= 22`, excluding tests | no new entries (currently 11) |
-| Hidden O(n²)? | `linear_scan_in_loop >= 1` | 0 |
-| Did I tangle the call graph? | circular `CALLS` (SCC > 1) | no new *confirmed* cycle |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **7**) |
+| Did a function get away from me? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.cognitive >= 22 AND NOT f.file_path CONTAINS "test" RETURN f.qualified_name, f.cognitive` — note the caveat above; verify by eye | no new entries (currently 7, plus one migration) |
+| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | 3 in production, all pre-existing |
+| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | 2, both confirmed false positives |
+
+The seven standing `SIMILAR_TO` pairs are the asset/project serialize and
+upsert twins, `capability_specs`/`resource_specs`, `pins.ordered`/`pinned`,
+`sections.projects`/`services`, `seed_demo._seed_content`/`_seed_docs`, and
+`exports.documentation_csv`/`projects_csv`.
+
+The two standing cycles resolve `.get()` on a dict to a class method named
+`get`; read the function before believing a third. The three standing
+`linear_scan_in_loop` hits are `plugins._validate_composition`,
+`search._fallback_snippet` and `services._faults`.
 
 Re-index after a change and re-run them; a number that moved the wrong way is a
 finding whether or not the suite is green.

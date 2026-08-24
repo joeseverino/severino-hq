@@ -193,6 +193,13 @@ class TrustedNetworkMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Django's SECURE_PROXY_SSL_HEADER is intentionally simple: when it is
+        # enabled it believes X-Forwarded-Proto without deciding who sent it.
+        # Make the proxy trust decision first so an arbitrary peer cannot turn
+        # a plain request into an apparently secure one by writing a header.
+        peer = str(request.META.get("REMOTE_ADDR", "") or "").strip()
+        if request.META.get("HTTP_X_FORWARDED_PROTO") and not is_trusted_proxy(peer):
+            request.META.pop("HTTP_X_FORWARDED_PROTO", None)
         if settings.SEVERINO_ENFORCE_TRUSTED_NETWORK and not is_trusted_client(request):
             return HttpResponseForbidden("Forbidden.")
         return self.get_response(request)

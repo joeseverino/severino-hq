@@ -1,6 +1,7 @@
 (() => {
   let requestController = null;
   let searchTimer = null;
+  let tableLocation = `${window.location.pathname}${window.location.search}`;
 
   // Selection is keyed by row id, survives table refreshes and pagination,
   // and persists across full reloads of the same list page for the session.
@@ -15,6 +16,59 @@
   };
 
   const selectedIds = new Set(readSelection());
+
+  // A bounded scroll region has to be operable from the keyboard, and a plain
+  // `div` that scrolls is not focusable. This is the whole helper now: the
+  // heading itself is `position: sticky` in the stylesheet, so the browser
+  // pins it on the compositor and there is nothing here to measure, to
+  // schedule, or to fall a frame behind.
+  //
+  // `is-pane` marks a wrapper that is genuinely its own scroll box -- one
+  // holding a table too wide to fit, or one an author capped to a reading
+  // height. Those pin the heading to the box; everything else pins it to the
+  // viewport, and the stylesheet reads this class to tell them apart.
+  function markScrollRegions() {
+    document.querySelectorAll(".table-scroll").forEach((wrapper) => {
+      const table = wrapper.querySelector(".data-table");
+      // Measured off the table, not the wrapper: the wrapper only reports a
+      // scrollable width while it is already a scroll container, and whether it
+      // should be one is exactly the question.
+      const capped = getComputedStyle(wrapper).maxHeight !== "none";
+      const tooWide = !!table && table.scrollWidth > wrapper.clientWidth + 1;
+      const scrolls = capped || tooWide;
+      wrapper.classList.toggle("is-pane", scrolls);
+      if (scrolls) {
+        if (!wrapper.hasAttribute("tabindex")) wrapper.tabIndex = 0;
+        if (!wrapper.hasAttribute("role")) wrapper.setAttribute("role", "region");
+        if (!wrapper.hasAttribute("aria-label")) {
+          const caption = wrapper.querySelector("caption")?.textContent?.trim();
+          wrapper.setAttribute("aria-label", caption || "Scrollable table");
+        }
+      } else {
+        wrapper.removeAttribute("tabindex");
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      }
+    });
+  }
+
+  // Kept under the old name so the places that re-run after a table refresh
+  // keep working.
+  const scheduleStickyHeader = markScrollRegions;
+
+  function preserveDisclosureState(next, url) {
+    const currentQuery = new URL(window.location.href).searchParams.get("q");
+    const nextQuery = new URL(url, window.location.href).searchParams.get("q");
+    if (!currentQuery || !nextQuery) return;
+    document.querySelectorAll("details[data-preserve-open]").forEach((details) => {
+      const key = details.dataset.preserveOpen;
+      const replacement = next.querySelector(`[data-preserve-open="${key}"]`);
+      if (replacement) replacement.open = details.open;
+    });
+  }
+
+  markScrollRegions();
+  window.addEventListener("resize", markScrollRegions);
 
   const persistSelection = () => {
     try {
@@ -140,6 +194,7 @@
       if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
       const next = new DOMParser().parseFromString(await response.text(), "text/html");
       const focusMemo = captureFocus();
+      preserveDisclosureState(next, url);
       pinColumnWidths(next);
       const selectors = [
         "[data-table-toolbar]",
@@ -161,8 +216,10 @@
       document.title = next.title;
       if (history === "push") window.history.pushState({}, "", url);
       if (history === "replace") window.history.replaceState({}, "", url);
+      tableLocation = `${window.location.pathname}${window.location.search}`;
       initializeSelection();
       restoreFocus(focusMemo);
+      scheduleStickyHeader();
     } catch (error) {
       if (error.name !== "AbortError") window.location.assign(url);
     } finally {
@@ -220,8 +277,17 @@
   });
 
   window.addEventListener("popstate", () => {
+    const nextLocation = `${window.location.pathname}${window.location.search}`;
+    // The mobile navigation and other lightweight disclosures use fragments.
+    // Chromium emits popstate for those history entries too; a fragment cannot
+    // change table data, so it must never trigger a fetch or DOM replacement.
+    if (nextLocation === tableLocation) return;
+    tableLocation = nextLocation;
     refreshTable(window.location.href, { history: "none" });
   });
 
-  document.addEventListener("DOMContentLoaded", () => initializeSelection());
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeSelection();
+    scheduleStickyHeader();
+  });
 })();

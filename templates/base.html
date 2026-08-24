@@ -33,7 +33,7 @@
       CSS can style an anchor but not rewrite where it goes -- and a control
       that only ever opens is a control that appears broken on the second tap.
       {% endcomment %}
-      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections">
+      <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections" aria-controls="primary-navigation" aria-expanded="false">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
@@ -47,7 +47,7 @@
           <rect x="0" y="10" width="16" height="2" rx="1"/>
         </svg>
       </a>
-      <nav class="primary-nav">
+      <nav class="primary-nav" id="primary-navigation">
         {% for entry in nav_entries %}
           {% if entry.kind == "group" %}
             {% comment %}Shared name makes the groups a native exclusive
@@ -85,11 +85,11 @@
           type="search"
           name="q"
           value="{{ search_query|default:'' }}"
-          placeholder="Search HQ"
-          aria-label="Search HQ"
+          placeholder="Find anything"
+          aria-label="Find anything"
         >
       </form>
-      <details class="user-menu" data-menu>
+      <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}">
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -98,6 +98,10 @@
           </svg>
         </summary>
         <div class="user-menu-panel">
+          <a class="user-menu-action-items" href="{% url 'action_items' %}">
+            <span>Action items</span>
+            <span class="user-menu-count" data-action-count{% if not show_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
+          </a>
           <a href="{% url 'admin:index' %}">Admin</a>
           {% comment %}
           A real link to the page that answers this, so it works with the dialog

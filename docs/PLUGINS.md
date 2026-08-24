@@ -27,7 +27,8 @@ plugin = PluginManifest(
     dashboard_provider="example_notes.projections:dashboard_cards",
     overview_provider="example_notes.projections:domain_overview",
     capability_provider="example_notes.capabilities:specs",
-    search_provider="example_notes.projections:search_definitions",
+    resource_provider="example_notes.resources:specs",
+    connection_provider="example_notes.connections:specs",
     health_provider="example_notes.health:ready",
     token_authenticated_routes=("api/v1/",),
     operator_capabilities=("notes.read", "notes.write"),
@@ -49,6 +50,7 @@ domain; the SDK owns integration mechanics:
 | --- | --- |
 | Manifest and navigation | `hq_sdk.plugin` |
 | Capabilities, principals, strict JSON commands | `hq_sdk.capabilities` |
+| Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Capability-gated Django views | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |
 | Tables, forms, UI projections, global search | matching `hq_sdk.*` module |
@@ -190,11 +192,81 @@ their private package even if the host is their only current consumer.
 
 Capability providers fail closed too. HQ validates every contributed
 `CapabilitySpec` before describing or invoking the registry: names, effects,
-required permissions, target kinds, command JSON Schema, duplicate names, and
-the handler call signature are all part of the host contract. MCP grants must
+required permissions, target kinds and labels, command JSON Schema, duplicate
+names, and the handler call signature are all part of the host contract. MCP grants must
 also be a subset of the plugin's operator grants. A typo therefore prevents a
 composition from passing its checks instead of becoming a production-only
 request failure or an accidental authority gap.
+
+Resource providers follow the same pattern. Each `ResourceSpec` may expose a
+list handler with a `ResourceQuery` subclass, a detail handler with one stable
+identifier, a `SearchDefinition`, or any useful combination. The host validates
+names, permissions, query and handler compatibility, identifier contracts,
+duplicate resources, and duplicate search scopes at composition startup. API,
+MCP, and global search then derive their surfaces from that spec. The older
+`search_provider` hook remains compatible for search-only plugins; new domains
+should attach search to their resource so the declaration cannot drift.
+Set `web_route` to the resource's list route to make it directly reachable from
+the Command Center. It must reverse without arguments; HQ checks that contract
+at startup and renders plain discovery text as a fail-safe if checks were
+bypassed. A capability may set `subject_resource` to that resource's name; HQ
+then connects the operation to its domain in both machine discovery and the
+operator UI, without a second plugin-owned menu or command inventory. The
+Command Center also derives a browser execution form from the command schema.
+For targeted commands, set `target_label` and `target_help` to explain the
+identifier in operator language (for example, `Record slug`), while
+`target_kind` continues to define its machine type. Set `target_query` when the
+subject resource can list eligible targets locally; HQ checks the filter against
+that resource's strict query contract and turns the result into an authorized
+choice control. `execution_notes` may describe the registered read, queue, and
+provider boundary shown in the live, zero-network execution preview. Fields named
+`idempotency_key` are generated and hidden in the browser; HQ separately wraps
+all state-changing browser submissions in durable replay protection. Plugins
+use the authorized `list_resource` and `get_resource` SDK functions for reads;
+the host's raw registry and handler callables are intentionally not exported.
+For a replacement-style targeted command, `target_initial_fields` names command
+fields that HQ should hydrate from the selected resource detail. Selection
+performs one authorized local read, carries the record's `updated_at` into the
+concurrency safeguard, and never contacts the provider.
+
+Connection providers complete the same declaration chain for external systems.
+Each `ConnectionSpec` names a family, its abilities and provider scopes, the
+capability needed to inspect it, and a zero-argument provider of cached
+`ConnectionInstance` observations. HQ derives the Connections workspace,
+Command Center entry, HTTP catalog, and MCP tools from that one spec. The
+provider is invoked only after authorization and must read local state: it must
+not make a network request merely because a user opened discovery. Instances
+may expose status, safe endpoint text, granted scope names, targets,
+dependencies, and small facts, but never tokens, credentials, authorization
+headers, secret values, or private endpoint URL parts. An endpoint is
+display-only metadata, so URL userinfo, query strings, and fragments are all
+rejected rather than filtered by a fallible list of secret parameter names.
+`observed_at` is a Python `datetime` and serializes as ISO 8601. Links accept
+only local paths and explicit HTTP(S) URLs. Import these contracts and
+`describe_connections` from `hq_sdk.connections`; the mutable registry
+and raw provider inventory are deliberately host-only.
+
+An ability may set `subject_resource` to the `ResourceSpec` it governs and list
+its provider kinds in `governs_kinds`. Command Center then discovers registered
+commands against that resource whose target filters include one of those kinds.
+For an operation that does not map through a resource, set `capability` to the
+exact `CapabilitySpec` name. Composition refuses unknown resource and capability
+references. Scope coverage decides whether the observed connection can perform
+the declared ability; it never fabricates an executable command from token text
+alone, so every offered mutation still has a schema, handler, authorization,
+audit, and idempotency boundary. Command discovery remains declaration-driven,
+so a temporarily missing or stale observation does not erase a supported
+workflow; Connections reports its current readiness separately. Searching never
+contacts the provider.
+
+Those same instances join the derived topology automatically. An ability's
+explicit `governs_kinds` connect it to managed resources, `targets` become
+observed destinations, and dependencies with an explicit `resource_key` become
+declared-use relationships. Set the optional
+`controller_id` only when the instance is an observation emitted by a distinct
+controller; direct account integrations leave it empty. It is observer identity,
+not credential identity, and must never contain secret material. A plugin needs
+no topology template, route, callback, or host edit.
 
 ## Shared UI contract
 
@@ -206,6 +278,7 @@ templates:
 | --- | --- |
 | `base.html` | Authenticated shell, navigation, messages, static assets, and security metadata |
 | `partials/_page_head.html` | Page title, lede, and optional primary action |
+| `partials/_page_navigation.html` | Sticky, responsive local navigation from `hq_sdk.ui.PageNavigation` |
 | `partials/_kpi_grid.html` | Responsive linked or static KPI collection |
 | `partials/_timeline.html` | Chronological linked events from `hq_sdk.ui.Timeline` |
 | `partials/_stacked_bar_chart.html` | Accessible chart from `hq_sdk.ui.StackedBarChart` |
@@ -219,6 +292,18 @@ Plugin templates supply domain content while HQ owns layout behavior, tokens,
 responsive rules, accessibility states, and visual evolution. A new shared
 pattern belongs in HQ first; copying host CSS or markup into every plugin is a
 contract failure.
+
+Wrap a `.data-table` in `.table-scroll`; HQ preserves horizontal scrolling and
+keeps its headings visible through long result sets. The enhancement is visual
+only and inert, so the real table remains the single semantic and interactive
+source—including sorting, selection, and assistive-technology navigation.
+
+Dense pages expose their information architecture with
+`PageNavigation((PageSection("overview", "Overview"), ...))`, include
+`partials/_page_navigation.html`, and put the corresponding stable `id` plus
+`data-page-section` on each section. HQ then owns compact horizontal overflow,
+sticky positioning, scroll-aware current state, and fragment history. Labels
+may change; section IDs are durable links.
 
 ## Routes that authenticate themselves
 

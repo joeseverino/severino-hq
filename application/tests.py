@@ -19,6 +19,7 @@ from expenses.models import Expense
 from receipts.models import Receipt
 from core.models import AuditLog
 from hq_mcp.server import mcp
+from hq_sdk.capabilities import StrictCommand
 from projects.models import Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from docs_index.models import DocumentationRecord
@@ -45,6 +46,28 @@ from .security import (
 
 
 class CapabilityTests(TestCase):
+    def test_plugin_strict_commands_execute_through_the_host(self):
+        class ExampleCommand(StrictCommand):
+            value: str = "works"
+
+        spec = CapabilitySpec(
+            "example.read",
+            "Read an example.",
+            "read",
+            "example.read",
+            ExampleCommand,
+            lambda command, **kwargs: {"ok": True, "value": command.value},
+        )
+        principal = Principal("test", "test", frozenset({"example.read"}))
+
+        with mock.patch(
+            "application.capabilities.capability_registry",
+            return_value={spec.name: spec},
+        ):
+            result = execute_capability(spec.name, {}, principal=principal)
+
+        self.assertEqual(result, {"ok": True, "value": "works"})
+
     def test_registry_emits_stable_json_schemas_and_effects(self):
         first = describe_capabilities()
         second = describe_capabilities()
@@ -54,6 +77,7 @@ class CapabilityTests(TestCase):
             item for item in first["capabilities"] if item["name"] == "project.create"
         )
         self.assertEqual(project["effect"], "remote_write")
+        self.assertEqual(project["resource"], "projects")
         self.assertIn("name", project["input_schema"]["properties"])
 
     def test_plugin_capabilities_fail_fast_on_an_unknown_effect(self):
@@ -92,6 +116,25 @@ class CapabilityTests(TestCase):
                 return_value=(malformed,),
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "host call contract"),
+        ):
+            capability_specs()
+
+    def test_plugin_capabilities_must_name_a_valid_resource(self):
+        malformed = CapabilitySpec(
+            "example.bad",
+            "Invalid subject",
+            "remote_write",
+            "example.write",
+            ProjectCommand,
+            save_project,
+            subject_resource="Not a resource",
+        )
+        with (
+            mock.patch(
+                "application.capabilities.plugin_capability_specs",
+                return_value=(malformed,),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "invalid resource"),
         ):
             capability_specs()
 

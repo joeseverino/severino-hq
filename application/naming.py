@@ -18,6 +18,7 @@ from control_plane.models import ManagedResource, ProviderConnection
 from control_plane.providers import PROVIDERS, NameContext, certificate_covers
 
 from .infrastructure import declared_machines, delivery_targets, resolved_spec
+from .locate import index_of, join_endpoint, split_endpoint
 
 
 def name_context(hostname: str) -> NameContext:
@@ -113,22 +114,26 @@ def _reachable(origin: str) -> str:
 
     A stack says which machine it runs on by name, because that is what the
     machine is called and what everything inside HQ matches on. A proxy is not
-    nginx resolves what it is given, and it has never heard the name.
+    HQ: nginx resolves what it is given, and it has never heard the name.
+
+    The inverse of what every other surface asks, and asked of the same index,
+    so the name-to-address direction and the address-to-name direction cannot
+    disagree about which pair belongs together. Resolved against declarations
+    alone, deliberately: this fills in a form field, and the address an
+    operator should see there is the one somebody wrote down, not one inferred
+    from where a credential happens to point. It is also one query on a path
+    that runs once per service.
 
     Unchanged when HQ knows no address for the machine, which leaves the
     operator a wrong-looking value to correct rather than a plausible one to
     trust.
     """
 
-    host, _, port = origin.rpartition(":")
+    host, port = split_endpoint(origin)
     if not host or not port:
         return origin
-    for machine in declared_machines():
-        if machine.get("name") != host:
-            continue
-        addresses = machine.get("addresses") or ()
-        return f"{addresses[0]}:{port}" if addresses else origin
-    return origin
+    address = index_of(declared=declared_machines()).address_for(host)
+    return join_endpoint(address, port) if address else origin
 
 
 def _covering(hostname: str) -> tuple[str, ...]:

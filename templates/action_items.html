@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Action items · {{ SITE_NAME }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Action items</h1>
+    <p class="page-lede">Every decision HQ and its installed extensions believe needs you, in one queue.</p>
+  </div>
+</div>
+
+<form class="filter-bar" method="get" role="search">
+  <input type="search" name="q" value="{{ action_query }}" placeholder="Filter action items" aria-label="Filter action items">
+  <select name="status" aria-label="Severity">
+    <option value="">Every severity</option>
+    <option value="serious"{% if action_status == "serious" %} selected{% endif %}>Serious</option>
+    <option value="attention"{% if action_status == "attention" %} selected{% endif %}>Attention</option>
+  </select>
+  <select name="source" aria-label="Source">
+    <option value="">Every source</option>
+    {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Apply</button>
+  {% if action_query or action_status or action_source %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
+</form>
+
+<div class="topology-summary" role="status">
+  <span><strong>{{ action_item_total }}</strong> item{{ action_item_total|pluralize }}</span>
+  <span><strong>{{ action_item_group_total }}</strong> area{{ action_item_group_total|pluralize }}</span>
+</div>
+
+<section class="card action-items-card">
+  <ul class="attention-list">
+    {% for item in action_items %}
+      <li class="attention-row">
+        <span class="pill pill-{{ item.status }}">{{ item.source }}</span>
+        <div class="attention-body">
+          {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+          {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+        </div>
+        <span class="attention-value">{{ item.count }}</span>
+      </li>
+    {% empty %}
+      <li class="attention-row"><p class="attention-clear">Nothing matches this view.</p></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

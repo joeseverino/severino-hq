@@ -11,6 +11,7 @@ from application.search_contracts import SearchDefinition
 from search_index.registry import BY_SCOPE
 
 from .projection import page_size
+from .resources import resource_search_capabilities
 from .security import AuthorizationError, Capability, Principal
 
 MAX_SEARCH_RESULTS = 5000
@@ -24,7 +25,7 @@ RELEVANCE_WINDOW = 500
 # revealing than the bounded recent_activity projection MCP already gets.
 SCOPE_CAPABILITIES = {
     scope: Capability.READ for scope in BY_SCOPE
-} | {"audit": Capability.READ_AUDIT_LOG}
+} | resource_search_capabilities()
 
 
 class UnknownSearchScope(ValueError):
@@ -54,7 +55,9 @@ def _fts5_available() -> bool:
 def _authorize(scope: str, principal: Principal) -> None:
     if scope not in BY_SCOPE:
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
-    principal.require(SCOPE_CAPABILITIES[scope])
+    required = SCOPE_CAPABILITIES[scope]
+    for capability in required if isinstance(required, tuple) else (required,):
+        principal.require(capability)
 
 
 def search_ids(
@@ -190,7 +193,7 @@ def global_search(
     total = 0
     for scope, definition in BY_SCOPE.items():
         try:
-            principal.require(SCOPE_CAPABILITIES[scope])
+            _authorize(scope, principal)
         except AuthorizationError:
             continue
         hits = _scope_hits(definition, query, limit_per_scope)

@@ -34,6 +34,8 @@ from control_plane.models import (
 )
 from control_plane.providers import PROVIDERS, service_facets
 
+from .contracts import endpoint_has_private_parts
+
 from .security import Capability, Principal
 
 
@@ -244,12 +246,20 @@ def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]
     Compared on the fields the declaration carries. A provider hands back more
     than was asked for -- an id it assigned, a status it keeps -- and requiring
     those to appear in a spec nobody wrote would report drift on every record.
+
+    Fields the provider declared ``unobservable`` are skipped: a blank it was
+    never able to fill is not a disagreement. Comparing them anyway made every
+    NPM proxy host that named a certificate differ forever, which
+    ``confirm_observed`` rightly refused to call observed -- so the resource
+    kept its last reconcile's condition and read healthy while no sweep had
+    confirmed it since.
     """
 
+    unobservable = PROVIDERS[kind].unobservable_fields
     return all(
         str(found.get(field, "")) == str(value)
         for field, value in declared.items()
-        if field in found
+        if field in found and field not in unobservable
     )
 
 
@@ -272,12 +282,17 @@ def record_connections(
         connection_ref = str(connection.get("connection_ref", "")).strip()
         if not connection_ref:
             continue
+        endpoint = str(connection.get("endpoint", ""))[:500]
+        if endpoint and endpoint_has_private_parts(endpoint):
+            raise ValueError(
+                f"Connection {connection_ref!r} endpoint contains private URL parts."
+            )
         ProviderConnection.objects.update_or_create(
             controller_id=controller_id,
             connection_ref=connection_ref,
             defaults={
                 "provider": str(connection.get("provider", ""))[:64],
-                "endpoint": str(connection.get("endpoint", ""))[:500],
+                "endpoint": endpoint,
                 "reaches": [
                     str(name) for name in connection.get("reaches") or [] if name
                 ],
