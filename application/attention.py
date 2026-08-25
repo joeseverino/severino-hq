@@ -77,17 +77,6 @@ def _backlog(
     )
 
 
-def projects() -> tuple[Insight, ...]:
-    return _backlog(
-        count=sections.projects_reading()["needing_output"],
-        eyebrow="Projects",
-        title="Active projects need output",
-        body="Active work with no content or documentation recorded against it.",
-        action="Review projects",
-        url=f"{reverse('projects:list')}?needs_output=1",
-    )
-
-
 def documentation() -> tuple[Insight, ...]:
     return _backlog(
         count=sections.documentation_reading()["needing_review"],
@@ -110,10 +99,12 @@ def content() -> tuple[Insight, ...]:
             url=f"{reverse('content:list')}?status=draft",
         ),
         *_backlog(
+            # Published, as the entry says. Counting drafts here meant every
+            # new draft raised two entries -- its own, and this one accusing it
+            # of missing documentation it is far too early to have written.
             count=(
-                ContentItem.objects.annotate(
-                    doc_count=Count("related_documentation")
-                )
+                ContentItem.objects.filter(status=ContentItem.Status.PUBLISHED)
+                .annotate(doc_count=Count("related_documentation"))
                 .filter(doc_count=0)
                 .count()
             ),

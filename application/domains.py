@@ -123,7 +123,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Projects", "projects:list", "projects", 100, "Build"),
         ),
-        attention_provider="application.attention:projects",
+        # No attention provider, deliberately. "Active work with nothing
+        # written about it yet" is a shape of the portfolio, not a decision:
+        # nothing clears it except months of work, so it sat at the top of the
+        # queue as its largest entry and never moved. The number still shows,
+        # on the projects card, as "N need output".
         cards_provider="application.sections:projects",
     ),
     DomainDescriptor(
