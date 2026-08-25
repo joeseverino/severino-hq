@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Command Center · {{ SITE_NAME }}{% endblock %}
+{% block title %}Command Center{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -9,7 +9,7 @@
 </div>
 
 <form class="filter-bar search-page-form" method="get" data-table-toolbar>
-  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" autofocus>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" aria-label="Search records, resources, connections, and commands" autofocus>
   <button type="submit">Find</button>
 </form>
 

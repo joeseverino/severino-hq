@@ -6,7 +6,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
+  {% comment %}
+  A page names only itself; the site name is appended once, here. Left to each
+  page it drifted both ways -- nineteen titles carried no site name at all and
+  seven hardcoded the string `SEVERINO_SITE_NAME` is allowed to change.
+  `application/test_architecture.py` fails if a title block names it again.
+  {% endcomment %}
+  <title>{% block title %}{% endblock %} · {{ SITE_NAME }}</title>
   <link rel="icon" href="{% static 'img/favicon.ico' %}?v={{ ASSET_VERSION }}" sizes="any">
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}?v={{ ASSET_VERSION }}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}?v={{ ASSET_VERSION }}">
@@ -15,6 +21,12 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  {% comment %}
+  The header is a dozen tab stops wide, and better than thirty with the
+  sections menu open. Visible only while focused, so it costs a pointer
+  nothing.
+  {% endcomment %}
+  <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header" id="sections">
     <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
     {% if user.is_authenticated %}
@@ -40,7 +52,14 @@
           <rect x="0" y="10" width="16" height="2" rx="1"/>
         </svg>
       </a>
-      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close sections">
+      {% comment %}
+      Both halves carry the state, because only one of them is ever on screen.
+      The state used to live on the opening half alone, which is the half that
+      is `display: none` exactly when it reads "expanded" -- so the control an
+      operator had just been moved to announced no state at all, and the one
+      announcing it could not be reached.
+      {% endcomment %}
+      <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close sections" aria-controls="primary-navigation" aria-expanded="true">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
           <rect x="0" y="0" width="16" height="2" rx="1"/>
           <rect x="0" y="5" width="16" height="2" rx="1"/>
@@ -133,7 +152,7 @@
     {% endcomment %}
     <a class="nav-backdrop" href="#" tabindex="-1" aria-hidden="true"></a>
 
-  <main class="content">
+  <main class="content" id="content" tabindex="-1">
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}
