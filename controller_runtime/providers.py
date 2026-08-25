@@ -2660,6 +2660,10 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return {
         "name": name,
+        # The node's WireGuard public key. The cryptographic identity itself:
+        # a peering is not a claim in an inventory, it is two keys that have
+        # completed a handshake, and this is the half that can be shown.
+        "public_key": str(node.get("PublicKey") or ""),
         # The MagicDNS name, which is how the tailnet addresses it and not
         # always what the host calls itself.
         "dns_name": str(node.get("DNSName") or "").rstrip("."),

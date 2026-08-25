@@ -263,6 +263,49 @@ class TailnetPresenceTests(TestCase):
     def device(self, name, *, online=True, key_expires=""):
         return {"name": name, "online": online, "key_expires": key_expires}
 
+    def test_a_key_that_has_shaken_hands_is_a_peer_and_one_that_has_not_is_not(self):
+        """The reading comes from the daemon on the machine HQ runs on, so a
+        device appearing at all is in HQ's network map. A key in a map is a
+        machine HQ could reach; a handshake is one it is reaching."""
+
+        from .machines import tailnet_presence
+
+        self.sweep(
+            {
+                **self.device("a-peer"),
+                "public_key": "nodekey:abc",
+                "last_handshake": "2026-08-25T22:18:24Z",
+                "direct_endpoint": "198.51.100.4:41641",
+                "relay": "ord",
+            },
+            {**self.device("never-spoken"), "public_key": "nodekey:def"},
+        )
+
+        found = tailnet_presence()
+
+        self.assertTrue(found["a-peer"].peered)
+        self.assertEqual(found["a-peer"].peer_path, "direct")
+        # In the map, never spoken to.
+        self.assertFalse(found["never-spoken"].peered)
+        self.assertEqual(found["never-spoken"].peer_path, "")
+
+    def test_a_relayed_peer_says_so_rather_than_reading_as_direct(self):
+        """Still end to end encrypted, still slower, and worth knowing which."""
+
+        from .machines import tailnet_presence
+
+        self.sweep({
+            **self.device("a-relayed-peer"),
+            "public_key": "nodekey:abc",
+            "last_handshake": "2026-08-25T22:18:24Z",
+            "direct_endpoint": "",
+            "relay": "ord",
+        })
+
+        self.assertEqual(
+            tailnet_presence()["a-relayed-peer"].peer_path, "relayed"
+        )
+
     def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
         """The silent failure. `--advertise-routes` succeeds, the machine
         reports the route for as long as it runs, and the coordination server

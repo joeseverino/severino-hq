@@ -69,12 +69,62 @@ class Presence:
     lock_error: str = ""
     update_available: bool = False
     client_version: str = ""
+    # The peering itself, as the machine HQ runs on reports it. This reading is
+    # taken from HQ's own daemon, so every device in it is a peer of HQ by
+    # construction -- which HQ knew and never said. A key that has completed a
+    # handshake, over a path that was negotiated, carrying counted bytes, is
+    # the difference between a machine HQ has been told about and one it is
+    # actually talking to.
+    public_key: str = ""
+    direct_endpoint: str = ""
+    relay: str = ""
+    last_handshake: str = ""
+    active: bool = False
+    rx_bytes: int = 0
+    tx_bytes: int = 0
     tags: tuple[str, ...] = ()
     # Who the policy admits, per port. Already swept for the reachability
     # panel, and the same answer a machine's own page should be able to give
     # without anybody having to go and ask it.
     openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
+
+    @property
+    def peered(self) -> bool:
+        """Whether HQ and this machine have actually completed a handshake.
+
+        Not whether the tailnet lists it. This reading comes from the daemon on
+        the machine HQ runs on, so a device appearing at all means HQ has it in
+        its network map -- but a key in a map is a machine HQ *could* talk to.
+        A handshake is one it has.
+        """
+
+        return bool(self.public_key and self.last_handshake)
+
+    @property
+    def handshake(self) -> str:
+        """When the two keys last completed a handshake, phrased as HQ phrases
+        every other elapsed time."""
+
+        from .ui import elapsed
+
+        return elapsed(self.last_handshake)
+
+    @property
+    def peer_path(self) -> str:
+        """How the two are reaching each other, in the terms WireGuard uses.
+
+        A direct path means the two daemons found a route through both NATs and
+        traffic goes machine to machine. A relayed one means they could not, and
+        Tailscale's DERP servers are carrying the encrypted packets -- still
+        end-to-end encrypted, still slower, and worth knowing which.
+        """
+
+        if not self.peered:
+            return ""
+        if self.direct_endpoint:
+            return "direct"
+        return "relayed" if self.relay else "negotiating"
 
     @property
     def unapproved_routes(self) -> tuple[str, ...]:
@@ -455,6 +505,13 @@ def tailnet_presence() -> dict[str, Presence]:
                 lock_error=str(record.get("lock_error", "")),
                 update_available=bool(record.get("update_available")),
                 client_version=str(record.get("client_version", "")),
+                public_key=str(record.get("public_key", "")),
+                direct_endpoint=str(record.get("direct_endpoint", "")),
+                relay=str(record.get("relay", "")),
+                last_handshake=str(record.get("last_handshake", "")),
+                active=bool(record.get("active")),
+                rx_bytes=int(record.get("rx_bytes") or 0),
+                tx_bytes=int(record.get("tx_bytes") or 0),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 openings=tuple(
                     (int(entry["port"]), tuple(entry.get("who") or ()))

@@ -1535,16 +1535,11 @@ def _ago(stamp: str) -> str:
 
 
 def _parsed(stamp: str) -> datetime | None:
-    text = str(stamp or "").strip()
-    if not text or text.startswith("0001-01-01"):
-        # Tailscale writes the zero time for "never", which as an age would
-        # read as two thousand years and look like a bug rather than a fact.
-        return None
-    try:
-        found = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return found if found.tzinfo else found.replace(tzinfo=utc.utc)
+    """The shared parse, kept as a name this module already reads by."""
+
+    from .ui import moment
+
+    return moment(stamp)
 
 
 def _bytes(count: int) -> str:

@@ -218,6 +218,53 @@
     </table>
   </div>
 
+  {% if machine.presence.peered %}
+    {% comment %}
+    The peering, stated rather than implied. This reading comes from the daemon
+    on the machine HQ runs on, so a device appearing in it at all is a peer of
+    HQ by construction -- a fact HQ has always held and never said, which left
+    "are these two actually talking" as something to go and check elsewhere.
+
+    A key in a network map is a machine HQ could reach. A key that has completed
+    a handshake, over a path that was negotiated, carrying counted bytes, is one
+    it is reaching. That is what this says and why each row is here.
+    {% endcomment %}
+    <h2 class="section-heading">Peered with HQ</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <th scope="row">Handshake</th>
+            <td>
+              Completed {{ machine.presence.handshake }}
+              {% if machine.presence.active %} · carrying traffic now{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Path</th>
+            <td>
+              {% if machine.presence.peer_path == "direct" %}
+                Direct — <code>{{ machine.presence.direct_endpoint }}</code>{% if machine.presence.relay %}, with the <code>{{ machine.presence.relay }}</code> relay as fallback{% endif %}
+              {% elif machine.presence.peer_path == "relayed" %}
+                Relayed through <code>{{ machine.presence.relay }}</code> — the two daemons could not find a route through both NATs. Still end to end encrypted.
+              {% else %}
+                No path negotiated yet — one is set up when there is traffic.
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Traffic</th>
+            <td>{{ machine.presence.rx_bytes|filesizeformat }} in · {{ machine.presence.tx_bytes|filesizeformat }} out</td>
+          </tr>
+          <tr>
+            <th scope="row">Node key</th>
+            <td><code class="node-key">{{ machine.presence.public_key }}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
   {% if machine.presence.openings %}
     {% comment %}
     Who the policy lets in, per port. The single most useful thing HQ can say
