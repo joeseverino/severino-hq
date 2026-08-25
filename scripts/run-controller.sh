@@ -32,7 +32,8 @@ chown 10001:10001 "${acme_dir}"
 runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
 runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
 runtime_tailnet="$(mktemp /run/severino-hq-controller-tailnet.XXXXXX)"
-trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}"; rm -rf "${runtime_ssh_dir}"' \
+runtime_tailnet_lock="$(mktemp /run/severino-hq-controller-tka.XXXXXX)"
+trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}" "${runtime_tailnet_lock}"; rm -rf "${runtime_ssh_dir}"' \
     EXIT HUP INT TERM
 install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 chown 10001:10001 "${runtime_app_env}"
@@ -96,6 +97,22 @@ if [ -S /var/run/tailscale/tailscaled.sock ] \
     set -- "$@" \
         --mount "type=bind,source=${runtime_tailnet},target=/run/severino-hq/tailnet.json,readonly" \
         --env SEVERINO_TAILNET_STATUS=/run/severino-hq/tailnet.json
+
+    # Tailnet lock, from the same socket and on the same terms. A separate
+    # reading because it is a separate endpoint, and separately optional: a
+    # tailnet without lock enabled answers it perfectly well, and a daemon too
+    # old to know it should cost the sweep nothing.
+    if curl -fsS --max-time 10 \
+        --unix-socket /var/run/tailscale/tailscaled.sock \
+        -H "Host: local-tailscaled.sock" \
+        http://local-tailscaled.sock/localapi/v0/tka/status \
+        -o "${runtime_tailnet_lock}" 2>/dev/null; then
+        chown 10001:10001 "${runtime_tailnet_lock}"
+        chmod 0400 "${runtime_tailnet_lock}"
+        set -- "$@" \
+            --mount "type=bind,source=${runtime_tailnet_lock},target=/run/severino-hq/tailnet-lock.json,readonly" \
+            --env SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json
+    fi
 fi
 
 # Forward what the renderer produced, rather than recomputing the same names

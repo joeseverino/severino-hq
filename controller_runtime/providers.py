@@ -2587,6 +2587,15 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
         device["tags"] = identity.get("tags", [])
         device["advertised_routes"] = identity.get("advertised_routes", [])
         device["enabled_routes"] = identity.get("enabled_routes", [])
+        device["authorized"] = bool(identity.get("authorized", True))
+        device["lock_error"] = identity.get("lock_error", "")
+        device["update_available"] = bool(identity.get("update_available"))
+        device["client_version"] = identity.get("client_version", "")
+        # The coordination server's answer wins over the daemon's inference:
+        # the daemon reports no expiry date, which is the same shape whether
+        # expiry is disabled or the reading simply lacks it.
+        if "key_expiry_disabled" in identity:
+            device["key_expiry_disabled"] = bool(identity["key_expiry_disabled"])
         # The daemon's `ExitNodeOption` answers "can this node be my exit node",
         # which is already false for one that offers but was never approved.
         # The coordination server is the only side that can tell those apart,
@@ -3122,48 +3131,29 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     return found
 
 
-def _device_routes(token: str, device_id: str) -> dict[str, list[str]]:
-    """What one device offers to route, and what the tailnet actually permits.
-
-    Two lists, and the gap between them is the whole reason to read this.
-    Advertising a route does nothing until it is approved in the coordination
-    server, and nothing tells you: the machine keeps reporting that it offers
-    the route, every device keeps not being able to use it, and the estate
-    reads as though the route works.
-    """
-
-    request = urllib.request.Request(
-        f"{TAILNET_API}/device/{device_id}/routes",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            routes = json.loads(response.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
-        return {}
-    return {
-        "advertised_routes": sorted(str(r) for r in routes.get("advertisedRoutes") or ()),
-        "enabled_routes": sorted(str(r) for r in routes.get("enabledRoutes") or ()),
-    }
-
-
 # An exit node is advertised as the two default routes rather than as a flag,
 # so "does this offer to be an exit node" is a question about its route list.
 _EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
 
 def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
-    """Each device's identity and what it routes, from the coordination server.
+    """Everything the coordination server knows about each device, in one read.
+
+    ``fields=all`` rather than a call per device. The default projection omits
+    routes, so the first version of this asked the routes endpoint once per
+    device and made the sweep's cost a function of how many machines exist --
+    for facts that already travel in this response.
 
     From the API rather than the local daemon for two reasons. The daemon does
     not report tags, which is what a policy names a device by. And a peer's
-    routes as the daemon sees them are the routes *this* node was given -- an
-    unapproved route is simply absent -- so the daemon can say a route is not
-    working but never that it was offered and refused.
+    routes as the daemon sees them are the routes the ACL lets *this* node
+    receive, so a route can be advertised, approved, and still absent from the
+    local reading -- which makes the daemon unable to tell "never offered" from
+    "offered and refused", the one distinction worth reporting.
     """
 
     request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/devices",
+        f"{TAILNET_API}/tailnet/-/devices?fields=all",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
@@ -3176,9 +3166,8 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
         hostname = str(device.get("hostname", ""))
         if not hostname:
             continue
-        routes = _device_routes(token, str(device.get("id", "")))
-        advertised = routes.get("advertised_routes", [])
-        enabled = routes.get("enabled_routes", [])
+        advertised = sorted(str(r) for r in device.get("advertisedRoutes") or ())
+        enabled = sorted(str(r) for r in device.get("enabledRoutes") or ())
         found[hostname] = {
             "user": str(device.get("user", "")),
             "tags": sorted(device.get("tags") or []),
@@ -3189,6 +3178,17 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
             # being present is not obvious as an answer to it.
             "offers_exit_node": bool(_EXIT_ROUTES & set(advertised)),
             "exit_node_approved": bool(_EXIT_ROUTES & set(enabled)),
+            # Facts with no symptom until they matter. A device the tailnet has
+            # not authorised is on no network; one carrying a lock error cannot
+            # be reached by anything under tailnet lock; and a client left
+            # behind is how a fleet acquires versions nobody chose.
+            "authorized": bool(device.get("authorized", True)),
+            "lock_error": str(device.get("tailnetLockError") or ""),
+            "update_available": bool(device.get("updateAvailable")),
+            "client_version": str(device.get("clientVersion") or ""),
+            # The coordination server's own answer, rather than the daemon's
+            # absence-of-an-expiry inference.
+            "key_expiry_disabled": bool(device.get("keyExpiryDisabled")),
         }
     return found
 

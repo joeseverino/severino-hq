@@ -258,6 +258,53 @@ def tailnet() -> tuple[Insight, ...]:
             )
         )
     for name, presence in presences:
+        if not presence.authorized:
+            items.append(
+                Insight(
+                    status="serious",
+                    eyebrow="Tailnet",
+                    title=f"{name} is on the tailnet without being authorised",
+                    value="1",
+                    body=(
+                        "This tailnet requires new devices to be approved, and "
+                        f"{name} has not been. It reaches nothing until it is."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
+        if presence.lock_error:
+            items.append(
+                Insight(
+                    status="serious",
+                    eyebrow="Tailnet",
+                    title=f"{name} is not signed for tailnet lock",
+                    value="1",
+                    body=(
+                        f"{presence.lock_error} Under tailnet lock an unsigned "
+                        "node is invisible to every other node, however healthy "
+                        "it otherwise looks."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
+        if presence.update_available:
+            items.append(
+                Insight(
+                    status="attention",
+                    eyebrow="Tailnet",
+                    title=f"{name} has a Tailscale update waiting",
+                    value="1",
+                    body=(
+                        f"It runs {presence.client_version or 'an older client'}. "
+                        "A client left behind is how a fleet ends up on versions "
+                        "nobody chose."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
         unapproved = presence.unapproved_routes
         if not unapproved:
             continue
@@ -272,7 +319,8 @@ def tailnet() -> tuple[Insight, ...]:
                 value=str(len(unapproved)),
                 body=(
                     f"{name} offers {', '.join(unapproved)} and the tailnet "
-                    "hands them to nobody. "
+                    f"hands {'them' if len(unapproved) != 1 else 'it'} to "
+                    "nobody. "
                     + (
                         "Nothing can use it as an exit node. "
                         # The swept fact, not a second reading of the route

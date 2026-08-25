@@ -61,6 +61,14 @@ class Presence:
     exit_node_approved: bool = False
     advertised_routes: tuple[str, ...] = ()
     enabled_routes: tuple[str, ...] = ()
+    # Facts with no symptom until they matter. A device the tailnet has not
+    # authorised reaches nothing; one carrying a lock error cannot be reached
+    # by anything under tailnet lock; and a client left behind is how a fleet
+    # acquires versions nobody chose.
+    authorized: bool = True
+    lock_error: str = ""
+    update_available: bool = False
+    client_version: str = ""
     tags: tuple[str, ...] = ()
     # Who the policy admits, per port. Already swept for the reachability
     # panel, and the same answer a machine's own page should be able to give
@@ -424,6 +432,10 @@ def tailnet_presence() -> dict[str, Presence]:
                 enabled_routes=tuple(
                     str(r) for r in record.get("enabled_routes") or ()
                 ),
+                authorized=bool(record.get("authorized", True)),
+                lock_error=str(record.get("lock_error", "")),
+                update_available=bool(record.get("update_available")),
+                client_version=str(record.get("client_version", "")),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 openings=tuple(
                     (int(entry["port"]), tuple(entry.get("who") or ()))

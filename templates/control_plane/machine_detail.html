@@ -152,7 +152,16 @@
           <th scope="row">Node key</th>
           <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days }} days, then it leaves the tailnet{% else %}Does not expire{% endif %}</td>
         </tr>
-        <tr><th scope="row">Runs</th><td>{{ machine.presence.os|default:"—" }}</td></tr>
+        <tr>
+          <th scope="row">Runs</th>
+          <td>{{ machine.presence.os|default:"—" }}{% if machine.presence.client_version %} · Tailscale {{ machine.presence.client_version }}{% if machine.presence.update_available %} <strong>(update waiting)</strong>{% endif %}{% endif %}</td>
+        </tr>
+        {% if not machine.presence.authorized %}
+          <tr><th scope="row">Authorised</th><td><strong>No</strong> — it reaches nothing until approved</td></tr>
+        {% endif %}
+        {% if machine.presence.lock_error %}
+          <tr><th scope="row">Tailnet lock</th><td><strong>Not signed</strong> — {{ machine.presence.lock_error }}</td></tr>
+        {% endif %}
         {% comment %}
         Offered and approved, never one of the two. A route is advertised by the
         machine and then has to be approved in the coordination server; until it
