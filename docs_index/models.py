@@ -26,15 +26,27 @@ class DocumentationQuerySet(models.QuerySet):
         """Active docs past the configured review interval (or never reviewed).
 
         The one shared definition used by the dashboard, the docs list filter,
-        and the reports page. Public article drafts are excluded — they live in
-        the Content pipeline, not the review cycle.
+        and the reports page.
+
+        Two doc types are excluded because they are not documentation about a
+        system and so have no review cycle to fall behind. A public article
+        draft belongs to the Content pipeline. A task belongs to the task
+        lifecycle -- it is open until it is done, and "last reviewed: never" is
+        not a finding about a task, it is what every task says from the moment
+        it is written. Both put an item in the queue that reviewing cannot
+        clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
         cutoff = timezone.localdate() - timedelta(days=review_days)
         return self.filter(
             Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
             status=self.model.Status.ACTIVE,
-        ).exclude(doc_type=self.model.DocType.PUBLIC_ARTICLE_DRAFT)
+        ).exclude(
+            doc_type__in=(
+                self.model.DocType.PUBLIC_ARTICLE_DRAFT,
+                self.model.DocType.TASK,
+            )
+        )
 
 
 class DocumentationRecord(TimestampedModel):

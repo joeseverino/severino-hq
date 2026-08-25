@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Contact submissions · {{ SITE_NAME }}{% endblock %}
+{% block title %}Contact submissions{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>Contact submissions</h1>
@@ -22,7 +22,7 @@
 
 <form class="filter-bar" method="get">
   {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">
   <button type="submit">Search</button>
   {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear</a>{% endif %}
 </form>

@@ -379,21 +379,27 @@ class SearchPageTests(_AuthedTestCase):
 
 class DashboardWorkflowTests(_AuthedTestCase):
     def test_action_items_is_the_full_existing_queue_and_filters_it(self):
-        Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
+        ContentItem.objects.create(
+            title="Unfinished post", status=ContentItem.Status.DRAFT
+        )
 
         with patch("application.attention.get_unread_count", return_value=0):
             response = self.client.get("/action-items/")
             filtered = self.client.get(
-                "/action-items/", {"status": "serious", "q": "project"}
+                "/action-items/", {"status": "serious", "q": "draft"}
             )
 
-        self.assertContains(response, "Active projects need output")
-        self.assertContains(response, 'href="/projects/?needs_output=1"')
+        self.assertContains(response, "Draft content")
+        self.assertContains(response, 'href="/content/?status=draft"')
         self.assertContains(response, "Action items")
-        self.assertNotContains(filtered, "Active projects need output")
+        # Filtered to serious only, so an attention-level entry is gone even
+        # though the query still matches its text.
+        self.assertNotContains(filtered, "Draft content")
 
     def test_profile_count_is_lazy_off_dashboard(self):
-        Project.objects.create(name="Count me", status=Project.Status.ACTIVE)
+        ContentItem.objects.create(
+            title="Count me", status=ContentItem.Status.DRAFT
+        )
 
         page = self.client.get("/projects/")
         with (
@@ -453,7 +459,14 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(response, "Infrastructure findings")
         self.assertContains(response, "/infrastructure/findings/")
 
-    def test_dashboard_surfaces_missing_project_output_once_in_queue(self):
+    def test_output_a_project_lacks_is_counted_but_not_queued(self):
+        """A shape of the portfolio, not a decision waiting on anyone.
+
+        Nothing clears "active work with nothing written about it yet" except
+        months of work, so as a queue entry it was permanently the largest and
+        permanently unactionable. The count still shows on the projects card.
+        """
+
         Project.objects.create(name="Documentable lab", status=Project.Status.ACTIVE)
 
         response = self.client.get("/")
@@ -461,9 +474,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Open items")
         self.assertContains(response, "Priority queue")
-        self.assertContains(response, "Active projects need output")
-        self.assertContains(response, "Documentable lab")
-        self.assertContains(response, "/projects/?needs_output=1")
+        self.assertContains(response, "Active projects")
+        self.assertContains(response, "1 need output")
+        self.assertNotContains(response, "Active projects need output")
+        self.assertNotContains(response, "/projects/?needs_output=1")
         self.assertNotContains(response, "Needs attention")
         self.assertNotContains(response, "Project opportunities")
         self.assertNotContains(response, "Relationship health")
@@ -560,6 +574,21 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/projects/", {"sort": "not_a_model_field"})
 
         self.assertEqual(response.status_code, 200)
+
+    def test_a_search_that_matches_nothing_is_an_empty_table_not_an_error(self):
+        """`apply_search` returned a bare `.none()` when nothing matched, so
+        the `_search_rank` the table layer orders by did not exist -- and
+        Django resolves an ordering name against the model whether or not a row
+        will ever be built. Every list page answered 500 to a misspelt vendor
+        or a doc that was never written."""
+
+        Project.objects.create(name="Something else entirely")
+
+        for path in ("/projects/", "/expenses/", "/docs/", "/audit/", "/receipts/"):
+            with self.subTest(path=path):
+                response = self.client.get(path, {"q": "zzzznomatchhere"})
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "Something else entirely")
 
     def test_table_search_combines_terms_across_searchable_fields(self):
         matching = Project.objects.create(

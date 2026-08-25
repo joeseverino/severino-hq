@@ -39,6 +39,10 @@ class DocumentationRecordForm(forms.ModelForm):
 class ManifestImportForm(forms.Form):
     manifest_file = forms.FileField(
         label="Manifest JSON",
+        # The importer accepts one shape of file; the picker should offer that
+        # shape. Both spellings, because a vault export written by a script is
+        # as likely to arrive typed `application/json` as named `.json`.
+        widget=forms.ClearableFileInput(attrs={"accept": ".json,application/json"}),
         help_text=(
             "JSON array of documentation records as produced by the Obsidian "
             "vault export script. See docs_index/management/commands/import_docs_manifest.py."

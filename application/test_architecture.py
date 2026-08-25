@@ -500,6 +500,55 @@ class TemplateCommentTests(SimpleTestCase):
         )
 
 
+class PageTitleTests(SimpleTestCase):
+    """A page names itself; the site name is appended once, by the layout.
+
+    Left to each page it drifted both ways: nineteen titles carried no site
+    name at all, and seven hardcoded the string ``SEVERINO_SITE_NAME`` is
+    allowed to change. A title is not visible from inside the page that has it,
+    so neither half showed up in review.
+    """
+
+    def title_blocks(self):
+        import re
+
+        root = Path(__file__).resolve().parents[1] / "templates"
+        pattern = re.compile(r"\{%\s*block title\s*%\}(.*?)\{%\s*endblock", re.DOTALL)
+        for template in sorted(root.rglob("*.html")):
+            if template.name == "base.html":
+                continue
+            match = pattern.search(template.read_text(encoding="utf-8"))
+            if match:
+                yield template.relative_to(root), match.group(1).strip()
+
+    def test_no_page_appends_the_site_name_itself(self):
+        offenders = [
+            f"{name}: {leaf}"
+            for name, leaf in self.title_blocks()
+            if "SITE_NAME" in leaf or "Severino HQ" in leaf
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "base.html appends the site name -- a page block names only itself",
+        )
+
+    def test_every_page_names_itself(self):
+        offenders = [str(name) for name, leaf in self.title_blocks() if not leaf]
+        self.assertEqual(
+            offenders,
+            [],
+            "an empty title block renders as the site name preceded by a separator",
+        )
+
+    def test_the_layout_is_what_appends_it(self):
+        base = Path(__file__).resolve().parents[1] / "templates" / "base.html"
+        self.assertIn(
+            "{% block title %}{% endblock %} · {{ SITE_NAME }}",
+            base.read_text(encoding="utf-8"),
+        )
+
+
 class WorkflowSecrecyTests(SimpleTestCase):
     """A private value reaches a public log through the environment or not at all.
 

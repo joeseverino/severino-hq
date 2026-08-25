@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} project · {{ SITE_NAME }}{% endblock %}
+{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} project{% endblock %}
 {% block content %}
 <h1>{% if form.instance.pk %}Edit project{% else %}New project{% endif %}</h1>
 <form method="post" class="form">

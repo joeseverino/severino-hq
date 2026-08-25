@@ -443,9 +443,12 @@ class DashboardProjectionTests(TestCase):
         # hand-assigned code, because nothing needs one: the link an entry
         # points at travels with the entry.
         items = {item["source_id"]: item for item in snapshot["priority"]}
-        self.assertEqual(items["hq.projects"]["count"], 1)
         self.assertEqual(items["hq.contacts"]["count"], 2)
-        self.assertTrue(items["hq.projects"]["url"])
+        self.assertTrue(items["hq.contacts"]["url"])
+        # Projects raise no queue entry: what a project has not produced yet is
+        # a reading, and it rides on the projects card instead.
+        self.assertNotIn("hq.projects", items)
+        self.assertEqual(snapshot["kpis"]["projects_needing_output"], 1)
         self.assertEqual(
             snapshot["priority_count"],
             sum(item["count"] for item in snapshot["priority"]),

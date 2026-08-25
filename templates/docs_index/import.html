@@ -6,7 +6,8 @@
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+  {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the exported manifest here" hint="A JSON array of doc records" %}
+  {% for field in form %}{% if field.name != "manifest_file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
   <div class="form-actions">
     <button type="submit" class="primary">Import</button>
     <a class="btn" href="{% url 'docs_index:list' %}">Cancel</a>

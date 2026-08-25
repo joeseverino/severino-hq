@@ -42,7 +42,12 @@ const sectionMenuBackdrop = document.querySelector(".nav-backdrop");
 
 function setSectionMenu(open, { restoreFocus = false } = {}) {
   document.body.classList.toggle("nav-is-open", open);
-  sectionMenuOpen?.setAttribute("aria-expanded", String(open));
+  // Both, not just the one that opens: CSS shows exactly one of them at a
+  // time, so a state written to only one half is a state written to whichever
+  // control happens to be hidden.
+  [sectionMenuOpen, sectionMenuClose].forEach((control) =>
+    control?.setAttribute("aria-expanded", String(open)),
+  );
   if (restoreFocus) {
     const control = open ? sectionMenuClose : sectionMenuOpen;
     control?.focus({ preventScroll: true });

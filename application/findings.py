@@ -403,7 +403,11 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
         Finding(
             rule="weakly-verified",
             subject=node.id,
-            title=f"{node.label} asserts {len(node.unconfirmed_fields)} unconfirmed field(s)",
+            title=(
+                f"{node.label} asserts {len(node.unconfirmed_fields)} "
+                f"unconfirmed field"
+                f"{'s' if len(node.unconfirmed_fields) != 1 else ''}"
+            ),
             severity="attention",
             explanation=(
                 "The last observation confirmed this record but said nothing "
