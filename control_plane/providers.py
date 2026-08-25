@@ -454,6 +454,114 @@ class TailnetPolicySpec(ProviderModel):
     )
 
 
+class NetworkSpec(ProviderModel):
+    """A range of addresses this estate is built on, and what it means.
+
+    Declared, because nothing sweeps a network. HQ learns addresses from the
+    things that answer at them -- a container's published port, a device's
+    tailnet address -- and never learns what range they belong to or what that
+    range implies. An address on the LAN and one on the tailnet are reachable
+    by different people, and only the ranges say which is which.
+    """
+
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        title="Name",
+        description="What this range is called when people talk about it.",
+    )
+    cidr: str = Field(
+        min_length=1,
+        max_length=64,
+        title="Range",
+        description="The range in CIDR form, e.g. 198.51.100.0/24.",
+    )
+    gateway: str = Field(
+        default="",
+        max_length=64,
+        title="Gateway",
+        description="The router for this range, where it has one.",
+    )
+    purpose: str = Field(
+        default="",
+        max_length=300,
+        title="What it is for",
+        description=(
+            "One line. What reaches this range and what that means for what "
+            "lives on it."
+        ),
+    )
+
+    @field_validator("cidr")
+    @classmethod
+    def a_real_range(cls, value: str) -> str:
+        import ipaddress
+
+        try:
+            ipaddress.ip_network(value, strict=False)
+        except ValueError as exc:
+            raise ValueError("Not a valid CIDR range.") from exc
+        return value
+
+
+class CertificateAuthoritySpec(ProviderModel):
+    """A certificate authority this estate trusts, and where its key lives.
+
+    Not `tls.certificate`: that is a certificate HQ renews and installs. This is
+    the authority a certificate was issued *by* -- including one HQ can never
+    reach, because the whole point of an offline root is that nothing can. An
+    authority nothing sweeps still has an expiry, and an expiry nobody is
+    watching is the failure this records.
+    """
+
+    name: str = Field(
+        min_length=1,
+        max_length=160,
+        title="Authority",
+        description="The issuer name, exactly as it appears in a certificate.",
+    )
+    covers: str = Field(
+        default="",
+        max_length=300,
+        title="What it issues",
+        description="One line. Which certificates this authority is behind.",
+    )
+    expires_on: str = Field(
+        default="",
+        max_length=10,
+        title="Expires",
+        description="ISO date, e.g. 2036-05-02. Left blank when it does not.",
+    )
+    key_location: str = Field(
+        default="",
+        max_length=300,
+        title="Where the key lives",
+        description=(
+            "Said plainly, and never the key itself. For an offline root this "
+            "is the whole control."
+        ),
+    )
+    issued_with: str = Field(
+        default="",
+        max_length=160,
+        title="Issued with",
+        description="The tool that signs with it, where there is one.",
+    )
+
+    @field_validator("expires_on")
+    @classmethod
+    def a_real_date(cls, value: str) -> str:
+        if not value:
+            return value
+        from datetime import date
+
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("Use an ISO date, e.g. 2036-05-02.") from exc
+        return value
+
+
 class MachineSpec(ProviderModel):
     """A machine HQ should know about, whether or not it can reach one.
 
@@ -1703,6 +1811,63 @@ def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _network_key_hint(spec: dict[str, Any]) -> str:
+    return re.sub(r"[^a-z0-9-]+", "-", str(spec.get("name", "")).lower()).strip("-")
+
+
+def _network_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What was declared. Nothing sweeps a range, so nothing is observed."""
+
+    del status
+    return (
+        ("Range", "", str(spec.get("cidr", ""))),
+        ("Gateway", "", str(spec.get("gateway", "")) or "none"),
+        ("What it is for", "", str(spec.get("purpose", ""))),
+    )
+
+
+def _authority_key_hint(spec: dict[str, Any]) -> str:
+    return re.sub(r"[^a-z0-9-]+", "-", str(spec.get("name", "")).lower()).strip("-")
+
+
+def _authority_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """What was declared, and how long it has left.
+
+    The expiry is the reason this record exists, so it is phrased as the time
+    remaining rather than as the date -- a date ten years out reads as "fine"
+    at a glance for nine of them.
+    """
+
+    del status
+    expires = str(spec.get("expires_on", ""))
+    remaining = ""
+    if expires:
+        from datetime import date
+
+        try:
+            days = (date.fromisoformat(expires) - date.today()).days
+        except ValueError:
+            days = None
+        if days is not None:
+            remaining = (
+                f"{expires} · {days // 365} years away"
+                if days > 730
+                else f"{expires} · {days} days away"
+                if days > 0
+                else f"{expires} · expired"
+            )
+    return (
+        ("What it issues", "", str(spec.get("covers", ""))),
+        ("Expires", "", remaining or "does not expire"),
+        ("Where the key lives", "", str(spec.get("key_location", ""))),
+        ("Issued with", "", str(spec.get("issued_with", ""))),
+    )
+
+
 def _machine_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("name", ""))
 
@@ -2218,6 +2383,40 @@ _PROVIDERS = (
             ("Grants", "", str(len(status.get("grants", ())) if status else "")),
             ("Groups", "", str(len(status.get("groups", ())) if status else "")),
             ("Tests", "", str(len(status.get("tests", ())) if status else "")),
+        ),
+    ),
+    ProviderSpec(
+        "network",
+        "A range of addresses this estate is built on. HQ learns addresses "
+        "from whatever answers at them and never learns what range they "
+        "belong to, which is what decides who can reach them.",
+        NetworkSpec,
+        label="Network",
+        declaration_only=True,
+        hostnames=None,
+        readout=_network_readout,
+        # No ``from_record``: nothing sweeps a range. What HQ observes are the
+        # things that answer inside one.
+        key_hint=_network_key_hint,
+        removal_note=lambda spec: (
+            f"{spec.get('name', 'This network')} stops being a range HQ knows. "
+            "Addresses inside it stay, with nothing saying what they are on."
+        ),
+    ),
+    ProviderSpec(
+        "pki.authority",
+        "A certificate authority this estate trusts. Not a certificate HQ "
+        "renews -- the authority one was issued by, including a root kept "
+        "offline that nothing can reach by design.",
+        CertificateAuthoritySpec,
+        label="Certificate authority",
+        declaration_only=True,
+        hostnames=None,
+        readout=_authority_readout,
+        key_hint=_authority_key_hint,
+        removal_note=lambda spec: (
+            f"{spec.get('name', 'This authority')} stops being recorded. "
+            "Certificates it issued stay, with nothing saying what signed them."
         ),
     ),
     ProviderSpec(
