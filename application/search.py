@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.db import connection
-from django.db.models import Case, IntegerField, Q, QuerySet, When
+from django.db.models import Case, IntegerField, Q, QuerySet, Value, When
 from django.db.models.expressions import RawSQL
 
 from search_index.backends import SnippetParts, search_backend
@@ -80,7 +80,16 @@ def apply_search(
     """Filter a domain queryset while retaining relevance as its default order."""
     head_ids = search_ids(scope, query, principal=principal, limit=RELEVANCE_WINDOW)
     if not head_ids:
-        return queryset.none()
+        # Annotated even though it is empty, because what this function
+        # promises its caller is a queryset that can be ordered by relevance,
+        # and that promise cannot hold only when there are results. The bare
+        # `.none()` this used to return made every list page in HQ answer 500
+        # to any search that matched nothing -- a misspelt vendor, a doc that
+        # was never written -- since `order_by("_search_rank")` resolves the
+        # name against the model whether or not a row will ever be built.
+        return queryset.none().annotate(
+            _search_rank=Value(RELEVANCE_WINDOW, output_field=IntegerField())
+        )
     definition = BY_SCOPE[scope]
     identifier_field = definition.identifier_field
     # Rank the head of the result set exactly; everything past the window
