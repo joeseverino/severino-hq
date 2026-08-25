@@ -484,6 +484,42 @@ class MachineSpec(ProviderModel):
             "forwarding to one of these is understood to be pointing here."
         ),
     )
+    # How you get in, and what you are getting into. An address says where a
+    # machine is; none of these are derivable from one, and an authored
+    # inventory outside HQ was carrying them because HQ had nowhere to put
+    # them.
+    operating_system: str = Field(
+        default="",
+        max_length=120,
+        title="Operating system",
+        description="What it runs. Free text — this is a label, not a contract.",
+    )
+    form: str = Field(
+        default="",
+        max_length=60,
+        title="Kind",
+        description=(
+            "What sort of thing it is — a VM, a host, a printer, a phone. "
+            "Decides nothing; it is how a list of machines reads as an estate "
+            "rather than as seven names."
+        ),
+    )
+    ssh_alias: str = Field(
+        default="",
+        max_length=120,
+        title="SSH alias",
+        description=(
+            "The name in `~/.ssh/config` that reaches it, if any. Recorded so "
+            "the way in is written down once rather than remembered."
+        ),
+    )
+    ssh_port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        title="SSH port",
+        description="Only when it is not 22. A moved port is worth stating.",
+    )
 
 
 class PortainerStackEnvVar(ProviderModel):
@@ -1676,9 +1712,16 @@ def _machine_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     """What was declared. Whether it answers is the machine page's to say."""
 
+    port = spec.get("ssh_port")
+    reached_by = str(spec.get("ssh_alias", ""))
+    if reached_by and port:
+        reached_by = f"{reached_by} :{port}"
     return (
         ("What it is for", "", str(spec.get("role", ""))),
+        ("Kind", "", str(spec.get("form", ""))),
+        ("Operating system", "", str(spec.get("operating_system", ""))),
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
+        ("Reached by", "", reached_by),
     )
 
 
