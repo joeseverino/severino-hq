@@ -342,6 +342,57 @@ class FindingsTests(TestCase):
 
         self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "priority")
 
+    def test_key_expiry_is_confirmed_by_the_sweep_that_can_see_it(self):
+        """The daemon reading holds presence and key expiry -- "the two that go
+        wrong quietly" -- and the record mapping kept only the name, so every
+        device asserted a setting no sweep confirmed."""
+
+        from control_plane.providers import PROVIDERS
+
+        rebuilt = PROVIDERS["tailscale.device"].from_record(
+            {"name": "example-device", "key_expires": "2026-12-01T00:00:00Z"}
+        )
+        self.assertIs(rebuilt["key_expiry_disabled"], False)
+
+        # No expiry is the setting, not an unknown date.
+        disabled = PROVIDERS["tailscale.device"].from_record({"name": "forever"})
+        self.assertIs(disabled["key_expiry_disabled"], True)
+
+    def test_ports_only_the_operator_can_know_are_a_declared_gap(self):
+        """``serves_ports`` exists for containers sharing the machine's network,
+        which are exactly the ones Docker publishes no ports for. A sweep can
+        never echo it back, so it is declared rather than reported forever."""
+
+        from control_plane.providers import PROVIDERS
+
+        self.assertIn(
+            "serves_ports", PROVIDERS["portainer.container"].unobservable_fields
+        )
+
+        container = ManagedResource.objects.create(
+            key="example-container",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "example-portainer",
+                "host": "example-host",
+                "name": "example-web",
+                "serves_ports": [8080],
+            },
+        )
+        observed(
+            container,
+            self.now,
+            status={
+                "connection_ref": "example-portainer",
+                "host": "example-host",
+                "name": "example-web",
+            },
+        )
+
+        subjects = [f.subject for f in self.raised() if f.rule == "weakly-verified"]
+
+        self.assertNotIn("resource:example-container", subjects)
+
     def test_a_field_the_provider_declared_it_cannot_report_is_not_a_finding(self):
         """A known gap is not a silent one, and only silence is the bug."""
 

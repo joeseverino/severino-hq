@@ -1943,7 +1943,20 @@ def _tailnet_device_readout(
 
 
 def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {"name": record.get("name", "")}
+    """A tailnet device, as the declaration that would reproduce it.
+
+    Key expiry is read back, not dropped. The daemon reading is described as
+    holding "presence and key expiry, which are the two that go wrong quietly",
+    and this mapping kept only the name -- so every device asserted a
+    ``key_expiry_disabled`` no sweep ever confirmed, which is the quiet way it
+    goes wrong. Absence of an expiry is the setting rather than an unknown
+    date, the same reading a reconcile makes.
+    """
+
+    return {
+        "name": record.get("name", ""),
+        "key_expiry_disabled": not record.get("key_expires"),
+    }
 
 
 _PROVIDERS = (
@@ -2094,6 +2107,12 @@ _PROVIDERS = (
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
         advanced_fields=("hidden", "serves_ports"),
+        # And that is exactly why a sweep can never confirm it. The field
+        # exists for the case Docker publishes nothing, so asking the world to
+        # echo it back asks for the one answer this provider is unable to give.
+        # Declared, so the gap is a known one rather than seven records
+        # reporting an unconfirmed assertion nothing could ever confirm.
+        unobservable_fields=("serves_ports",),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
@@ -2107,7 +2126,13 @@ _PROVIDERS = (
         connection_providers=("tailscale",),
         readout=_tailnet_device_readout,
         from_record=_tailnet_device_from_record,
-        sample_record={"name": "example-device", "document": ""},
+        # Carries an expiry, so the round-trip guard has something to check
+        # rather than passing on a field the fixture never supplied.
+        sample_record={
+            "name": "example-device",
+            "key_expires": "2026-12-01T00:00:00Z",
+            "document": "",
+        },
         identity=_tailnet_device_identity,
         key_hint=_tailnet_device_key_hint,
         choices="application.provider_choices:tailnet_device",
