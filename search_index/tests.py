@@ -162,6 +162,48 @@ class GlobalSearchTests(TestCase):
         self.assertEqual(item["badge"], "tailscale.device")
         self.assertEqual(item["url"], resource.get_absolute_url())
 
+    def test_a_structured_field_is_indexed_as_words_not_as_python(self):
+        """The snippet under a result is cut out of the body. ``str()`` on a
+        JSONField put ``{'key_expiry_disabled': False}`` there, and the
+        punctuation carrying the meaning is what the tokenizer discards -- so
+        the key and its value were indexed as unrelated words."""
+        ManagedResource.objects.create(
+            key="example-node",
+            kind="example.device",
+            spec={"hostname": "alpha", "key_expiry_disabled": False, "tags": []},
+            conditions=[{"type": "Ready", "status": "True"}],
+        )
+
+        body = SearchDocument.objects.get(
+            scope="infrastructure.resources", object_id="example-node"
+        ).body
+
+        self.assertIn("hostname: alpha", body)
+        self.assertIn("key_expiry_disabled: no", body)
+        self.assertIn("type: Ready", body)
+        for python in ("{", "}", "[", "]", "'", "False"):
+            self.assertNotIn(python, body)
+
+    def test_a_multi_line_value_is_indexed_on_one_line(self):
+        """A snippet window is a fixed number of characters around the match.
+        Spent on escaped newlines, it shows whitespace instead of context."""
+        ManagedResource.objects.create(
+            key="example-policy",
+            kind="example.policy",
+            spec={"document": '{\r\n  "grants": [\r\n    {"dst": ["*"]}\r\n  ]\r\n}'},
+        )
+
+        body = SearchDocument.objects.get(
+            scope="infrastructure.resources", object_id="example-policy"
+        ).body
+
+        (document,) = [
+            line for line in body.splitlines() if line.startswith("document:")
+        ]
+        self.assertNotIn("\r", body)
+        self.assertIn('"grants"', document)
+        self.assertNotIn("  ", document)
+
     def test_docs_use_title_not_str_and_carry_doc_id_badge(self):
         from docs_index.models import DocumentationRecord
 
