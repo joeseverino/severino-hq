@@ -45,7 +45,7 @@ class Device:
     tx_bytes: int = 0
     endpoints: tuple[str, ...] = ()
     key_expires: str = ""
-    exit_node: bool = False
+    offers_exit_node: bool = False
     observed_at: datetime | None = None
 
     @property
@@ -153,7 +153,7 @@ def devices() -> dict[str, Device]:
                     str(endpoint) for endpoint in record.get("endpoints") or ()
                 ),
                 key_expires=str(record.get("key_expires", "")),
-                exit_node=bool(record.get("exit_node")),
+                offers_exit_node=bool(record.get("offers_exit_node")),
                 observed_at=snapshot.observed_at,
             )
     return found

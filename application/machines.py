@@ -53,13 +53,36 @@ class Presence:
     tailnet_name: str = ""
     dns_name: str = ""
     os: str = ""
-    exit_node: bool = False
+    offers_exit_node: bool = False
+    # Offered and approved are two facts, and only their agreement means the
+    # route works. A route is advertised by the machine and must then be
+    # approved in the coordination server; until it is, the machine goes on
+    # reporting that it offers the route and nothing can use it.
+    exit_node_approved: bool = False
+    advertised_routes: tuple[str, ...] = ()
+    enabled_routes: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     # Who the policy admits, per port. Already swept for the reachability
     # panel, and the same answer a machine's own page should be able to give
     # without anybody having to go and ask it.
     openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
+
+    @property
+    def unapproved_routes(self) -> tuple[str, ...]:
+        """Routes this machine offers that the tailnet has not approved.
+
+        The silent failure this reading exists for. `tailscale up
+        --advertise-routes` succeeds, the machine reports the route forever,
+        and every other device simply never receives it -- so a subnet route or
+        an exit node can be declared, believed, and dead, with nothing in the
+        estate disagreeing.
+        """
+
+        return tuple(
+            route for route in self.advertised_routes
+            if route not in set(self.enabled_routes)
+        )
 
     @property
     def key_expiry_days(self) -> int | None:
@@ -393,7 +416,14 @@ def tailnet_presence() -> dict[str, Presence]:
                 tailnet_name=name,
                 dns_name=str(record.get("dns_name", "")),
                 os=str(record.get("os", "")),
-                exit_node=bool(record.get("exit_node")),
+                offers_exit_node=bool(record.get("offers_exit_node")),
+                exit_node_approved=bool(record.get("exit_node_approved")),
+                advertised_routes=tuple(
+                    str(r) for r in record.get("advertised_routes") or ()
+                ),
+                enabled_routes=tuple(
+                    str(r) for r in record.get("enabled_routes") or ()
+                ),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 openings=tuple(
                     (int(entry["port"]), tuple(entry.get("who") or ()))

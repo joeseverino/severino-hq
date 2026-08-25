@@ -2585,6 +2585,17 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
         identity = identities.get(device["name"], {})
         device["user"] = identity.get("user", "")
         device["tags"] = identity.get("tags", [])
+        device["advertised_routes"] = identity.get("advertised_routes", [])
+        device["enabled_routes"] = identity.get("enabled_routes", [])
+        # The daemon's `ExitNodeOption` answers "can this node be my exit node",
+        # which is already false for one that offers but was never approved.
+        # The coordination server is the only side that can tell those apart,
+        # so when it answered, its answer wins.
+        if device["name"] in identities:
+            device["offers_exit_node"] = bool(identity.get("offers_exit_node"))
+            device["exit_node_approved"] = bool(identity.get("exit_node_approved"))
+        else:
+            device["exit_node_approved"] = device.get("offers_exit_node", False)
     return devices
 
 
@@ -2612,7 +2623,13 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "key_expires": str(node.get("KeyExpiry") or ""),
         "addresses": [str(address) for address in node.get("TailscaleIPs") or ()],
         "os": str(node.get("OS") or ""),
-        "exit_node": bool(node.get("ExitNode")),
+        # Two different questions, and only the second is a fact about the
+        # device. `ExitNode` is whether this peer is the exit node *this*
+        # machine is currently routing through -- a statement about our own
+        # preference. `ExitNodeOption` is whether the peer offers to be one at
+        # all. A machine page saying "exit node" means the latter.
+        "exit_node_in_use": bool(node.get("ExitNode")),
+        "offers_exit_node": bool(node.get("ExitNodeOption")),
         "self": False,
         # How the traffic actually gets there, which is the part nothing else
         # can answer. A peer is either reached directly -- the two daemons found
@@ -3105,12 +3122,44 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     return found
 
 
-def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
-    """Each device's own identity: the user that owns it, and its tags.
+def _device_routes(token: str, device_id: str) -> dict[str, list[str]]:
+    """What one device offers to route, and what the tailnet actually permits.
 
-    From the API rather than the local daemon, which does not report tags. It
-    is what a policy names a device by, so without it "may this reach that" has
-    no way to say which principal is asking.
+    Two lists, and the gap between them is the whole reason to read this.
+    Advertising a route does nothing until it is approved in the coordination
+    server, and nothing tells you: the machine keeps reporting that it offers
+    the route, every device keeps not being able to use it, and the estate
+    reads as though the route works.
+    """
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{device_id}/routes",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            routes = json.loads(response.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+        return {}
+    return {
+        "advertised_routes": sorted(str(r) for r in routes.get("advertisedRoutes") or ()),
+        "enabled_routes": sorted(str(r) for r in routes.get("enabledRoutes") or ()),
+    }
+
+
+# An exit node is advertised as the two default routes rather than as a flag,
+# so "does this offer to be an exit node" is a question about its route list.
+_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
+
+
+def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
+    """Each device's identity and what it routes, from the coordination server.
+
+    From the API rather than the local daemon for two reasons. The daemon does
+    not report tags, which is what a policy names a device by. And a peer's
+    routes as the daemon sees them are the routes *this* node was given -- an
+    unapproved route is simply absent -- so the daemon can say a route is not
+    working but never that it was offered and refused.
     """
 
     request = urllib.request.Request(
@@ -3122,14 +3171,26 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
             devices = json.loads(response.read()).get("devices") or []
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return {}
-    return {
-        str(device.get("hostname", "")): {
+    found: dict[str, dict[str, Any]] = {}
+    for device in devices:
+        hostname = str(device.get("hostname", ""))
+        if not hostname:
+            continue
+        routes = _device_routes(token, str(device.get("id", "")))
+        advertised = routes.get("advertised_routes", [])
+        enabled = routes.get("enabled_routes", [])
+        found[hostname] = {
             "user": str(device.get("user", "")),
             "tags": sorted(device.get("tags") or []),
+            "advertised_routes": advertised,
+            "enabled_routes": enabled,
+            # Stated separately from the route lists because it is the question
+            # an operator actually asks, and because the two default routes
+            # being present is not obvious as an answer to it.
+            "offers_exit_node": bool(_EXIT_ROUTES & set(advertised)),
+            "exit_node_approved": bool(_EXIT_ROUTES & set(enabled)),
         }
-        for device in devices
-        if device.get("hostname")
-    }
+    return found
 
 
 # Where the answers start. Asking about all 65535 would be that many calls per

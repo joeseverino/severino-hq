@@ -152,7 +152,31 @@
           <th scope="row">Node key</th>
           <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days }} days, then it leaves the tailnet{% else %}Does not expire{% endif %}</td>
         </tr>
-        <tr><th scope="row">Runs</th><td>{{ machine.presence.os|default:"—" }}{% if machine.presence.exit_node %} · exit node{% endif %}</td></tr>
+        <tr><th scope="row">Runs</th><td>{{ machine.presence.os|default:"—" }}</td></tr>
+        {% comment %}
+        Offered and approved, never one of the two. A route is advertised by the
+        machine and then has to be approved in the coordination server; until it
+        is, the machine goes on reporting that it offers the route and no device
+        receives it. Showing only what was offered is how a dead subnet route
+        reads as a working one.
+        {% endcomment %}
+        {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
+          <tr>
+            <th scope="row">Exit node</th>
+            <td>
+              {% if not machine.presence.offers_exit_node %}Not offered
+              {% elif machine.presence.exit_node_approved %}Offered and approved
+              {% else %}<strong>Offered, not approved</strong> — nothing can route through it
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Routes</th>
+            <td>
+              {% for route in machine.presence.advertised_routes %}<code>{{ route }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
+            </td>
+          </tr>
+        {% endif %}
         {% if machine.presence.tags %}
           <tr>
             <th scope="row">Tags</th>

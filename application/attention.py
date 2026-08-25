@@ -212,12 +212,17 @@ KEY_EXPIRY_SERIOUS_DAYS = 14
 
 
 def tailnet() -> tuple[Insight, ...]:
-    """Machines whose tailnet key runs out soon.
+    """Two tailnet facts with no symptom until somebody needs them.
 
-    A deadline nothing else in HQ watches, and one with no symptom until it
-    passes: the machine keeps running, keeps serving, and simply stops being
-    reachable over the tailnet on a date decided months earlier. Devices with
+    A node key runs out on a date decided months earlier: the machine keeps
+    running, keeps serving, and simply stops being reachable. Devices with
     expiry disabled are silent here, because for them there is no date.
+
+    And a route that was advertised but never approved. `--advertise-routes`
+    succeeds, the machine reports the route for as long as it runs, and the
+    coordination server hands it to nobody -- so a subnet route or an exit node
+    can be configured, documented, believed, and dead, with every side of it
+    reporting success.
     """
 
     # The presence table, not the whole machine catalogue. Everything shown
@@ -225,8 +230,12 @@ def tailnet() -> tuple[Insight, ...]:
     # reach it costs the dashboard a query per row for facts it does not use.
     from .machines import tailnet_presence
 
+    # Read once, asked twice. The projection has a query budget and this is
+    # the same table both questions are about.
+    presences = sorted(tailnet_presence().items())
+
     items = []
-    for name, presence in sorted(tailnet_presence().items()):
+    for name, presence in presences:
         days = presence.key_expiry_days
         if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
             continue
@@ -243,6 +252,38 @@ def tailnet() -> tuple[Insight, ...]:
                 body=(
                     f"Its node key expires. {name} keeps running and stops "
                     "being reachable over the tailnet."
+                ),
+                action="Open machine",
+                url=reverse("control_plane:machine", kwargs={"name": name}),
+            )
+        )
+    for name, presence in presences:
+        unapproved = presence.unapproved_routes
+        if not unapproved:
+            continue
+        items.append(
+            Insight(
+                status="attention",
+                eyebrow="Tailnet",
+                title=(
+                    f"{name} advertises {len(unapproved)} route"
+                    f"{'s' if len(unapproved) != 1 else ''} nothing approved"
+                ),
+                value=str(len(unapproved)),
+                body=(
+                    f"{name} offers {', '.join(unapproved)} and the tailnet "
+                    "hands them to nobody. "
+                    + (
+                        "Nothing can use it as an exit node. "
+                        # The swept fact, not a second reading of the route
+                        # list: what makes a route an exit route is Tailscale's
+                        # to say, and the sweep already asked.
+                        if presence.offers_exit_node
+                        and not presence.exit_node_approved
+                        else ""
+                    )
+                    + "Approve them in the Tailscale console, or stop "
+                    "advertising what is not wanted."
                 ),
                 action="Open machine",
                 url=reverse("control_plane:machine", kwargs={"name": name}),

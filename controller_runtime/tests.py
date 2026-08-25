@@ -1799,6 +1799,7 @@ class TailnetSweepTests(TestCase):
                 "TailscaleIPs": ["100.64.0.2"],
                 "OS": "linux",
                 "ExitNode": True,
+                "ExitNodeOption": True,
             },
             "k2": {"HostName": "a-tv", "Online": False, "LastSeen": "2026-07-01T00:00:00Z"},
         },
@@ -1827,6 +1828,20 @@ class TailnetSweepTests(TestCase):
         found = self.by_name()
         self.assertTrue(found["an-edge"]["online"])
         self.assertFalse(found["a-tv"]["online"])
+
+    def test_offering_to_be_an_exit_node_is_not_being_the_one_in_use(self):
+        """Two different questions. `ExitNode` is whether this peer is the exit
+        node the reading machine currently routes through -- a fact about our
+        own preference. `ExitNodeOption` is whether the peer offers to be one.
+        A machine page saying "exit node" means the second."""
+
+        found = self.by_name()
+
+        self.assertTrue(found["an-edge"]["offers_exit_node"])
+        self.assertTrue(found["an-edge"]["exit_node_in_use"])
+        # A device that offers nothing says so on both counts.
+        self.assertFalse(found["a-tv"]["offers_exit_node"])
+        self.assertFalse(found["a-tv"]["exit_node_in_use"])
 
     def test_a_key_expiry_is_carried_and_its_absence_is_not_invented(self):
         found = self.by_name()
