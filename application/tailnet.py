@@ -47,6 +47,10 @@ class Device:
     tx_bytes: int = 0
     endpoints: tuple[str, ...] = ()
     key_expires: str = ""
+    # The WireGuard public key. A peering is not a claim in an inventory, it is
+    # two keys that have completed a handshake, and this is the half of that
+    # pair a page can show.
+    public_key: str = ""
     offers_exit_node: bool = False
     # What actually admits a node, as distinct from what lists one. A device in
     # the inventory has been seen; a device the tailnet has authorised and lock
@@ -150,6 +154,7 @@ def devices() -> dict[str, Device]:
                 os=str(record.get("os", "")),
                 online=bool(record.get("online")),
                 observer=bool(record.get("self")),
+                public_key=str(record.get("public_key", "")),
                 authorized=bool(record.get("authorized", True)),
                 lock_error=str(record.get("lock_error", "")),
                 direct_endpoint=str(record.get("direct_endpoint", "")),

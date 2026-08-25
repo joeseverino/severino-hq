@@ -422,6 +422,24 @@ class Connection:
         )
 
     @property
+    def peer_keys(self) -> tuple[tuple[str, str], ...]:
+        """The two node keys behind this connection, yours first.
+
+        The evidence the rest of the link section is describing. Everything
+        above it -- an endpoint, a handshake age, a byte count -- is a
+        consequence of these two keys having agreed; naming them is what turns
+        "HQ says you are a peer" into something checkable against `tailscale
+        status` on either machine.
+        """
+
+        found = []
+        if self.caller_device and self.caller_device.public_key:
+            found.append((self.caller_device.label, self.caller_device.public_key))
+        if self.serves and self.serves.public_key:
+            found.append((self.serves.label, self.serves.public_key))
+        return tuple(found)
+
+    @property
     def peering(self) -> Peering:
         """Which network this tailnet session is actually riding over.
 

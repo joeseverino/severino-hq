@@ -124,9 +124,13 @@ code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, mo
 pre code { background: transparent; padding: 0; color: inherit; }
 pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: var(--radius); overflow-x: auto; font-size: 13px; line-height: 1.55; }
 
-/* A node key is one long unbroken token; without this it widens the table
-   past the viewport instead of wrapping. */
-.node-key { overflow-wrap: anywhere; }
+/* A node key is one long unbroken token. Stacked so the machine's name sits
+   above it rather than competing for width, and allowed to break anywhere so
+   it wraps inside its panel instead of widening the page. */
+.conn-keys { display: grid; gap: 2px; margin: 6px 0 8px; }
+.conn-keys dt { color: var(--muted); font-size: 12px; }
+.conn-keys dd { margin: 0 0 6px; }
+.conn-keys dd code, .node-key { font-size: 12px; overflow-wrap: anywhere; word-break: break-all; }
 
 /* ── Header ─────────────────────────────────────────────────────── */
 
