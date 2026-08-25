@@ -69,6 +69,13 @@ class Presence:
     lock_error: str = ""
     update_available: bool = False
     client_version: str = ""
+    # Tailscale SSH turns a device into something the policy can hand shells
+    # out on. Shields-up means it accepts no inbound connection at all, which
+    # from outside looks exactly like being broken. An external device belongs
+    # to another tailnet and was shared into this one.
+    ssh_enabled: bool = False
+    blocks_incoming: bool = False
+    external: bool = False
     # The peering itself, as the machine HQ runs on reports it. This reading is
     # taken from HQ's own daemon, so every device in it is a peer of HQ by
     # construction -- which HQ knew and never said. A key that has completed a
@@ -505,6 +512,9 @@ def tailnet_presence() -> dict[str, Presence]:
                 lock_error=str(record.get("lock_error", "")),
                 update_available=bool(record.get("update_available")),
                 client_version=str(record.get("client_version", "")),
+                ssh_enabled=bool(record.get("ssh_enabled")),
+                blocks_incoming=bool(record.get("blocks_incoming")),
+                external=bool(record.get("external")),
                 public_key=str(record.get("public_key", "")),
                 direct_endpoint=str(record.get("direct_endpoint", "")),
                 relay=str(record.get("relay", "")),

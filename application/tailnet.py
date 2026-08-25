@@ -278,6 +278,9 @@ class Policy:
     settings: dict = field(default_factory=dict)
     dns: dict = field(default_factory=dict)
     lock: dict = field(default_factory=dict)
+    services: tuple[dict, ...] = ()
+    app_connectors: tuple[dict, ...] = ()
+    ssh_rules: tuple[dict, ...] = ()
 
     @property
     def facts(self) -> tuple[tuple[str, str], ...]:
@@ -411,5 +414,8 @@ def policy() -> Policy:
                 settings=record.get("settings") or {},
                 dns=record.get("dns") or {},
                 lock=record.get("lock") or {},
+                services=tuple(record.get("services") or ()),
+                app_connectors=tuple(record.get("app_connectors") or ()),
+                ssh_rules=tuple(record.get("ssh_rules") or ()),
             )
     return Policy()

@@ -156,6 +156,20 @@
           <th scope="row">Runs</th>
           <td>{{ machine.presence.os|default:"—" }}{% if machine.presence.client_version %} · Tailscale {{ machine.presence.client_version }}{% if machine.presence.update_available %} <strong>(update waiting)</strong>{% endif %}{% endif %}</td>
         </tr>
+        {% comment %}
+        Each shown only when true. A device that runs no Tailscale SSH, accepts
+        inbound connections and belongs to this tailnet is every device -- three
+        rows saying "no" on every machine page is how a page stops being read.
+        {% endcomment %}
+        {% if machine.presence.ssh_enabled %}
+          <tr><th scope="row">Tailscale SSH</th><td>Enabled — the policy can hand out shells on this machine</td></tr>
+        {% endif %}
+        {% if machine.presence.blocks_incoming %}
+          <tr><th scope="row">Shields</th><td>Up — it accepts no inbound connection, which from outside looks the same as being down</td></tr>
+        {% endif %}
+        {% if machine.presence.external %}
+          <tr><th scope="row">Belongs to</th><td>Another tailnet — shared into this one</td></tr>
+        {% endif %}
         {% if not machine.presence.authorized %}
           <tr><th scope="row">Authorised</th><td><strong>No</strong> — it reaches nothing until approved</td></tr>
         {% endif %}

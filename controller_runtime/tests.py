@@ -1779,6 +1779,50 @@ class MachineNameTests(TestCase):
         self.assertEqual(providers.controller_id(), "a-named-host")
 
 
+class AppConnectorTests(TestCase):
+    """An app connector is a node routing traffic for named domains on the
+    tailnet's behalf -- a way something is reached that is neither a device nor
+    a DNS record, declared inside the policy rather than anywhere HQ looked."""
+
+    def connectors(self, policy):
+        return providers._app_connectors(policy)
+
+    def test_a_declared_connector_is_read_out_of_the_policy(self):
+        found = self.connectors({
+            "nodeAttrs": [{
+                "target": ["tag:server"],
+                "app": {
+                    "tailscale.com/app-connectors": [{
+                        "name": "example-connector",
+                        "connectors": ["tag:server"],
+                        "domains": ["example.test"],
+                    }]
+                },
+            }]
+        })
+
+        self.assertEqual(
+            found,
+            [{
+                "name": "example-connector",
+                "connectors": ["tag:server"],
+                "domains": ["example.test"],
+            }],
+        )
+
+    def test_other_node_attributes_are_not_mistaken_for_connectors(self):
+        """`nodeAttrs` carries every per-node attribute the policy sets."""
+
+        found = self.connectors({
+            "nodeAttrs": [{"target": ["*"], "attr": ["funnel"]}]
+        })
+
+        self.assertEqual(found, [])
+
+    def test_a_policy_with_no_attributes_at_all_reads_as_none(self):
+        self.assertEqual(self.connectors({}), [])
+
+
 class TailnetSweepTests(TestCase):
     """Reading the tailnet through the daemon this node is already a peer of.
 

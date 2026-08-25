@@ -2629,6 +2629,9 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
         device["lock_error"] = identity.get("lock_error", "")
         device["update_available"] = bool(identity.get("update_available"))
         device["client_version"] = identity.get("client_version", "")
+        device["ssh_enabled"] = bool(identity.get("ssh_enabled"))
+        device["blocks_incoming"] = bool(identity.get("blocks_incoming"))
+        device["external"] = bool(identity.get("external"))
         # The coordination server's answer wins over the daemon's inference:
         # the daemon reports no expiry date, which is the same shape whether
         # expiry is disabled or the reading simply lacks it.
@@ -3151,6 +3154,38 @@ def _who_may_reach(policy: dict[str, Any], token: str, target: str) -> list[dict
         return []
 
 
+# The attribute an app connector is declared under. Named once: it appears in
+# the policy as a key, and a second spelling of it would read as a second
+# feature rather than as a typo.
+_APP_CONNECTOR_ATTR = "tailscale.com/app-connectors"
+
+
+def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every app connector the policy declares, as its own fact.
+
+    An app connector is a node routing traffic for named domains on the
+    tailnet's behalf, so it is a way something is reached that is neither a
+    device nor a DNS record -- and it is declared inside the policy rather than
+    anywhere HQ was looking.
+    """
+
+    found = []
+    for attr in policy.get("nodeAttrs") or []:
+        for declared in (attr.get("app") or {}).get(_APP_CONNECTOR_ATTR) or []:
+            found.append(
+                {
+                    "name": str(declared.get("name", "")),
+                    "connectors": sorted(
+                        str(node) for node in declared.get("connectors") or ()
+                    ),
+                    "domains": sorted(
+                        str(domain) for domain in declared.get("domains") or ()
+                    ),
+                }
+            )
+    return found
+
+
 def list_tailnet_policy() -> list[dict[str, Any]]:
     """The policy itself: who is grouped, what is tagged, and what it grants.
 
@@ -3194,6 +3229,38 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             ],
             "tests": policy.get("tests") or [],
             "lock": _tailnet_lock(),
+            # A Service is a name the tailnet serves that is not a device --
+            # published by whichever nodes advertise it, and reachable under
+            # the policy like anything else. Nothing else in HQ would notice
+            # one appearing.
+            "services": [
+                {
+                    "name": str(service.get("name", "")),
+                    "addresses": sorted(
+                        str(a) for a in service.get("addrs") or ()
+                    ),
+                    "comment": str(service.get("comment", "")),
+                    "ports": sorted(str(p) for p in service.get("ports") or ()),
+                }
+                for service in (
+                    _tailnet_get(token, "vip-services").get("vipServices") or []
+                )
+            ],
+            # Not fetched: both are declared inside the policy this record
+            # already carries, so reading them is reading it.
+            "app_connectors": _app_connectors(policy),
+            # Tailscale SSH rules are grants like any other -- who may open a
+            # shell, on what, as which user -- and the grants table above shows
+            # none of them because they live under their own key.
+            "ssh_rules": [
+                {
+                    "action": str(rule.get("action", "")),
+                    "src": sorted(str(s) for s in rule.get("src") or ()),
+                    "dst": sorted(str(d) for d in rule.get("dst") or ()),
+                    "users": sorted(str(u) for u in rule.get("users") or ()),
+                }
+                for rule in policy.get("ssh") or []
+            ],
         }
     ]
 
@@ -3325,6 +3392,15 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
             # The coordination server's own answer, rather than the daemon's
             # absence-of-an-expiry inference.
             "key_expiry_disabled": bool(device.get("keyExpiryDisabled")),
+            # Three more that travel in the same response and that nothing else
+            # in HQ can answer. Tailscale SSH turns a device into something the
+            # policy can hand shells out on; shields-up means it accepts no
+            # inbound connection at all, which looks identical to being broken;
+            # and an external device belongs to somebody else's tailnet and was
+            # shared into this one.
+            "ssh_enabled": bool(device.get("sshEnabled")),
+            "blocks_incoming": bool(device.get("blocksIncomingConnections")),
+            "external": bool(device.get("isExternal")),
         }
     return found
 
