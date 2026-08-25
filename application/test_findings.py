@@ -256,6 +256,91 @@ class FindingsTests(TestCase):
 
         self.assertEqual([f.subject for f in found], ["resource:half-checked"])
         self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "answer")
+        # `field(s)` is what a claim looks like when it does not know how
+        # many there are. This one does.
+        self.assertTrue(found[0].title.endswith("1 unconfirmed field"))
+        self.assertNotIn("(s)", found[0].title)
+
+    def test_a_field_carrying_no_value_is_not_an_unconfirmed_assertion(self):
+        """A spec is a full model dump, so an optional field nobody set is
+        still a key. Reading that as a claim put twenty-eight unclearable
+        findings in front of the real ones on the live estate: every DNS record
+        that was not an MX asserted a ``priority`` the provider correctly
+        declines to read back for a type that has none."""
+
+        record = ManagedResource.objects.create(
+            key="nothing-asserted",
+            kind="cloudflare.dns_record",
+            spec={
+                "zone": "example.test",
+                "name": "example.test",
+                "record_type": "TXT",
+                "content": '"v=spf1 -all"',
+                "priority": None,
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
+        # A sweep that read everything the record actually has.
+        observed(
+            record,
+            self.now,
+            status={
+                "zone": "example.test",
+                "name": "example.test",
+                "record_type": "TXT",
+                "content": '"v=spf1 -all"',
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
+
+        subjects = [f.subject for f in self.raised() if f.rule == "weakly-verified"]
+
+        self.assertNotIn("resource:nothing-asserted", subjects)
+
+    def test_a_field_carrying_a_value_is_still_an_unconfirmed_assertion(self):
+        """The other half of the same rule, and the half worth reading.
+
+        ``False`` and ``0`` are not absence. A record that says a port is
+        served, or that key expiry is off, has said something checkable that
+        nothing has checked -- and silencing those alongside the empty ones is
+        how the fix above would have become the bug it was fixing.
+        """
+
+        record = ManagedResource.objects.create(
+            key="something-asserted",
+            kind="cloudflare.dns_record",
+            spec={
+                "zone": "example.test",
+                "name": "mail.example.test",
+                "record_type": "MX",
+                "content": "mx.example.test",
+                "priority": 0,
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
+        observed(
+            record,
+            self.now,
+            status={
+                "zone": "example.test",
+                "name": "mail.example.test",
+                "record_type": "MX",
+                "content": "mx.example.test",
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
+
+        found = [
+            f
+            for f in self.raised()
+            if f.rule == "weakly-verified" and f.subject == "resource:something-asserted"
+        ]
+
+        self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "priority")
 
     def test_a_field_the_provider_declared_it_cannot_report_is_not_a_finding(self):
         """A known gap is not a silent one, and only silence is the bug."""

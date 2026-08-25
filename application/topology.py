@@ -268,13 +268,33 @@ def _ability_actions(
     return tuple(actions)
 
 
+def _asserts_nothing(value: Any) -> bool:
+    """Whether a declared value is the absence of a claim rather than a claim.
+
+    A spec is a full model dump, so every optional field a provider defines is
+    a key whether or not anyone set one. A TXT record carries a ``priority``
+    key because MX records exist; ``None`` there is the schema showing through.
+
+    ``False`` and ``0`` are claims, not absence: a device declaring key expiry
+    *on*, or an MX at priority zero, has said something checkable.
+    """
+
+    return value is None or value == "" or value == [] or value == {}
+
+
 def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     """What this declaration asserts that the last reading did not echo back.
 
     Drift is compared only across fields present in *both*, so a field the
     reading omits is never judged -- it is unverified rather than agreed.
     Fields the provider declared it cannot report are excluded: those are a
-    known gap rather than a silent one.
+    known gap rather than a silent one. And a field carrying no value is
+    excluded because there is nothing there to confirm.
+
+    Without that last clause every DNS record that is not an MX asserted an
+    unconfirmed ``priority`` -- twenty-eight of them, none clearable, since the
+    provider correctly declines to read a priority back for a type that has
+    none. They buried the findings that were real.
     """
 
     if not resource.last_observed_at or not isinstance(resource.status, dict):
@@ -283,8 +303,10 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     return tuple(
         sorted(
             field
-            for field in (resource.spec or {})
-            if field not in resource.status and field not in unobservable
+            for field, value in (resource.spec or {}).items()
+            if field not in resource.status
+            and field not in unobservable
+            and not _asserts_nothing(value)
         )
     )
 
