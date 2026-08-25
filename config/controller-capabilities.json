@@ -94,6 +94,10 @@
             "timeout_seconds": 60,
             "interval_seconds": 10
           }
+        },
+        "approve-routes": {
+          "mode": "apply",
+          "automatic": false
         }
       }
     },

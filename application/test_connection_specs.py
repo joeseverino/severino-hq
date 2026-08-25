@@ -305,9 +305,16 @@ class ConnectionRegistrationTests(TestCase):
                 "infrastructure.resource.update",
                 "infrastructure.reconcile",
                 "infrastructure.resource.remove",
+                # Scoped to the device kind, so it surfaces here for the same
+                # reason `certificate.renew` does not: the ability names what
+                # the credential reaches, and the command names what it acts on.
+                "tailnet.routes.approve",
             },
         )
         self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)
+        self.assertIn(
+            "via Tailnet device", commands["tailnet.routes.approve"].badges
+        )
         self.assertEqual(
             commands["infrastructure.reconcile"].url,
             "/commands/infrastructure.reconcile/"

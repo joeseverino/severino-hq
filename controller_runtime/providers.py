@@ -2799,6 +2799,99 @@ def reconcile_tailnet_device(
     )
 
 
+def approve_tailnet_routes(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Approve exactly the routes this device is already advertising.
+
+    Approval takes the whole set, so it is read before it is written: sending a
+    list assembled from anywhere else would silently withdraw a route this call
+    was never about. What the machine offers is what gets approved, and a
+    machine offering nothing is a no-op rather than a way to clear its routes.
+    """
+
+    del observed
+    name = spec["name"]
+    identifier = _tailnet_device_id(name)
+    token = _tailnet_token(spec.get("connection_ref", ""))
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            current = json.loads(response.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
+
+    advertised = sorted(str(route) for route in current.get("advertisedRoutes") or ())
+    enabled = sorted(str(route) for route in current.get("enabledRoutes") or ())
+    pending = [route for route in advertised if route not in set(enabled)]
+    status = {
+        "name": name,
+        "advertised_routes": advertised,
+        "enabled_routes": enabled,
+    }
+    if not pending:
+        return ProviderResult(
+            changed=False,
+            status=status,
+            conditions=[
+                _condition(
+                    "Ready", True, "Reconciled",
+                    "Every route this device advertises is approved.",
+                )
+            ],
+            message=(
+                "Nothing to approve."
+                if advertised
+                else f"{name} advertises no routes."
+            ),
+        )
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status=status,
+            conditions=[],
+            message=f"Would approve {', '.join(pending)} for {name}.",
+        )
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+        data=json.dumps({"routes": advertised}).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            approved = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            raise ProviderError(
+                "This Tailscale credential may not approve routes. It needs "
+                "the devices:core scope."
+            ) from exc
+        raise ProviderError(f"Tailscale refused the route approval for {name}.") from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError(f"Tailscale did not answer for {name}.") from exc
+
+    status["enabled_routes"] = sorted(
+        str(route) for route in approved.get("enabledRoutes") or ()
+    )
+    return ProviderResult(
+        changed=True,
+        status=status,
+        conditions=[
+            _condition("Ready", True, "Reconciled", "The advertised routes are approved.")
+        ],
+        message=f"Approved {', '.join(pending)} for {name}.",
+    )
+
+
 def _tailnet_device_state(name: str) -> dict[str, Any]:
     """What the tailnet currently says about one device."""
 
@@ -3459,6 +3552,7 @@ PROVIDER_ACTIONS = {
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
     ("tailscale.device", "reconcile"): reconcile_tailnet_device,
+    ("tailscale.device", "approve-routes"): approve_tailnet_routes,
     ("tailscale.policy", "reconcile"): reconcile_tailnet_policy,
 }
 

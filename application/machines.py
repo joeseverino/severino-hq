@@ -133,6 +133,10 @@ class Machine:
     # asked.
     addresses: tuple[str, ...] = ()
     containers: tuple[Running, ...] = ()
+    # The tailnet device declaration this machine has, when it has one. A verb
+    # offered here acts on that record, and its key is not the tailnet's name
+    # for the device.
+    route_approval_key: str = ""
 
     @property
     def on_show(self) -> tuple[Running, ...]:
@@ -200,7 +204,7 @@ def machine_catalog() -> tuple[Machine, ...]:
         connections=connections,
     )
     services = _services_by_host(index)
-    resources = _resources_by_host()
+    resources, device_keys = _resources_by_host()
     # A declared machine counts on its own. It used to have to be reached or
     # running something as well, because the declarations came from a document
     # that named a printer and a phone as readily as a Docker host and nobody
@@ -231,6 +235,18 @@ def machine_catalog() -> tuple[Machine, ...]:
                     if target == name and alias in present
                 ),
                 None,
+            ),
+            # Keyed by the tailnet's name for the device, for the same reason
+            # presence is: a declaration adopted from a sweep carries the name
+            # the tailnet used, not the one HQ lists the machine under.
+            route_approval_key=device_keys.get(name)
+            or next(
+                (
+                    device_keys[alias]
+                    for alias, target in aliases.items()
+                    if target == name and alias in device_keys
+                ),
+                "",
             ),
             reachable=any(
                 ref in answered
@@ -566,23 +582,33 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     return found
 
 
-def _resources_by_host() -> dict[str, set[str]]:
-    """Declarations that name a machine in their own spec.
+def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Declarations that name a machine, and the tailnet device keys, in one pass.
 
     Read through the providers rather than by looking for a ``host`` key, so a
     provider that starts naming machines joins this by having the field and not
     by anything here learning about it.
+
+    The device keys ride along because the loop already reads every enabled
+    resource, and a verb offered on a machine page needs the key of the
+    declaration it acts on -- which is not the tailnet's name for the device
+    and must not be guessed from it.
     """
 
     found: dict[str, set[str]] = {}
+    devices: dict[str, str] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
+        if resource.kind == TAILNET_KIND:
+            declared_name = str(resource.spec.get("name", "")).strip()
+            if declared_name:
+                devices[declared_name] = resource.key
         provider = PROVIDERS.get(resource.kind)
         if provider is None or "host" not in provider.spec_type.model_fields:
             continue
         host = str(resource.spec.get("host", "")).strip()
         if host:
             found.setdefault(host, set()).add(resource.key)
-    return found
+    return found, devices
 
 
 def container_context(host: str, name: str) -> dict[str, object]:

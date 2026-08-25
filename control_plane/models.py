@@ -171,6 +171,11 @@ class OperationRequest(TimestampedModel):
         RESTART = "restart", "Restart"
         START = "start", "Start"
         STOP = "stop", "Stop"
+        # Consent, not convergence. A route a machine advertises is inert until
+        # the tailnet approves it, and approving is a decision about trusting
+        # that machine to carry that traffic -- so it is asked for once, by an
+        # operator, about a route the machine is already offering.
+        APPROVE_ROUTES = "approve-routes", "Approve advertised routes"
 
     class State(models.TextChoices):
         QUEUED = "queued", "Queued"

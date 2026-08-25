@@ -330,10 +330,13 @@ def tailnet() -> tuple[Insight, ...]:
                         and not presence.exit_node_approved
                         else ""
                     )
-                    + "Approve them in the Tailscale console, or stop "
-                    "advertising what is not wanted."
+                    + "Approve exactly what it offers, or stop advertising "
+                    "what is not wanted."
                 ),
-                action="Open machine",
+                # The machine page, which offers the approval as a POST. A
+                # queue entry links somewhere you can look before you act; the
+                # verb lives where the routes it approves are shown.
+                action="Approve its routes",
                 url=reverse("control_plane:machine", kwargs={"name": name}),
             )
         )
