@@ -19,6 +19,8 @@ from datetime import datetime
 
 from control_plane.models import ProviderInventory
 
+from .projection import read_once
+
 TAILNET_KIND = "tailscale.device"
 
 
@@ -46,6 +48,11 @@ class Device:
     endpoints: tuple[str, ...] = ()
     key_expires: str = ""
     offers_exit_node: bool = False
+    # What actually admits a node, as distinct from what lists one. A device in
+    # the inventory has been seen; a device the tailnet has authorised and lock
+    # has signed is one the tailnet will carry traffic for.
+    authorized: bool = True
+    lock_error: str = ""
     observed_at: datetime | None = None
 
     @property
@@ -117,7 +124,7 @@ def devices() -> dict[str, Device]:
     """Every device the last sweep described, by the name the tailnet uses."""
 
     found: dict[str, Device] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=TAILNET_KIND):
+    for snapshot in snapshots()[TAILNET_KIND]:
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:
@@ -143,6 +150,8 @@ def devices() -> dict[str, Device]:
                 os=str(record.get("os", "")),
                 online=bool(record.get("online")),
                 observer=bool(record.get("self")),
+                authorized=bool(record.get("authorized", True)),
+                lock_error=str(record.get("lock_error", "")),
                 direct_endpoint=str(record.get("direct_endpoint", "")),
                 relay=str(record.get("relay", "")),
                 last_handshake=str(record.get("last_handshake", "")),
@@ -263,6 +272,7 @@ class Policy:
     tests: tuple[dict, ...] = ()
     settings: dict = field(default_factory=dict)
     dns: dict = field(default_factory=dict)
+    lock: dict = field(default_factory=dict)
 
     @property
     def facts(self) -> tuple[tuple[str, str], ...]:
@@ -297,7 +307,26 @@ class Policy:
             "Policy authored",
             "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "In Tailscale",
         ))
+        # Only when the reading exists. A tailnet whose daemon never answered
+        # should say nothing here rather than report lock as off, which is a
+        # claim about the tailnet rather than about the reading.
+        if self.lock:
+            keys = self.lock.get("trusted_keys") or 0
+            rows.append((
+                "Tailnet lock",
+                (
+                    f"On · {keys} signing key{'' if keys == 1 else 's'}"
+                    if self.lock.get("enabled")
+                    else "Off"
+                ),
+            ))
         return tuple(rows)
+
+    @property
+    def locked_out(self) -> tuple[str, ...]:
+        """Machines tailnet lock is currently filtering out of the tailnet."""
+
+        return tuple(self.lock.get("locked_out") or ())
 
     @property
     def known(self) -> bool:
@@ -343,10 +372,31 @@ def proposed_grant(source: str, target: str, port: int) -> dict:
     }
 
 
+def snapshots() -> dict[str, list]:
+    """Both tailnet readings, in one query, once per projection.
+
+    The devices and the policy live in the same table under two kinds, and the
+    dashboard wants both -- what each machine reports, and what lock is
+    filtering out. Read separately that was two queries for one table, and the
+    second pushed the host's page over its budget. Read together it is one, and
+    every caller inside the projection shares it.
+    """
+
+    def load() -> dict[str, list]:
+        found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: []}
+        for snapshot in ProviderInventory.objects.filter(
+            kind__in=(TAILNET_KIND, POLICY_KIND)
+        ):
+            found.setdefault(snapshot.kind, []).append(snapshot)
+        return found
+
+    return read_once("tailnet.snapshots", load)
+
+
 def policy() -> Policy:
     """What the tailnet's policy says, or an empty one if nothing swept it."""
 
-    for snapshot in ProviderInventory.objects.filter(kind=POLICY_KIND):
+    for snapshot in snapshots()[POLICY_KIND]:
         for record in snapshot.records:
             return Policy(
                 groups=tuple(record.get("groups") or ()),
@@ -355,5 +405,6 @@ def policy() -> Policy:
                 tests=tuple(record.get("tests") or ()),
                 settings=record.get("settings") or {},
                 dns=record.get("dns") or {},
+                lock=record.get("lock") or {},
             )
     return Policy()

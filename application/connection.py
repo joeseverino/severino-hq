@@ -803,6 +803,34 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
             boundary="Device identity",
             mechanism="Tailnet node inventory",
         )
+    # Being in the inventory means the tailnet has seen this machine. It does
+    # not mean the tailnet will carry traffic for it. A device pending approval
+    # is listed and admitted to nothing, and under tailnet lock a node whose key
+    # no signing node has signed is filtered out by every peer while reporting
+    # itself as healthy. Both are answers to "is this a node", and neither was
+    # being asked.
+    if not device.authorized:
+        return Layer(
+            "device",
+            "The device is a known node",
+            False,
+            f"{device.label} is on the tailnet but has not been authorised, "
+            "so the tailnet admits it to nothing.",
+            evidence=device.dns_name or device.name,
+            boundary="Device identity",
+            mechanism="Tailnet device approval",
+        )
+    if device.lock_error:
+        return Layer(
+            "device",
+            "The device is a known node",
+            False,
+            f"{device.label} is not signed for tailnet lock, so every other "
+            f"node filters it out. {device.lock_error}",
+            evidence=device.dns_name or device.name,
+            boundary="Device identity",
+            mechanism="Tailnet lock signature",
+        )
     carried = (
         f"carried by the {device.relay} relay"
         if device.path == "relayed"

@@ -427,7 +427,10 @@ def tailnet_presence() -> dict[str, Presence]:
     """Presence by machine name, as the tailnet last reported it."""
 
     found: dict[str, Presence] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=TAILNET_KIND):
+    # The same read the policy uses. Two kinds in one table, asked once.
+    from .tailnet import snapshots
+
+    for snapshot in snapshots()[TAILNET_KIND]:
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:

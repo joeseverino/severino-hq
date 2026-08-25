@@ -2508,6 +2508,44 @@ def stop_portainer_container(
 
 
 TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
+# Tailnet lock, handed over the same way and for the same reason: the local
+# API is read *and* write, so the controller is given a reading rather than the
+# socket. Separately optional -- a tailnet without lock enabled answers it
+# perfectly well, and a daemon too old to know it should cost the sweep
+# nothing.
+TAILNET_LOCK = os.environ.get("SEVERINO_TAILNET_LOCK", "")
+
+
+def _tailnet_lock() -> dict[str, Any]:
+    """Whether tailnet lock is on, and who it is currently shutting out.
+
+    The fact with the least warning attached. Under lock a node whose key no
+    signing node has signed is not degraded, it is *absent*: every other node
+    filters it out, and the node itself reports being perfectly healthy. There
+    is nothing in a status page or a service check that says why.
+    """
+
+    if not TAILNET_LOCK:
+        return {}
+    try:
+        status = json.loads(Path(TAILNET_LOCK).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(status, dict):
+        return {}
+    return {
+        "enabled": bool(status.get("Enabled")),
+        # Whether the machine taking this reading is itself signed. A "no" here
+        # is why the rest of the tailnet cannot see it.
+        "node_key_signed": bool(status.get("NodeKeySigned")),
+        "trusted_keys": len(status.get("TrustedKeys") or ()),
+        # Named, not counted: a locked-out node is a machine somebody has to go
+        # and sign, and a number does not say which.
+        "locked_out": sorted(
+            str(peer.get("Name") or peer.get("StableID") or "")
+            for peer in status.get("FilteredPeers") or ()
+        ),
+    }
 
 
 def local_tailnet_devices() -> list[dict[str, Any]]:
@@ -3151,6 +3189,7 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
                 for grant in policy.get("grants") or []
             ],
             "tests": policy.get("tests") or [],
+            "lock": _tailnet_lock(),
         }
     ]
 

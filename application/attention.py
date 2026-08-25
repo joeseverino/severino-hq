@@ -257,6 +257,27 @@ def tailnet() -> tuple[Insight, ...]:
                 url=reverse("control_plane:machine", kwargs={"name": name}),
             )
         )
+    # Tailnet lock, which is a fact about the tailnet rather than about any one
+    # machine's presence -- a locked-out node is filtered out of the reading the
+    # loop below walks, so asking each machine would never find one.
+    from .tailnet import policy as tailnet_policy
+
+    for name in tailnet_policy().locked_out:
+        items.append(
+            Insight(
+                status="serious",
+                eyebrow="Tailnet",
+                title=f"{name} is locked out of the tailnet",
+                value="1",
+                body=(
+                    "Tailnet lock is on and no signing node has signed this "
+                    "machine's key, so every other node filters it out. It "
+                    "reports itself as perfectly healthy."
+                ),
+                action="Sign it from a signing node",
+                url=reverse("control_plane:tailnet"),
+            )
+        )
     for name, presence in presences:
         if not presence.authorized:
             items.append(
