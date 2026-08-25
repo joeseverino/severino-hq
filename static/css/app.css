@@ -126,6 +126,23 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 
 /* ── Header ─────────────────────────────────────────────────────── */
 
+/* Off-screen rather than `display: none`, which would take it out of the tab
+   order and leave nothing to skip with. It sits above the sticky header's
+   stacking context so it is not painted underneath the thing it jumps past. */
+.skip-link {
+  position: absolute; left: 12px; top: -100px; z-index: 20;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 14px; font-size: 13px; font-weight: 600;
+  transition: top .12s ease-out;
+}
+.skip-link:focus { top: 12px; text-decoration: none; outline: 2px solid var(--accent); }
+/* The target takes focus so the next Tab continues from the content, but it is
+   only ever focused programmatically -- an outline there would be a box drawn
+   around the whole page. */
+.content:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
+
 /* One row, always. The sections are the header's job; the search field is the
    part that gives way. It collapses to a button that expands back over the nav
    on focus, so a cramped header costs a click rather than a second row -- and
@@ -1811,8 +1828,24 @@ a.kpi:hover { background: var(--surface-2); }
   cursor: pointer;
   transition: border-color .12s ease, background .12s ease;
 }
-.dropzone:hover, .dropzone:focus-within { border-color: var(--accent-2); background: var(--accent-tint); }
-.dropzone.is-dragging { border-color: var(--accent); background: var(--accent-tint); }
+/* `.field label.dropzone` above is (0,2,1), so a bare `.dropzone:hover` at
+   (0,2,0) lost to it and neither state applied to a dropzone inside a form
+   field -- which is every dropzone on a form. Matched here rather than lowered
+   there, because the base rule's specificity is what makes it beat the generic
+   `.field label` styling in the first place. */
+.field label.dropzone:hover, .dropzone:hover,
+.field label.dropzone:focus-within, .dropzone:focus-within {
+  border-color: var(--accent-2); background: var(--accent-tint);
+}
+/* The input is full-bleed and `opacity: 0`, so its own ring is invisible and
+   the zone has to carry one. Without this a keyboard user tabbing onto the
+   upload control gets no indication they are on it at all. */
+.field label.dropzone:focus-within, .dropzone:focus-within {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.field label.dropzone.is-dragging, .dropzone.is-dragging {
+  border-color: var(--accent); background: var(--accent-tint);
+}
 /* Full-bleed and invisible: the input is the hit target, the text is chrome. */
 .field .dropzone input[type=file] {
   position: absolute; inset: 0; width: 100%; height: 100%;
