@@ -2071,3 +2071,158 @@ class TailnetDeviceTests(TestCase):
 
         self.assertNotIn("_TOKEN_CACHE", source)
         self.assertEqual(source.count("def _tailnet_token"), 1)
+
+
+class RouteApprovalTests(TestCase):
+    """Approving routes is the one tailnet call that writes.
+
+    Tailscale takes the whole enabled set on every write, so what this sends
+    decides which routes keep working. A list assembled from anywhere but the
+    device's own advertisement would withdraw a route the call was never about
+    -- silently, and on a subnet router that is somebody's network going away.
+    """
+
+    def approve(self, reads, *, apply=True):
+        """Run the handler against a scripted sequence of API answers."""
+
+        sent = []
+
+        def urlopen(request, timeout=None):
+            del timeout
+            sent.append(request)
+            return _Answer(reads[len(sent) - 1])
+
+        with (
+            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(providers, "_tailnet_token", return_value="token"),
+            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+        ):
+            result = providers.approve_tailnet_routes(
+                {"name": "a-router", "connection_ref": "a-tailnet"}, apply=apply
+            )
+        return result, sent
+
+    def test_what_is_approved_is_what_the_device_advertises(self):
+        result, sent = self.approve([
+            {"advertisedRoutes": ["10.0.0.0/24", "0.0.0.0/0"], "enabledRoutes": []},
+            {"enabledRoutes": ["0.0.0.0/0", "10.0.0.0/24"]},
+        ])
+
+        self.assertTrue(result.changed)
+        self.assertEqual(sent[1].method, "POST")
+        self.assertEqual(
+            json.loads(sent[1].data)["routes"], ["0.0.0.0/0", "10.0.0.0/24"]
+        )
+        self.assertEqual(
+            result.status["enabled_routes"], ["0.0.0.0/0", "10.0.0.0/24"]
+        )
+
+    def test_an_already_enabled_route_is_kept_rather_than_withdrawn(self):
+        """The write is the whole set, so approving the second route has to
+        send the first one back with it."""
+
+        _, sent = self.approve([
+            {
+                "advertisedRoutes": ["10.0.0.0/24", "10.0.1.0/24"],
+                "enabledRoutes": ["10.0.0.0/24"],
+            },
+            {"enabledRoutes": ["10.0.0.0/24", "10.0.1.0/24"]},
+        ])
+
+        self.assertIn("10.0.0.0/24", json.loads(sent[1].data)["routes"])
+
+    def test_nothing_pending_writes_nothing(self):
+        result, sent = self.approve([
+            {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": ["10.0.0.0/24"]},
+        ])
+
+        self.assertFalse(result.changed)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(result.message, "Nothing to approve.")
+
+    def test_a_device_offering_nothing_is_a_no_op_not_a_clearance(self):
+        """An empty advertisement must not become an empty write: that is how
+        a handler meant to approve routes ends up removing them."""
+
+        result, sent = self.approve([{"advertisedRoutes": [], "enabledRoutes": []}])
+
+        self.assertFalse(result.changed)
+        self.assertEqual(len(sent), 1)
+        self.assertIn("advertises no routes", result.message)
+
+    def test_a_plan_says_what_it_would_do_and_touches_nothing(self):
+        result, sent = self.approve(
+            [{"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}], apply=False
+        )
+
+        self.assertTrue(result.changed)
+        self.assertEqual(len(sent), 1)
+        self.assertIn("Would approve 10.0.0.0/24", result.message)
+
+    def refuse_at(self, call, code):
+        """Answer normally until `call`, then refuse with `code`."""
+
+        reads = [{"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": []}]
+        calls = []
+
+        def urlopen(request, timeout=None):
+            del timeout
+            calls.append(request)
+            if len(calls) == call:
+                raise providers.urllib.error.HTTPError(
+                    "https://example.invalid", code, "Forbidden", {}, None
+                )
+            return _Answer(reads[len(calls) - 1])
+
+        with (
+            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(providers, "_tailnet_token", return_value="token"),
+            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            self.assertRaises(providers.ProviderError) as raised,
+        ):
+            providers.approve_tailnet_routes({"name": "a-router"})
+        return str(raised.exception)
+
+    def test_a_credential_without_the_scope_says_which_scope(self):
+        """403 here is a grant that was never made, and the operator can only
+        fix it if the message names it. Both calls need the same grant, so both
+        have to name it -- told only that the routes could not be read, an
+        operator goes looking at the device."""
+
+        for call in (1, 2):
+            for code in (401, 403):
+                with self.subTest(call=call, code=code):
+                    self.assertIn("devices:core", self.refuse_at(call, code))
+
+    def test_a_refusal_that_is_not_about_scope_is_not_reported_as_one(self):
+        self.assertNotIn("devices:core", self.refuse_at(1, 500))
+        self.assertNotIn("devices:core", self.refuse_at(2, 500))
+
+    def test_an_unreadable_device_is_not_approved_blind(self):
+        def urlopen(request, timeout=None):
+            del request, timeout
+            raise OSError("no route to host")
+
+        with (
+            mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
+            mock.patch.object(providers, "_tailnet_token", return_value="token"),
+            mock.patch.object(providers.urllib.request, "urlopen", urlopen),
+            self.assertRaisesRegex(providers.ProviderError, "did not report the routes"),
+        ):
+            providers.approve_tailnet_routes({"name": "a-router"})
+
+
+class _Answer:
+    """The context-manager shape `urlopen` returns."""
+
+    def __init__(self, payload):
+        self._payload = json.dumps(payload).encode()
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False

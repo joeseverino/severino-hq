@@ -2844,6 +2844,14 @@ def reconcile_tailnet_device(
     )
 
 
+# Said once, because both calls in the approval fail the same way for the same
+# reason, and an operator comparing two wordings would look for two problems.
+_TAILNET_SCOPE_NEEDED = (
+    "This Tailscale credential may not approve routes. It needs the "
+    "devices:core scope."
+)
+
+
 def approve_tailnet_routes(
     spec: dict[str, Any], *, apply: bool = True,
     observed: dict[str, Any] | None = None,
@@ -2867,7 +2875,15 @@ def approve_tailnet_routes(
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             current = json.loads(response.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+    except urllib.error.HTTPError as exc:
+        # A refusal here is the same missing grant the write would hit, and it
+        # is worth naming at the first call rather than the second: an operator
+        # told only that the routes could not be read goes looking at the
+        # device.
+        if exc.code in (401, 403):
+            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
+        raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
 
     advertised = sorted(str(route) for route in current.get("advertisedRoutes") or ())
@@ -2916,10 +2932,7 @@ def approve_tailnet_routes(
             approved = json.loads(response.read())
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            raise ProviderError(
-                "This Tailscale credential may not approve routes. It needs "
-                "the devices:core scope."
-            ) from exc
+            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
         raise ProviderError(f"Tailscale refused the route approval for {name}.") from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError(f"Tailscale did not answer for {name}.") from exc
