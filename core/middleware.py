@@ -19,12 +19,46 @@ from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
 from application.cadence import note_activity
+from application.demo import demo_scope
 
 import core.logging as request_logging
 
 
+# Where the browser's own answer to "show me stand-ins" is kept. Named here
+# because the middleware that reads it and the view that writes it are the only
+# two things that may know the spelling.
+DEMO_SESSION_KEY = "showing_demo"
+
 _current_user = ContextVar("severino_current_user", default=None)
 _request_logger = logging.getLogger("severino.request")
+
+
+class DemoModeMiddleware:
+    """Enter the substituting scope for a request whose session asked for it.
+
+    Middleware rather than a context processor, because the substitution has to
+    be in force while the view runs and not merely while the page renders --
+    every number on a page is decided long before a template sees it.
+
+    Session-scoped on purpose. The flag never leaves the browser that set it, so
+    it cannot follow an operator to a second device, cannot reach the API or the
+    MCP, and cannot be left switched on for somebody else. Anonymous requests
+    never carry one: the sign-in page has nothing to substitute, and a flag that
+    survives sign-out belongs to nobody.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        showing = bool(
+            getattr(request, "user", None)
+            and request.user.is_authenticated
+            and request.session.get(DEMO_SESSION_KEY)
+        )
+        request.showing_demo = showing
+        with demo_scope(showing):
+            return self.get_response(request)
 
 
 class RequestContextMiddleware:

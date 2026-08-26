@@ -95,6 +95,79 @@
       </tbody>
     </table>
   </div>
+
+  {% comment %}
+  Two more ways this tailnet reaches things, neither of which is a device and
+  neither of which shows anywhere else. A Service is a name the tailnet serves,
+  published by whichever nodes advertise it. An app connector is a node routing
+  traffic for named domains on the tailnet's behalf -- declared inside the
+  policy above rather than anywhere HQ was looking, so it is read from the
+  document rather than fetched.
+
+  Shown only when there are any: a heading over an empty table says a feature is
+  broken when it is simply unused.
+  {% endcomment %}
+  {% if policy.services %}
+    <h2>Services</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Service</th><th>Answers at</th><th>Ports</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for service in policy.services %}
+            <tr>
+              <td><code>{{ service.name }}</code></td>
+              <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+              <td>{{ service.ports|join:" "|default:"—" }}</td>
+              <td class="muted">{{ service.comment|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if policy.ssh_rules %}
+    {% comment %}
+    Grants of a different kind, and the grants table above shows none of them
+    because they live under their own key in the policy. "Check" means the
+    person is asked to re-authenticate before the shell opens; "accept" means
+    they are not.
+    {% endcomment %}
+    <h2>Shell access</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>From</th><th>To</th><th>As</th><th>Asks again</th></tr></thead>
+        <tbody>
+          {% for rule in policy.ssh_rules %}
+            <tr>
+              <td>{% for src in rule.src %}<code>{{ src }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% for dst in rule.dst %}<code>{{ dst }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% for user in rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% if rule.action == "check" %}Yes{% elif rule.action == "accept" %}<strong>No</strong>{% else %}{{ rule.action }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if policy.app_connectors %}
+    <h2>App connectors</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Routed by</th><th>For</th></tr></thead>
+        <tbody>
+          {% for connector in policy.app_connectors %}
+            <tr>
+              <td><code>{{ connector.name }}</code></td>
+              <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+              <td>{% for domain in connector.domains %}<code>{{ domain }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No sweep has read the tailnet policy yet." %}
 {% endif %}

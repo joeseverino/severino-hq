@@ -422,6 +422,24 @@ class Connection:
         )
 
     @property
+    def peer_keys(self) -> tuple[tuple[str, str], ...]:
+        """The two node keys behind this connection, yours first.
+
+        The evidence the rest of the link section is describing. Everything
+        above it -- an endpoint, a handshake age, a byte count -- is a
+        consequence of these two keys having agreed; naming them is what turns
+        "HQ says you are a peer" into something checkable against `tailscale
+        status` on either machine.
+        """
+
+        found = []
+        if self.caller_device and self.caller_device.public_key:
+            found.append((self.caller_device.label, self.caller_device.public_key))
+        if self.serves and self.serves.public_key:
+            found.append((self.serves.label, self.serves.public_key))
+        return tuple(found)
+
+    @property
     def peering(self) -> Peering:
         """Which network this tailnet session is actually riding over.
 
@@ -802,6 +820,34 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
             "say which machine is asking.",
             boundary="Device identity",
             mechanism="Tailnet node inventory",
+        )
+    # Being in the inventory means the tailnet has seen this machine. It does
+    # not mean the tailnet will carry traffic for it. A device pending approval
+    # is listed and admitted to nothing, and under tailnet lock a node whose key
+    # no signing node has signed is filtered out by every peer while reporting
+    # itself as healthy. Both are answers to "is this a node", and neither was
+    # being asked.
+    if not device.authorized:
+        return Layer(
+            "device",
+            "The device is a known node",
+            False,
+            f"{device.label} is on the tailnet but has not been authorised, "
+            "so the tailnet admits it to nothing.",
+            evidence=device.dns_name or device.name,
+            boundary="Device identity",
+            mechanism="Tailnet device approval",
+        )
+    if device.lock_error:
+        return Layer(
+            "device",
+            "The device is a known node",
+            False,
+            f"{device.label} is not signed for tailnet lock, so every other "
+            f"node filters it out. {device.lock_error}",
+            evidence=device.dns_name or device.name,
+            boundary="Device identity",
+            mechanism="Tailnet lock signature",
         )
     carried = (
         f"carried by the {device.relay} relay"
@@ -1507,16 +1553,11 @@ def _ago(stamp: str) -> str:
 
 
 def _parsed(stamp: str) -> datetime | None:
-    text = str(stamp or "").strip()
-    if not text or text.startswith("0001-01-01"):
-        # Tailscale writes the zero time for "never", which as an age would
-        # read as two thousand years and look like a bug rather than a fact.
-        return None
-    try:
-        found = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return found if found.tzinfo else found.replace(tzinfo=utc.utc)
+    """The shared parse, kept as a name this module already reads by."""
+
+    from .ui import moment
+
+    return moment(stamp)
 
 
 def _bytes(count: int) -> str:

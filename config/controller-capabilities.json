@@ -94,6 +94,10 @@
             "timeout_seconds": 60,
             "interval_seconds": 10
           }
+        },
+        "approve-routes": {
+          "mode": "apply",
+          "automatic": false
         }
       }
     },
@@ -142,6 +146,22 @@
         "delete": {
           "mode": "apply",
           "automatic": false
+        }
+      }
+    },
+    "network": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "A network entry says what a range is and who reaches it. Nothing converges toward that -- HQ cannot make a subnet exist, and the addresses inside one are found by sweeping whatever answers there."
+        }
+      }
+    },
+    "pki.authority": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "An authority is recorded, not reconciled. The one that matters most is kept offline precisely so nothing can reach it, and a controller that could converge toward it would be the thing that control exists to prevent."
         }
       }
     }

@@ -184,6 +184,35 @@ page it falls back to. Nothing here knows which one it is in.
           <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
         </dd>
         <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
+        {% if connection.peer_keys %}
+          {% comment %}
+          The evidence the rest of this section is describing. An endpoint, a
+          handshake age and a byte count are all consequences of these two keys
+          having agreed -- naming them is what turns "HQ says you are a peer"
+          into something checkable against `tailscale status` on either machine.
+          Folded away because it is proof rather than a reading: wanted when the
+          claim is doubted, noise on every other visit.
+          {% endcomment %}
+          <dt>Peered as</dt>
+          <dd>
+            <details class="conn-more">
+              <summary>Both node keys</summary>
+              {% comment %}
+              Stacked rather than the shared row grid: that grid sizes its value
+              column to `max-content`, which for a seventy-character key is the
+              key's full width -- it pushed past the panel and crushed the label
+              beside it into one letter per line.
+              {% endcomment %}
+              <dl class="conn-keys">
+                {% for label, key in connection.peer_keys %}
+                  <dt>{{ label }}</dt>
+                  <dd><code>{{ key }}</code></dd>
+                {% endfor %}
+              </dl>
+              <p class="conn-row-note">These two keys completed the handshake above. Compare either against <code>tailscale status</code> on that machine.</p>
+            </details>
+          </dd>
+        {% endif %}
       </dl>
     </section>
   </div>

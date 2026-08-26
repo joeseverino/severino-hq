@@ -212,12 +212,17 @@ KEY_EXPIRY_SERIOUS_DAYS = 14
 
 
 def tailnet() -> tuple[Insight, ...]:
-    """Machines whose tailnet key runs out soon.
+    """Two tailnet facts with no symptom until somebody needs them.
 
-    A deadline nothing else in HQ watches, and one with no symptom until it
-    passes: the machine keeps running, keeps serving, and simply stops being
-    reachable over the tailnet on a date decided months earlier. Devices with
+    A node key runs out on a date decided months earlier: the machine keeps
+    running, keeps serving, and simply stops being reachable. Devices with
     expiry disabled are silent here, because for them there is no date.
+
+    And a route that was advertised but never approved. `--advertise-routes`
+    succeeds, the machine reports the route for as long as it runs, and the
+    coordination server hands it to nobody -- so a subnet route or an exit node
+    can be configured, documented, believed, and dead, with every side of it
+    reporting success.
     """
 
     # The presence table, not the whole machine catalogue. Everything shown
@@ -225,8 +230,12 @@ def tailnet() -> tuple[Insight, ...]:
     # reach it costs the dashboard a query per row for facts it does not use.
     from .machines import tailnet_presence
 
+    # Read once, asked twice. The projection has a query budget and this is
+    # the same table both questions are about.
+    presences = sorted(tailnet_presence().items())
+
     items = []
-    for name, presence in sorted(tailnet_presence().items()):
+    for name, presence in presences:
         days = presence.key_expiry_days
         if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
             continue
@@ -245,6 +254,110 @@ def tailnet() -> tuple[Insight, ...]:
                     "being reachable over the tailnet."
                 ),
                 action="Open machine",
+                url=reverse("control_plane:machine", kwargs={"name": name}),
+            )
+        )
+    # Tailnet lock, which is a fact about the tailnet rather than about any one
+    # machine's presence -- a locked-out node is filtered out of the reading the
+    # loop below walks, so asking each machine would never find one.
+    from .tailnet import policy as tailnet_policy
+
+    for name in tailnet_policy().locked_out:
+        items.append(
+            Insight(
+                status="serious",
+                eyebrow="Tailnet",
+                title=f"{name} is locked out of the tailnet",
+                value="1",
+                body=(
+                    "Tailnet lock is on and no signing node has signed this "
+                    "machine's key, so every other node filters it out. It "
+                    "reports itself as perfectly healthy."
+                ),
+                action="Sign it from a signing node",
+                url=reverse("control_plane:tailnet"),
+            )
+        )
+    for name, presence in presences:
+        if not presence.authorized:
+            items.append(
+                Insight(
+                    status="serious",
+                    eyebrow="Tailnet",
+                    title=f"{name} is on the tailnet without being authorised",
+                    value="1",
+                    body=(
+                        "This tailnet requires new devices to be approved, and "
+                        f"{name} has not been. It reaches nothing until it is."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
+        if presence.lock_error:
+            items.append(
+                Insight(
+                    status="serious",
+                    eyebrow="Tailnet",
+                    title=f"{name} is not signed for tailnet lock",
+                    value="1",
+                    body=(
+                        f"{presence.lock_error} Under tailnet lock an unsigned "
+                        "node is invisible to every other node, however healthy "
+                        "it otherwise looks."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
+        if presence.update_available:
+            items.append(
+                Insight(
+                    status="attention",
+                    eyebrow="Tailnet",
+                    title=f"{name} has a Tailscale update waiting",
+                    value="1",
+                    body=(
+                        f"It runs {presence.client_version or 'an older client'}. "
+                        "A client left behind is how a fleet ends up on versions "
+                        "nobody chose."
+                    ),
+                    action="Open machine",
+                    url=reverse("control_plane:machine", kwargs={"name": name}),
+                )
+            )
+        unapproved = presence.unapproved_routes
+        if not unapproved:
+            continue
+        items.append(
+            Insight(
+                status="attention",
+                eyebrow="Tailnet",
+                title=(
+                    f"{name} advertises {len(unapproved)} route"
+                    f"{'s' if len(unapproved) != 1 else ''} nothing approved"
+                ),
+                value=str(len(unapproved)),
+                body=(
+                    f"{name} offers {', '.join(unapproved)} and the tailnet "
+                    f"hands {'them' if len(unapproved) != 1 else 'it'} to "
+                    "nobody. "
+                    + (
+                        "Nothing can use it as an exit node. "
+                        # The swept fact, not a second reading of the route
+                        # list: what makes a route an exit route is Tailscale's
+                        # to say, and the sweep already asked.
+                        if presence.offers_exit_node
+                        and not presence.exit_node_approved
+                        else ""
+                    )
+                    + "Approve exactly what it offers, or stop advertising "
+                    "what is not wanted."
+                ),
+                # The machine page, which offers the approval as a POST. A
+                # queue entry links somewhere you can look before you act; the
+                # verb lives where the routes it approves are shown.
+                action="Approve its routes",
                 url=reverse("control_plane:machine", kwargs={"name": name}),
             )
         )

@@ -1,5 +1,6 @@
 """Conformance helpers for plugin test suites."""
 
+from application.demo import demo_scope
 from application.plugin_testing import (
     ComposedPluginTestCase,
     sibling,
@@ -26,9 +27,16 @@ def audit_writer():
     return AuditLog.objects
 
 
+# Entering the substituting scope is a test affordance, not part of the
+# contract: production turns it on from the operator's session and a domain
+# only ever reads it. Exposed here so an extension can prove what its own
+# surfaces do under a demo, and nowhere an extension could switch it on for a
+# real request.
+
 __all__ = [
     "ComposedPluginTestCase",
     "audit_writer",
+    "demo_scope",
     "sibling",
     "undefined_style_classes",
     "unsupported_hq_imports",

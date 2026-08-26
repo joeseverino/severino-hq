@@ -108,6 +108,12 @@
           aria-label="Find anything"
         >
       </form>
+      {% comment %}
+      In the header rather than on a page, because the mode outlives whichever
+      page is open and the one failure worth designing against is an operator
+      forgetting it is on and filing a screenshot of fiction as fact.
+      {% endcomment %}
+      {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
       <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}">
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
@@ -136,6 +142,21 @@
             Connection
             <span class="conn-dot" aria-hidden="true"></span>
           </a>
+          {% comment %}
+          A switch, not a verb. The state is the label -- a menu entry that
+          renamed itself each time left you reading the button to work out what
+          was currently true. POST because it changes what every number on the
+          page means, and a thing that flips by following a link can be flipped
+          by an image tag on somebody else's page.
+          {% endcomment %}
+          <form action="{% url 'demo_mode' %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="menu-switch" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
+              <span>Demo</span>
+              <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+            </button>
+          </form>
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}
             <button type="submit">Sign out</button>

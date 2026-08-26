@@ -12,6 +12,7 @@ from core.views import (
     ActionItemsView,
     DashboardLinkChoiceView,
     ConnectionView,
+    DemoModeView,
     DashboardView,
     PublicAddressView,
     SearchView,
@@ -56,6 +57,7 @@ urlpatterns = [
     path("", DashboardView.as_view(), name="dashboard"),
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
     path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),
+    path("demo/", DemoModeView.as_view(), name="demo_mode"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(
         "connection/address/",

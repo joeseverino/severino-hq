@@ -784,6 +784,38 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
 
 
 @transaction.atomic
+def request_route_approval(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Approve the routes a tailnet device is already advertising.
+
+    The remedy the "advertises routes nothing approved" finding names. HQ does
+    not choose the routes: the machine has already said what it offers, and
+    this is the consent that turns that offer into something the tailnet hands
+    out. Which is why it is never automatic -- approving a route is a decision
+    to trust that machine with traffic for those addresses.
+    """
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="tailnet.routes.approve.request",
+    ):
+        return _queue_operation(
+            resource,
+            command,
+            principal=principal,
+            action=OperationRequest.Action.APPROVE_ROUTES,
+        )
+
+
 def request_certificate_renewal(
     command: OperationCommand,
     *,

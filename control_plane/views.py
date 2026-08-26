@@ -1371,6 +1371,7 @@ OPERATION_PHRASE = {
     OperationRequest.Action.RESTART: "a restart",
     OperationRequest.Action.START: "a start",
     OperationRequest.Action.STOP: "a stop",
+    OperationRequest.Action.APPROVE_ROUTES: "route approval",
 }
 
 
@@ -1415,15 +1416,23 @@ class OperationView(LoginRequiredMixin, View):
 
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
+        # Back where the verb was offered. These forms are on pages that show
+        # the fact the verb answers -- a machine's routes, a service's
+        # container -- and they have been sending `next` all along while this
+        # view returned to the resource record regardless. Validated through
+        # the shared helper, so the field cannot become an open redirect.
+        destination = safe_next(
+            request, fallback=reverse("control_plane:detail", kwargs={"key": key})
+        )
         try:
             result = _web_operation(request, resource, self.action)
         except PolicyError as exc:
             messages.error(request, str(exc))
-            return redirect("control_plane:detail", key=key)
+            return redirect(destination)
         verb = "Queued" if result["queued"] else "Already queued"
         phrase = OPERATION_PHRASE.get(self.action, self.action)
         messages.success(request, f"{verb} {phrase} for “{resource.key}”.")
-        return redirect("control_plane:detail", key=key)
+        return redirect(destination)
 
 
 class CertificateDownloadView(LoginRequiredMixin, View):

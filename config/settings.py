@@ -349,6 +349,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # After authentication, because the flag is read off the signed-in
+    # operator's session, and around the view rather than the template, because
+    # every number is decided before a template sees it.
+    "core.middleware.DemoModeMiddleware",
     "core.middleware.LoginRequiredMiddleware",
     "core.middleware.CurrentUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

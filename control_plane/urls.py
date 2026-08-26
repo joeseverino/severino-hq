@@ -85,6 +85,11 @@ urlpatterns = [
         name="stop",
     ),
     path(
+        "<slug:key>/approve-routes/",
+        views.OperationView.as_view(action=OperationRequest.Action.APPROVE_ROUTES),
+        name="approve_routes",
+    ),
+    path(
         "<slug:key>/certificate.pem",
         views.CertificateDownloadView.as_view(),
         name="certificate_download",

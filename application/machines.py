@@ -53,13 +53,101 @@ class Presence:
     tailnet_name: str = ""
     dns_name: str = ""
     os: str = ""
-    exit_node: bool = False
+    offers_exit_node: bool = False
+    # Offered and approved are two facts, and only their agreement means the
+    # route works. A route is advertised by the machine and must then be
+    # approved in the coordination server; until it is, the machine goes on
+    # reporting that it offers the route and nothing can use it.
+    exit_node_approved: bool = False
+    advertised_routes: tuple[str, ...] = ()
+    enabled_routes: tuple[str, ...] = ()
+    # Facts with no symptom until they matter. A device the tailnet has not
+    # authorised reaches nothing; one carrying a lock error cannot be reached
+    # by anything under tailnet lock; and a client left behind is how a fleet
+    # acquires versions nobody chose.
+    authorized: bool = True
+    lock_error: str = ""
+    update_available: bool = False
+    client_version: str = ""
+    # Tailscale SSH turns a device into something the policy can hand shells
+    # out on. Shields-up means it accepts no inbound connection at all, which
+    # from outside looks exactly like being broken. An external device belongs
+    # to another tailnet and was shared into this one.
+    ssh_enabled: bool = False
+    blocks_incoming: bool = False
+    external: bool = False
+    # The peering itself, as the machine HQ runs on reports it. This reading is
+    # taken from HQ's own daemon, so every device in it is a peer of HQ by
+    # construction -- which HQ knew and never said. A key that has completed a
+    # handshake, over a path that was negotiated, carrying counted bytes, is
+    # the difference between a machine HQ has been told about and one it is
+    # actually talking to.
+    public_key: str = ""
+    direct_endpoint: str = ""
+    relay: str = ""
+    last_handshake: str = ""
+    active: bool = False
+    rx_bytes: int = 0
+    tx_bytes: int = 0
     tags: tuple[str, ...] = ()
     # Who the policy admits, per port. Already swept for the reachability
     # panel, and the same answer a machine's own page should be able to give
     # without anybody having to go and ask it.
     openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
+
+    @property
+    def peered(self) -> bool:
+        """Whether HQ and this machine have actually completed a handshake.
+
+        Not whether the tailnet lists it. This reading comes from the daemon on
+        the machine HQ runs on, so a device appearing at all means HQ has it in
+        its network map -- but a key in a map is a machine HQ *could* talk to.
+        A handshake is one it has.
+        """
+
+        return bool(self.public_key and self.last_handshake)
+
+    @property
+    def handshake(self) -> str:
+        """When the two keys last completed a handshake, phrased as HQ phrases
+        every other elapsed time."""
+
+        from .ui import elapsed
+
+        return elapsed(self.last_handshake)
+
+    @property
+    def peer_path(self) -> str:
+        """How the two are reaching each other, in the terms WireGuard uses.
+
+        A direct path means the two daemons found a route through both NATs and
+        traffic goes machine to machine. A relayed one means they could not, and
+        Tailscale's DERP servers are carrying the encrypted packets -- still
+        end-to-end encrypted, still slower, and worth knowing which.
+        """
+
+        if not self.peered:
+            return ""
+        if self.direct_endpoint:
+            return "direct"
+        return "relayed" if self.relay else "negotiating"
+
+    @property
+    def unapproved_routes(self) -> tuple[str, ...]:
+        """Routes this machine offers that the tailnet has not approved.
+
+        The silent failure this reading exists for. `tailscale up
+        --advertise-routes` succeeds, the machine reports the route forever,
+        and every other device simply never receives it -- so a subnet route or
+        an exit node can be declared, believed, and dead, with nothing in the
+        estate disagreeing.
+        """
+
+        return tuple(
+            route for route in self.advertised_routes
+            if route not in set(self.enabled_routes)
+        )
 
     @property
     def key_expiry_days(self) -> int | None:
@@ -102,6 +190,10 @@ class Machine:
     # asked.
     addresses: tuple[str, ...] = ()
     containers: tuple[Running, ...] = ()
+    # The tailnet device declaration this machine has, when it has one. A verb
+    # offered here acts on that record, and its key is not the tailnet's name
+    # for the device.
+    route_approval_key: str = ""
 
     @property
     def on_show(self) -> tuple[Running, ...]:
@@ -169,7 +261,7 @@ def machine_catalog() -> tuple[Machine, ...]:
         connections=connections,
     )
     services = _services_by_host(index)
-    resources = _resources_by_host()
+    resources, device_keys = _resources_by_host()
     # A declared machine counts on its own. It used to have to be reached or
     # running something as well, because the declarations came from a document
     # that named a printer and a phone as readily as a Docker host and nobody
@@ -200,6 +292,18 @@ def machine_catalog() -> tuple[Machine, ...]:
                     if target == name and alias in present
                 ),
                 None,
+            ),
+            # Keyed by the tailnet's name for the device, for the same reason
+            # presence is: a declaration adopted from a sweep carries the name
+            # the tailnet used, not the one HQ lists the machine under.
+            route_approval_key=device_keys.get(name)
+            or next(
+                (
+                    device_keys[alias]
+                    for alias, target in aliases.items()
+                    if target == name and alias in device_keys
+                ),
+                "",
             ),
             reachable=any(
                 ref in answered
@@ -380,7 +484,10 @@ def tailnet_presence() -> dict[str, Presence]:
     """Presence by machine name, as the tailnet last reported it."""
 
     found: dict[str, Presence] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=TAILNET_KIND):
+    # The same read the policy uses. Two kinds in one table, asked once.
+    from .tailnet import snapshots
+
+    for snapshot in snapshots()[TAILNET_KIND]:
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:
@@ -393,7 +500,28 @@ def tailnet_presence() -> dict[str, Presence]:
                 tailnet_name=name,
                 dns_name=str(record.get("dns_name", "")),
                 os=str(record.get("os", "")),
-                exit_node=bool(record.get("exit_node")),
+                offers_exit_node=bool(record.get("offers_exit_node")),
+                exit_node_approved=bool(record.get("exit_node_approved")),
+                advertised_routes=tuple(
+                    str(r) for r in record.get("advertised_routes") or ()
+                ),
+                enabled_routes=tuple(
+                    str(r) for r in record.get("enabled_routes") or ()
+                ),
+                authorized=bool(record.get("authorized", True)),
+                lock_error=str(record.get("lock_error", "")),
+                update_available=bool(record.get("update_available")),
+                client_version=str(record.get("client_version", "")),
+                ssh_enabled=bool(record.get("ssh_enabled")),
+                blocks_incoming=bool(record.get("blocks_incoming")),
+                external=bool(record.get("external")),
+                public_key=str(record.get("public_key", "")),
+                direct_endpoint=str(record.get("direct_endpoint", "")),
+                relay=str(record.get("relay", "")),
+                last_handshake=str(record.get("last_handshake", "")),
+                active=bool(record.get("active")),
+                rx_bytes=int(record.get("rx_bytes") or 0),
+                tx_bytes=int(record.get("tx_bytes") or 0),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 openings=tuple(
                     (int(entry["port"]), tuple(entry.get("who") or ()))
@@ -524,23 +652,33 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     return found
 
 
-def _resources_by_host() -> dict[str, set[str]]:
-    """Declarations that name a machine in their own spec.
+def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
+    """Declarations that name a machine, and the tailnet device keys, in one pass.
 
     Read through the providers rather than by looking for a ``host`` key, so a
     provider that starts naming machines joins this by having the field and not
     by anything here learning about it.
+
+    The device keys ride along because the loop already reads every enabled
+    resource, and a verb offered on a machine page needs the key of the
+    declaration it acts on -- which is not the tailnet's name for the device
+    and must not be guessed from it.
     """
 
     found: dict[str, set[str]] = {}
+    devices: dict[str, str] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
+        if resource.kind == TAILNET_KIND:
+            declared_name = str(resource.spec.get("name", "")).strip()
+            if declared_name:
+                devices[declared_name] = resource.key
         provider = PROVIDERS.get(resource.kind)
         if provider is None or "host" not in provider.spec_type.model_fields:
             continue
         host = str(resource.spec.get("host", "")).strip()
         if host:
             found.setdefault(host, set()).add(resource.key)
-    return found
+    return found, devices
 
 
 def container_context(host: str, name: str) -> dict[str, object]:

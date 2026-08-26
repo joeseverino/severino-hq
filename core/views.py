@@ -36,6 +36,7 @@ from contacts.d1 import (
     search_submissions,
 )
 from .audit import record_event
+from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .network import client_ip
 
@@ -339,6 +340,32 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
             action_source=source,
         )
         return context
+
+
+class DemoModeView(LoginRequiredMixin, View):
+    """Turn substituted values on or off for this browser.
+
+    POST because it changes what every number on every page means, and a thing
+    that can be flipped by following a link can be flipped by an image tag on
+    another page. Nothing is written beyond the session, so the audit entry is
+    the only trace it leaves -- and it is recorded because an operator who
+    forgets the mode is on can screenshot fiction and file it as fact.
+    """
+
+    def post(self, request):
+        showing = not request.session.get(DEMO_SESSION_KEY)
+        request.session[DEMO_SESSION_KEY] = showing
+        record_event(
+            action=AuditLog.Action.UPDATED,
+            obj=request.user,
+            type_label="Demo mode",
+            message="Demo mode on" if showing else "Demo mode off",
+            user=request.user,
+        )
+        # No message. The switch shows its own state and the header carries a
+        # mark while it is on -- a paragraph on every flip is a third telling
+        # of something already said twice.
+        return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
 class ActionItemCountView(LoginRequiredMixin, View):

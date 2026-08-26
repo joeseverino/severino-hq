@@ -529,6 +529,46 @@ class OperationPolicyTests(TestCase):
         )
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
 
+    def test_a_verb_returns_to_the_page_that_offered_it(self):
+        """These forms sit on pages that show the fact the verb answers, and
+        they have been sending `next` all along while the view returned to the
+        resource record regardless."""
+
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_superuser("op", password="x" * 20)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
+            {"next": "/infrastructure/machines/a-host/"},
+        )
+
+        self.assertRedirects(
+            response,
+            "/infrastructure/machines/a-host/",
+            fetch_redirect_response=False,
+        )
+
+    def test_a_destination_off_this_host_is_refused(self):
+        """`next` is operator input, so it goes through the shared check."""
+
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_superuser("op2", password="x" * 20)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
+            {"next": "https://example.test/somewhere"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("control_plane:detail", kwargs={"key": self.resource.key}),
+            fetch_redirect_response=False,
+        )
+
     def test_controller_automatically_queues_due_certificate_renewal(self):
         self.resource.status = {
             "not_after": (timezone.now() + timedelta(days=29)).isoformat()

@@ -269,6 +269,35 @@ class LayerTests(TestCase):
         self.assertEqual(layer.state, "unknown")
         self.assertIn("unverified", found.summary)
 
+    def test_a_device_awaiting_approval_is_not_a_known_node(self):
+        """Being listed is not being admitted. A device pending approval is in
+        the inventory and the tailnet carries nothing for it."""
+
+        a_tailnet(a_device("a-laptop", "100.64.0.77", authorized=False))
+
+        found = connection(a_request("100.64.0.77"))
+
+        layer = self.layer(found, "device")
+        self.assertFalse(layer.holds)
+        self.assertIn("not been authorised", layer.detail)
+
+    def test_a_device_lock_has_not_signed_is_not_a_known_node(self):
+        """Under tailnet lock an unsigned node is filtered out by every peer
+        while reporting itself as perfectly healthy."""
+
+        a_tailnet(
+            a_device(
+                "a-laptop", "100.64.0.77",
+                lock_error="node is not signed by a trusted key.",
+            )
+        )
+
+        found = connection(a_request("100.64.0.77"))
+
+        layer = self.layer(found, "device")
+        self.assertFalse(layer.holds)
+        self.assertIn("not signed for tailnet lock", layer.detail)
+
     def test_a_device_nothing_swept_is_not_reported_as_a_known_node(self):
         found = connection(a_request("100.64.0.77"))
 

@@ -263,6 +263,91 @@ class TailnetPresenceTests(TestCase):
     def device(self, name, *, online=True, key_expires=""):
         return {"name": name, "online": online, "key_expires": key_expires}
 
+    def test_a_key_that_has_shaken_hands_is_a_peer_and_one_that_has_not_is_not(self):
+        """The reading comes from the daemon on the machine HQ runs on, so a
+        device appearing at all is in HQ's network map. A key in a map is a
+        machine HQ could reach; a handshake is one it is reaching."""
+
+        from .machines import tailnet_presence
+
+        self.sweep(
+            {
+                **self.device("a-peer"),
+                "public_key": "nodekey:abc",
+                "last_handshake": "2026-08-25T22:18:24Z",
+                "direct_endpoint": "198.51.100.4:41641",
+                "relay": "ord",
+            },
+            {**self.device("never-spoken"), "public_key": "nodekey:def"},
+        )
+
+        found = tailnet_presence()
+
+        self.assertTrue(found["a-peer"].peered)
+        self.assertEqual(found["a-peer"].peer_path, "direct")
+        # In the map, never spoken to.
+        self.assertFalse(found["never-spoken"].peered)
+        self.assertEqual(found["never-spoken"].peer_path, "")
+
+    def test_a_relayed_peer_says_so_rather_than_reading_as_direct(self):
+        """Still end to end encrypted, still slower, and worth knowing which."""
+
+        from .machines import tailnet_presence
+
+        self.sweep({
+            **self.device("a-relayed-peer"),
+            "public_key": "nodekey:abc",
+            "last_handshake": "2026-08-25T22:18:24Z",
+            "direct_endpoint": "",
+            "relay": "ord",
+        })
+
+        self.assertEqual(
+            tailnet_presence()["a-relayed-peer"].peer_path, "relayed"
+        )
+
+    def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
+        """The silent failure. `--advertise-routes` succeeds, the machine
+        reports the route for as long as it runs, and the coordination server
+        hands it to nobody -- so a subnet route can be configured, documented,
+        believed, and dead, with every side of it reporting success."""
+
+        from .machines import tailnet_presence
+
+        self.sweep({
+            **self.device("a-router"),
+            "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
+            "enabled_routes": ["198.51.100.0/24"],
+            "offers_exit_node": True,
+            "exit_node_approved": False,
+        })
+
+        presence = tailnet_presence()["a-router"]
+
+        self.assertEqual(presence.unapproved_routes, ("0.0.0.0/0", "::/0"))
+        self.assertTrue(presence.offers_exit_node)
+        self.assertFalse(presence.exit_node_approved)
+
+    def test_a_machine_advertising_nothing_raises_nothing(self):
+        """A queue entry per machine that routes nothing would be every machine."""
+
+        from .machines import tailnet_presence
+
+        self.sweep(self.device("a-laptop"))
+
+        self.assertEqual(tailnet_presence()["a-laptop"].unapproved_routes, ())
+
+    def test_every_advertised_route_approved_is_silent(self):
+        from .machines import tailnet_presence
+
+        self.sweep({
+            **self.device("a-router"),
+            "advertised_routes": ["198.51.100.0/24"],
+            "enabled_routes": ["198.51.100.0/24"],
+        })
+
+        self.assertEqual(tailnet_presence()["a-router"].unapproved_routes, ())
+
     def test_a_machine_only_the_tailnet_knows_is_still_a_machine(self):
         from .machines import machine
 

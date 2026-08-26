@@ -152,7 +152,66 @@
           <th scope="row">Node key</th>
           <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days }} days, then it leaves the tailnet{% else %}Does not expire{% endif %}</td>
         </tr>
-        <tr><th scope="row">Runs</th><td>{{ machine.presence.os|default:"—" }}{% if machine.presence.exit_node %} · exit node{% endif %}</td></tr>
+        <tr>
+          <th scope="row">Runs</th>
+          <td>{{ machine.presence.os|default:"—" }}{% if machine.presence.client_version %} · Tailscale {{ machine.presence.client_version }}{% if machine.presence.update_available %} <strong>(update waiting)</strong>{% endif %}{% endif %}</td>
+        </tr>
+        {% comment %}
+        Each shown only when true. A device that runs no Tailscale SSH, accepts
+        inbound connections and belongs to this tailnet is every device -- three
+        rows saying "no" on every machine page is how a page stops being read.
+        {% endcomment %}
+        {% if machine.presence.ssh_enabled %}
+          <tr><th scope="row">Tailscale SSH</th><td>Enabled — the policy can hand out shells on this machine</td></tr>
+        {% endif %}
+        {% if machine.presence.blocks_incoming %}
+          <tr><th scope="row">Shields</th><td>Up — it accepts no inbound connection, which from outside looks the same as being down</td></tr>
+        {% endif %}
+        {% if machine.presence.external %}
+          <tr><th scope="row">Belongs to</th><td>Another tailnet — shared into this one</td></tr>
+        {% endif %}
+        {% if not machine.presence.authorized %}
+          <tr><th scope="row">Authorised</th><td><strong>No</strong> — it reaches nothing until approved</td></tr>
+        {% endif %}
+        {% if machine.presence.lock_error %}
+          <tr><th scope="row">Tailnet lock</th><td><strong>Not signed</strong> — {{ machine.presence.lock_error }}</td></tr>
+        {% endif %}
+        {% comment %}
+        Offered and approved, never one of the two. A route is advertised by the
+        machine and then has to be approved in the coordination server; until it
+        is, the machine goes on reporting that it offers the route and no device
+        receives it. Showing only what was offered is how a dead subnet route
+        reads as a working one.
+        {% endcomment %}
+        {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
+          <tr>
+            <th scope="row">Exit node</th>
+            <td>
+              {% if not machine.presence.offers_exit_node %}Not offered
+              {% elif machine.presence.exit_node_approved %}Offered and approved
+              {% else %}<strong>Offered, not approved</strong> — nothing can route through it
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Routes</th>
+            <td>
+              {% for route in machine.presence.advertised_routes %}<code>{{ route }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
+              {% comment %}
+              The verb where the fact is. Approval takes the whole advertised
+              set, so there is one control rather than one per route -- and it
+              appears only when something is actually waiting on it.
+              {% endcomment %}
+              {% if machine.presence.unapproved_routes and machine.route_approval_key %}
+                <form method="post" action="{% url 'control_plane:approve_routes' machine.route_approval_key %}" class="inline-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn">Approve what it advertises</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endif %}
         {% if machine.presence.tags %}
           <tr>
             <th scope="row">Tags</th>
@@ -172,6 +231,53 @@
       </tbody>
     </table>
   </div>
+
+  {% if machine.presence.peered %}
+    {% comment %}
+    The peering, stated rather than implied. This reading comes from the daemon
+    on the machine HQ runs on, so a device appearing in it at all is a peer of
+    HQ by construction -- a fact HQ has always held and never said, which left
+    "are these two actually talking" as something to go and check elsewhere.
+
+    A key in a network map is a machine HQ could reach. A key that has completed
+    a handshake, over a path that was negotiated, carrying counted bytes, is one
+    it is reaching. That is what this says and why each row is here.
+    {% endcomment %}
+    <h2 class="section-heading">Peered with HQ</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <th scope="row">Handshake</th>
+            <td>
+              Completed {{ machine.presence.handshake }}
+              {% if machine.presence.active %} · carrying traffic now{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Path</th>
+            <td>
+              {% if machine.presence.peer_path == "direct" %}
+                Direct — <code>{{ machine.presence.direct_endpoint }}</code>{% if machine.presence.relay %}, with the <code>{{ machine.presence.relay }}</code> relay as fallback{% endif %}
+              {% elif machine.presence.peer_path == "relayed" %}
+                Relayed through <code>{{ machine.presence.relay }}</code> — the two daemons could not find a route through both NATs. Still end to end encrypted.
+              {% else %}
+                No path negotiated yet — one is set up when there is traffic.
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Traffic</th>
+            <td>{{ machine.presence.rx_bytes|filesizeformat }} in · {{ machine.presence.tx_bytes|filesizeformat }} out</td>
+          </tr>
+          <tr>
+            <th scope="row">Node key</th>
+            <td><code class="node-key">{{ machine.presence.public_key }}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
 
   {% if machine.presence.openings %}
     {% comment %}

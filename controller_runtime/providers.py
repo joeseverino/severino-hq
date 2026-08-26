@@ -2508,6 +2508,44 @@ def stop_portainer_container(
 
 
 TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
+# Tailnet lock, handed over the same way and for the same reason: the local
+# API is read *and* write, so the controller is given a reading rather than the
+# socket. Separately optional -- a tailnet without lock enabled answers it
+# perfectly well, and a daemon too old to know it should cost the sweep
+# nothing.
+TAILNET_LOCK = os.environ.get("SEVERINO_TAILNET_LOCK", "")
+
+
+def _tailnet_lock() -> dict[str, Any]:
+    """Whether tailnet lock is on, and who it is currently shutting out.
+
+    The fact with the least warning attached. Under lock a node whose key no
+    signing node has signed is not degraded, it is *absent*: every other node
+    filters it out, and the node itself reports being perfectly healthy. There
+    is nothing in a status page or a service check that says why.
+    """
+
+    if not TAILNET_LOCK:
+        return {}
+    try:
+        status = json.loads(Path(TAILNET_LOCK).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(status, dict):
+        return {}
+    return {
+        "enabled": bool(status.get("Enabled")),
+        # Whether the machine taking this reading is itself signed. A "no" here
+        # is why the rest of the tailnet cannot see it.
+        "node_key_signed": bool(status.get("NodeKeySigned")),
+        "trusted_keys": len(status.get("TrustedKeys") or ()),
+        # Named, not counted: a locked-out node is a machine somebody has to go
+        # and sign, and a number does not say which.
+        "locked_out": sorted(
+            str(peer.get("Name") or peer.get("StableID") or "")
+            for peer in status.get("FilteredPeers") or ()
+        ),
+    }
 
 
 def local_tailnet_devices() -> list[dict[str, Any]]:
@@ -2585,6 +2623,29 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
         identity = identities.get(device["name"], {})
         device["user"] = identity.get("user", "")
         device["tags"] = identity.get("tags", [])
+        device["advertised_routes"] = identity.get("advertised_routes", [])
+        device["enabled_routes"] = identity.get("enabled_routes", [])
+        device["authorized"] = bool(identity.get("authorized", True))
+        device["lock_error"] = identity.get("lock_error", "")
+        device["update_available"] = bool(identity.get("update_available"))
+        device["client_version"] = identity.get("client_version", "")
+        device["ssh_enabled"] = bool(identity.get("ssh_enabled"))
+        device["blocks_incoming"] = bool(identity.get("blocks_incoming"))
+        device["external"] = bool(identity.get("external"))
+        # The coordination server's answer wins over the daemon's inference:
+        # the daemon reports no expiry date, which is the same shape whether
+        # expiry is disabled or the reading simply lacks it.
+        if "key_expiry_disabled" in identity:
+            device["key_expiry_disabled"] = bool(identity["key_expiry_disabled"])
+        # The daemon's `ExitNodeOption` answers "can this node be my exit node",
+        # which is already false for one that offers but was never approved.
+        # The coordination server is the only side that can tell those apart,
+        # so when it answered, its answer wins.
+        if device["name"] in identities:
+            device["offers_exit_node"] = bool(identity.get("offers_exit_node"))
+            device["exit_node_approved"] = bool(identity.get("exit_node_approved"))
+        else:
+            device["exit_node_approved"] = device.get("offers_exit_node", False)
     return devices
 
 
@@ -2602,6 +2663,10 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return {
         "name": name,
+        # The node's WireGuard public key. The cryptographic identity itself:
+        # a peering is not a claim in an inventory, it is two keys that have
+        # completed a handshake, and this is the half that can be shown.
+        "public_key": str(node.get("PublicKey") or ""),
         # The MagicDNS name, which is how the tailnet addresses it and not
         # always what the host calls itself.
         "dns_name": str(node.get("DNSName") or "").rstrip("."),
@@ -2612,7 +2677,13 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "key_expires": str(node.get("KeyExpiry") or ""),
         "addresses": [str(address) for address in node.get("TailscaleIPs") or ()],
         "os": str(node.get("OS") or ""),
-        "exit_node": bool(node.get("ExitNode")),
+        # Two different questions, and only the second is a fact about the
+        # device. `ExitNode` is whether this peer is the exit node *this*
+        # machine is currently routing through -- a statement about our own
+        # preference. `ExitNodeOption` is whether the peer offers to be one at
+        # all. A machine page saying "exit node" means the latter.
+        "exit_node_in_use": bool(node.get("ExitNode")),
+        "offers_exit_node": bool(node.get("ExitNodeOption")),
         "self": False,
         # How the traffic actually gets there, which is the part nothing else
         # can answer. A peer is either reached directly -- the two daemons found
@@ -2770,6 +2841,112 @@ def reconcile_tailnet_device(
             if wanted
             else f"{name} has an expiry date again."
         ),
+    )
+
+
+# Said once, because both calls in the approval fail the same way for the same
+# reason, and an operator comparing two wordings would look for two problems.
+_TAILNET_SCOPE_NEEDED = (
+    "This Tailscale credential may not approve routes. It needs the "
+    "devices:core scope."
+)
+
+
+def approve_tailnet_routes(
+    spec: dict[str, Any], *, apply: bool = True,
+    observed: dict[str, Any] | None = None,
+) -> ProviderResult:
+    """Approve exactly the routes this device is already advertising.
+
+    Approval takes the whole set, so it is read before it is written: sending a
+    list assembled from anywhere else would silently withdraw a route this call
+    was never about. What the machine offers is what gets approved, and a
+    machine offering nothing is a no-op rather than a way to clear its routes.
+    """
+
+    del observed
+    name = spec["name"]
+    identifier = _tailnet_device_id(name)
+    token = _tailnet_token(spec.get("connection_ref", ""))
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            current = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        # A refusal here is the same missing grant the write would hit, and it
+        # is worth naming at the first call rather than the second: an operator
+        # told only that the routes could not be read goes looking at the
+        # device.
+        if exc.code in (401, 403):
+            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
+        raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
+
+    advertised = sorted(str(route) for route in current.get("advertisedRoutes") or ())
+    enabled = sorted(str(route) for route in current.get("enabledRoutes") or ())
+    pending = [route for route in advertised if route not in set(enabled)]
+    status = {
+        "name": name,
+        "advertised_routes": advertised,
+        "enabled_routes": enabled,
+    }
+    if not pending:
+        return ProviderResult(
+            changed=False,
+            status=status,
+            conditions=[
+                _condition(
+                    "Ready", True, "Reconciled",
+                    "Every route this device advertises is approved.",
+                )
+            ],
+            message=(
+                "Nothing to approve."
+                if advertised
+                else f"{name} advertises no routes."
+            ),
+        )
+    if not apply:
+        return ProviderResult(
+            changed=True,
+            status=status,
+            conditions=[],
+            message=f"Would approve {', '.join(pending)} for {name}.",
+        )
+
+    request = urllib.request.Request(
+        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+        data=json.dumps({"routes": advertised}).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            approved = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
+        raise ProviderError(f"Tailscale refused the route approval for {name}.") from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError(f"Tailscale did not answer for {name}.") from exc
+
+    status["enabled_routes"] = sorted(
+        str(route) for route in approved.get("enabledRoutes") or ()
+    )
+    return ProviderResult(
+        changed=True,
+        status=status,
+        conditions=[
+            _condition("Ready", True, "Reconciled", "The advertised routes are approved.")
+        ],
+        message=f"Approved {', '.join(pending)} for {name}.",
     )
 
 
@@ -2990,6 +3167,38 @@ def _who_may_reach(policy: dict[str, Any], token: str, target: str) -> list[dict
         return []
 
 
+# The attribute an app connector is declared under. Named once: it appears in
+# the policy as a key, and a second spelling of it would read as a second
+# feature rather than as a typo.
+_APP_CONNECTOR_ATTR = "tailscale.com/app-connectors"
+
+
+def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every app connector the policy declares, as its own fact.
+
+    An app connector is a node routing traffic for named domains on the
+    tailnet's behalf, so it is a way something is reached that is neither a
+    device nor a DNS record -- and it is declared inside the policy rather than
+    anywhere HQ was looking.
+    """
+
+    found = []
+    for attr in policy.get("nodeAttrs") or []:
+        for declared in (attr.get("app") or {}).get(_APP_CONNECTOR_ATTR) or []:
+            found.append(
+                {
+                    "name": str(declared.get("name", "")),
+                    "connectors": sorted(
+                        str(node) for node in declared.get("connectors") or ()
+                    ),
+                    "domains": sorted(
+                        str(domain) for domain in declared.get("domains") or ()
+                    ),
+                }
+            )
+    return found
+
+
 def list_tailnet_policy() -> list[dict[str, Any]]:
     """The policy itself: who is grouped, what is tagged, and what it grants.
 
@@ -3032,6 +3241,39 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
                 for grant in policy.get("grants") or []
             ],
             "tests": policy.get("tests") or [],
+            "lock": _tailnet_lock(),
+            # A Service is a name the tailnet serves that is not a device --
+            # published by whichever nodes advertise it, and reachable under
+            # the policy like anything else. Nothing else in HQ would notice
+            # one appearing.
+            "services": [
+                {
+                    "name": str(service.get("name", "")),
+                    "addresses": sorted(
+                        str(a) for a in service.get("addrs") or ()
+                    ),
+                    "comment": str(service.get("comment", "")),
+                    "ports": sorted(str(p) for p in service.get("ports") or ()),
+                }
+                for service in (
+                    _tailnet_get(token, "vip-services").get("vipServices") or []
+                )
+            ],
+            # Not fetched: both are declared inside the policy this record
+            # already carries, so reading them is reading it.
+            "app_connectors": _app_connectors(policy),
+            # Tailscale SSH rules are grants like any other -- who may open a
+            # shell, on what, as which user -- and the grants table above shows
+            # none of them because they live under their own key.
+            "ssh_rules": [
+                {
+                    "action": str(rule.get("action", "")),
+                    "src": sorted(str(s) for s in rule.get("src") or ()),
+                    "dst": sorted(str(d) for d in rule.get("dst") or ()),
+                    "users": sorted(str(u) for u in rule.get("users") or ()),
+                }
+                for rule in policy.get("ssh") or []
+            ],
         }
     ]
 
@@ -3105,16 +3347,29 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     return found
 
 
-def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
-    """Each device's own identity: the user that owns it, and its tags.
+# An exit node is advertised as the two default routes rather than as a flag,
+# so "does this offer to be an exit node" is a question about its route list.
+_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
-    From the API rather than the local daemon, which does not report tags. It
-    is what a policy names a device by, so without it "may this reach that" has
-    no way to say which principal is asking.
+
+def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
+    """Everything the coordination server knows about each device, in one read.
+
+    ``fields=all`` rather than a call per device. The default projection omits
+    routes, so the first version of this asked the routes endpoint once per
+    device and made the sweep's cost a function of how many machines exist --
+    for facts that already travel in this response.
+
+    From the API rather than the local daemon for two reasons. The daemon does
+    not report tags, which is what a policy names a device by. And a peer's
+    routes as the daemon sees them are the routes the ACL lets *this* node
+    receive, so a route can be advertised, approved, and still absent from the
+    local reading -- which makes the daemon unable to tell "never offered" from
+    "offered and refused", the one distinction worth reporting.
     """
 
     request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/devices",
+        f"{TAILNET_API}/tailnet/-/devices?fields=all",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
@@ -3122,14 +3377,45 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
             devices = json.loads(response.read()).get("devices") or []
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
         return {}
-    return {
-        str(device.get("hostname", "")): {
+    found: dict[str, dict[str, Any]] = {}
+    for device in devices:
+        hostname = str(device.get("hostname", ""))
+        if not hostname:
+            continue
+        advertised = sorted(str(r) for r in device.get("advertisedRoutes") or ())
+        enabled = sorted(str(r) for r in device.get("enabledRoutes") or ())
+        found[hostname] = {
             "user": str(device.get("user", "")),
             "tags": sorted(device.get("tags") or []),
+            "advertised_routes": advertised,
+            "enabled_routes": enabled,
+            # Stated separately from the route lists because it is the question
+            # an operator actually asks, and because the two default routes
+            # being present is not obvious as an answer to it.
+            "offers_exit_node": bool(_EXIT_ROUTES & set(advertised)),
+            "exit_node_approved": bool(_EXIT_ROUTES & set(enabled)),
+            # Facts with no symptom until they matter. A device the tailnet has
+            # not authorised is on no network; one carrying a lock error cannot
+            # be reached by anything under tailnet lock; and a client left
+            # behind is how a fleet acquires versions nobody chose.
+            "authorized": bool(device.get("authorized", True)),
+            "lock_error": str(device.get("tailnetLockError") or ""),
+            "update_available": bool(device.get("updateAvailable")),
+            "client_version": str(device.get("clientVersion") or ""),
+            # The coordination server's own answer, rather than the daemon's
+            # absence-of-an-expiry inference.
+            "key_expiry_disabled": bool(device.get("keyExpiryDisabled")),
+            # Three more that travel in the same response and that nothing else
+            # in HQ can answer. Tailscale SSH turns a device into something the
+            # policy can hand shells out on; shields-up means it accepts no
+            # inbound connection at all, which looks identical to being broken;
+            # and an external device belongs to somebody else's tailnet and was
+            # shared into this one.
+            "ssh_enabled": bool(device.get("sshEnabled")),
+            "blocks_incoming": bool(device.get("blocksIncomingConnections")),
+            "external": bool(device.get("isExternal")),
         }
-        for device in devices
-        if device.get("hostname")
-    }
+    return found
 
 
 # Where the answers start. Asking about all 65535 would be that many calls per
@@ -3398,6 +3684,7 @@ PROVIDER_ACTIONS = {
     ("tls.certificate", "reconcile"): _tls_reconcile,
     ("tls.certificate", "renew"): _tls_renew,
     ("tailscale.device", "reconcile"): reconcile_tailnet_device,
+    ("tailscale.device", "approve-routes"): approve_tailnet_routes,
     ("tailscale.policy", "reconcile"): reconcile_tailnet_policy,
 }
 
