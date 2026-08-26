@@ -159,14 +159,33 @@ class ToggleTests(TestCase):
             response, reverse("dashboard"), fetch_redirect_response=False
         )
 
-    def test_the_header_says_so_while_it_is_on(self):
-        """The mode outlives whichever page is open."""
+    def test_the_header_carries_a_mark_while_it_is_on(self):
+        """The mode outlives whichever page is open, so the header says so.
 
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Demo values")
+        Asserted on the mark rather than on its text: on a narrow screen it
+        becomes a dot and the word stays only in the accessibility tree, so the
+        element is the fact and the rendering is not.
+        """
+
+        self.assertNotContains(self.client.get(reverse("dashboard")), 'class="demo-flag"')
 
         self.client.post(reverse("demo_mode"))
 
-        self.assertContains(self.client.get(reverse("dashboard")), "Demo values")
+        page = self.client.get(reverse("dashboard"))
+        self.assertContains(page, 'class="demo-flag"')
+        self.assertContains(page, "Demo")
+
+    def test_the_switch_carries_the_state_rather_than_the_label(self):
+        """A menu entry that renames itself makes you read the button to work
+        out what is currently true."""
+
+        off = self.client.get(reverse("dashboard"))
+        self.assertContains(off, 'role="switch" aria-checked="false"')
+
+        self.client.post(reverse("demo_mode"))
+
+        on = self.client.get(reverse("dashboard"))
+        self.assertContains(on, 'role="switch" aria-checked="true"')
 
     def test_signing_out_does_not_carry_the_mode_to_the_next_operator(self):
         self.client.post(reverse("demo_mode"))

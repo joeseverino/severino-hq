@@ -14,7 +14,6 @@ from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import formats
@@ -363,13 +362,9 @@ class DemoModeView(LoginRequiredMixin, View):
             message="Demo mode on" if showing else "Demo mode off",
             user=request.user,
         )
-        messages.success(
-            request,
-            "Demo mode on — numbers are stand-ins. What is connected and what "
-            "needs attention are still real."
-            if showing
-            else "Demo mode off — real values.",
-        )
+        # No message. The switch shows its own state and the header carries a
+        # mark while it is on -- a paragraph on every flip is a third telling
+        # of something already said twice.
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 

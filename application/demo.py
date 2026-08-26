@@ -120,14 +120,28 @@ def label(value: Any, *, key: str) -> str:
     return f"{first} {second}"
 
 
-def day(value: Any, *, key: str) -> Any:
-    """A date moved by a stable offset, or the real one.
+# One offset for every date, rather than one per record. Per-record shifts read
+# as order-preserving and are not: two records move by different amounts, so a
+# page sorted by date reorders and something due next week can be drawn after
+# something due next year. A single shift moves the calendar, and every
+# relationship in it survives exactly -- which is the only version of this that
+# a date-sorted page can be shown with.
+_DAY_OFFSET = timedelta(days=int(_fraction("calendar", "day") * 90) - 45)
 
-    Shifted rather than invented, so an ordering survives: a date that falls
-    before another still does, and a page that sorts by date goes on making
-    sense. Under a year, so nothing lands in an implausible decade.
+
+def day(value: Any, *, key: str = "") -> Any:
+    """The date, moved with every other date, or the real one.
+
+    Shifted rather than invented so the shape survives: what falls due before
+    something else still does, and what is close is still close. Under two
+    months, so urgency reads the same -- a renewal that needed acting on this
+    week must not become one that can wait.
+
+    ``key`` is accepted and unused, so a caller reads the same as every other
+    substitution and nothing has to remember which of the three is different.
     """
 
+    del key
     if not showing_demo() or not isinstance(value, date):
         return value
-    return value + timedelta(days=int(_fraction(key, "day") * 330) - 165)
+    return value + _DAY_OFFSET
