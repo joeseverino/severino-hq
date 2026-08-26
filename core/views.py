@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import formats
@@ -36,6 +37,7 @@ from contacts.d1 import (
     search_submissions,
 )
 from .audit import record_event
+from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .network import client_ip
 
@@ -339,6 +341,36 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
             action_source=source,
         )
         return context
+
+
+class DemoModeView(LoginRequiredMixin, View):
+    """Turn substituted values on or off for this browser.
+
+    POST because it changes what every number on every page means, and a thing
+    that can be flipped by following a link can be flipped by an image tag on
+    another page. Nothing is written beyond the session, so the audit entry is
+    the only trace it leaves -- and it is recorded because an operator who
+    forgets the mode is on can screenshot fiction and file it as fact.
+    """
+
+    def post(self, request):
+        showing = not request.session.get(DEMO_SESSION_KEY)
+        request.session[DEMO_SESSION_KEY] = showing
+        record_event(
+            action=AuditLog.Action.UPDATED,
+            obj=request.user,
+            type_label="Demo mode",
+            message="Demo mode on" if showing else "Demo mode off",
+            user=request.user,
+        )
+        messages.success(
+            request,
+            "Demo mode on — numbers are stand-ins. What is connected and what "
+            "needs attention are still real."
+            if showing
+            else "Demo mode off — real values.",
+        )
+        return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
 class ActionItemCountView(LoginRequiredMixin, View):
