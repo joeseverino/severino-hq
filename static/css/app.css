@@ -3580,7 +3580,14 @@ textarea.code {
    `.table-scroll` was already the answer; it just never got the chance, because
    a table told to be exactly as wide as its container never overflows the thing
    that scrolls it. Sized to its content it does, and the reader swipes -- the
-   same conclusion `td > .readout` reached for a dotted-quad address. */
+   same conclusion `td > .readout` reached for a dotted-quad address.
+
+   Stack and scroll are alternatives, so a table doing the first must not also
+   be told to do the second -- sized to its content, a stacked row is spaced to
+   columns it no longer has and every value lands past the right edge of a
+   phone. The exemption sits here rather than beside the stacking rules because
+   this file's tail is outside `@layer components` and unlayered styles win
+   over every layer: from in there, no amount of specificity reaches this. */
 @media (max-width: 760px) {
   .table-scroll .data-table { min-width: max-content; }
   .table-scroll .data-table td,
@@ -3598,6 +3605,13 @@ textarea.code {
   .connection-control-grid { grid-template-columns: 1fr; }
   .connection-security-advanced > summary small { max-width: 260px; }
   .connection-trust-path { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
+}
+
+/* Between the two breakpoints a `.stacks` table is still an ordinary table and
+   wants the sizing above, so the exemption starts where the stacking does. */
+@media (max-width: 640px) {
+  .table-scroll .data-table.stacks { min-width: 0; }
+  .table-scroll .data-table.stacks td { overflow-wrap: break-word; }
 }
 
 /* ----- Provider readings ------------------------------------------------ */
@@ -3722,6 +3736,64 @@ textarea.code {
    hands the wheel back to the page. */
 .topology-relations .table-scroll { max-height: 480px; margin-top: 12px; overflow-y: auto; }
 .topology-relations tr.is-related { background: var(--accent-tint); }
+
+/* A ledger row is an edge, not four fields. The generic stacking gives every
+   cell a label and a line of its own, which is right for a table of unrelated
+   columns and wrong here: "FROM / RELATIONSHIP / TO / STATE" spends eight lines
+   saying what an arrow says in three, and 127 of those is a scroll nobody
+   finishes. So on a phone the row draws as the thing it describes -- endpoints
+   stacked, the verb between them, the state alongside -- and the column names
+   stay in the header for a screen reader to find. */
+@media (max-width: 640px) {
+  .topology-relations .data-table.stacks tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0 10px;
+    padding: 9px 11px;
+    margin-bottom: 8px;
+  }
+  /* Both endpoints get the whole width; the state rides on the short middle
+     line, where the only other thing is a two-word verb. Parked in a column of
+     its own it narrows the names at every width, and at 320px that turns a
+     hostname into two lines. */
+  .topology-relations .data-table.stacks td:first-child { grid-area: 1 / 1 / 2 / -1; }
+  .topology-relations .data-table.stacks td:nth-child(2) { grid-area: 2 / 1 / 3 / 2; }
+  .topology-relations .data-table.stacks td:nth-child(3) { grid-area: 3 / 1 / 4 / -1; }
+  .topology-relations .data-table.stacks td:last-child {
+    grid-area: 2 / 2 / 3 / 3;
+    justify-self: end;
+  }
+  .topology-relations .data-table.stacks td {
+    display: block;
+    text-align: left;
+    padding: 0;
+    font-size: 13.5px;
+  }
+  .topology-relations .data-table.stacks td::before { display: none; }
+  /* The kind belongs beside the name, not under it: the break is a desktop
+     affordance for a narrow column, and here the column is the screen. */
+  .topology-relations .data-table.stacks td br { display: none; }
+  .topology-relations .data-table.stacks td code { margin-left: 6px; }
+  .topology-relations .data-table.stacks td:nth-child(2) {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 3px 0 3px 15px;
+    position: relative;
+  }
+  .topology-relations .data-table.stacks td:nth-child(2)::before {
+    content: "\21B3";
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 2px;
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+}
 
 @media (max-width: 760px) {
   .command-layout { grid-template-columns: minmax(0, 1fr); }
