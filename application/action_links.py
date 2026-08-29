@@ -9,7 +9,7 @@ a projection never advertises authority its principal does not hold.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -17,6 +17,7 @@ from django.urls import NoReverseMatch, reverse
 
 from .contracts import route_url
 from .security import AuthorizationError, Principal
+from .workflow_contracts import ActionLink
 
 
 class ConnectionLinkSpec(Protocol):
@@ -26,21 +27,6 @@ class ConnectionLinkSpec(Protocol):
     management_route: str
     setup_route: str
     documentation_url: str
-
-
-@dataclass(frozen=True)
-class ActionLink:
-    """One safe route from observed state to an existing HQ use case."""
-
-    name: str
-    label: str
-    effect: str
-    url: str
-    method: str = "GET"
-    capability: str = ""
-    target: str = ""
-    reason: str = ""
-    recommended: bool = False
 
 
 _CONNECTION_ROUTES = (
