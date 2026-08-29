@@ -40,16 +40,40 @@ class ControllerConnectionRegistryTests(TestCase):
         self.assertNotRegex(serialised, r"\b\d{1,3}(\.\d{1,3}){3}\b")
 
     def test_every_remote_provider_has_exactly_one_health_probe(self):
+        """A probe exists for a stated use, and every stated use is probed.
+
+        Two sources of use, not one. A resource declares the connection it
+        reconciles through; a reading declares the connection it only looks
+        with. Both are reasons to carry a credential, and neither may carry one
+        HQ cannot say whether it can still reach.
+        """
+
         from control_plane.providers import PROVIDERS
 
-        declared = {
+        reconciled = {
             provider
             for spec in PROVIDERS.values()
             for provider in spec.connection_providers
             if provider != "ssh"
         }
 
-        self.assertEqual(set(providers._CONNECTION_PROBES), declared)
+        self.assertEqual(
+            set(providers._CONNECTION_PROBES),
+            reconciled | providers.OBSERVER_PROVIDERS,
+        )
+
+    def test_a_connection_is_reconciled_through_or_observed_with_never_both(self):
+        """The two categories have to stay meaningful to be worth separating."""
+
+        from control_plane.providers import PROVIDERS
+
+        reconciled = {
+            provider
+            for spec in PROVIDERS.values()
+            for provider in spec.connection_providers
+        }
+
+        self.assertEqual(reconciled & providers.OBSERVER_PROVIDERS, set())
 
 
 def _by_url(routes):
@@ -1227,6 +1251,7 @@ class WorkerTests(TestCase):
                 "sweep-due": {"ok": True, "due": True},
                 "connections": {"ok": True},
                 "inventory": {"ok": True},
+                "analytics": {"ok": True},
                 "schedule": {"ok": True},
                 "claim": {"ok": True, "operation": None},
             }
@@ -1239,7 +1264,8 @@ class WorkerTests(TestCase):
         # ahead of what it found there, so an empty inventory can be read
         # against the credential that would have filled it.
         self.assertEqual(
-            called, ["sweep-due", "connections", "inventory", "schedule", "claim"]
+            called,
+            ["sweep-due", "connections", "inventory", "analytics", "schedule", "claim"],
         )
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
@@ -1311,6 +1337,7 @@ class WorkerTests(TestCase):
                 "sweep-due": {"ok": True, "due": True},
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
+                "analytics": {"ok": True, "recorded": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},
@@ -1343,6 +1370,7 @@ class WorkerTests(TestCase):
                 "sweep-due": {"ok": True, "due": True},
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
+                "analytics": {"ok": True, "recorded": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},

@@ -1657,23 +1657,29 @@ def _npm_certificates(
 
 # ----- Cloudflare ------------------------------------------------------------
 #
-# The credential is deliberately narrow: it can read the zones on the account
+# Two credentials, each scoped to one surface.
+#
+# `cloudflare_dns` is deliberately narrow: it can read the zones on the account
 # and read and write their DNS records, and nothing else. Zone settings,
 # analytics and every account-level surface answer 403 to it. That is why the
 # zone provider declares no reconcile it could perform -- see the capability
 # registry -- and why nothing here reaches for a setting it cannot change.
+#
+# `cloudflare_api` carries the account surface -- analytics, zone settings,
+# registration -- and reaches no DNS record. Neither is a subset of the other,
+# so a provider states which one it needs and gets exactly that.
 
 
-def _cloudflare_url(connection_ref: str = "") -> str:
-    return _required(
-        connection_prefix("cloudflare_dns", connection_ref), "URL"
-    ).rstrip("/")
+def _cloudflare_url(
+    connection_ref: str = "", *, provider: str = "cloudflare_dns"
+) -> str:
+    return _required(connection_prefix(provider, connection_ref), "URL").rstrip("/")
 
 
-def _cloudflare_token(connection_ref: str = "") -> str:
-    return _required(
-        connection_prefix("cloudflare_dns", connection_ref), "API_TOKEN"
-    )
+def _cloudflare_token(
+    connection_ref: str = "", *, provider: str = "cloudflare_dns"
+) -> str:
+    return _required(connection_prefix(provider, connection_ref), "API_TOKEN")
 
 
 def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
@@ -3511,6 +3517,359 @@ def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
     return {"detail": f"{len(names)} zones.", "reaches": names}
 
 
+def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
+    """Prove the account credential answers, and report the sites it observes.
+
+    ``reaches`` is the analytics sites rather than the zones, because that is
+    what distinguishes this credential from the DNS one beside it: both see the
+    same zones, and a page listing them twice tells an operator nothing about
+    which connection is which.
+
+    A site with no ruleset bound to a hostname is left out. Cloudflare keeps a
+    Web Analytics site around after whatever it was attached to goes away, so
+    the account carries entries that describe nothing -- and a site HQ cannot
+    name a host for is one it could not join to anything either.
+    """
+
+    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
+    headers = {
+        "Authorization": (
+            f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+        )
+    }
+    verification = _request(f"{base}/user/tokens/verify", headers=headers)
+    if not isinstance(verification, dict) or not verification.get("success"):
+        raise ProviderError("Cloudflare token verification failed.")
+
+    # The account is discovered rather than configured. A credential that can
+    # read analytics can say which account it reads them for, so asking is one
+    # call and never a value that can go stale in a settings file.
+    accounts = _request(f"{base}/accounts?per_page=50", headers=headers)
+    tags = [
+        account["id"]
+        for account in (accounts or {}).get("result", [])
+        if isinstance(account, dict) and account.get("id")
+    ]
+    if not tags:
+        raise ProviderError("The Cloudflare credential can see no account.")
+    if len(tags) > 1:
+        # Every account-scoped read below would have to pick one, and picking
+        # silently would report a different estate than the operator expects.
+        raise ProviderError(
+            f"The Cloudflare credential sees {len(tags)} accounts; it has to see one."
+        )
+
+    sites = _request(
+        f"{base}/accounts/{tags[0]}/rum/site_info/list?per_page=100", headers=headers
+    )
+    hosts = sorted(
+        {
+            str(ruleset.get("zone_name"))
+            for site in (sites or {}).get("result", [])
+            if isinstance(site, dict)
+            for ruleset in (site.get("ruleset") or {},)
+            if isinstance(ruleset, dict) and ruleset.get("zone_name")
+        }
+    )
+    measured = "site" if len(hosts) == 1 else "sites"
+    return {"detail": f"{len(hosts)} analytics {measured}.", "reaches": hosts}
+
+
+# Which Cloudflare dimension answers each breakdown HQ stores. Declared once:
+# the GraphQL query is generated from this and so is the payload, so a new
+# breakdown is one entry here and one enum member in the analytics app, and
+# there is no third place where the two names could stop matching.
+ANALYTICS_DIMENSIONS = {
+    "path": "requestPath",
+    "referrer": "refererHost",
+    "country": "countryName",
+    "device": "deviceType",
+    "browser": "userAgentBrowser",
+    "os": "userAgentOS",
+}
+
+# Percentiles HQ keeps, and the field each comes from. p75 because that is the
+# threshold Core Web Vitals is actually defined at -- a metric passes when 75%
+# of samples are good, so the 75th percentile is the number being judged.
+ANALYTICS_VITALS = {
+    "largest_contentful_paint_ms": "largestContentfulPaintP75",
+    "interaction_to_next_paint_ms": "interactionToNextPaintP75",
+    "first_contentful_paint_ms": "firstContentfulPaintP75",
+    "time_to_first_byte_ms": "timeToFirstByteP75",
+}
+
+ANALYTICS_BUCKETS = ("lcp", "inp", "cls")
+
+# Connection kinds a reading uses that no resource declares.
+#
+# Every other probe exists because some ProviderSpec names its provider: the
+# credential is there to reconcile something, so the resource registry is the
+# record of why it is carried. Analytics is observed and never reconciled --
+# there is no desired state for a page view -- so nothing in that registry
+# would ever name this, and without saying so here the probe would look like a
+# probe for nothing. Declared rather than inferred, so a probe still cannot be
+# added for a connection HQ has no stated use for.
+OBSERVER_PROVIDERS = frozenset({"cloudflare_api"})
+
+
+def _cloudflare_graphql(
+    query: str, variables: dict[str, Any], connection_ref: str = ""
+) -> dict[str, Any]:
+    """One GraphQL call against the account credential.
+
+    GraphQL answers 200 with an ``errors`` array rather than an HTTP status, so
+    a caller that only checked the status would read a failed query as an empty
+    estate -- which is indistinguishable from a site nobody visited.
+    """
+
+    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
+    body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base}/graphql",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": (
+                f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+            ),
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderError(
+            f"Cloudflare analytics refused the query: HTTP {exc.code}."
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ProviderError(
+            f"Cloudflare analytics was unreachable: {type(exc).__name__}."
+        ) from exc
+    except ValueError as exc:
+        raise ProviderError("Cloudflare analytics returned invalid JSON.") from exc
+
+    if payload.get("errors"):
+        first = payload["errors"][0]
+        message = first.get("message", "") if isinstance(first, dict) else ""
+        raise ProviderError(f"Cloudflare analytics rejected the query: {message}")
+    return payload.get("data") or {}
+
+
+def _analytics_account(connection_ref: str = "") -> str:
+    """The one account this credential reads, discovered rather than configured."""
+
+    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
+    headers = {
+        "Authorization": (
+            f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+        )
+    }
+    result = _request(f"{base}/accounts?per_page=50", headers=headers)
+    tags = [
+        account["id"]
+        for account in (result or {}).get("result", [])
+        if isinstance(account, dict) and account.get("id")
+    ]
+    if len(tags) != 1:
+        raise ProviderError(
+            f"The Cloudflare credential sees {len(tags)} accounts; it has to see one."
+        )
+    return tags[0]
+
+
+def _analytics_sites(account: str, connection_ref: str = "") -> list[dict[str, str]]:
+    """Web Analytics sites that still describe something.
+
+    The same membership rule the probe applies: a site whose ruleset names no
+    hostname measures nothing, and Cloudflare keeps those around indefinitely.
+    """
+
+    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
+    headers = {
+        "Authorization": (
+            f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+        )
+    }
+    result = _request(
+        f"{base}/accounts/{account}/rum/site_info/list?per_page=100", headers=headers
+    )
+    sites = []
+    for site in (result or {}).get("result", []):
+        if not isinstance(site, dict) or not site.get("site_tag"):
+            continue
+        ruleset = site.get("ruleset") or {}
+        host = str(ruleset.get("zone_name") or "").strip()
+        if host:
+            sites.append({"site_tag": str(site["site_tag"]), "host": host})
+    return sorted(sites, key=lambda item: item["host"])
+
+
+def _analytics_query() -> str:
+    """One query carrying every breakdown, built from the dimension registry.
+
+    Aliased selections rather than a request each: the breakdowns share a
+    filter and a window, and asking six times would spend six times the quota
+    to answer one question about one day.
+    """
+
+    breakdowns = "\n".join(
+        f"""{name}: rumPageloadEventsAdaptiveGroups(
+             filter: $filter, limit: 5000, orderBy: [count_DESC]
+           ) {{
+             count
+             sum {{ visits }}
+             avg {{ sampleInterval }}
+             dimensions {{ date {field} }}
+           }}"""
+        for name, field in ANALYTICS_DIMENSIONS.items()
+    )
+    quantiles = " ".join(ANALYTICS_VITALS.values())
+    buckets = " ".join(
+        f"{metric}{suffix}"
+        for metric in ANALYTICS_BUCKETS
+        for suffix in ("Good", "NeedsImprovement", "Poor")
+    )
+    return f"""
+      query($account: String!, $filter: ZoneRumPageloadEventsAdaptiveGroupsFilter_InputObject!,
+            $vitalsFilter: ZoneRumWebVitalsEventsAdaptiveGroupsFilter_InputObject!) {{
+        viewer {{
+          accounts(filter: {{ accountTag: $account }}) {{
+            {breakdowns}
+            vitals: rumWebVitalsEventsAdaptiveGroups(
+              filter: $vitalsFilter, limit: 5000, orderBy: [date_ASC]
+            ) {{
+              count
+              avg {{ sampleInterval }}
+              quantiles {{ {quantiles} cumulativeLayoutShiftP75 }}
+              sum {{ {buckets} }}
+              dimensions {{ date }}
+            }}
+          }}
+        }}
+      }}
+    """
+
+
+def _milliseconds(value: Any) -> int | None:
+    """Cloudflare's microseconds as milliseconds, and its -1 as absence.
+
+    A percentile with no samples arrives as -1, which is absence wearing a
+    number's clothes. Left alone it would average into a negative load time,
+    so it stops here rather than downstream.
+    """
+
+    if value is None:
+        return None
+    try:
+        micros = float(value)
+    except (TypeError, ValueError):
+        return None
+    if micros < 0:
+        return None
+    return int(round(micros / 1000))
+
+
+def analytics(days: int = 3) -> dict[str, Any]:
+    """Every site's recent traffic and vitals, in the shape HQ stores.
+
+    ``days`` is short by default because a day that has closed does not change:
+    re-reading a week on every sweep would spend quota confirming numbers that
+    were settled the first time. A longer window is what a backfill asks for,
+    and the same call answers it.
+
+    Returns whole days only. The current day is excluded because it is still
+    accumulating, and a partial day stored beside complete ones is the kind of
+    figure that reads as a traffic collapse every morning.
+    """
+
+    if not provider_connection_refs("cloudflare_api"):
+        # Nothing to do, which is not the same as something going wrong. A
+        # deployment carrying no analytics credential should sweep in silence
+        # rather than report a failure on every pass.
+        return {"sites": []}
+
+    account = _analytics_account()
+    sites = _analytics_sites(account)
+    today = datetime.now(timezone.utc).date()
+    end = today - timedelta(days=1)
+    start = end - timedelta(days=max(days, 1) - 1)
+    query = _analytics_query()
+
+    readings = []
+    for site in sites:
+        window = {
+            "siteTag": site["site_tag"],
+            "date_geq": start.isoformat(),
+            "date_leq": end.isoformat(),
+        }
+        data = _cloudflare_graphql(
+            query,
+            {"account": account, "filter": window, "vitalsFilter": dict(window)},
+        )
+        accounts = ((data.get("viewer") or {}).get("accounts") or [{}])[0]
+        rows = []
+        for dimension, field in ANALYTICS_DIMENSIONS.items():
+            for group in accounts.get(dimension) or []:
+                dimensions = group.get("dimensions") or {}
+                value = str(dimensions.get(field) or "").strip()
+                if not value:
+                    # A dimension the beacon could not report. Stored as a row
+                    # it would claim a page or a country that does not exist.
+                    continue
+                rows.append(
+                    {
+                        "dimension": dimension,
+                        "value": value[:512],
+                        "date": dimensions.get("date"),
+                        "pageviews": int(group.get("count") or 0),
+                        "visits": int((group.get("sum") or {}).get("visits") or 0),
+                        "sample_interval": int(
+                            (group.get("avg") or {}).get("sampleInterval") or 1
+                        ),
+                    }
+                )
+
+        vitals = []
+        for group in accounts.get("vitals") or []:
+            quantiles = group.get("quantiles") or {}
+            sums = group.get("sum") or {}
+            reading = {
+                "date": (group.get("dimensions") or {}).get("date"),
+                "sample_interval": int(
+                    (group.get("avg") or {}).get("sampleInterval") or 1
+                ),
+                "cumulative_layout_shift": quantiles.get("cumulativeLayoutShiftP75"),
+            }
+            for column, field in ANALYTICS_VITALS.items():
+                reading[column] = _milliseconds(quantiles.get(field))
+            for metric in ANALYTICS_BUCKETS:
+                for suffix, column in (
+                    ("Good", "good"),
+                    ("NeedsImprovement", "needs_improvement"),
+                    ("Poor", "poor"),
+                ):
+                    reading[f"{metric}_{column}"] = int(
+                        sums.get(f"{metric}{suffix}") or 0
+                    )
+            vitals.append(reading)
+
+        readings.append(
+            {
+                "site_tag": site["site_tag"],
+                "host": site["host"],
+                "connection_ref": _required(
+                    connection_prefix("cloudflare_api"), "CONNECTION_REF"
+                ),
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "rows": rows,
+                "vitals": vitals,
+            }
+        )
+    return {"sites": readings}
+
+
 def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     environments = _portainer_environments(connection_ref)
     reachable = [item for item in environments if item["reachable"]]
@@ -3546,6 +3905,7 @@ _CONNECTION_PROBES = {
     "adguard": _probe_adguard,
     "npm": _probe_npm,
     "cloudflare_dns": _probe_cloudflare_dns,
+    "cloudflare_api": _probe_cloudflare_api,
     "portainer": _probe_portainer,
     "tailscale": _probe_tailscale,
 }

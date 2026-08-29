@@ -11,7 +11,14 @@ import subprocess
 import sys
 from typing import Any
 
-from .providers import ProviderError, connections, execute, inventory, provider_snapshot
+from .providers import (
+    ProviderError,
+    analytics,
+    connections,
+    execute,
+    inventory,
+    provider_snapshot,
+)
 from control_plane.providers import (
     controller_id,
     enabled_controller_actions,
@@ -167,6 +174,16 @@ def _report_findings(controller_id: str) -> None:
         else:
             _post("connections", controller_id, found)
         _post("inventory", controller_id, inventory())
+        try:
+            readings = analytics()
+        except (ProviderError, OSError, ValueError) as exc:
+            # Its own guard, like connections above. Analytics is the one
+            # reading here that leaves the network HQ controls, so it is also
+            # the one most able to be slow or refused -- and a page-view count
+            # is never a reason for a sweep of the estate to end early.
+            print(f"analytics sweep skipped: {type(exc).__name__}", file=sys.stderr)
+        else:
+            _post("analytics", controller_id, readings)
 
 
 def run_once(controller_id: str, *, apply: bool) -> int:

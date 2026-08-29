@@ -140,19 +140,36 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         cards_provider="application.sections:documentation",
     ),
     DomainDescriptor(
+        # The id stays `hq.content` though the label does not. It is the
+        # registry's stable key -- what attribution is keyed on -- and the
+        # section being renamed is a change to what an operator reads, not to
+        # which domain reported an item.
         id="hq.content",
-        label="Content",
+        label="Writeups",
+        # The published work, and the section this group exists for. Its
+        # queues and card are declared here rather than on the sibling below
+        # because they count the whole registry, both halves, and a queue
+        # declared twice would report its backlog twice.
         navigation=(
-            NavigationItem("Content", "content:list", "content", 110, "Web"),
+            NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),
         ),
         attention_provider="application.attention:content",
         cards_provider="application.sections:content",
     ),
     DomainDescriptor(
+        id="hq.pages",
+        label="Pages",
+        # The structural pages -- the ones that make the site navigable rather
+        # than worth visiting. Same registry, same table, different half.
+        navigation=(
+            NavigationItem("Pages", "content:pages", "content", 111, "Web"),
+        ),
+    ),
+    DomainDescriptor(
         id="hq.contacts",
         label="Contacts",
         navigation=(
-            NavigationItem("Contacts", "contacts:list", "contacts", 111, "Web"),
+            NavigationItem("Contacts", "contacts:list", "contacts", 112, "Web"),
         ),
         attention_provider="application.attention:contacts",
     ),
@@ -165,7 +182,16 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # records themselves are read and changed, which is a different job done
         # on a different day.
         navigation=(
-            NavigationItem("Domains", "zones:index", "zones", 112, "Web"),
+            NavigationItem("Domains", "zones:index", "zones", 113, "Web"),
+        ),
+    ),
+    DomainDescriptor(
+        id="hq.analytics",
+        label="Analytics",
+        # Last in Web, because it is the section that reports on the others.
+        # Reading it is what you do after publishing, not before.
+        navigation=(
+            NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),
         ),
     ),
     DomainDescriptor(

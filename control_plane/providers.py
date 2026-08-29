@@ -2530,6 +2530,43 @@ _PROVIDERS = (
 
 PROVIDERS = {provider.kind: provider for provider in _PROVIDERS}
 
+
+@dataclass(frozen=True)
+class ObserverAbility:
+    """What a connection is carried for when it reconciles nothing.
+
+    Every other ability is derived from a resource kind: a credential exists to
+    make some declaration true, so the kind is the record of why it is held.
+    A connection that only ever reads has no kind to derive from, and left at
+    that it appears on the connections page holding no authority at all -- which
+    reads as a credential nobody can account for rather than as a reader.
+
+    So a reader declares its ability here, against the resource it answers for.
+    The effect is always a read: if something wants to change state it needs a
+    kind, and a kind is what the reconcile machinery keys on.
+    """
+
+    provider: str
+    name: str
+    label: str
+    summary: str
+    subject_resource: str
+
+
+OBSERVERS: tuple[ObserverAbility, ...] = (
+    ObserverAbility(
+        provider="cloudflare_api",
+        name="analytics.read",
+        label="Site analytics",
+        summary=(
+            "Reads what the published site was asked for -- pages, referrers, "
+            "countries, devices, browsers and operating systems -- and the Core "
+            "Web Vitals behind them."
+        ),
+        subject_resource="analytics",
+    ),
+)
+
 # The kinds other modules name directly. Spelled once here, beside the registry
 # that defines them, because a kind mistyped in a filter is a query that finds
 # nothing and reports it as an empty world.

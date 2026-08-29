@@ -319,6 +319,7 @@ INSTALLED_APPS = [
     "core",
     "projects",
     "content",
+    "analytics",
     "docs_index",
     "assets",
     "expenses",

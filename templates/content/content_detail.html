@@ -26,6 +26,33 @@
   <dt>Updated</dt><dd class="muted">{{ item.updated_at }}</dd>
 </dl>
 
+{% if traffic.path %}
+  <section class="card" aria-labelledby="traffic">
+    <div class="card-head">
+      <h2 id="traffic">Traffic</h2>
+      <a class="section-foot" href="{% url 'analytics:overview' %}?days={{ traffic.days }}">All analytics &rarr;</a>
+    </div>
+    {% if traffic.measured %}
+      <dl class="vitals-strip">
+        <div class="vital">
+          <dt>Page views</dt>
+          <dd><span class="vital-rate">{{ traffic.pageviews }}</span> <span class="muted">{{ traffic.days }}d</span></dd>
+        </div>
+        <div class="vital">
+          <dt>Visits</dt>
+          <dd><span class="vital-rate">{{ traffic.visits }}</span> </dd>
+        </div>
+        <div class="vital">
+          <dt>Path</dt>
+          <dd><code>{{ traffic.path }}</code></dd>
+        </div>
+      </dl>
+    {% else %}
+      <p class="muted">No traffic recorded for <code>{{ traffic.path }}</code>.</p>
+    {% endif %}
+  </section>
+{% endif %}
+
 {% if item.notes %}<h2>Notes</h2><p>{{ item.notes|linebreaksbr }}</p>{% endif %}
 
 <section>

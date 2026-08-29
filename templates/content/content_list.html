@@ -1,8 +1,8 @@
 {% extends "base.html" %}{% load table_tags %}
-{% block title %}Content{% endblock %}
+{% block title %}{{ heading }}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Content pipeline</h1>
+  <h1>{{ heading }}</h1>
   <a class="btn primary" href="{% url 'content:create' %}">New content item</a>
 </div>
 
@@ -11,7 +11,7 @@
 <div class="table-scroll">
 <table class="data-table" data-selectable-table>
   <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "content_type" "-content_type" %}{% table_sort_header "Status" "status" "-status" %}<th>Description</th>{% table_sort_header "Published" "published_at" "-published_at" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th class="actions-col">Open</th></tr>
+    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "content_type" "-content_type" %}{% table_sort_header "Status" "status" "-status" %}<th>Description</th><th class="num-col" title="Page views in the last {{ traffic_days }} days">Views</th>{% table_sort_header "Published" "published_at" "-published_at" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th class="actions-col">Open</th></tr>
   </thead>
   <tbody>
     {% for c in items %}
@@ -21,6 +21,7 @@
         <td>{{ c.get_content_type_display }}</td>
         <td><span class="pill pill-{{ c.status }}">{{ c.get_status_display }}</span></td>
         <td class="muted">{{ c.topic|default:"—" }}</td>
+        <td class="num-col">{% if c.pageviews is None %}<span class="muted">—</span>{% else %}{{ c.pageviews }}{% endif %}</td>
         <td class="muted">{{ c.published_at|default:"—" }}</td>
         <td class="muted">{{ c.updated_at }}</td>
         <td class="actions-col">
@@ -32,7 +33,7 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="8" class="muted">No content yet.</td></tr>
+      <tr><td colspan="9" class="muted">No content yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
