@@ -146,35 +146,47 @@ def _identity(machine) -> ServiceSection | None:
     )
 
 
-def _points_here(machine) -> ServiceSection | None:
-    """Every declaration that resolves to this machine, whatever named it.
+def _related(machine) -> ServiceSection | None:
+    """Every declaration that is about this machine, and why it is.
 
     The machine page's central question, and the one nothing answered. A
-    machine's own declarations were collected by looking for a ``host`` field,
-    so a container was found and the DNS record answering the machine's address,
-    the proxy forwarding to it, and the certificate covering a name it serves
-    were not -- they relate by *address*, and none of them has a ``host`` key.
+    machine's own declarations were gathered by looking for a ``host`` field, so
+    a container was found and everything that relates some other way was not.
 
-    So this asks the question the other way round, through the one index that
-    turns an origin into a machine: for every value a declaration carries, which
-    machine does it point at? A provider joins this by declaring something that
-    resolves, not by anything here learning what it is.
+    There are exactly two other ways, and HQ already writes both down. A
+    declaration can point at where the machine *is* -- a DNS answer, a
+    forwarding target, an endpoint -- which ``locate`` resolves to a machine
+    name. Or it can be about a name the machine *answers on*, which a provider
+    states through ``hostnames``. A provider joins this by declaring one of
+    those, not by anything here learning what it is.
 
-    ``resolve`` consults HQ's names before the network's addresses, so a stack
-    that named its host and a proxy that addressed one both land here, and
-    neither can match a machine merely because a string looked like its name.
+    One band rather than two. A record frequently relates both ways -- an
+    internal DNS record answers this machine's address *and* names one of its
+    hostnames -- and splitting them would describe two relationships where there
+    is one, listing the same record twice. The reason travels in the row.
+
+    Names are matched with ``certificate_covers`` rather than by set
+    intersection, because the declared name is often a wildcard: the
+    certificate covering this machine's ``hq`` host lists ``*.example.com`` and
+    never lists the host at all. That function is the one place that decides
+    what a wildcard answers for, and a second implementation of it here would be
+    a second chance to get it subtly wrong.
     """
 
     from control_plane.models import ManagedResource
+    from control_plane.providers import PROVIDERS, certificate_covers
 
     from .locate import machines_index
 
-    index = machines_index()
     name = getattr(machine, "name", "")
     if not name:
         return None
+    index = machines_index()
+    answers = {
+        normalize_host(host) for host in (getattr(machine, "hostnames", ()) or ()) if host
+    }
 
-    # Its own declarations are what this machine *is*, not what reaches it —
+    # Its own declarations are what this machine *is*, not what relates to it —
     # and one of them is filed under a suffixed key, so a page that listed it
     # here would report a machine as pointing at itself under a name that looks
     # like a second machine. They belong to `_identity`.
@@ -182,14 +194,16 @@ def _points_here(machine) -> ServiceSection | None:
         getattr(machine, "declaration", ""),
         getattr(machine, "route_approval_key", ""),
     } - {""}
+
     found: list[tuple[str, str, str]] = []
     for resource in ManagedResource.objects.filter(enabled=True).order_by("kind", "key"):
         if resource.key in own:
-            continue  # already shown as what this machine runs
-        for field, value in (resource.spec or {}).items():
+            continue
+        spec = resource.spec or {}
+        why = ""
+        for field, value in spec.items():
             # A field holding one endpoint and a field holding several are the
-            # same kind of claim. Reading only strings quietly missed every
-            # provider that declares its addresses as a list.
+            # same kind of claim, so both are read the same way.
             candidates = value if isinstance(value, (list, tuple)) else (value,)
             hit = next(
                 (
@@ -199,16 +213,25 @@ def _points_here(machine) -> ServiceSection | None:
                 ),
                 None,
             )
-            if hit is None:
-                continue
-            found.append((resource.key, resource.kind, f"{field} → {hit}"))
-            break
+            if hit is not None:
+                why = f"{field} → {hit}"
+                break
+        if not why:
+            provider = PROVIDERS.get(resource.kind)
+            declared = frozenset(provider.hostnames(spec)) if provider and provider.hostnames else frozenset()
+            served = next(
+                (host for host in sorted(answers) if certificate_covers(host, declared)), ""
+            )
+            if served:
+                why = f"serves {served}"
+        if why:
+            found.append((resource.key, resource.kind, why))
 
     if not found:
         return None
     return ServiceSection(
-        id="points-here",
-        label="Declared to reach this machine",
+        id="related",
+        label="What relates to this machine",
         columns=("Declaration", "Kind", "Because"),
         records=tuple(
             (
@@ -266,6 +289,6 @@ def _ago(moment) -> str:
 SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
     _identity,
     _traffic,
-    _points_here,
+    _related,
     _activity,
 )
