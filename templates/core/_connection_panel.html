@@ -132,7 +132,19 @@ page it falls back to. Nothing here knows which one it is in.
           <dt>Session until</dt><dd><time datetime="{{ connection.identity.session_expires|date:'c' }}">{{ connection.identity.session_expires|date:"M j, Y, g:i a" }}</time></dd>
         {% endif %}
       </dl>
-      {% if not connection.identity.corroborated %}
+      {% if connection.identity.corroborated %}
+        <p class="conn-agree conn-agree-yes">
+          Tailnet ownership and this session independently agree.
+        </p>
+      {% elif connection.identity.conflicted %}
+        <p class="conn-agree conn-agree-no">
+          Tailnet ownership and this session name different people.
+        </p>
+      {% elif connection.identity.tailnet_user %}
+        <p class="conn-agree conn-agree-no">
+          Both systems identify this request, but HQ has no declared link between those account names.
+        </p>
+      {% else %}
         <p class="conn-agree conn-agree-no">
           Only the session has an opinion on who is asking.
         </p>
@@ -145,6 +157,11 @@ page it falls back to. Nothing here knows which one it is in.
         <dt>Path</dt>
         <dd>
           <strong>{{ connection.path_label }}</strong>
+        </dd>
+        <dt>Measured by</dt>
+        <dd>
+          <strong>{{ connection.measurement_label }}</strong>
+          {% if connection.serving_basis %}<span class="conn-row-note">{{ connection.serving_basis }}</span>{% endif %}
         </dd>
         <dt>Carried over</dt>
         <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
@@ -209,7 +226,11 @@ page it falls back to. Nothing here knows which one it is in.
                   <dd><code>{{ key }}</code></dd>
                 {% endfor %}
               </dl>
-              <p class="conn-row-note">These two keys completed the handshake above. Compare either against <code>tailscale status</code> on that machine.</p>
+              <p class="conn-row-note">
+                These are the caller and observing node behind the measurement above.
+                {% if connection.link_observed_by_hq %}The observer is independently resolved as the node serving HQ.{% else %}HQ has not proved that the observer is its serving node.{% endif %}
+                Compare either key against <code>tailscale status</code> on that machine.
+              </p>
             </details>
           </dd>
         {% endif %}

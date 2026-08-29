@@ -183,14 +183,7 @@
     const main = document.querySelector("main");
     main.setAttribute("aria-busy", "true");
     try {
-      const response = await fetch(url, { signal: controller.signal });
-      // An expired session 302s to the login page; fetch follows it and would
-      // otherwise splice login-page fragments into the table. Hand the whole
-      // navigation to the browser instead.
-      if (response.redirected) {
-        window.location.assign(response.url);
-        return;
-      }
+      const response = await window.hqFetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`Table request failed: ${response.status}`);
       const next = hqParseDocument(await response.text());
       const focusMemo = captureFocus();

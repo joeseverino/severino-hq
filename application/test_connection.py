@@ -9,6 +9,7 @@ what follows takes a fact away and asserts the page notices.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
@@ -96,6 +97,12 @@ class ChannelTests(TestCase):
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class LayerTests(TestCase):
     def setUp(self):
+        self.own_addresses = mock.patch(
+            "application.connection._own_addresses",
+            return_value=frozenset({"100.64.0.9"}),
+        )
+        self.own_addresses.start()
+        self.addCleanup(self.own_addresses.stop)
         a_tailnet(
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
             a_device(
@@ -174,6 +181,34 @@ class LayerTests(TestCase):
         self.assertTrue(forwarder.conclusive)
         self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
         self.assertEqual(forwarder.mechanism, "Exact proxy allowlist")
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_npm_redundant_headers_corroborate_the_canonical_inputs(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META.update(
+            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+            HTTP_X_REAL_IP=A_TAILNET_ADDRESS,
+            HTTP_X_FORWARDED_SCHEME="https",
+        )
+
+        layer = self.layer(connection(request), "proxy-evidence")
+
+        self.assertTrue(layer.holds)
+        self.assertIn("not a second identity authority", layer.detail)
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_disagreeing_npm_headers_are_a_visible_proxy_failure(self):
+        request = a_request(A_LAN_ADDRESS)
+        request.META.update(
+            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+            HTTP_X_REAL_IP="100.64.0.77",
+            HTTP_X_FORWARDED_SCHEME="https",
+        )
+
+        layer = self.layer(connection(request), "proxy-evidence")
+
+        self.assertFalse(layer.holds)
+        self.assertTrue(layer.conclusive)
 
     def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
         found = connection(a_request(A_LAN_ADDRESS, secure=True))
@@ -316,9 +351,62 @@ class IdentityTests(TestCase):
         self.assertTrue(connection(a_request()).identity.corroborated)
 
     def test_a_session_with_no_device_behind_it_is_not_corroborated(self):
-        """The shape a stolen session would have."""
-
         self.assertFalse(connection(a_request(A_LAN_ADDRESS)).identity.corroborated)
+
+    def test_two_sources_naming_different_people_is_a_visible_conflict(self):
+        request = a_request()
+        request.user.email = "different@example.test"
+
+        identity = connection(request).identity
+
+        self.assertFalse(identity.corroborated)
+        self.assertTrue(identity.conflicted)
+        layer = next(
+            layer for layer in connection(request).layers if layer.id == "identity-agreement"
+        )
+        self.assertFalse(layer.holds)
+
+    def test_an_sso_signed_link_correlates_different_identity_namespaces(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="operator@passkey"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        request = a_request()
+        request.user.email = "operator@example.test"
+        request.session = {
+            "_auth_user_backend": "core.oidc.HQOIDCAuthenticationBackend",
+            "oidc_tailscale_principal": "operator@passkey",
+        }
+
+        identity = connection(request).identity
+
+        self.assertTrue(identity.corroborated)
+        self.assertEqual(identity.agreement_basis, "SSO-signed principal link")
+
+    def test_a_password_session_cannot_use_an_oidc_principal_link(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="operator@passkey"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        request = a_request()
+        request.user.email = "operator@example.test"
+        request.session = {
+            "_auth_user_backend": "django.contrib.auth.backends.ModelBackend",
+            "oidc_tailscale_principal": "operator@passkey",
+        }
+
+        self.assertFalse(connection(request).identity.corroborated)
+
+    def test_different_identity_namespaces_are_unknown_without_a_link(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="operator@passkey"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        identity = connection(a_request()).identity
+
+        self.assertFalse(identity.corroborated)
+        self.assertFalse(identity.conflicted)
 
     @override_settings(
         OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
@@ -429,6 +517,40 @@ class ConnectionPageTests(TestCase):
 
         self.assertContains(response, "Aug 23, 2026, 4:12 p.m.")
 
+    def test_the_request_timeline_includes_the_observed_npm_edge(self):
+        ProviderInventory.objects.create(
+            kind="npm.proxy_host",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "domain_names": ["testserver"],
+                    "access_list_id": 7,
+                    "access_policy": {
+                        "satisfy_any": False,
+                        "pass_auth": False,
+                        "authorization_count": 0,
+                        "implicit_deny": True,
+                        "clients": [
+                            {"directive": "allow", "address": "100.64.0.0/10"},
+                            {
+                                "directive": "allow",
+                                "address": "fd7a:115c:a1e0::/48",
+                            },
+                        ],
+                    },
+                }
+            ],
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("connection"))
+
+        edge = next(
+            layer for layer in response.context["connection"].layers if layer.id == "edge"
+        )
+        self.assertTrue(edge.holds)
+        self.assertContains(response, "Tailnet ranges · implicit deny all")
+
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class AddressEvidenceTests(TestCase):
@@ -478,7 +600,11 @@ class AddressEvidenceTests(TestCase):
             ),
         )
 
-        rows = addresses_of_hq(connection(a_request()))
+        with mock.patch(
+            "application.connection._own_addresses",
+            return_value=frozenset({"100.64.0.9"}),
+        ):
+            rows = addresses_of_hq(connection(a_request()))
 
         self.assertEqual([row.value for row in rows], ["100.64.0.9"])
 
@@ -614,7 +740,7 @@ class CostTests(TestCase):
 
         self.client.force_login(self.user)
 
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(7):
             self.client.get(reverse("connection"))
 
 
@@ -735,14 +861,22 @@ class ServingDeviceTests(TestCase):
         )
 
     def serving(self, own):
-        from unittest import mock
-
         from .connection import _serving_device
         from .infrastructure import declared_machines
         from . import tailnet
 
         with mock.patch("application.connection._own_addresses", return_value=frozenset(own)):
             return _serving_device(tailnet.devices(), declared_machines())
+
+    def resolution(self, own):
+        from .connection import _serving_device_resolution
+        from .infrastructure import declared_machines
+        from . import tailnet
+
+        with mock.patch(
+            "application.connection._own_addresses", return_value=frozenset(own)
+        ):
+            return _serving_device_resolution(tailnet.devices(), declared_machines())
 
     def test_locating_hq_never_puts_dns_in_the_request_path(self):
         from unittest import mock
@@ -778,6 +912,7 @@ class ServingDeviceTests(TestCase):
 
         self.assertIsNotNone(found)
         self.assertEqual(found.name, "example-registered-name")
+        self.assertTrue(self.resolution({"192.0.2.10"}).verified)
 
     def test_the_observer_flag_is_not_mistaken_for_where_hq_runs(self):
         found = self.serving({"192.0.2.10"})
@@ -789,6 +924,19 @@ class ServingDeviceTests(TestCase):
 
         self.assertIsNotNone(found)
         self.assertEqual(found.name, "example-controller")
+        self.assertFalse(self.resolution(set()).verified)
+
+    def test_an_observer_fallback_is_not_drawn_or_authorized_as_hq(self):
+        with mock.patch(
+            "application.connection._own_addresses", return_value=frozenset()
+        ):
+            found = connection(a_request())
+
+        self.assertIsNone(found.serves)
+        self.assertEqual(found.observer.name, "example-controller")
+        policy = next(layer for layer in found.layers if layer.id == "policy")
+        self.assertFalse(policy.conclusive)
+        self.assertIn("HQ's Tailnet node", policy.evidence)
 
     def test_an_unrecognised_address_never_guesses_a_node(self):
         found = self.serving({"198.51.100.7"})
@@ -896,6 +1044,12 @@ class LocalProxyPolicyTests(TestCase):
     """
 
     def setUp(self):
+        self.own_addresses = mock.patch(
+            "application.connection._own_addresses",
+            return_value=frozenset({"100.64.0.9"}),
+        )
+        self.own_addresses.start()
+        self.addCleanup(self.own_addresses.stop)
         a_tailnet(
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
             a_device(

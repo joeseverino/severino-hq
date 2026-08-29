@@ -29,6 +29,23 @@ const hqParseDocument = (() => {
     new DOMParser().parseFromString(policy.createHTML(html), "text/html");
 })();
 
+// Every enhanced request crosses the session boundary the same way. When an
+// OIDC session needs renewal, the server returns the provider URL instead of
+// letting fetch follow a cross-origin redirect that CSP correctly blocks.
+const hqFetch = async (input, options = {}) => {
+  const headers = new Headers(options.headers);
+  headers.set("X-Requested-With", "XMLHttpRequest");
+  const response = await window.fetch(input, { ...options, headers });
+  const refreshUrl =
+    response.status === 403 ? response.headers.get("refresh_url") : "";
+  if (refreshUrl) {
+    window.location.assign(refreshUrl);
+    return new Promise(() => {});
+  }
+  return response;
+};
+window.hqFetch = hqFetch;
+
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
 // than by remembering to extend a hardcoded query. That query was extended
@@ -120,7 +137,7 @@ document.querySelectorAll("details[data-action-count-url]").forEach((menu) => {
     }
     menu.dataset.actionCountLoaded = "loading";
     try {
-      const response = await fetch(menu.dataset.actionCountUrl, {
+      const response = await hqFetch(menu.dataset.actionCountUrl, {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) throw new Error(`Action count returned ${response.status}`);
@@ -447,7 +464,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     if (!card || !card.id) return false;
     // X-Fragment lets the view skip everything it would otherwise rebuild to
     // redraw one grid, and return the card on its own.
-    const response = await fetch(link.href, {
+    const response = await hqFetch(link.href, {
       credentials: "same-origin",
       headers: { "X-Fragment": "calendar" },
     });
@@ -498,7 +515,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   const tick = async () => {
     if (stop) return;
     try {
-      const response = await fetch(panel.dataset.job, {
+      const response = await hqFetch(panel.dataset.job, {
         credentials: "same-origin",
       });
       if (response.ok) {
@@ -599,10 +616,9 @@ document.addEventListener("submit", (event) => {
   const buttons = form.querySelectorAll("button");
   buttons.forEach((button) => (button.disabled = true));
   if (status) status.textContent = "Saving…";
-  fetch(form.action, {
+  hqFetch(form.action, {
     method: "POST",
     body: new FormData(form),
-    headers: { "X-Requested-With": "fetch" },
     credentials: "same-origin",
   })
     .then((response) => {
@@ -651,8 +667,7 @@ document.addEventListener("submit", (event) => {
   event.preventDefault();
   const query = new URLSearchParams(new FormData(form)).toString();
   slot.setAttribute("aria-busy", "true");
-  fetch(`${form.action}?${query}`, {
-    headers: { "X-Requested-With": "fetch" },
+  hqFetch(`${form.action}?${query}`, {
     credentials: "same-origin",
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
@@ -679,8 +694,7 @@ document.addEventListener("click", (event) => {
   const dialog = document.getElementById("modal-connection");
   const slot = dialog?.querySelector("[data-connection-slot]");
   if (!slot) return;
-  fetch(opener.dataset.connectionSource, {
-    headers: { "X-Requested-With": "fetch" },
+  hqFetch(opener.dataset.connectionSource, {
     credentials: "same-origin",
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
@@ -712,7 +726,7 @@ const hqRoundTrip = (() => {
     const started = performance.now();
     // A response with no body and no database behind it, so what is measured
     // is the path rather than what HQ did after arriving.
-    return fetch(`${endpoint}?t=${started}`, {
+    return hqFetch(`${endpoint}?t=${started}`, {
       cache: "no-store",
       credentials: "same-origin",
     }).then(() => performance.now() - started);
@@ -791,6 +805,8 @@ document.getElementById("modal-connection")?.addEventListener("close", () => {
 // meant to produce one. A same-origin fetch exposes every response header, so
 // the browser reading the panel is the honest place to ask what it was given.
 const HQ_RESPONSE_HEADERS = [
+  ["x-served-by", "Which reverse-proxy hostname actually served this response"],
+  ["x-request-id", "Joins this browser response to HQ's structured request log"],
   ["content-security-policy", "Which origins may load script, style and frames"],
   ["strict-transport-security", "Refuses plain HTTP for this host from now on"],
   ["x-content-type-options", "Stops the browser guessing a type it was not sent"],
@@ -836,7 +852,10 @@ const hqShowResponseHeaders = (root) => {
     return row;
   };
 
-  fetch(window.location.href, { credentials: "same-origin", cache: "no-store" })
+  hqFetch(window.location.href, {
+    credentials: "same-origin",
+    cache: "no-store",
+  })
     .then((response) => {
       const rows = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
         const value = response.headers.get(name);
@@ -881,7 +900,7 @@ const hqShowPublicAddress = (disclosure) => {
   const slot = disclosure.querySelector("[data-peering-source]");
   if (!slot || slot.dataset.loaded || !window.fetch) return;
   slot.dataset.loaded = "true";
-  fetch(slot.dataset.peeringSource, { credentials: "same-origin" })
+  hqFetch(slot.dataset.peeringSource, { credentials: "same-origin" })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
     .then((html) => {
       const rows = hqParseDocument(html).body;

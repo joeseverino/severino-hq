@@ -1632,8 +1632,19 @@ def _npm_access_policies(
         # A policy endpoint unavailable on an older NPM must not erase every
         # proxy host. The missing evidence stays unknown until the next sweep.
         return {}
-    return {
-        record["id"]: {
+    found = {}
+    for record in records:
+        if not isinstance(record, dict) or not isinstance(record.get("id"), int):
+            continue
+        clients = [
+            {
+                "directive": str(client.get("directive", "")),
+                "address": str(client.get("address", "")),
+            }
+            for client in record.get("clients") or ()
+            if client.get("directive") and client.get("address")
+        ]
+        found[record["id"]] = {
             "name": str(record.get("name", "")),
             "satisfy_any": bool(record.get("satisfy_any", False)),
             "pass_auth": bool(record.get("pass_auth", False)),
@@ -1641,18 +1652,12 @@ def _npm_access_policies(
             # carrying usernames, password hints, or any other auth material
             # into HQ's safe observation cache.
             "authorization_count": len(record.get("items") or ()),
-            "clients": [
-                {
-                    "directive": str(client.get("directive", "")),
-                    "address": str(client.get("address", "")),
-                }
-                for client in record.get("clients") or ()
-                if client.get("directive") and client.get("address")
-            ],
+            "clients": clients,
+            # NPM generates a final ``deny all`` for every non-empty client
+            # rule set but does not return that generated rule through the API.
+            "implicit_deny": bool(clients),
         }
-        for record in records
-        if isinstance(record, dict) and isinstance(record.get("id"), int)
-    }
+    return found
 
 
 def _npm_certificates(

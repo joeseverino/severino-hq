@@ -38,6 +38,7 @@ from core.logging import JsonFormatter, reset_request_id, set_request_id
 from core.audit import operation_context
 from core.models import AuditLog
 from core.oidc import HQOIDCAuthenticationBackend
+from core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
 from docs_index.models import DocumentationRecord
 from docs_index.importer import (
     ManifestImportError,
@@ -230,6 +231,41 @@ class SecurityBoundaryTests(TestCase):
 
 
 class OIDCBackendTests(TestCase):
+    @patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.get_or_create_user")
+    def test_verified_id_token_principal_is_bound_to_the_session(self, get_user):
+        get_user.return_value = User(username="operator")
+        backend = HQOIDCAuthenticationBackend()
+        backend.request = type("Request", (), {"session": {}})()
+
+        backend.get_or_create_user(
+            "access-token",
+            "id-token",
+            {"tailscale_principal": " operator@passkey "},
+        )
+
+        self.assertEqual(
+            backend.request.session[TAILSCALE_PRINCIPAL_SESSION_KEY],
+            "operator@passkey",
+        )
+
+    @patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.get_or_create_user")
+    def test_invalid_principal_claim_removes_a_stale_session_link(self, get_user):
+        get_user.return_value = User(username="operator")
+        backend = HQOIDCAuthenticationBackend()
+        backend.request = type(
+            "Request",
+            (),
+            {"session": {TAILSCALE_PRINCIPAL_SESSION_KEY: "stale@passkey"}},
+        )()
+
+        backend.get_or_create_user(
+            "access-token",
+            "id-token",
+            {"tailscale_principal": ["operator@passkey"]},
+        )
+
+        self.assertNotIn(TAILSCALE_PRINCIPAL_SESSION_KEY, backend.request.session)
+
     def test_allows_user_in_allowed_group(self):
         backend = HQOIDCAuthenticationBackend()
 
