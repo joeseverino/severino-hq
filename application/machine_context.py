@@ -1,15 +1,22 @@
 """Everything else HQ holds about a machine, gathered by what it already knows.
 
-The machine page is where the estate is most densely related and says least
-about it. A machine is reached by connections, runs containers, answers on a
-handful of names, holds declarations, and appears in the audit log under every
-one of their keys -- and none of that needs a new column, because each side
-already carries the thing that identifies the other.
+The machine page is where the estate is most densely related and said least
+about it. A machine answers on a handful of names, and behind each name sits a
+DNS record, a proxy host, a certificate and something running -- four
+declarations HQ already resolves, per name, for the service page.
 
-So this is the service page's shape applied to a machine: a section is a
-function from a machine to rows, and the registry below is the list of them.
-A page that hand-wires each band can only grow when someone edits it; a page
-that reads a registry grows when HQ learns something.
+So this reads that answer rather than re-deriving it. An earlier version listed
+every declaration that resolved to the machine and produced nineteen
+undifferentiated rows: ten DNS records, eight proxy hosts and a certificate,
+which is the same information the service model already organises by name, at
+twice the volume and none of the structure. Emit once, derive everywhere means
+the machine page asks the service catalog what supplies each name, and the
+answer cannot disagree with the service page because it *is* the service page's
+answer.
+
+A section is a function from a machine to rows, and the registry below is the
+list of them. A page that hand-wires each band can only grow when someone edits
+it; a page that reads a registry grows when HQ learns something.
 
 The section and cell primitives are shared with the service page rather than
 copied, so a band gained on one renders identically on the other.
@@ -36,65 +43,6 @@ def sections_for(machine) -> tuple[ServiceSection, ...]:
         if section is not None and (section.records or section.actions):
             found.append(section)
     return tuple(found)
-
-
-def _traffic(machine) -> ServiceSection | None:
-    """Which of this machine's names anyone actually visits.
-
-    A machine answers on several names and they are not equally used -- an
-    origin nobody reaches directly, an admin surface used twice a month, and the
-    one name that carries the site. The machine page is the only place that
-    question is even askable, because it is the only page that holds all the
-    names at once.
-
-    Unmeasured names are listed rather than dropped. "Nothing measures this" and
-    "nobody visits this" are opposite conclusions and the row says which it is,
-    because the first is a gap in HQ and the second is a fact about the estate.
-    """
-
-    hostnames = tuple(getattr(machine, "hostnames", ()) or ())
-    if not hostnames:
-        return None
-    measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
-    if not measured:
-        return None
-
-    def row(hostname: str) -> tuple[Cell, ...]:
-        reading = measured.get(normalize_host(hostname))
-        if not reading:
-            return (
-                Cell(hostname),
-                Cell("—", muted=True),
-                Cell("—", muted=True),
-                Cell("nothing measures this name", muted=True),
-            )
-        interval = reading.get("sample_interval") or 1
-        return (
-            Cell(hostname),
-            Cell(f"{reading['pageviews']:,}"),
-            Cell(f"{reading['visits']:,}"),
-            Cell(
-                "Counted" if interval <= 1 else f"Sampled 1 in {interval}",
-                muted=interval > 1,
-            ),
-        )
-
-    # Measured names first, busiest down: the question is which names carry the
-    # traffic, and an alphabetical list buries the answer among the quiet ones.
-    ordered = sorted(
-        hostnames,
-        key=lambda host: (
-            -(measured.get(normalize_host(host), {}).get("pageviews") or -1),
-            host,
-        ),
-    )
-    return ServiceSection(
-        id="traffic",
-        label=f"Traffic by name · {HOST_TRAFFIC_DAYS} days",
-        columns=("Name", "Pageviews", "Visits", "Basis"),
-        records=tuple(row(hostname) for hostname in ordered),
-        actions=(("Open analytics", reverse("analytics:overview")),),
-    )
 
 
 def _identity(machine) -> ServiceSection | None:
@@ -130,8 +78,7 @@ def _identity(machine) -> ServiceSection | None:
             Cell(by_key[key].kind if key in by_key else "—", muted=key not in by_key),
             Cell(
                 "filed under a suffixed key — the plain one was taken"
-                if key.rpartition("-")[2].isdigit()
-                and not key.rpartition("-")[2].startswith("0")
+                if key.rpartition("-")[2].isdigit() and not key.rpartition("-")[2].startswith("0")
                 else "",
                 muted=True,
             ),
@@ -146,101 +93,74 @@ def _identity(machine) -> ServiceSection | None:
     )
 
 
-def _related(machine) -> ServiceSection | None:
-    """Every declaration that is about this machine, and why it is.
+def _names(machine) -> ServiceSection | None:
+    """Every name this machine answers on, and what supplies each one.
 
-    The machine page's central question, and the one nothing answered. A
-    machine's own declarations were gathered by looking for a ``host`` field, so
-    a container was found and everything that relates some other way was not.
+    The band the machine page exists for. A machine is only interesting through
+    its names, and each name is supplied by a short, fixed set of things -- what
+    runs it, what resolves it, what fronts it, what secures it. HQ already
+    decides all four, per name, for the service page; this reads that decision
+    rather than making a second one.
 
-    There are exactly two other ways, and HQ already writes both down. A
-    declaration can point at where the machine *is* -- a DNS answer, a
-    forwarding target, an endpoint -- which ``locate`` resolves to a machine
-    name. Or it can be about a name the machine *answers on*, which a provider
-    states through ``hostnames``. A provider joins this by declaring one of
-    those, not by anything here learning what it is.
+    Traffic rides along because it answers the question the facets raise. Four
+    green cells beside a name nobody visits is a different situation from four
+    green cells beside the name carrying the site, and only the machine page
+    holds enough names at once for the comparison to mean anything.
 
-    One band rather than two. A record frequently relates both ways -- an
-    internal DNS record answers this machine's address *and* names one of its
-    hostnames -- and splitting them would describe two relationships where there
-    is one, listing the same record twice. The reason travels in the row.
-
-    Names are matched with ``certificate_covers`` rather than by set
-    intersection, because the declared name is often a wildcard: the
-    certificate covering this machine's ``hq`` host lists ``*.example.com`` and
-    never lists the host at all. That function is the one place that decides
-    what a wildcard answers for, and a second implementation of it here would be
-    a second chance to get it subtly wrong.
+    A blank cell is "nothing supplies this", which is not the same as unhealthy
+    and not the same as unmeasured. Each is said in its own words.
     """
 
-    from control_plane.models import ManagedResource
-    from control_plane.providers import PROVIDERS, certificate_covers
+    from .services import service_catalog
 
-    from .locate import machines_index
-
-    name = getattr(machine, "name", "")
-    if not name:
+    hostnames = tuple(getattr(machine, "hostnames", ()) or ())
+    if not hostnames:
         return None
-    index = machines_index()
-    answers = {
-        normalize_host(host) for host in (getattr(machine, "hostnames", ()) or ()) if host
-    }
 
-    # Its own declarations are what this machine *is*, not what relates to it —
-    # and one of them is filed under a suffixed key, so a page that listed it
-    # here would report a machine as pointing at itself under a name that looks
-    # like a second machine. They belong to `_identity`.
-    own = set(getattr(machine, "resources", ()) or ()) | {
-        getattr(machine, "declaration", ""),
-        getattr(machine, "route_approval_key", ""),
-    } - {""}
+    # One derivation for the whole catalog rather than one per name: asking
+    # per hostname would re-resolve the same estate nine times over.
+    catalog = {service.hostname: service for service in service_catalog()}
+    measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
+    facets = ("Runtime", "DNS", "Ingress", "Certificate")
 
-    found: list[tuple[str, str, str]] = []
-    for resource in ManagedResource.objects.filter(enabled=True).order_by("kind", "key"):
-        if resource.key in own:
-            continue
-        spec = resource.spec or {}
-        why = ""
-        for field, value in spec.items():
-            # A field holding one endpoint and a field holding several are the
-            # same kind of claim, so both are read the same way.
-            candidates = value if isinstance(value, (list, tuple)) else (value,)
-            hit = next(
-                (
-                    item
-                    for item in candidates
-                    if isinstance(item, str) and item.strip() and index.resolve(item) == name
-                ),
-                None,
-            )
-            if hit is not None:
-                why = f"{field} → {hit}"
-                break
-        if not why:
-            provider = PROVIDERS.get(resource.kind)
-            declared = frozenset(provider.hostnames(spec)) if provider and provider.hostnames else frozenset()
-            served = next(
-                (host for host in sorted(answers) if certificate_covers(host, declared)), ""
-            )
-            if served:
-                why = f"serves {served}"
-        if why:
-            found.append((resource.key, resource.kind, why))
+    def supplied(service, label: str) -> Cell:
+        facet = next((f for f in service.facets if f.label == label), None) if service else None
+        claim = next(iter(facet.claims), None) if facet and facet.present else None
+        if claim is None:
+            return Cell("—", muted=True)
+        return Cell(claim.resource_key, getattr(claim, "url", ""))
 
-    if not found:
-        return None
+    def traffic(hostname: str) -> Cell:
+        reading = measured.get(normalize_host(hostname))
+        if not reading:
+            return Cell("unmeasured", muted=True)
+        return Cell(f"{reading['pageviews']:,}")
+
+    ordered = sorted(
+        hostnames,
+        key=lambda host: (
+            -(measured.get(normalize_host(host), {}).get("pageviews") or -1),
+            host,
+        ),
+    )
     return ServiceSection(
-        id="related",
-        label="What relates to this machine",
-        columns=("Declaration", "Kind", "Because"),
+        id="names",
+        label=f"Names it answers · traffic over {HOST_TRAFFIC_DAYS} days",
+        columns=("Name", *facets, "Pageviews"),
         records=tuple(
             (
-                Cell(key, reverse("control_plane:detail", kwargs={"key": key})),
-                Cell(kind),
-                Cell(why, muted=True),
+                Cell(
+                    hostname,
+                    reverse("control_plane:service", kwargs={"hostname": hostname}),
+                ),
+                *(supplied(catalog.get(hostname), label) for label in facets),
+                traffic(hostname),
             )
-            for key, kind, why in found
+            for hostname in ordered
         ),
+        # The whole graph, rather than more rows here. Every other relationship
+        # this machine has is an edge, and the topology is where edges live.
+        actions=(("See this machine in the topology", reverse("control_plane:topology")),),
     )
 
 
@@ -288,7 +208,6 @@ def _ago(moment) -> str:
 # nothing and does not appear, so the page grows a band only when HQ has one.
 SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
     _identity,
-    _traffic,
-    _related,
+    _names,
     _activity,
 )
