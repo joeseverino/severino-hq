@@ -107,7 +107,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 | `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
 | `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
-| `GET` | `/api/v2/findings/` | Evidence-backed claims, causal rollups, authorized remedies, and canonical investigation links derived from that graph |
+| `GET` | `/api/v2/findings/` | Evidence-backed claims with stable IDs, causal rollups, authorized remedies, and derived understand → act → verify workflows |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -136,6 +136,11 @@ HQ active, rings the credential-free controller doorbell, and lets the
 privileged pull-based controller apply the same cadence contract it always
 uses. The web/API process receives no provider authority, and callers receive
 the due decision that made the request meaningful.
+
+Each serialized finding may include a domain-neutral `workflow`: ordered steps
+whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
+outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
+second executor; every mutation still names and enters a registered capability.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
 label, summary, required permissions, list-query model, stable identifier, and

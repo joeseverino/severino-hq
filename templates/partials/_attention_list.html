@@ -18,6 +18,7 @@ imply the position carries meaning when only the order does.
         {% if entry.item.url %}<a class="attention-title" href="{{ entry.item.url }}">{{ entry.item.title }}</a>{% else %}<span class="attention-title">{{ entry.item.title }}</span>{% endif %}
         {% if entry.item.body %}<p class="attention-detail">{{ entry.item.body }}</p>{% endif %}
         {% if entry.item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ entry.item.action }}</p>{% endif %}
+        {% if entry.item.workflow %}<details class="attention-workflow"><summary>Resolution workflow</summary>{% include "partials/_resolution_workflow.html" with workflow=entry.item.workflow compact=True %}</details>{% endif %}
       </div>
       {% if entry.item.value %}<span class="attention-value">{{ entry.item.value }}</span>{% endif %}
     </li>

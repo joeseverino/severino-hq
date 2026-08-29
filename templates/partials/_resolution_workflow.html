@@ -1,0 +1,34 @@
+{% comment %}
+Domain-neutral claim resolution. `workflow` is application.workflows.WorkflowPlan.
+Actions link to their canonical owner; this partial never executes or derives one.
+{% endcomment %}
+<section class="resolution-workflow{% if compact %} is-compact{% endif %}" aria-label="{{ workflow.label }}">
+  <div class="resolution-workflow-head">
+    <strong>{{ workflow.label }}</strong>
+    <span>{{ workflow.outcome.label }}</span>
+  </div>
+  <ol>
+    {% for step in workflow.steps %}
+      <li class="is-{{ step.state }}">
+        <div class="resolution-workflow-step">
+          <span class="resolution-workflow-number">{{ forloop.counter }}</span>
+          <div>
+            <strong>{{ step.label }}</strong>
+            <p>{{ step.summary }}</p>
+          </div>
+        </div>
+        {% if step.actions %}
+          <div class="finding-actions">
+            {% for action in step.actions %}
+              {% if action.method == "POST" %}
+                <form action="{{ action.url }}" method="post">{% csrf_token %}<button type="submit" class="btn compact{% if action.recommended %} primary{% endif %}">{{ action.label }}</button></form>
+              {% else %}
+                <a class="btn compact{% if action.recommended %} primary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</section>

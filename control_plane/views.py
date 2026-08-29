@@ -1271,6 +1271,7 @@ class FindingsView(LoginRequiredMixin, TemplateView):
             entries.append(
                 {
                     "finding": finding,
+                    "workflow": finding.workflow,
                     "investigations": finding.investigations,
                     "offers": finding.offers,
                     "remedies": tuple(
