@@ -215,3 +215,43 @@ class TrafficSectionTests(TestCase):
         hosts = {f"h{index}.example.com" for index in range(5)}
         with self.assertNumQueries(1):
             self.assertEqual(len(traffic_for_hosts(hosts, days=7)), 5)
+
+
+class OneWindowTests(TestCase):
+    """The page, the graph and the query must mean the same week.
+
+    Two sevens in two modules agree only until someone changes one, and then a
+    service page and the topology node for the same host quietly disagree with
+    nothing on screen to show for it.
+    """
+
+    def test_the_page_and_the_graph_share_one_window(self):
+        from . import service_context, topology
+        from .analytics import HOST_TRAFFIC_DAYS
+
+        self.assertIs(service_context.HOST_TRAFFIC_DAYS, HOST_TRAFFIC_DAYS)
+        self.assertIs(topology.HOST_TRAFFIC_DAYS, HOST_TRAFFIC_DAYS)
+
+    def test_no_module_declares_a_host_window_of_its_own(self):
+        import pathlib
+        import re
+
+        root = pathlib.Path(__file__).resolve().parent
+        owner = root / "analytics.py"
+        declares = re.compile(r"^[A-Z_]*HOST_TRAFFIC_DAYS\s*=", re.MULTILINE)
+        offenders = [
+            path.name
+            for path in sorted(root.glob("*.py"))
+            if path != owner and declares.search(path.read_text())
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_the_template_does_not_restate_the_window(self):
+        import pathlib
+
+        template = (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "templates/control_plane/topology.html"
+        ).read_text()
+        self.assertIn("{{ traffic_window_days }}", template)
+        self.assertNotIn("Traffic · 7 days", template)
