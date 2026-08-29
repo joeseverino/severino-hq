@@ -38,6 +38,19 @@ DEFAULT_WINDOW_DAYS = 1
 CONTENT_TRAFFIC_DAYS = 28
 
 
+def normalize_host(value: str) -> str:
+    """The one spelling of a hostname HQ compares by.
+
+    The join between analytics and the rest of HQ is the name itself, so the
+    rule that decides whether two names are the same name has to be one rule.
+    Written out per caller it drifts silently: a reading stored lowercase never
+    matches a service asked for in mixed case, and the page simply shows no
+    traffic rather than an error anyone would investigate.
+    """
+
+    return value.strip().rstrip(".").lower()
+
+
 def location_of(url: str) -> tuple[str, str]:
     """The measured host and path for one published URL.
 
@@ -49,7 +62,7 @@ def location_of(url: str) -> tuple[str, str]:
     if not url:
         return "", ""
     parsed = urlparse(url.strip())
-    host = (parsed.hostname or "").rstrip(".").lower()
+    host = normalize_host(parsed.hostname or "")
     return host, parsed.path or "/"
 
 
@@ -94,7 +107,7 @@ def record_analytics(
     recorded = {"sites": 0, "rows": 0, "vitals": 0}
     for entry in sites:
         site_tag = str(entry.get("site_tag", "")).strip()
-        host = str(entry.get("host", "")).strip().rstrip(".").lower()
+        host = normalize_host(str(entry.get("host", "")))
         connection_ref = str(entry.get("connection_ref", ""))[:100]
         if not site_tag or not host:
             continue
@@ -243,6 +256,79 @@ def _traffic_for_locations(
         for row in rows
         if (key := (row["site__host"].lower(), row["value"])) in locations
     }
+
+
+def traffic_for_hosts(
+    hosts: set[str], *, days: int = DEFAULT_WINDOW_DAYS
+) -> dict[str, dict[str, int]]:
+    """Traffic for whole hosts in one bounded query.
+
+    The host-grain sibling of :func:`_traffic_for_locations`. A service in HQ
+    *is* a hostname, and an observed connection target is one too, so a host is
+    the key the rest of HQ already identifies these things by -- no new
+    identifier, and no table joining one to the other.
+
+    Summed over the path dimension rather than across every dimension, for the
+    same reason :func:`site_totals` does: a row exists once per dimension, so
+    adding them all would count each visit six times.
+    """
+
+    hosts = {normalize_host(host) for host in hosts if host and host.strip()}
+    if not hosts:
+        return {}
+    start, end = _window(days)
+    rows = (
+        RumDaily.objects.filter(
+            site__host__in=hosts,
+            dimension=RumDaily.Dimension.PATH,
+            date__gte=start,
+            date__lte=end,
+        )
+        .values("site__host")
+        .annotate(
+            pageviews=Sum("pageviews"),
+            visits=Sum("visits"),
+            sample_interval=Max("sample_interval"),
+        )
+    )
+    return {
+        row["site__host"].lower(): {
+            "pageviews": row["pageviews"] or 0,
+            "visits": row["visits"] or 0,
+            # Carried rather than hidden, as everywhere else: a figure
+            # extrapolated from one beacon in ten is a different claim to a count.
+            "sample_interval": row["sample_interval"] or 1,
+        }
+        for row in rows
+        if row["site__host"]
+    }
+
+
+def attach_host_traffic(items, *, attribute: str = "hostname", days: int = DEFAULT_WINDOW_DAYS):
+    """Give each item carrying a hostname what that host earned.
+
+    Annotates in place and asks once for the whole page, exactly as
+    :func:`attach_traffic` does for published content -- the N+1 is the thing
+    worth avoiding, not the extra column.
+
+    ``pageviews`` is None where nothing was measured, which a template can tell
+    from a real zero: one means nobody visited, the other means nobody looked.
+    A host HQ knows about but Cloudflare never saw is the second case, and it
+    is the more interesting one -- it is a site nothing is measuring.
+    """
+
+    items = list(items)
+    if not items:
+        return items
+    hosts = {str(getattr(item, attribute, "") or "") for item in items}
+    traffic = traffic_for_hosts(hosts, days=days)
+    for item in items:
+        host = normalize_host(str(getattr(item, attribute, "") or ""))
+        measured = traffic.get(host)
+        item.pageviews = measured["pageviews"] if measured else None
+        item.visits = measured["visits"] if measured else None
+        item.sample_interval = measured["sample_interval"] if measured else None
+    return items
 
 
 def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
