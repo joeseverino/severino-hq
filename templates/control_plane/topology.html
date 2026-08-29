@@ -22,6 +22,24 @@
 
 {% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary }}</p>{% endif %}
 
+{% if topology_trace %}
+  <section class="topology-trace-bar" id="trace" tabindex="-1" aria-label="Active topology trace">
+    <div>
+      <span class="eyebrow">Bounded trace</span>
+      <strong>{{ topology_trace_focus.label }}</strong>
+      <span class="muted">{{ topology_trace.direction }} · {{ topology_trace.depth }} hop{{ topology_trace.depth|pluralize }}</span>
+    </div>
+    <nav class="topology-trace-controls" aria-label="Trace direction">
+      {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+    </nav>
+    <nav class="topology-trace-controls" aria-label="Trace depth">
+      <span class="muted">Depth</span>
+      {% for item in trace_depth_links %}<a class="scope-chip{% if topology_trace.depth == item.depth %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth }}</a>{% endfor %}
+    </nav>
+    <a class="btn ghost compact" href="{{ trace_reset_url }}">Clear trace</a>
+  </section>
+{% endif %}
+
 <div class="topology-summary" role="group" aria-label="Topology summary">
   <span><strong>{{ topology.nodes|length }}</strong> nodes</span>
   <span><strong>{{ topology.edges|length }}</strong> relationships</span>
@@ -66,7 +84,12 @@
             >
               <summary>
                 <span class="topology-node-title">
-                  <strong>{{ item.node.label }}</strong>
+                  {% comment %}
+                    The anchor sits inside the title's strong rather than replacing it:
+                    the title stays the node's name for both the stylesheet and the
+                    status line the explorer writes from it.
+                  {% endcomment %}
+                  <strong>{% if item.node.url %}<a class="topology-node-link" href="{{ item.node.url }}">{{ item.node.label }}</a>{% else %}{{ item.node.label }}{% endif %}</strong>
                   <small>{{ item.node.subtitle }}</small>
                 </span>
                 <span class="topology-node-degree" title="{{ item.degree }} direct relationship{{ item.degree|pluralize }}">{{ item.degree }}</span>
@@ -74,6 +97,91 @@
               <div class="topology-node-body">
                 {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
                 {% if item.node.detail %}<p class="muted">{{ item.node.detail }}</p>{% endif %}
+
+                {% comment %}
+                  Triage, in the order an operator asks it: is anyone converging this,
+                  has a reconcile run against this exact declaration, what did the last
+                  reading decline to confirm, and how old is that reading.
+                {% endcomment %}
+                <dl class="topology-facts">
+                  {% if not item.node.managed %}
+                    <div class="topology-fact">
+                      <dt>Management</dt>
+                      <dd><span class="pill">Unmanaged</span> Nobody asked for this to be true, so a difference here is not a finding.</dd>
+                    </div>
+                  {% endif %}
+                  {% if item.node.declared_revision or item.node.observed_revision %}
+                    <div class="topology-fact">
+                      <dt>Convergence</dt>
+                      <dd>
+                        {% if not item.node.observed_revision %}
+                          <span class="pill pill-attention">Never confirmed</span>
+                          Declaration {{ item.node.declared_revision }} has never been read back.
+                        {% elif item.node.observed_revision == item.node.declared_revision %}
+                          <span class="pill pill-good">Reconciled</span>
+                          A reconcile ran against declaration {{ item.node.declared_revision }} — the current one.
+                        {% else %}
+                          <span class="pill pill-attention">Behind</span>
+                          Declared {{ item.node.declared_revision }}, last confirmed {{ item.node.observed_revision }} — the declaration moved since anything agreed with it.
+                        {% endif %}
+                      </dd>
+                    </div>
+                  {% endif %}
+                  {% if item.node.unconfirmed_fields %}
+                    <div class="topology-fact">
+                      <dt>Unconfirmed by the last reading</dt>
+                      <dd>
+                        <ul class="topology-field-list">
+                          {% for field in item.node.unconfirmed_fields %}<li><code>{{ field }}</code></li>{% endfor %}
+                        </ul>
+                        <span class="muted">Asserted here and not echoed back — unverified, not agreed.</span>
+                      </dd>
+                    </div>
+                  {% endif %}
+                  <div class="topology-fact">
+                    <dt>Last observed</dt>
+                    <dd>
+                      {% if item.observed_age %}
+                        <time datetime="{{ item.node.observed_at }}" title="{{ item.node.observed_at }}">{{ item.observed_age|timesince }} ago</time>
+                        {% if item.node.reason %}<span class="muted">· {{ item.node.reason }}</span>{% endif %}
+                      {% else %}
+                        <span class="muted">Never — nothing observes this, so its health describes no reading.</span>
+                      {% endif %}
+                    </dd>
+                  </div>
+                </dl>
+
+                {% comment %}
+                  The edge a node stands at the end of, stated from where it stands.
+                  Grouping by direction keeps an outgoing "Carries" from reading like
+                  an incoming one, and every row walks the graph to the other end.
+                {% endcomment %}
+                {% if item.relations %}
+                  {% regroup item.relations by direction as relation_groups %}
+                  <div class="topology-relation-set">
+                    {% for group in relation_groups %}
+                      <span class="eyebrow topology-relation-heading">{% if group.grouper == "out" %}Outgoing{% else %}Incoming{% endif %}</span>
+                      <ul class="topology-relation-list topology-relation-{{ group.grouper }}">
+                        {% for row in group.list %}
+                          <li class="topology-relation">
+                            <a class="topology-relation-link" href="{{ row.url }}">
+                              <span class="topology-relation-arrow" aria-hidden="true">{% if group.grouper == "out" %}&rarr;{% else %}&larr;{% endif %}</span>
+                              <span class="visually-hidden">{% if group.grouper == "out" %}Outgoing:{% else %}Incoming:{% endif %}</span>
+                              <span class="topology-relation-verb">{{ row.label }}</span>
+                              <span class="topology-relation-other">{{ row.other.label }}</span>
+                              <span class="topology-relation-kind">{{ row.other.kind }}</span>
+                            </a>
+                            {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title }}</span>{% endif %}
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="muted">No derived relationships — nothing declared or observed reaches this node.</p>
+                {% endif %}
+
+                {% if topology_trace %}<p class="topology-hop"><span class="pill">Hop {{ item.hop }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
                 {% if item.node.actions %}
                   <div class="topology-node-actions">
                     {% for action in item.node.actions %}
@@ -88,6 +196,10 @@
                     {% endfor %}
                   </div>
                 {% endif %}
+                <div class="topology-node-actions" aria-label="Trace from {{ item.node.label }}">
+                  <a class="btn ghost compact" href="{{ item.inbound_url }}">Trace incoming</a>
+                  <a class="btn ghost compact" href="{{ item.outbound_url }}">Trace outgoing</a>
+                </div>
               </div>
             </details>
           {% empty %}
@@ -113,9 +225,9 @@
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td data-label="From"><a href="?focus={{ item.source.id|urlencode }}#map">{{ item.source.label }}</a><br><code>{{ item.source.kind }}</code></td>
+            <td data-label="From"><a href="?focus={{ item.source.id|urlencode }}#trace">{{ item.source.label }}</a><br><code>{{ item.source.kind }}</code></td>
             <td data-label="Relationship">{{ item.edge.label }}</td>
-            <td data-label="To"><a href="?focus={{ item.target.id|urlencode }}#map">{{ item.target.label }}</a><br><code>{{ item.target.kind }}</code></td>
+            <td data-label="To"><a href="?focus={{ item.target.id|urlencode }}#trace">{{ item.target.label }}</a><br><code>{{ item.target.kind }}</code></td>
             <td data-label="State"><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
           </tr>
         {% empty %}

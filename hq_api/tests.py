@@ -703,13 +703,17 @@ class TransportTests(TestCase):
             patch("application.plugins.plugin_connection_specs", return_value=()),
         ):
             response = self.client.get(
-                "/api/v2/topology/",
+                "/api/v2/topology/?focus=resource%3Aapi-zone&direction=inbound&depth=2",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
             )
 
         self.assertEqual(response.status_code, 200)
         topology = response.json()["data"]
-        self.assertEqual(topology["schema_version"], 1)
+        self.assertEqual(topology["schema_version"], 2)
+        self.assertEqual(topology["trace"]["focus"], "resource:api-zone")
+        self.assertEqual(topology["trace"]["direction"], "inbound")
+        self.assertEqual(topology["trace"]["depth"], 2)
+        self.assertEqual(topology["trace"]["hops"][0], {"node": "resource:api-zone", "hop": 0})
         self.assertIn("resource:api-zone", {node["id"] for node in topology["nodes"]})
         self.assertTrue(topology["edges"])
         resource = next(
@@ -717,6 +721,19 @@ class TransportTests(TestCase):
         )
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
         self.assertNotIn("token", json.dumps(topology).lower())
+
+    def test_unknown_topology_focus_is_explicitly_not_applied(self):
+        with (
+            _serving(),
+            patch("application.plugins.plugin_connection_specs", return_value=()),
+        ):
+            response = self.client.get(
+                "/api/v2/topology/?focus=not-a-node&direction=outbound&depth=999",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["data"]["trace"])
 
     def test_topology_requires_read_before_deriving_any_state(self):
         with (

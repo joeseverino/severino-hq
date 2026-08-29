@@ -340,7 +340,7 @@ document.querySelectorAll("dialog.modal").forEach((dialog) => {
 // field remains a normal GET form; this only removes the click needed to reach
 // it and leaves local table search's `/` shortcut untouched.
 document.addEventListener("keydown", (event) => {
-  if (!(event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
+  if (!(event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
   if (event.target.closest("input, textarea, select, [contenteditable]")) return;
   const search = document.querySelector(".global-search input[type=search]");
   if (!search) return;
@@ -949,58 +949,91 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
   const status = workspace.querySelector("[data-topology-status]");
   const reset = workspace.querySelector("[data-topology-reset]");
-  let focused = "";
+  let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
+    ? workspace.dataset.focus : "";
 
   const rememberFocus = (nodeId) => {
     const url = new URL(window.location.href);
     if (nodeId) url.searchParams.set("focus", nodeId);
-    else url.searchParams.delete("focus");
+    else {
+      url.searchParams.delete("focus");
+      url.searchParams.delete("direction");
+      url.searchParams.delete("depth");
+    }
     window.history.replaceState({}, "", url);
   };
 
-  const focus = (nodeId, remember = true) => {
-    focused = nodes.some((node) => node.dataset.topologyNode === nodeId) ? nodeId : "";
+  const render = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
+    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
     workspace.classList.toggle("has-focus", Boolean(selected));
     nodes.forEach((node) => {
       const id = node.dataset.topologyNode;
+      const matchesFilter = shownKinds.has(node.dataset.topologyNodeKind)
+        && terms.every((term) => node.dataset.topologySearchText.toLocaleLowerCase().includes(term));
+      const inNeighborhood = !selected || id === focused || related.has(id);
+      node.hidden = !matchesFilter || !inNeighborhood;
       node.classList.toggle("is-selected", id === focused);
       node.classList.toggle("is-related", related.has(id));
-      node.classList.toggle(
-        "is-dimmed",
-        Boolean(selected) && id !== focused && !related.has(id) && !node.open,
-      );
-    });
-    edges.forEach((edge) => {
-      const ends = edge.dataset.topologyEdge.split(" ");
-      edge.classList.toggle("is-related", Boolean(selected) && ends.includes(focused));
-    });
-    if (status) {
-      status.textContent = selected
-        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : "Select a node to isolate its immediate relationships. Open it for actions and detail.";
-    }
-    if (remember) rememberFocus(focused);
-  };
-
-  const filter = () => {
-    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
-    nodes.forEach((node) => {
-      const haystack = node.dataset.topologySearchText.toLocaleLowerCase();
-      node.hidden = !shownKinds.has(node.dataset.topologyNodeKind)
-        || !terms.every((term) => haystack.includes(term));
     });
     lanes.forEach((lane) => {
-      const visible = [...lane.querySelectorAll("[data-topology-node]")].filter((node) => !node.hidden);
+      const visible = [...lane.querySelectorAll("[data-topology-node]")]
+        .filter((node) => !node.hidden);
       lane.hidden = visible.length === 0;
       const count = lane.querySelector("[data-topology-count]");
       if (count) count.textContent = visible.length;
     });
+    edges.forEach((edge) => {
+      const ends = edge.dataset.topologyEdge.split(" ");
+      const touchesFocus = Boolean(selected) && ends.includes(focused);
+      edge.hidden = Boolean(selected) && !touchesFocus;
+      edge.classList.toggle("is-related", touchesFocus);
+    });
+    if (status) {
+      const visible = nodes.filter((node) => !node.hidden).length;
+      status.textContent = selected
+        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
+        : `${visible} of ${nodes.length} nodes shown. Select one to isolate its immediate relationships.`;
+    }
+  };
+
+  const focus = (nodeId, remember = true) => {
+    focused = nodes.some((node) => node.dataset.topologyNode === nodeId) ? nodeId : "";
+    render();
+    if (remember) rememberFocus(focused);
+    if (focused && remember) {
+      nodes.find((node) => node.dataset.topologyNode === focused)?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  };
+
+  const filter = () => {
+    render();
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     if (selected?.hidden) focus("");
   };
+
+  // A node title is a link inside a <summary>, so one click can mean two
+  // things: follow it, and toggle the disclosure. Blink suppresses the toggle
+  // for a click on an interactive descendant; other engines do both, which
+  // navigates away from a node it just expanded. preventDefault cancels the
+  // toggle and the navigation together, so the navigation is reissued here --
+  // and only for the plain click, leaving middle-click and modified clicks to
+  // the browser, where opening a new tab was the whole intent.
+  workspace.addEventListener("click", (event) => {
+    const link = event.target.closest?.("summary a[href]");
+    if (!link) return;
+    event.stopPropagation();
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.location.assign(link.href);
+  });
 
   nodes.forEach((node) => {
     node.addEventListener("toggle", () => {
@@ -1009,6 +1042,8 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
           if (other !== node) other.removeAttribute("open");
         });
         focus(node.dataset.topologyNode);
+      } else if (focused === node.dataset.topologyNode) {
+        focus("");
       }
     });
   });
@@ -1022,8 +1057,13 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     if (event.key === "Escape") {
       search.value = "";
       filter();
+    } else if (event.key === "Enter") {
+      const first = nodes.find((node) => !node.hidden);
+      if (first) {
+        first.open = true;
+        first.querySelector("summary")?.focus();
+      }
     }
   });
-  filter();
-  if (workspace.dataset.focus) focus(workspace.dataset.focus, false);
+  render();
 });

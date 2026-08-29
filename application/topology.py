@@ -96,6 +96,16 @@ class Topology:
     edges: tuple[TopologyEdge, ...]
 
 
+@dataclass(frozen=True)
+class TopologyTrace:
+    """A bounded traversal applied to an already-authorized topology."""
+
+    focus: str
+    direction: str
+    depth: int
+    hops: tuple[tuple[str, int], ...]
+
+
 _KIND_ORDER = {
     "controller": 0,
     "connection": 1,
@@ -104,6 +114,9 @@ _KIND_ORDER = {
     "target": 4,
     "dependency": 5,
 }
+
+TRACE_DIRECTIONS = ("inbound", "outbound", "both")
+MAX_TRACE_DEPTH = 5
 
 
 def _permitted(principal: Principal, capability: Capability | str) -> bool:
@@ -122,7 +135,7 @@ def _derived_id(kind: str, *parts: str) -> str:
 
 
 def _focus_url(node_id: str) -> str:
-    return f"{reverse('control_plane:topology')}?{urlencode({'focus': node_id})}#map"
+    return f"{reverse('control_plane:topology')}?{urlencode({'focus': node_id})}#trace"
 
 
 def _edge(source: str, target: str, kind: str, label: str, status="neutral"):
@@ -638,21 +651,99 @@ def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
     )
 
 
+def apply_trace(
+    topology: Topology,
+    focus: str,
+    *,
+    direction: str = "both",
+    depth: int | str = 2,
+) -> tuple[Topology, TopologyTrace | None]:
+    """Select a bounded dependency neighborhood without deriving new state.
+
+    ``outbound`` follows the graph's declared source-to-target direction;
+    ``inbound`` answers what points at the focus. Unknown inputs deliberately
+    leave the projection unchanged and report no applied trace, matching the
+    standing-lens contract used by every delivery adapter.
+    """
+
+    node_ids = {node.id for node in topology.nodes}
+    if focus not in node_ids:
+        return topology, None
+    selected_direction = direction if direction in TRACE_DIRECTIONS else "both"
+    try:
+        selected_depth = int(depth)
+    except (TypeError, ValueError):
+        selected_depth = 2
+    selected_depth = min(max(selected_depth, 1), MAX_TRACE_DEPTH)
+
+    adjacent: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+    for edge in topology.edges:
+        if selected_direction in ("outbound", "both"):
+            adjacent[edge.source].add(edge.target)
+        if selected_direction in ("inbound", "both"):
+            adjacent[edge.target].add(edge.source)
+
+    hops = {focus: 0}
+    frontier = {focus}
+    for hop in range(1, selected_depth + 1):
+        frontier = {
+            neighbor
+            for node_id in frontier
+            for neighbor in adjacent[node_id]
+            if neighbor not in hops
+        }
+        if not frontier:
+            break
+        hops.update({node_id: hop for node_id in frontier})
+
+    narrowed = Topology(
+        tuple(node for node in topology.nodes if node.id in hops),
+        tuple(
+            edge
+            for edge in topology.edges
+            if edge.source in hops and edge.target in hops
+        ),
+    )
+    trace = TopologyTrace(
+        focus=focus,
+        direction=selected_direction,
+        depth=selected_depth,
+        hops=tuple(sorted(hops.items(), key=lambda item: (item[1], item[0]))),
+    )
+    return narrowed, trace
+
+
 def serialize_topology(
-    topology: Topology, *, lens: TopologyLens | None = None
+    topology: Topology,
+    *,
+    lens: TopologyLens | None = None,
+    trace: TopologyTrace | None = None,
 ) -> dict[str, Any]:
     counts: dict[str, int] = {}
     for node in topology.nodes:
         counts[node.kind] = counts.get(node.kind, 0) + 1
     return {
         "ok": True,
-        "schema_version": 1,
+        "schema_version": 2,
         # Which lens produced this payload, and every lens that could have.
         "lens": lens.name if lens else None,
         "lenses": [
             {"name": item.name, "label": item.label, "summary": item.summary}
             for item in TOPOLOGY_LENSES
         ],
+        "trace": (
+            {
+                "focus": trace.focus,
+                "direction": trace.direction,
+                "depth": trace.depth,
+                "hops": [
+                    {"node": node_id, "hop": hop}
+                    for node_id, hop in trace.hops
+                ],
+            }
+            if trace
+            else None
+        ),
         "summary": {
             "nodes": len(topology.nodes),
             "edges": len(topology.edges),
@@ -663,11 +754,21 @@ def serialize_topology(
     }
 
 
-def topology(*, principal: Principal, lens: str = "") -> dict[str, Any]:
+def topology(
+    *,
+    principal: Principal,
+    lens: str = "",
+    focus: str = "",
+    direction: str = "both",
+    depth: int | str = 2,
+) -> dict[str, Any]:
     """Return the shared serialized projection for machine delivery adapters."""
 
     selected = lens_for(lens) if lens else None
     projection = derive_topology(principal=principal)
     if selected is not None:
         projection = apply_lens(projection, selected)
-    return serialize_topology(projection, lens=selected)
+    projection, trace = apply_trace(
+        projection, focus, direction=direction, depth=depth
+    )
+    return serialize_topology(projection, lens=selected, trace=trace)

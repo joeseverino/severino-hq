@@ -183,11 +183,15 @@ class ServiceTests(TestCase):
         with mock.patch(
             "application.plugins.plugin_connection_specs", return_value=()
         ):
-            topology = services.get_topology()
+            topology = services.get_topology(
+                focus="resource:mcp-zone", direction="inbound", depth=2
+            )
 
         self.assertIn(
             "resource:mcp-zone", {node["id"] for node in topology["nodes"]}
         )
+        self.assertEqual(topology["trace"]["focus"], "resource:mcp-zone")
+        self.assertEqual(topology["trace"]["direction"], "inbound")
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
         self.assertNotIn("secret", json.dumps(topology).lower())
 
