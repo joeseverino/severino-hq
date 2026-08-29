@@ -212,6 +212,11 @@ class FindingsTests(TestCase):
         self.assertIn(
             "next=%2Finfrastructure%2Ffindings%2F", general[0].remedies[0].url
         )
+        self.assertEqual(
+            [step.phase for step in general[0].workflow.steps],
+            ["understand", "act", "verify"],
+        )
+        self.assertEqual(general[0].workflow.outcome.kind, "claim_absent")
         self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
 
     def test_a_shared_ability_does_not_guess_between_two_controllers(self):
@@ -650,6 +655,8 @@ class FindingsTests(TestCase):
         self.assertEqual(whole["schema_version"], 2)
         self.assertTrue(any(item["offers"] for item in whole["findings"]))
         self.assertTrue(any(item["investigations"] for item in whole["findings"]))
+        self.assertTrue(any(item["workflow"] for item in whole["findings"]))
+        self.assertTrue(all(item["id"] for item in whole["findings"]))
         self.assertTrue(
             all(
                 remedy["method"] == "POST"

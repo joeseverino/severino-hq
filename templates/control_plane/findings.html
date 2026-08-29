@@ -33,7 +33,7 @@
           <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity }}</span>
           <h2>{{ entry.finding.title }}</h2>
         </div>
-        {% if entry.investigations %}
+        {% if entry.investigations and not entry.workflow %}
           <div class="finding-actions">
             {% for action in entry.investigations %}<a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
           </div>
@@ -45,7 +45,9 @@
           {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
         </dl>
       {% endif %}
-      {% if entry.offers or entry.remedies %}
+      {% if entry.workflow %}
+        {% include "partials/_resolution_workflow.html" with workflow=entry.workflow %}
+      {% elif entry.offers or entry.remedies %}
         <div class="finding-offers">
           <strong>What HQ can do now</strong>
           <div class="finding-actions">

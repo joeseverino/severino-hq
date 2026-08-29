@@ -41,18 +41,26 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 from django.utils import timezone
 
 from .action_links import ActionLink, action_with_return, topology_investigation_links
 from .capabilities import capability_specs
 from .cadence import sweep_interval
+from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .topology import (
     _STALE_AFTER,
     Topology,
     TopologyNode,
     derive_topology,
+)
+from .workflows import (
+    WorkflowPlan,
+    claim_identity,
+    claim_resolution_plan,
+    serialize_workflow,
 )
 
 
@@ -64,6 +72,7 @@ from .topology import (
 # the sweep rather than any one record. Three, because one missed tick is a
 # restart and two is a slow provider.
 _KIND_SILENT_AFTER = 3
+_CLAIM_NAMESPACE = "infrastructure.finding"
 
 
 @dataclass(frozen=True)
@@ -104,6 +113,7 @@ class Finding:
     # Kinds this higher-order claim explains. They remain exact machine facts,
     # while an effortless surface can lead with the shared cause once.
     affected_scopes: tuple[str, ...] = ()
+    workflow: WorkflowPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -729,6 +739,51 @@ def _resolved(
                 auto=False,
             )
         )
+    resolved_remedies = tuple(kept)
+    offers = tuple(
+        action
+        for action in (subject.actions if subject else ())
+        if action.effect == "read" and action.method == "GET"
+    )
+    investigations = topology_investigation_links(subject.id) if subject else ()
+    remedy_actions = tuple(
+        ActionLink(
+            "remedy",
+            remedy.label,
+            remedy.effect,
+            remedy.url,
+            method=remedy.method,
+            capability=remedy.capability,
+            target=remedy.target,
+            recommended=True,
+        )
+        for remedy in resolved_remedies
+        if remedy.url
+    )
+    findings_url = route_url("control_plane:findings")
+    verification = (
+        ActionLink(
+            "verify",
+            "Recheck from current facts",
+            "read",
+            f"{findings_url}?{urlencode({'rule': finding.rule})}",
+            reason=(
+                "HQ re-derives the same rule from the newest authorized topology."
+            ),
+        )
+        if findings_url
+        else None
+    )
+    workflow = claim_resolution_plan(
+        namespace=_CLAIM_NAMESPACE,
+        rule=finding.rule,
+        subject=finding.subject,
+        scope=finding.scope,
+        investigations=investigations,
+        offers=offers,
+        remedies=remedy_actions,
+        verification=verification,
+    )
     return Finding(
         rule=finding.rule,
         subject=finding.subject,
@@ -736,15 +791,12 @@ def _resolved(
         severity=finding.severity,
         explanation=finding.explanation,
         evidence=finding.evidence,
-        remedies=tuple(kept),
-        offers=tuple(
-            action
-            for action in (subject.actions if subject else ())
-            if action.effect == "read" and action.method == "GET"
-        ),
-        investigations=topology_investigation_links(subject.id) if subject else (),
+        remedies=resolved_remedies,
+        offers=offers,
+        investigations=investigations,
         scope=finding.scope,
         affected_scopes=finding.affected_scopes,
+        workflow=workflow,
     )
 
 
@@ -864,6 +916,9 @@ def derive_findings(
 
 def _serialize(finding: Finding) -> dict[str, Any]:
     return {
+        "id": claim_identity(
+            _CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope
+        ),
         "rule": finding.rule,
         "subject": finding.subject or None,
         "scope": finding.scope or None,
@@ -888,6 +943,7 @@ def _serialize(finding: Finding) -> dict[str, Any]:
         ],
         "offers": [asdict(action) for action in finding.offers],
         "investigations": [asdict(action) for action in finding.investigations],
+        "workflow": serialize_workflow(finding.workflow),
     }
 
 

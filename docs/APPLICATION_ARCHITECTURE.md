@@ -85,7 +85,12 @@ pulls work and decides what is due, so a natural remediation loop does not
 reverse the trust direction or create a second scheduler. Contextual command
 links carry a same-origin return path through Command Center's result screen,
 so execution stays on the canonical command spine without losing the workflow
-that proposed it. Analytics freshness follows the
+that proposed it. The resolution-plan primitive itself is domain-neutral and
+exported through `hq_sdk.workflows`: a domain emits a stable claim, supporting
+actions, authorized remedies, and its own verification action; HQ derives the
+ordered understand → act → verify projection and the machine-readable
+`claim_absent` completion condition. Infrastructure is merely its first
+producer. Analytics freshness follows the
 same shape: successful site-day coverage is a fact, HQ derives missing windows,
 and the controller executes that plan without owning a second backfill policy.
 
