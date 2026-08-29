@@ -731,6 +731,27 @@ def _policy_layers(
         )
         return (layer,) if layer else ()
 
+    if forwarder is None:
+        # A reverse proxy on the same host forwards from a loopback address,
+        # which the tailnet never sees and cannot have a grant about. Asked as
+        # "device -> forwarder" the question has no target, so both layers
+        # returned nothing and the whole boundary disappeared from the page --
+        # on the deployment where it matters most.
+        #
+        # The hop the policy actually governs is the one the caller dialled:
+        # their device to the node HQ runs on, on the port they connected to.
+        # That is one tailnet hop, so it is one layer. Claiming a second for
+        # proxy-to-HQ would describe a loopback socket as a policed crossing.
+        layer = _policy_layer(
+            "policy",
+            "The policy admits this device",
+            device,
+            serves,
+            443 if request.is_secure() else 80,
+            known,
+        )
+        return (layer,) if layer else ()
+
     edge = _policy_layer(
         "edge-policy",
         "The policy admits you to the proxy",

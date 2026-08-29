@@ -875,3 +875,62 @@ class CarriageTests(TestCase):
         local = self._connection(direct_endpoint="10.9.9.9:41641")
         markup = render_to_string("core/_connection_panel.html", {"connection": local})
         self.assertNotIn("data-peering-detail", markup)
+
+
+@override_settings(
+    ALLOWED_HOSTS=["hq.example.test", "testserver"],
+    SEVERINO_TRUSTED_PROXIES=["127.0.0.1/32"],
+)
+class LocalProxyPolicyTests(TestCase):
+    """A reverse proxy on HQ's own host still crosses one policed hop.
+
+    The production shape: the proxy runs beside HQ and forwards from a loopback
+    address. Asked as "device -> forwarder" the question has no target, because
+    the tailnet has never heard of 127.0.0.1 -- so both policy layers returned
+    nothing and the Zero trust policy boundary vanished from the page entirely,
+    on the deployment where it matters most.
+
+    The hop the policy governs is the one the caller dialled: their device to
+    the node HQ runs on. One tailnet hop, so one layer -- claiming a second for
+    proxy-to-HQ would describe a loopback socket as a policed crossing.
+    """
+
+    def setUp(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
+            a_device(
+                "hq-host",
+                "100.64.0.9",
+                observer=True,
+                reach=[(443, ["someone@example.test"])],
+            ),
+        )
+
+    def found(self):
+        request = RequestFactory().get(
+            "/connection/", secure=True, HTTP_HOST="hq.example.test",
+            REMOTE_ADDR="127.0.0.1", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+        )
+        request.user = get_user_model()(
+            username="someone", email="someone@example.test"
+        )
+        return connection(request)
+
+    def policy_layers(self):
+        return [
+            layer for layer in self.found().layers
+            if layer.boundary == "Zero trust policy"
+        ]
+
+    def test_the_boundary_does_not_disappear_behind_a_local_proxy(self):
+        self.assertTrue(self.policy_layers())
+
+    def test_it_asks_about_the_hop_the_caller_actually_dialled(self):
+        layer = self.policy_layers()[0]
+
+        self.assertEqual(layer.id, "policy")
+        self.assertTrue(layer.holds)
+        self.assertTrue(layer.conclusive)
+
+    def test_it_does_not_invent_a_second_hop_for_a_loopback_socket(self):
+        self.assertEqual(len(self.policy_layers()), 1)
