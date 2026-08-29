@@ -728,3 +728,81 @@ class AutoRepairTests(TestCase):
             idempotency_key__startswith="finding:"
         )
         self.assertEqual(operation.state, OperationRequest.State.QUEUED)
+
+
+class ReachedButUnmeasuredTests(TestCase):
+    """The first claim neither half of HQ can make on its own.
+
+    Infrastructure knows what a connection reaches; analytics knows what it
+    counts. The finding lives in the gap between them, and the gate is a
+    measured sibling -- most things HQ reaches are containers that will never
+    carry a beacon, and a rule that cannot stay quiet is a lens, not a finding.
+    """
+
+    def _measure(self, host):
+        from analytics.models import AnalyticsSite, RumDaily
+
+        site = AnalyticsSite.objects.create(site_tag=f"tag-{host}", host=host)
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=1),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=250,
+            visits=200,
+            sample_interval=1,
+        )
+
+    def _raised(self, *hosts):
+        from .connections import ConnectionInstance, ConnectionLink, ConnectionSpec
+
+        spec = ConnectionSpec(
+            "example.reach", "Reaching routes",
+            "A synthetic connection family that reaches named hosts.",
+            Capability.READ,
+            lambda: (
+                ConnectionInstance(
+                    "one", "One", "example", "good", "Healthy",
+                    targets=tuple(ConnectionLink(host) for host in hosts),
+                ),
+            ),
+        )
+        principal = Principal("reader", "test", frozenset({Capability.READ}))
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            projection = derive_topology(principal=principal)
+        return [
+            f
+            for f in derive_findings(projection, principal=principal)
+            if f.rule == "reached-but-unmeasured"
+        ]
+
+    def test_an_unmeasured_name_beside_a_measured_one_is_the_finding(self):
+        self._measure("counted.example.com")
+
+        raised = self._raised("counted.example.com", "uncounted.example.com")
+
+        self.assertEqual(len(raised), 1)
+        self.assertIn("uncounted.example.com", raised[0].title)
+        self.assertNotIn("counted.example.com", raised[0].title.replace("uncounted", ""))
+
+    def test_a_connection_nothing_measures_says_nothing(self):
+        # Analytics simply is not pointed at this connection. That is not a
+        # per-name gap, and saying it about each name would bury the queue.
+        self.assertEqual(self._raised("a.example.com", "b.example.com"), [])
+
+    def test_a_fully_measured_connection_says_nothing(self):
+        self._measure("a.example.com")
+        self._measure("b.example.com")
+
+        self.assertEqual(self._raised("a.example.com", "b.example.com"), [])
+
+    def test_the_evidence_names_what_reaches_it(self):
+        self._measure("counted.example.com")
+
+        found = self._raised("counted.example.com", "uncounted.example.com")[0]
+        evidence = dict(found.evidence)
+
+        self.assertEqual(evidence["Measured"], "nothing reports traffic for this name")
+        self.assertTrue(evidence["Reached by"])
