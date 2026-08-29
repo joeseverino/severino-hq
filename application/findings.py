@@ -428,6 +428,71 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
     )
 
 
+def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
+    """A name a connection reports reaching that nothing is measuring.
+
+    The first claim here that neither half of HQ can make alone. Infrastructure
+    knows a connection reaches this name; analytics knows what every name it
+    watches served. Put beside each other they answer a question neither was
+    asked: which of the things we run is nobody watching.
+
+    ``None`` and zero are the whole rule. A measured site with no visitors is a
+    fact about the site; an unmeasured one is a fact about HQ, and only the
+    second is a gap someone can close.
+
+    Restricted to observed targets on purpose. A declaration is a statement of
+    intent and may name something not serving anything yet, but a target is a
+    name a live connection said it *reaches* -- so it is answering, and nothing
+    is counting.
+
+    Gated on a measured sibling, the same way a skipped record is judged against
+    the sweep that confirmed its siblings. Most things HQ reaches are containers
+    and proxy entries that will never carry a web beacon, and saying so about
+    each would bury the queue in claims nobody can act on. But a connection with
+    four measured names and a fifth without one is a gap someone can close, and
+    that is the only shape this fires on.
+    """
+
+    measured_peers: dict[str, bool] = {}
+    reached_by: dict[str, str] = {}
+    for edge in estate.topology.edges:
+        if edge.kind != "reaches":
+            continue
+        reached_by.setdefault(edge.target, edge.source)
+    by_id = {node.id: node for node in estate.nodes()}
+    for target_id, connection_id in reached_by.items():
+        node = by_id.get(target_id)
+        if node is not None and node.pageviews is not None:
+            measured_peers[connection_id] = True
+
+    return tuple(
+        Finding(
+            rule="reached-but-unmeasured",
+            subject=node.id,
+            title=f"{node.label} is reachable and unmeasured",
+            severity="attention",
+            explanation=(
+                "A live connection reports reaching this name, and other names "
+                "on the same connection do report traffic. Nothing here says the "
+                "site is idle -- it says nobody is counting, so a drop in use "
+                "would look exactly like a steady one."
+            ),
+            evidence=(
+                (
+                    "Reached by",
+                    (by_id.get(reached_by[node.id]).label if by_id.get(reached_by[node.id]) else "a connection"),
+                ),
+                ("Measured", "nothing reports traffic for this name"),
+            ),
+        )
+        for node in estate.nodes()
+        if node.kind == "target"
+        and node.pageviews is None
+        and node.id in reached_by
+        and measured_peers.get(reached_by[node.id])
+    )
+
+
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "skipped-by-a-sweep",
@@ -461,6 +526,12 @@ RULES: tuple[FindingRule, ...] = (
         "Never observed",
         "attention",
         _never_observed,
+    ),
+    FindingRule(
+        "reached-but-unmeasured",
+        "Reachable and unmeasured",
+        "attention",
+        _reached_but_unmeasured,
     ),
 )
 
