@@ -12,7 +12,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
+from control_plane.views import TopologyView
 
+from .action_links import topology_investigation_links, topology_url
 from .command_center import command_center
 from .connections import (
     ConnectionAbility,
@@ -22,7 +24,12 @@ from .connections import (
 )
 from .security import Capability, Principal
 from .topology import (
+    MAX_TRACE_DEPTH,
+    Topology,
+    TopologyEdge,
+    TopologyNode,
     apply_lens,
+    apply_trace,
     derive_topology,
     lens_for,
     serialize_topology,
@@ -98,6 +105,30 @@ class DerivedTopologyTests(TestCase):
         )
         self.assertIn((connection_id, "resource:example-zone", "used_by"), edges)
         self.assertIn((connection_id, target.id, "reaches"), edges)
+
+    def test_a_controller_retains_every_distinct_connection_workflow(self):
+        second = ConnectionSpec(
+            "example.second", "Second connections",
+            "Another family carried by the same controller.", Capability.READ,
+            lambda: (
+                ConnectionInstance(
+                    "second", "Second", "example", "good", "Healthy",
+                    controller_id="example-controller",
+                ),
+            ),
+            web_route="control_plane:list",
+        )
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(second,)
+        ):
+            topology = derive_topology(principal=READ)
+
+        controller = next(node for node in topology.nodes if node.kind == "controller")
+        self.assertEqual(
+            {action.url for action in controller.actions},
+            {reverse("control_plane:connections"), reverse("control_plane:list")},
+        )
 
     def test_declared_ability_remains_visible_without_a_live_connection(self):
         resource = ManagedResource.objects.create(
@@ -225,7 +256,7 @@ class DerivedTopologyTests(TestCase):
         payload = serialize_topology(self.project(MANAGE))
         serialized = json.dumps(payload)
 
-        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["summary"]["nodes"], len(payload["nodes"]))
         self.assertEqual(payload["summary"]["edges"], len(payload["edges"]))
         self.assertNotIn("secret", serialized.lower())
@@ -255,6 +286,68 @@ class DerivedTopologyTests(TestCase):
                 large_counts[principal.actor] = len(large)
 
         self.assertEqual(large_counts, small_counts)
+
+
+class TopologyTraceTests(TestCase):
+    def setUp(self):
+        self.graph = Topology(
+            nodes=tuple(
+                TopologyNode(node_id, "resource", node_id.upper(), "Example")
+                for node_id in ("a", "b", "c", "d", "aside")
+            ),
+            edges=(
+                TopologyEdge("ab", "a", "b", "feeds", "Feeds"),
+                TopologyEdge("bc", "b", "c", "feeds", "Feeds"),
+                TopologyEdge("cd", "c", "d", "feeds", "Feeds"),
+                TopologyEdge("aside-a", "aside", "a", "feeds", "Feeds"),
+            ),
+        )
+
+    def test_outbound_trace_is_bounded_and_records_shortest_hops(self):
+        narrowed, trace = apply_trace(
+            self.graph, "a", direction="outbound", depth=2
+        )
+
+        self.assertEqual({node.id for node in narrowed.nodes}, {"a", "b", "c"})
+        self.assertEqual(dict(trace.hops), {"a": 0, "b": 1, "c": 2})
+        self.assertNotIn("d", {node.id for node in narrowed.nodes})
+
+    def test_inbound_and_outbound_are_distinct_questions(self):
+        inbound, _ = apply_trace(self.graph, "a", direction="inbound", depth=3)
+        outbound, _ = apply_trace(self.graph, "a", direction="outbound", depth=3)
+
+        self.assertEqual({node.id for node in inbound.nodes}, {"a", "aside"})
+        self.assertEqual(
+            {node.id for node in outbound.nodes}, {"a", "b", "c", "d"}
+        )
+
+    def test_invalid_inputs_are_safe_and_depth_is_capped(self):
+        unchanged, trace = apply_trace(self.graph, "missing", depth="many")
+        capped, capped_trace = apply_trace(
+            self.graph, "a", direction="sideways", depth=999
+        )
+
+        self.assertIs(unchanged, self.graph)
+        self.assertIsNone(trace)
+        self.assertEqual(capped_trace.direction, "both")
+        self.assertEqual(capped_trace.depth, MAX_TRACE_DEPTH)
+        self.assertLessEqual(len(capped.nodes), len(self.graph.nodes))
+
+    def test_serialization_carries_the_trace_without_mutating_nodes(self):
+        narrowed, trace = apply_trace(self.graph, "a", direction="outbound", depth=2)
+        payload = serialize_topology(narrowed, trace=trace)
+
+        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["trace"]["focus"], "a")
+        self.assertEqual(
+            payload["trace"]["hops"],
+            [
+                {"node": "a", "hop": 0},
+                {"node": "b", "hop": 1},
+                {"node": "c", "hop": 2},
+            ],
+        )
+        self.assertNotIn("hop", payload["nodes"][0])
 
 
 class TopologyPageTests(TestCase):
@@ -300,6 +393,132 @@ class TopologyPageTests(TestCase):
 
         self.assertEqual(response.context["focus_node"], "")
 
+    def test_focus_becomes_a_shareable_bounded_trace(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            response = self.client.get(
+                reverse("control_plane:topology"),
+                {
+                    "focus": "resource:internal-name",
+                    "direction": "inbound",
+                    "depth": "1",
+                },
+            )
+
+        trace = response.context["topology_trace"]
+        self.assertEqual(trace.focus, "resource:internal-name")
+        self.assertEqual(trace.direction, "inbound")
+        self.assertEqual(trace.depth, 1)
+        self.assertContains(response, "Bounded trace")
+        self.assertContains(response, "Trace outgoing")
+        self.assertContains(response, "Clear trace")
+
+    def page(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            return self.client.get(reverse("control_plane:topology"))
+
+    def test_a_node_title_links_to_the_thing_it_names(self):
+        """A node carries a URL; a title that renders as text throws it away."""
+
+        response = self.page()
+
+        detail = reverse("control_plane:detail", kwargs={"key": "internal-name"})
+        self.assertContains(
+            response,
+            f'<a class="topology-node-link" href="{detail}">internal-name</a>',
+        )
+        # The anchor sits inside the title's <strong>, which both the stylesheet
+        # and the explorer's status line read as the node's name.
+        self.assertContains(response, '<strong><a class="topology-node-link"')
+        # A multi-line {# … #} is not a comment in Django, it is text. One
+        # holding the word <strong> renders an element, and the explorer reads
+        # the first <strong> in a node as its title -- so the leak is silent
+        # until the status line starts quoting the commentary.
+        self.assertNotContains(response, "{#")
+        self.assertNotContains(response, "#}")
+
+    def test_a_node_states_each_edge_from_where_it_stands(self):
+        """Direction is the half of an edge a neighbour list throws away."""
+
+        response = self.page()
+
+        ability_id = "ability:infrastructure.controllers:adguard.rewrite"
+        relations = {
+            item["node"].id: item["relations"]
+            for group in response.context["topology_groups"]
+            for item in group["items"]
+        }
+        self.assertEqual(
+            [(row["direction"], row["label"], row["other"].id)
+             for row in relations["resource:internal-name"]],
+            [("in", "Governs", ability_id)],
+        )
+        self.assertEqual(
+            [(row["direction"], row["label"], row["other"].id)
+             for row in relations[ability_id]],
+            [("out", "Governs", "resource:internal-name")],
+        )
+
+        # The same edge renders once as incoming and once as outgoing, and each
+        # row walks to the other end.
+        self.assertContains(
+            response, '<span class="eyebrow topology-relation-heading">Incoming</span>'
+        )
+        self.assertContains(
+            response, '<span class="eyebrow topology-relation-heading">Outgoing</span>'
+        )
+        self.assertContains(response, '<span class="topology-relation-verb">Governs</span>')
+        self.assertContains(
+            response,
+            f'href="{TopologyView._focus_link("resource:internal-name")}"',
+        )
+        self.assertContains(response, f'href="{TopologyView._focus_link(ability_id)}"')
+        self.assertContains(
+            response, '<span class="topology-relation-other">internal-name</span>'
+        )
+        self.assertContains(response, '<span class="topology-relation-kind">resource</span>')
+
+    def test_a_node_body_carries_the_triage_the_projection_already_derived(self):
+        """Declared versus observed is the whole of triage; both were discarded."""
+
+        ManagedResource.objects.create(
+            key="behind-name",
+            kind="adguard.rewrite",
+            spec={"domain": "behind.example.test", "answer": "192.0.2.11"},
+            status={"domain": "behind.example.test"},
+            last_observed_at=timezone.now() - timedelta(hours=3),
+            generation=4,
+            observed_generation=2,
+        )
+        ManagedResource.objects.create(
+            key="disabled-name",
+            kind="adguard.rewrite",
+            spec={"domain": "off.example.test", "answer": "192.0.2.12"},
+            enabled=False,
+        )
+
+        response = self.page()
+
+        # A comparison, not two raw numbers.
+        self.assertContains(response, "Behind")
+        self.assertContains(response, "Declared 4, last confirmed 2")
+        # The field the reading declined to echo back, as the list it is.
+        self.assertContains(response, "<li><code>answer</code></li>")
+        self.assertContains(response, "Unconfirmed by the last reading")
+        # Age, not an ISO timestamp -- and the absence of one said out loud.
+        self.assertContains(response, "3\xa0hours ago")
+        self.assertContains(response, "Never — nothing observes this")
+        # A disabled declaration is not a finding.
+        self.assertContains(response, ">Unmanaged</span>")
+
+    def test_a_node_nothing_reaches_says_so_rather_than_drawing_an_empty_box(self):
+        response = self.page()
+
+        self.assertContains(response, "No derived relationships")
+
 
 class ConnectionActionTests(TestCase):
     """A connection offers what its own spec declared, resolved generically."""
@@ -320,6 +539,27 @@ class ConnectionActionTests(TestCase):
     def node(self, spec):
         return next(n for n in self.project(spec).nodes
                     if n.id == "connection:example.declared:one")
+
+    def test_topology_investigations_share_one_addressing_contract(self):
+        node_id = "connection:example.declared:one"
+
+        actions = topology_investigation_links(node_id)
+
+        self.assertEqual(
+            [(action.name, action.url) for action in actions],
+            [
+                ("topology", topology_url(node_id)),
+                (
+                    "impact",
+                    topology_url(node_id, direction="outbound", depth=3),
+                ),
+            ],
+        )
+        self.assertEqual(
+            topology_url(node_id, lens="operations"),
+            f"{reverse('control_plane:topology')}?"
+            "focus=connection%3Aexample.declared%3Aone&lens=operations#trace",
+        )
 
     def test_every_declared_route_becomes_its_own_action(self):
         node = self.node(self.spec(
@@ -473,3 +713,91 @@ class TopologyLensTests(TestCase):
         self.assertEqual([i.name for i in offered], [lens.name for lens in topology_lenses()])
         self.assertEqual(denied, ())
         self.assertEqual([i.name for i in matched], ["ungoverned-resources"])
+
+
+class MeasuredNodeTests(TestCase):
+    """A node named like a host carries what that host served, by name alone."""
+
+    def _measure(self, host, *, pageviews=412, visits=300):
+        from analytics.models import AnalyticsSite, RumDaily
+
+        site = AnalyticsSite.objects.create(site_tag=f"tag-{host}", host=host)
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=1),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=pageviews,
+            visits=visits,
+            sample_interval=1,
+        )
+
+    def _spec(self, *hosts):
+        return ConnectionSpec(
+            "example.measured", "Measured routes",
+            "A synthetic connection family that reaches named hosts.",
+            Capability.READ,
+            lambda: (
+                ConnectionInstance(
+                    "one", "One", "example", "good", "Healthy",
+                    targets=tuple(ConnectionLink(host) for host in hosts),
+                ),
+            ),
+        )
+
+    def _nodes(self, *hosts):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)
+        ):
+            return {n.label: n for n in derive_topology(principal=READ).nodes}
+
+    def test_a_target_named_like_a_measured_host_carries_its_traffic(self):
+        self._measure("measured.example.com")
+
+        node = self._nodes("measured.example.com")["measured.example.com"]
+
+        self.assertEqual(node.pageviews, 412)
+        self.assertEqual(node.visits, 300)
+
+    def test_an_unmeasured_host_carries_none_rather_than_zero(self):
+        # The distinction the field exists for: nobody visited and nobody looked
+        # are opposite findings, and only the second is worth acting on.
+        node = self._nodes("unmeasured.example.com")["unmeasured.example.com"]
+
+        self.assertIsNone(node.pageviews)
+        self.assertIsNone(node.visits)
+
+    def test_one_hosts_traffic_is_not_lent_to_another(self):
+        self._measure("measured.example.com", pageviews=9999)
+
+        nodes = self._nodes("measured.example.com", "other.example.com")
+
+        self.assertEqual(nodes["measured.example.com"].pageviews, 9999)
+        self.assertIsNone(nodes["other.example.com"].pageviews)
+
+    def test_a_graph_with_no_hostname_shaped_node_costs_no_extra_query(self):
+        # Why this can live in the shared projection rather than in one adapter:
+        # a deployment measuring nothing pays nothing for the seam.
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(self._spec("not-a-hostname"),),
+        ):
+            derive_topology(principal=READ)
+            with CaptureQueriesContext(database_connection) as queries:
+                derive_topology(principal=READ)
+
+        self.assertEqual(
+            [q for q in queries.captured_queries if "analytics_rumdaily" in q["sql"]], []
+        )
+
+    def test_the_measurement_reaches_every_adapter_not_just_the_page(self):
+        self._measure("measured.example.com")
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(self._spec("measured.example.com"),),
+        ):
+            payload = serialized_topology(principal=READ)
+
+        node = next(n for n in payload["nodes"] if n["label"] == "measured.example.com")
+        self.assertEqual(node["pageviews"], 412)

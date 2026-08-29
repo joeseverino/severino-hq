@@ -30,6 +30,7 @@ from application.controller import (
 )
 from application.certificates import CertificateError, material_for
 from application.cadence import sweep_due
+from application.analytics import analytics_plan, record_analytics
 from application.inventory import record_connections
 from application.sweep import record_sweep
 from application.security import cli_principal
@@ -110,6 +111,18 @@ def _connections(options: dict) -> Any:
     )
 
 
+def _analytics(options: dict) -> Any:
+    return record_analytics(
+        json.loads(options["payload"]),
+        principal=cli_principal(),
+        controller_id=options["controller_id"],
+    )
+
+
+def _analytics_plan(options: dict) -> Any:
+    return analytics_plan(json.loads(options["payload"]))
+
+
 def _sweep_due(options: dict) -> Any:
     del options
     return sweep_due()
@@ -142,6 +155,8 @@ ACTIONS: tuple[Action, ...] = (
     Action("material", ("resource",), _material),
     Action("inventory", ("controller_id", "payload"), _inventory),
     Action("connections", ("controller_id", "payload"), _connections),
+    Action("analytics", ("controller_id", "payload"), _analytics),
+    Action("analytics-plan", ("payload",), _analytics_plan),
     Action("sweep-due", (), _sweep_due),
     Action("report", ("controller_id", "operation", "payload"), _report),
 )

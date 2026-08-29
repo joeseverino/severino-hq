@@ -71,6 +71,29 @@ topology findings enter through the infrastructure provider and drill into an
 evidence/remedy surface, where remedies remain references to registered
 capabilities rather than a second mutation path.
 
+Higher-order findings preserve the same rule. Exact resource and kind facts
+remain addressable, while the default projection follows topology edges to
+group downstream symptoms under a proven shared controller. The frontend then
+renders the subject's already-authorized actions as “what HQ can do now”; it
+does not maintain a parallel action catalog. Focus and dependency-trace links
+are application-level actions too: findings, topology, connection views, and
+machine adapters all receive one canonical topology address rather than
+reconstructing query strings. A stale-controller finding also derives the
+registered controller-refresh capability from that same node. Executing it
+rings the existing credential-free doorbell; the privileged controller still
+pulls work and decides what is due, so a natural remediation loop does not
+reverse the trust direction or create a second scheduler. Contextual command
+links carry a same-origin return path through Command Center's result screen,
+so execution stays on the canonical command spine without losing the workflow
+that proposed it. The resolution-plan primitive itself is domain-neutral and
+exported through `hq_sdk.workflows`: a domain emits a stable claim, supporting
+actions, authorized remedies, and its own verification action; HQ derives the
+ordered understand → act → verify projection and the machine-readable
+`claim_absent` completion condition. Infrastructure is merely its first
+producer. Analytics freshness follows the
+same shape: successful site-day coverage is a fact, HQ derives missing windows,
+and the controller executes that plan without owning a second backfill policy.
+
 Large projections run inside `application.projection.projection_scope()`. A
 reading may be reused while one answer is assembled and is discarded when that
 scope exits, eliminating repeated joins/counts without serving process-cached

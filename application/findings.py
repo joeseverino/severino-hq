@@ -38,20 +38,29 @@ capability sees the finding and the evidence and no remedy at all.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 from django.utils import timezone
 
+from .action_links import ActionLink, action_with_return, topology_investigation_links
 from .capabilities import capability_specs
 from .cadence import sweep_interval
+from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .topology import (
     _STALE_AFTER,
     Topology,
     TopologyNode,
     derive_topology,
+)
+from .workflows import (
+    WorkflowPlan,
+    claim_identity,
+    claim_resolution_plan,
+    serialize_workflow,
 )
 
 
@@ -63,6 +72,7 @@ from .topology import (
 # the sweep rather than any one record. Three, because one missed tick is a
 # restart and two is a slow provider.
 _KIND_SILENT_AFTER = 3
+_CLAIM_NAMESPACE = "infrastructure.finding"
 
 
 @dataclass(frozen=True)
@@ -74,6 +84,7 @@ class Remedy:
     label: str
     effect: str
     url: str = ""
+    method: str = "GET"
     # Whether the controller would run this unattended. Left False here: this
     # module proposes, and the thing that already schedules automatic work is
     # the only correct place for anything else.
@@ -91,9 +102,18 @@ class Finding:
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
     remedies: tuple[Remedy, ...] = ()
+    # Safe, already-authorized read workflows emitted by the subject node.
+    # Delivery adapters render these; they do not rediscover or filter them.
+    offers: tuple[ActionLink, ...] = ()
+    # Canonical graph investigations derived once from the finding subject.
+    investigations: tuple[ActionLink, ...] = ()
     # A kind rather than a node, for a claim about a whole class. The estate
     # keeps its honesty: no synthetic node is invented to hang this on.
     scope: str = ""
+    # Kinds this higher-order claim explains. They remain exact machine facts,
+    # while an effortless surface can lead with the shared cause once.
+    affected_scopes: tuple[str, ...] = ()
+    workflow: WorkflowPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +145,7 @@ class _Estate:
     # from `latest_by_kind` but present here has never been observed at all.
     declared_kinds: frozenset[str]
     declared_counts: dict[str, int]
+    controllers_by_kind: dict[str, frozenset[str]]
 
     def nodes(self) -> tuple[TopologyNode, ...]:
         return self.topology.nodes
@@ -137,6 +158,53 @@ def _parse(value: str) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _causal_edges(topology: Topology) -> dict[str, dict[str, set[str]]]:
+    """Index only the relationship verbs causal findings traverse."""
+
+    indexed = {kind: {} for kind in ("carries", "enables", "governs", "used_by")}
+    for edge in topology.edges:
+        if edge.kind == "governs":
+            indexed[edge.kind].setdefault(edge.source, set()).add(edge.target)
+        elif edge.kind in indexed:
+            indexed[edge.kind].setdefault(edge.target, set()).add(edge.source)
+    return indexed
+
+
+def _controllers_by_kind(
+    topology: Topology, by_id: dict[str, TopologyNode]
+) -> dict[str, frozenset[str]]:
+    """Controllers a kind can be attributed to without guessing."""
+
+    indexed = _causal_edges(topology)
+    controllers_by_kind: dict[str, set[str]] = {}
+    for resource_id, connections in indexed["used_by"].items():
+        kind = getattr(by_id.get(resource_id), "kind_key", "")
+        controllers = {
+            controller
+            for connection in connections
+            for controller in indexed["carries"].get(connection, set())
+        }
+        if kind and controllers:
+            controllers_by_kind.setdefault(kind, set()).update(controllers)
+
+    # Ability nodes are shared by a connection family. They prove a cause only
+    # when exactly one controller enables that ability; otherwise attributing
+    # every governed resource to both would manufacture knowledge HQ lacks.
+    for ability, connections in indexed["enables"].items():
+        controllers = {
+            controller
+            for connection in connections
+            for controller in indexed["carries"].get(connection, set())
+        }
+        if len(controllers) != 1:
+            continue
+        for resource_id in indexed["governs"].get(ability, set()):
+            kind = getattr(by_id.get(resource_id), "kind_key", "")
+            if kind:
+                controllers_by_kind.setdefault(kind, set()).update(controllers)
+    return {kind: frozenset(items) for kind, items in controllers_by_kind.items()}
 
 
 def _estate(topology: Topology) -> _Estate:
@@ -157,6 +225,7 @@ def _estate(topology: Topology) -> _Estate:
     for node in topology.nodes:
         if node.kind == "resource" and node.managed and node.kind_key:
             counts[node.kind_key] = counts.get(node.kind_key, 0) + 1
+    by_id = {node.id: node for node in topology.nodes}
     return _Estate(
         topology,
         timezone.now(),
@@ -165,6 +234,7 @@ def _estate(topology: Topology) -> _Estate:
         governed,
         frozenset(counts),
         counts,
+        _controllers_by_kind(topology, by_id),
     )
 
 
@@ -307,6 +377,59 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(found)
 
 
+def _controller_sweep_stale(estate: _Estate) -> tuple[Finding, ...]:
+    """Several stale kinds sharing one controller are one upstream failure.
+
+    Kind-level findings stay useful evidence for machines. An operator should
+    not have to correlate them by timestamp and provider, though: topology
+    already says which controller carries the connections that enable each
+    kind. When at least two stale kinds converge there, HQ can name the cause,
+    trace its impact, and offer the controller's existing safe read actions.
+    """
+
+    stale_kinds = {
+        finding.scope for finding in _kind_never_swept(estate) if finding.scope
+    }
+    grouped: dict[str, set[str]] = {}
+    for kind in stale_kinds:
+        for controller in estate.controllers_by_kind.get(kind, frozenset()):
+            grouped.setdefault(controller, set()).add(kind)
+    by_id = {node.id: node for node in estate.nodes()}
+    return tuple(
+        Finding(
+            rule="controller-sweep-stale",
+            subject=controller,
+            title=f"{by_id[controller].label} stopped confirming {len(kinds)} kinds",
+            severity="serious",
+            explanation=(
+                "These kinds became stale behind connections carried by the same "
+                "controller. HQ has correlated the downstream symptoms into one "
+                "upstream failure; inspect that connection once, then trace every "
+                "affected declaration from here."
+            ),
+            evidence=(
+                ("Affected kinds", ", ".join(sorted(kinds))),
+                ("Shared cause", by_id[controller].label),
+                (
+                    "What HQ can do",
+                    "wake its controller, open its connections, and trace the affected estate",
+                ),
+            ),
+            remedies=(
+                Remedy(
+                    "infrastructure.controller.refresh",
+                    "",
+                    "Request fresh sweep",
+                    "",
+                ),
+            ),
+            affected_scopes=tuple(sorted(kinds)),
+        )
+        for controller, kinds in sorted(grouped.items())
+        if len(kinds) >= 2 and controller in by_id
+    )
+
+
 def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
     """Converged on paper, disagreeing in practice.
 
@@ -428,7 +551,83 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
     )
 
 
+def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
+    """A name a connection reports reaching that nothing is measuring.
+
+    The first claim here that neither half of HQ can make alone. Infrastructure
+    knows a connection reaches this name; analytics knows what every name it
+    watches served. Put beside each other they answer a question neither was
+    asked: which of the things we run is nobody watching.
+
+    ``None`` and zero are the whole rule. A measured site with no visitors is a
+    fact about the site; an unmeasured one is a fact about HQ, and only the
+    second is a gap someone can close.
+
+    Restricted to observed targets on purpose. A declaration is a statement of
+    intent and may name something not serving anything yet, but a target is a
+    name a live connection said it *reaches* -- so it is answering, and nothing
+    is counting.
+
+    Gated on a measured sibling, the same way a skipped record is judged against
+    the sweep that confirmed its siblings. Most things HQ reaches are containers
+    and proxy entries that will never carry a web beacon, and saying so about
+    each would bury the queue in claims nobody can act on. But a connection with
+    four measured names and a fifth without one is a gap someone can close, and
+    that is the only shape this fires on.
+    """
+
+    measured_peers: dict[str, bool] = {}
+    reached_by: dict[str, str] = {}
+    for edge in estate.topology.edges:
+        if edge.kind != "reaches":
+            continue
+        reached_by.setdefault(edge.target, edge.source)
+    by_id = {node.id: node for node in estate.nodes()}
+    for target_id, connection_id in reached_by.items():
+        node = by_id.get(target_id)
+        if node is not None and node.pageviews is not None:
+            measured_peers[connection_id] = True
+
+    return tuple(
+        Finding(
+            rule="reached-but-unmeasured",
+            subject=node.id,
+            title=f"{node.label} is reachable and unmeasured",
+            severity="attention",
+            explanation=(
+                "A live connection reports reaching this name, and other names "
+                "on the same connection do report traffic. Nothing here says the "
+                "site is idle -- it says nobody is counting, so a drop in use "
+                "would look exactly like a steady one."
+            ),
+            evidence=(
+                (
+                    "Reached by",
+                    (
+                        by_id.get(reached_by[node.id]).label
+                        if by_id.get(reached_by[node.id])
+                        else "a connection"
+                    ),
+                ),
+                ("Measured", "nothing reports traffic for this name"),
+            ),
+        )
+        for node in estate.nodes()
+        if node.kind == "target"
+        and node.pageviews is None
+        and node.id in reached_by
+        and measured_peers.get(reached_by[node.id])
+    )
+
+
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "controller-sweep-stale",
+        "A controller stopped confirming its estate",
+        "serious",
+        _controller_sweep_stale,
+        subsumes=("kind-never-swept",),
+    ),
     FindingRule(
         "skipped-by-a-sweep",
         "Not confirmed by the last sweep",
@@ -462,6 +661,12 @@ RULES: tuple[FindingRule, ...] = (
         "attention",
         _never_observed,
     ),
+    FindingRule(
+        "reached-but-unmeasured",
+        "Reachable and unmeasured",
+        "attention",
+        _reached_but_unmeasured,
+    ),
 )
 
 _RULE_BY_NAME = {rule.name: rule for rule in RULES}
@@ -494,7 +699,9 @@ def _permitted(capability: str, principal: Principal) -> tuple[bool, str]:
     return False, ""
 
 
-def _resolved(finding: Finding, principal: Principal) -> Finding:
+def _resolved(
+    finding: Finding, principal: Principal, subject: TopologyNode | None
+) -> Finding:
     """Drop remedies this principal cannot run, and take effect from the spec.
 
     Absent rather than disabled: an offer that cannot work is worse than no
@@ -508,16 +715,75 @@ def _resolved(finding: Finding, principal: Principal) -> Finding:
         allowed, effect = _permitted(remedy.capability, principal)
         if not allowed or effect == "destructive":
             continue
+        action = next(
+            (
+                candidate
+                for candidate in (subject.actions if subject else ())
+                if candidate.capability == remedy.capability
+                and candidate.target == remedy.target
+            ),
+            None,
+        )
         kept.append(
             Remedy(
                 capability=remedy.capability,
                 target=remedy.target,
                 label=remedy.label,
                 effect=effect,
-                url=remedy.url,
+                url=(
+                    action_with_return(action, "control_plane:findings").url
+                    if action
+                    else remedy.url
+                ),
+                method=action.method if action else remedy.method,
                 auto=False,
             )
         )
+    resolved_remedies = tuple(kept)
+    offers = tuple(
+        action
+        for action in (subject.actions if subject else ())
+        if action.effect == "read" and action.method == "GET"
+    )
+    investigations = topology_investigation_links(subject.id) if subject else ()
+    remedy_actions = tuple(
+        ActionLink(
+            "remedy",
+            remedy.label,
+            remedy.effect,
+            remedy.url,
+            method=remedy.method,
+            capability=remedy.capability,
+            target=remedy.target,
+            recommended=True,
+        )
+        for remedy in resolved_remedies
+        if remedy.url
+    )
+    findings_url = route_url("control_plane:findings")
+    verification = (
+        ActionLink(
+            "verify",
+            "Recheck from current facts",
+            "read",
+            f"{findings_url}?{urlencode({'rule': finding.rule})}",
+            reason=(
+                "HQ re-derives the same rule from the newest authorized topology."
+            ),
+        )
+        if findings_url
+        else None
+    )
+    workflow = claim_resolution_plan(
+        namespace=_CLAIM_NAMESPACE,
+        rule=finding.rule,
+        subject=finding.subject,
+        scope=finding.scope,
+        investigations=investigations,
+        offers=offers,
+        remedies=remedy_actions,
+        verification=verification,
+    )
     return Finding(
         rule=finding.rule,
         subject=finding.subject,
@@ -525,8 +791,79 @@ def _resolved(finding: Finding, principal: Principal) -> Finding:
         severity=finding.severity,
         explanation=finding.explanation,
         evidence=finding.evidence,
-        remedies=tuple(kept),
+        remedies=resolved_remedies,
+        offers=offers,
+        investigations=investigations,
         scope=finding.scope,
+        affected_scopes=finding.affected_scopes,
+        workflow=workflow,
+    )
+
+
+def _finding_scopes(finding: Finding) -> tuple[str, ...]:
+    return ((finding.scope,) if finding.scope else ()) + finding.affected_scopes
+
+
+def _silenced_kinds(
+    raised: dict[str, tuple[Finding, ...]],
+) -> set[str]:
+    return {
+        scope
+        for declared in RULES
+        for finding in raised[declared.name]
+        if declared.subsumes
+        for scope in _finding_scopes(finding)
+    }
+
+
+def _silenced_scopes(
+    raised: dict[str, tuple[Finding, ...]],
+) -> dict[str, set[str]]:
+    silenced: dict[str, set[str]] = {}
+    for declared in RULES:
+        scopes = {
+            scope
+            for finding in raised[declared.name]
+            for scope in _finding_scopes(finding)
+        }
+        for name in declared.subsumes:
+            silenced.setdefault(name, set()).update(scopes)
+    return silenced
+
+
+def _subsumed_subjects(
+    raised: dict[str, tuple[Finding, ...]],
+) -> dict[str, set[str]]:
+    subjects: dict[str, set[str]] = {}
+    for declared in RULES:
+        found = {
+            finding.subject
+            for finding in raised[declared.name]
+            if finding.subject
+        }
+        for name in declared.subsumes:
+            subjects.setdefault(name, set()).update(found)
+    return subjects
+
+
+def _is_suppressed(
+    finding: Finding,
+    declared: FindingRule,
+    node: TopologyNode | None,
+    *,
+    exact_rule: bool,
+    kinds: set[str],
+    scopes: dict[str, set[str]],
+    subjects: dict[str, set[str]],
+) -> bool:
+    """Whether a higher-order claim already says this fact more usefully."""
+
+    if exact_rule:
+        return False
+    return (
+        finding.subject in subjects.get(declared.name, set())
+        or finding.scope in scopes.get(declared.name, set())
+        or (node is not None and node.kind_key in kinds)
     )
 
 
@@ -548,18 +885,9 @@ def derive_findings(
 
     # A rule that fired takes its subsumed rules off the same subject, and off
     # the whole kind when it speaks for one.
-    silenced_kinds = {
-        finding.scope
-        for declared in RULES
-        for finding in raised[declared.name]
-        if declared.subsumes and finding.scope
-    }
-    subsumed_by: dict[str, set[str]] = {}
-    for declared in RULES:
-        for name in declared.subsumes:
-            subsumed_by.setdefault(name, set()).update(
-                finding.subject for finding in raised[declared.name] if finding.subject
-            )
+    silenced_kinds = _silenced_kinds(raised)
+    silenced_scopes_by_rule = _silenced_scopes(raised)
+    subsumed_by = _subsumed_subjects(raised)
 
     by_id = {node.id: node for node in topology.nodes}
     findings = []
@@ -567,12 +895,18 @@ def derive_findings(
         if wanted is not None and declared.name != wanted.name:
             continue
         for finding in raised[declared.name]:
-            if finding.subject in subsumed_by.get(declared.name, set()):
-                continue
             node = by_id.get(finding.subject)
-            if node is not None and node.kind_key in silenced_kinds:
+            if _is_suppressed(
+                finding,
+                declared,
+                node,
+                exact_rule=wanted is not None,
+                kinds=silenced_kinds,
+                scopes=silenced_scopes_by_rule,
+                subjects=subsumed_by,
+            ):
                 continue
-            findings.append(_resolved(finding, principal))
+            findings.append(_resolved(finding, principal, node))
 
     order = {"serious": 0, "attention": 1, "neutral": 2, "good": 3}
     return tuple(
@@ -582,13 +916,19 @@ def derive_findings(
 
 def _serialize(finding: Finding) -> dict[str, Any]:
     return {
+        "id": claim_identity(
+            _CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope
+        ),
         "rule": finding.rule,
         "subject": finding.subject or None,
         "scope": finding.scope or None,
+        "affected_scopes": list(finding.affected_scopes),
         "title": finding.title,
         "severity": finding.severity,
         "explanation": finding.explanation,
-        "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
+        "evidence": [
+            {"label": label, "value": value} for label, value in finding.evidence
+        ],
         "remedies": [
             {
                 "capability": remedy.capability,
@@ -596,10 +936,14 @@ def _serialize(finding: Finding) -> dict[str, Any]:
                 "label": remedy.label,
                 "effect": remedy.effect,
                 "auto": remedy.auto,
+                "method": "POST",
                 "url": f"/api/v2/capabilities/{remedy.capability}/",
             }
             for remedy in finding.remedies
         ],
+        "offers": [asdict(action) for action in finding.offers],
+        "investigations": [asdict(action) for action in finding.investigations],
+        "workflow": serialize_workflow(finding.workflow),
     }
 
 
@@ -617,7 +961,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
     return {
         "ok": True,
-        "schema_version": 1,
+        "schema_version": 2,
         # Which rule produced this, and every rule that could have. A client
         # that asked for an unknown one is told it got everything.
         "rule": selected.name if selected else None,
@@ -659,9 +1003,7 @@ class Repair:
     reason: str
 
 
-def auto_remediable(
-    *, principal: Principal, limit: int = 10
-) -> tuple[Repair, ...]:
+def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, ...]:
     """Findings whose remedy the controller contract already runs unattended.
 
     Returns what should be *queued*, never anything executed here. HQ queues and

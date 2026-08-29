@@ -106,7 +106,8 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 | `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
-| `GET` | `/api/v2/topology/` | The permitted live graph of controllers, connections, abilities, resources, and observed targets |
+| `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
+| `GET` | `/api/v2/findings/` | Evidence-backed claims with stable IDs, causal rollups, authorized remedies, and derived understand → act → verify workflows |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -129,6 +130,17 @@ is authorizing without creating a second execution plan. Optional
 `target_initial_fields` declare which same-named command fields the browser may
 hydrate from an authorized target detail; this is presentation metadata and
 does not change the machine payload contract.
+
+`infrastructure.controller.refresh` is the deliberate freshness loop. It marks
+HQ active, rings the credential-free controller doorbell, and lets the
+privileged pull-based controller apply the same cadence contract it always
+uses. The web/API process receives no provider authority, and callers receive
+the due decision that made the request meaningful.
+
+Each serialized finding may include a domain-neutral `workflow`: ordered steps
+whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
+outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
+second executor; every mutation still names and enters a registered capability.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
 label, summary, required permissions, list-query model, stable identifier, and
@@ -161,6 +173,31 @@ HTTP clients execute those changes through
 `POST /api/v2/capabilities/<name>/`, including the normal schema,
 authorization, audit and idempotency requirements. The projection requires the
 token's `read` grant and contains safe endpoint text, never credentials.
+
+The same endpoint is also HQ's impact engine. `focus=<node-id>` selects a
+bounded neighborhood; `direction=inbound|outbound|both` chooses which way to
+follow declared edges, and `depth=1..5` limits traversal. The response's
+`trace.hops` records every selected node's shortest distance from the focus.
+Tracing composes with `lens`, costs no provider reads beyond deriving the
+original authorized projection, and unknown focus values leave the projection
+whole with `trace: null`. This makes “show what depends on this” and “show what
+this reaches” available to generated clients without creating a second graph.
+
+Findings are another projection of that same authorized topology. General
+reads collapse several stale resource kinds onto their shared controller when
+the graph proves one, and expose the explained kinds in `affected_scopes`.
+Clients that need the underlying machine facts can request one declared
+`rule`; causal presentation never destroys the exact observations. Remedies
+remain references to registered capabilities, while read-only “what HQ can do
+now” links come from the subject node's canonical actions rather than a second
+workflow registry.
+
+The `analytics` resource reports `coverage` for the requested completed-day
+window. Coverage is recorded even when a healthy site had zero traffic, so
+`missing_days` means HQ has not read that site-day—not that no visit occurred.
+The controller discovers sites, asks HQ for bounded missing windows, and
+backfills them idempotently; API and web readers do not invent their own
+freshness policy.
 
 ### Compatibility policy
 

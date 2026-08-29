@@ -6,7 +6,7 @@ import base64
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import io
 import ipaddress
@@ -27,6 +27,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 
+from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from control_plane.providers import (
     caa_parts,
     certificate_covers,
@@ -205,7 +206,9 @@ def _adguard_headers(connection_ref: str = "") -> dict[str, str]:
 
 
 def reconcile_adguard(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     base_url = _adguard_url()
@@ -287,9 +290,7 @@ def reconcile_adguard(
 
 
 def _npm_url(connection_ref: str = "") -> str:
-    return _npm_api_url(
-        _required(connection_prefix("npm", connection_ref), "URL")
-    )
+    return _npm_api_url(_required(connection_prefix("npm", connection_ref), "URL"))
 
 
 def _npm_token(base_url: str, connection_ref: str = "") -> str:
@@ -323,7 +324,9 @@ def _npm_api_url(configured_url: str) -> str:
 
 
 def reconcile_npm(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     base_url = _npm_url()
@@ -421,10 +424,14 @@ def reconcile_npm(
     )
 
 
-def _observe_tls_domain(domain: str, *, connect_host: str | None = None) -> dict[str, Any]:
+def _observe_tls_domain(
+    domain: str, *, connect_host: str | None = None
+) -> dict[str, Any]:
     try:
         tls_context = _tls_context()
-        with socket.create_connection((connect_host or domain, 443), timeout=15) as raw_socket:
+        with socket.create_connection(
+            (connect_host or domain, 443), timeout=15
+        ) as raw_socket:
             with tls_context.wrap_socket(
                 raw_socket, server_hostname=domain
             ) as tls_socket:
@@ -467,7 +474,9 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
     """Resolve a managed consumer's origin without changing TLS SNI."""
     kind = consumer["kind"]
     if kind == "npm":
-        hostname = urllib.parse.urlsplit(_required(connection_prefix("npm"), "URL")).hostname
+        hostname = urllib.parse.urlsplit(
+            _required(connection_prefix("npm"), "URL")
+        ).hostname
         if not hostname:
             raise ProviderError("NPM origin verification endpoint is missing.")
         return hostname
@@ -475,9 +484,7 @@ def _consumer_tls_endpoint(consumer: dict[str, Any]) -> str | None:
         transport = _transport(consumer["connection_ref"])
         hostname = transport.get("host")
         if not hostname:
-            raise ProviderError(
-                f"{kind} origin verification endpoint is missing."
-            )
+            raise ProviderError(f"{kind} origin verification endpoint is missing.")
         return hostname
     return None
 
@@ -492,8 +499,7 @@ def _npm_covered_hosts(certificate_domains: list[str]) -> list[dict[str, Any]]:
         for host in hosts
         if host.get("enabled") is not False
         and any(
-            certificate_covers(domain, names)
-            for domain in host.get("domain_names", [])
+            certificate_covers(domain, names) for domain in host.get("domain_names", [])
         )
     ]
 
@@ -646,8 +652,7 @@ def connection_prefix(provider: str, connection_ref: str = "") -> str:
     )
     if len(candidates) > 1:
         raise ProviderError(
-            f"More than one connection is a {provider}; the resource has to "
-            "say which."
+            f"More than one connection is a {provider}; the resource has to say which."
         )
     return candidates[0] if candidates else provider.upper()
 
@@ -662,7 +667,9 @@ def provider_connection_refs(provider: str) -> tuple[str, ...]:
     """
 
     declared = tuple(
-        sorted(ref for ref in connection_prefixes() if connection_provider(ref) == provider)
+        sorted(
+            ref for ref in connection_prefixes() if connection_provider(ref) == provider
+        )
     )
     if declared:
         return declared
@@ -791,7 +798,7 @@ def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> b
         str(ssh_dir / connection_ref),
         "-p",
         str(transport["port"]),
-        f'{transport["user"]}@{transport["host"]}',
+        f"{transport['user']}@{transport['host']}",
         operation,
     ]
     return _run(
@@ -843,11 +850,34 @@ def _validate_certificate(
         )
         if cert_pub != key_pub:
             raise ProviderError("Certificate and private key do not match.")
-        fingerprint = _run(
-            ["openssl", "x509", "-in", str(cert_path), "-noout", "-fingerprint", "-sha256"]
-        ).decode().strip().split("=", 1)[-1].replace(":", "").lower()
+        fingerprint = (
+            _run(
+                [
+                    "openssl",
+                    "x509",
+                    "-in",
+                    str(cert_path),
+                    "-noout",
+                    "-fingerprint",
+                    "-sha256",
+                ]
+            )
+            .decode()
+            .strip()
+            .split("=", 1)[-1]
+            .replace(":", "")
+            .lower()
+        )
         san_output = _run(
-            ["openssl", "x509", "-in", str(cert_path), "-noout", "-ext", "subjectAltName"]
+            [
+                "openssl",
+                "x509",
+                "-in",
+                str(cert_path),
+                "-noout",
+                "-ext",
+                "subjectAltName",
+            ]
         ).decode()
         sans = {
             chunk.split(",", 1)[0].strip()
@@ -873,11 +903,7 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         raise ProviderError("ACME state directory is not writable.")
     _run(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
-    credentials.write_text(
-        "dns_cloudflare_api_token = "
-        + _cloudflare_token()
-        + "\n"
-    )
+    credentials.write_text("dns_cloudflare_api_token = " + _cloudflare_token() + "\n")
     credentials.chmod(0o600)
     command = [
         "certbot",
@@ -911,7 +937,10 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         credentials.unlink(missing_ok=True)
     lineage = acme_dir / "config" / "live" / spec["certificate_name"]
     try:
-        return (lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath("privkey.pem").read_bytes())
+        return (
+            lineage.joinpath("fullchain.pem").read_bytes(),
+            lineage.joinpath("privkey.pem").read_bytes(),
+        )
     except OSError as exc:
         raise ProviderError("Certbot did not produce a complete lineage.") from exc
 
@@ -921,10 +950,7 @@ def _resumable_lineage(
 ) -> tuple[bytes, bytes] | None:
     """Reuse a newer failed-transaction artifact instead of issuing again."""
     lineage = (
-        Path(_required("HQ", "ACME_DIR"))
-        / "config"
-        / "live"
-        / spec["certificate_name"]
+        Path(_required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
     )
     try:
         fullchain = lineage.joinpath("fullchain.pem").read_bytes()
@@ -937,9 +963,11 @@ def _resumable_lineage(
     with tempfile.TemporaryDirectory() as directory:
         cert_path = Path(directory) / "fullchain.pem"
         cert_path.write_bytes(fullchain)
-        raw_expiry = _run(
-            ["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"]
-        ).decode().strip()
+        raw_expiry = (
+            _run(["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"])
+            .decode()
+            .strip()
+        )
     try:
         expiry = datetime.strptime(
             raw_expiry.removeprefix("notAfter="), "%b %d %H:%M:%S %Y %Z"
@@ -970,7 +998,9 @@ def _npm_managed_certificate(
     if matches:
         certificate = matches[0]
         if certificate.get("provider") != "other":
-            raise ProviderError("The HQ-managed NPM certificate is not a custom certificate.")
+            raise ProviderError(
+                "The HQ-managed NPM certificate is not a custom certificate."
+            )
     else:
         certificate = _request(
             f"{base_url}/nginx/certificates",
@@ -1128,9 +1158,7 @@ def _verify_tls_deployment(
                 for item in result.status["consumers"]
             ]
             failed = {
-                item["consumer"]
-                for item in evidence
-                if not item["matches_expected"]
+                item["consumer"] for item in evidence if not item["matches_expected"]
             }
             raise ProviderError(
                 f"{len(failed)} of {len(spec['consumers'])} TLS consumers "
@@ -1173,7 +1201,9 @@ def _deploy_tls_transaction(
     reason: str,
     message: str,
 ) -> ProviderResult:
-    expected_fingerprint = _validate_certificate(fullchain, private_key, spec["domains"])
+    expected_fingerprint = _validate_certificate(
+        fullchain, private_key, spec["domains"]
+    )
     try:
         deployment_status = _deploy_certificate(spec, fullchain, private_key)
         observed = _verify_tls_deployment(spec, expected_fingerprint)
@@ -1209,26 +1239,23 @@ def _deploy_tls_transaction(
 
 def _lineage(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     lineage = (
-        Path(_required("HQ", "ACME_DIR"))
-        / "config"
-        / "live"
-        / spec["certificate_name"]
+        Path(_required("HQ", "ACME_DIR")) / "config" / "live" / spec["certificate_name"]
     )
     try:
         return lineage.joinpath("fullchain.pem").read_bytes(), lineage.joinpath(
             "privkey.pem"
         ).read_bytes()
     except OSError as exc:
-        raise ProviderError("Certbot lineage is unavailable for reconciliation.") from exc
+        raise ProviderError(
+            "Certbot lineage is unavailable for reconciliation."
+        ) from exc
 
 
 def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
     fullchain, private_key = _lineage(spec)
     expected = _validate_certificate(fullchain, private_key, spec["domains"])
     observed = reconcile_tls(spec)
-    fingerprints = {
-        item["fingerprint_sha256"] for item in observed.status["consumers"]
-    }
+    fingerprints = {item["fingerprint_sha256"] for item in observed.status["consumers"]}
     if fingerprints == {expected}:
         return ProviderResult(
             changed=False,
@@ -1241,9 +1268,7 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
             ],
             message="Certificate consumers already match the managed lineage.",
         )
-    caddy = next(
-        (item for item in spec["consumers"] if item["kind"] == "caddy"), None
-    )
+    caddy = next((item for item in spec["consumers"] if item["kind"] == "caddy"), None)
     if caddy is None:
         raise ProviderError("Certificate reconciliation requires a rollback source.")
     previous_fullchain, previous_key = _read_bundle(
@@ -1262,9 +1287,7 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
 
 
 def renew_tls(spec: dict[str, Any]) -> ProviderResult:
-    caddy = next(
-        (item for item in spec["consumers"] if item["kind"] == "caddy"), None
-    )
+    caddy = next((item for item in spec["consumers"] if item["kind"] == "caddy"), None)
     if caddy is None:
         raise ProviderError("Certificate renewal requires a rollback source.")
     previous_fullchain, previous_key = _read_bundle(
@@ -1293,14 +1316,18 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
 
 
 def _tls_reconcile(
-    spec: dict[str, Any], *, apply: bool,
+    spec: dict[str, Any],
+    *,
+    apply: bool,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     return apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
 
 
 def _tls_renew(
-    spec: dict[str, Any], *, apply: bool,
+    spec: dict[str, Any],
+    *,
+    apply: bool,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     if apply:
@@ -1374,7 +1401,9 @@ def reconcile_uploaded_certificate(
 
 
 def delete_uploaded_certificate(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Remove an installed certificate, or refuse and say who has to do it.
@@ -1401,12 +1430,8 @@ def delete_uploaded_certificate(
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
-    wanted = {
-        f"Severino HQ - {consumer['name']}" for consumer in spec["consumers"]
-    }
-    matches = [
-        item for item in certificates if item.get("nice_name") in wanted
-    ]
+    wanted = {f"Severino HQ - {consumer['name']}" for consumer in spec["consumers"]}
+    matches = [item for item in certificates if item.get("nice_name") in wanted]
     if not matches:
         return ProviderResult(
             changed=False,
@@ -1451,7 +1476,9 @@ def delete_uploaded_certificate(
 
 
 def delete_adguard(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Remove the rewrite, and treat an already-absent one as success.
@@ -1495,7 +1522,9 @@ def delete_adguard(
 
 
 def delete_npm(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Remove the proxy host matching this exact domain set."""
@@ -1603,8 +1632,19 @@ def _npm_access_policies(
         # A policy endpoint unavailable on an older NPM must not erase every
         # proxy host. The missing evidence stays unknown until the next sweep.
         return {}
-    return {
-        record["id"]: {
+    found = {}
+    for record in records:
+        if not isinstance(record, dict) or not isinstance(record.get("id"), int):
+            continue
+        clients = [
+            {
+                "directive": str(client.get("directive", "")),
+                "address": str(client.get("address", "")),
+            }
+            for client in record.get("clients") or ()
+            if client.get("directive") and client.get("address")
+        ]
+        found[record["id"]] = {
             "name": str(record.get("name", "")),
             "satisfy_any": bool(record.get("satisfy_any", False)),
             "pass_auth": bool(record.get("pass_auth", False)),
@@ -1612,18 +1652,12 @@ def _npm_access_policies(
             # carrying usernames, password hints, or any other auth material
             # into HQ's safe observation cache.
             "authorization_count": len(record.get("items") or ()),
-            "clients": [
-                {
-                    "directive": str(client.get("directive", "")),
-                    "address": str(client.get("address", "")),
-                }
-                for client in record.get("clients") or ()
-                if client.get("directive") and client.get("address")
-            ],
+            "clients": clients,
+            # NPM generates a final ``deny all`` for every non-empty client
+            # rule set but does not return that generated rule through the API.
+            "implicit_deny": bool(clients),
         }
-        for record in records
-        if isinstance(record, dict) and isinstance(record.get("id"), int)
-    }
+    return found
 
 
 def _npm_certificates(
@@ -1657,38 +1691,63 @@ def _npm_certificates(
 
 # ----- Cloudflare ------------------------------------------------------------
 #
-# The credential is deliberately narrow: it can read the zones on the account
+# Two credentials, each scoped to one surface.
+#
+# `cloudflare_dns` is deliberately narrow: it can read the zones on the account
 # and read and write their DNS records, and nothing else. Zone settings,
 # analytics and every account-level surface answer 403 to it. That is why the
 # zone provider declares no reconcile it could perform -- see the capability
 # registry -- and why nothing here reaches for a setting it cannot change.
+#
+# `cloudflare_api` carries the account surface -- analytics, zone settings,
+# registration -- and reaches no DNS record. Neither is a subset of the other,
+# so a provider states which one it needs and gets exactly that.
 
 
-def _cloudflare_url(connection_ref: str = "") -> str:
-    return _required(
-        connection_prefix("cloudflare_dns", connection_ref), "URL"
-    ).rstrip("/")
+def _cloudflare_url(
+    connection_ref: str = "", *, provider: str = "cloudflare_dns"
+) -> str:
+    return _required(connection_prefix(provider, connection_ref), "URL").rstrip("/")
 
 
-def _cloudflare_token(connection_ref: str = "") -> str:
-    return _required(
-        connection_prefix("cloudflare_dns", connection_ref), "API_TOKEN"
-    )
+def _cloudflare_token(
+    connection_ref: str = "", *, provider: str = "cloudflare_dns"
+) -> str:
+    return _required(connection_prefix(provider, connection_ref), "API_TOKEN")
 
 
-def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
-    """One Cloudflare call, with its envelope unwrapped and its errors kept.
+def _cloudflare_envelope(
+    path: str,
+    *,
+    method: str = "GET",
+    payload: Any = None,
+    provider: str = "cloudflare_dns",
+    connection_ref: str = "",
+) -> dict[str, Any]:
+    """One Cloudflare call, returning the whole envelope with its errors kept.
 
     Not routed through ``_request`` because Cloudflare says something useful in
     the body of a 400 -- "Content for A record must be a valid IPv4 address",
     "An identical record already exists" -- and the shared helper turns every
     non-200 into the same sentence. A rejected DNS change that only says
     "Provider request failed: HTTPError" is a support ticket to yourself.
+
+    ``success`` is checked here rather than by each caller, because Cloudflare
+    also answers 200 with ``success: false`` -- a token missing one permission
+    returns no ``result`` at all, and a list helper reading ``result`` off that
+    collects nothing and reports an empty estate. An account that looks empty
+    and an account that refused to answer must not read the same.
+
+    Both credentials come through here: the zone-scoped DNS token and the
+    account-scoped analytics one differ only in which connection names them,
+    which is what ``provider`` and ``connection_ref`` select.
     """
 
-    url = f"{_cloudflare_url()}{path}"
+    url = f"{_cloudflare_url(connection_ref, provider=provider)}{path}"
     headers = {
-        "Authorization": f"Bearer {_cloudflare_token()}",
+        "Authorization": (
+            f"Bearer {_cloudflare_token(connection_ref, provider=provider)}"
+        ),
         "Accept": "application/json",
     }
     body = None
@@ -1717,7 +1776,13 @@ def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) 
         raise ProviderError(
             f"Cloudflare refused the request: {_cloudflare_errors(raw)}"
         )
-    return parsed.get("result")
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
+    """The zone-scoped DNS surface, unwrapped to the result callers expect."""
+
+    return _cloudflare_envelope(path, method=method, payload=payload).get("result")
 
 
 def _cloudflare_errors(raw: bytes) -> str:
@@ -1757,9 +1822,7 @@ def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
 
 
 def _cloudflare_zones() -> list[dict[str, Any]]:
-    return _snapshot_value(
-        ("cloudflare-zones",), lambda: _cloudflare_paged("/zones")
-    )
+    return _snapshot_value(("cloudflare-zones",), lambda: _cloudflare_paged("/zones"))
 
 
 _ZONE_IDS: dict[str, str] = {}
@@ -1793,9 +1856,7 @@ def _caa_data(content: str) -> dict[str, Any]:
 
     parts = caa_parts(content)
     if parts is None:
-        raise ProviderError(
-            'A CAA value must look like: 0 issue "letsencrypt.org".'
-        )
+        raise ProviderError('A CAA value must look like: 0 issue "letsencrypt.org".')
     flags, tag, value = parts
     return {"flags": flags, "tag": tag, "value": value}
 
@@ -1810,7 +1871,9 @@ def _cloudflare_payload(spec: dict[str, Any]) -> dict[str, Any]:
     if record_type == "CAA":
         payload["data"] = _caa_data(str(spec["content"]))
     else:
-        payload["content"] = normalized_record_content(record_type, str(spec["content"]))
+        payload["content"] = normalized_record_content(
+            record_type, str(spec["content"])
+        )
     if record_type == "MX":
         payload["priority"] = int(spec.get("priority") or 0)
     if record_type in {"A", "AAAA", "CNAME"}:
@@ -1826,9 +1889,9 @@ def _record_matches(live: dict[str, Any], spec: dict[str, Any]) -> bool:
         return False
     if normalized_hostname(live.get("name", "")) != normalized_hostname(spec["name"]):
         return False
-    return normalized_record_content(record_type, str(live.get("content", ""))) == normalized_record_content(
-        record_type, str(spec["content"])
-    )
+    return normalized_record_content(
+        record_type, str(live.get("content", ""))
+    ) == normalized_record_content(record_type, str(spec["content"]))
 
 
 def _record_status(zone: str, live: dict[str, Any]) -> dict[str, Any]:
@@ -1849,7 +1912,9 @@ def _record_status(zone: str, live: dict[str, Any]) -> dict[str, Any]:
 
 
 def reconcile_cloudflare_record(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Make one public DNS record match its declaration.
@@ -1868,9 +1933,7 @@ def reconcile_cloudflare_record(
     record_id = str((observed or {}).get("record_id", "")).strip()
     live = next((item for item in records if item.get("id") == record_id), None)
     if live is None:
-        live = next(
-            (item for item in records if _record_matches(item, spec)), None
-        )
+        live = next((item for item in records if _record_matches(item, spec)), None)
 
     if live is None:
         if apply:
@@ -1893,11 +1956,12 @@ def reconcile_cloudflare_record(
     }
     if desired["type"] == "CAA":
         current["data"] = {
-            key: (live.get("data") or {}).get(key)
-            for key in ("flags", "tag", "value")
+            key: (live.get("data") or {}).get(key) for key in ("flags", "tag", "value")
         }
     else:
-        current["content"] = normalized_record_content(desired["type"], str(live.get("content", "")))
+        current["content"] = normalized_record_content(
+            desired["type"], str(live.get("content", ""))
+        )
     if desired["type"] == "MX":
         current["priority"] = int(live.get("priority") or 0)
     if "proxied" in desired:
@@ -1921,15 +1985,15 @@ def reconcile_cloudflare_record(
     return ProviderResult(
         changed=True,
         status=_record_status(zone, live or {}),
-        conditions=[
-            _condition("Ready", True, "Reconciled", "DNS record was updated.")
-        ],
+        conditions=[_condition("Ready", True, "Reconciled", "DNS record was updated.")],
         message="Public DNS record updated.",
     )
 
 
 def delete_cloudflare_record(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Remove one record, treating an already-absent one as success.
@@ -1963,9 +2027,7 @@ def delete_cloudflare_record(
     return ProviderResult(
         changed=True,
         status={"zone": zone, "name": spec.get("name", ""), "removed": True},
-        conditions=[
-            _condition("Ready", True, "Removed", "DNS record was removed.")
-        ],
+        conditions=[_condition("Ready", True, "Removed", "DNS record was removed.")],
         message="Public DNS record removed.",
     )
 
@@ -2012,9 +2074,7 @@ def list_cloudflare_records() -> list[dict[str, Any]]:
 
 
 def _portainer_url(connection_ref: str = "") -> str:
-    base = _required(
-        connection_prefix("portainer", connection_ref), "URL"
-    ).rstrip("/")
+    base = _required(connection_prefix("portainer", connection_ref), "URL").rstrip("/")
     return base if base.endswith("/api") else f"{base}/api"
 
 
@@ -2128,9 +2188,7 @@ def _portainer_stacks(
         headers=_portainer_headers(connection_ref),
     )
     return [
-        stack
-        for stack in stacks or []
-        if stack.get("EndpointId") == environment_id
+        stack for stack in stacks or [] if stack.get("EndpointId") == environment_id
     ]
 
 
@@ -2228,15 +2286,15 @@ def _stack_payload(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def reconcile_portainer(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     connection_ref = spec.get("connection_ref", "")
     environment = _portainer_environment_for(spec["host"], connection_ref)
     if not environment["reachable"]:
-        raise ProviderError(
-            f"Portainer cannot currently reach {spec['host']}."
-        )
+        raise ProviderError(f"Portainer cannot currently reach {spec['host']}.")
     existing = [
         stack
         for stack in _portainer_stacks(environment["id"], connection_ref)
@@ -2295,7 +2353,9 @@ def reconcile_portainer(
             status=status,
             conditions=[
                 _condition(
-                    "Degraded", True, "NotRunning",
+                    "Degraded",
+                    True,
+                    "NotRunning",
                     "The stack exists in Portainer but no container from it is "
                     "running.",
                 )
@@ -2309,7 +2369,9 @@ def reconcile_portainer(
             status=status,
             conditions=[
                 _condition(
-                    "Degraded", True, "BoundToLoopback",
+                    "Degraded",
+                    True,
+                    "BoundToLoopback",
                     f"{names} publishes a port on the loopback address, so "
                     "nothing outside that machine can reach it -- including a "
                     "proxy running in a container on the same host.",
@@ -2320,15 +2382,15 @@ def reconcile_portainer(
     return ProviderResult(
         changed=changed,
         status=status,
-        conditions=[
-            _condition("Ready", True, "Reconciled", "Stack is running.")
-        ],
+        conditions=[_condition("Ready", True, "Reconciled", "Stack is running.")],
         message="Stack updated." if changed else "Stack unchanged.",
     )
 
 
 def delete_portainer(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     connection_ref = spec.get("connection_ref", "")
@@ -2342,9 +2404,7 @@ def delete_portainer(
         return ProviderResult(
             changed=False,
             status={},
-            conditions=[
-                _condition("Ready", True, "Absent", "Stack is already gone.")
-            ],
+            conditions=[_condition("Ready", True, "Absent", "Stack is already gone.")],
             message="Stack was already absent.",
         )
     if apply:
@@ -2396,7 +2456,9 @@ def _list_portainer_containers() -> list[dict[str, Any]]:
             for container in _portainer_containers(environment["id"], connection_ref):
                 # The controller is running this sweep from inside one of these.
                 # Reporting it adds a row that is gone before the page renders.
-                if (container.get("Labels") or {}).get("severino-hq.role") == "controller":
+                if (container.get("Labels") or {}).get(
+                    "severino-hq.role"
+                ) == "controller":
                     continue
                 records.append(
                     _container_record(
@@ -2459,9 +2521,8 @@ def _cycle_portainer_container(
     observed = [
         _container_record(container, spec["host"], connection_ref)
         for container in _portainer_containers(environment["id"], connection_ref)
-        if spec["name"] in [
-            str(name).lstrip("/") for name in container.get("Names") or ()
-        ]
+        if spec["name"]
+        in [str(name).lstrip("/") for name in container.get("Names") or ()]
     ]
     state = observed[0]["state"] if observed else ""
     status = {
@@ -2487,21 +2548,27 @@ def _cycle_portainer_container(
 
 
 def restart_portainer_container(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     return _cycle_portainer_container(spec, "restart", apply=apply)
 
 
 def start_portainer_container(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     return _cycle_portainer_container(spec, "start", apply=apply)
 
 
 def stop_portainer_container(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     return _cycle_portainer_container(spec, "stop", apply=apply)
@@ -2770,7 +2837,9 @@ def _tailnet_device_id(name: str) -> str:
 
 
 def reconcile_tailnet_device(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Assert HQ's decision about one device, and report what is true after.
@@ -2799,8 +2868,7 @@ def reconcile_tailnet_device(
             status=current,
             conditions=[],
             message=(
-                f"Key expiry would be {'disabled' if wanted else 'enabled'} for "
-                f"{name}."
+                f"Key expiry would be {'disabled' if wanted else 'enabled'} for {name}."
             ),
         )
 
@@ -2847,13 +2915,14 @@ def reconcile_tailnet_device(
 # Said once, because both calls in the approval fail the same way for the same
 # reason, and an operator comparing two wordings would look for two problems.
 _TAILNET_SCOPE_NEEDED = (
-    "This Tailscale credential may not approve routes. It needs the "
-    "devices:core scope."
+    "This Tailscale credential may not approve routes. It needs the devices:core scope."
 )
 
 
 def approve_tailnet_routes(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Approve exactly the routes this device is already advertising.
@@ -2900,14 +2969,14 @@ def approve_tailnet_routes(
             status=status,
             conditions=[
                 _condition(
-                    "Ready", True, "Reconciled",
+                    "Ready",
+                    True,
+                    "Reconciled",
                     "Every route this device advertises is approved.",
                 )
             ],
             message=(
-                "Nothing to approve."
-                if advertised
-                else f"{name} advertises no routes."
+                "Nothing to approve." if advertised else f"{name} advertises no routes."
             ),
         )
     if not apply:
@@ -2933,7 +3002,9 @@ def approve_tailnet_routes(
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
             raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
-        raise ProviderError(f"Tailscale refused the route approval for {name}.") from exc
+        raise ProviderError(
+            f"Tailscale refused the route approval for {name}."
+        ) from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError(f"Tailscale did not answer for {name}.") from exc
 
@@ -2944,7 +3015,9 @@ def approve_tailnet_routes(
         changed=True,
         status=status,
         conditions=[
-            _condition("Ready", True, "Reconciled", "The advertised routes are approved.")
+            _condition(
+                "Ready", True, "Reconciled", "The advertised routes are approved."
+            )
         ],
         message=f"Approved {', '.join(pending)} for {name}.",
     )
@@ -3018,7 +3091,9 @@ def _tailnet_policy_etag(token: str) -> str:
 
 
 def reconcile_tailnet_policy(
-    spec: dict[str, Any], *, apply: bool = True,
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Apply the declared policy, but only if it still passes its own tests.
@@ -3140,7 +3215,9 @@ def _tailnet_policy(token: str) -> dict[str, Any]:
         raise ProviderError("Tailscale did not return a readable policy.") from exc
 
 
-def _who_may_reach(policy: dict[str, Any], token: str, target: str) -> list[dict[str, Any]]:
+def _who_may_reach(
+    policy: dict[str, Any], token: str, target: str
+) -> list[dict[str, Any]]:
     """The rules that let anything reach one address and port.
 
     Asked of Tailscale rather than worked out here. HQ is a reader of this
@@ -3249,9 +3326,7 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             "services": [
                 {
                     "name": str(service.get("name", "")),
-                    "addresses": sorted(
-                        str(a) for a in service.get("addrs") or ()
-                    ),
+                    "addresses": sorted(str(a) for a in service.get("addrs") or ()),
                     "comment": str(service.get("comment", "")),
                     "ports": sorted(str(p) for p in service.get("ports") or ()),
                 }
@@ -3316,9 +3391,7 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     for device in devices:
         # IPv4 only. The policy here is written against v4, and previewing both
         # families would double every row to say the same thing twice.
-        address = next(
-            (a for a in device["addresses"] if ":" not in a), ""
-        )
+        address = next((a for a in device["addresses"] if ":" not in a), "")
         if not address:
             continue
         for port in asking:
@@ -3511,14 +3584,404 @@ def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
     return {"detail": f"{len(names)} zones.", "reaches": names}
 
 
+def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
+    """Prove the account credential answers, and report the sites it observes.
+
+    ``reaches`` is the analytics sites rather than the zones, because that is
+    what distinguishes this credential from the DNS one beside it: both see the
+    same zones, and a page listing them twice tells an operator nothing about
+    which connection is which.
+
+    A site with no ruleset bound to a hostname is left out. Cloudflare keeps a
+    Web Analytics site around after whatever it was attached to goes away, so
+    the account carries entries that describe nothing -- and a site HQ cannot
+    name a host for is one it could not join to anything either.
+    """
+
+    verification = _cloudflare_api_request("/user/tokens/verify", connection_ref)
+    if not isinstance(verification, dict) or not verification.get("success"):
+        raise ProviderError("Cloudflare token verification failed.")
+
+    account = _analytics_account(connection_ref)
+    hosts = sorted(site["host"] for site in _analytics_sites(account, connection_ref))
+    measured = "site" if len(hosts) == 1 else "sites"
+    return {"detail": f"{len(hosts)} analytics {measured}.", "reaches": hosts}
+
+
+# Which Cloudflare dimension answers each breakdown HQ stores. Declared once:
+# the GraphQL query is generated from this and so is the payload, so a new
+# breakdown is one entry here and one enum member in the analytics app, and
+# there is no third place where the two names could stop matching.
+ANALYTICS_DIMENSIONS = {
+    "path": "requestPath",
+    "referrer": "refererHost",
+    "country": "countryName",
+    "device": "deviceType",
+    "browser": "userAgentBrowser",
+    "os": "userAgentOS",
+}
+
+# Percentiles HQ keeps, and the field each comes from. p75 because that is the
+# threshold Core Web Vitals is actually defined at -- a metric passes when 75%
+# of samples are good, so the 75th percentile is the number being judged.
+ANALYTICS_VITALS = {
+    "largest_contentful_paint_ms": "largestContentfulPaintP75",
+    "interaction_to_next_paint_ms": "interactionToNextPaintP75",
+    "first_contentful_paint_ms": "firstContentfulPaintP75",
+    "time_to_first_byte_ms": "timeToFirstByteP75",
+}
+
+ANALYTICS_BUCKETS = ("lcp", "inp", "cls")
+
+# Connection kinds a reading uses that no resource declares.
+#
+# Every other probe exists because some ProviderSpec names its provider: the
+# credential is there to reconcile something, so the resource registry is the
+# record of why it is carried. Analytics is observed and never reconciled --
+# there is no desired state for a page view -- so nothing in that registry
+# would ever name this, and without saying so here the probe would look like a
+# probe for nothing. Declared rather than inferred, so a probe still cannot be
+# added for a connection HQ has no stated use for.
+OBSERVER_PROVIDERS = frozenset({"cloudflare_api"})
+
+
+def _cloudflare_graphql(
+    query: str, variables: dict[str, Any], connection_ref: str = ""
+) -> dict[str, Any]:
+    """One GraphQL call against the account credential.
+
+    GraphQL answers 200 with an ``errors`` array rather than an HTTP status, so
+    a caller that only checked the status would read a failed query as an empty
+    estate -- which is indistinguishable from a site nobody visited.
+    """
+
+    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
+    body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base}/graphql",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": (
+                f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+            ),
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderError(
+            f"Cloudflare analytics refused the query: HTTP {exc.code}."
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ProviderError(
+            f"Cloudflare analytics was unreachable: {type(exc).__name__}."
+        ) from exc
+    except ValueError as exc:
+        raise ProviderError("Cloudflare analytics returned invalid JSON.") from exc
+
+    if payload.get("errors"):
+        first = payload["errors"][0]
+        message = first.get("message", "") if isinstance(first, dict) else ""
+        raise ProviderError(f"Cloudflare analytics rejected the query: {message}")
+    return payload.get("data") or {}
+
+
+def _cloudflare_api_request(path: str, connection_ref: str = "") -> Any:
+    """One account-surface request through the account-scoped credential."""
+
+    return _cloudflare_envelope(
+        path, provider="cloudflare_api", connection_ref=connection_ref
+    )
+
+
+def _cloudflare_api_list(
+    path: str, connection_ref: str = "", *, per_page: int = 100
+) -> list[dict[str, Any]]:
+    """Every page from one Cloudflare account list endpoint."""
+
+    collected: list[dict[str, Any]] = []
+    for page in range(1, 51):
+        separator = "&" if "?" in path else "?"
+        response = _cloudflare_api_request(
+            f"{path}{separator}per_page={per_page}&page={page}", connection_ref
+        )
+        batch = (response or {}).get("result", [])
+        if not isinstance(batch, list):
+            raise ProviderError("Cloudflare account list returned an invalid result.")
+        collected.extend(item for item in batch if isinstance(item, dict))
+        total_pages = int(
+            ((response or {}).get("result_info") or {}).get("total_pages") or 0
+        )
+        if (total_pages and page >= total_pages) or len(batch) < per_page:
+            return collected
+    raise ProviderError("Cloudflare account list did not terminate.")
+
+
+def _analytics_account(connection_ref: str = "") -> str:
+    """The one account this credential reads, discovered rather than configured."""
+
+    accounts = _cloudflare_api_list("/accounts", connection_ref, per_page=50)
+    tags = [account["id"] for account in accounts if account.get("id")]
+    if len(tags) != 1:
+        raise ProviderError(
+            f"The Cloudflare credential sees {len(tags)} accounts; it has to see one."
+        )
+    return tags[0]
+
+
+def _analytics_sites(account: str, connection_ref: str = "") -> list[dict[str, str]]:
+    """Web Analytics sites that still describe something.
+
+    The same membership rule the probe applies: a site whose ruleset names no
+    hostname measures nothing, and Cloudflare keeps those around indefinitely.
+    """
+
+    result = _cloudflare_api_list(
+        f"/accounts/{account}/rum/site_info/list", connection_ref
+    )
+    sites = []
+    for site in result:
+        if not site.get("site_tag"):
+            continue
+        ruleset = site.get("ruleset") or {}
+        host = str(ruleset.get("zone_name") or "").strip().rstrip(".").lower()
+        if host:
+            sites.append({"site_tag": str(site["site_tag"]), "host": host})
+    return sorted(sites, key=lambda item: item["host"])
+
+
+def _analytics_query() -> str:
+    """One query carrying every breakdown, built from the dimension registry.
+
+    Aliased selections rather than a request each: the breakdowns share a
+    filter and a window, and asking six times would spend six times the quota
+    to answer one question about one day.
+    """
+
+    breakdowns = "\n".join(
+        f"""{name}: rumPageloadEventsAdaptiveGroups(
+             filter: $filter, limit: 5000, orderBy: [count_DESC]
+           ) {{
+             count
+             sum {{ visits }}
+             avg {{ sampleInterval }}
+             dimensions {{ date {field} }}
+           }}"""
+        for name, field in ANALYTICS_DIMENSIONS.items()
+    )
+    quantiles = " ".join(ANALYTICS_VITALS.values())
+    buckets = " ".join(
+        f"{metric}{suffix}"
+        for metric in ANALYTICS_BUCKETS
+        for suffix in ("Good", "NeedsImprovement", "Poor")
+    )
+    return f"""
+      query($account: String!, $filter: ZoneRumPageloadEventsAdaptiveGroupsFilter_InputObject!,
+            $vitalsFilter: ZoneRumWebVitalsEventsAdaptiveGroupsFilter_InputObject!) {{
+        viewer {{
+          accounts(filter: {{ accountTag: $account }}) {{
+            {breakdowns}
+            vitals: rumWebVitalsEventsAdaptiveGroups(
+              filter: $vitalsFilter, limit: 5000, orderBy: [date_ASC]
+            ) {{
+              count
+              avg {{ sampleInterval }}
+              quantiles {{ {quantiles} cumulativeLayoutShiftP75 }}
+              sum {{ {buckets} }}
+              dimensions {{ date }}
+            }}
+          }}
+        }}
+      }}
+    """
+
+
+def _milliseconds(value: Any) -> int | None:
+    """Cloudflare's microseconds as milliseconds, and its -1 as absence.
+
+    A percentile with no samples arrives as -1, which is absence wearing a
+    number's clothes. Left alone it would average into a negative load time,
+    so it stops here rather than downstream.
+    """
+
+    if value is None:
+        return None
+    try:
+        micros = float(value)
+    except (TypeError, ValueError):
+        return None
+    if micros < 0:
+        return None
+    return int(round(micros / 1000))
+
+
+def _analytics_rows(account: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalise every configured traffic breakdown from one query result."""
+
+    rows = []
+    for dimension, field in ANALYTICS_DIMENSIONS.items():
+        for group in account.get(dimension) or []:
+            dimensions = group.get("dimensions") or {}
+            value = str(dimensions.get(field) or "").strip()
+            if not value:
+                continue
+            rows.append(
+                {
+                    "dimension": dimension,
+                    "value": value[:512],
+                    "date": dimensions.get("date"),
+                    "pageviews": int(group.get("count") or 0),
+                    "visits": int((group.get("sum") or {}).get("visits") or 0),
+                    "sample_interval": int(
+                        (group.get("avg") or {}).get("sampleInterval") or 1
+                    ),
+                }
+            )
+    return rows
+
+
+def _analytics_vitals(account: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalise site-wide vitals from one query result."""
+
+    vitals = []
+    for group in account.get("vitals") or []:
+        quantiles = group.get("quantiles") or {}
+        sums = group.get("sum") or {}
+        reading = {
+            "date": (group.get("dimensions") or {}).get("date"),
+            "sample_interval": int((group.get("avg") or {}).get("sampleInterval") or 1),
+            "cumulative_layout_shift": quantiles.get("cumulativeLayoutShiftP75"),
+        }
+        for column, field in ANALYTICS_VITALS.items():
+            reading[column] = _milliseconds(quantiles.get(field))
+        for metric in ANALYTICS_BUCKETS:
+            for suffix, column in (
+                ("Good", "good"),
+                ("NeedsImprovement", "needs_improvement"),
+                ("Poor", "poor"),
+            ):
+                reading[f"{metric}_{column}"] = int(sums.get(f"{metric}{suffix}") or 0)
+        vitals.append(reading)
+    return vitals
+
+
+def _analytics_site_reading(
+    account: str,
+    site: dict[str, str],
+    connection_ref: str,
+    *,
+    start: date,
+    end: date,
+    query: str,
+) -> dict[str, Any]:
+    """One site's reading, with its connection identity preserved."""
+
+    window = {
+        "siteTag": site["site_tag"],
+        "date_geq": start.isoformat(),
+        "date_leq": end.isoformat(),
+    }
+    data = _cloudflare_graphql(
+        query,
+        {"account": account, "filter": window, "vitalsFilter": dict(window)},
+        connection_ref,
+    )
+    accounts = (data.get("viewer") or {}).get("accounts") or []
+    if len(accounts) != 1 or not isinstance(accounts[0], dict):
+        raise ProviderError("Cloudflare analytics returned no matching account.")
+    result = accounts[0]
+    return {
+        "site_tag": site["site_tag"],
+        "host": site["host"],
+        "connection_ref": connection_ref,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "rows": _analytics_rows(result),
+        "vitals": _analytics_vitals(result),
+    }
+
+
+def analytics_sites() -> list[dict[str, str]]:
+    """Discover measured sites once so HQ can plan their missing windows."""
+
+    found = []
+    for connection_ref in provider_connection_refs("cloudflare_api"):
+        account = _analytics_account(connection_ref)
+        found.extend(
+            {
+                **site,
+                "account": account,
+                "connection_ref": connection_ref,
+            }
+            for site in _analytics_sites(account, connection_ref)
+        )
+    return found
+
+
+def analytics(
+    days: int = 3,
+    *,
+    sites: list[dict[str, str]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Every site's recent traffic and vitals, in the shape HQ stores.
+
+    ``days`` is short by default because a day that has closed does not change:
+    re-reading a week on every sweep would spend quota confirming numbers that
+    were settled the first time. A longer window is what a backfill asks for,
+    and the same call answers it.
+
+    Returns whole days only. The current day is excluded because it is still
+    accumulating, and a partial day stored beside complete ones is the kind of
+    figure that reads as a traffic collapse every morning.
+    """
+
+    sources = analytics_sites() if sites is None else sites
+    if not sources:
+        # Nothing to do, which is not the same as something going wrong. A
+        # deployment carrying no analytics credential should sweep in silence
+        # rather than report a failure on every pass.
+        return {"sites": []}
+
+    default_start, completed = completed_window(days)
+    query = _analytics_query()
+    planned = {
+        (item.get("connection_ref", ""), item.get("site_tag", "")): item
+        for item in (windows or [])
+        if isinstance(item, dict)
+    }
+    readings = []
+    for site in sources:
+        window = planned.get((site["connection_ref"], site["site_tag"]), {})
+        try:
+            start = date.fromisoformat(window.get("start", ""))
+            end = date.fromisoformat(window.get("end", ""))
+        except (TypeError, ValueError):
+            start, end = default_start, completed
+        if start > end or end > completed or (end - start).days >= MAX_QUERY_DAYS:
+            start, end = default_start, completed
+        readings.append(
+            _analytics_site_reading(
+                site["account"],
+                site,
+                site["connection_ref"],
+                start=start,
+                end=end,
+                query=query,
+            )
+        )
+    return {"sites": readings}
+
+
 def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     environments = _portainer_environments(connection_ref)
     reachable = [item for item in environments if item["reachable"]]
     local_host = controller_id()
     return {
-        "detail": (
-            f"{len(reachable)} of {len(environments)} environments reachable."
-        ),
+        "detail": (f"{len(reachable)} of {len(environments)} environments reachable."),
         "reaches": sorted(
             local_host if item["local"] and local_host else item["name"]
             for item in reachable
@@ -3546,6 +4009,7 @@ _CONNECTION_PROBES = {
     "adguard": _probe_adguard,
     "npm": _probe_npm,
     "cloudflare_dns": _probe_cloudflare_dns,
+    "cloudflare_api": _probe_cloudflare_api,
     "portainer": _probe_portainer,
     "tailscale": _probe_tailscale,
 }
@@ -3650,7 +4114,10 @@ def _refuses(reason: str):
     """
 
     def locked(
-        spec: dict[str, Any], *, apply: bool, observed: dict[str, Any] | None = None,
+        spec: dict[str, Any],
+        *,
+        apply: bool,
+        observed: dict[str, Any] | None = None,
     ) -> ProviderResult:
         del spec, apply, observed
         raise ProviderError(reason)

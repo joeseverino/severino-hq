@@ -69,19 +69,18 @@ class TableListMixin:
     def table_values(self, name: str) -> list[str]:
         return [value for value in self.request.GET.getlist(name) if value]
 
-    def apply_table_query(self, queryset: QuerySet) -> QuerySet:
-        query = self.request.GET.get("q", "").strip()
+    def _apply_table_search(self, queryset: QuerySet, query: str) -> QuerySet:
         if query and self.table_search_scope:
             from application.search import apply_search
             from application.security import web_principal
 
-            queryset = apply_search(
+            return apply_search(
                 queryset,
                 scope=self.table_search_scope,
                 query=query,
                 principal=web_principal(self.request.user),
             )
-        elif query and self.table_search_fields:
+        if query and self.table_search_fields:
             try:
                 terms = shlex.split(query)
             except ValueError:
@@ -91,17 +90,20 @@ class TableListMixin:
                 for field in self.table_search_fields:
                     predicate |= Q(**{f"{field}__icontains": term})
                 queryset = queryset.filter(predicate)
+        return queryset
 
+    def _apply_table_filters(self, queryset: QuerySet) -> QuerySet:
         for spec in self.resolved_table_filters():
             values = self.table_values(spec.name)
             if values:
                 queryset = queryset.filter(**{f"{spec.lookup}__in": values})
+        return queryset
 
+    def _apply_table_sort(self, queryset: QuerySet, query: str) -> QuerySet:
         requested_sort = self.request.GET.get("sort")
         selected_sort = requested_sort or self.table_default_sort
         if query and self.table_search_scope and requested_sort in (None, "_relevance"):
-            queryset = queryset.order_by("_search_rank", "pk")
-            return queryset
+            return queryset.order_by("_search_rank", "pk")
         sort = next(
             (spec for spec in self.get_table_sorts() if spec.value == selected_sort),
             None,
@@ -115,6 +117,14 @@ class TableListMixin:
                 ordering = (*ordering, "pk")
             queryset = queryset.order_by(*ordering)
         return queryset
+
+    def apply_table_query(self, queryset: QuerySet) -> QuerySet:
+        """Apply the shared search, filter, and stable-sort URL contract."""
+
+        query = self.request.GET.get("q", "").strip()
+        queryset = self._apply_table_search(queryset, query)
+        queryset = self._apply_table_filters(queryset)
+        return self._apply_table_sort(queryset, query)
 
     def table_context(self) -> dict[str, Any]:
         filters = []

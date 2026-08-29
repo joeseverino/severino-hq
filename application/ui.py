@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from .workflow_contracts import WorkflowPlan
+
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
 # insight panels, extension-provided projections -- draws from this set, so a
 # state means the same thing and looks the same wherever it is rendered.
@@ -137,6 +139,9 @@ class Insight:
     # unset, the insight counts as the single thing it describes -- which is
     # what an alert is.
     magnitude: int | None = None
+    # Optional closure loop emitted by any host or plugin domain. The queue and
+    # insight partials render it generically; the domain still owns every action.
+    workflow: WorkflowPlan | None = None
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:

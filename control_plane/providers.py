@@ -2126,8 +2126,31 @@ def _tailnet_device_identity(spec: dict[str, Any]) -> tuple[str, ...]:
     return (name,) if name else ()
 
 
+# What a tailnet device declaration is *about* its machine, used to qualify its
+# key. Not a service facet: a device is not something a hostname is served by,
+# so it belongs here rather than in the facet the service composition reads.
+TAILNET_FACET = "tailnet"
+
+
 def _tailnet_device_key_hint(spec: dict[str, Any]) -> str:
-    return str(spec.get("name", ""))
+    """``<name>-tailnet``, because a machine already answers to ``<name>``.
+
+    A key is unique across every kind, and this asked for the bare device name
+    -- the same string ``_machine_key_hint`` asks for. Two declarations about
+    one machine competed for one key, so whichever was adopted second was filed
+    as ``<name>-2``: a suffix that records nothing except which arrived later,
+    on an estate where the name is what everything else joins on.
+
+    Every other provider that describes an aspect of something already answers
+    this way -- ``<name>-dns``, ``<name>-proxy``, ``<name>-certificate``. This
+    one is the outlier, and the collision was the consequence rather than a
+    quirk of the tailnet.
+
+    Existing keys are migrated rather than left; see the migration that renames
+    them, because a key nobody can explain is worse than a rename nobody enjoys.
+    """
+    name = str(spec.get("name", "")).strip()
+    return f"{name}-{TAILNET_FACET}" if name else ""
 
 
 def _tailnet_device_readout(
@@ -2529,6 +2552,48 @@ _PROVIDERS = (
 )
 
 PROVIDERS = {provider.kind: provider for provider in _PROVIDERS}
+
+
+@dataclass(frozen=True)
+class ObserverAbility:
+    """What a connection is carried for when it reconciles nothing.
+
+    Every other ability is derived from a resource kind: a credential exists to
+    make some declaration true, so the kind is the record of why it is held.
+    A connection that only ever reads has no kind to derive from, and left at
+    that it appears on the connections page holding no authority at all -- which
+    reads as a credential nobody can account for rather than as a reader.
+
+    So a reader declares its ability here, against the resource it answers for.
+    The effect is always a read: if something wants to change state it needs a
+    kind, and a kind is what the reconcile machinery keys on.
+    """
+
+    provider: str
+    name: str
+    label: str
+    summary: str
+    subject_resource: str
+
+
+_OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
+    ObserverAbility(
+        provider="cloudflare_api",
+        name="analytics.read",
+        label="Site analytics",
+        summary=(
+            "Reads what the published site was asked for -- pages, referrers, "
+            "countries, devices, browsers and operating systems -- and the Core "
+            "Web Vitals behind them."
+        ),
+        subject_resource="analytics",
+    ),
+)
+
+
+def observer_abilities() -> tuple[ObserverAbility, ...]:
+    return _OBSERVER_ABILITIES
+
 
 # The kinds other modules name directly. Spelled once here, beside the registry
 # that defines them, because a kind mistyped in a filter is a query that finds

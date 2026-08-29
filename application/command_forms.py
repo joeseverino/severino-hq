@@ -144,7 +144,7 @@ class CapabilityCommandForm(forms.Form):
         return tuple(
             field
             for field in self.visible_fields()
-            if field.name not in {"__expected_updated_at", "__confirm_effect"}
+            if field.name not in {"__expected_updated_at", "__confirm_effect", "next"}
         )
 
     @property
@@ -256,6 +256,7 @@ def command_form_class(
         ],
         widget=forms.HiddenInput(),
     )
+    fields["next"] = forms.CharField(required=False, widget=forms.HiddenInput())
     if spec.effect in {"infrastructure_change", "destructive"}:
         fields["__confirm_effect"] = forms.BooleanField(
             label=(

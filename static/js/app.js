@@ -29,6 +29,23 @@ const hqParseDocument = (() => {
     new DOMParser().parseFromString(policy.createHTML(html), "text/html");
 })();
 
+// Every enhanced request crosses the session boundary the same way. When an
+// OIDC session needs renewal, the server returns the provider URL instead of
+// letting fetch follow a cross-origin redirect that CSP correctly blocks.
+const hqFetch = async (input, options = {}) => {
+  const headers = new Headers(options.headers);
+  headers.set("X-Requested-With", "XMLHttpRequest");
+  const response = await window.fetch(input, { ...options, headers });
+  const refreshUrl =
+    response.status === 403 ? response.headers.get("refresh_url") : "";
+  if (refreshUrl) {
+    window.location.assign(refreshUrl);
+    return new Promise(() => {});
+  }
+  return response;
+};
+window.hqFetch = hqFetch;
+
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
 // than by remembering to extend a hardcoded query. That query was extended
@@ -120,7 +137,7 @@ document.querySelectorAll("details[data-action-count-url]").forEach((menu) => {
     }
     menu.dataset.actionCountLoaded = "loading";
     try {
-      const response = await fetch(menu.dataset.actionCountUrl, {
+      const response = await hqFetch(menu.dataset.actionCountUrl, {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) throw new Error(`Action count returned ${response.status}`);
@@ -340,7 +357,7 @@ document.querySelectorAll("dialog.modal").forEach((dialog) => {
 // field remains a normal GET form; this only removes the click needed to reach
 // it and leaves local table search's `/` shortcut untouched.
 document.addEventListener("keydown", (event) => {
-  if (!(event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
+  if (!(event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
   if (event.target.closest("input, textarea, select, [contenteditable]")) return;
   const search = document.querySelector(".global-search input[type=search]");
   if (!search) return;
@@ -447,7 +464,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     if (!card || !card.id) return false;
     // X-Fragment lets the view skip everything it would otherwise rebuild to
     // redraw one grid, and return the card on its own.
-    const response = await fetch(link.href, {
+    const response = await hqFetch(link.href, {
       credentials: "same-origin",
       headers: { "X-Fragment": "calendar" },
     });
@@ -498,7 +515,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   const tick = async () => {
     if (stop) return;
     try {
-      const response = await fetch(panel.dataset.job, {
+      const response = await hqFetch(panel.dataset.job, {
         credentials: "same-origin",
       });
       if (response.ok) {
@@ -599,10 +616,9 @@ document.addEventListener("submit", (event) => {
   const buttons = form.querySelectorAll("button");
   buttons.forEach((button) => (button.disabled = true));
   if (status) status.textContent = "Saving…";
-  fetch(form.action, {
+  hqFetch(form.action, {
     method: "POST",
     body: new FormData(form),
-    headers: { "X-Requested-With": "fetch" },
     credentials: "same-origin",
   })
     .then((response) => {
@@ -651,8 +667,7 @@ document.addEventListener("submit", (event) => {
   event.preventDefault();
   const query = new URLSearchParams(new FormData(form)).toString();
   slot.setAttribute("aria-busy", "true");
-  fetch(`${form.action}?${query}`, {
-    headers: { "X-Requested-With": "fetch" },
+  hqFetch(`${form.action}?${query}`, {
     credentials: "same-origin",
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
@@ -679,8 +694,7 @@ document.addEventListener("click", (event) => {
   const dialog = document.getElementById("modal-connection");
   const slot = dialog?.querySelector("[data-connection-slot]");
   if (!slot) return;
-  fetch(opener.dataset.connectionSource, {
-    headers: { "X-Requested-With": "fetch" },
+  hqFetch(opener.dataset.connectionSource, {
     credentials: "same-origin",
   })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
@@ -712,7 +726,7 @@ const hqRoundTrip = (() => {
     const started = performance.now();
     // A response with no body and no database behind it, so what is measured
     // is the path rather than what HQ did after arriving.
-    return fetch(`${endpoint}?t=${started}`, {
+    return hqFetch(`${endpoint}?t=${started}`, {
       cache: "no-store",
       credentials: "same-origin",
     }).then(() => performance.now() - started);
@@ -791,6 +805,8 @@ document.getElementById("modal-connection")?.addEventListener("close", () => {
 // meant to produce one. A same-origin fetch exposes every response header, so
 // the browser reading the panel is the honest place to ask what it was given.
 const HQ_RESPONSE_HEADERS = [
+  ["x-served-by", "Which reverse-proxy hostname actually served this response"],
+  ["x-request-id", "Joins this browser response to HQ's structured request log"],
   ["content-security-policy", "Which origins may load script, style and frames"],
   ["strict-transport-security", "Refuses plain HTTP for this host from now on"],
   ["x-content-type-options", "Stops the browser guessing a type it was not sent"],
@@ -836,7 +852,10 @@ const hqShowResponseHeaders = (root) => {
     return row;
   };
 
-  fetch(window.location.href, { credentials: "same-origin", cache: "no-store" })
+  hqFetch(window.location.href, {
+    credentials: "same-origin",
+    cache: "no-store",
+  })
     .then((response) => {
       const rows = HQ_RESPONSE_HEADERS.map(([name, purpose]) => {
         const value = response.headers.get(name);
@@ -881,7 +900,7 @@ const hqShowPublicAddress = (disclosure) => {
   const slot = disclosure.querySelector("[data-peering-source]");
   if (!slot || slot.dataset.loaded || !window.fetch) return;
   slot.dataset.loaded = "true";
-  fetch(slot.dataset.peeringSource, { credentials: "same-origin" })
+  hqFetch(slot.dataset.peeringSource, { credentials: "same-origin" })
     .then((response) => (response.ok ? response.text() : Promise.reject(response)))
     .then((html) => {
       const rows = hqParseDocument(html).body;
@@ -949,58 +968,105 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
   const status = workspace.querySelector("[data-topology-status]");
   const reset = workspace.querySelector("[data-topology-reset]");
-  let focused = "";
+  let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
+    ? workspace.dataset.focus : "";
 
   const rememberFocus = (nodeId) => {
     const url = new URL(window.location.href);
     if (nodeId) url.searchParams.set("focus", nodeId);
-    else url.searchParams.delete("focus");
+    else {
+      url.searchParams.delete("focus");
+      url.searchParams.delete("direction");
+      url.searchParams.delete("depth");
+    }
     window.history.replaceState({}, "", url);
   };
 
-  const focus = (nodeId, remember = true) => {
-    focused = nodes.some((node) => node.dataset.topologyNode === nodeId) ? nodeId : "";
+  // Whether the toolbar alone would show this node, ignoring any focus. Split
+  // out so a caller can ask before rendering rather than reading it back off
+  // the DOM afterwards: dropping a focus the filter just hid used to mean
+  // rendering a state that existed only until the next line replaced it.
+  const passesToolbar = (node) => {
+    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
+    return shownKinds.has(node.dataset.topologyNodeKind)
+      && terms.every((term) => node.dataset.topologySearchText.toLocaleLowerCase().includes(term));
+  };
+
+  const render = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
     workspace.classList.toggle("has-focus", Boolean(selected));
     nodes.forEach((node) => {
       const id = node.dataset.topologyNode;
+      const matchesFilter = passesToolbar(node);
+      const inNeighborhood = !selected || id === focused || related.has(id);
+      node.hidden = !matchesFilter || !inNeighborhood;
       node.classList.toggle("is-selected", id === focused);
       node.classList.toggle("is-related", related.has(id));
-      node.classList.toggle(
-        "is-dimmed",
-        Boolean(selected) && id !== focused && !related.has(id) && !node.open,
-      );
-    });
-    edges.forEach((edge) => {
-      const ends = edge.dataset.topologyEdge.split(" ");
-      edge.classList.toggle("is-related", Boolean(selected) && ends.includes(focused));
-    });
-    if (status) {
-      status.textContent = selected
-        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : "Select a node to isolate its immediate relationships. Open it for actions and detail.";
-    }
-    if (remember) rememberFocus(focused);
-  };
-
-  const filter = () => {
-    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
-    nodes.forEach((node) => {
-      const haystack = node.dataset.topologySearchText.toLocaleLowerCase();
-      node.hidden = !shownKinds.has(node.dataset.topologyNodeKind)
-        || !terms.every((term) => haystack.includes(term));
     });
     lanes.forEach((lane) => {
-      const visible = [...lane.querySelectorAll("[data-topology-node]")].filter((node) => !node.hidden);
+      const visible = [...lane.querySelectorAll("[data-topology-node]")]
+        .filter((node) => !node.hidden);
       lane.hidden = visible.length === 0;
       const count = lane.querySelector("[data-topology-count]");
       if (count) count.textContent = visible.length;
     });
-    const selected = nodes.find((node) => node.dataset.topologyNode === focused);
-    if (selected?.hidden) focus("");
+    edges.forEach((edge) => {
+      const ends = edge.dataset.topologyEdge.split(" ");
+      const touchesFocus = Boolean(selected) && ends.includes(focused);
+      edge.hidden = Boolean(selected) && !touchesFocus;
+      edge.classList.toggle("is-related", touchesFocus);
+    });
+    if (status) {
+      const visible = nodes.filter((node) => !node.hidden).length;
+      status.textContent = selected
+        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
+        : `${visible} of ${nodes.length} nodes shown. Select one to isolate its immediate relationships.`;
+    }
   };
+
+  const focus = (nodeId, remember = true) => {
+    focused = nodes.some((node) => node.dataset.topologyNode === nodeId) ? nodeId : "";
+    render();
+    if (remember) rememberFocus(focused);
+    if (focused && remember) {
+      nodes.find((node) => node.dataset.topologyNode === focused)?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  };
+
+  const filter = () => {
+    // Decide, then draw — once. A focus the toolbar has just excluded is
+    // dropped before anything is painted, so the explorer never shows a
+    // neighbourhood it is about to discard.
+    const selected = nodes.find((node) => node.dataset.topologyNode === focused);
+    if (selected && !passesToolbar(selected)) {
+      focused = "";
+      rememberFocus("");
+    }
+    render();
+  };
+
+  // A node title is a link inside a <summary>, so one click can mean two
+  // things: follow it, and toggle the disclosure. Blink suppresses the toggle
+  // for a click on an interactive descendant; other engines do both, which
+  // navigates away from a node it just expanded. preventDefault cancels the
+  // toggle and the navigation together, so the navigation is reissued here --
+  // and only for the plain click, leaving middle-click and modified clicks to
+  // the browser, where opening a new tab was the whole intent.
+  workspace.addEventListener("click", (event) => {
+    const link = event.target.closest?.("summary a[href]");
+    if (!link) return;
+    event.stopPropagation();
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.location.assign(link.href);
+  });
 
   nodes.forEach((node) => {
     node.addEventListener("toggle", () => {
@@ -1009,6 +1075,8 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
           if (other !== node) other.removeAttribute("open");
         });
         focus(node.dataset.topologyNode);
+      } else if (focused === node.dataset.topologyNode) {
+        focus("");
       }
     });
   });
@@ -1022,8 +1090,13 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     if (event.key === "Escape") {
       search.value = "";
       filter();
+    } else if (event.key === "Enter") {
+      const first = nodes.find((node) => !node.hidden);
+      if (first) {
+        first.open = true;
+        first.querySelector("summary")?.focus();
+      }
     }
   });
-  filter();
-  if (workspace.dataset.focus) focus(workspace.dataset.focus, false);
+  render();
 });

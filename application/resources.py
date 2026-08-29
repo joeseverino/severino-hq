@@ -25,7 +25,7 @@ from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
 
-from . import assets, infrastructure, projects, read_models, services
+from . import analytics, assets, infrastructure, projects, read_models, services
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
 from .plugins import plugin_resource_specs, plugin_search_definitions
 from .search_contracts import SearchDefinition
@@ -81,6 +81,14 @@ class ExpenseQuery(BoundedQuery):
 
 class ReceiptQuery(BoundedQuery):
     unmatched_only: bool = False
+
+
+class AnalyticsQuery(BoundedQuery):
+    # Empty means the default breakdown rather than "every breakdown at once":
+    # the dimensions cannot be crossed, so a combined answer would be six
+    # answers wearing one collection's shape.
+    dimension: str = ""
+    days: int = Field(default=28, ge=1, le=184)
 
 
 class EmptyQuery(ResourceQuery):
@@ -221,6 +229,15 @@ CORE_RESOURCE_SPECS = (
             label="Receipts",
         ),
         web_route="receipts:list",
+    ),
+    ResourceSpec(
+        "analytics",
+        "Analytics",
+        "What the published site was asked for, by any breakdown HQ records.",
+        Capability.READ,
+        analytics.list_analytics,
+        AnalyticsQuery,
+        web_route="analytics:overview",
     ),
     ResourceSpec(
         "audit",

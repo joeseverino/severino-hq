@@ -9,17 +9,17 @@ mutation that could drift from the thing it claims to represent.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import re
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any, Callable
-from urllib.parse import urlencode
-
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import CERTIFICATE_KIND, PROVIDERS, controller_action_policy
 
+from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
 from .connections import (
     ConnectionGroup,
     ConnectionLink,
@@ -27,7 +27,7 @@ from .connections import (
     connection_catalog,
 )
 from .action_links import ActionLink as TopologyAction
-from .action_links import capability_action_link, connection_action_links
+from .action_links import capability_action_link, connection_action_links, topology_url
 from .infrastructure import certificate_renewal_allowed, resource_health
 from .security import AuthorizationError, Capability, Principal
 
@@ -73,6 +73,12 @@ class TopologyNode:
     # is unverified rather than agreed -- the difference between "we set this"
     # and "we checked this".
     unconfirmed_fields: tuple[str, ...] = ()
+    # What this name actually served, where anything measures it. ``None`` is
+    # not zero: nobody visited and nobody looked are opposite findings, and the
+    # second is the one worth acting on -- a target HQ reaches, and nothing
+    # measures, is a site running unobserved.
+    pageviews: int | None = None
+    visits: int | None = None
     actions: tuple[TopologyAction, ...] = ()
 
 
@@ -96,6 +102,16 @@ class Topology:
     edges: tuple[TopologyEdge, ...]
 
 
+@dataclass(frozen=True)
+class TopologyTrace:
+    """A bounded traversal applied to an already-authorized topology."""
+
+    focus: str
+    direction: str
+    depth: int
+    hops: tuple[tuple[str, int], ...]
+
+
 _KIND_ORDER = {
     "controller": 0,
     "connection": 1,
@@ -104,6 +120,9 @@ _KIND_ORDER = {
     "target": 4,
     "dependency": 5,
 }
+
+TRACE_DIRECTIONS = ("inbound", "outbound", "both")
+MAX_TRACE_DEPTH = 5
 
 
 def _permitted(principal: Principal, capability: Capability | str) -> bool:
@@ -122,7 +141,7 @@ def _derived_id(kind: str, *parts: str) -> str:
 
 
 def _focus_url(node_id: str) -> str:
-    return f"{reverse('control_plane:topology')}?{urlencode({'focus': node_id})}#map"
+    return topology_url(node_id)
 
 
 def _edge(source: str, target: str, kind: str, label: str, status="neutral"):
@@ -311,6 +330,45 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     )
 
 
+def _merge_controller_node(
+    nodes: dict[str, TopologyNode],
+    *,
+    node_id: str,
+    label: str,
+    group_label: str,
+    url: str,
+    principal: Principal,
+) -> None:
+    """Join every distinct emitted connection workflow onto one controller."""
+
+    action = TopologyAction("open", f"Open {group_label}", "read", url) if url else None
+    refresh = capability_action_link(
+        "infrastructure.controller.refresh",
+        "infrastructure_change",
+        "Request fresh sweep",
+        principal=principal,
+    )
+    emitted = tuple(item for item in (action, refresh) if item is not None)
+    current = nodes.get(node_id)
+    if current is None:
+        nodes[node_id] = TopologyNode(
+            id=node_id,
+            kind="controller",
+            label=label,
+            subtitle="Controller",
+            url=url,
+            actions=emitted,
+        )
+    else:
+        additions = tuple(
+            item
+            for item in emitted
+            if all(existing.url != item.url for existing in current.actions)
+        )
+        if additions:
+            nodes[node_id] = replace(current, actions=current.actions + additions)
+
+
 def _connection_nodes(
     groups: tuple[ConnectionGroup, ...],
     nodes: dict[str, TopologyNode],
@@ -358,20 +416,13 @@ def _connection_nodes(
             )
             if instance.controller_id:
                 controller_id = _derived_id("controller", instance.controller_id)
-                nodes.setdefault(
-                    controller_id,
-                    TopologyNode(
-                        id=controller_id,
-                        kind="controller",
-                        label=instance.controller_id,
-                        subtitle="Controller",
-                        url=connection_url,
-                        actions=(
-                            (TopologyAction("open", "Open connections", "read", connection_url),)
-                            if connection_url
-                            else ()
-                        ),
-                    ),
+                _merge_controller_node(
+                    nodes,
+                    node_id=controller_id,
+                    label=instance.controller_id,
+                    group_label=group.spec.label,
+                    url=connection_url,
+                    principal=principal,
                 )
                 relation = _edge(
                     controller_id, connection_id, "carries", "Carries"
@@ -408,6 +459,45 @@ def _connection_nodes(
                     connection_id, ability_id, "enables", "Enables", available
                 )
                 edges[relation.id] = relation
+
+
+# A label is a candidate hostname when it looks like one. Deliberately a shape
+# test rather than a list of kinds: a target is a hostname, a resource key
+# sometimes is, and an extension may emit a node kind this module has never
+# heard of. Asking what the label *is* keeps that open.
+_HOSTNAME_SHAPE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+\.?$")
+
+
+def _measure(nodes: dict[str, TopologyNode]) -> None:
+    """Give every node named like a host what that host actually served.
+
+    The join is the name, the same one the service page uses: analytics stores
+    a reading against a hostname and these nodes *are* hostnames, so no key
+    ties them and none is stored twice.
+
+    One query for the whole graph, and none at all when nothing in it is named
+    like a host -- a deployment measuring nothing pays nothing, which is what
+    lets this sit in the shared projection rather than in one adapter.
+    """
+
+    candidates = {
+        node.id: normalize_host(node.label)
+        for node in nodes.values()
+        if _HOSTNAME_SHAPE.match(node.label.strip().lower())
+    }
+    if not candidates:
+        return
+    measured = traffic_for_hosts(set(candidates.values()), days=HOST_TRAFFIC_DAYS)
+    if not measured:
+        return
+    for node_id, host in candidates.items():
+        reading = measured.get(host)
+        if reading:
+            nodes[node_id] = replace(
+                nodes[node_id],
+                pageviews=reading["pageviews"],
+                visits=reading["visits"],
+            )
 
 
 def derive_topology(*, principal: Principal) -> Topology:
@@ -461,6 +551,8 @@ def derive_topology(*, principal: Principal) -> Topology:
                         ability_id, resource_id, "governs", "Governs"
                     )
                     edges[relation.id] = relation
+
+    _measure(nodes)
 
     ordered_nodes = tuple(
         sorted(
@@ -638,21 +730,99 @@ def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
     )
 
 
+def apply_trace(
+    topology: Topology,
+    focus: str,
+    *,
+    direction: str = "both",
+    depth: int | str = 2,
+) -> tuple[Topology, TopologyTrace | None]:
+    """Select a bounded dependency neighborhood without deriving new state.
+
+    ``outbound`` follows the graph's declared source-to-target direction;
+    ``inbound`` answers what points at the focus. Unknown inputs deliberately
+    leave the projection unchanged and report no applied trace, matching the
+    standing-lens contract used by every delivery adapter.
+    """
+
+    node_ids = {node.id for node in topology.nodes}
+    if focus not in node_ids:
+        return topology, None
+    selected_direction = direction if direction in TRACE_DIRECTIONS else "both"
+    try:
+        selected_depth = int(depth)
+    except (TypeError, ValueError):
+        selected_depth = 2
+    selected_depth = min(max(selected_depth, 1), MAX_TRACE_DEPTH)
+
+    adjacent: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+    for edge in topology.edges:
+        if selected_direction in ("outbound", "both"):
+            adjacent[edge.source].add(edge.target)
+        if selected_direction in ("inbound", "both"):
+            adjacent[edge.target].add(edge.source)
+
+    hops = {focus: 0}
+    frontier = {focus}
+    for hop in range(1, selected_depth + 1):
+        frontier = {
+            neighbor
+            for node_id in frontier
+            for neighbor in adjacent[node_id]
+            if neighbor not in hops
+        }
+        if not frontier:
+            break
+        hops.update({node_id: hop for node_id in frontier})
+
+    narrowed = Topology(
+        tuple(node for node in topology.nodes if node.id in hops),
+        tuple(
+            edge
+            for edge in topology.edges
+            if edge.source in hops and edge.target in hops
+        ),
+    )
+    trace = TopologyTrace(
+        focus=focus,
+        direction=selected_direction,
+        depth=selected_depth,
+        hops=tuple(sorted(hops.items(), key=lambda item: (item[1], item[0]))),
+    )
+    return narrowed, trace
+
+
 def serialize_topology(
-    topology: Topology, *, lens: TopologyLens | None = None
+    topology: Topology,
+    *,
+    lens: TopologyLens | None = None,
+    trace: TopologyTrace | None = None,
 ) -> dict[str, Any]:
     counts: dict[str, int] = {}
     for node in topology.nodes:
         counts[node.kind] = counts.get(node.kind, 0) + 1
     return {
         "ok": True,
-        "schema_version": 1,
+        "schema_version": 2,
         # Which lens produced this payload, and every lens that could have.
         "lens": lens.name if lens else None,
         "lenses": [
             {"name": item.name, "label": item.label, "summary": item.summary}
             for item in TOPOLOGY_LENSES
         ],
+        "trace": (
+            {
+                "focus": trace.focus,
+                "direction": trace.direction,
+                "depth": trace.depth,
+                "hops": [
+                    {"node": node_id, "hop": hop}
+                    for node_id, hop in trace.hops
+                ],
+            }
+            if trace
+            else None
+        ),
         "summary": {
             "nodes": len(topology.nodes),
             "edges": len(topology.edges),
@@ -663,11 +833,21 @@ def serialize_topology(
     }
 
 
-def topology(*, principal: Principal, lens: str = "") -> dict[str, Any]:
+def topology(
+    *,
+    principal: Principal,
+    lens: str = "",
+    focus: str = "",
+    direction: str = "both",
+    depth: int | str = 2,
+) -> dict[str, Any]:
     """Return the shared serialized projection for machine delivery adapters."""
 
     selected = lens_for(lens) if lens else None
     projection = derive_topology(principal=principal)
     if selected is not None:
         projection = apply_lens(projection, selected)
-    return serialize_topology(projection, lens=selected)
+    projection, trace = apply_trace(
+        projection, focus, direction=direction, depth=depth
+    )
+    return serialize_topology(projection, lens=selected, trace=trace)

@@ -15,6 +15,31 @@ from core.static import CachedStaticFiles
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
+    def test_workflow_models_remain_a_dependency_leaf(self):
+        root = Path(__file__).resolve().parent
+        contracts = ast.parse(
+            (root / "workflow_contracts.py").read_text(encoding="utf-8")
+        )
+        relative_imports = [
+            node.module
+            for node in ast.walk(contracts)
+            if isinstance(node, ast.ImportFrom) and node.level
+        ]
+        self.assertEqual(relative_imports, [])
+
+        boundaries = {
+            "ui.py": "workflows",
+            "workflows.py": "action_links",
+        }
+        for filename, forbidden in boundaries.items():
+            tree = ast.parse((root / filename).read_text(encoding="utf-8"))
+            imported = {
+                node.module
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.level
+            }
+            self.assertNotIn(forbidden, imported)
+
     def test_asgi_routes_static_assets_before_django(self):
         from config.asgi import application
 

@@ -15,6 +15,7 @@ from django.conf import settings
 
 from .connection import channel_for_request, hops_of
 from .connections import ConnectionGroup
+from .reach import TAILNET
 
 
 @dataclass(frozen=True)
@@ -85,13 +86,12 @@ def _tailnet_only(policy: dict[str, Any]) -> bool:
         for rule in clients
         if isinstance(rule, dict)
     ]
+    tailnet_allows = [("allow", str(network)) for network in TAILNET]
+    deny_all = rules == [*tailnet_allows, ("deny", "all")] or (
+        rules == tailnet_allows and policy.get("implicit_deny") is True
+    )
     return (
-        rules
-        == [
-            ("allow", "100.64.0.0/10"),
-            ("allow", "fd7a:115c:a1e0::/48"),
-            ("deny", "all"),
-        ]
+        deny_all
         and policy.get("satisfy_any") is False
         and policy.get("pass_auth") is False
         and policy.get("authorization_count") == 0
@@ -153,14 +153,20 @@ def _ingress_control(hostname: str, snapshot) -> SecurityControl:
             "The assigned NPM policy does not exactly allow both Tailscale "
             "address ranges and then deny every other source without proxy auth.",
         )
+    implicit = policy.get("implicit_deny") is True and not any(
+        str(rule.get("directive", "")).lower() == "deny"
+        for rule in policy.get("clients") or ()
+        if isinstance(rule, dict)
+    )
     return SecurityControl(
         "edge",
         "Ingress policy",
         "good",
-        "Tailnet ranges · deny all",
+        f"Tailnet ranges · {'implicit ' if implicit else ''}deny all",
         "NPM's authenticated API reports that this hostname allows Tailscale "
-        "IPv4 and IPv6 sources, denies everything else, and passes no proxy "
-        "credentials to HQ.",
+        "IPv4 and IPv6 sources, denies everything else"
+        f"{' through its generated final rule' if implicit else ''}, and passes "
+        "no proxy credentials to HQ.",
     )
 
 

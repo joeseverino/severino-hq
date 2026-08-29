@@ -171,3 +171,34 @@ class ResourceRegistrationTests(SimpleTestCase):
             "application.resources.plugin_resource_specs", return_value=(nested,)
         ):
             self.assertIn(nested, resource_specs())
+
+
+class TailnetDeviceKeyTests(TestCase):
+    """A machine and its tailnet device must not compete for one key.
+
+    Both providers keyed on the bare device name, so the second declaration
+    adopted was filed as `<name>-2` — a suffix recording arrival order on an
+    estate where the name is what everything else joins on.
+    """
+
+    def test_a_tailnet_device_key_says_what_it_is(self):
+        from application.infrastructure import suggest_key
+
+        self.assertEqual(
+            suggest_key("tailscale.device", {"name": "box"}), "box-tailnet"
+        )
+
+    def test_it_does_not_collide_with_the_machine_of_the_same_name(self):
+        from application.infrastructure import suggest_key
+
+        ManagedResource.objects.create(key="box", kind="machine", spec={"name": "box"})
+
+        # No suffix: the collision is gone, so nothing has to be invented.
+        self.assertEqual(
+            suggest_key("tailscale.device", {"name": "box"}), "box-tailnet"
+        )
+
+    def test_the_machine_still_keys_on_its_plain_name(self):
+        from application.infrastructure import suggest_key
+
+        self.assertEqual(suggest_key("machine", {"name": "box"}), "box")

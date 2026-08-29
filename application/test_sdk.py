@@ -15,6 +15,7 @@ from application.capabilities import CapabilitySpec
 from application.connections import ConnectionSpec
 from application.plugins import NavigationItem, PluginManifest
 from application.security import Principal
+from application.workflows import WorkflowPlan
 from core.models import AuditLog
 from hq_sdk.audit import audit_operation, record_operation
 from hq_sdk.capabilities import StrictCommand
@@ -72,6 +73,11 @@ class SdkContractTests(SimpleTestCase):
 
         self.assertIs(SdkConnectionSpec, ConnectionSpec)
         self.assertIs(sdk_describe_connections, describe_connections)
+
+    def test_resolution_workflows_are_available_to_every_plugin_domain(self):
+        from hq_sdk.workflows import WorkflowPlan as SdkWorkflowPlan
+
+        self.assertIs(SdkWorkflowPlan, WorkflowPlan)
 
 
 class _AllowedView(CapabilityRequiredMixin, View):

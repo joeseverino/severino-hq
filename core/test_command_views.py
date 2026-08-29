@@ -183,6 +183,33 @@ class CommandViewTests(TestCase):
         self.assertEqual(audit.metadata["interface"], "web")
         self.assertEqual(audit.metadata["operation"], "project.create")
 
+    def test_a_contextual_command_returns_to_the_workflow_that_offered_it(self):
+        source = "/infrastructure/findings/"
+        form = self.client.get(
+            "/commands/project.create/", {"next": source}
+        ).context["form"]
+        payload = {
+            "name": "Contextual command",
+            "slug": "contextual-command",
+            "__execution_key": form.initial["__execution_key"],
+            "next": form.initial["next"],
+        }
+
+        response = self.client.post(
+            "/commands/project.create/", payload, follow=True
+        )
+
+        self.assertContains(response, f'href="{source}"')
+        self.assertContains(response, "Return to previous workflow")
+
+    def test_a_command_never_returns_to_an_external_site(self):
+        response = self.client.get(
+            "/commands/project.create/", {"next": "https://attacker.example/"}
+        )
+
+        self.assertEqual(response.context["form"].initial["next"], "")
+        self.assertEqual(response.context["return_url"], "")
+
     def test_exact_retry_replays_one_committed_write(self):
         payload = self._create_payload(slug="safe-retry")
 

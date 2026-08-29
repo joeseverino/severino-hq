@@ -1,0 +1,44 @@
+{% comment %}
+  One renderer for every registry-driven band on a detail page.
+
+  A section is a heading, columns, rows of cells and an optional action, and
+  nothing here knows what any of them mean. That is the point: a page grows a
+  band because a resolver produced one, so adding what HQ knows next is a
+  function and a registry entry rather than an edit to a template.
+
+  Shared rather than copied. Two pages rendering the same dataclass from two
+  templates drift the moment one gains a column, and the difference shows up as
+  one page quietly missing what the other shows.
+
+  Expects: `sections` — an iterable of ServiceSection.
+{% endcomment %}
+{% for section in sections %}
+<section id="{{ section.id }}" class="page-section" data-page-section>
+  <h2>{{ section.label }}</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for record in section.records %}
+          <tr>
+            {% for cell in record %}
+              <td>
+                {% if cell.url %}
+                  <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text }}</a>
+                {% elif cell.muted %}
+                  <span class="muted">{{ cell.text }}</span>
+                {% else %}
+                  {{ cell.text }}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% for label, url in section.actions %}
+    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
+  {% endfor %}
+</section>
+{% endfor %}

@@ -174,6 +174,37 @@ class ConnectionSecurityPostureTests(TestCase):
         self.assertEqual(edge.evidence, "Tailnet ranges · deny all")
         self.assertEqual(posture.state, "good")
 
+    def test_npm_generated_final_deny_is_not_duplicated_to_prove_the_policy(self):
+        ProviderInventory.objects.create(
+            kind="npm.proxy_host",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "domain_names": ["hq.example.test"],
+                    "access_list_id": 7,
+                    "access_policy": {
+                        "name": "Tailnet only",
+                        "satisfy_any": False,
+                        "pass_auth": False,
+                        "authorization_count": 0,
+                        "implicit_deny": True,
+                        "clients": [
+                            {"directive": "allow", "address": "100.64.0.0/10"},
+                            {
+                                "directive": "allow",
+                                "address": "fd7a:115c:a1e0::/48",
+                            },
+                        ],
+                    },
+                }
+            ],
+        )
+
+        edge = observed_ingress_control("hq.example.test")
+
+        self.assertEqual(edge.state, "good")
+        self.assertEqual(edge.evidence, "Tailnet ranges · implicit deny all")
+
     def test_a_widened_npm_policy_degrades_the_whole_posture(self):
         ProviderInventory.objects.create(
             kind="npm.proxy_host",

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+
+{% block content %}
+  {% include "partials/_page_head.html" with title="Analytics" %}
+
+  <div class="window-bar">
+    <nav class="window-switch" aria-label="Reporting window">
+      {% for option in windows %}
+        <a class="chip{% if option.current %} is-current{% endif %}"
+           href="?days={{ option.days }}"
+           {% if option.current %}aria-current="page"{% endif %}>{{ option.label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+
+  {% if latest %}
+    {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
+
+    <p class="muted reading-note">
+      {{ totals.start|date:"j M" }} – {{ totals.end|date:"j M Y" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|timesince }} ago{% endif %}
+      {% if coverage.expected_days and not coverage.complete %}
+        · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read; HQ will backfill the remaining {{ coverage.missing_days }} automatically
+      {% endif %}
+    </p>
+
+    <div class="breakdown-grid">
+      {% for panel in breakdowns %}
+        <section class="card" aria-labelledby="breakdown-{{ panel.dimension }}">
+          <h2 id="breakdown-{{ panel.dimension }}">{{ panel.label }}</h2>
+          {% if panel.rows %}
+            <ol class="bar-list">
+              {% for row in panel.rows %}
+                <li class="bar-row">
+                  <span class="bar-track" style="--at: {{ row.share }}%" aria-hidden="true"></span>
+                  <span class="bar-label" title="{{ row.value }}">{{ row.value }}</span>
+                  <span class="bar-value">{{ row.pageviews }}</span>
+                </li>
+              {% endfor %}
+            </ol>
+          {% else %}
+            {% include "partials/_empty_state.html" with message="Nothing in this window." compact=1 %}
+          {% endif %}
+        </section>
+      {% endfor %}
+    </div>
+
+    <section class="card" aria-labelledby="vitals">
+      <h2 id="vitals">Core Web Vitals</h2>
+      <dl class="vitals-strip">
+        {% for key, metric in vitals.items %}
+          <div class="vital">
+            <dt>{{ key|upper }}</dt>
+            <dd>
+              {% if metric.percent is None %}
+                <span class="muted">no samples</span>
+              {% else %}
+                <span class="vital-rate{% if metric.passing %} is-passing{% endif %}">{{ metric.percent|floatformat:"-1" }}<span class="unit">%</span></span>
+                <span class="muted">{{ metric.good }} of {{ metric.total }} good</span>
+              {% endif %}
+            </dd>
+          </div>
+        {% endfor %}
+      </dl>
+    </section>
+  {% else %}
+    {% include "partials/_empty_state.html" with message="No readings yet." %}
+  {% endif %}
+{% endblock %}

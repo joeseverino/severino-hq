@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 from django.urls import reverse
 
 from core.models import AuditLog
+from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
 from .services import projects_by_hostname
 from .ui import PAGE_SECTION_ID
 
@@ -163,9 +164,51 @@ def _activity(service, project) -> ServiceSection | None:
     )
 
 
+def _traffic(service, project) -> ServiceSection | None:
+    """What this host actually served, for the hosts something measures.
+
+    The join is the name, like every other section here: analytics stores a
+    reading against a hostname and a service *is* a hostname, so neither side
+    needs a key to the other. A service nothing measures returns None and the
+    band does not render -- an empty traffic table would imply the site is dead
+    rather than unmeasured, which are opposite conclusions.
+
+    Sampling is carried rather than hidden. A figure extrapolated from one
+    beacon in ten is the best number available and still not a count, so the
+    page says which it is instead of quietly presenting an estimate as fact.
+    """
+
+    hostname = getattr(service, "hostname", "") or ""
+    if not hostname:
+        return None
+    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(
+        normalize_host(hostname)
+    )
+    if not measured:
+        return None
+    interval = measured.get("sample_interval") or 1
+    return ServiceSection(
+        id="traffic",
+        label=f"Traffic · {HOST_TRAFFIC_DAYS} days",
+        columns=("Pageviews", "Visits", "Basis"),
+        records=(
+            (
+                Cell(f"{measured['pageviews']:,}"),
+                Cell(f"{measured['visits']:,}"),
+                Cell(
+                    "Counted" if interval <= 1 else f"Sampled 1 in {interval}",
+                    muted=interval > 1,
+                ),
+            ),
+        ),
+        actions=(("Open analytics", reverse("analytics:overview")),),
+    )
+
+
 # The list of sections, stated once. A section that has nothing to say returns
 # nothing and does not appear, so the page grows a band only when HQ has one.
 SECTIONS: tuple[Callable[[object, object], ServiceSection | None], ...] = (
     _delivery,
     _activity,
+    _traffic,
 )

@@ -50,6 +50,7 @@ domain; the SDK owns integration mechanics:
 | --- | --- |
 | Manifest and navigation | `hq_sdk.plugin` |
 | Capabilities, principals, strict JSON commands | `hq_sdk.capabilities` |
+| Claim-resolution plans and workflow actions | `hq_sdk.workflows` |
 | Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Capability-gated Django views | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |

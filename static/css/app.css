@@ -1398,12 +1398,43 @@ a.kpi:hover { background: var(--surface-2); }
 .finding-evidence > div { min-width: 0; padding: 9px 10px; background: var(--surface-2); }
 .finding-evidence dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .045em; }
 .finding-evidence dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 13px; }
+.finding-offers { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.finding-offers > strong { color: var(--ink-2); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+.finding-offers .finding-actions { margin-top: 8px; }
 .finding-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .finding-actions form { display: inline-flex; }
+.resolution-workflow { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.resolution-workflow-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.resolution-workflow-head > strong { color: var(--ink-2); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+.resolution-workflow-head > span { color: var(--muted); font-size: 11px; text-align: right; }
+/* auto-fit rather than a fixed three: a claim HQ cannot act on has no Act step,
+   so the plan is Understand and Verify, and a three-column track left the row
+   two-thirds full with a third of it blank. auto-fit collapses the empty track
+   and the steps that exist share the row. The minimum is real because auto-fit
+   cannot count tracks against a flexible one. */
+.resolution-workflow ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; counter-reset: none; }
+.resolution-workflow li { min-width: 0; padding: 10px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface-2); }
+.resolution-workflow li.is-recommended { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
+.resolution-workflow li.is-after_action { border-style: dashed; }
+.resolution-workflow-step { display: flex; align-items: flex-start; gap: 8px; }
+.resolution-workflow-number { display: grid; place-items: center; flex: 0 0 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 700; }
+.resolution-workflow-step strong { color: var(--ink); font-size: 12.5px; }
+.resolution-workflow-step p { margin: 3px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.resolution-workflow .finding-actions { margin-top: 9px; }
+.attention-workflow { margin-top: 8px; }
+.attention-workflow > summary { color: var(--accent); cursor: pointer; font-size: 12px; font-weight: 650; }
+.resolution-workflow.is-compact { margin-top: 8px; padding-top: 8px; }
+.resolution-workflow.is-compact ol { grid-template-columns: 1fr; }
 
 @media (max-width: 720px) {
   .attention-row { grid-template-columns: 1fr auto; }
   .attention-row > .pill { grid-column: 1 / -1; justify-self: start; }
+  .finding-card .section-head { flex-direction: column; }
+  .finding-card .section-head > div { width: 100%; }
+  .finding-card .section-head > .finding-actions { margin-top: 2px; }
+  .resolution-workflow-head { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .resolution-workflow-head > span { text-align: left; }
+  .resolution-workflow ol { grid-template-columns: 1fr; }
 }
 
 /* ── Operations panels ──────────────────────────────────────────── */
@@ -3651,6 +3682,15 @@ textarea.code {
 }
 .topology-lenses .scope-chip.is-active:hover { color: #fff; border-color: var(--accent); }
 .topology-lens-note { margin: 0 0 10px; font-size: 13px; }
+.topology-trace-bar {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  margin-bottom: 12px; padding: 12px; border: 1px solid var(--accent);
+  border-radius: var(--radius); background: var(--accent-tint);
+}
+.topology-trace-bar > div { display: grid; gap: 1px; margin-right: auto; }
+.topology-trace-controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.topology-trace-controls .scope-chip { background: var(--surface); }
+.topology-hop { display: flex; align-items: center; gap: 6px; }
 
 .topology-summary {
   display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
@@ -3683,6 +3723,7 @@ textarea.code {
   align-items: stretch; gap: 1px; overflow: auto; background: var(--line);
   max-height: min(68vh, 680px);
   overscroll-behavior-inline: contain;
+  scroll-behavior: smooth;
 }
 .topology-lane { min-width: 218px; padding: 10px; background: var(--surface-2); }
 .topology-lane > header {
@@ -3725,10 +3766,59 @@ textarea.code {
 .topology-node-body p { margin: 0; font-size: 12px; }
 .topology-node-actions { display: flex; flex-wrap: wrap; gap: 5px; }
 .topology-node-actions form { display: inline-flex; }
+.topology-node-link { color: inherit; text-decoration: none; }
+.topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
+
+/* Triage reads as a list of questions with answers, not a paragraph: each row
+   is one fact an operator checks, so the term stays scannable when the answer
+   runs long. */
+.topology-facts { display: grid; gap: 6px; margin: 0; }
+.topology-fact { display: grid; gap: 1px; }
+.topology-fact dt {
+  color: var(--muted-2); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.topology-fact dd { margin: 0; font-size: 12px; color: var(--ink-2); }
+.topology-fact dd .pill { margin-right: 4px; vertical-align: baseline; }
+.topology-field-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0; padding: 0; list-style: none; }
+.topology-field-list code { font-size: 11px; }
+
+/* An edge stated from the node standing at one end of it. The arrow and the
+   heading both carry the direction, because a verb alone reads the same in
+   either -- and the whole row is the link, so walking the graph is one click
+   per hop. */
+.topology-relation-set { display: grid; gap: 3px; }
+.topology-relation-heading { margin: 4px 0 0; }
+.topology-relation-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.topology-relation { display: flex; align-items: center; gap: 5px; }
+.topology-relation-link {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 6px;
+  align-items: center; flex: 1 1 auto; min-width: 0; padding: 4px 6px;
+  border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2); text-decoration: none;
+  font-size: 12px; transition: border-color 100ms ease, background 100ms ease;
+}
+.topology-relation-link:hover, .topology-relation-link:focus-visible {
+  border-color: var(--accent); background: var(--accent-tint); color: var(--ink);
+}
+.topology-relation-arrow { grid-area: 1 / 1 / 3 / 2; color: var(--muted); font-size: 13px; }
+.topology-relation-out .topology-relation-arrow { color: var(--accent-2); }
+.topology-relation-verb {
+  grid-area: 1 / 2 / 2 / 4; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .055em; color: var(--muted);
+}
+.topology-relation-other {
+  grid-area: 2 / 2 / 3 / 3; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--ink);
+}
+.topology-relation-kind {
+  grid-area: 2 / 3 / 3 / 4; font-size: 10px; color: var(--muted-2);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+.topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: 4px 8px; font-size: 12.5px; }
 .topology-node.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.topology-workspace.has-focus .topology-node.is-dimmed { opacity: .24; }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
 .topology-relations > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; }
 /* A fixed reading height inside a disclosure, so this one is a pane: the
@@ -3866,3 +3956,62 @@ textarea.code {
     }
   }
 }
+
+/* ---- Analytics ---------------------------------------------------------- */
+
+/* The window an operator is reading. Links rather than a control, so the
+   choice is in the URL and a reading can be sent to someone. */
+.window-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--stack-gap); }
+.chip {
+  display: inline-block; padding: 4px 12px; border: 1px solid var(--line);
+  border-radius: 999px; font-size: 13px; color: var(--muted);
+  text-decoration: none; background: var(--bg);
+}
+.chip:hover { color: var(--accent); border-color: var(--accent); }
+.chip.is-current { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.reading-note { margin: -6px 0 var(--stack-gap); font-size: 13px; }
+
+/* Six breakdowns, each a card. Two columns where there is room and one where
+   there is not: a bar list is unreadable below about 20rem. */
+.breakdown-grid {
+  display: grid; gap: var(--layout-gap); margin: 0 0 var(--stack-gap);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  /* Each card as tall as its own list. Stretched to the row, a breakdown with
+     three entries carries the height of one with twelve, and the page reads as
+     mostly empty boxes. */
+  align-items: start;
+}
+
+/* A row is label, bar and number in one line, with the bar behind the text
+   rather than beside it -- a separate bar column costs the label the width it
+   needs, and a path is the longest thing on the page. */
+.bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.bar-row {
+  position: relative; display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 10px; border-radius: 4px; font-size: 13.5px; min-inline-size: 0;
+}
+/* Width arrives as a value, not as presentation: the same `--at` contract the
+   chart marks use, so the template supplies a share and this decides how a
+   share looks. */
+.bar-track {
+  position: absolute; inset: 0 auto 0 0; inline-size: var(--at, 0%);
+  background: var(--bg-tint); border-radius: 4px; min-inline-size: 2px;
+}
+.bar-label {
+  position: relative; flex: 1 1 auto; min-inline-size: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
+
+/* Vitals sit under the breakdowns, not above them: they are the check you run
+   after the question you came to ask. */
+.vitals-strip { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 0; }
+.vital { display: flex; flex-direction: column; gap: 2px; }
+.vital dt { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vital dd { margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; }
+.vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
+/* 75% of samples good is what passing means; the colour says which side of it
+   this metric is on rather than making the reader compare two numbers. */
+.vital-rate.is-passing { color: var(--ok); }
+.vital .unit { font-size: .8em; margin-inline-start: 1px; }
