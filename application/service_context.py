@@ -27,13 +27,9 @@ from urllib.parse import urlparse
 from django.urls import reverse
 
 from core.models import AuditLog
-from .analytics import normalize_host, traffic_for_hosts
+from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
 from .services import projects_by_hostname
 from .ui import PAGE_SECTION_ID
-
-# A week, so a quiet Tuesday does not read as a site nobody visits. Long enough
-# to be a shape, short enough that it is still news.
-SERVICE_TRAFFIC_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -185,7 +181,7 @@ def _traffic(service, project) -> ServiceSection | None:
     hostname = getattr(service, "hostname", "") or ""
     if not hostname:
         return None
-    measured = traffic_for_hosts({hostname}, days=SERVICE_TRAFFIC_DAYS).get(
+    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(
         normalize_host(hostname)
     )
     if not measured:
@@ -193,7 +189,7 @@ def _traffic(service, project) -> ServiceSection | None:
     interval = measured.get("sample_interval") or 1
     return ServiceSection(
         id="traffic",
-        label=f"Traffic · {SERVICE_TRAFFIC_DAYS} days",
+        label=f"Traffic · {HOST_TRAFFIC_DAYS} days",
         columns=("Pageviews", "Visits", "Basis"),
         records=(
             (

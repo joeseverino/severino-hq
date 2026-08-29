@@ -106,7 +106,7 @@
                 <dl class="topology-facts">
                   {% if item.node.pageviews is not None %}
                     <div class="topology-fact">
-                      <dt>Traffic · 7 days</dt>
+                      <dt>Traffic · {{ traffic_window_days }} days</dt>
                       <dd>
                         <strong>{{ item.node.pageviews }}</strong> pageviews from
                         <strong>{{ item.node.visits }}</strong> visits.

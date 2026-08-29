@@ -37,6 +37,17 @@ DEFAULT_WINDOW_DAYS = 1
 # figure beside it would say almost every writeup is worth nothing.
 CONTENT_TRAFFIC_DAYS = 28
 
+# What a whole host means by "recent". A week, so a quiet Tuesday does not read
+# as a site nobody visits -- long enough to be a shape, short enough to still be
+# news. Deliberately not CONTENT_TRAFFIC_DAYS: a writeup earns its traffic over
+# months, a host is either serving this week or it is not.
+#
+# One constant, because the service page and the topology graph must answer the
+# same question the same way. Two sevens in two modules agree only until someone
+# changes one, and then the page and the graph disagree with nothing to show for
+# it -- see ``test_the_page_and_the_graph_share_one_window``.
+HOST_TRAFFIC_DAYS = 7
+
 
 def normalize_host(value: str) -> str:
     """The one spelling of a hostname HQ compares by.
@@ -680,6 +691,7 @@ def list_analytics(
 
 __all__ = [
     "CONTENT_TRAFFIC_DAYS",
+    "HOST_TRAFFIC_DAYS",
     "DEFAULT_WINDOW_DAYS",
     "MAX_QUERY_DAYS",
     "WINDOW_DAYS",

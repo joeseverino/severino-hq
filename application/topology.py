@@ -21,7 +21,7 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import CERTIFICATE_KIND, PROVIDERS, controller_action_policy
 
-from .analytics import normalize_host, traffic_for_hosts
+from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
 from .connections import (
     ConnectionGroup,
     ConnectionLink,
@@ -122,10 +122,6 @@ _KIND_ORDER = {
     "target": 4,
     "dependency": 5,
 }
-
-# A week, matching the service page: long enough to be a shape, short enough
-# to still be news. Stated once here so the graph and the page agree.
-TOPOLOGY_TRAFFIC_DAYS = 7
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
 MAX_TRACE_DEPTH = 5
@@ -461,7 +457,7 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
     }
     if not candidates:
         return
-    measured = traffic_for_hosts(set(candidates.values()), days=TOPOLOGY_TRAFFIC_DAYS)
+    measured = traffic_for_hosts(set(candidates.values()), days=HOST_TRAFFIC_DAYS)
     if not measured:
         return
     for node_id, host in candidates.items():

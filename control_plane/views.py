@@ -56,6 +56,7 @@ from application.connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
+from application.analytics import HOST_TRAFFIC_DAYS
 from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import (
     apply_lens,
@@ -1166,6 +1167,10 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                     }
                     for edge in topology.edges
                 ),
+                # Passed rather than written into the template: the window is
+                # one number, and a page that restates it drifts from the query
+                # that produced the figures the moment either changes.
+                "traffic_window_days": HOST_TRAFFIC_DAYS,
                 "focus_node": trace.focus if trace else "",
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,
