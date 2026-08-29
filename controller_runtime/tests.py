@@ -1271,6 +1271,47 @@ class WorkerTests(TestCase):
         self.assertIn("tls.certificate:reconcile", arguments)
         self.assertIn("tls.certificate:renew", arguments)
 
+    @mock.patch("controller_runtime.worker.inventory", return_value={"records": []})
+    @mock.patch("controller_runtime.worker.connections", return_value=[])
+    @mock.patch("controller_runtime.worker.analytics")
+    @mock.patch("controller_runtime.worker.analytics_sites")
+    @mock.patch("controller_runtime.worker._manage")
+    def test_hq_plans_each_sites_missing_analytics_before_it_is_read(
+        self, manage, sites, analytics, _connections, _inventory
+    ):
+        site = {
+            "account": "provider-only-account-id",
+            "connection_ref": "example-api",
+            "site_tag": "0" * 32,
+            "host": "example.test",
+        }
+        window = {
+            "connection_ref": "example-api",
+            "site_tag": "0" * 32,
+            "start": "2026-06-01",
+            "end": "2026-08-28",
+            "reason": "backfill",
+        }
+        sites.return_value = [site]
+        analytics.return_value = {"sites": []}
+        manage.side_effect = _bridge(
+            **{
+                "sweep-due": {"ok": True, "due": True},
+                "analytics-plan": {"ok": True, "windows": [window]},
+                "connections": {"ok": True},
+                "inventory": {"ok": True},
+                "analytics": {"ok": True},
+            }
+        )
+
+        worker._report_findings("test")
+
+        analytics.assert_called_once_with(sites=[site], windows=[window])
+        plan_call = next(
+            call for call in manage.call_args_list if call.args[0] == "analytics-plan"
+        )
+        self.assertNotIn("provider-only-account-id", " ".join(plan_call.args))
+
     def test_capability_registry_drives_supported_kinds(self):
         """What the controller offers is the registry, minus what is locked.
 
@@ -1883,15 +1924,26 @@ class CloudflareAnalyticsTests(TestCase):
         self.assertEqual(result["connection_ref"], "account-two")
         self.assertEqual(graphql.call_args.args[2], "account-two")
 
-    @mock.patch("controller_runtime.providers._analytics_connection_readings")
-    @mock.patch(
-        "controller_runtime.providers.provider_connection_refs",
-        return_value=("account-one", "account-two"),
-    )
-    def test_every_configured_connection_is_read(self, connection_refs, readings):
-        readings.side_effect = [
-            [{"connection_ref": "account-one"}],
-            [{"connection_ref": "account-two"}],
+    @mock.patch("controller_runtime.providers._analytics_site_reading")
+    @mock.patch("controller_runtime.providers.analytics_sites")
+    def test_every_configured_connection_is_read(self, sites, reading):
+        sites.return_value = [
+            {
+                "account": "account-id-one",
+                "connection_ref": "account-one",
+                "site_tag": "1" * 32,
+                "host": "one.example",
+            },
+            {
+                "account": "account-id-two",
+                "connection_ref": "account-two",
+                "site_tag": "2" * 32,
+                "host": "two.example",
+            },
+        ]
+        reading.side_effect = [
+            {"connection_ref": "account-one"},
+            {"connection_ref": "account-two"},
         ]
 
         result = providers.analytics()
@@ -1901,10 +1953,69 @@ class CloudflareAnalyticsTests(TestCase):
             ["account-one", "account-two"],
         )
         self.assertEqual(
-            [call.args[0] for call in readings.call_args_list],
+            [call.args[2] for call in reading.call_args_list],
             ["account-one", "account-two"],
         )
-        connection_refs.assert_called_once_with("cloudflare_api")
+
+    @mock.patch("controller_runtime.providers._analytics_site_reading")
+    @mock.patch(
+        "controller_runtime.providers.completed_window",
+        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
+    )
+    def test_hq_can_plan_an_exact_window_for_each_site(self, _window, reading):
+        site = {
+            "account": "account-id",
+            "connection_ref": "account-one",
+            "site_tag": "1" * 32,
+            "host": "one.example",
+        }
+        reading.return_value = {"connection_ref": "account-one"}
+
+        providers.analytics(
+            sites=[site],
+            windows=[
+                {
+                    "connection_ref": "account-one",
+                    "site_tag": "1" * 32,
+                    "start": "2026-06-01",
+                    "end": "2026-08-28",
+                }
+            ],
+        )
+
+        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 6, 1))
+        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
+
+    @mock.patch("controller_runtime.providers._analytics_site_reading")
+    @mock.patch(
+        "controller_runtime.providers.completed_window",
+        return_value=(providers.date(2026, 8, 26), providers.date(2026, 8, 28)),
+    )
+    def test_an_invalid_plan_falls_back_to_the_shared_safe_window(
+        self, _window, reading
+    ):
+        site = {
+            "account": "account-id",
+            "connection_ref": "account-one",
+            "site_tag": "1" * 32,
+            "host": "one.example",
+        }
+        reading.return_value = {}
+
+        providers.analytics(
+            sites=[site],
+            windows=[
+                {
+                    "connection_ref": "account-one",
+                    "site_tag": "1" * 32,
+                    "start": "not-a-date",
+                    "end": None,
+                }
+            ],
+        )
+
+        self.assertEqual(reading.call_args.kwargs["start"], providers.date(2026, 8, 26))
+        self.assertEqual(reading.call_args.kwargs["end"], providers.date(2026, 8, 28))
 
     @mock.patch("controller_runtime.providers._cloudflare_graphql")
     def test_missing_graphql_account_fails_closed(self, graphql):

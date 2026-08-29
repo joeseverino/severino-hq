@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -34,7 +35,7 @@ from application.idempotency import (
     validate_key,
 )
 from application.resources import resource_specs
-from application.security import AuthorizationError, web_principal
+from application.security import AuthorizationError, safe_next, web_principal
 
 
 def _json_value(value):
@@ -126,6 +127,7 @@ class CommandView(LoginRequiredMixin, View):
                 if result
                 else ""
             ),
+            "return_url": safe_next(self.request),
             "schema_json": json.dumps(schema, indent=2, sort_keys=True),
             "resource_url": route_url(resource.web_route) if resource else "",
             "resource_label": resource.label if resource else "",
@@ -147,7 +149,7 @@ class CommandView(LoginRequiredMixin, View):
         }
 
     def get(self, request, name: str):
-        initial = {"__execution_key": _new_key()}
+        initial = {"__execution_key": _new_key(), "next": safe_next(request)}
         target = request.GET.get("target", "") if self.spec.target_kind else ""
         known_targets = {option.value for option in self.target_options or ()}
         if target and (self.target_options is None or target in known_targets):
@@ -221,4 +223,8 @@ class CommandView(LoginRequiredMixin, View):
             "replayed": replayed,
         }
         destination = reverse("command", kwargs={"name": self.spec.name})
-        return redirect(f"{destination}?result={token}")
+        params = {"result": token}
+        return_url = safe_next(request)
+        if return_url:
+            params["next"] = return_url
+        return redirect(f"{destination}?{urlencode(params)}")

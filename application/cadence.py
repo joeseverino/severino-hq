@@ -25,6 +25,7 @@ replayed, the worst it can cause is a controller run that finds nothing to do.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 import os
@@ -35,6 +36,13 @@ from django.conf import settings
 from django.utils import timezone
 
 from control_plane.models import ProviderInventory
+
+from .security import Capability, Principal
+
+
+@dataclass(frozen=True)
+class ControllerSweepCommand:
+    """A deliberate wake-up request; the controller still decides what is due."""
 
 
 def _seconds(name: str, fallback: int) -> int:
@@ -136,7 +144,7 @@ def sweep_due() -> dict[str, object]:
     }
 
 
-def ring_doorbell() -> None:
+def ring_doorbell() -> bool:
     """Tell the host something is queued, without telling it anything else.
 
     Best effort, and rung only after the operation is stored. A doorbell able to
@@ -147,7 +155,37 @@ def ring_doorbell() -> None:
     try:
         _touch(_path("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"))
     except OSError:
-        return
+        return False
+    return True
+
+
+def request_controller_sweep(
+    command: ControllerSweepCommand,
+    *,
+    principal: Principal,
+    expected_updated_at: str | None = None,
+) -> dict[str, object]:
+    """Wake the pull-based controller and explain the cadence it will apply."""
+
+    del command, expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    # An operator asking for fresh state makes HQ active before policy is read,
+    # so the active cadence—not the twelve-hour idle economy—decides the sweep.
+    note_activity()
+    verdict = sweep_due()
+    if not ring_doorbell():
+        raise ValueError("The controller doorbell could not be reached.")
+    return {
+        "ok": True,
+        "requested": True,
+        "due": verdict["due"],
+        "reason": verdict["reason"],
+        "message": (
+            "The controller was notified and will pull work now."
+            if verdict["due"]
+            else "The controller was notified; the current observation is already fresh."
+        ),
+    }
 
 
 def _touch(path: Path) -> None:

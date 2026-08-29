@@ -14,6 +14,7 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, ProviderConnection
 from control_plane.views import TopologyView
 
+from .action_links import topology_investigation_links, topology_url
 from .command_center import command_center
 from .connections import (
     ConnectionAbility,
@@ -104,6 +105,30 @@ class DerivedTopologyTests(TestCase):
         )
         self.assertIn((connection_id, "resource:example-zone", "used_by"), edges)
         self.assertIn((connection_id, target.id, "reaches"), edges)
+
+    def test_a_controller_retains_every_distinct_connection_workflow(self):
+        second = ConnectionSpec(
+            "example.second", "Second connections",
+            "Another family carried by the same controller.", Capability.READ,
+            lambda: (
+                ConnectionInstance(
+                    "second", "Second", "example", "good", "Healthy",
+                    controller_id="example-controller",
+                ),
+            ),
+            web_route="control_plane:list",
+        )
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(second,)
+        ):
+            topology = derive_topology(principal=READ)
+
+        controller = next(node for node in topology.nodes if node.kind == "controller")
+        self.assertEqual(
+            {action.url for action in controller.actions},
+            {reverse("control_plane:connections"), reverse("control_plane:list")},
+        )
 
     def test_declared_ability_remains_visible_without_a_live_connection(self):
         resource = ManagedResource.objects.create(
@@ -514,6 +539,27 @@ class ConnectionActionTests(TestCase):
     def node(self, spec):
         return next(n for n in self.project(spec).nodes
                     if n.id == "connection:example.declared:one")
+
+    def test_topology_investigations_share_one_addressing_contract(self):
+        node_id = "connection:example.declared:one"
+
+        actions = topology_investigation_links(node_id)
+
+        self.assertEqual(
+            [(action.name, action.url) for action in actions],
+            [
+                ("topology", topology_url(node_id)),
+                (
+                    "impact",
+                    topology_url(node_id, direction="outbound", depth=3),
+                ),
+            ],
+        )
+        self.assertEqual(
+            topology_url(node_id, lens="operations"),
+            f"{reverse('control_plane:topology')}?"
+            "focus=connection%3Aexample.declared%3Aone&lens=operations#trace",
+        )
 
     def test_every_declared_route_becomes_its_own_action(self):
         node = self.node(self.spec(

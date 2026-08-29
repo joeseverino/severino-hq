@@ -29,6 +29,7 @@
     {% if result.replayed %}<span class="scope-chip">Safely replayed</span>{% else %}<span class="pill pill-good">Committed once</span>{% endif %}
   </div>
   <pre><code>{{ result_json }}</code></pre>
+  {% if return_url %}<a class="btn" href="{{ return_url }}">Return to previous workflow</a>{% endif %}
 </section>
 {% endif %}
 

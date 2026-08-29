@@ -14,8 +14,6 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any, Callable
-from urllib.parse import urlencode
-
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, OperationRequest
@@ -29,7 +27,7 @@ from .connections import (
     connection_catalog,
 )
 from .action_links import ActionLink as TopologyAction
-from .action_links import capability_action_link, connection_action_links
+from .action_links import capability_action_link, connection_action_links, topology_url
 from .infrastructure import certificate_renewal_allowed, resource_health
 from .security import AuthorizationError, Capability, Principal
 
@@ -143,7 +141,7 @@ def _derived_id(kind: str, *parts: str) -> str:
 
 
 def _focus_url(node_id: str) -> str:
-    return f"{reverse('control_plane:topology')}?{urlencode({'focus': node_id})}#trace"
+    return topology_url(node_id)
 
 
 def _edge(source: str, target: str, kind: str, label: str, status="neutral"):
@@ -332,6 +330,45 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     )
 
 
+def _merge_controller_node(
+    nodes: dict[str, TopologyNode],
+    *,
+    node_id: str,
+    label: str,
+    group_label: str,
+    url: str,
+    principal: Principal,
+) -> None:
+    """Join every distinct emitted connection workflow onto one controller."""
+
+    action = TopologyAction("open", f"Open {group_label}", "read", url) if url else None
+    refresh = capability_action_link(
+        "infrastructure.controller.refresh",
+        "infrastructure_change",
+        "Request fresh sweep",
+        principal=principal,
+    )
+    emitted = tuple(item for item in (action, refresh) if item is not None)
+    current = nodes.get(node_id)
+    if current is None:
+        nodes[node_id] = TopologyNode(
+            id=node_id,
+            kind="controller",
+            label=label,
+            subtitle="Controller",
+            url=url,
+            actions=emitted,
+        )
+    else:
+        additions = tuple(
+            item
+            for item in emitted
+            if all(existing.url != item.url for existing in current.actions)
+        )
+        if additions:
+            nodes[node_id] = replace(current, actions=current.actions + additions)
+
+
 def _connection_nodes(
     groups: tuple[ConnectionGroup, ...],
     nodes: dict[str, TopologyNode],
@@ -379,20 +416,13 @@ def _connection_nodes(
             )
             if instance.controller_id:
                 controller_id = _derived_id("controller", instance.controller_id)
-                nodes.setdefault(
-                    controller_id,
-                    TopologyNode(
-                        id=controller_id,
-                        kind="controller",
-                        label=instance.controller_id,
-                        subtitle="Controller",
-                        url=connection_url,
-                        actions=(
-                            (TopologyAction("open", "Open connections", "read", connection_url),)
-                            if connection_url
-                            else ()
-                        ),
-                    ),
+                _merge_controller_node(
+                    nodes,
+                    node_id=controller_id,
+                    label=instance.controller_id,
+                    group_label=group.spec.label,
+                    url=connection_url,
+                    principal=principal,
                 )
                 relation = _edge(
                     controller_id, connection_id, "carries", "Carries"

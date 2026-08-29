@@ -27,6 +27,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 
+from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from control_plane.providers import (
     caa_parts,
     certificate_covers,
@@ -3898,21 +3899,29 @@ def _analytics_site_reading(
     }
 
 
-def _analytics_connection_readings(
-    connection_ref: str, *, start: date, end: date, query: str
-) -> list[dict[str, Any]]:
-    """Every site visible through one credential."""
+def analytics_sites() -> list[dict[str, str]]:
+    """Discover measured sites once so HQ can plan their missing windows."""
 
-    account = _analytics_account(connection_ref)
-    return [
-        _analytics_site_reading(
-            account, site, connection_ref, start=start, end=end, query=query
+    found = []
+    for connection_ref in provider_connection_refs("cloudflare_api"):
+        account = _analytics_account(connection_ref)
+        found.extend(
+            {
+                **site,
+                "account": account,
+                "connection_ref": connection_ref,
+            }
+            for site in _analytics_sites(account, connection_ref)
         )
-        for site in _analytics_sites(account, connection_ref)
-    ]
+    return found
 
 
-def analytics(days: int = 3) -> dict[str, Any]:
+def analytics(
+    days: int = 3,
+    *,
+    sites: list[dict[str, str]] | None = None,
+    windows: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Every site's recent traffic and vitals, in the shape HQ stores.
 
     ``days`` is short by default because a day that has closed does not change:
@@ -3925,25 +3934,40 @@ def analytics(days: int = 3) -> dict[str, Any]:
     figure that reads as a traffic collapse every morning.
     """
 
-    connection_refs = provider_connection_refs("cloudflare_api")
-    if not connection_refs:
+    sources = analytics_sites() if sites is None else sites
+    if not sources:
         # Nothing to do, which is not the same as something going wrong. A
         # deployment carrying no analytics credential should sweep in silence
         # rather than report a failure on every pass.
         return {"sites": []}
 
-    today = datetime.now(timezone.utc).date()
-    end = today - timedelta(days=1)
-    start = end - timedelta(days=max(days, 1) - 1)
+    default_start, completed = completed_window(days)
     query = _analytics_query()
-
-    readings = [
-        reading
-        for connection_ref in connection_refs
-        for reading in _analytics_connection_readings(
-            connection_ref, start=start, end=end, query=query
+    planned = {
+        (item.get("connection_ref", ""), item.get("site_tag", "")): item
+        for item in (windows or [])
+        if isinstance(item, dict)
+    }
+    readings = []
+    for site in sources:
+        window = planned.get((site["connection_ref"], site["site_tag"]), {})
+        try:
+            start = date.fromisoformat(window.get("start", ""))
+            end = date.fromisoformat(window.get("end", ""))
+        except (TypeError, ValueError):
+            start, end = default_start, completed
+        if start > end or end > completed or (end - start).days >= MAX_QUERY_DAYS:
+            start, end = default_start, completed
+        readings.append(
+            _analytics_site_reading(
+                site["account"],
+                site,
+                site["connection_ref"],
+                start=start,
+                end=end,
+                query=query,
+            )
         )
-    ]
     return {"sites": readings}
 
 

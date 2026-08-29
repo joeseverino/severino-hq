@@ -13,6 +13,7 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
+from .cadence import ControllerSweepCommand, request_controller_sweep
 from .contracts import DOTTED_NAME, EFFECTS
 from .deletion import (
     DeleteCommand,
@@ -369,6 +370,19 @@ _SPECS = (
         "infrastructure.resources",
         target_label="Resource key",
         target_help="The managed infrastructure resource to reconcile.",
+    ),
+    CapabilitySpec(
+        "infrastructure.controller.refresh",
+        "Wake the privileged controller to pull work and refresh due observations.",
+        "infrastructure_change",
+        Capability.MANAGE_INFRASTRUCTURE,
+        ControllerSweepCommand,
+        request_controller_sweep,
+        execution_notes=(
+            "Mark HQ active so the short observation cadence applies.",
+            "Ring the credential-free controller doorbell; no provider authority enters the web process.",
+            "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
+        ),
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
