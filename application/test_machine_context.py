@@ -98,7 +98,7 @@ class RegistryTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_identity", "_traffic", "_points_here", "_activity"],
+            ["_identity", "_traffic", "_related", "_activity"],
         )
 
     def test_a_section_with_nothing_to_say_does_not_appear(self):
@@ -137,7 +137,7 @@ class IdentityTests(TestCase):
         self.assertNotIn("identity", by_id(a_machine(name="box")))
 
 
-class PointsHereTests(TestCase):
+class RelatedTests(TestCase):
     def _declare(self, key, kind, **spec):
         from control_plane.models import ManagedResource
 
@@ -149,7 +149,7 @@ class PointsHereTests(TestCase):
         self._declare("box", "machine", name="box", addresses=["10.9.9.9"])
         self._declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
 
-        rows = by_id(a_machine(name="box", declaration="box"))["points-here"].records
+        rows = by_id(a_machine(name="box", declaration="box"))["related"].records
 
         self.assertEqual([row[0].text for row in rows], ["site-dns"])
         self.assertIn("10.9.9.9", rows[0][2].text)
@@ -160,10 +160,63 @@ class PointsHereTests(TestCase):
 
         found = by_id(a_machine(name="box", declaration="box", device="box-2"))
 
-        self.assertNotIn("points-here", found)
+        self.assertNotIn("related", found)
 
     def test_a_declaration_pointing_elsewhere_is_not_borrowed(self):
         self._declare("box", "machine", name="box", addresses=["10.9.9.9"])
         self._declare("other-dns", "adguard.rewrite", domain="other.test", answer="10.1.1.1")
 
-        self.assertNotIn("points-here", by_id(a_machine(name="box", declaration="box")))
+        self.assertNotIn("related", by_id(a_machine(name="box", declaration="box")))
+
+
+class RelatedByNameTests(TestCase):
+    """A declaration can be about a machine by naming what it answers on."""
+
+    def _declare(self, key, kind, **spec):
+        from control_plane.models import ManagedResource
+
+        return ManagedResource.objects.create(key=key, kind=kind, spec=spec, enabled=True)
+
+    def test_a_wildcard_certificate_relates_without_naming_the_host(self):
+        """The case a set intersection silently misses.
+
+        The certificate lists `*.example.test` and never lists the host, so
+        matching declared names against answered names as sets finds nothing —
+        and the machine serving that host appears to have no certificate.
+        """
+
+        self._declare("box", "machine", name="box", addresses=["10.9.9.9"])
+        self._declare(
+            "wildcard-cert",
+            "tls.certificate",
+            certificate_name="wildcard",
+            domains=["*.example.test"],
+        )
+
+        found = by_id(a_machine("hq.example.test", name="box", declaration="box"))
+
+        self.assertIn("related", found)
+        row = found["related"].records[0]
+        self.assertEqual(row[0].text, "wildcard-cert")
+        self.assertEqual(row[2].text, "serves hq.example.test")
+
+    def test_a_certificate_for_another_estate_is_not_related(self):
+        self._declare("box", "machine", name="box", addresses=["10.9.9.9"])
+        self._declare(
+            "elsewhere-cert",
+            "tls.certificate",
+            certificate_name="elsewhere",
+            domains=["*.elsewhere.test"],
+        )
+
+        self.assertNotIn("related", by_id(a_machine("hq.example.test", name="box", declaration="box")))
+
+    def test_one_declaration_relating_both_ways_is_listed_once(self):
+        """A DNS record answers the address *and* names a host it serves."""
+
+        self._declare("box", "machine", name="box", addresses=["10.9.9.9"])
+        self._declare("hq-dns", "adguard.rewrite", domain="hq.example.test", answer="10.9.9.9")
+
+        rows = by_id(a_machine("hq.example.test", name="box", declaration="box"))["related"].records
+
+        self.assertEqual([row[0].text for row in rows], ["hq-dns"])
