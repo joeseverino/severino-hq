@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Max, Sum
 from django.utils import timezone
 
 from analytics.models import AnalyticsSite, RumDaily, VitalsDaily
@@ -38,19 +38,32 @@ DEFAULT_WINDOW_DAYS = 1
 CONTENT_TRAFFIC_DAYS = 28
 
 
-def path_of(url: str) -> str:
-    """The request path a published URL would be requested as.
+def location_of(url: str) -> tuple[str, str]:
+    """The measured host and path for one published URL.
 
-    The single definition of the join key. Cloudflare reports what the browser
-    asked for, so this keeps the trailing slash rather than tidying it away:
-    the site serves one form and redirects the other, and a normalisation here
-    would silently match a path that never gets requested.
+    A path is only unique inside a host. Keeping both parts here prevents a
+    writeup at ``example.com/about/`` inheriting traffic from another measured
+    site that happens to publish ``/about/`` too.
     """
 
     if not url:
-        return ""
+        return "", ""
     parsed = urlparse(url.strip())
-    return parsed.path or "/"
+    host = (parsed.hostname or "").rstrip(".").lower()
+    return host, parsed.path or "/"
+
+
+def path_of(url: str) -> str:
+    """The request path a published URL would be requested as.
+
+    Cloudflare reports what the browser asked for, so this keeps the trailing
+    slash rather than tidying it away: the site serves one form and redirects
+    the other, and a normalisation here would silently match a path that never
+    gets requested. Location parsing lives in one place; path-only consumers
+    derive their view from it.
+    """
+
+    return location_of(url)[1]
 
 
 # ----- Recording -------------------------------------------------------------
@@ -81,14 +94,15 @@ def record_analytics(
     recorded = {"sites": 0, "rows": 0, "vitals": 0}
     for entry in sites:
         site_tag = str(entry.get("site_tag", "")).strip()
-        host = str(entry.get("host", "")).strip()
+        host = str(entry.get("host", "")).strip().rstrip(".").lower()
+        connection_ref = str(entry.get("connection_ref", ""))[:100]
         if not site_tag or not host:
             continue
         site, _ = AnalyticsSite.objects.update_or_create(
+            connection_ref=connection_ref,
             site_tag=site_tag,
             defaults={
                 "host": host[:255],
-                "connection_ref": str(entry.get("connection_ref", ""))[:100],
             },
         )
         recorded["sites"] += 1
@@ -197,13 +211,52 @@ def breakdown(
     return [dict(row) for row in rows]
 
 
-def traffic_by_path(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, dict[str, int]]:
-    """Every path's totals over the window, keyed for joining."""
+def _traffic_for_locations(
+    locations: set[tuple[str, str]], *, days: int = DEFAULT_WINDOW_DAYS
+) -> dict[tuple[str, str], dict[str, int]]:
+    """Traffic for exact published locations in one bounded query.
 
+    The caller supplies the locations it can render. That keeps attribution at
+    its real ``(host, path)`` grain and avoids loading an estate's entire path
+    history merely to annotate one page of content.
+    """
+
+    locations = {(host.lower(), path) for host, path in locations if host and path}
+    if not locations:
+        return {}
+    hosts = {host for host, _ in locations}
+    paths = {path for _, path in locations}
+    start, end = _window(days)
+    rows = (
+        RumDaily.objects.filter(
+            site__host__in=hosts,
+            dimension=RumDaily.Dimension.PATH,
+            value__in=paths,
+            date__gte=start,
+            date__lte=end,
+        )
+        .values("site__host", "value")
+        .annotate(pageviews=Sum("pageviews"), visits=Sum("visits"))
+    )
     return {
-        row["value"]: {"pageviews": row["pageviews"], "visits": row["visits"]}
-        for row in breakdown(RumDaily.Dimension.PATH, days=days, limit=5000)
+        key: {"pageviews": row["pageviews"], "visits": row["visits"]}
+        for row in rows
+        if (key := (row["site__host"].lower(), row["value"])) in locations
     }
+
+
+def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
+    """How many site-local paths were measured in the window."""
+
+    start, end = _window(days)
+    return (
+        RumDaily.objects.filter(
+            dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end
+        )
+        .values("site_id", "value")
+        .distinct()
+        .count()
+    )
 
 
 def published_traffic(
@@ -216,15 +269,19 @@ def published_traffic(
     number would hide exactly the thing worth seeing.
     """
 
-    traffic = traffic_by_path(days=days)
-    items = ContentItem.objects.filter(
-        content_type__in=content_types, status=ContentItem.Status.PUBLISHED
-    ).only("title", "slug", "content_type", "published_url", "published_at")
+    items = list(
+        ContentItem.objects.filter(
+            content_type__in=content_types, status=ContentItem.Status.PUBLISHED
+        ).only("title", "slug", "content_type", "published_url", "published_at")
+    )
+    locations = {location_of(item.published_url) for item in items}
+    traffic = _traffic_for_locations(locations, days=days)
 
     rows = []
     for item in items:
-        path = path_of(item.published_url)
-        measured = traffic.get(path, {})
+        location = location_of(item.published_url)
+        path = location[1]
+        measured = traffic.get(location, {})
         rows.append(
             {
                 "item": item,
@@ -253,9 +310,10 @@ def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
     items = list(items)
     if not items:
         return items
-    traffic = traffic_by_path(days=days)
+    locations = {location_of(getattr(item, "published_url", "")) for item in items}
+    traffic = _traffic_for_locations(locations, days=days)
     for item in items:
-        measured = traffic.get(path_of(getattr(item, "published_url", "")))
+        measured = traffic.get(location_of(getattr(item, "published_url", "")))
         item.pageviews = measured["pageviews"] if measured else None
         item.visits = measured["visits"] if measured else None
     return items
@@ -270,14 +328,21 @@ def item_traffic(item, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
     an item nobody opens are different facts and a 0 says the wrong one.
     """
 
-    path = path_of(getattr(item, "published_url", ""))
-    if not path:
-        return {"path": "", "measured": False, "pageviews": 0, "visits": 0, "days": days}
+    host, path = location_of(getattr(item, "published_url", ""))
+    if not host or not path:
+        return {
+            "path": "",
+            "measured": False,
+            "pageviews": 0,
+            "visits": 0,
+            "days": days,
+        }
 
     start, end = _window(days)
     rows = list(
         RumDaily.objects.filter(
             dimension=RumDaily.Dimension.PATH,
+            site__host=host,
             value=path,
             date__gte=start,
             date__lte=end,
@@ -369,14 +434,10 @@ def site_totals(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
     start, end = _window(days)
     totals = RumDaily.objects.filter(
         dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end
-    ).aggregate(pageviews=Sum("pageviews"), visits=Sum("visits"))
-    sampling = (
-        RumDaily.objects.filter(
-            dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end
-        )
-        .order_by("-date")
-        .values_list("sample_interval", flat=True)
-        .first()
+    ).aggregate(
+        pageviews=Sum("pageviews"),
+        visits=Sum("visits"),
+        sample_interval=Max("sample_interval"),
     )
     return {
         "pageviews": totals.get("pageviews") or 0,
@@ -386,7 +447,10 @@ def site_totals(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
         "days": days,
         # Carried, not hidden. A figure extrapolated from one beacon in ten is
         # still the best number available, and is a different claim than a count.
-        "sample_interval": sampling or 1,
+        # Different sites can be sampled differently. Carry the least precise
+        # interval so the aggregate never claims stronger evidence than any
+        # number included in it.
+        "sample_interval": totals.get("sample_interval") or 1,
     }
 
 
@@ -443,7 +507,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
 
     days = days if days in WINDOW_DAYS else DEFAULT_WINDOW_DAYS
     totals = site_totals(days=days)
-    measured_paths = len(traffic_by_path(days=days))
+    measured_paths = measured_path_count(days=days)
     return {
         "kpis": (
             {
@@ -541,12 +605,13 @@ __all__ = [
     "breakdown",
     "last_observed_at",
     "latest_reading",
+    "location_of",
+    "measured_path_count",
     "page_traffic",
     "path_of",
     "published_traffic",
     "record_analytics",
     "site_totals",
-    "traffic_by_path",
     "vitals_summary",
     "writeup_traffic",
 ]

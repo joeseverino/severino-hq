@@ -35,7 +35,7 @@ class AnalyticsSite(models.Model):
     is what keeps a new site a matter of enabling it at Cloudflare.
     """
 
-    site_tag = models.CharField(max_length=64, unique=True)
+    site_tag = models.CharField(max_length=64)
     host = models.CharField(max_length=255)
     # Which credential observed it. Two accounts would mean two connections,
     # and a reading has to say which one it came from or it cannot be refreshed.
@@ -45,6 +45,12 @@ class AnalyticsSite(models.Model):
 
     class Meta:
         ordering = ("host",)
+        constraints = (
+            models.UniqueConstraint(
+                fields=("connection_ref", "site_tag"),
+                name="analytics_site_ref_tag_unique",
+            ),
+        )
 
     def __str__(self) -> str:
         return self.host or self.site_tag
@@ -108,6 +114,10 @@ class RumDaily(models.Model):
             # window, one path's history, and the window itself.
             models.Index(fields=("site", "dimension", "-date")),
             models.Index(fields=("dimension", "value", "-date")),
+            models.Index(
+                fields=("site", "dimension", "value", "-date"),
+                name="analytics_rum_loc_date_idx",
+            ),
         )
 
     def __str__(self) -> str:

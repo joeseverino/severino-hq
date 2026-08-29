@@ -87,9 +87,7 @@ def _by_url(routes):
     def respond(url, *args, **kwargs):
         # Longest match wins. `/tokens` is a substring of `/user/tokens/verify`,
         # so first-match would answer Cloudflare with NPM's reply.
-        matches = sorted(
-            (fragment for fragment in routes if fragment in url), key=len
-        )
+        matches = sorted((fragment for fragment in routes if fragment in url), key=len)
         if not matches:
             raise AssertionError(f"Unexpected provider request: {url}")
         return routes[matches[-1]]
@@ -115,7 +113,9 @@ def _bridge(**responses):
 
 class ProviderAdapterTests(TestCase):
     @mock.patch.dict(
-        "os.environ", {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"}, clear=True
+        "os.environ",
+        {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"},
+        clear=True,
     )
     @mock.patch("controller_runtime.providers.ssl.create_default_context")
     def test_tls_context_adds_controller_ca_without_replacing_public_roots(
@@ -208,7 +208,9 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_adguard({"domain": "hq.example", "answer": "192.0.2.10"})
+        result = providers.delete_adguard(
+            {"domain": "hq.example", "answer": "192.0.2.10"}
+        )
 
         self.assertTrue(result.changed)
         deletion = request.call_args_list[-1]
@@ -499,9 +501,7 @@ class ProviderAdapterTests(TestCase):
     def test_npm_refuses_https_create_without_certificate(self, request):
         request.side_effect = [{"token": "short-lived"}, []]
 
-        with self.assertRaisesRegex(
-            providers.ProviderError, "resolved certificate ID"
-        ):
+        with self.assertRaisesRegex(providers.ProviderError, "resolved certificate ID"):
             providers.reconcile_npm(
                 {
                     "domain_names": ["hq.example"],
@@ -591,7 +591,6 @@ class ProviderAdapterTests(TestCase):
         self.assertTrue(sent["hsts_enabled"])
         self.assertTrue(sent["hsts_subdomains"])
         self.assertTrue(sent["trust_forwarded_proto"])
-
 
     @mock.patch.dict(
         "os.environ",
@@ -844,9 +843,7 @@ class ProviderAdapterTests(TestCase):
             }
         )
 
-        self.assertTrue(
-            any(item["type"] == "Drifted" for item in result.conditions)
-        )
+        self.assertTrue(any(item["type"] == "Drifted" for item in result.conditions))
         self.assertIn("BEGIN CERTIFICATE", result.status["certificate_pem"])
         self.assertNotIn("PRIVATE KEY", json.dumps(result.status))
         self.assertEqual(
@@ -899,9 +896,7 @@ class ProviderAdapterTests(TestCase):
             }
         )
 
-        observe.assert_called_once_with(
-            "quiz.example.test", connect_host="192.0.2.10"
-        )
+        observe.assert_called_once_with("quiz.example.test", connect_host="192.0.2.10")
 
     @mock.patch.dict("os.environ", {"NPM_URL": "https://proxy.example"}, clear=True)
     def test_npm_tls_endpoint_is_derived_from_controller_connection(self):
@@ -1099,7 +1094,9 @@ class ProviderAdapterTests(TestCase):
         )
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
-    @mock.patch("controller_runtime.providers._validate_certificate", return_value="new")
+    @mock.patch(
+        "controller_runtime.providers._validate_certificate", return_value="new"
+    )
     @mock.patch("controller_runtime.providers._lineage")
     def test_reconcile_success_records_explicit_consumer_match_evidence(
         self, lineage, _validate, reconcile
@@ -1403,7 +1400,12 @@ CLOUDFLARE_ENV = {
     "CLOUDFLARE_DNS_CONNECTION_REF": "cloudflare-dns-example",
 }
 
-ZONE = {"id": "zone1", "name": "example.com", "status": "active", "plan": {"name": "Free"}}
+ZONE = {
+    "id": "zone1",
+    "name": "example.com",
+    "status": "active",
+    "plan": {"name": "Free"},
+}
 
 
 def live(record_id, rtype, name, content, **extra):
@@ -1448,12 +1450,22 @@ class CloudflareAdapterTests(TestCase):
 
     @mock.patch("controller_runtime.providers._cloudflare_request")
     def test_a_missing_record_is_created(self, request):
-        request.side_effect = [[ZONE], [], live("new1", "A", "app.example.com", "203.0.113.1")]
+        request.side_effect = [
+            [ZONE],
+            [],
+            live("new1", "A", "app.example.com", "203.0.113.1"),
+        ]
 
-        result = providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "app.example.com",
-            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
-        })
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         self.assertTrue(result.changed)
         created = request.call_args_list[-1]
@@ -1469,10 +1481,16 @@ class CloudflareAdapterTests(TestCase):
             [live("r1", "A", "app.example.com", "203.0.113.1")],
         ]
 
-        result = providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "app.example.com",
-            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
-        })
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         self.assertFalse(result.changed)
         # Two reads and no write. A reconciler that rewrites an already-correct
@@ -1489,8 +1507,12 @@ class CloudflareAdapterTests(TestCase):
 
         result = providers.reconcile_cloudflare_record(
             {
-                "zone": "example.com", "name": "app.example.com",
-                "record_type": "A", "content": "203.0.113.9", "proxied": False, "ttl": 1,
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.9",
+                "proxied": False,
+                "ttl": 1,
             },
             observed={"record_id": "r1"},
         )
@@ -1518,8 +1540,12 @@ class CloudflareAdapterTests(TestCase):
 
         result = providers.reconcile_cloudflare_record(
             {
-                "zone": "example.com", "name": "new.example.com",
-                "record_type": "A", "content": "203.0.113.7", "proxied": False, "ttl": 1,
+                "zone": "example.com",
+                "name": "new.example.com",
+                "record_type": "A",
+                "content": "203.0.113.7",
+                "proxied": False,
+                "ttl": 1,
             },
             observed={"record_id": "r1"},
         )
@@ -1534,20 +1560,38 @@ class CloudflareAdapterTests(TestCase):
         """A zone apex holds many records. Matching by name would pick a coin toss."""
 
         siblings = [
-            live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"',
-                 data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"}),
-            live("c2", "CAA", "example.com", '0 issuewild "letsencrypt.org"',
-                 data={"flags": 0, "tag": "issuewild", "value": "letsencrypt.org"}),
+            live(
+                "c1",
+                "CAA",
+                "example.com",
+                '0 issue "letsencrypt.org"',
+                data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"},
+            ),
+            live(
+                "c2",
+                "CAA",
+                "example.com",
+                '0 issuewild "letsencrypt.org"',
+                data={"flags": 0, "tag": "issuewild", "value": "letsencrypt.org"},
+            ),
             live("m1", "MX", "example.com", "mx01.example.net", priority=10),
             live("m2", "MX", "example.com", "mx02.example.net", priority=20),
         ]
-        request.side_effect = [[ZONE], siblings, live("m2", "MX", "example.com", "mx03.example.net", priority=20)]
+        request.side_effect = [
+            [ZONE],
+            siblings,
+            live("m2", "MX", "example.com", "mx03.example.net", priority=20),
+        ]
 
         providers.reconcile_cloudflare_record(
             {
-                "zone": "example.com", "name": "example.com",
-                "record_type": "MX", "content": "mx03.example.net",
-                "priority": 20, "proxied": False, "ttl": 1,
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "MX",
+                "content": "mx03.example.net",
+                "priority": 20,
+                "proxied": False,
+                "ttl": 1,
             },
             observed={"record_id": "m2"},
         )
@@ -1558,35 +1602,66 @@ class CloudflareAdapterTests(TestCase):
     def test_caa_is_sent_as_three_fields_not_as_a_string(self, request):
         """Cloudflare returns CAA as one string and accepts it only as data."""
 
-        request.side_effect = [[ZONE], [], live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"')]
+        request.side_effect = [
+            [ZONE],
+            [],
+            live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"'),
+        ]
 
-        providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "example.com",
-            "record_type": "CAA", "content": '0 issue "letsencrypt.org"',
-            "proxied": False, "ttl": 1,
-        })
+        providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "CAA",
+                "content": '0 issue "letsencrypt.org"',
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         payload = request.call_args_list[-1].kwargs["payload"]
-        self.assertEqual(payload["data"], {"flags": 0, "tag": "issue", "value": "letsencrypt.org"})
+        self.assertEqual(
+            payload["data"], {"flags": 0, "tag": "issue", "value": "letsencrypt.org"}
+        )
         self.assertNotIn("content", payload)
 
     @mock.patch("controller_runtime.providers._cloudflare_request")
     def test_an_mx_carries_its_priority_and_an_address_record_does_not(self, request):
-        request.side_effect = [[ZONE], [], live("m1", "MX", "example.com", "mx.example.net", priority=10)]
-        providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "example.com",
-            "record_type": "MX", "content": "mx.example.net",
-            "priority": 10, "proxied": False, "ttl": 1,
-        })
+        request.side_effect = [
+            [ZONE],
+            [],
+            live("m1", "MX", "example.com", "mx.example.net", priority=10),
+        ]
+        providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "MX",
+                "content": "mx.example.net",
+                "priority": 10,
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
         self.assertEqual(request.call_args_list[-1].kwargs["payload"]["priority"], 10)
 
         providers._ZONE_IDS.clear()
         request.reset_mock()
-        request.side_effect = [[ZONE], [], live("a1", "A", "app.example.com", "203.0.113.1")]
-        providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "app.example.com",
-            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
-        })
+        request.side_effect = [
+            [ZONE],
+            [],
+            live("a1", "A", "app.example.com", "203.0.113.1"),
+        ]
+        providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
         payload = request.call_args_list[-1].kwargs["payload"]
         self.assertNotIn("priority", payload)
         # proxied is only sent for the types that can carry it; Cloudflare
@@ -1602,10 +1677,16 @@ class CloudflareAdapterTests(TestCase):
             [live("t1", "TXT", "example.com", '"v=spf1 -all"')],
         ]
 
-        result = providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "example.com",
-            "record_type": "TXT", "content": "v=spf1 -all", "proxied": False, "ttl": 1,
-        })
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "TXT",
+                "content": "v=spf1 -all",
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         self.assertFalse(result.changed)
 
@@ -1618,10 +1699,16 @@ class CloudflareAdapterTests(TestCase):
             [live("a1", "A", "app.example.com", "203.0.113.1")],
         ]
 
-        result = providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "APP.example.com",
-            "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
-        })
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "APP.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         self.assertFalse(result.changed)
 
@@ -1629,15 +1716,27 @@ class CloudflareAdapterTests(TestCase):
     def test_a_caa_value_with_extra_spaces_is_not_permanent_drift(self, request):
         request.side_effect = [
             [ZONE],
-            [live("c1", "CAA", "example.com", '0 issue "letsencrypt.org"',
-                  data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"})],
+            [
+                live(
+                    "c1",
+                    "CAA",
+                    "example.com",
+                    '0 issue "letsencrypt.org"',
+                    data={"flags": 0, "tag": "issue", "value": "letsencrypt.org"},
+                )
+            ],
         ]
 
-        result = providers.reconcile_cloudflare_record({
-            "zone": "example.com", "name": "example.com",
-            "record_type": "CAA", "content": '0  issue   "letsencrypt.org"',
-            "proxied": False, "ttl": 1,
-        })
+        result = providers.reconcile_cloudflare_record(
+            {
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "CAA",
+                "content": '0  issue   "letsencrypt.org"',
+                "proxied": False,
+                "ttl": 1,
+            }
+        )
 
         self.assertFalse(result.changed)
 
@@ -1651,8 +1750,12 @@ class CloudflareAdapterTests(TestCase):
         request.side_effect = [[ZONE], siblings, None]
 
         result = providers.delete_cloudflare_record(
-            {"zone": "example.com", "name": "example.com",
-             "record_type": "TXT", "content": '"two"'},
+            {
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "TXT",
+                "content": '"two"',
+            },
             observed={"record_id": "t2"},
         )
 
@@ -1670,8 +1773,12 @@ class CloudflareAdapterTests(TestCase):
         request.side_effect = [[ZONE], []]
 
         result = providers.delete_cloudflare_record(
-            {"zone": "example.com", "name": "gone.example.com",
-             "record_type": "A", "content": "203.0.113.1"},
+            {
+                "zone": "example.com",
+                "name": "gone.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+            },
         )
 
         self.assertFalse(result.changed)
@@ -1682,10 +1789,16 @@ class CloudflareAdapterTests(TestCase):
         request.side_effect = [[ZONE]]
 
         with self.assertRaisesRegex(providers.ProviderError, "elsewhere.example"):
-            providers.reconcile_cloudflare_record({
-                "zone": "elsewhere.example", "name": "app.elsewhere.example",
-                "record_type": "A", "content": "203.0.113.1", "proxied": False, "ttl": 1,
-            })
+            providers.reconcile_cloudflare_record(
+                {
+                    "zone": "elsewhere.example",
+                    "name": "app.elsewhere.example",
+                    "record_type": "A",
+                    "content": "203.0.113.1",
+                    "proxied": False,
+                    "ttl": 1,
+                }
+            )
 
     @mock.patch("controller_runtime.providers._cloudflare_request")
     def test_every_page_of_a_long_zone_is_read(self, request):
@@ -1696,7 +1809,9 @@ class CloudflareAdapterTests(TestCase):
         recreating records that were there all along.
         """
 
-        first = [live(f"r{i}", "A", f"h{i}.example.com", "203.0.113.1") for i in range(100)]
+        first = [
+            live(f"r{i}", "A", f"h{i}.example.com", "203.0.113.1") for i in range(100)
+        ]
         second = [live("r100", "A", "h100.example.com", "203.0.113.1")]
         request.side_effect = [[ZONE], first, second]
 
@@ -1721,6 +1836,89 @@ class CloudflareAdapterTests(TestCase):
         self.assertEqual(records[0]["record_id"], "m1")
         self.assertEqual(records[0]["priority"], 10)
         self.assertEqual(records[0]["zone"], "example.com")
+
+
+class CloudflareAnalyticsTests(TestCase):
+    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    def test_account_lists_are_read_to_the_last_page(self, request):
+        request.side_effect = [
+            {"result": [{"id": f"account-{index}"} for index in range(100)]},
+            {"result": [{"id": "account-100"}]},
+        ]
+
+        accounts = providers._cloudflare_api_list("/accounts", "example-api")
+
+        self.assertEqual(len(accounts), 101)
+        self.assertIn("page=1", request.call_args_list[0].args[0])
+        self.assertIn("page=2", request.call_args_list[1].args[0])
+        self.assertEqual(request.call_args_list[1].args[1], "example-api")
+
+    @mock.patch("controller_runtime.providers._analytics_sites")
+    @mock.patch("controller_runtime.providers._analytics_account")
+    @mock.patch("controller_runtime.providers._cloudflare_api_request")
+    def test_probe_and_reader_share_account_discovery(self, request, account, sites):
+        request.return_value = {"success": True}
+        account.return_value = "account-id"
+        sites.return_value = [{"site_tag": "0" * 32, "host": "example.test"}]
+
+        result = providers._probe_cloudflare_api("example-api")
+
+        account.assert_called_once_with("example-api")
+        sites.assert_called_once_with("account-id", "example-api")
+        self.assertEqual(result["reaches"], ["example.test"])
+
+    @mock.patch("controller_runtime.providers._cloudflare_graphql")
+    def test_site_reading_uses_its_connection(self, graphql):
+        graphql.return_value = {"viewer": {"accounts": [{}]}}
+
+        result = providers._analytics_site_reading(
+            "account-id",
+            {"site_tag": "0" * 32, "host": "example.test"},
+            "account-two",
+            start=providers.date(2026, 8, 26),
+            end=providers.date(2026, 8, 27),
+            query="query Analytics {}",
+        )
+
+        self.assertEqual(result["connection_ref"], "account-two")
+        self.assertEqual(graphql.call_args.args[2], "account-two")
+
+    @mock.patch("controller_runtime.providers._analytics_connection_readings")
+    @mock.patch(
+        "controller_runtime.providers.provider_connection_refs",
+        return_value=("account-one", "account-two"),
+    )
+    def test_every_configured_connection_is_read(self, connection_refs, readings):
+        readings.side_effect = [
+            [{"connection_ref": "account-one"}],
+            [{"connection_ref": "account-two"}],
+        ]
+
+        result = providers.analytics()
+
+        self.assertEqual(
+            [site["connection_ref"] for site in result["sites"]],
+            ["account-one", "account-two"],
+        )
+        self.assertEqual(
+            [call.args[0] for call in readings.call_args_list],
+            ["account-one", "account-two"],
+        )
+        connection_refs.assert_called_once_with("cloudflare_api")
+
+    @mock.patch("controller_runtime.providers._cloudflare_graphql")
+    def test_missing_graphql_account_fails_closed(self, graphql):
+        graphql.return_value = {"viewer": {"accounts": []}}
+
+        with self.assertRaisesRegex(providers.ProviderError, "matching account"):
+            providers._analytics_site_reading(
+                "account-id",
+                {"site_tag": "0" * 32, "host": "example.test"},
+                "example-api",
+                start=providers.date(2026, 8, 26),
+                end=providers.date(2026, 8, 27),
+                query="query Analytics {}",
+            )
 
 
 class ControllerStepReportingTests(TestCase):
@@ -1759,9 +1957,10 @@ class WorkerEntryPointTests(TestCase):
     """
 
     def test_it_starts_and_names_the_machine_it_runs_on(self):
-        with mock.patch.object(worker.sys, "argv", ["worker"]), mock.patch.object(
-            worker, "run_once", return_value=0
-        ) as run:
+        with (
+            mock.patch.object(worker.sys, "argv", ["worker"]),
+            mock.patch.object(worker, "run_once", return_value=0) as run,
+        ):
             self.assertEqual(worker.main(), 0)
 
         self.assertEqual(run.call_args.args[0], os.uname().nodename)
@@ -1769,17 +1968,19 @@ class WorkerEntryPointTests(TestCase):
 
     @mock.patch.dict("os.environ", {"HQ_CONTROLLER_ID": "a-named-controller"})
     def test_the_environment_names_it_when_it_says_so(self):
-        with mock.patch.object(worker.sys, "argv", ["worker"]), mock.patch.object(
-            worker, "run_once", return_value=0
-        ) as run:
+        with (
+            mock.patch.object(worker.sys, "argv", ["worker"]),
+            mock.patch.object(worker, "run_once", return_value=0) as run,
+        ):
             worker.main()
 
         self.assertEqual(run.call_args.args[0], "a-named-controller")
 
     def test_apply_is_off_unless_asked_for(self):
-        with mock.patch.object(worker.sys, "argv", ["worker", "--apply"]), (
-            mock.patch.object(worker, "run_once", return_value=0)
-        ) as run:
+        with (
+            mock.patch.object(worker.sys, "argv", ["worker", "--apply"]),
+            mock.patch.object(worker, "run_once", return_value=0) as run,
+        ):
             worker.main()
 
         self.assertTrue(run.call_args.kwargs["apply"])
@@ -1816,34 +2017,40 @@ class AppConnectorTests(TestCase):
         return providers._app_connectors(policy)
 
     def test_a_declared_connector_is_read_out_of_the_policy(self):
-        found = self.connectors({
-            "nodeAttrs": [{
-                "target": ["tag:server"],
-                "app": {
-                    "tailscale.com/app-connectors": [{
-                        "name": "example-connector",
-                        "connectors": ["tag:server"],
-                        "domains": ["example.test"],
-                    }]
-                },
-            }]
-        })
+        found = self.connectors(
+            {
+                "nodeAttrs": [
+                    {
+                        "target": ["tag:server"],
+                        "app": {
+                            "tailscale.com/app-connectors": [
+                                {
+                                    "name": "example-connector",
+                                    "connectors": ["tag:server"],
+                                    "domains": ["example.test"],
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
 
         self.assertEqual(
             found,
-            [{
-                "name": "example-connector",
-                "connectors": ["tag:server"],
-                "domains": ["example.test"],
-            }],
+            [
+                {
+                    "name": "example-connector",
+                    "connectors": ["tag:server"],
+                    "domains": ["example.test"],
+                }
+            ],
         )
 
     def test_other_node_attributes_are_not_mistaken_for_connectors(self):
         """`nodeAttrs` carries every per-node attribute the policy sets."""
 
-        found = self.connectors({
-            "nodeAttrs": [{"target": ["*"], "attr": ["funnel"]}]
-        })
+        found = self.connectors({"nodeAttrs": [{"target": ["*"], "attr": ["funnel"]}]})
 
         self.assertEqual(found, [])
 
@@ -1873,7 +2080,11 @@ class TailnetSweepTests(TestCase):
                 "ExitNode": True,
                 "ExitNodeOption": True,
             },
-            "k2": {"HostName": "a-tv", "Online": False, "LastSeen": "2026-07-01T00:00:00Z"},
+            "k2": {
+                "HostName": "a-tv",
+                "Online": False,
+                "LastSeen": "2026-07-01T00:00:00Z",
+            },
         },
     }
 
@@ -2131,38 +2342,42 @@ class RouteApprovalTests(TestCase):
         return result, sent
 
     def test_what_is_approved_is_what_the_device_advertises(self):
-        result, sent = self.approve([
-            {"advertisedRoutes": ["10.0.0.0/24", "0.0.0.0/0"], "enabledRoutes": []},
-            {"enabledRoutes": ["0.0.0.0/0", "10.0.0.0/24"]},
-        ])
+        result, sent = self.approve(
+            [
+                {"advertisedRoutes": ["10.0.0.0/24", "0.0.0.0/0"], "enabledRoutes": []},
+                {"enabledRoutes": ["0.0.0.0/0", "10.0.0.0/24"]},
+            ]
+        )
 
         self.assertTrue(result.changed)
         self.assertEqual(sent[1].method, "POST")
         self.assertEqual(
             json.loads(sent[1].data)["routes"], ["0.0.0.0/0", "10.0.0.0/24"]
         )
-        self.assertEqual(
-            result.status["enabled_routes"], ["0.0.0.0/0", "10.0.0.0/24"]
-        )
+        self.assertEqual(result.status["enabled_routes"], ["0.0.0.0/0", "10.0.0.0/24"])
 
     def test_an_already_enabled_route_is_kept_rather_than_withdrawn(self):
         """The write is the whole set, so approving the second route has to
         send the first one back with it."""
 
-        _, sent = self.approve([
-            {
-                "advertisedRoutes": ["10.0.0.0/24", "10.0.1.0/24"],
-                "enabledRoutes": ["10.0.0.0/24"],
-            },
-            {"enabledRoutes": ["10.0.0.0/24", "10.0.1.0/24"]},
-        ])
+        _, sent = self.approve(
+            [
+                {
+                    "advertisedRoutes": ["10.0.0.0/24", "10.0.1.0/24"],
+                    "enabledRoutes": ["10.0.0.0/24"],
+                },
+                {"enabledRoutes": ["10.0.0.0/24", "10.0.1.0/24"]},
+            ]
+        )
 
         self.assertIn("10.0.0.0/24", json.loads(sent[1].data)["routes"])
 
     def test_nothing_pending_writes_nothing(self):
-        result, sent = self.approve([
-            {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": ["10.0.0.0/24"]},
-        ])
+        result, sent = self.approve(
+            [
+                {"advertisedRoutes": ["10.0.0.0/24"], "enabledRoutes": ["10.0.0.0/24"]},
+            ]
+        )
 
         self.assertFalse(result.changed)
         self.assertEqual(len(sent), 1)
@@ -2235,7 +2450,9 @@ class RouteApprovalTests(TestCase):
             mock.patch.object(providers, "_tailnet_device_id", return_value="node-1"),
             mock.patch.object(providers, "_tailnet_token", return_value="token"),
             mock.patch.object(providers.urllib.request, "urlopen", urlopen),
-            self.assertRaisesRegex(providers.ProviderError, "did not report the routes"),
+            self.assertRaisesRegex(
+                providers.ProviderError, "did not report the routes"
+            ),
         ):
             providers.approve_tailnet_routes({"name": "a-router"})
 
