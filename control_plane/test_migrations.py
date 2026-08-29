@@ -236,3 +236,120 @@ class TopologyHandoverTests(TestCase):
             [consumer["name"] for consumer in resolved["consumers"]],
             ["example_wildcard", "edge-caddy", "a-shared-host"],
         )
+
+
+rename_tailnet_keys = import_module(
+    "control_plane.migrations.0015_tailnet_device_keys_say_what_they_are"
+)
+
+
+class _RealApps:
+    """The live models, for a migration whose logic is model-shaped."""
+
+    @staticmethod
+    def get_model(app_label, model_name):
+        from django.apps import apps
+
+        return apps.get_model(app_label, model_name)
+
+
+class TailnetKeyRenameTests(TestCase):
+    """A key that recorded arrival order becomes one that says what it is.
+
+    The migration runs once against real rows, so it runs here first: the
+    interesting cases are a device already filed under a collision suffix, the
+    audit trail that references it by string, and a target key that is occupied.
+    """
+
+    def device(self, key, name):
+        return ManagedResource.objects.create(
+            key=key, kind="tailscale.device", spec={"name": name}
+        )
+
+    def test_a_suffixed_device_is_renamed_to_say_what_it_is(self):
+        ManagedResource.objects.create(key="box", kind="machine", spec={"name": "box"})
+        self.device("box-2", "box")
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        self.assertTrue(ManagedResource.objects.filter(key="box-tailnet").exists())
+        self.assertFalse(ManagedResource.objects.filter(key="box-2").exists())
+        # The machine keeps the plain name it always had.
+        self.assertEqual(ManagedResource.objects.get(key="box").kind, "machine")
+
+    def test_the_audit_trail_follows_the_rename(self):
+        """Audit references a resource by string so history outlives deletion.
+
+        A rename that ignored it would sever every record of what was done to
+        these devices, which is worse than the key it set out to fix.
+        """
+
+        from core.models import AuditLog
+
+        self.device("box-2", "box")
+        AuditLog.objects.create(
+            action="update", object_type="ManagedResource",
+            object_id="box-2", object_repr="box-2",
+        )
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        self.assertTrue(
+            AuditLog.objects.filter(object_type="ManagedResource", object_id="box-tailnet").exists()
+        )
+
+    def test_an_occupied_target_is_left_alone(self):
+        """A rename onto an existing key would break the uniqueness it restores."""
+
+        self.device("box-2", "box")
+        ManagedResource.objects.create(
+            key="box-tailnet", kind="machine", spec={"name": "something-else"}
+        )
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        self.assertTrue(ManagedResource.objects.filter(key="box-2").exists())
+
+    def test_it_is_reversible(self):
+        self.device("box-2", "box")
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+        rename_tailnet_keys.backwards(_RealApps, None)
+
+        self.assertTrue(ManagedResource.objects.filter(key="box").exists())
+
+    def test_a_device_with_no_name_is_left_alone(self):
+        ManagedResource.objects.create(key="nameless", kind="tailscale.device", spec={})
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        self.assertTrue(ManagedResource.objects.filter(key="nameless").exists())
+
+    def test_a_display_name_becomes_a_key_a_url_can_carry(self):
+        """The mistake this nearly shipped with.
+
+        A device name is a display string — "Joseph's MacBook Pro" — and a key
+        appears in a URL. Renaming without slugifying turned a working key into
+        one the resource route cannot match, which is worse than the suffix it
+        set out to remove.
+        """
+
+        import re
+
+        self.device("josephs-macbook-pro", "Joseph’s MacBook Pro")
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        key = ManagedResource.objects.get(kind="tailscale.device").key
+        self.assertEqual(key, "josephs-macbook-pro-tailnet")
+        self.assertTrue(re.fullmatch(r"[-a-zA-Z0-9_]+", key))
+
+    def test_a_name_with_dots_separates_rather_than_running_together(self):
+        self.device("box", "box.example.com")
+
+        rename_tailnet_keys.forwards(_RealApps, None)
+
+        self.assertEqual(
+            ManagedResource.objects.get(kind="tailscale.device").key,
+            "box-example-com-tailnet",
+        )
