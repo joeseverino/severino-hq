@@ -33,7 +33,12 @@
           <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity }}</span>
           <h2>{{ entry.finding.title }}</h2>
         </div>
-        {% if entry.topology_url %}<a class="btn compact" href="{{ entry.topology_url }}">Show in topology</a>{% endif %}
+        {% if entry.topology_url %}
+          <div class="finding-actions">
+            <a class="btn compact" href="{{ entry.topology_url }}">Show in topology</a>
+            <a class="btn compact" href="{{ entry.impact_url }}">Trace impact</a>
+          </div>
+        {% endif %}
       </div>
       <p>{{ entry.finding.explanation }}</p>
       {% if entry.finding.evidence %}

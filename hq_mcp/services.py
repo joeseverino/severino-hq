@@ -90,14 +90,26 @@ def get_findings(rule: str = "") -> dict[str, Any]:
     return application_findings(principal=mcp_principal(), rule=rule.strip())
 
 
-def get_topology(lens: str = "") -> dict[str, Any]:
+def get_topology(
+    lens: str = "",
+    focus: str = "",
+    direction: str = "both",
+    depth: int = 2,
+) -> dict[str, Any]:
     """Return the live infrastructure graph with safe canonical actions.
 
-    Pass a lens name to narrow it to one standing question; the payload always
-    lists every available lens under ``lenses``.
+    Pass a lens name for a standing question. To inspect dependencies or blast
+    radius, pass a node id as ``focus`` and trace ``inbound``, ``outbound``, or
+    ``both`` up to five hops. Every node retains its canonical safe actions.
     """
 
-    return application_topology(principal=mcp_principal(), lens=lens.strip())
+    return application_topology(
+        principal=mcp_principal(),
+        lens=lens.strip(),
+        focus=focus.strip(),
+        direction=direction.strip(),
+        depth=depth,
+    )
 
 
 def list_resource(

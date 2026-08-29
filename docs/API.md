@@ -106,7 +106,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 | `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
-| `GET` | `/api/v2/topology/` | The permitted live graph of controllers, connections, abilities, resources, and observed targets |
+| `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -161,6 +161,15 @@ HTTP clients execute those changes through
 `POST /api/v2/capabilities/<name>/`, including the normal schema,
 authorization, audit and idempotency requirements. The projection requires the
 token's `read` grant and contains safe endpoint text, never credentials.
+
+The same endpoint is also HQ's impact engine. `focus=<node-id>` selects a
+bounded neighborhood; `direction=inbound|outbound|both` chooses which way to
+follow declared edges, and `depth=1..5` limits traversal. The response's
+`trace.hops` records every selected node's shortest distance from the focus.
+Tracing composes with `lens`, costs no provider reads beyond deriving the
+original authorized projection, and unknown focus values leave the projection
+whole with `trace: null`. This makes “show what depends on this” and “show what
+this reaches” available to generated clients without creating a second graph.
 
 ### Compatibility policy
 

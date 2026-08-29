@@ -284,14 +284,14 @@ def resources(request, version: int):
     )
 
 
-def _projection(serve, filter_name: str, name: str, doc: str):
-    """One principal-scoped projection, served with its single narrowing filter.
+def _projection(serve, query_fields: tuple[str, ...], name: str, doc: str):
+    """One principal-scoped projection, served with declared narrowing inputs.
 
     `topology` and `findings` are the same adapter: authorize, read one query
-    parameter, hand both to the application layer, and turn a refusal into a
-    403. Written out twice they were flagged as duplicates, which was the graph
-    noticing something true -- an adapter that adds no behaviour of its own
-    should not be copied once per projection.
+    parameters, hand them to the application layer, and turn a refusal into a
+    403. Written out per projection they were flagged as duplicates, which was
+    the graph noticing something true: an adapter that adds no behaviour of its
+    own should not be copied once per read model.
 
     An unrecognized filter value is the application's business, not the
     transport's: both projections answer it by returning everything and saying
@@ -304,7 +304,10 @@ def _projection(serve, filter_name: str, name: str, doc: str):
             return _ok(
                 serve(
                     principal=request.principal,
-                    **{filter_name: request.GET.get(filter_name, "").strip()},
+                    **{
+                        field: request.GET.get(field, "").strip()
+                        for field in query_fields
+                    },
                 )
             )
         except AuthorizationError as exc:
@@ -319,17 +322,18 @@ def _projection(serve, filter_name: str, name: str, doc: str):
 
 topology = _projection(
     application_topology,
-    "lens",
+    ("lens", "focus", "direction", "depth"),
     "topology",
     """The live permitted infrastructure graph and its canonical actions.
 
-    `?lens=` narrows the projection to one declared standing question.
+    `?lens=` narrows to a standing question. `?focus=`, `direction`, and
+    bounded `depth` trace a dependency neighborhood inside that projection.
     """,
 )
 
 findings = _projection(
     application_findings,
-    "rule",
+    ("rule",),
     "findings",
     """What HQ currently claims is wrong, with the evidence and a remedy.
 

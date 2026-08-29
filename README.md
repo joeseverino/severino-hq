@@ -87,6 +87,9 @@ carry connections, connections enable abilities and reach targets, and abilities
 govern declared resources. The web explorer, HTTP API, and MCP expose the same
 normalized graph; its actions invoke the existing application capabilities, so
 there is no second source of truth or graph-only mutation path.
+Any node can be traced inbound or outbound through a bounded number of hops,
+turning that same projection into dependency and blast-radius answers before an
+operator or agent invokes one of those actions.
 
 ![Infrastructure control plane — HQ authors desired state, a capability-filtered homelab controller reconciles providers and reports back both observed state and full inventory](docs/diagrams/infrastructure-control-plane.png)
 

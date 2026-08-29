@@ -57,7 +57,13 @@ from application.connection_security import (
     observed_connection_controls,
 )
 from application.findings import derive_findings, finding_rules, rule_for
-from application.topology import apply_lens, derive_topology, lens_for, topology_lenses
+from application.topology import (
+    apply_lens,
+    apply_trace,
+    derive_topology,
+    lens_for,
+    topology_lenses,
+)
 from application.machines import container_context, machine, machine_catalog
 from application.services import machine_link, whereabouts
 from application.naming import name_context
@@ -1066,11 +1072,50 @@ class TopologyView(LoginRequiredMixin, TemplateView):
         active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
+        requested_focus = self.request.GET.get("focus", "").strip()
+        topology, trace = apply_trace(
+            topology,
+            requested_focus,
+            direction=self.request.GET.get("direction", "both").strip(),
+            depth=self.request.GET.get("depth", "2").strip(),
+        )
         by_id = {node.id: node for node in topology.nodes}
+        hops = dict(trace.hops) if trace else {}
         neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
+        # An edge is a verb with a direction. Collapsing it to an undirected
+        # neighbour set answers "is this related" and throws away "how" and
+        # "which way", which is the only part an operator is actually reading.
+        # Both ends get a row so a node can state its relationships from where
+        # it stands, without the reader re-deriving the arrow.
+        relations: dict[str, list[dict[str, Any]]] = {
+            node.id: [] for node in topology.nodes
+        }
+        lens_name = active_lens.name if active_lens else ""
         for edge in topology.edges:
+            if edge.source not in neighbors or edge.target not in neighbors:
+                continue
             neighbors[edge.source].add(edge.target)
             neighbors[edge.target].add(edge.source)
+            relations[edge.source].append(
+                {
+                    "direction": "out",
+                    "label": edge.label,
+                    "other": by_id[edge.target],
+                    "status": edge.status,
+                    "url": self._focus_link(edge.target, lens_name),
+                }
+            )
+            relations[edge.target].append(
+                {
+                    "direction": "in",
+                    "label": edge.label,
+                    "other": by_id[edge.source],
+                    "status": edge.status,
+                    "url": self._focus_link(edge.source, lens_name),
+                }
+            )
+        for rows in relations.values():
+            rows.sort(key=lambda row: (row["direction"], row["label"], row["other"].label.casefold()))
         groups: dict[str, list[dict[str, Any]]] = {}
         for node in topology.nodes:
             groups.setdefault(node.kind, []).append(
@@ -1078,6 +1123,15 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                     "node": node,
                     "neighbors": " ".join(sorted(neighbors[node.id])),
                     "degree": len(neighbors[node.id]),
+                    "relations": relations[node.id],
+                    "observed_age": self._observed_age(node.observed_at),
+                    "hop": hops.get(node.id),
+                    "inbound_url": self._trace_url(
+                        node.id, "inbound", active_lens.name if active_lens else ""
+                    ),
+                    "outbound_url": self._trace_url(
+                        node.id, "outbound", active_lens.name if active_lens else ""
+                    ),
                 }
             )
         labels = {
@@ -1088,7 +1142,11 @@ class TopologyView(LoginRequiredMixin, TemplateView):
             "target": "Targets",
             "dependency": "Dependencies",
         }
-        requested_focus = self.request.GET.get("focus", "")
+        trace_directions = (
+            ("inbound", "Incoming"),
+            ("outbound", "Outgoing"),
+            ("both", "Both directions"),
+        )
         context.update(
             {
                 "topology": topology,
@@ -1108,16 +1166,83 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                     }
                     for edge in topology.edges
                 ),
-                # A lens can exclude the node a shared link focused. Validating
-                # focus against the narrowed set keeps the two composable.
-                "focus_node": (
-                    requested_focus if requested_focus in by_id else ""
-                ),
+                "focus_node": trace.focus if trace else "",
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,
+                "topology_trace": trace,
+                "topology_trace_focus": by_id.get(trace.focus) if trace else None,
+                "trace_direction_links": tuple(
+                    {
+                        "name": name,
+                        "label": label,
+                        "url": self._trace_url(
+                            trace.focus,
+                            name,
+                            active_lens.name if active_lens else "",
+                            trace.depth,
+                        ),
+                    }
+                    for name, label in trace_directions
+                )
+                if trace
+                else (),
+                "trace_depth_links": tuple(
+                    {
+                        "depth": depth,
+                        "url": self._trace_url(
+                            trace.focus,
+                            trace.direction,
+                            active_lens.name if active_lens else "",
+                            depth,
+                        ),
+                    }
+                    for depth in range(1, 6)
+                )
+                if trace
+                else (),
+                "trace_reset_url": (
+                    f"{reverse('control_plane:topology')}?"
+                    f"{urlencode({'lens': active_lens.name})}#map"
+                    if active_lens
+                    else f"{reverse('control_plane:topology')}#map"
+                ),
             }
         )
         return context
+
+    @staticmethod
+    def _observed_age(observed_at: str) -> datetime | None:
+        """The observation instant as a datetime, so a template can age it.
+
+        A node carries the instant as ISO 8601 text because the projection is
+        serialized to JSON as often as it is rendered, and `timesince` needs
+        the object back. Unparseable text ages to nothing rather than raising:
+        the reading is a fact about the world, not an invariant of ours.
+        """
+
+        if not observed_at:
+            return None
+        with suppress(ValueError):
+            return datetime.fromisoformat(observed_at)
+        return None
+
+    @staticmethod
+    def _focus_link(node_id: str, lens: str = "") -> str:
+        """Focus one node, keeping the active lens and letting depth default."""
+
+        params = {"focus": node_id}
+        if lens:
+            params["lens"] = lens
+        return f"{reverse('control_plane:topology')}?{urlencode(params)}#trace"
+
+    @staticmethod
+    def _trace_url(
+        focus: str, direction: str, lens: str = "", depth: int = 3
+    ) -> str:
+        params = {"focus": focus, "direction": direction, "depth": depth}
+        if lens:
+            params["lens"] = lens
+        return f"{reverse('control_plane:topology')}?{urlencode(params)}#trace"
 
 
 class FindingsView(LoginRequiredMixin, TemplateView):
@@ -1144,7 +1269,13 @@ class FindingsView(LoginRequiredMixin, TemplateView):
             if subject is not None:
                 topology_url = (
                     f"{reverse('control_plane:topology')}?"
-                    f"{urlencode({'focus': subject.id})}#map"
+                    f"{urlencode({'focus': subject.id})}#trace"
+                )
+            impact_url = ""
+            if subject is not None:
+                impact_url = (
+                    f"{reverse('control_plane:topology')}?"
+                    f"{urlencode({'focus': subject.id, 'direction': 'outbound', 'depth': 3})}#trace"
                 )
             remedies = []
             if subject is not None:
@@ -1165,6 +1296,7 @@ class FindingsView(LoginRequiredMixin, TemplateView):
                     "finding": finding,
                     "subject": subject,
                     "topology_url": topology_url,
+                    "impact_url": impact_url,
                     "remedies": tuple(remedies),
                 }
             )
