@@ -79,6 +79,7 @@ urlpatterns = [
     path("receipts/", include("receipts.urls")),
     path("reports/", include("reports.urls")),
     path("contacts/", include("contacts.urls")),
+    path("analytics/", include("analytics.urls")),
     path("domains/", include("control_plane.zone_urls")),
     path("infrastructure/", include("control_plane.urls")),
     path("audit/", include("core.urls")),

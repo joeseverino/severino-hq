@@ -3866,3 +3866,62 @@ textarea.code {
     }
   }
 }
+
+/* ---- Analytics ---------------------------------------------------------- */
+
+/* The window an operator is reading. Links rather than a control, so the
+   choice is in the URL and a reading can be sent to someone. */
+.window-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--stack-gap); }
+.chip {
+  display: inline-block; padding: 4px 12px; border: 1px solid var(--line);
+  border-radius: 999px; font-size: 13px; color: var(--muted);
+  text-decoration: none; background: var(--bg);
+}
+.chip:hover { color: var(--accent); border-color: var(--accent); }
+.chip.is-current { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.reading-note { margin: -6px 0 var(--stack-gap); font-size: 13px; }
+
+/* Six breakdowns, each a card. Two columns where there is room and one where
+   there is not: a bar list is unreadable below about 20rem. */
+.breakdown-grid {
+  display: grid; gap: var(--layout-gap); margin: 0 0 var(--stack-gap);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  /* Each card as tall as its own list. Stretched to the row, a breakdown with
+     three entries carries the height of one with twelve, and the page reads as
+     mostly empty boxes. */
+  align-items: start;
+}
+
+/* A row is label, bar and number in one line, with the bar behind the text
+   rather than beside it -- a separate bar column costs the label the width it
+   needs, and a path is the longest thing on the page. */
+.bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.bar-row {
+  position: relative; display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 10px; border-radius: 4px; font-size: 13.5px; min-inline-size: 0;
+}
+/* Width arrives as a value, not as presentation: the same `--at` contract the
+   chart marks use, so the template supplies a share and this decides how a
+   share looks. */
+.bar-track {
+  position: absolute; inset: 0 auto 0 0; inline-size: var(--at, 0%);
+  background: var(--bg-tint); border-radius: 4px; min-inline-size: 2px;
+}
+.bar-label {
+  position: relative; flex: 1 1 auto; min-inline-size: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
+
+/* Vitals sit under the breakdowns, not above them: they are the check you run
+   after the question you came to ask. */
+.vitals-strip { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 0; }
+.vital { display: flex; flex-direction: column; gap: 2px; }
+.vital dt { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vital dd { margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 15px; }
+.vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
+/* 75% of samples good is what passing means; the colour says which side of it
+   this metric is on rather than making the reader compare two numbers. */
+.vital-rate.is-passing { color: var(--ok); }
+.vital .unit { font-size: .8em; margin-inline-start: 1px; }

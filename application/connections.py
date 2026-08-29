@@ -23,7 +23,7 @@ from typing import Callable
 
 from django.core.exceptions import ImproperlyConfigured
 from control_plane.models import ProviderConnection
-from control_plane.providers import PROVIDERS
+from control_plane.providers import OBSERVERS, PROVIDERS
 
 from .contracts import (
     DJANGO_ROUTE,
@@ -304,6 +304,22 @@ def _controller_contract() -> tuple[
         )
         for provider in spec.connection_providers:
             by_provider.setdefault(provider, []).append(kind)
+
+    # Readers, which derive from no kind. Appended rather than merged into the
+    # loop above because they are a different claim: a kind says what a
+    # credential may change, an observer says what it may look at.
+    for observer in OBSERVERS:
+        abilities.append(
+            ConnectionAbility(
+                name=observer.name,
+                label=observer.label,
+                summary=observer.summary,
+                effect="read",
+                subject_resource=observer.subject_resource,
+            )
+        )
+        by_provider.setdefault(observer.provider, []).append(observer.name)
+
     return tuple(abilities), {
         provider: tuple(kinds) for provider, kinds in by_provider.items()
     }
