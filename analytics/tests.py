@@ -48,6 +48,18 @@ def _payload(rows=None, vitals=None) -> dict:
     }
 
 
+def _site_payload(
+    *, site_tag=SITE_TAG, host=HOST, connection_ref="example-api", rows=None
+) -> dict:
+    return {
+        "site_tag": site_tag,
+        "host": host,
+        "connection_ref": connection_ref,
+        "rows": rows if rows is not None else [],
+        "vitals": [],
+    }
+
+
 def _row(dimension="path", value="/about/", offset=0, pageviews=20, visits=10):
     return {
         "dimension": dimension,
@@ -127,6 +139,27 @@ class RecordingTests(TestCase):
             service.record_analytics(_payload([_row()]), principal=bare)
 
         self.assertEqual(RumDaily.objects.count(), 0)
+
+    def test_the_same_site_tag_can_exist_in_independent_connections(self):
+        payload = {
+            "sites": [
+                _site_payload(
+                    host="one.example", connection_ref="account-one", rows=[_row()]
+                ),
+                _site_payload(
+                    host="two.example", connection_ref="account-two", rows=[_row()]
+                ),
+            ]
+        }
+
+        service.record_analytics(payload, principal=_principal())
+
+        self.assertEqual(AnalyticsSite.objects.count(), 2)
+        self.assertEqual(
+            set(AnalyticsSite.objects.values_list("connection_ref", "host")),
+            {("account-one", "one.example"), ("account-two", "two.example")},
+        )
+        self.assertEqual(RumDaily.objects.count(), 2)
 
 
 class VitalsTests(TestCase):
@@ -223,6 +256,26 @@ class JoinTests(TestCase):
         )
         self.assertEqual([row["item"] for row in service.page_traffic()], [self.page])
 
+    def test_the_same_path_on_another_host_is_not_credited(self):
+        path = "/portfolio/a-writeup/"
+        service.record_analytics(
+            {
+                "sites": [
+                    _site_payload(rows=[_row(value=path, pageviews=412)]),
+                    _site_payload(
+                        site_tag="1" * 32,
+                        host="other.example",
+                        connection_ref="other-api",
+                        rows=[_row(value=path, pageviews=999)],
+                    ),
+                ]
+            },
+            principal=_principal(),
+        )
+
+        self.assertEqual(service.writeup_traffic()[0]["pageviews"], 412)
+        self.assertEqual(service.item_traffic(self.writeup)["pageviews"], 412)
+
     def test_something_published_and_unread_is_kept_and_sorted_last(self):
         """The most actionable row on the page is the one with no number."""
 
@@ -273,6 +326,46 @@ class WindowTests(TestCase):
         service.record_analytics(_payload([_row()]), principal=_principal())
 
         self.assertEqual(service.site_totals()["sample_interval"], 10)
+
+    def test_totals_carry_the_least_precise_sampling_across_sites(self):
+        precise = _row(pageviews=20) | {"sample_interval": 1}
+        sampled = _row(pageviews=30) | {"sample_interval": 100}
+        service.record_analytics(
+            {
+                "sites": [
+                    _site_payload(rows=[precise]),
+                    _site_payload(
+                        site_tag="1" * 32,
+                        host="other.example",
+                        connection_ref="other-api",
+                        rows=[sampled],
+                    ),
+                ]
+            },
+            principal=_principal(),
+        )
+
+        totals = service.site_totals()
+        self.assertEqual(totals["pageviews"], 50)
+        self.assertEqual(totals["sample_interval"], 100)
+
+    def test_measured_paths_are_counted_at_the_site_path_grain(self):
+        service.record_analytics(
+            {
+                "sites": [
+                    _site_payload(rows=[_row(value="/shared/")]),
+                    _site_payload(
+                        site_tag="1" * 32,
+                        host="other.example",
+                        connection_ref="other-api",
+                        rows=[_row(value="/shared/")],
+                    ),
+                ]
+            },
+            principal=_principal(),
+        )
+
+        self.assertEqual(service.measured_path_count(), 2)
 
     def test_every_dimension_the_reader_collects_can_be_stored(self):
         """The reader's registry and the model's enum have to stay in step."""
