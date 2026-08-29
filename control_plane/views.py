@@ -75,6 +75,7 @@ from application.provider_forms import (
     spec_form_class,
 )
 from application.security import safe_next, web_principal
+from application.machine_context import sections_for as machine_sections
 from application.service_context import sections_for
 from application.ui import PageNavigation, PageSection
 from application.services import (
@@ -997,6 +998,10 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
         if found is None:
             raise Http404("No machine of that name has been reported.")
         context["machine"] = found
+        # What else HQ can say about this machine, from a registry rather than
+        # from this view. A band appears because a resolver produced one, so
+        # what HQ learns next reaches the page without either being edited.
+        context["sections"] = machine_sections(found)
         # Whether you are reading this on the machine it describes. HQ already
         # judged the caller's address for the network gate, and every machine
         # carries the addresses it answers at -- so the page could always have

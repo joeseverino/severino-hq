@@ -266,39 +266,11 @@ answering. That is a claim about the row, so it reads under it.
 
 {% comment %}
 What else HQ holds about this name. Each band is a section the registry produced,
-rendered through the host's own row primitive — so a section HQ gains later
-appears here without this template learning anything about it.
+rendered through the shared renderer — so a section HQ gains later appears here
+without this template learning anything about it, and the machine page renders
+the same shape from the same file.
 {% endcomment %}
-{% for section in sections %}
-<section id="{{ section.id }}" class="page-section" data-page-section>
-  <h2>{{ section.label }}</h2>
-  <div class="table-scroll">
-    <table class="data-table">
-      <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for record in section.records %}
-          <tr>
-            {% for cell in record %}
-              <td>
-                {% if cell.url %}
-                  <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text }}</a>
-                {% elif cell.muted %}
-                  <span class="muted">{{ cell.text }}</span>
-                {% else %}
-                  {{ cell.text }}
-                {% endif %}
-              </td>
-            {% endfor %}
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% for label, url in section.actions %}
-    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
-  {% endfor %}
-</section>
-{% endfor %}
+{% include "partials/_page_sections.html" %}
 
 <section id="resources" class="page-section" data-page-section>
 <h2>Resources behind this name</h2>

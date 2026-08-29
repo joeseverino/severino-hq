@@ -302,6 +302,13 @@
   {% endif %}
 {% endif %}
 
+{% comment %}
+  What else HQ holds about this machine. Each band is a section the registry
+  produced, rendered through the shared renderer — so a section HQ gains later
+  appears here without this template learning anything about it.
+{% endcomment %}
+{% include "partials/_page_sections.html" %}
+
 {% if device_names %}
   {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="What the tailnet policy admits, evaluated by Tailscale rather than worked out here." body_template="control_plane/_whatif_form.html" %}
 {% endif %}
