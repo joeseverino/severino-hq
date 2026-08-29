@@ -9,7 +9,8 @@ mutation that could drift from the thing it claims to represent.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import re
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any, Callable
@@ -20,6 +21,7 @@ from django.urls import reverse
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import CERTIFICATE_KIND, PROVIDERS, controller_action_policy
 
+from .analytics import normalize_host, traffic_for_hosts
 from .connections import (
     ConnectionGroup,
     ConnectionLink,
@@ -73,6 +75,12 @@ class TopologyNode:
     # is unverified rather than agreed -- the difference between "we set this"
     # and "we checked this".
     unconfirmed_fields: tuple[str, ...] = ()
+    # What this name actually served, where anything measures it. ``None`` is
+    # not zero: nobody visited and nobody looked are opposite findings, and the
+    # second is the one worth acting on -- a target HQ reaches, and nothing
+    # measures, is a site running unobserved.
+    pageviews: int | None = None
+    visits: int | None = None
     actions: tuple[TopologyAction, ...] = ()
 
 
@@ -114,6 +122,10 @@ _KIND_ORDER = {
     "target": 4,
     "dependency": 5,
 }
+
+# A week, matching the service page: long enough to be a shape, short enough
+# to still be news. Stated once here so the graph and the page agree.
+TOPOLOGY_TRAFFIC_DAYS = 7
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
 MAX_TRACE_DEPTH = 5
@@ -423,6 +435,45 @@ def _connection_nodes(
                 edges[relation.id] = relation
 
 
+# A label is a candidate hostname when it looks like one. Deliberately a shape
+# test rather than a list of kinds: a target is a hostname, a resource key
+# sometimes is, and an extension may emit a node kind this module has never
+# heard of. Asking what the label *is* keeps that open.
+_HOSTNAME_SHAPE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+\.?$")
+
+
+def _measure(nodes: dict[str, TopologyNode]) -> None:
+    """Give every node named like a host what that host actually served.
+
+    The join is the name, the same one the service page uses: analytics stores
+    a reading against a hostname and these nodes *are* hostnames, so no key
+    ties them and none is stored twice.
+
+    One query for the whole graph, and none at all when nothing in it is named
+    like a host -- a deployment measuring nothing pays nothing, which is what
+    lets this sit in the shared projection rather than in one adapter.
+    """
+
+    candidates = {
+        node.id: normalize_host(node.label)
+        for node in nodes.values()
+        if _HOSTNAME_SHAPE.match(node.label.strip().lower())
+    }
+    if not candidates:
+        return
+    measured = traffic_for_hosts(set(candidates.values()), days=TOPOLOGY_TRAFFIC_DAYS)
+    if not measured:
+        return
+    for node_id, host in candidates.items():
+        reading = measured.get(host)
+        if reading:
+            nodes[node_id] = replace(
+                nodes[node_id],
+                pageviews=reading["pageviews"],
+                visits=reading["visits"],
+            )
+
+
 def derive_topology(*, principal: Principal) -> Topology:
     """Derive the complete topology visible to ``principal`` from live state."""
 
@@ -474,6 +525,8 @@ def derive_topology(*, principal: Principal) -> Topology:
                         ability_id, resource_id, "governs", "Governs"
                     )
                     edges[relation.id] = relation
+
+    _measure(nodes)
 
     ordered_nodes = tuple(
         sorted(

@@ -667,3 +667,91 @@ class TopologyLensTests(TestCase):
         self.assertEqual([i.name for i in offered], [lens.name for lens in topology_lenses()])
         self.assertEqual(denied, ())
         self.assertEqual([i.name for i in matched], ["ungoverned-resources"])
+
+
+class MeasuredNodeTests(TestCase):
+    """A node named like a host carries what that host served, by name alone."""
+
+    def _measure(self, host, *, pageviews=412, visits=300):
+        from analytics.models import AnalyticsSite, RumDaily
+
+        site = AnalyticsSite.objects.create(site_tag=f"tag-{host}", host=host)
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=1),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=pageviews,
+            visits=visits,
+            sample_interval=1,
+        )
+
+    def _spec(self, *hosts):
+        return ConnectionSpec(
+            "example.measured", "Measured routes",
+            "A synthetic connection family that reaches named hosts.",
+            Capability.READ,
+            lambda: (
+                ConnectionInstance(
+                    "one", "One", "example", "good", "Healthy",
+                    targets=tuple(ConnectionLink(host) for host in hosts),
+                ),
+            ),
+        )
+
+    def _nodes(self, *hosts):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)
+        ):
+            return {n.label: n for n in derive_topology(principal=READ).nodes}
+
+    def test_a_target_named_like_a_measured_host_carries_its_traffic(self):
+        self._measure("measured.example.com")
+
+        node = self._nodes("measured.example.com")["measured.example.com"]
+
+        self.assertEqual(node.pageviews, 412)
+        self.assertEqual(node.visits, 300)
+
+    def test_an_unmeasured_host_carries_none_rather_than_zero(self):
+        # The distinction the field exists for: nobody visited and nobody looked
+        # are opposite findings, and only the second is worth acting on.
+        node = self._nodes("unmeasured.example.com")["unmeasured.example.com"]
+
+        self.assertIsNone(node.pageviews)
+        self.assertIsNone(node.visits)
+
+    def test_one_hosts_traffic_is_not_lent_to_another(self):
+        self._measure("measured.example.com", pageviews=9999)
+
+        nodes = self._nodes("measured.example.com", "other.example.com")
+
+        self.assertEqual(nodes["measured.example.com"].pageviews, 9999)
+        self.assertIsNone(nodes["other.example.com"].pageviews)
+
+    def test_a_graph_with_no_hostname_shaped_node_costs_no_extra_query(self):
+        # Why this can live in the shared projection rather than in one adapter:
+        # a deployment measuring nothing pays nothing for the seam.
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(self._spec("not-a-hostname"),),
+        ):
+            derive_topology(principal=READ)
+            with CaptureQueriesContext(database_connection) as queries:
+                derive_topology(principal=READ)
+
+        self.assertEqual(
+            [q for q in queries.captured_queries if "analytics_rumdaily" in q["sql"]], []
+        )
+
+    def test_the_measurement_reaches_every_adapter_not_just_the_page(self):
+        self._measure("measured.example.com")
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs",
+            return_value=(self._spec("measured.example.com"),),
+        ):
+            payload = serialized_topology(principal=READ)
+
+        node = next(n for n in payload["nodes"] if n["label"] == "measured.example.com")
+        self.assertEqual(node["pageviews"], 412)
