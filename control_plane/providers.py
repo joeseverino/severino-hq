@@ -2126,8 +2126,31 @@ def _tailnet_device_identity(spec: dict[str, Any]) -> tuple[str, ...]:
     return (name,) if name else ()
 
 
+# What a tailnet device declaration is *about* its machine, used to qualify its
+# key. Not a service facet: a device is not something a hostname is served by,
+# so it belongs here rather than in the facet the service composition reads.
+TAILNET_FACET = "tailnet"
+
+
 def _tailnet_device_key_hint(spec: dict[str, Any]) -> str:
-    return str(spec.get("name", ""))
+    """``<name>-tailnet``, because a machine already answers to ``<name>``.
+
+    A key is unique across every kind, and this asked for the bare device name
+    -- the same string ``_machine_key_hint`` asks for. Two declarations about
+    one machine competed for one key, so whichever was adopted second was filed
+    as ``<name>-2``: a suffix that records nothing except which arrived later,
+    on an estate where the name is what everything else joins on.
+
+    Every other provider that describes an aspect of something already answers
+    this way -- ``<name>-dns``, ``<name>-proxy``, ``<name>-certificate``. This
+    one is the outlier, and the collision was the consequence rather than a
+    quirk of the tailnet.
+
+    Existing keys are migrated rather than left; see the migration that renames
+    them, because a key nobody can explain is worse than a rename nobody enjoys.
+    """
+    name = str(spec.get("name", "")).strip()
+    return f"{name}-{TAILNET_FACET}" if name else ""
 
 
 def _tailnet_device_readout(
