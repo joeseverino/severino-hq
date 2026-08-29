@@ -963,16 +963,24 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     window.history.replaceState({}, "", url);
   };
 
+  // Whether the toolbar alone would show this node, ignoring any focus. Split
+  // out so a caller can ask before rendering rather than reading it back off
+  // the DOM afterwards: dropping a focus the filter just hid used to mean
+  // rendering a state that existed only until the next line replaced it.
+  const passesToolbar = (node) => {
+    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
+    return shownKinds.has(node.dataset.topologyNodeKind)
+      && terms.every((term) => node.dataset.topologySearchText.toLocaleLowerCase().includes(term));
+  };
+
   const render = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
-    const terms = (search?.value || "").trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-    const shownKinds = new Set(kindControls.filter((control) => control.checked).map((control) => control.value));
     workspace.classList.toggle("has-focus", Boolean(selected));
     nodes.forEach((node) => {
       const id = node.dataset.topologyNode;
-      const matchesFilter = shownKinds.has(node.dataset.topologyNodeKind)
-        && terms.every((term) => node.dataset.topologySearchText.toLocaleLowerCase().includes(term));
+      const matchesFilter = passesToolbar(node);
       const inNeighborhood = !selected || id === focused || related.has(id);
       node.hidden = !matchesFilter || !inNeighborhood;
       node.classList.toggle("is-selected", id === focused);
@@ -1013,9 +1021,15 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   };
 
   const filter = () => {
-    render();
+    // Decide, then draw — once. A focus the toolbar has just excluded is
+    // dropped before anything is painted, so the explorer never shows a
+    // neighbourhood it is about to discard.
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
-    if (selected?.hidden) focus("");
+    if (selected && !passesToolbar(selected)) {
+      focused = "";
+      rememberFocus("");
+    }
+    render();
   };
 
   // A node title is a link inside a <summary>, so one click can mean two
