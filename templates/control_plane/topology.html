@@ -104,6 +104,15 @@
                   reading decline to confirm, and how old is that reading.
                 {% endcomment %}
                 <dl class="topology-facts">
+                  {% if item.node.pageviews is not None %}
+                    <div class="topology-fact">
+                      <dt>Traffic · 7 days</dt>
+                      <dd>
+                        <strong>{{ item.node.pageviews }}</strong> pageviews from
+                        <strong>{{ item.node.visits }}</strong> visits.
+                      </dd>
+                    </div>
+                  {% endif %}
                   {% if not item.node.managed %}
                     <div class="topology-fact">
                       <dt>Management</dt>
