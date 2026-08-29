@@ -1710,19 +1710,38 @@ def _cloudflare_token(
     return _required(connection_prefix(provider, connection_ref), "API_TOKEN")
 
 
-def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
-    """One Cloudflare call, with its envelope unwrapped and its errors kept.
+def _cloudflare_envelope(
+    path: str,
+    *,
+    method: str = "GET",
+    payload: Any = None,
+    provider: str = "cloudflare_dns",
+    connection_ref: str = "",
+) -> dict[str, Any]:
+    """One Cloudflare call, returning the whole envelope with its errors kept.
 
     Not routed through ``_request`` because Cloudflare says something useful in
     the body of a 400 -- "Content for A record must be a valid IPv4 address",
     "An identical record already exists" -- and the shared helper turns every
     non-200 into the same sentence. A rejected DNS change that only says
     "Provider request failed: HTTPError" is a support ticket to yourself.
+
+    ``success`` is checked here rather than by each caller, because Cloudflare
+    also answers 200 with ``success: false`` -- a token missing one permission
+    returns no ``result`` at all, and a list helper reading ``result`` off that
+    collects nothing and reports an empty estate. An account that looks empty
+    and an account that refused to answer must not read the same.
+
+    Both credentials come through here: the zone-scoped DNS token and the
+    account-scoped analytics one differ only in which connection names them,
+    which is what ``provider`` and ``connection_ref`` select.
     """
 
-    url = f"{_cloudflare_url()}{path}"
+    url = f"{_cloudflare_url(connection_ref, provider=provider)}{path}"
     headers = {
-        "Authorization": f"Bearer {_cloudflare_token()}",
+        "Authorization": (
+            f"Bearer {_cloudflare_token(connection_ref, provider=provider)}"
+        ),
         "Accept": "application/json",
     }
     body = None
@@ -1751,7 +1770,13 @@ def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) 
         raise ProviderError(
             f"Cloudflare refused the request: {_cloudflare_errors(raw)}"
         )
-    return parsed.get("result")
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
+    """The zone-scoped DNS surface, unwrapped to the result callers expect."""
+
+    return _cloudflare_envelope(path, method=method, payload=payload).get("result")
 
 
 def _cloudflare_errors(raw: bytes) -> str:
@@ -3661,13 +3686,9 @@ def _cloudflare_graphql(
 def _cloudflare_api_request(path: str, connection_ref: str = "") -> Any:
     """One account-surface request through the account-scoped credential."""
 
-    base = _cloudflare_url(connection_ref, provider="cloudflare_api")
-    headers = {
-        "Authorization": (
-            f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
-        )
-    }
-    return _request(f"{base}{path}", headers=headers)
+    return _cloudflare_envelope(
+        path, provider="cloudflare_api", connection_ref=connection_ref
+    )
 
 
 def _cloudflare_api_list(
