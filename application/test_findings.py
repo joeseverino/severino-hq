@@ -806,3 +806,46 @@ class ReachedButUnmeasuredTests(TestCase):
 
         self.assertEqual(evidence["Measured"], "nothing reports traffic for this name")
         self.assertTrue(evidence["Reached by"])
+
+
+class CollisionNameTests(TestCase):
+    """A `-2` is a fossil only when the plain name is free and it is a key.
+
+    Both halves were learned the hard way against the real estate: counting an
+    observed target as occupying the name silenced the rule entirely, and
+    treating any trailing number as a suffix read `sl-cloud-edge-01` as a
+    conflict.
+    """
+
+    def _rule(self, keys):
+        from .findings import _estate, _name_forced_by_a_collision
+        from .topology import Topology, TopologyNode
+
+        nodes = tuple(
+            TopologyNode(id=f"resource:{key}", kind="resource", label=key, subtitle="Thing")
+            for key in keys
+        )
+        return _name_forced_by_a_collision(_estate(Topology(nodes, ())))
+
+    def test_a_suffix_with_a_free_base_is_the_finding(self):
+        raised = self._rule(["widget-2"])
+        self.assertEqual(len(raised), 1)
+        self.assertIn("widget-2", raised[0].title)
+        self.assertEqual(dict(raised[0].evidence)["Free"], "widget")
+
+    def test_a_suffix_beside_an_occupied_base_says_nothing(self):
+        # Several records for one name is ordinary — a zone apex has nine.
+        self.assertEqual(self._rule(["widget", "widget-2", "widget-3"]), ())
+
+    def test_a_numbered_hostname_is_not_a_collision(self):
+        # The false positive this rule actually produced: -01 is a naming
+        # convention, and suggest_key never emits a leading zero.
+        self.assertEqual(self._rule(["sl-cloud-edge-01"]), ())
+
+    def test_a_number_outside_the_suffix_range_is_not_a_collision(self):
+        self.assertEqual(self._rule(["thing-2026", "other-1"]), ())
+
+    def test_the_remedy_is_the_existing_rename_capability(self):
+        remedy = self._rule(["widget-2"])[0].remedies[0]
+        self.assertEqual(remedy.capability, "infrastructure.resource.update")
+        self.assertEqual(remedy.target, "widget-2")
