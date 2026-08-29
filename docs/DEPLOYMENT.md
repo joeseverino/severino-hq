@@ -218,10 +218,27 @@ docker compose up -d
 
 The container uses host networking and binds Uvicorn to port `8000`. Host
 networking is required so `/mcp/` sees the real Tailscale peer address rather
-than Docker's bridge gateway. The bridge-networked reverse proxy reaches the
-browser UI through the host LAN address. The UI remains protected by Django
+than Docker's bridge gateway. A co-located reverse proxy should forward the
+browser UI to `127.0.0.1:8000`; its socket address is then the only entry in
+`SEVERINO_TRUSTED_PROXIES`. The browser's WireGuard peering terminates at the
+host's Tailscale daemon, Nginx preserves the real Tailnet caller in its standard
+forwarding headers, and the loopback hop into HQ is not misrepresented as a
+second policed Tailnet crossing. The UI remains protected by Django
 authentication; `/mcp/` independently requires a direct Tailscale peer, an
 allowed Host header, and the MCP bearer token.
+
+For Nginx Proxy Manager, attach an access list whose client rules allow exactly
+the Tailscale IPv4 and IPv6 ranges in `SEVERINO_TRUSTED_NETWORKS`, in that
+order. Do not copy its loopback entries: they describe the local proxy-to-HQ
+hop, not a caller Nginx should admit.
+
+NPM generates the final `deny all` whenever client rules exist. Its editor
+shows that generated row disabled. Adding another editable deny is harmless
+but redundant; HQ's provider projection records the implicit default so the
+effective Tailnet-only policy is derived without duplicating configuration.
+Keep `satisfy_any` and proxy authorization disabled. As defense in depth, limit
+host ingress for 443 and direct MCP port 8000 to `tailscale0` (plus loopback
+where needed), and ensure no router forwards either port publicly.
 
 ### A.5 Tailscale-only exposure — pick one
 

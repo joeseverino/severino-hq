@@ -942,6 +942,7 @@ class ProviderAdapterTests(TestCase):
         found = providers.list_npm()[0]["access_policy"]
 
         self.assertEqual(found["authorization_count"], 1)
+        self.assertTrue(found["implicit_deny"])
         self.assertEqual(
             found["clients"],
             [

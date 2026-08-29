@@ -34,6 +34,23 @@
   so is the redirect that keeps the plain port HQ binds from being a second
   front door. Only the healthcheck path is exempt, because it deliberately
   probes that port from inside the container's own network namespace.
+- Forwarded identity is accepted only from the exact addresses in
+  `SEVERINO_TRUSTED_PROXIES`. Keep this list to loopback when the reverse proxy
+  is co-located. A Tailnet range belongs in `SEVERINO_TRUSTED_NETWORKS`, not in
+  the proxy allowlist: a Tailnet peer is an admitted caller, not automatically
+  an authority allowed to name some other caller.
+- Identity systems may issue unrelated names for one person. Pocket ID can
+  assert the association in its signed ID token: add a user custom claim named
+  `tailscale_principal` with a string value such as `"operator@passkey"`.
+  HQ binds that claim to the resulting OIDC session and compares it with the
+  requesting device's Tailnet owner. HQ accepts exact equality or that signed
+  association; it does not infer identity from similar usernames.
+- The connection inspector joins the live request to cached Nginx Proxy Manager
+  and Tailscale observations. It distinguishes the node serving HQ from the
+  node whose daemon made the Tailnet observation, and calls the path an
+  HQ-to-caller peering only when those independently resolve to the same node.
+  The node keys, handshake age, endpoint and counters remain observer-relative;
+  missing placement evidence stays visibly unverified.
 - Django's native Content Security Policy middleware enforces same-origin
   assets, nonce-authorized scripts, no object embedding, and no framing.
   Application JavaScript is external; a regression test rejects inline scripts
@@ -97,9 +114,22 @@
 - [ ] `DJANGO_DEBUG=0`.
 - [ ] `DJANGO_ALLOWED_HOSTS` contains only your Tailnet hostname (+ `127.0.0.1`).
 - [ ] `DJANGO_CSRF_TRUSTED_ORIGINS` matches the full origin you actually serve.
-- [ ] App binds to `127.0.0.1:8000` (Docker) **or** to the Tailscale interface
-      via the reverse proxy. Never to `0.0.0.0` on a public interface.
+- [ ] The browser UI reaches port 8000 only through the reverse proxy. If host
+      networking leaves Uvicorn on `0.0.0.0` so direct Tailnet MCP can preserve
+      the real socket peer, host firewall and Tailnet policy permit that port
+      only from the intended Tailnet principals; no public or LAN route admits
+      it.
 - [ ] Caddy / Nginx / Tailscale Serve terminates TLS.
+- [ ] A co-located proxy is the only member of `SEVERINO_TRUSTED_PROXIES`
+      (`127.0.0.1/32,::1/128`). `SEVERINO_TRUSTED_NETWORKS` contains loopback
+      and Tailscale's IPv4/IPv6 ranges, with no RFC 1918 blanket allowance.
+- [ ] If the Tailnet login and OIDC principal use different namespaces,
+      the Pocket ID user has a `tailscale_principal` custom claim and the
+      connection page reports `SSO-signed principal link` as its evidence.
+- [ ] Nginx Proxy Manager's access list contains the two Tailnet `allow` rules.
+      Do not add a second explicit `deny all`: NPM materializes its disabled
+      final deny automatically, and HQ records that effective default from the
+      provider observation.
 - [ ] `DJANGO_BEHIND_TLS_PROXY=1`, `DJANGO_SESSION_COOKIE_SECURE=1`,
       `DJANGO_CSRF_COOKIE_SECURE=1`.
 - [ ] `DJANGO_HSTS_SECONDS` is **not** left at `0`. The connection page's
@@ -130,7 +160,7 @@
       confidential-client authentication.
 - [ ] Documentation index records carrying secrets are flagged
       `sensitivity=sensitive` or `restricted` (these are excluded from
-      AI-safe references).
+      automated retrieval).
 - [ ] The MCP token's source of truth is 1Password. Production mounts a
       validator copy through `SEVERINO_MCP_TOKEN_FILE_HOST`; the token is never
       placed in `.env` or the container environment.

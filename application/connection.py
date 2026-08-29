@@ -274,6 +274,15 @@ class Identity:
     superuser: bool = False
     last_sign_in: datetime | None = None
     token_expires: str = ""
+    provider_principal: str = ""
+
+    @property
+    def session_principals(self) -> frozenset[str]:
+        return frozenset(
+            principal.strip().casefold()
+            for principal in (self.username, self.email)
+            if principal.strip()
+        )
 
     @property
     def route(self) -> str:
@@ -289,11 +298,51 @@ class Identity:
 
         The session says who signed in; the tailnet says which account owns the
         device the request came from. Neither consults the other, so agreement
-        between them is worth something -- and disagreement is worth more,
-        because it is the shape a stolen session would have.
+        between them is independent corroboration. Different account
+        namespaces require an explicit link; HQ does not infer equivalence
+        from similar-looking names.
         """
 
-        return bool(self.tailnet_user) and bool(self.username or self.email)
+        tailnet = self.tailnet_user.strip().casefold()
+        if not tailnet or not self.session_principals:
+            return False
+        if tailnet in self.session_principals:
+            return True
+        return tailnet == self.provider_principal.strip().casefold()
+
+    @property
+    def agreement_basis(self) -> str:
+        tailnet = self.tailnet_user.strip().casefold()
+        if tailnet in self.session_principals:
+            return "exact principal"
+        if tailnet == self.provider_principal.strip().casefold():
+            return "SSO-signed principal link"
+        return ""
+
+    @property
+    def conflicted(self) -> bool:
+        """Whether both systems answered, but named different people."""
+
+        tailnet = self.tailnet_user.strip().casefold()
+        _, separator, namespace = tailnet.rpartition("@")
+        return bool(
+            separator
+            and not self.corroborated
+            and any(
+                principal.rpartition("@")[2] == namespace
+                for principal in self.session_principals
+                if "@" in principal
+            )
+        )
+
+
+@dataclass(frozen=True)
+class ServingDeviceResolution:
+    """The node serving HQ and how strongly that placement was established."""
+
+    device: tailnet.Device | None
+    verified: bool
+    basis: str
 
 
 @dataclass(frozen=True)
@@ -304,6 +353,7 @@ class Connection:
     channel: Channel
     device: tailnet.Device | None
     serves: tailnet.Device | None
+    observer: tailnet.Device | None
     identity: Identity
     # A device correlated from a forwarded address that HQ will show as
     # evidence but will not use for admission until the forwarding peer is a
@@ -322,12 +372,15 @@ class Connection:
     forwarder_name: str = ""
     forwarder_url: str = ""
     forwarded: bool = False
+    local_forwarder: bool = False
     serves_url: str = ""
     # What HQ was told about its machines, read once and answering every
     # relationship this page draws: which machine each end of the link is, and
     # which of a node's addresses are ones HQ was actually declared at.
     declared: tuple = ()
     untrusted_forwarding: bool = False
+    serves_verified: bool = False
+    serving_basis: str = ""
 
     @property
     def holds(self) -> bool:
@@ -367,6 +420,8 @@ class Connection:
         """Which segment each encrypted transport protects."""
 
         if self.forwarded and self.channel.id == "tailnet" and self.secure_transport:
+            if self.local_forwarder:
+                return "WireGuard + TLS to HQ's host · loopback to the app"
             return f"TLS to {self.forwarder_name or 'proxy'} · WireGuard to HQ"
         if self.channel.id == "tailnet" and self.secure_transport:
             return "WireGuard + TLS end to end"
@@ -409,6 +464,25 @@ class Connection:
         }[self.caller_device.path]
 
     @property
+    def link_observed_by_hq(self) -> bool:
+        """Whether the daemon measurement is provably from HQ's own node."""
+
+        return bool(
+            self.serves_verified
+            and self.observer
+            and self.serves
+            and self.observer.name == self.serves.name
+        )
+
+    @property
+    def measurement_label(self) -> str:
+        if self.link_observed_by_hq:
+            return f"HQ · {self.observer.label}"
+        if self.observer:
+            return f"Tailnet observer · {self.observer.label}"
+        return "No tailnet observer"
+
+    @property
     def handshake(self) -> str:
         return _ago(self.caller_device.last_handshake) if self.caller_device else "—"
 
@@ -435,8 +509,11 @@ class Connection:
         found = []
         if self.caller_device and self.caller_device.public_key:
             found.append((self.caller_device.label, self.caller_device.public_key))
-        if self.serves and self.serves.public_key:
-            found.append((self.serves.label, self.serves.public_key))
+        # Path, handshake and byte counters are observer-relative. Pair the
+        # caller with the node that actually made that observation, never with
+        # a different node merely because it happens to serve HQ.
+        if self.observer and self.observer.public_key:
+            found.append((self.observer.label, self.observer.public_key))
         return tuple(found)
 
     @property
@@ -457,7 +534,7 @@ class Connection:
             # finding itself there means the inventory is empty rather than
             # that this caller is missing from it -- read from a field the
             # page already holds, so distinguishing the two costs no query.
-            if self.serves is None:
+            if self.observer is None:
                 return PEERING_UNOBSERVED
             return PEERING_UNKNOWN
         return _peering(self.caller_device)
@@ -469,7 +546,7 @@ class Connection:
         return self.caller_device.observed_at if self.caller_device else None
 
 
-def connection(request) -> Connection:
+def connection(request, *, edge=None) -> Connection:
     """Everything HQ can say about the request in front of it."""
 
     address = client_ip(request)
@@ -493,7 +570,11 @@ def connection(request) -> Connection:
     from .infrastructure import declared_machines
 
     declared = declared_machines()
-    serves = _serving_device(known, declared)
+    serving = _serving_device_resolution(known, declared)
+    # A fallback observer is useful provenance, but it is not a placement
+    # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
+    serves = serving.device if serving.verified else None
+    observer = tailnet.observer(known)
     peer_device = reported_device if untrusted_forwarding else device
     machine_name = _machine_name(peer_device.addresses if peer_device else (), declared)
     forwarder_name = _machine_name((peer,), declared) if forwarded else ""
@@ -505,15 +586,19 @@ def connection(request) -> Connection:
         reported_device=reported_device,
         reported_address=reported_address,
         serves=serves,
+        observer=observer,
         machine_url=_machine_url(machine_name),
         machine_name=machine_name,
         forwarder_name=forwarder_name,
         forwarder_url=_machine_url(forwarder_name),
         forwarded=forwarded,
+        local_forwarder=forwarded and network_of(peer) == "loopback",
         serves_url=_machine_url(serves_name),
         declared=declared,
         identity=identity,
         untrusted_forwarding=untrusted_forwarding,
+        serves_verified=serving.verified,
+        serving_basis=serving.basis,
         secure_transport=bool(request.is_secure()),
         host=request.get_host(),
         layers=_layers(
@@ -528,6 +613,9 @@ def connection(request) -> Connection:
             forwarded=forwarded,
             forwarding_trusted=forwarding_trusted,
             forwarding_peer=peer,
+            serving=serving,
+            observer=observer,
+            edge=edge,
         ),
     )
 
@@ -569,6 +657,8 @@ def _chain_is_all_proxies(request) -> bool:
 
 
 def _identity(request, device: tailnet.Device | None) -> Identity:
+    from core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
+
     user = getattr(request, "user", None)
     backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
     session = getattr(request, "session", None)
@@ -612,6 +702,11 @@ def _identity(request, device: tailnet.Device | None) -> Identity:
             if session is not None
             else ""
         ),
+        provider_principal=(
+            str((session or {}).get(TAILSCALE_PRINCIPAL_SESSION_KEY, ""))
+            if session is not None and "OIDC" in signed_in_by
+            else ""
+        ),
     )
 
 
@@ -637,6 +732,9 @@ def _layers(
     forwarded: bool,
     forwarding_trusted: bool,
     forwarding_peer: str,
+    serving: ServingDeviceResolution,
+    observer: tailnet.Device | None,
+    edge,
 ) -> tuple[Layer, ...]:
     """The independent things that each had to hold, outermost first.
 
@@ -647,9 +745,11 @@ def _layers(
 
     found = [
         _name_layer(request),
+        _observed_control_layer(edge),
         _channel_layer(address, channel),
         *_policy_layers(device, forwarder, serves, request, known, forwarded),
         _device_layer(device),
+        _identity_agreement_layer(identity),
         _forwarder_layer(
             forwarder,
             trusted=forwarding_trusted,
@@ -657,6 +757,14 @@ def _layers(
         )
         if forwarded
         else None,
+        _proxy_headers_layer(
+            request,
+            trusted=forwarding_trusted,
+            address=address,
+        )
+        if forwarded
+        else None,
+        _tailnet_observation_layer(observer, serving),
         _gate_layer(channel),
         _sign_in_layer(identity),
         _session_layer(request, identity),
@@ -665,6 +773,24 @@ def _layers(
         _browser_layer(),
     ]
     return tuple(layer for layer in found if layer is not None)
+
+
+def _observed_control_layer(control) -> Layer | None:
+    """Project a shared provider control into the request decision timeline."""
+
+    if control is None:
+        return None
+    conclusive = control.state != "neutral"
+    return Layer(
+        control.id,
+        control.label,
+        control.state == "good",
+        control.detail,
+        evidence=control.evidence,
+        boundary="Reverse proxy edge",
+        mechanism="NPM authenticated API observation",
+        conclusive=conclusive,
+    )
 
 
 def _name_layer(request) -> Layer:
@@ -780,7 +906,18 @@ def _policy_layer(
     known: dict[str, tailnet.Device],
 ) -> Layer | None:
     if source is None or target is None:
-        return None
+        missing = "caller device" if source is None else "HQ's Tailnet node"
+        return Layer(
+            layer_id,
+            label,
+            False,
+            f"HQ could not resolve the {missing}, so it cannot ask Tailscale's "
+            "observed policy verdict for this hop.",
+            evidence=f"port {port} · {missing} unresolved",
+            boundary="Zero trust policy",
+            mechanism="Tailscale grants",
+            conclusive=False,
+        )
     # Names for the lookup, labels for the sentence: the policy is keyed on the
     # node's registered name, but a person reads the MagicDNS label, and two
     # phones registered as "localhost" are indistinguishable in the other one.
@@ -870,13 +1007,6 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
             boundary="Device identity",
             mechanism="Tailnet lock signature",
         )
-    carried = (
-        f"carried by the {device.relay} relay"
-        if device.path == "relayed"
-        else "over a direct path"
-        if device.path == "direct"
-        else "with no path currently negotiated"
-    )
     expiry = (
         f" Its node key {_expiry_phrase(device.key_expires)}."
         if device.key_expires
@@ -887,11 +1017,74 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
         "The device is a known node",
         True,
         f"{device.label} is enrolled on the tailnet, owned by "
-        f"{device.user or 'nobody in particular'}, and is talking to HQ "
-        f"{carried}.{expiry}",
+        f"{device.user or 'no reported owner'}, and authorized to participate."
+        f"{expiry}",
         evidence=device.dns_name or device.name,
         boundary="Device identity",
         mechanism="WireGuard node key",
+    )
+
+
+def _identity_agreement_layer(identity: Identity) -> Layer:
+    """Compare the independently observed device owner and signed-in person."""
+
+    if not identity.tailnet_user:
+        return Layer(
+            "identity-agreement",
+            "The device owner agrees with the session",
+            False,
+            "The signed-in session names a person, but the matched Tailnet "
+            "device does not name an owner, so HQ cannot compare them.",
+            evidence="session only",
+            boundary="Identity correlation",
+            mechanism="Session principal and Tailnet device owner",
+            conclusive=False,
+        )
+    session_principal = identity.email or identity.username
+    if not identity.corroborated and not identity.conflicted:
+        return Layer(
+            "identity-agreement",
+            "The device owner agrees with the session",
+            False,
+            "The Tailnet owner and HQ session use different identity namespaces, "
+            "and the SSO session carries no signed Tailscale principal that "
+            "links them.",
+            evidence=f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}",
+            boundary="Identity correlation",
+            mechanism="Session principal and Tailnet device owner",
+            conclusive=False,
+        )
+    return Layer(
+        "identity-agreement",
+        "The device owner agrees with the session",
+        identity.corroborated,
+        (
+            "Pocket ID signed the Tailscale principal into this HQ session, "
+            "and Tailscale independently reports that principal as the owner "
+            "of the requesting device."
+            if identity.agreement_basis == "SSO-signed principal link"
+            else "The Tailnet account that owns this device and the "
+            "independently authenticated HQ session use the same principal."
+            if identity.corroborated
+            else "The Tailnet account that owns this device and the signed-in "
+            "HQ session use different principals in the same namespace. Review "
+            "the device ownership and active session."
+        ),
+        evidence=(
+            f"Tailnet {identity.tailnet_user} = SSO claim "
+            f"{identity.provider_principal} · session "
+            f"{session_principal or 'unnamed session'}"
+            if identity.agreement_basis == "SSO-signed principal link"
+            else f"{identity.tailnet_user} ↔ "
+            f"{session_principal or 'unnamed session'}"
+            f"{' · ' + identity.agreement_basis if identity.agreement_basis else ''}"
+        ),
+        boundary="Identity correlation",
+        mechanism=(
+            "Signed OIDC claim and Tailnet device owner"
+            if identity.agreement_basis == "SSO-signed principal link"
+            else "Session principal and Tailnet device owner"
+        ),
     )
 
 
@@ -929,6 +1122,100 @@ def _forwarder_layer(
         evidence=device.dns_name or device.name,
         boundary="Forwarding identity",
         mechanism="Exact proxy allowlist and WireGuard node key",
+    )
+
+
+def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | None:
+    """Cross-check redundant NPM headers without granting them authority."""
+
+    if not trusted:
+        return None
+    real = str(request.META.get("HTTP_X_REAL_IP", "") or "").strip()
+    scheme = str(request.META.get("HTTP_X_FORWARDED_SCHEME", "") or "").strip().lower()
+    if not real or not scheme:
+        return Layer(
+            "proxy-evidence",
+            "The proxy headers are consistent",
+            False,
+            "The forwarding peer is trusted, but it did not supply both of "
+            "NPM's corroborating X-Real-IP and X-Forwarded-Scheme headers. "
+            "HQ still uses its canonical forwarding inputs for admission.",
+            evidence="corroborating headers incomplete",
+            boundary="Forwarding evidence",
+            mechanism="NPM forwarding headers",
+            conclusive=False,
+        )
+    real_host = split_host_port(real)[0]
+    expected_scheme = "https" if request.is_secure() else "http"
+    agrees = real_host == address and scheme == expected_scheme
+    return Layer(
+        "proxy-evidence",
+        "The proxy headers are consistent",
+        agrees,
+        (
+            "NPM's redundant client and scheme headers agree with the values "
+            "HQ selected from its canonical forwarding inputs. This detects "
+            "proxy drift; it is corroboration by one proxy, not a second "
+            "identity authority."
+            if agrees
+            else "NPM's redundant forwarding headers disagree with the client "
+            "or scheme HQ selected. Treat the proxy path as misconfigured."
+        ),
+        evidence=f"X-Real-IP={real_host or 'missing'} · X-Forwarded-Scheme={scheme or 'missing'}",
+        boundary="Forwarding evidence",
+        mechanism="NPM forwarding headers",
+    )
+
+
+def _tailnet_observation_layer(
+    observer: tailnet.Device | None, serving: ServingDeviceResolution
+) -> Layer:
+    """Say exactly whether observer-relative link data is evidence about HQ."""
+
+    if observer is None:
+        return Layer(
+            "tailnet-observer",
+            "HQ's node measured this Tailnet link",
+            False,
+            "No Tailnet inventory record identifies the node whose daemon made "
+            "the path, handshake, and traffic observation.",
+            boundary="Transport attestation",
+            mechanism="Local Tailscale daemon snapshot",
+            conclusive=False,
+        )
+    if not serving.verified:
+        return Layer(
+            "tailnet-observer",
+            "HQ's node measured this Tailnet link",
+            False,
+            "The Tailnet observer is known, but HQ could not independently place "
+            "itself on a Tailnet node. Link measurements are shown as the "
+            "observer's evidence rather than claimed as HQ's own handshake.",
+            evidence=f"observed by {observer.label} · HQ placement unresolved",
+            boundary="Transport attestation",
+            mechanism="Local Tailscale daemon snapshot",
+            conclusive=False,
+        )
+    same = bool(serving.device and observer.name == serving.device.name)
+    return Layer(
+        "tailnet-observer",
+        "HQ's node measured this Tailnet link",
+        same,
+        (
+            "The daemon that measured the peer path, handshake, and byte "
+            "counters is on the same node HQ independently resolved as its host."
+            if same
+            else "The Tailnet snapshot was measured from a different node than "
+            "the one serving HQ. Its peer data is real, but it does not attest "
+            "this browser-to-HQ link."
+        ),
+        evidence=(
+            f"{observer.label} · {serving.basis}"
+            if same
+            else f"observer {observer.label} ≠ HQ {serving.device.label}"
+        ),
+        boundary="Transport attestation",
+        mechanism="Local Tailscale daemon snapshot",
     )
 
 
@@ -1264,9 +1551,9 @@ def _own_addresses() -> frozenset[str]:
     return frozenset(found)
 
 
-def _serving_device(
+def _serving_device_resolution(
     known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
-) -> tailnet.Device | None:
+) -> ServingDeviceResolution:
     """The tailnet node HQ is actually running on.
 
     The obvious answer -- the device the sweep marked ``self`` -- is the device
@@ -1295,15 +1582,32 @@ def _serving_device(
     if mine:
         for device in known.values():
             if mine.intersection(device.addresses):
-                return device
+                return ServingDeviceResolution(
+                    device, True, "matched to an address on this host"
+                )
         for machine in declared:
             addresses = frozenset(machine.get("addresses") or ())
             if not mine.intersection(addresses):
                 continue
             for device in known.values():
                 if addresses.intersection(device.addresses):
-                    return device
-    return tailnet.observer(known)
+                    return ServingDeviceResolution(
+                        device, True, "matched through HQ's machine declaration"
+                    )
+    observer = tailnet.observer(known)
+    return ServingDeviceResolution(
+        observer,
+        False,
+        "fallback to the sweep observer" if observer else "not resolved",
+    )
+
+
+def _serving_device(
+    known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
+) -> tailnet.Device | None:
+    """Compatibility projection for callers that need only the best candidate."""
+
+    return _serving_device_resolution(known, declared).device
 
 
 def addresses_of_hq(found: Connection) -> tuple[Address, ...]:

@@ -117,7 +117,7 @@ def look_up_name(
     *,
     principal: Principal,
     expected_updated_at: str | None = None,
-    resolver: Callable[..., dict] = resolve,
+    resolver: Callable[..., dict] | None = None,
 ) -> dict[str, Any]:
     """What a resolver outside this network returns for a name."""
 
@@ -126,6 +126,8 @@ def look_up_name(
     wanted = str(command.name or "").strip().lower().rstrip(".")
     if not wanted or not HOSTNAME.match(wanted):
         raise ValueError("That is not a hostname.")
+    # Resolve at execution time so scoped replacements also cover registry calls.
+    resolver = resolver or resolve
     payload = resolver("api/dns", {"domain": wanted, "types": ",".join(RECORD_TYPES)})
     records = payload.get("records")
     server = payload.get("server")
@@ -259,4 +261,3 @@ def look_up_address(
         defaults={"reading": reading, "observed_at": now()},
     )
     return {**reading, "observed_at": iso(now())}
-

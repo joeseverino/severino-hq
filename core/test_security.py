@@ -696,6 +696,16 @@ class BrowserBoundaryTests(TestCase):
                         f"{name} reaches a Trusted Types sink outside the helper",
                     )
 
+    def test_every_enhanced_request_uses_the_session_renewal_boundary(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent / "static" / "js"
+        sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
+
+        self.assertEqual(sources["app.js"].count("window.fetch("), 1)
+        self.assertNotIn("fetch(", sources["tables.js"])
+        self.assertIn("window.hqFetch(", sources["tables.js"])
+
     def test_the_policy_names_somewhere_to_report_a_violation(self):
         response = self.client.get("/accounts/login/")
 

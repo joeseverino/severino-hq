@@ -9,6 +9,18 @@ from django.core.exceptions import PermissionDenied, SuspiciousOperation
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 
+TAILSCALE_PRINCIPAL_CLAIM = "tailscale_principal"
+TAILSCALE_PRINCIPAL_SESSION_KEY = "oidc_tailscale_principal"
+
+
+def _tailscale_principal(payload) -> str:
+    value = payload.get(TAILSCALE_PRINCIPAL_CLAIM)
+    if not isinstance(value, str):
+        return ""
+    value = value.strip()
+    return value if value and len(value) <= 254 else ""
+
+
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
@@ -33,6 +45,19 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         if issuer and payload.get("iss") != issuer:
             raise SuspiciousOperation("The ID token came from another issuer.")
         return payload
+
+    def get_or_create_user(self, access_token, id_token, payload):
+        user = super().get_or_create_user(access_token, id_token, payload)
+        if user is None:
+            return None
+        session = getattr(getattr(self, "request", None), "session", None)
+        if session is not None:
+            principal = _tailscale_principal(payload)
+            if principal:
+                session[TAILSCALE_PRINCIPAL_SESSION_KEY] = principal
+            else:
+                session.pop(TAILSCALE_PRINCIPAL_SESSION_KEY, None)
+        return user
 
     def verify_claims(self, claims):
         preferred_username = claims.get("preferred_username", "").strip()
