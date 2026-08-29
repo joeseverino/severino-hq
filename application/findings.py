@@ -428,6 +428,78 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
     )
 
 
+def _name_forced_by_a_collision(estate: _Estate) -> tuple[Finding, ...]:
+    """Named ``-2`` for a clash with something that is no longer there.
+
+    A key is only suffixed when the base was taken at the moment of adoption:
+    ``suggest_key`` returns the plain name whenever it is free. So a record
+    holding ``x-2`` while nothing holds ``x`` is wearing the shape of a conflict
+    that has since been resolved -- and the key is what the graph labels it, so
+    HQ shows a machine under a name nothing actually calls it.
+
+    That matters here more than it would elsewhere. The join between HQ's halves
+    is the name: a project publishes at a hostname, a document names a system, a
+    reading is stored against a host. A name carrying a suffix nobody else uses
+    is a name that will not match, and the failure is silent -- the page simply
+    shows nothing rather than showing something wrong.
+
+    Gated on the base being *free*, which is what keeps this quiet. Several
+    records for one name is ordinary -- a zone apex has nine -- and every one of
+    those is a legitimate ``-2`` sitting beside an occupied base.
+    """
+
+    # Resource labels only. A key collides with a key: ``suggest_key`` asks
+    # ManagedResource and nothing else, so an observed target that happens to
+    # carry the plain name does not make the name taken. Counting it did, and
+    # the rule stayed silent about the very record that prompted it — the
+    # machine is reached under one name and declared under another.
+    labels = {node.label for node in estate.nodes() if node.kind == "resource"}
+    findings = []
+    for node in estate.nodes():
+        if node.kind != "resource":
+            continue
+        base, _, suffix = node.label.rpartition("-")
+        # Exactly the shape ``suggest_key`` produces: 2 through 99, no leading
+        # zero. Anything else is somebody's naming convention, not a collision.
+        # Without that last clause this fired on ``sl-cloud-edge-01`` and read a
+        # perfectly ordinary hostname as a conflict -- a rule that invents work
+        # is worse than one that misses some.
+        if not base or not suffix.isdigit() or suffix.startswith("0"):
+            continue
+        if not 2 <= int(suffix) <= 99:
+            continue
+        if base in labels:
+            continue
+        findings.append(
+            Finding(
+                rule="name-forced-by-a-collision",
+                subject=node.id,
+                title=f"{node.label} is named for a clash that is gone",
+                severity="attention",
+                explanation=(
+                    "This key ends in a number because the plain name was taken "
+                    "when it was adopted. Nothing holds the plain name now, so "
+                    "the suffix records a conflict that no longer exists — and "
+                    "the name is what everything else in HQ joins on."
+                ),
+                evidence=(
+                    ("Named", node.label),
+                    ("Free", base),
+                    ("Kind", node.subtitle or node.kind_key or "resource"),
+                ),
+                remedies=(
+                    Remedy(
+                        capability="infrastructure.resource.update",
+                        target=node.label,
+                        label=f"Rename to {base}",
+                        effect="",
+                    ),
+                ),
+            )
+        )
+    return tuple(findings)
+
+
 def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
     """A name a connection reports reaching that nothing is measuring.
 
@@ -532,6 +604,12 @@ RULES: tuple[FindingRule, ...] = (
         "Reachable and unmeasured",
         "attention",
         _reached_but_unmeasured,
+    ),
+    FindingRule(
+        "name-forced-by-a-collision",
+        "Named for a clash that is gone",
+        "attention",
+        _name_forced_by_a_collision,
     ),
 )
 
