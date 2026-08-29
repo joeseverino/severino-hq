@@ -146,9 +146,72 @@ class PageTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_delivery", "_activity"],
+            ["_delivery", "_activity", "_traffic"],
         )
 
     def test_service_section_ids_share_the_page_navigation_contract(self):
         with self.assertRaisesRegex(ValueError, "valid page section id"):
             ServiceSection("Not valid", "Broken", (), ())
+
+
+class TrafficSectionTests(TestCase):
+    """The join is the hostname, and an unmeasured host is not a dead one."""
+
+    def _measure(self, host, *, pageviews=120, visits=90, sample_interval=1, days_ago=1):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from analytics.models import AnalyticsSite, RumDaily
+
+        site = AnalyticsSite.objects.create(site_tag=f"tag-{host}", host=host)
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=days_ago),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=pageviews,
+            visits=visits,
+            sample_interval=sample_interval,
+        )
+        return site
+
+    def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
+        self._measure("probe.example.com")
+        section = next(s for s in sections_for(a_service()) if s.id == "traffic")
+        self.assertEqual(section.records[0][0].text, "120")
+        self.assertEqual(section.records[0][1].text, "90")
+        self.assertEqual(section.records[0][2].text, "Counted")
+
+    def test_a_host_nothing_measures_renders_no_band(self):
+        # Not an empty table: that would read as a dead site rather than an
+        # unmeasured one, and those are opposite conclusions.
+        self.assertFalse([s for s in sections_for(a_service()) if s.id == "traffic"])
+
+    def test_sampling_is_carried_rather_than_presented_as_a_count(self):
+        self._measure("probe.example.com", sample_interval=10)
+        section = next(s for s in sections_for(a_service()) if s.id == "traffic")
+        self.assertEqual(section.records[0][2].text, "Sampled 1 in 10")
+
+    def test_another_hosts_traffic_is_not_borrowed(self):
+        self._measure("someone-else.example.com", pageviews=9999)
+        self.assertFalse([s for s in sections_for(a_service()) if s.id == "traffic"])
+
+    def test_the_host_join_is_case_and_trailing_dot_insensitive(self):
+        # Ingest stores it normalised; the lookup is what must tolerate mess.
+        self._measure("probe.example.com")
+        from .analytics import traffic_for_hosts
+
+        self.assertEqual(
+            traffic_for_hosts({"  PROBE.example.com. "}, days=7)["probe.example.com"]["pageviews"],
+            120,
+        )
+
+    def test_traffic_for_many_hosts_costs_one_query(self):
+        for index in range(5):
+            self._measure(f"h{index}.example.com")
+        from .analytics import traffic_for_hosts
+
+        hosts = {f"h{index}.example.com" for index in range(5)}
+        with self.assertNumQueries(1):
+            self.assertEqual(len(traffic_for_hosts(hosts, days=7)), 5)
