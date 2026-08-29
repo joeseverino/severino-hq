@@ -1398,12 +1398,18 @@ a.kpi:hover { background: var(--surface-2); }
 .finding-evidence > div { min-width: 0; padding: 9px 10px; background: var(--surface-2); }
 .finding-evidence dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .045em; }
 .finding-evidence dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 13px; }
+.finding-offers { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.finding-offers > strong { color: var(--ink-2); font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+.finding-offers .finding-actions { margin-top: 8px; }
 .finding-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .finding-actions form { display: inline-flex; }
 
 @media (max-width: 720px) {
   .attention-row { grid-template-columns: 1fr auto; }
   .attention-row > .pill { grid-column: 1 / -1; justify-self: start; }
+  .finding-card .section-head { flex-direction: column; }
+  .finding-card .section-head > div { width: 100%; }
+  .finding-card .section-head > .finding-actions { margin-top: 2px; }
 }
 
 /* ── Operations panels ──────────────────────────────────────────── */

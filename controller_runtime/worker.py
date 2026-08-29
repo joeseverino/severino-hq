@@ -14,6 +14,7 @@ from typing import Any
 from .providers import (
     ProviderError,
     analytics,
+    analytics_sites,
     connections,
     execute,
     inventory,
@@ -140,6 +141,33 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
         print(f"{action} report skipped: {type(exc).__name__}", file=sys.stderr)
 
 
+def _analytics_windows(sites: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Ask HQ what is missing without sending provider-local account identity."""
+
+    identities = [
+        {
+            "connection_ref": site["connection_ref"],
+            "site_tag": site["site_tag"],
+        }
+        for site in sites
+    ]
+    if not identities:
+        return []
+    try:
+        plan = _manage(
+            "analytics-plan",
+            "--payload",
+            json.dumps(identities, separators=(",", ":")),
+        )
+    except BridgeError as exc:
+        # Three completed days remain a safe degraded mode. The next successful
+        # plan derives the missing span again, so a failed read strands nothing.
+        print(f"analytics plan unavailable: {type(exc).__name__}", file=sys.stderr)
+        return []
+    windows = plan.get("windows") if isinstance(plan, dict) else []
+    return windows if isinstance(windows, list) else []
+
+
 def _report_findings(controller_id: str) -> None:
     """Both sweeps, when HQ says one is due.
 
@@ -175,7 +203,8 @@ def _report_findings(controller_id: str) -> None:
             _post("connections", controller_id, found)
         _post("inventory", controller_id, inventory())
         try:
-            readings = analytics()
+            sites = analytics_sites()
+            readings = analytics(sites=sites, windows=_analytics_windows(sites))
         except (ProviderError, OSError, ValueError) as exc:
             # Its own guard, like connections above. Analytics is the one
             # reading here that leaves the network HQ controls, so it is also

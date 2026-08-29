@@ -56,6 +56,34 @@ class AnalyticsSite(models.Model):
         return self.host or self.site_tag
 
 
+class AnalyticsCoverage(models.Model):
+    """One completed day a site's credential successfully read.
+
+    Traffic rows cannot carry this fact: a healthy site can have a real zero,
+    and therefore no breakdown rows, for a day.  Recording coverage separately
+    lets HQ distinguish "nothing happened" from "nobody looked", derive exact
+    backfill work, and say when a requested window is partial without asking
+    Cloudflare again merely to find out.
+    """
+
+    site = models.ForeignKey(
+        AnalyticsSite, on_delete=models.CASCADE, related_name="coverage"
+    )
+    date = models.DateField()
+
+    class Meta:
+        ordering = ("-date",)
+        constraints = (
+            models.UniqueConstraint(
+                fields=("site", "date"), name="analytics_coverage_unique_day"
+            ),
+        )
+        indexes = (models.Index(fields=("date",)),)
+
+    def __str__(self) -> str:
+        return f"{self.site_id} covered {self.date}"
+
+
 class RumDaily(models.Model):
     """One day of one breakdown: the single grain everything else derives from.
 

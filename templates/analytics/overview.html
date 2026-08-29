@@ -19,6 +19,9 @@
 
     <p class="muted reading-note">
       {{ totals.start|date:"j M" }} – {{ totals.end|date:"j M Y" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|timesince }} ago{% endif %}
+      {% if coverage.expected_days and not coverage.complete %}
+        · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read; HQ will backfill the remaining {{ coverage.missing_days }} automatically
+      {% endif %}
     </p>
 
     <div class="breakdown-grid">

@@ -57,6 +57,7 @@ from application.connection_security import (
     observed_connection_controls,
 )
 from application.analytics import HOST_TRAFFIC_DAYS
+from application.action_links import topology_url
 from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import (
     apply_lens,
@@ -1240,19 +1241,13 @@ class TopologyView(LoginRequiredMixin, TemplateView):
     def _focus_link(node_id: str, lens: str = "") -> str:
         """Focus one node, keeping the active lens and letting depth default."""
 
-        params = {"focus": node_id}
-        if lens:
-            params["lens"] = lens
-        return f"{reverse('control_plane:topology')}?{urlencode(params)}#trace"
+        return topology_url(node_id, lens=lens)
 
     @staticmethod
     def _trace_url(
         focus: str, direction: str, lens: str = "", depth: int = 3
     ) -> str:
-        params = {"focus": focus, "direction": direction, "depth": depth}
-        if lens:
-            params["lens"] = lens
-        return f"{reverse('control_plane:topology')}?{urlencode(params)}#trace"
+        return topology_url(focus, direction=direction, depth=depth, lens=lens)
 
 
 class FindingsView(LoginRequiredMixin, TemplateView):
@@ -1271,43 +1266,16 @@ class FindingsView(LoginRequiredMixin, TemplateView):
             principal=principal,
             rule=active_rule.name if active_rule else "",
         )
-        by_id = {node.id: node for node in topology.nodes}
         entries = []
         for finding in raised:
-            subject = by_id.get(finding.subject)
-            topology_url = ""
-            if subject is not None:
-                topology_url = (
-                    f"{reverse('control_plane:topology')}?"
-                    f"{urlencode({'focus': subject.id})}#trace"
-                )
-            impact_url = ""
-            if subject is not None:
-                impact_url = (
-                    f"{reverse('control_plane:topology')}?"
-                    f"{urlencode({'focus': subject.id, 'direction': 'outbound', 'depth': 3})}#trace"
-                )
-            remedies = []
-            if subject is not None:
-                for remedy in finding.remedies:
-                    action = next(
-                        (
-                            candidate
-                            for candidate in subject.actions
-                            if candidate.capability == remedy.capability
-                            and candidate.target == remedy.target
-                        ),
-                        None,
-                    )
-                    if action is not None:
-                        remedies.append(action)
             entries.append(
                 {
                     "finding": finding,
-                    "subject": subject,
-                    "topology_url": topology_url,
-                    "impact_url": impact_url,
-                    "remedies": tuple(remedies),
+                    "investigations": finding.investigations,
+                    "offers": finding.offers,
+                    "remedies": tuple(
+                        remedy for remedy in finding.remedies if remedy.url
+                    ),
                 }
             )
 

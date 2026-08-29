@@ -18,7 +18,14 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 
-from .cadence import note_activity, recently_used, ring_doorbell, sweep_due
+from .cadence import (
+    ControllerSweepCommand,
+    note_activity,
+    recently_used,
+    request_controller_sweep,
+    ring_doorbell,
+    sweep_due,
+)
 from .infrastructure import OperationCommand, request_reconcile
 from .security import cli_principal
 
@@ -152,6 +159,28 @@ class DoorbellTests(TestCase):
         self.assertEqual(
             [path.name for path in self.directory.iterdir()], ["doorbell"]
         )
+
+    @override_settings(
+        SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=60,
+        SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200,
+    )
+    def test_an_operator_can_request_a_due_sweep_without_provider_authority(self):
+        swept(age_seconds=600)
+
+        result = request_controller_sweep(
+            ControllerSweepCommand(), principal=cli_principal()
+        )
+
+        self.assertTrue(result["requested"])
+        self.assertTrue(result["due"])
+        self.assertTrue((self.directory / "doorbell").exists())
+
+    @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
+    def test_an_explicit_sweep_request_reports_an_unreachable_doorbell(self):
+        with self.assertRaisesRegex(ValueError, "doorbell could not be reached"):
+            request_controller_sweep(
+                ControllerSweepCommand(), principal=cli_principal()
+            )
 
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_a_doorbell_it_cannot_write_does_not_fail_the_write(self):

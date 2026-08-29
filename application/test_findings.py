@@ -11,9 +11,10 @@ from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
 
+from .action_links import ActionLink
 from .findings import derive_findings, finding_rules, findings, rule_for
 from .security import Capability, Principal
-from .topology import derive_topology
+from .topology import Topology, TopologyEdge, TopologyNode, derive_topology
 
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -150,6 +151,100 @@ class FindingsTests(TestCase):
         self.assertEqual(rules.count("kind-never-swept"), 1)
         self.assertNotIn("skipped-by-a-sweep", rules)
         self.assertNotIn("never-observed", rules)
+
+    def test_shared_controller_failures_are_one_causal_claim(self):
+        old = (self.now - timedelta(days=3)).isoformat()
+        topology = Topology(
+            nodes=(
+                TopologyNode(
+                    "controller:one", "controller", "HQ dev", "Controller",
+                    actions=(
+                        ActionLink("open", "Open connections", "read", "/connections/"),
+                        ActionLink(
+                            "command",
+                            "Request fresh sweep",
+                            "infrastructure_change",
+                            "/commands/infrastructure.controller.refresh/",
+                            capability="infrastructure.controller.refresh",
+                        ),
+                        ActionLink(
+                            "change", "Unsafe shortcut", "infrastructure_change", "/change/",
+                        ),
+                    ),
+                ),
+                TopologyNode("connection:one", "connection", "Provider", "Connection"),
+                TopologyNode("ability:a", "ability", "Read A", "Ability"),
+                TopologyNode("ability:b", "ability", "Read B", "Ability"),
+                TopologyNode(
+                    "resource:a", "resource", "A", "Resource", kind_key="example.a",
+                    observed_at=old,
+                ),
+                TopologyNode(
+                    "resource:b", "resource", "B", "Resource", kind_key="example.b",
+                    observed_at=old,
+                ),
+            ),
+            edges=(
+                TopologyEdge("carries", "controller:one", "connection:one", "carries", "Carries"),
+                TopologyEdge("enables-a", "connection:one", "ability:a", "enables", "Enables"),
+                TopologyEdge("enables-b", "connection:one", "ability:b", "enables", "Enables"),
+                TopologyEdge("governs-a", "ability:a", "resource:a", "governs", "Governs"),
+                TopologyEdge("governs-b", "ability:b", "resource:b", "governs", "Governs"),
+            ),
+        )
+
+        general = derive_findings(topology, principal=MANAGE)
+        raw = derive_findings(topology, principal=READ, rule="kind-never-swept")
+
+        self.assertEqual([item.rule for item in general], ["controller-sweep-stale"])
+        self.assertEqual(general[0].subject, "controller:one")
+        self.assertEqual(general[0].affected_scopes, ("example.a", "example.b"))
+        self.assertEqual([offer.label for offer in general[0].offers], ["Open connections"])
+        self.assertEqual(
+            [action.label for action in general[0].investigations],
+            ["Show in topology", "Trace impact"],
+        )
+        self.assertIn("focus=controller%3Aone", general[0].investigations[0].url)
+        self.assertEqual(
+            [remedy.capability for remedy in general[0].remedies],
+            ["infrastructure.controller.refresh"],
+        )
+        self.assertIn(
+            "next=%2Finfrastructure%2Ffindings%2F", general[0].remedies[0].url
+        )
+        self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
+
+    def test_a_shared_ability_does_not_guess_between_two_controllers(self):
+        old = (self.now - timedelta(days=3)).isoformat()
+        topology = Topology(
+            nodes=(
+                TopologyNode("controller:one", "controller", "One", "Controller"),
+                TopologyNode("controller:two", "controller", "Two", "Controller"),
+                TopologyNode("connection:one", "connection", "One", "Connection"),
+                TopologyNode("connection:two", "connection", "Two", "Connection"),
+                TopologyNode("ability:shared", "ability", "Read", "Ability"),
+                TopologyNode(
+                    "resource:a", "resource", "A", "Resource", kind_key="example.a",
+                    observed_at=old,
+                ),
+                TopologyNode(
+                    "resource:b", "resource", "B", "Resource", kind_key="example.b",
+                    observed_at=old,
+                ),
+            ),
+            edges=(
+                TopologyEdge("carries-one", "controller:one", "connection:one", "carries", "Carries"),
+                TopologyEdge("carries-two", "controller:two", "connection:two", "carries", "Carries"),
+                TopologyEdge("enables-one", "connection:one", "ability:shared", "enables", "Enables"),
+                TopologyEdge("enables-two", "connection:two", "ability:shared", "enables", "Enables"),
+                TopologyEdge("governs-a", "ability:shared", "resource:a", "governs", "Governs"),
+                TopologyEdge("governs-b", "ability:shared", "resource:b", "governs", "Governs"),
+            ),
+        )
+
+        raised = derive_findings(topology, principal=READ)
+
+        self.assertEqual([item.rule for item in raised], ["kind-never-swept"] * 2)
 
     # ----- the other two rules ---------------------------------------------
 
@@ -551,6 +646,16 @@ class FindingsTests(TestCase):
         self.assertEqual(
             [item["name"] for item in whole["rules"]],
             [rule.name for rule in finding_rules()],
+        )
+        self.assertEqual(whole["schema_version"], 2)
+        self.assertTrue(any(item["offers"] for item in whole["findings"]))
+        self.assertTrue(any(item["investigations"] for item in whole["findings"]))
+        self.assertTrue(
+            all(
+                remedy["method"] == "POST"
+                for item in whole["findings"]
+                for remedy in item["remedies"]
+            )
         )
         self.assertNotIn("secret", json.dumps(whole).lower())
 

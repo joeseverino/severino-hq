@@ -105,18 +105,81 @@ def capability_action_link(
     )
 
 
+def topology_url(
+    node_id: str,
+    *,
+    direction: str = "",
+    depth: int | None = None,
+    lens: str = "",
+    fragment: str = "trace",
+) -> str:
+    """Address one topology investigation from every delivery surface."""
+
+    topology = route_url("control_plane:topology")
+    if not topology or not node_id:
+        return ""
+    params: dict[str, str | int] = {"focus": node_id}
+    if direction:
+        params["direction"] = direction
+    if depth is not None:
+        params["depth"] = depth
+    if lens:
+        params["lens"] = lens
+    return f"{topology}?{urlencode(params)}#{fragment}"
+
+
+def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
+    """The canonical read-only ways to understand an affected topology node."""
+
+    focus_url = topology_url(node_id)
+    impact_url = topology_url(node_id, direction="outbound", depth=3)
+    if not focus_url or not impact_url:
+        return ()
+    return (
+        ActionLink(
+            "topology",
+            "Show in topology",
+            "read",
+            focus_url,
+            reason="The relationships that support this finding.",
+        ),
+        ActionLink(
+            "impact",
+            "Trace impact",
+            "read",
+            impact_url,
+            reason="The downstream nodes reachable from this subject.",
+        ),
+    )
+
+
+def action_with_return(action: ActionLink, route_name: str) -> ActionLink:
+    """Keep a command inside the workflow that discovered it."""
+
+    destination = route_url(route_name)
+    if not destination or not action.url:
+        return action
+    separator = "&" if "?" in action.url else "?"
+    return replace(
+        action,
+        url=f"{action.url}{separator}{urlencode({'next': destination})}",
+    )
+
+
 def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink | None:
     """Focus the one derived topology node for a connection instance."""
 
-    topology = route_url("control_plane:topology")
-    if not topology:
+    url = topology_url(
+        f"connection:{spec_name}:{instance_id}",
+        fragment="map",
+    )
+    if not url:
         return None
-    node_id = f"connection:{spec_name}:{instance_id}"
     return ActionLink(
         "relationships",
         "Show relationships",
         "read",
-        f"{topology}?{urlencode({'focus': node_id})}#map",
+        url,
         reason="Derived targets, dependencies, abilities, and governed resources.",
     )
 

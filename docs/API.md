@@ -107,6 +107,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
 | `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
 | `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
+| `GET` | `/api/v2/findings/` | Evidence-backed claims, causal rollups, authorized remedies, and canonical investigation links derived from that graph |
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
@@ -129,6 +130,12 @@ is authorizing without creating a second execution plan. Optional
 `target_initial_fields` declare which same-named command fields the browser may
 hydrate from an authorized target detail; this is presentation metadata and
 does not change the machine payload contract.
+
+`infrastructure.controller.refresh` is the deliberate freshness loop. It marks
+HQ active, rings the credential-free controller doorbell, and lets the
+privileged pull-based controller apply the same cadence contract it always
+uses. The web/API process receives no provider authority, and callers receive
+the due decision that made the request meaningful.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
 label, summary, required permissions, list-query model, stable identifier, and
@@ -170,6 +177,22 @@ Tracing composes with `lens`, costs no provider reads beyond deriving the
 original authorized projection, and unknown focus values leave the projection
 whole with `trace: null`. This makes “show what depends on this” and “show what
 this reaches” available to generated clients without creating a second graph.
+
+Findings are another projection of that same authorized topology. General
+reads collapse several stale resource kinds onto their shared controller when
+the graph proves one, and expose the explained kinds in `affected_scopes`.
+Clients that need the underlying machine facts can request one declared
+`rule`; causal presentation never destroys the exact observations. Remedies
+remain references to registered capabilities, while read-only “what HQ can do
+now” links come from the subject node's canonical actions rather than a second
+workflow registry.
+
+The `analytics` resource reports `coverage` for the requested completed-day
+window. Coverage is recorded even when a healthy site had zero traffic, so
+`missing_days` means HQ has not read that site-day—not that no visit occurred.
+The controller discovers sites, asks HQ for bounded missing windows, and
+backfills them idempotently; API and web readers do not invent their own
+freshness policy.
 
 ### Compatibility policy
 

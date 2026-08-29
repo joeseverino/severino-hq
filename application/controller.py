@@ -78,6 +78,49 @@ def _scheduler_now():
     return timezone.now()
 
 
+def _certificate_expiry(resource: ManagedResource):
+    """Parse the provider's public expiry observation once, preserving UTC."""
+
+    not_after = resource.status.get("not_after")
+    if not not_after:
+        return None
+    try:
+        expiry = timezone.datetime.fromisoformat(not_after.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=datetime_timezone.utc)
+    return expiry
+
+
+def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
+    not_after = resource.status.get("not_after")
+    if resource.kind == CERTIFICATE_KIND and not_after and _certificate_expiry(resource) is None:
+        return True, "Automatic repair of invalid certificate observation.", "invalid-expiry"
+    if resource.generation != resource.observed_generation:
+        return True, "Automatic reconciliation of a new desired generation.", "generation"
+    drifted = any(
+        item.get("status") is True
+        and item.get("type") in {"Drifted", "Degraded"}
+        for item in resource.conditions
+    )
+    if drifted:
+        return True, "Automatic reconciliation of provider drift.", "drift"
+    return False, "", ""
+
+
+def _automatic_renewal(resource: ManagedResource, now) -> tuple[bool, str, str]:
+    if resource.kind != CERTIFICATE_KIND:
+        return False, "", ""
+    expiry = _certificate_expiry(resource)
+    if expiry is None:
+        return False, "", ""
+    renewal_at = expiry - timedelta(days=resource.spec.get("renewal_window_days", 30))
+    if now >= renewal_at:
+        return True, "Automatic renewal window reached.", resource.status["not_after"]
+    return False, "", ""
+
+
 def _automatic_action(
     resource: ManagedResource,
     action: str,
@@ -86,37 +129,9 @@ def _automatic_action(
     """Evaluate one declared automatic action without executing it."""
 
     if action == OperationRequest.Action.RECONCILE:
-        if resource.kind == CERTIFICATE_KIND and resource.status.get("not_after"):
-            try:
-                timezone.datetime.fromisoformat(
-                    resource.status["not_after"].replace("Z", "+00:00")
-                )
-            except (AttributeError, TypeError, ValueError):
-                return True, "Automatic repair of invalid certificate observation.", "invalid-expiry"
-        if resource.generation != resource.observed_generation:
-            return True, "Automatic reconciliation of a new desired generation.", "generation"
-        if any(
-            item.get("status") is True
-            and item.get("type") in {"Drifted", "Degraded"}
-            for item in resource.conditions
-        ):
-            return True, "Automatic reconciliation of provider drift.", "drift"
-        return False, "", ""
-    if resource.kind == CERTIFICATE_KIND and action == OperationRequest.Action.RENEW:
-        not_after = resource.status.get("not_after")
-        if not not_after:
-            return False, "", ""
-        try:
-            expiry = timezone.datetime.fromisoformat(not_after.replace("Z", "+00:00"))
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=datetime_timezone.utc)
-        except (TypeError, ValueError):
-            return False, "", ""
-        renewal_at = expiry - timedelta(
-            days=resource.spec.get("renewal_window_days", 30)
-        )
-        if now >= renewal_at:
-            return True, "Automatic renewal window reached.", not_after
+        return _automatic_reconcile(resource)
+    if action == OperationRequest.Action.RENEW:
+        return _automatic_renewal(resource, now)
     return False, "", ""
 
 

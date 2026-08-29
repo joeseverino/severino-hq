@@ -811,6 +811,39 @@ class InfrastructureViewsTests(TestCase):
         self.assertContains(response, "Records of this kind")
         self.assertContains(response, reverse("action_items"))
 
+    def test_findings_render_only_offers_the_projection_authorized(self):
+        from application.action_links import ActionLink
+        from application.findings import Finding
+        from application.topology import Topology, TopologyNode
+
+        subject = TopologyNode(
+            "controller:one", "controller", "HQ dev", "Controller",
+        )
+        finding = Finding(
+            "controller-sweep-stale", subject.id,
+            "HQ dev stopped confirming two kinds", "serious",
+            "The graph proves one shared cause.",
+            offers=(
+                ActionLink("open", "Open connections", "read", "/connections/"),
+            ),
+            investigations=(
+                ActionLink("impact", "Trace impact", "read", "/topology/?trace"),
+            ),
+        )
+        with (
+            patch(
+                "control_plane.views.derive_topology",
+                return_value=Topology((subject,), ()),
+            ),
+            patch("control_plane.views.derive_findings", return_value=(finding,)),
+        ):
+            response = self.client.get(reverse("control_plane:findings"))
+
+        self.assertContains(response, "What HQ can do now")
+        self.assertContains(response, "Open connections")
+        self.assertContains(response, 'href="/topology/?trace"')
+        self.assertContains(response, "Trace impact")
+
     def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
         OperationRequest.objects.create(
             resource=self.resource,

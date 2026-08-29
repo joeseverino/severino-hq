@@ -13,7 +13,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from analytics.models import AnalyticsSite, RumDaily, VitalsDaily
+from analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from application import analytics as service
 from application.security import AuthorizationError, Capability, Principal
 from content.models import ContentItem
@@ -31,18 +31,25 @@ def _principal() -> Principal:
 
 
 def _day(offset: int) -> str:
-    return (timezone.now().date() - timedelta(days=offset)).isoformat()
+    return (timezone.now().date() - timedelta(days=offset + 1)).isoformat()
 
 
 def _payload(rows=None, vitals=None) -> dict:
+    rows = rows if rows is not None else []
+    vitals = vitals if vitals is not None else []
+    dates = [item["date"] for item in (*rows, *vitals) if item.get("date")]
+    start = min(dates, default=_day(0))
+    end = max(dates, default=_day(0))
     return {
         "sites": [
             {
                 "site_tag": SITE_TAG,
                 "host": HOST,
                 "connection_ref": "example-api",
-                "rows": rows if rows is not None else [],
-                "vitals": vitals if vitals is not None else [],
+                "start": start,
+                "end": end,
+                "rows": rows,
+                "vitals": vitals,
             }
         ]
     }
@@ -51,11 +58,15 @@ def _payload(rows=None, vitals=None) -> dict:
 def _site_payload(
     *, site_tag=SITE_TAG, host=HOST, connection_ref="example-api", rows=None
 ) -> dict:
+    rows = rows if rows is not None else []
+    dates = [item["date"] for item in rows if item.get("date")]
     return {
         "site_tag": site_tag,
         "host": host,
         "connection_ref": connection_ref,
-        "rows": rows if rows is not None else [],
+        "start": min(dates, default=_day(0)),
+        "end": max(dates, default=_day(0)),
+        "rows": rows,
         "vitals": [],
     }
 
@@ -79,6 +90,16 @@ class RecordingTests(TestCase):
         self.assertEqual(site.host, HOST)
         self.assertEqual(site.connection_ref, "example-api")
         self.assertEqual(RumDaily.objects.count(), 1)
+        self.assertEqual(AnalyticsCoverage.objects.count(), 1)
+
+    def test_a_successful_zero_is_coverage_even_without_a_traffic_row(self):
+        service.record_analytics(_payload(), principal=_principal())
+
+        self.assertEqual(RumDaily.objects.count(), 0)
+        self.assertEqual(
+            AnalyticsCoverage.objects.get().date.isoformat(),
+            _day(0),
+        )
 
     def test_replaying_a_sweep_restates_a_day_rather_than_doubling_it(self):
         payload = _payload([_row(pageviews=20)])
@@ -160,6 +181,71 @@ class RecordingTests(TestCase):
             {("account-one", "one.example"), ("account-two", "two.example")},
         )
         self.assertEqual(RumDaily.objects.count(), 2)
+
+
+class CoveragePlanningTests(TestCase):
+    def identity(self):
+        return [{"connection_ref": "example-api", "site_tag": SITE_TAG}]
+
+    def record_window(self, start_offset: int, end_offset: int = 0):
+        payload = _payload()
+        payload["sites"][0]["start"] = _day(start_offset)
+        payload["sites"][0]["end"] = _day(end_offset)
+        service.record_analytics(payload, principal=_principal())
+
+    def test_a_new_site_is_offered_one_bounded_quarter(self):
+        plan = service.analytics_plan(self.identity())["windows"][0]
+
+        self.assertEqual(plan["reason"], "backfill")
+        self.assertEqual(
+            service.date.fromisoformat(plan["end"])
+            - service.date.fromisoformat(plan["start"]),
+            timedelta(days=service.BACKFILL_DAYS - 1),
+        )
+
+    def test_a_complete_site_only_refreshes_recent_completed_days(self):
+        self.record_window(service.BACKFILL_DAYS - 1)
+
+        plan = service.analytics_plan(self.identity())["windows"][0]
+
+        self.assertEqual(plan["reason"], "refresh")
+        self.assertEqual(
+            service.date.fromisoformat(plan["end"])
+            - service.date.fromisoformat(plan["start"]),
+            timedelta(days=service.REFRESH_DAYS - 1),
+        )
+
+    def test_a_hole_reopens_only_the_span_needed_to_fill_it(self):
+        self.record_window(service.BACKFILL_DAYS - 1)
+        AnalyticsCoverage.objects.filter(
+            date=service.date.fromisoformat(_day(20))
+        ).delete()
+
+        plan = service.analytics_plan(self.identity())["windows"][0]
+
+        self.assertEqual(plan["reason"], "backfill")
+        self.assertEqual(plan["start"], _day(20))
+        self.assertEqual(plan["end"], _day(0))
+
+    def test_the_reader_and_provider_mean_the_same_completed_day(self):
+        self.assertEqual(
+            service._window(1),
+            (
+                service.date.fromisoformat(_day(0)),
+                service.date.fromisoformat(_day(0)),
+            ),
+        )
+
+    def test_planning_cost_is_constant_as_sites_grow(self):
+        identities = [
+            {"connection_ref": "example-api", "site_tag": f"site-{index}"}
+            for index in range(30)
+        ]
+
+        with self.assertNumQueries(1):
+            plan = service.analytics_plan(identities)
+
+        self.assertEqual(len(plan["windows"]), 30)
 
 
 class VitalsTests(TestCase):
@@ -444,6 +530,14 @@ class OverviewPageTests(TestCase):
 
         self.assertContains(response, "sampled 1:10")
 
+    def test_a_partial_window_says_what_is_missing_and_who_will_fill_it(self):
+        service.record_analytics(_payload([_row()]), principal=_principal())
+
+        response = self.client.get("/analytics/?days=7")
+
+        self.assertContains(response, "1 of 7 site-days read")
+        self.assertContains(response, "HQ will backfill the remaining 6 automatically")
+
     def test_signing_in_is_required(self):
         self.client.logout()
 
@@ -612,4 +706,6 @@ class RecordedDayTests(TestCase):
             principal=_principal(),
         )
 
-        self.assertEqual(service.latest_reading(), timezone.now().date())
+        self.assertEqual(
+            service.latest_reading(), timezone.now().date() - timedelta(days=1)
+        )

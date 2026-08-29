@@ -21,7 +21,13 @@ from django.db import transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
 
-from analytics.models import AnalyticsSite, RumDaily, VitalsDaily
+from analytics.contracts import (
+    BACKFILL_DAYS,
+    MAX_QUERY_DAYS,
+    REFRESH_DAYS,
+    completed_window,
+)
+from analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from content.models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 
 from .cadence import sweep_interval
@@ -115,7 +121,7 @@ def record_analytics(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
 
     sites = payload.get("sites") or []
-    recorded = {"sites": 0, "rows": 0, "vitals": 0}
+    recorded = {"sites": 0, "coverage": 0, "rows": 0, "vitals": 0}
     for entry in sites:
         site_tag = str(entry.get("site_tag", "")).strip()
         host = normalize_host(str(entry.get("host", "")))
@@ -130,6 +136,16 @@ def record_analytics(
             },
         )
         recorded["sites"] += 1
+
+        start = _as_date(entry.get("start"))
+        end = _as_date(entry.get("end"))
+        if start and end and start <= end and (end - start).days < MAX_QUERY_DAYS:
+            covered = [
+                AnalyticsCoverage(site=site, date=start + timedelta(days=offset))
+                for offset in range((end - start).days + 1)
+            ]
+            AnalyticsCoverage.objects.bulk_create(covered, ignore_conflicts=True)
+            recorded["coverage"] += len(covered)
 
         for row in entry.get("rows") or []:
             day = _as_date(row.get("date"))
@@ -201,18 +217,90 @@ def _as_date(value: Any) -> date | None:
 
 
 def _window(days: int) -> tuple[date, date]:
-    """The window ending today, inclusive.
+    """The requested number of completed days, ending yesterday.
 
-    Today is included even though it is still accumulating. A partial day
-    beside complete ones would misread as a collapse, which is why the reader
-    used to stop at yesterday -- but the sweep re-reads a rolling window and
-    restates each day as it fills, so today is simply the most recent reading
-    rather than a permanent undercount. Excluding it would mean the shortest
-    window on the page could not answer what is happening now.
+    The provider deliberately excludes today because a partial day reads as a
+    collapse every morning. Readers use the same boundary; previously the
+    controller emitted yesterday while the default one-day view asked only for
+    today, making valid traffic look like zero.
     """
 
-    end = timezone.now().date()
-    return end - timedelta(days=max(days, 1) - 1), end
+    return completed_window(days)
+
+
+def analytics_plan(sites: list[dict[str, Any]]) -> dict[str, Any]:
+    """The exact bounded window the controller should read for each site.
+
+    Coverage is emitted by successful provider reads, including real zeroes.
+    Missing days therefore describe work rather than traffic. A new site gets
+    a quarter; a complete site refreshes three completed days; a hole reopens
+    the smallest rolling span that fills it. One provider request may restate
+    already-covered days, which the unique storage grain makes idempotent.
+    """
+
+    identities = tuple(
+        sorted(
+            {
+                (
+                    str(item.get("connection_ref", ""))[:100],
+                    str(item.get("site_tag", "")).strip(),
+                )
+                for item in sites
+                if str(item.get("site_tag", "")).strip()
+            }
+        )
+    )
+    end = _window(1)[1]
+    target_start = end - timedelta(days=BACKFILL_DAYS - 1)
+    covered: dict[tuple[str, str], set[date]] = {
+        identity: set() for identity in identities
+    }
+    for connection_ref, site_tag, day in AnalyticsCoverage.objects.filter(
+        date__gte=target_start,
+        date__lte=end,
+    ).values_list("site__connection_ref", "site__site_tag", "date"):
+        identity = (connection_ref, site_tag)
+        if identity in covered:
+            covered[identity].add(day)
+
+    windows = []
+    for connection_ref, site_tag in identities:
+        missing = [
+            target_start + timedelta(days=offset)
+            for offset in range(BACKFILL_DAYS)
+            if target_start + timedelta(days=offset)
+            not in covered[(connection_ref, site_tag)]
+        ]
+        start = min(missing) if missing else end - timedelta(days=REFRESH_DAYS - 1)
+        windows.append(
+            {
+                "connection_ref": connection_ref,
+                "site_tag": site_tag,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "reason": "backfill" if missing else "refresh",
+            }
+        )
+    return {"ok": True, "windows": windows}
+
+
+def coverage_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
+    """How much of a requested window HQ can honestly answer."""
+
+    start, end = _window(days)
+    site_count = AnalyticsSite.objects.count()
+    expected = site_count * days
+    covered = AnalyticsCoverage.objects.filter(date__gte=start, date__lte=end).count()
+    missing = max(expected - covered, 0)
+    return {
+        "start": start,
+        "end": end,
+        "sites": site_count,
+        "covered_days": covered,
+        "expected_days": expected,
+        "missing_days": missing,
+        "complete": bool(site_count) and missing == 0,
+    }
 
 
 def breakdown(
@@ -315,7 +403,9 @@ def traffic_for_hosts(
     }
 
 
-def attach_host_traffic(items, *, attribute: str = "hostname", days: int = DEFAULT_WINDOW_DAYS):
+def attach_host_traffic(
+    items, *, attribute: str = "hostname", days: int = DEFAULT_WINDOW_DAYS
+):
     """Give each item carrying a hostname what that host earned.
 
     Annotates in place and asks once for the whole page, exactly as
@@ -559,12 +649,9 @@ def site_totals(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
 # 90 is the widest offered: the account refuses a single query wider than
 # 13w2d, so a 184-day window is a request Cloudflare rejects rather than a
 # reading anyone can get.
-WINDOWS = ((1, "24 hours"), (7, "7 days"), (28, "28 days"), (90, "90 days"))
+WINDOWS = ((1, "Last 24 hours"), (7, "7 days"), (28, "28 days"), (90, "90 days"))
 
 WINDOW_DAYS = tuple(days for days, _ in WINDOWS)
-
-# The widest span one query may cover, as the account reports it.
-MAX_QUERY_DAYS = 93
 
 # The breakdowns the overview shows, in the order it shows them. Ordered by how
 # often the answer changes what you do: what people read first, how they got
@@ -605,6 +692,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
     days = days if days in WINDOW_DAYS else DEFAULT_WINDOW_DAYS
     totals = site_totals(days=days)
     measured_paths = measured_path_count(days=days)
+    coverage = coverage_summary(days=days)
     return {
         "kpis": (
             {
@@ -627,6 +715,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
             },
         ),
         "totals": totals,
+        "coverage": coverage,
         "days": days,
         "windows": [
             {"days": option, "label": label, "current": option == days}
@@ -667,6 +756,7 @@ def list_analytics(
         )
     rows = breakdown(dimension, days=days, limit=limit)
     window = site_totals(days=days)
+    coverage = coverage_summary(days=days)
     items = [
         {
             "dimension": dimension,
@@ -686,6 +776,10 @@ def list_analytics(
         # page: a consumer that treats an extrapolation as a count will
         # eventually publish it as one.
         "sample_interval": window["sample_interval"],
+        "coverage": {
+            key: value.isoformat() if isinstance(value, date) else value
+            for key, value in coverage.items()
+        },
     }
 
 
@@ -694,13 +788,17 @@ __all__ = [
     "HOST_TRAFFIC_DAYS",
     "DEFAULT_WINDOW_DAYS",
     "MAX_QUERY_DAYS",
+    "BACKFILL_DAYS",
+    "REFRESH_DAYS",
     "WINDOW_DAYS",
     "attach_traffic",
+    "analytics_plan",
     "list_analytics",
     "OVERVIEW_DIMENSIONS",
     "WINDOWS",
     "overview",
     "breakdown",
+    "coverage_summary",
     "last_observed_at",
     "latest_reading",
     "location_of",
