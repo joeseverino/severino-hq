@@ -2576,7 +2576,7 @@ class ObserverAbility:
     subject_resource: str
 
 
-OBSERVERS: tuple[ObserverAbility, ...] = (
+_OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
     ObserverAbility(
         provider="cloudflare_api",
         name="analytics.read",
@@ -2589,6 +2589,11 @@ OBSERVERS: tuple[ObserverAbility, ...] = (
         subject_resource="analytics",
     ),
 )
+
+
+def observer_abilities() -> tuple[ObserverAbility, ...]:
+    return _OBSERVER_ABILITIES
+
 
 # The kinds other modules name directly. Spelled once here, beside the registry
 # that defines them, because a kind mistyped in a filter is a query that finds

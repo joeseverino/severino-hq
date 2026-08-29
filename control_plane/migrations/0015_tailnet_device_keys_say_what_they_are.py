@@ -75,7 +75,7 @@ def forwards(apps, schema_editor):
 
 
 def backwards(apps, schema_editor):
-    _rename(apps, lambda name: _keyed(name))
+    _rename(apps, _keyed)
 
 
 class Migration(migrations.Migration):

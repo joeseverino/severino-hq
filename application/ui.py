@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .workflows import WorkflowPlan
+from .workflow_contracts import WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
 # insight panels, extension-provided projections -- draws from this set, so a

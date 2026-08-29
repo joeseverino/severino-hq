@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 The internal operating system behind Severino Labs. A host that composes
