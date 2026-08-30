@@ -5,7 +5,17 @@
    than by how many classes its selector happens to name. A component can be
    written with a single class and still beat a base element rule, which is
    what keeps a 2,000-line stylesheet from turning into a specificity contest
-   as it grows. */
+   as it grows.
+
+   There is deliberately no fourth layer for "things that must win". Nine
+   hundred lines had once accumulated *outside* every layer, where unlayered
+   rules beat all of them: a component written there could not be overridden
+   from `components` at any specificity, so the only way to change one was to
+   add another rule outside the layers too. Every one of them turned out to
+   need nothing but source order -- narrowing a component at a breakpoint is
+   exactly what "later in the same layer" already means -- so they were folded
+   back in rather than given a layer of their own. `StylesheetTests` fails the
+   build if a rule ever lands outside a layer again. */
 @layer tokens, base, components;
 
 @layer tokens {
@@ -31,6 +41,69 @@
   --warn: #a35a00;
   --ok: #1d6b35;
   --attn: #b0521a;
+
+  /* Tones. A status colour is never one value: it is a fill, ink that stays
+     legible on that fill, and a border a shade deeper than both. Those three
+     have to agree, and they were previously spelled out in hex at every site
+     that needed them -- pills, messages, connection ticks, worth readouts,
+     control metrics -- so the same seven trios appeared in about thirty-five
+     rules across five component families that knew nothing about each other.
+     Adding a variant meant inventing three colours and hoping.
+
+     Named once here, a component asks for a tone and a new variant chooses
+     one. `--tone-bg/-ink/-line` are the contract a component reads; the
+     `--tone-*-*` sets below are what a variant assigns to it. The neutral
+     values are the fallbacks, so a component with no tone still renders. */
+  --tone-neutral-bg: var(--bg-tint);
+  --tone-neutral-ink: var(--ink-2);
+  --tone-neutral-line: var(--line);
+
+  --tone-positive-bg: #e1efe5;
+  --tone-positive-ink: #16522a;
+  --tone-positive-line: #b8dac3;
+
+  --tone-caution-bg: #fbf1d6;
+  --tone-caution-ink: #6c5300;
+  --tone-caution-line: #ecdba0;
+
+  --tone-critical-bg: #f0dcdc;
+  --tone-critical-ink: #6a1f1f;
+  --tone-critical-line: #dfb4b4;
+
+  /* The second fill level. A chip is small enough to carry a saturated tint;
+     a banner covering half the page is not, and the same value that reads as
+     a label at 20px reads as an alarm at full width. Ink and border are
+     shared with the tone above -- only the fill lightens -- so a banner and
+     the chip beside it are recognisably the same status. Tones without a
+     wash have no large-surface use yet; add one when they do. */
+  --tone-positive-wash: #e8f5ec;
+  --tone-caution-wash: #fbf1d6;
+  --tone-critical-wash: #fbeaea;
+  --tone-info-wash: #eef2f7;
+
+  /* The third fill, for marks that carry the strong ink rather than the muted
+     one -- a tick inside a decision step, a kind badge on a hop. Paired with
+     `--ok`/`--warn`/`--danger` above, which are darker and more saturated than
+     the tone inks because they sit on less fill and often stand alone. */
+  --tone-positive-tint: #e2efe6;
+  --tone-caution-tint: #f4ead8;
+  --tone-critical-tint: #f6e2e0;
+
+  --tone-severe-bg: #fcdcd0;
+  --tone-severe-ink: #843300;
+  --tone-severe-line: #ffbfa8;
+
+  --tone-info-bg: #e4ebf3;
+  --tone-info-ink: #1f3656;
+  --tone-info-line: #c9d3e3;
+
+  --tone-notable-bg: #dfe6f1;
+  --tone-notable-ink: #1c3463;
+  --tone-notable-line: #c5d2e9;
+
+  --tone-special-bg: #ebe0f0;
+  --tone-special-ink: #4a2a72;
+  --tone-special-line: #d3c2e8;
 
   /* Categorical series palette. Assigned in fixed order, never cycled: colour
      follows the entity, not its rank, so filtering a series must not repaint
@@ -451,6 +524,76 @@ pre { background: #161922; color: #eaeef2; padding: 14px 16px; border-radius: va
 }
 
 @layer components {
+
+/* ── Tone assignment ─────────────────────────────────────────────────
+   The one place a status name maps to a tone, for every component that has
+   statuses. Grouped by tone rather than by component, because the alternative
+   -- each family assigning its own -- is what let `published`, `reachable` and
+   `success` mean the same thing in three different greens.
+
+   A component decides which fill level it reads (`--tone-bg` for a chip,
+   `--tone-wash` for a banner, `--tone-tint` for a mark carrying strong ink);
+   this section decides only what the tone *is*. Adding a status means adding
+   its class to one of these lists. Adding a component means reading the
+   contract, not restating the colours. */
+
+.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
+.pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet {
+  --tone-bg: var(--tone-positive-bg);
+  --tone-wash: var(--tone-positive-wash);
+  --tone-tint: var(--tone-positive-tint);
+  --tone-ink: var(--tone-positive-ink);
+  --tone-line: var(--tone-positive-line);
+}
+.pill-paused, .pill-editing, .pill-drafting, .pill-researching,
+.pill-internal, .pill-attention, .msg-warning, .conn-decision-step-unknown,
+.conn-kind-declined {
+  --tone-bg: var(--tone-caution-bg);
+  --tone-wash: var(--tone-caution-wash);
+  --tone-tint: var(--tone-caution-tint);
+  --tone-ink: var(--tone-caution-ink);
+  --tone-line: var(--tone-caution-line);
+}
+.pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
+.pill-replaced, .pill-deleted, .pill-login_failed, .pill-spam,
+.pill-unreachable, .msg-error, .conn-decision-step-does-not,
+.conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
+  --tone-bg: var(--tone-critical-bg);
+  --tone-wash: var(--tone-critical-wash);
+  --tone-tint: var(--tone-critical-tint);
+  --tone-ink: var(--tone-critical-ink);
+  --tone-line: var(--tone-critical-line);
+}
+.pill-idea, .pill-draft, .pill-viewed, .msg-info {
+  --tone-bg: var(--tone-info-bg);
+  --tone-wash: var(--tone-info-wash);
+  --tone-ink: var(--tone-info-ink);
+  --tone-line: var(--tone-info-line);
+}
+.pill-completed, .pill-unread {
+  --tone-bg: var(--tone-notable-bg);
+  --tone-ink: var(--tone-notable-ink);
+  --tone-line: var(--tone-notable-line);
+}
+.pill-sensitive, .pill-restricted, .pill-serious {
+  --tone-bg: var(--tone-severe-bg);
+  --tone-ink: var(--tone-severe-ink);
+  --tone-line: var(--tone-severe-line);
+}
+.pill-imported, .pill-exported {
+  --tone-bg: var(--tone-special-bg);
+  --tone-ink: var(--tone-special-ink);
+  --tone-line: var(--tone-special-line);
+}
+/* Neutral is already every component's fallback, so these assign nothing.
+   They are still named: a status with no rule and a status deliberately
+   neutral look identical and are not the same claim, and the class has to
+   exist for the template check to find it. */
+.pill-read, .pill-unprobed, .pill-neutral {
+  --tone-bg: var(--tone-neutral-bg);
+  --tone-ink: var(--tone-neutral-ink);
+  --tone-line: var(--tone-neutral-line);
+}
 
 .content { max-width: 1180px; margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
@@ -1024,8 +1167,8 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .chart-data { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .control-label { color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
-.control-good, .control-healthy { color: #1f7250; }
-.control-warn, .control-degraded, .control-drifted { color: #9a5a12; }
+.control-good, .control-healthy { color: var(--ok); }
+.control-warn, .control-degraded, .control-drifted { color: var(--warn); }
 .control-unknown { color: var(--muted); }
 /* Neither is a health reading: one is a responsibility nothing reconciles, the
    other is a resource between being declared and being applied. Both take the
@@ -1350,31 +1493,19 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
 
+/* Reads the tone contract, so every variant below is a choice of tone rather
+   than three colours. Falls back to neutral, so an unrecognised status renders
+   as a plain pill instead of an unstyled one. */
 .pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
-  background: var(--bg-tint); color: var(--ink-2); border: 1px solid var(--line);
+  background: var(--tone-bg, var(--tone-neutral-bg));
+  color: var(--tone-ink, var(--tone-neutral-ink));
+  border: 1px solid var(--tone-line, var(--tone-neutral-line));
   letter-spacing: .01em;
 }
-.pill-active, .pill-published, .pill-created, .pill-uploaded { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
-.pill-paused, .pill-editing, .pill-drafting, .pill-researching { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
-.pill-idea, .pill-draft, .pill-viewed { background: #e4ebf3; color: #1f3656; border-color: #c9d3e3; }
-.pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned, .pill-replaced, .pill-deleted, .pill-login_failed { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
-.pill-completed { background: #dfe6f1; color: #1c3463; border-color: #c5d2e9; }
-.pill-sensitive, .pill-restricted { background: #fcdcd0; color: #843300; border-color: #ffbfa8; }
-.pill-internal { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
-.pill-public { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
-.pill-imported, .pill-exported { background: #ebe0f0; color: #4a2a72; border-color: #d3c2e8; }
-.pill-unread { background: #dfe6f1; color: #1c3463; border-color: #c5d2e9; font-weight: 650; }
-.pill-read { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
-.pill-replied { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
-.pill-spam { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
-/* A connection that was not asked is not a connection that failed, so unprobed
-   is neutral rather than the warning colour it would read as if it shared one
-   with unreachable. */
-.pill-reachable { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
-.pill-unreachable { background: #f0dcdc; color: #6a1f1f; border-color: #dfb4b4; }
-.pill-unprobed { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
+
+.pill-unread { font-weight: 650; }
 
 /* ── Contact submissions ────────────────────────────────────────── */
 
@@ -1496,12 +1627,11 @@ a.kpi:hover { background: var(--surface-2); }
 .insight-action-label { font-weight: 650; color: var(--ink-2); }
 .insight-action-label::after { content: ":"; }
 
-/* Status pills for insights. Reserved states, each carrying its own text so
-   meaning never rests on colour alone. */
-.pill-good { background: #e1efe5; color: #16522a; border-color: #b8dac3; }
-.pill-attention { background: #fbf1d6; color: #6c5300; border-color: #ecdba0; }
-.pill-serious { background: #fcdcd0; color: #843300; border-color: #ffbfa8; }
-.pill-neutral { background: var(--bg-tint); color: var(--ink-2); border-color: var(--line); }
+/* Status pills for insights carry the host's shared status vocabulary, and
+   each carries its own text so meaning never rests on colour alone. Their
+   tones are assigned with every other status at the top of this layer: they
+   were the clearest case of the drift the tone system exists to stop, spelling
+   out the same three greens as `.pill-published` three hundred lines away. */
 
 /* ── Attention queue ────────────────────────────────────────────────
    Cross-surface list of things awaiting a decision. A row, not a card: these
@@ -2738,11 +2868,18 @@ kbd {
 /* ── Messages ───────────────────────────────────────────────────── */
 
 .messages { list-style: none; padding: 0; margin: 0 0 16px; }
-.msg { padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); margin-bottom: 6px; font-size: 13.5px; }
-.msg-success { background: #e8f5ec; border-color: #b8dac3; color: #16522a; }
-.msg-info { background: #eef2f7; border-color: #c9d3e3; color: #1f3656; }
-.msg-warning { background: #fbf1d6; border-color: #ecdba0; color: #6c5300; }
-.msg-error { background: #fbeaea; border-color: #dfb4b4; color: #6a1f1f; }
+/* Same tone contract as `.pill`, at the wash fill level. A success banner and
+   a success chip therefore cannot drift apart: they read the same three
+   tokens, and only the fill differs by design. */
+.msg {
+  padding: 9px 12px; border-radius: var(--radius-sm); margin-bottom: 6px;
+  font-size: 13.5px;
+  background: var(--tone-wash, transparent);
+  color: var(--tone-ink, inherit);
+  border: 1px solid var(--tone-line, var(--line));
+}
+/* Variants carry no colour of their own -- the tone assignment section above
+   gives them one. */
 
 .pagination { display: flex; gap: 12px; align-items: center; margin: 16px 0; font-size: 13.5px; }
 
@@ -3286,8 +3423,8 @@ kbd {
    helped, with the sign and the number carrying the meaning -- the colour is
    never the only thing saying which way it went. */
 .worth { font-variant-numeric: tabular-nums; }
-.worth-good { color: #1f7250; }
-.worth-attention { color: #9a5a12; }
+.worth-good { color: var(--ok); }
+.worth-attention { color: var(--warn); }
 .worth-neutral { color: var(--ink-2); }
 
 /* A finding stated once, with its arithmetic underneath. The claim is what
@@ -3317,7 +3454,7 @@ kbd {
 .route-band-4.route-swatch { background: #3f9268; }
 .route-band-5.route-swatch { background: #0e7f9c; }
 .route-marker { stroke: var(--surface); stroke-width: 2.5; }
-.route-start { fill: #1f7250; }
+.route-start { fill: var(--ok); }
 .route-finish { fill: #843300; }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
@@ -3504,7 +3641,13 @@ kbd {
   }
 }
 
-}
+
+/* ---- Responsive and late component rules ------------------------------
+   Same layer, later in source: a rule here beats the one it narrows by
+   order alone, which is how CSS is meant to express 'and at this width,
+   this instead'. These lived outside every layer until they were folded
+   in; nothing here needs to outrank anything by specificity. */
+
 /* The folded half of a zone. Its table keeps the same styling as the one above
    it, so opening it reads as more of the same list rather than a new thing. */
 .zone-policy { margin-top: var(--stack-gap); }
@@ -3727,10 +3870,10 @@ textarea.code {
   width: 100%;
 }
 .conn-decision-step:hover { border-color: var(--accent); text-decoration: none; }
-.conn-decision-step-does-not { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: color-mix(in srgb, #f6e2e0 55%, var(--surface)); }
-.conn-decision-step-does-not .conn-tick { background: #f6e2e0; color: var(--danger); }
-.conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, #f4ead8 45%, var(--surface)); }
-.conn-decision-step-unknown .conn-tick { background: #f4ead8; color: var(--warn); }
+.conn-decision-step-does-not { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 55%, var(--surface)); }
+.conn-decision-step-does-not .conn-tick { background: var(--tone-tint); color: var(--danger); }
+.conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
+.conn-decision-step-unknown .conn-tick { background: var(--tone-tint); color: var(--warn); }
 .conn-related {
   display: flex;
   align-items: center;
@@ -3790,8 +3933,8 @@ textarea.code {
   font-size: 10.5px; letter-spacing: .04em; padding: 2px 8px; border-radius: 20px;
   background: var(--bg-tint); color: var(--muted); white-space: nowrap;
 }
-.conn-kind-tailnet { background: #e2efe6; color: var(--ok); }
-.conn-kind-elsewhere, .conn-kind-public { background: #f6e2e0; color: var(--danger); }
+.conn-kind-tailnet { background: var(--tone-tint); color: var(--ok); }
+.conn-kind-elsewhere, .conn-kind-public { background: var(--tone-tint); color: var(--danger); }
 
 /* The chain HQ walked to decide which address it is judging you by. */
 .conn-hops { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
@@ -3803,7 +3946,7 @@ textarea.code {
 .conn-hop-judged { border-color: var(--accent); background: var(--accent-tint); }
 .conn-hop-ignored { opacity: .6; }
 .conn-kind-hop-judged { background: var(--accent); color: var(--accent-ink); }
-.conn-kind-hop-ignored { background: #f6e2e0; color: var(--danger); }
+.conn-kind-hop-ignored { background: var(--tone-tint); color: var(--danger); }
 
 .conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
@@ -3939,7 +4082,7 @@ textarea.code {
    turns a list of six values into six grey slabs. */
 .conn-row > code, .conn-hop > code { justify-self: start; }
 .conn-peer-name { font-size: 14px; font-weight: 600; }
-.conn-kind-declined { background: #f4ead8; color: var(--warn); }
+.conn-kind-declined { background: var(--tone-tint); color: var(--warn); }
 
 /* A header value is long by nature, and beside it a three-column row squeezes
    the note into one word per line the moment the panel is a dialog rather than
@@ -4412,3 +4555,5 @@ textarea.code {
    this metric is on rather than making the reader compare two numbers. */
 .vital-rate.is-passing { color: var(--ok); }
 .vital .unit { font-size: .8em; margin-inline-start: 1px; }
+
+}

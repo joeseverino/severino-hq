@@ -198,6 +198,61 @@ class StyleContractTests(SimpleTestCase):
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
 
+    def test_every_rule_sits_inside_a_cascade_layer(self):
+        """Unlayered rules beat every layer, at any specificity.
+
+        Nine hundred lines had collected outside the layers, and the effect
+        compounds: a component written there cannot be overridden from
+        `components`, so the only available fix is to write the next rule
+        outside the layers too -- a responsive rule nothing could reach,
+        answered by another rule nothing could reach.
+
+        Checked by brace depth rather than by parsing CSS: at depth zero the
+        only thing allowed to open a block is an at-rule.
+        """
+
+        outside = []
+        depth = 0
+        for number, line in enumerate(self._stylesheet().splitlines(), 1):
+            stripped = line.strip()
+            if depth == 0 and "{" in stripped and not stripped.startswith(("@", "/*", "*")):
+                outside.append(f"{number}: {stripped[:60]}")
+            depth += line.count("{") - line.count("}")
+
+        self.assertEqual(
+            outside, [], "Rules outside @layer beat every layer. Put them in one."
+        )
+
+    def test_status_colour_comes_from_a_tone_token(self):
+        """One status, one set of colours, named once.
+
+        The same seven fill/ink/border trios were written out in hex across
+        pills, messages, connection ticks and worth readouts -- five families
+        that knew nothing about each other -- so `published`, `reachable` and
+        `success` were three different greens. Components now read `--tone-*`
+        and only the token block names a colour.
+
+        Scoped to the families that carry status. Charts, category dots and
+        print rules legitimately name absolute colours: a categorical palette
+        is identity, not state.
+        """
+
+        import re
+
+        status = re.compile(
+            r"^\s*\.(?:pill|msg|conn-kind|conn-decision|worth|control)-[^{\n]*\{([^}]*)\}",
+            re.MULTILINE,
+        )
+        offenders = [
+            colour
+            for match in status.finditer(self._stylesheet())
+            for colour in re.findall(r"#[0-9a-fA-F]{3,8}\b", match.group(1))
+        ]
+
+        self.assertEqual(
+            offenders, [], "Status colour belongs in a --tone-* token, not the component."
+        )
+
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
 
