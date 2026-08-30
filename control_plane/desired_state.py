@@ -36,7 +36,7 @@ def desired_fingerprint(
     *,
     targets: tuple[dict[str, Any], ...] = (),
     resource_key: str = "",
-    names_at: "Callable[[str], tuple[str, ...]] | None" = None,
+    names_at: Callable[[str], tuple[str, ...]] | None = None,
 ) -> str:
     """Fingerprint the complete desired input, including resolved references.
 
@@ -59,6 +59,10 @@ def desired_fingerprint(
     """
 
     if names_at is None:
+        # Deferred on purpose: application.infrastructure imports this module,
+        # so at module scope this is a cycle. Inside the call it is resolved
+        # after both modules exist, which is the whole reason for the default
+        # being constructed here rather than in the signature.
         from application.infrastructure import _NamesByConnection
 
         names_at = _NamesByConnection()

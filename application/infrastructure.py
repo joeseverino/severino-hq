@@ -120,6 +120,9 @@ class _NamesByConnection:
 
     def __call__(self, connection_ref: str) -> tuple[str, ...]:
         if self._found is None:
+            # Deferred on purpose: locate imports this module, so at module
+            # scope this is a cycle. Resolved on first call, which is also the
+            # first point the answer is wanted.
             from .locate import names_by_connection
 
             self._found = names_by_connection()
