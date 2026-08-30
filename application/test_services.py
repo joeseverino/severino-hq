@@ -303,6 +303,73 @@ class OriginResolutionTests(TestCase):
         self.assertEqual(origin.container, "web")
 
 
+class SurfacesAgreeTests(TestCase):
+    """The service page and the machine board must name the same machine.
+
+    Both answer "where is this served", from the same declarations, through the
+    same index -- and they answer it in two different functions. Every time one
+    of those grew a rule the other did not, a name appeared under one machine on
+    its own page and under another, or none, on the board. The rule they share
+    is now stated once; this is what notices when only one of them reads it.
+    """
+
+    def setUp(self):
+        declare_world(containers=True)
+
+    def _boards(self):
+        from application.machines import machine_catalog
+
+        # Read as an attribute, not through getattr with a default: a default
+        # turns a renamed field into an empty set, and an empty set is what this
+        # is trying to tell the difference between.
+        return {entry.name: set(entry.hostnames) for entry in machine_catalog()}
+
+    def test_a_proxied_name_is_filed_where_the_ingress_forwards(self):
+        """And not also under the box the record points at."""
+
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                # The ingress itself, which is where the *name* goes.
+                spec={"domain": "app.example.com", "answer": "10.0.0.99"},
+            )
+        )
+        healthy(
+            ManagedResource.objects.create(
+                key="app-proxy",
+                kind="npm.proxy_host",
+                spec={
+                    "domain_names": ["app.example.com"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.10",
+                    "forward_port": 8000,
+                },
+            )
+        )
+
+        service = find_service("app.example.com")
+        boards = self._boards()
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertIn("app.example.com", boards.get("app-host", set()))
+
+    def test_a_name_with_only_a_record_is_filed_where_the_record_points(self):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+            )
+        )
+
+        service = find_service("app.example.com")
+        boards = self._boards()
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertIn("app.example.com", boards.get("app-host", set()))
+
+
 class WiringFaultTests(TestCase):
     """The faults exist only in the join, which is why no resource page has them."""
 

@@ -285,6 +285,26 @@ class ResolvedTLSCertificateSpec(ProviderModel):
         return self
 
 
+def origin_is_authoritative(provider: "ProviderSpec") -> bool:
+    """Whether this provider's origin says where a request is *finally* served.
+
+    Two kinds of provider answer "and then what serves it", and they mean
+    different things by it. One that also *answers* for the name states where
+    the name points -- which for a proxied name is the proxy. One that only
+    routes states where the request ends up. Both are origins; only the second
+    is the answer to "what serves this", so the first has to yield wherever both
+    are present.
+
+    Stated once, here, because two surfaces rank origins: the service catalogue
+    and the machine board. Ranked differently, a name appears under one machine
+    on its own page and another on the board -- which is precisely the
+    disagreement the shared origin was introduced to end, reintroduced one level
+    up.
+    """
+
+    return provider.answers is None
+
+
 def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
     """Whether a set of declared names, wildcards included, answers for one name.
 

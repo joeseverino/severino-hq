@@ -47,6 +47,7 @@ from control_plane.providers import (
     PROVIDERS,
     NameContext,
     certificate_covers,
+    origin_is_authoritative,
     service_facets,
     names_a_host,
     normalized_hostname,
@@ -722,7 +723,7 @@ def _declarations():
                 claim
             )
             if origin:
-                rank = resolved if provider.answers else routed
+                rank = routed if origin_is_authoritative(provider) else resolved
                 rank.setdefault(hostname, origin)
             answers.setdefault(hostname, []).extend(resolves_to)
 

@@ -205,7 +205,11 @@ def confirm_observed(payload: dict[str, Any]) -> int:
             continue
         for resource in ManagedResource.objects.filter(kind=kind, enabled=True):
             found = live.get(_identity(kind, resource.spec))
-            if found is None or not _same_declaration(kind, resource.spec, found):
+            if found is None:
+                continue
+            drift = _differences(kind, resource.spec, found)
+            if drift:
+                _record_drift(resource, drift)
                 continue
             resource.observed_generation = resource.generation
             resource.last_observed_at = seen
@@ -255,12 +259,65 @@ def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]
     confirmed it since.
     """
 
+    return not _differences(kind, declared, found)
+
+
+def _differences(
+    kind: str, declared: dict[str, Any], found: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    """``(field, asked for, found)`` for every field the live record contradicts.
+
+    The comparison rule above, stated once and returning what it saw rather than
+    only whether it saw anything. Asking "do these match" and asking "how do
+    these differ" with two implementations is how a page comes to report drift
+    it cannot describe, or describe drift that is not there.
+    """
+
     unobservable = PROVIDERS[kind].unobservable_fields
-    return all(
-        str(found.get(field, "")) == str(value)
+    return tuple(
+        (field, str(value), str(found.get(field, "")))
         for field, value in declared.items()
-        if field in found and field not in unobservable
+        if field in found
+        and field not in unobservable
+        and str(found.get(field, "")) != str(value)
     )
+
+
+def _record_drift(
+    resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]
+) -> None:
+    """Say what the sweep found instead, rather than leaving the last good word.
+
+    A declaration the live record contradicts was skipped entirely -- not
+    confirmed, and not described either. It kept the condition from the last
+    time it did match, "the last sweep found this exactly as declared", beside a
+    timestamp slowly ageing away from it. So the page read healthy and stale at
+    once and said nothing about the only thing that had changed, and the operator
+    was left to notice a date.
+
+    Still not marked observed: this is not what HQ asked for, and the timestamp
+    has to keep meaning "last seen as declared" or it means nothing. What gets
+    written is the disagreement itself, named field by field, because which side
+    is wrong is not HQ's to decide -- often it is the declaration that is out of
+    date, and an operator can only see that if HQ says which value it is arguing
+    about.
+    """
+
+    resource.conditions = [
+        {
+            "type": "Ready",
+            "status": False,
+            "reason": "Drifted",
+            "message": "The last sweep found "
+            + "; ".join(
+                f"{field} is {live or 'blank'}, where this asks for "
+                f"{asked or 'blank'}"
+                for field, asked, live in drift
+            )
+            + ".",
+        }
+    ]
+    resource.save(update_fields=["conditions"])
 
 
 @transaction.atomic

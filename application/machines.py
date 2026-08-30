@@ -24,7 +24,12 @@ from django.utils.dateparse import parse_datetime
 from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 
 from .locate import Machines, index_of, points_at_host
-from control_plane.providers import MACHINE_KIND, PROVIDERS, normalized_hostname
+from control_plane.providers import (
+    MACHINE_KIND,
+    PROVIDERS,
+    normalized_hostname,
+    origin_is_authoritative,
+)
 
 from .services import CONTAINER_KIND, Running, container_watchers
 
@@ -630,7 +635,12 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     on the board and under the declared machine's on the service page.
     """
 
-    found: dict[str, set[str]] = {}
+    # Ranked exactly as the service catalogue ranks them, through the one rule
+    # both read. A name whose ingress declares an origin is served where the
+    # ingress forwards; the record pointing at that ingress is not a second
+    # answer to file it under a second machine.
+    routed: dict[str, str] = {}
+    resolved: dict[str, str] = {}
     for resource in ManagedResource.objects.filter(enabled=True):
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
@@ -642,13 +652,17 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
             continue
         if not origin:
             continue
-        host = index.resolve(origin)
-        if not host:
-            continue
+        rank = routed if origin_is_authoritative(provider) else resolved
         for name in names:
             hostname = normalized_hostname(name)
             if hostname:
-                found.setdefault(host, set()).add(hostname)
+                rank.setdefault(hostname, origin)
+
+    found: dict[str, set[str]] = {}
+    for hostname, origin in {**resolved, **routed}.items():
+        host = index.resolve(origin)
+        if host:
+            found.setdefault(host, set()).add(hostname)
     return found
 
 

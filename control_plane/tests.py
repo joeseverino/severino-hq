@@ -448,6 +448,55 @@ class DesiredStateOwnershipTests(TestCase):
         self.assertEqual(resource.updated_at, stamped)
 
 
+class RegistrySymmetryTests(TestCase):
+    """Providers that answer the same question must answer all of it.
+
+    Every bug this class exists to catch had the same shape: two providers
+    supplying one facet, one of them declaring a hook the other did not, and a
+    page reporting HQ's own silence as a fact about the world. Found one at a
+    time from the outside, each looked like its own defect. They were one.
+    """
+
+    def test_a_provider_that_says_where_a_name_points_says_where_it_is_served(self):
+        """Answering for a name and routing it are the same knowledge.
+
+        A provider that can say which address a name resolves to can say where
+        that name is served -- the address *is* the answer. Declaring the first
+        and withholding the second is how a live service came to report "nothing
+        supplies this": one DNS provider declared an origin and the other did
+        not, so a name carried by the quiet one had no origin at all, no machine,
+        and no runtime, while the box serving it sat in HQ's own inventory.
+        """
+
+        from .providers import PROVIDERS
+
+        silent = sorted(
+            kind
+            for kind, provider in PROVIDERS.items()
+            if provider.answers is not None and provider.origin is None
+        )
+
+        self.assertEqual(
+            silent,
+            [],
+            "these say where a name resolves but not where it is served, so a "
+            "name they carry alone will read as unrouted: " + ", ".join(silent),
+        )
+
+    def test_every_facet_provider_agrees_on_what_a_hostname_is(self):
+        """A facet is a column, and two providers must fill it the same way."""
+
+        from .providers import PROVIDERS
+
+        missing = sorted(
+            kind
+            for kind, provider in PROVIDERS.items()
+            if provider.facet and provider.covers and provider.hostnames is None
+        )
+
+        self.assertEqual(missing, [], f"covering providers with no names: {missing}")
+
+
 class ProviderContractTests(TestCase):
     def test_resolved_certificate_accepts_wildcard_covered_cpanel_vhost(self):
         spec = resolved_certificate_spec()
