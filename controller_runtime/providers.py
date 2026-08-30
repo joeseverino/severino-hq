@@ -1667,18 +1667,29 @@ def list_caddy_routes() -> list[dict[str, Any]]:
     return found
 
 
-def _caddy_route_block(spec: dict[str, Any], snippet: str) -> str:
-    """One site block, in the shape the operator's own file already uses."""
+def _caddy_route_block(spec: dict[str, Any], certificate_directory: str) -> str:
+    """One site block, in the shape the operator's own file already uses.
+
+    The TLS lines are written out rather than importing the snippet that file
+    defines. HQ owns this file and not that one, and a file that imports a name
+    from somewhere else breaks the moment the somewhere else is edited -- which
+    is the coupling the separate file exists to avoid. The paths come from the
+    delivery target, which already holds the directory the certificate is
+    installed into.
+    """
 
     lines = [f"{spec['domain']} {{"]
-    if snippet:
-        lines.append(f"\timport {snippet}")
+    if certificate_directory:
+        directory = certificate_directory.rstrip("/")
+        lines.append(f"\ttls {directory}/fullchain.pem {directory}/privkey.pem")
     lines.append(f"\treverse_proxy {spec['upstream']}")
     lines.append("}")
     return "\n".join(lines)
 
 
-def render_caddy_routes(specs: list[dict[str, Any]], snippet: str = "") -> str:
+def render_caddy_routes(
+    specs: list[dict[str, Any]], certificate_directory: str = ""
+) -> str:
     """Every route HQ declares for one edge, as a file it owns outright.
 
     Written to its own file rather than into the operator's Caddyfile, which
@@ -1699,8 +1710,44 @@ def render_caddy_routes(specs: list[dict[str, Any]], snippet: str = "") -> str:
         "# routes this file does not name are the operator's and are untouched.\n"
     )
     return header + "\n" + "\n\n".join(
-        _caddy_route_block(spec, snippet) for spec in ordered
+        _caddy_route_block(spec, certificate_directory) for spec in ordered
     ) + "\n"
+
+
+def reconcile_caddy(
+    spec: dict[str, Any], *, apply: bool = True, observed: dict[str, Any] | None = None
+) -> ProviderResult:
+    """Write the routes this edge serves, as one file.
+
+    Every route in the contract, not just the one being reconciled: Caddy is
+    configured by a file and a file is all of them. Reconciling any one of them
+    converges the same file, so they cannot disagree about its contents.
+
+    In plan mode nothing is sent. The rendered file is the plan -- it is the
+    whole of what would change, and printing it is more useful than a sentence
+    describing it.
+    """
+
+    del observed
+    rendered = render_caddy_routes(
+        [dict(route) for route in spec.get("routes", ())],
+        spec.get("certificate_directory", ""),
+    )
+    if not apply:
+        return ProviderResult(
+            changed=False,
+            status={"routes": len(spec.get("routes", ()))},
+            message="Would write the routes this edge serves.",
+        )
+    _ssh(spec["connection_ref"], "routes:write", rendered.encode("utf-8"))
+    return ProviderResult(
+        changed=True,
+        status={"routes": len(spec.get("routes", ()))},
+        conditions=[
+            _condition("Ready", True, "Written", "Caddy reloaded with these routes.")
+        ],
+        message="Routes written and Caddy reloaded.",
+    )
 
 
 def list_npm() -> list[dict[str, Any]]:
@@ -4308,6 +4355,7 @@ PROVIDER_ACTIONS = {
         if policy.mode == "locked"
     },
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("caddy.route", "reconcile"): reconcile_caddy,
     ("portainer.stack", "reconcile"): reconcile_portainer,
     ("portainer.stack", "delete"): delete_portainer,
     ("portainer.container", "restart"): restart_portainer_container,

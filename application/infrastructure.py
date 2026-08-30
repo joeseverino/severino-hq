@@ -12,6 +12,7 @@ from django.db import transaction
 
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import (
+    CADDY_ROUTE_KIND,
     CERTIFICATE_KIND,
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
@@ -100,6 +101,12 @@ def delivery_targets() -> tuple[dict[str, Any], ...]:
     return _declared(DELIVERY_TARGET_KIND)[DELIVERY_TARGET_KIND]
 
 
+def caddy_routes() -> tuple[dict[str, Any], ...]:
+    """Every Caddy route HQ declares, for the file each edge imports."""
+
+    return _declared(CADDY_ROUTE_KIND)[CADDY_ROUTE_KIND]
+
+
 class _NamesByConnection:
     """The observed name map, read at most once and only if asked.
 
@@ -157,6 +164,7 @@ def resolved_spec(
                 delivery_targets=(delivery_targets() if targets is None else targets),
                 resource_key=resource.key,
                 names_at=_NamesByConnection(),
+                caddy_routes=caddy_routes,
             ),
         )
     except (KeyError, TypeError, ValueError):
@@ -393,6 +401,7 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             resource_status=resource_status,
             resource_key=resource.key,
             names_at=_NamesByConnection(),
+            caddy_routes=caddy_routes,
         ),
     )
     return {

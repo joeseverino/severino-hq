@@ -2879,14 +2879,21 @@ class CapabilityMatchesTheHandlersTests(TestCase):
 class CaddyRouteRenderingTests(TestCase):
     """The file HQ writes for an edge, in the shape that edge already uses."""
 
-    def _rendered(self, specs, snippet="jseverino_wildcard"):
-        return providers.render_caddy_routes(specs, snippet)
+    def _rendered(self, specs, certificate_directory="/opt/apps/caddy/certs"):
+        return providers.render_caddy_routes(specs, certificate_directory)
 
-    def test_a_route_becomes_a_site_block_that_imports_the_tls_snippet(self):
+    def test_a_route_becomes_a_site_block_that_serves_its_own_tls(self):
+        """Written out rather than importing the operator's snippet.
+
+        A file that imports a name from a file HQ does not own breaks the moment
+        that file is edited, which is the coupling the separate file exists to
+        avoid.
+        """
+
         out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
 
         self.assertIn("a.example.com {", out)
-        self.assertIn("\timport jseverino_wildcard", out)
+        self.assertIn("\ttls /opt/apps/caddy/certs/fullchain.pem", out)
         self.assertIn("\treverse_proxy app:8080", out)
 
     def test_the_same_declarations_render_the_same_bytes(self):

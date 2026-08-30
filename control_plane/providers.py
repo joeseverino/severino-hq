@@ -859,6 +859,31 @@ class CaddyRouteSpec(ProviderModel):
     )
 
 
+class CaddyRouteInFile(ProviderModel):
+    """One route as it appears in the file HQ writes."""
+
+    domain: str = Field(min_length=1, max_length=253)
+    upstream: str = Field(min_length=1, max_length=253)
+
+
+class ResolvedCaddyRouteSpec(CaddyRouteSpec):
+    """A route, and every route sharing the file its edge imports.
+
+    Caddy is configured by a file rather than by a route, so reconciling one
+    means writing all of them. The contract carries the siblings for the same
+    reason a certificate's carries every place it installs: ``execute`` is
+    handed one resource, and one resource is not what gets written.
+
+    ``certificate_directory`` comes from the delivery target for the same
+    connection, which already records where the certificate is installed. HQ
+    writes the TLS lines out from it rather than importing the snippet the
+    operator's own file defines, so the file HQ owns stands on its own.
+    """
+
+    certificate_directory: str = Field(default="", max_length=500)
+    routes: list[CaddyRouteInFile] = Field(default_factory=list)
+
+
 def _caddy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return (spec["domain"],)
 
@@ -1406,6 +1431,16 @@ class ProviderResolutionContext:
     # resource is asking -- a target's name belongs to one certificate, and the
     # rest are named after themselves.
     resource_key: str = ""
+    # Every Caddy route HQ declares. A route reconciles by writing the file its
+    # edge imports, and that file is all of them at once -- so one route's
+    # contract has to carry its siblings, the way a certificate's carries every
+    # place it installs.
+    #
+    # Called rather than passed, because resolution runs for every declaration
+    # on a page and only a route asks this. Read eagerly it was a query per
+    # resource for an answer almost none of them wanted -- which is the cost
+    # the machine board's own test measures and refused.
+    caddy_routes: Callable[[], tuple[dict[str, Any], ...]] | None = None
     # ``connection_ref -> hostnames observed landing on that connection's
     # machine``. Passed in for the same reason the targets are: this module
     # states what a certificate installs and must not be the thing that queries
@@ -1505,6 +1540,45 @@ def _consumer_at(
                 "install against."
             )
     return consumer
+
+
+def _resolve_caddy_route(
+    authored: dict[str, Any], context: ProviderResolutionContext
+) -> dict[str, Any]:
+    """One route, plus the whole file it is part of.
+
+    Caddy is configured by a file, not by a route, so reconciling one means
+    writing all of them for that edge. `execute` is handed a single resource --
+    which is right for everything else -- so the contract carries the siblings,
+    exactly as a certificate's carries every consumer it installs on.
+
+    The certificate directory comes from the delivery target for the same
+    connection, which already records where the certificate is installed. HQ
+    writes the TLS lines out from it rather than importing the operator's
+    snippet, so its file stands on its own.
+    """
+
+    connection_ref = authored.get("connection_ref", "")
+    directory = ""
+    for target in context.delivery_targets:
+        if (
+            target.get("connection_ref") == connection_ref
+            and target.get("kind") == "caddy"
+        ):
+            directory = str(target.get("certificate_directory", "") or "")
+    return {
+        **authored,
+        "certificate_directory": directory,
+        "routes": [
+            {
+                "domain": route.get("domain", ""),
+                "upstream": route.get("upstream", ""),
+            }
+            for route in (context.caddy_routes() if context.caddy_routes else ())
+            if route.get("connection_ref") == connection_ref
+            and route.get("upstream")
+        ],
+    }
 
 
 def _resolve_tls(
@@ -2740,16 +2814,15 @@ _PROVIDERS = (
     ),
     ProviderSpec(
         "caddy.route",
-        "A name an edge Caddy already serves. Found by asking it, not declared.",
+        "A name an edge Caddy serves, and where it hands the request on.",
         CaddyRouteSpec,
+        ResolvedCaddyRouteSpec,
+        _resolve_caddy_route,
         actions={
-            'reconcile': locked(
-                "HQ reads these out of the edge's Caddyfile. It does not write that file."
-            ),
+            "reconcile": applies(automatic=True),
         },
         label="Caddy route",
         connection_providers=("ssh",),
-        declaration_only=True,
         facet="proxy",
         hostnames=_caddy_hostnames,
         origin=_caddy_origin,
@@ -2894,6 +2967,7 @@ def observer_abilities() -> tuple[ObserverAbility, ...]:
 # nothing and reports it as an empty world.
 CERTIFICATE_KIND = "tls.certificate"
 UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"
+CADDY_ROUTE_KIND = "caddy.route"
 CONTAINER_KIND = "portainer.container"
 DELIVERY_TARGET_KIND = "tls.delivery_target"
 MACHINE_KIND = "machine"
