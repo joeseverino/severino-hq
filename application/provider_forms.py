@@ -76,38 +76,52 @@ class NameListWidget(forms.Widget):
     # about something HQ is watching, and gives no way to tell which is which.
     notes: dict[str, str] = {}
 
+    def _row(self, name: str, item: str):
+        """One value, editable unless HQ is the one that found it.
+
+        A value carrying a note is a value a sweep reports, so HQ holds it
+        whether or not this field does -- and offering to remove it was
+        offering to delete a fact. It read as though the tailnet address of a
+        machine on the tailnet were HQ's to forget.
+
+        Submitted as a hidden input rather than left out, so a save keeps what
+        it did not ask about instead of quietly dropping it.
+        """
+
+        from django.utils.html import format_html
+
+        note = self.notes.get(item, "")
+        if note:
+            return format_html(
+                '<div class="name-list-row name-list-row-observed">'
+                '<input type="hidden" name="{}" value="{}">'
+                '<span class="name-list-observed">{}</span>'
+                '<span class="name-list-note">{}</span>'
+                "</div>",
+                name,
+                item,
+                item,
+                note,
+            )
+        return format_html(
+            '<div class="name-list-row">'
+            '<input type="text" name="{}" value="{}" spellcheck="false"'
+            ' autocapitalize="off" autocorrect="off">'
+            '<button type="button" class="btn ghost" data-name-list-remove'
+            ' aria-label="Remove {}">Remove</button>'
+            "</div>",
+            name,
+            item,
+            item,
+        )
+
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
 
         values = self.format_value(value)
         rows = format_html_join(
-            "",
-            (
-                '<div class="name-list-row">'
-                '<input type="text" name="{}" value="{}" spellcheck="false"'
-                ' autocapitalize="off" autocorrect="off">'
-                '<button type="button" class="btn ghost" data-name-list-remove'
-                ' aria-label="Remove {}">Remove</button>'
-                "{}"
-                "</div>"
-            ),
-            (
-                (
-                    name,
-                    item,
-                    item,
-                    (
-                        format_html(
-                            '<span class="name-list-note">{}</span>',
-                            self.notes[item],
-                        )
-                        if item in self.notes
-                        else ""
-                    ),
-                )
-                for item in values
-            ),
+            "", "{}", ((self._row(name, item),) for item in values)
         )
         # Always one empty row, so adding a name needs no script and no
         # thinking about where the cursor goes.

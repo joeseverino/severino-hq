@@ -3193,6 +3193,16 @@ kbd {
   font-size: 0.85em;
   white-space: nowrap;
 }
+/* A value a sweep reports. Shown as the fact it is rather than as an input,
+   because HQ holds it whether or not this field does. */
+.name-list-row-observed { align-items: center; }
+.name-list-observed {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 0;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 40rem) {
   .name-list-row { flex-wrap: wrap; }
   .name-list-note { flex-basis: 100%; }

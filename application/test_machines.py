@@ -669,3 +669,37 @@ class ObservedAddressAnnotationTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.spec["addresses"], ["192.0.2.137"])
+
+    def test_an_observed_address_is_not_offered_for_removal(self):
+        """HQ holds it whether or not this field does.
+
+        Offering to remove it was offering to delete a fact -- and until the
+        tailnet's addresses reached the index, removing one silently broke the
+        resolution it looked redundant to.
+        """
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]}
+        )
+        rendered = str(form["addresses"])
+
+        self.assertIn('value="100.101.102.103"', rendered)
+        self.assertIn('aria-label="Remove 192.0.2.50"', rendered)
+        self.assertNotIn('aria-label="Remove 100.101.102.103"', rendered)
+
+    def test_a_save_keeps_the_observed_address_it_did_not_ask_about(self):
+        """Rendered read-only, it still has to come back on submit."""
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            data={
+                "name": "a-box",
+                "addresses": ["192.0.2.50", "100.101.102.103"],
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIn("100.101.102.103", form.spec["addresses"])

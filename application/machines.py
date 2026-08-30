@@ -261,6 +261,19 @@ def machine_catalog() -> tuple[Machine, ...]:
         declared=[
             {"name": name, "addresses": entry.addresses}
             for name, entry in declared.items()
+        ]
+        # The tailnet's own addresses, as evidence rather than as something
+        # somebody has to retype. They were read on the line above and thrown
+        # away: the index held only what a declaration listed, so a tailnet
+        # address resolved to a machine exactly when an operator had copied it
+        # into the form -- and removing it from there, a value plainly marked as
+        # observed, silently broke the resolution it looked redundant to.
+        #
+        # After the declarations, so a declared name still wins the address it
+        # claims and nothing about precedence moves.
+        + [
+            {"name": name, "addresses": presence.addresses}
+            for name, presence in present.items()
         ],
         hosts=addresses,
         connections=connections,
@@ -462,7 +475,38 @@ def _same_machine(
             if owner and owner != name:
                 aliases[name] = owner
                 break
+    # And the ones no shared address folds, because the address was only ever
+    # in the declaration and has now been left out of it. A tailnet device is
+    # often the same machine under a name somebody typed into that laptop years
+    # ago -- but its MagicDNS name is a slug, and a slug is what HQ names
+    # machines with. `Joseph's MacBook Pro` never matched `joes-macbook-pro`;
+    # `joes-macbook-pro.tail…ts.net` does.
+    #
+    # Only where an address did not already answer, so a recorded address still
+    # decides. Where neither matches -- a device whose owner named it something
+    # unrelated to HQ's name for the machine -- it stays its own row, which is
+    # HQ declining to assert two things are one when nothing says so.
+    known = {_folded(existing): existing for existing in index.names}
+    for name, presence in (present or {}).items():
+        if name in aliases:
+            continue
+        for candidate in (name, presence.dns_name.partition(".")[0]):
+            owner = known.get(_folded(candidate))
+            if owner and owner != name:
+                aliases[name] = owner
+                break
     return aliases
+
+
+def _folded(name: str) -> str:
+    """A name with the punctuation two sources spell differently taken out.
+
+    A tailnet device, a Portainer environment and a machine entry are written
+    by three different people at three different times. Hyphens, apostrophes,
+    spaces and case are where they disagree; the letters are where they do not.
+    """
+
+    return "".join(char for char in str(name or "").lower() if char.isalnum())
 
 
 def machine(name: str) -> Machine | None:
