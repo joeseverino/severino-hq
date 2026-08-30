@@ -7,7 +7,7 @@ from django.urls import NoReverseMatch, reverse
 
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
-DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w]*:)*[A-Za-z_][\w]*\Z")
+DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
 SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 EFFECTS = frozenset(
     {"read", "remote_write", "destructive", "infrastructure_change"}

@@ -59,31 +59,32 @@ class ContactViewTests(TestCase):
         self.assertContains(response, "Mark replied")
         self.assertContains(response, "Delete")
 
-    @patch("contacts.views.set_status")
+    @patch("contacts.views.execute_contact_review")
     @patch("contacts.views.get_submission", return_value=dict(SUBMISSION))
-    def test_set_status_flips_and_redirects_back(self, mock_get, mock_set):
+    def test_set_status_flips_and_redirects_back(self, mock_get, mock_review):
         response = self.client.post(
             reverse("contacts:set_status", args=[1]),
             {"status": "read", "next": reverse("contacts:list") + "?status=unread"},
         )
-        mock_set.assert_called_once_with(1, "read")
+        self.assertEqual(mock_review.call_args.args[0].status, "read")
+        self.assertEqual(mock_review.call_args.kwargs["current_id"], 1)
         self.assertRedirects(
             response,
             reverse("contacts:list") + "?status=unread",
             fetch_redirect_response=False,
         )
 
-    @patch("contacts.views.set_status")
+    @patch("contacts.views.execute_contact_review")
     @patch("contacts.views.get_submission", return_value=dict(SUBMISSION))
-    def test_set_status_rejects_unknown_status(self, mock_get, mock_set):
+    def test_set_status_rejects_unknown_status(self, mock_get, mock_review):
         self.client.post(
             reverse("contacts:set_status", args=[1]), {"status": "bogus"}
         )
-        mock_set.assert_not_called()
+        mock_review.assert_not_called()
 
-    @patch("contacts.views.set_status")
+    @patch("contacts.views.execute_contact_review")
     @patch("contacts.views.get_submission", return_value=dict(SUBMISSION))
-    def test_set_status_ignores_offsite_next(self, mock_get, mock_set):
+    def test_set_status_ignores_offsite_next(self, mock_get, mock_review):
         response = self.client.post(
             reverse("contacts:set_status", args=[1]),
             {"status": "read", "next": "https://evil.example/"},
@@ -98,11 +99,12 @@ class ContactViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Delete submission #1?")
 
-    @patch("contacts.views.delete_submission")
+    @patch("contacts.views.execute_contact_delete")
     @patch("contacts.views.get_submission", return_value=dict(SUBMISSION))
     def test_delete_post_deletes_and_redirects(self, mock_get, mock_delete):
         response = self.client.post(reverse("contacts:delete", args=[1]))
-        mock_delete.assert_called_once_with(1)
+        self.assertEqual(mock_delete.call_args.args[0].confirm, "1")
+        self.assertEqual(mock_delete.call_args.kwargs["current_id"], 1)
         self.assertRedirects(
             response, reverse("contacts:list"), fetch_redirect_response=False
         )

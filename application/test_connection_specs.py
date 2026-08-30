@@ -82,6 +82,18 @@ def _finance_spec() -> ConnectionSpec:
 
 
 class ConnectionExecutionTests(TestCase):
+    def test_hyphenated_plugin_route_names_are_valid(self):
+        spec = replace(
+            _finance_spec(),
+            web_route="finance:connection-list",
+            management_route="finance:connection-list",
+        )
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            self.assertIn(spec, connection_specs())
+
     def test_core_spec_derives_controller_abilities_and_safe_state(self):
         from django.utils import timezone
 

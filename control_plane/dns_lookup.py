@@ -25,6 +25,86 @@ import urllib.request
 from django.conf import settings
 
 
+def connection_specs():
+    """Emit the keyless public registries used by lookup capabilities."""
+
+    from application.connections import (
+        ConnectionAbility,
+        ConnectionInstance,
+        ConnectionSpec,
+    )
+    from application.security import Capability
+
+    def configured_instance(
+        *, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]
+    ):
+        endpoint = str(getattr(settings, setting, "") or "").strip()
+        parsed = urlsplit(endpoint)
+        if parsed.scheme != "https" or not parsed.hostname:
+            return None
+        return ConnectionInstance(
+            id=identifier,
+            label=label,
+            kind=kind,
+            status="good",
+            status_label="configured",
+            detail="Keyless public API; reachability is checked only when a lookup runs.",
+            endpoint=f"https://{parsed.netloc}",
+            ability_names=abilities,
+        )
+
+    def instances():
+        emitted = (
+            configured_instance(
+                identifier="public-dns-resolver",
+                label="Public DNS resolver",
+                kind="public_dns",
+                setting="SEVERINO_LOOKUP_ENDPOINT",
+                abilities=("lookup.public_dns", "lookup.reverse_dns"),
+            ),
+            configured_instance(
+                identifier="public-rdap",
+                label="Public address registry",
+                kind="rdap",
+                setting="SEVERINO_RDAP_ENDPOINT",
+                abilities=("lookup.address_registry",),
+            ),
+        )
+        return tuple(instance for instance in emitted if instance is not None)
+
+    return (
+        ConnectionSpec(
+            name="hq.public_registries",
+            label="Public lookup registries",
+            summary="Keyless DNS and address registries used for external truth.",
+            required_capability=Capability.LOOK_UP_PUBLIC_RECORDS,
+            instance_provider=instances,
+            abilities=(
+                ConnectionAbility(
+                    "lookup.public_dns",
+                    "Public DNS lookup",
+                    "Resolve a hostname from outside HQ's internal DNS rewrites.",
+                    capability="lookup.name",
+                ),
+                ConnectionAbility(
+                    "lookup.reverse_dns",
+                    "Reverse DNS lookup",
+                    "Read the public name an address publishes for itself.",
+                    capability="lookup.address",
+                ),
+                ConnectionAbility(
+                    "lookup.address_registry",
+                    "Address ownership lookup",
+                    "Read the public allocation and registrant for an address.",
+                    capability="lookup.address",
+                ),
+            ),
+            web_route="control_plane:tools",
+            documentation_url="https://www.rfc-editor.org/rfc/rfc9082",
+        ),
+    )
+
+
 class LookupUnavailable(RuntimeError):
     """A registry could not be reached, or answered with nothing usable."""
 

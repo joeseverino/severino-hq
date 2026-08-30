@@ -93,7 +93,12 @@ class DerivedTopologyTests(TestCase):
         controller = next(
             node for node in topology.nodes if node.kind == "controller"
         )
-        target = next(node for node in topology.nodes if node.kind == "target")
+        target_id = next(
+            target
+            for source, target, kind in edges
+            if source == connection_id and kind == "reaches"
+        )
+        target = nodes[target_id]
         self.assertEqual(target.label, "example.com")
         self.assertIn((controller.id, connection_id, "carries"), edges)
         self.assertIn(

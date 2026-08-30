@@ -131,7 +131,14 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">{% include "partials/_empty_state.html" with compact=True message="No controller has reported yet. Connections appear here automatically when their provider reports an instance." %}</td></tr>
+        {% comment %}
+        The family says which emptiness this is. One sentence about a controller
+        not having reported was shown for all of them, which is true of the
+        controller family and wrong for every self-emitting one -- D1 and Plaid
+        are empty in development for want of a credential, and being told to
+        wait for a sweep sends the reader to look at the wrong thing.
+        {% endcomment %}
+        <tr><td colspan="7">{% include "partials/_empty_state.html" with compact=True message=group.spec.empty_message %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -247,6 +247,15 @@ only local paths and explicit HTTP(S) URLs. Import these contracts and
 `describe_connections` from `hq_sdk.connections`; the mutable registry
 and raw provider inventory are deliberately host-only.
 
+Treat this provider as part of adding any external API, token, consent, or
+keyless data gateway—not as optional Connections-page decoration. The owning
+package emits the connection and maps every useful operation to its registered
+capability or resource. This keeps new gateways self-describing and makes their
+relationships and processes immediately available to Command Center, API, MCP,
+and topology without host-specific registration work. Emit a truthful reduced
+mode when the gateway still works anonymously; do not hide a usable integration
+solely because a token is absent.
+
 An ability may set `subject_resource` to the `ResourceSpec` it governs and list
 its provider kinds in `governs_kinds`. Command Center then discovers registered
 commands against that resource whose target filters include one of those kinds.

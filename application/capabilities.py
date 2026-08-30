@@ -13,6 +13,14 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
+from .contact_submissions import (
+    ContactDeleteCommand,
+    ContactListCommand,
+    ContactReviewCommand,
+    execute_contact_delete,
+    execute_contact_list,
+    execute_contact_review,
+)
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .contracts import DOTTED_NAME, EFFECTS
 from .deletion import (
@@ -47,7 +55,13 @@ from .lookup import (
     look_up_address,
     look_up_name,
 )
-from .projects import ProjectCommand, save_project, upsert_project
+from .projects import (
+    ProjectCommand,
+    ProjectRefreshCommand,
+    execute_project_refresh,
+    save_project,
+    upsert_project,
+)
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
@@ -150,6 +164,71 @@ _SPECS = (
         "projects",
         target_label="Project slug",
         target_help="The project to update.",
+    ),
+    CapabilitySpec(
+        "project.refresh",
+        "Refresh a project's GitHub and published-content metadata.",
+        "remote_write",
+        Capability.WRITE_PROJECTS,
+        ProjectRefreshCommand,
+        execute_project_refresh,
+        "slug",
+        "projects",
+        target_label="Project slug",
+        target_help="The project whose external metadata to refresh.",
+        execution_notes=(
+            "Read the selected project's registered repository URL.",
+            "Ask GitHub for current push metadata using the configured connection.",
+            "Persist the observed timestamp and attribute the refresh to this operator.",
+        ),
+    ),
+    CapabilitySpec(
+        "contact.submissions.list",
+        "List contact submissions held in Cloudflare D1.",
+        "read",
+        Capability.MANAGE_CONTACTS,
+        ContactListCommand,
+        execute_contact_list,
+        subject_resource="contact.submissions",
+        execution_notes=(
+            "Validate the requested status and result bound locally.",
+            "Read submissions through the configured D1 connection.",
+            "Return only the requested bounded result set.",
+        ),
+    ),
+    CapabilitySpec(
+        "contact.submission.review",
+        "Review and update one contact submission in Cloudflare D1.",
+        "remote_write",
+        Capability.MANAGE_CONTACTS,
+        ContactReviewCommand,
+        execute_contact_review,
+        "integer",
+        "contact.submissions",
+        target_label="Submission ID",
+        target_help="The contact submission to review.",
+        execution_notes=(
+            "Read the selected submission and validate its new review state.",
+            "Write the review fields through the configured D1 connection.",
+            "Record the attributed change in HQ's audit log.",
+        ),
+    ),
+    CapabilitySpec(
+        "contact.submission.delete",
+        "Delete one explicitly confirmed contact submission from Cloudflare D1.",
+        "destructive",
+        Capability.MANAGE_CONTACTS,
+        ContactDeleteCommand,
+        execute_contact_delete,
+        "integer",
+        "contact.submissions",
+        target_label="Submission ID",
+        target_help="The contact submission to delete.",
+        execution_notes=(
+            "Require confirmation that exactly matches the selected submission ID.",
+            "Delete the record through the configured D1 connection.",
+            "Treat an already-absent record as a successful retry and audit the change.",
+        ),
     ),
     CapabilitySpec(
         "asset.create",

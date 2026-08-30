@@ -25,7 +25,15 @@ from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
 
-from . import analytics, assets, infrastructure, projects, read_models, services
+from . import (
+    analytics,
+    assets,
+    contact_submissions,
+    infrastructure,
+    projects,
+    read_models,
+    services,
+)
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
 from .plugins import plugin_resource_specs, plugin_search_definitions
 from .search_contracts import SearchDefinition
@@ -95,6 +103,11 @@ class EmptyQuery(ResourceQuery):
     pass
 
 
+class ContactSubmissionQuery(BoundedQuery):
+    status: str = ""
+    query: str = ""
+
+
 @dataclass(frozen=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""
@@ -139,6 +152,19 @@ CORE_RESOURCE_SPECS = (
             title_field="name",
         ),
         web_route="projects:list",
+    ),
+    ResourceSpec(
+        "contact.submissions",
+        "Contact submissions",
+        "Contact requests held in Cloudflare D1 and reviewed through HQ.",
+        Capability.MANAGE_CONTACTS,
+        contact_submissions.list_contact_submissions,
+        ContactSubmissionQuery,
+        contact_submissions.get_contact_submission,
+        "id",
+        int,
+        not_found_errors=(contact_submissions.ContactSubmissionNotFound,),
+        web_route="contacts:list",
     ),
     ResourceSpec(
         "assets",

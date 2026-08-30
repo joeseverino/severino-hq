@@ -164,6 +164,15 @@ capability. Command Center joins those declarations to the capability catalog;
 scope coverage reports availability but does not synthesize unregistered API
 operations.
 
+Host domains and extensions use the same provider contract. Each external
+gateway owns its `ConnectionSpec`, and every emitted ability points to a
+registered capability or resource. Consequently the connection, its reachable
+records, the executable process, and that process's schema and execution notes
+are joinable without adapter-specific inventories. Keyless and anonymous modes
+may be emitted explicitly; adding a credential changes readiness/scope state,
+not the shape of the API contract. Instance discovery remains a local read and
+never spends an external API call.
+
 The topology endpoint joins those connection observations to the deployed
 ability registry and HQ's managed resources. It is a derived projection, not a
 second inventory: nodes and edges disappear when their source declaration or

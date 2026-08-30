@@ -148,6 +148,17 @@ class ConnectionSpec:
     setup_route: str = ""
     documentation_url: str = ""
     secret_store: str = ""
+    # What this family's emptiness means, in its own words. One sentence about
+    # a controller not having reported was shown for all of them, which is true
+    # of the controller family and misleading for every self-emitting one: D1
+    # and Plaid are empty in development because no credential is configured,
+    # and sending the reader to wait for a sweep points them at the wrong
+    # thing. The default suits a family that emits from configuration; a family
+    # fed by controller reports overrides it to say so.
+    empty_message: str = (
+        "No credential for this is configured in this environment. "
+        "Connections appear once one is present."
+    )
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -384,6 +395,12 @@ def _controller_connection_spec() -> ConnectionSpec:
         instance_provider=lambda: _controller_instances(ability_names),
         abilities=abilities,
         secret_store="1Password",
+        # The one family fed by sweeps rather than by its own configuration,
+        # so the one whose emptiness means a report has not arrived.
+        empty_message=(
+            "No controller has reported yet. Connections appear here "
+            "automatically when their provider reports an instance."
+        ),
     )
 
 
@@ -476,9 +493,14 @@ def _validate_connection_spec(spec: ConnectionSpec) -> None:
 
 
 def connection_specs() -> tuple[ConnectionSpec, ...]:
+    from .domains import host_connection_specs
     from .plugins import plugin_connection_specs
 
-    specs = (_controller_connection_spec(), *plugin_connection_specs())
+    specs = (
+        _controller_connection_spec(),
+        *host_connection_specs(),
+        *plugin_connection_specs(),
+    )
     for spec in specs:
         _validate_connection_spec(spec)
     names = [spec.name for spec in specs]

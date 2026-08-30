@@ -56,6 +56,13 @@ class ProjectCommand:
     notes: str = ""
 
 
+@dataclass(frozen=True)
+class ProjectRefreshCommand:
+    """A targeted refresh has no free-form payload beyond its project target."""
+
+    pass
+
+
 
 
 
@@ -176,6 +183,19 @@ def refresh_project(
         project.save(update_fields=["last_push_at", "updated_at"])
     result["github"] = {"ok": True, "last_push_at": pushed_at.isoformat()}
     return result
+
+
+def execute_project_refresh(
+    command: ProjectRefreshCommand,
+    *,
+    principal: Principal,
+    current_slug: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Capability-shaped entry point for the existing project refresh use case."""
+
+    del command, expected_updated_at
+    return refresh_project(current_slug, principal=principal)
 
 
 @transaction.atomic
