@@ -247,6 +247,44 @@ class StyleContractTests(SimpleTestCase):
             "font-size belongs to the --text-* scale, not a literal.",
         )
 
+    def test_spacing_on_the_scale_is_written_as_a_token(self):
+        """A value that is on the scale must say so.
+
+        Eight hundred spacing declarations had spread across twenty-nine
+        values -- every integer from one to eighteen. The even rungs are now
+        `--space-*`; this stops one being written back as a literal, which is
+        how the ladder came apart the first time.
+
+        Odd values are still literals and are deliberately not failed here.
+        Rounding padding by a pixel is visible in a dense table in a way that
+        moving type by half a pixel is not, so each is being looked at rather
+        than swept. `1px` is exempt for good: it is a hairline rule -- the grid
+        lines in `.sweep-grid` are a 1px gap over a coloured background -- and
+        not a space at all.
+        """
+
+        import re
+
+        on_scale = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40}
+        declaration = re.compile(
+            r"\b(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?:\s*([^;{}]+)",
+        )
+        offenders = sorted(
+            {
+                f"{value}px"
+                for match in declaration.finditer(self._stylesheet())
+                # calc() and max() carry their own arithmetic; the scale is
+                # still the input, and rewriting inside them buys nothing.
+                if not re.search(r"\b(?:calc|max|min|clamp)\(", match.group(1))
+                for value in re.findall(r"(?<![-\w.])([0-9]+)px", match.group(1))
+                if int(value) in on_scale
+            }
+        )
+
+        self.assertEqual(
+            offenders, [], "This spacing is on the scale; write it as --space-*."
+        )
+
     def test_status_colour_comes_from_a_tone_token(self):
         """One status, one set of colours, named once.
 
