@@ -240,17 +240,24 @@
         {% endfor %}
       </dl>
     {% endif %}
-    <details class="control-diagnostics">
-      <summary>Every field of this declaration</summary>
-      <dl class="kv compact">
-        {% for row_label, value in spec_rows.primary %}
-          <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
-        {% endfor %}
-        {% for row_label, value in spec_rows.advanced %}
-          <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
-        {% endfor %}
-      </dl>
-    </details>
+    {% comment %}
+    Only what the readout above has not already said. On a declaration with a
+    handful of fields the readout is the whole spec, and this printed it again
+    under a heading promising more.
+    {% endcomment %}
+    {% if spec_rows.primary or spec_rows.advanced %}
+      <details class="control-diagnostics">
+        <summary>The rest of this declaration</summary>
+        <dl class="kv compact">
+          {% for row_label, value in spec_rows.primary %}
+            <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+          {% endfor %}
+          {% for row_label, value in spec_rows.advanced %}
+            <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
+          {% endfor %}
+        </dl>
+      </details>
+    {% endif %}
   </section>
 {% endif %}
 

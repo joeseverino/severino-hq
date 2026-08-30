@@ -318,6 +318,11 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
 
     provider = PROVIDERS[resource.kind]
     fields = provider.spec_type.model_fields
+    # What the readout above already printed. On anything with a handful of
+    # fields the readout *is* the spec, so the disclosure repeated it whole --
+    # a machine showed "What it is for" and its addresses, then offered "every
+    # field of this declaration" and showed the same two again with the name.
+    shown = {str(label).strip().casefold() for label, _, _ in _readout_rows(resource)}
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
     for name, value in resource.spec.items():
@@ -328,7 +333,19 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
             if name in fields
             else name
         )
-        row = (label, _spec_value(value))
+        if label.strip().casefold() in shown:
+            continue
+        rendered = _spec_value(value)
+        # And not the thing the page is already titled. A machine's name is its
+        # identifier here, so the last row left after the readout was the
+        # heading repeated inside a disclosure offering more.
+        #
+        # Only when they are the same string: a declaration whose name differs
+        # from its filing is telling you something, and that is the case worth
+        # showing.
+        if rendered == resource.key:
+            continue
+        row = (label, rendered)
         (advanced if name in provider.advanced_fields else primary).append(row)
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
 
