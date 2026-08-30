@@ -840,10 +840,10 @@ class OperationPolicyTests(TestCase):
     def test_locked_reconcile_capability_cannot_queue_work(self):
         """A domain is the locked capability now that DNS records apply.
 
-        Declaring one records which zones HQ is responsible for. Reconciling it
-        would mean changing the zone's own settings, which needs a credential
-        this controller deliberately does not hold -- so asking for it must be
-        refused rather than queued for a worker that could only fail.
+        Declaring one records which zones HQ is responsible for. It carries no
+        settings, so there is nothing for a reconcile to converge toward -- and
+        asking for one must be refused rather than queued for a worker that
+        could only fail.
         """
 
         save_managed_resource(
@@ -855,7 +855,7 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
 
-        with self.assertRaisesRegex(PolicyError, "Zone Settings"):
+        with self.assertRaisesRegex(PolicyError, "nothing to converge"):
             request_reconcile(
                 OperationCommand(idempotency_key="zone-locked"),
                 principal=cli_principal(),

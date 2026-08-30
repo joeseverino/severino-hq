@@ -438,8 +438,11 @@ class ProviderSurfaceTests(TestCase):
 
         from control_plane.views import _apply_note
 
+        # Asserted on the promise, not on the sentence explaining its absence.
+        # Pinning the wording meant a reason that had gone stale could only be
+        # corrected by editing a test that was never about the reason.
         self.assertNotIn("applies this at the provider", _apply_note(ZONE_KIND))
-        self.assertIn("Zone Settings", _apply_note(ZONE_KIND))
+        self.assertIn("nothing to converge", _apply_note(ZONE_KIND))
         self.assertIn("applies this at the provider", _apply_note(RECORD_KIND))
 
     def test_a_zone_declares_no_service_facet(self):

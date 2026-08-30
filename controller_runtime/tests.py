@@ -780,7 +780,7 @@ class ProviderAdapterTests(TestCase):
         refused there.
         """
 
-        with self.assertRaisesRegex(providers.ProviderError, "Zone Settings"):
+        with self.assertRaisesRegex(providers.ProviderError, "nothing to converge"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
     @mock.patch("controller_runtime.providers._observe_tls_domain")

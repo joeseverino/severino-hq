@@ -1096,6 +1096,12 @@ class CloudflareZoneSpec(ProviderModel):
     -- is the natural next field set here, and is deliberately absent until the
     controller holds a credential that could reconcile it. Declaring desired
     state nothing can act on is how a control plane starts lying.
+
+    That credential now exists: `cloudflare_api` carries the account surface,
+    zone settings included, beside the DNS token that deliberately does not. So
+    the precondition written here has been met and the field set is the only
+    thing still missing -- and the refusal shown on the page had gone on blaming
+    the token, which explains something that stopped being true.
     """
 
     zone: str = Field(
@@ -2815,8 +2821,9 @@ _PROVIDERS = (
         "the account, which is not the same as being asked to manage them.",
         CloudflareZoneSpec,
         actions={
-            'reconcile': locked(
-                'Changing zone settings needs a token with Zone Settings:Edit. The DNS token does not carry it.'
+            "reconcile": locked(
+                "A zone declaration records which domains are HQ's business. It "
+                "carries no settings, so there is nothing to converge toward."
             ),
         },
         label="Domain",
