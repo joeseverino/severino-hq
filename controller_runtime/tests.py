@@ -106,12 +106,152 @@ def _bridge(**responses):
         action = args[0] if args else ""
         if action in responses:
             return responses[action]
+        if action == "glance-plan":
+            return {"ok": True, "panels": [], "targets": {}}
         raise AssertionError(f"Unexpected bridge call: {action}")
 
     return respond
 
 
 class ProviderAdapterTests(TestCase):
+    @mock.patch("controller_runtime.providers._portainer_glance")
+    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch(
+        "controller_runtime.providers.ssh_connection_refs",
+        return_value=("homelab-ssh",),
+    )
+    def test_dashboard_glance_prefers_whole_host_telemetry(
+        self, _connection_refs, ssh, portainer
+    ):
+        ssh.return_value = json.dumps(
+            {
+                "cpu_percent": 17.4,
+                "cores": 8,
+                "load_1m": 0.42,
+                "memory_used": 8 * 1024**3,
+                "memory_total": 32 * 1024**3,
+                "storage_used": 250 * 1024**3,
+                "storage_total": 1000 * 1024**3,
+            }
+        ).encode()
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["infrastructure"],
+                "targets": {
+                    "infrastructure": [
+                        {
+                            "key": "homelab-server",
+                            "connections": ["homelab-ssh"],
+                        }
+                    ]
+                },
+            }
+        )
+
+        machine = result[0]["machines"][0]
+        self.assertEqual(machine["key"], "homelab-server")
+        self.assertEqual(
+            [metric["value"] for metric in machine["metrics"]],
+            ["17%", "25%", "25%"],
+        )
+        ssh.assert_called_once_with(
+            "homelab-ssh", "python3 -", providers._HOST_GLANCE_SCRIPT
+        )
+        portainer.assert_not_called()
+
+    @mock.patch("controller_runtime.providers.ssh_connection_refs", return_value=())
+    @mock.patch("controller_runtime.providers._portainer_glance")
+    def test_dashboard_glance_labels_docker_fallback_by_scope(
+        self, portainer, _connection_refs
+    ):
+        portainer.return_value = {
+            "panel_id": "infrastructure",
+            "machines": [
+                {
+                    "key": "homelab-server",
+                    "status": "good",
+                    "summary": "4 containers running",
+                    "metrics": [
+                        {"label": "Container CPU", "value": "7%", "detail": ""},
+                        {
+                            "label": "Container memory",
+                            "value": "2 GB",
+                            "detail": "",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["infrastructure"],
+                "targets": {
+                    "infrastructure": [{"key": "homelab-server", "connections": []}]
+                },
+            }
+        )
+
+        labels = [metric["label"] for metric in result[0]["machines"][0]["metrics"]]
+        self.assertEqual(labels, ["Container CPU", "Container memory"])
+
+    @mock.patch("controller_runtime.providers._request")
+    def test_weather_glance_uses_the_nws_point_contract(self, request):
+        request.side_effect = [
+            {
+                "properties": {
+                    "forecastHourly": "https://api.weather.gov/hourly",
+                    "relativeLocation": {
+                        "properties": {"city": "Chicago", "state": "IL"}
+                    },
+                }
+            },
+            {
+                "properties": {
+                    "periods": [
+                        {
+                            "name": "This Hour",
+                            "shortForecast": "Clear",
+                            "temperature": 72,
+                            "temperatureUnit": "F",
+                            "windDirection": "NW",
+                            "windSpeed": "5 mph",
+                        }
+                    ]
+                }
+            },
+            {"features": []},
+        ]
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["weather"],
+                "targets": {"weather": {"point": "41.0000,-87.0000"}},
+            }
+        )
+
+        self.assertEqual(result[0]["summary"], "Chicago, IL")
+        self.assertEqual(result[0]["metrics"][0]["value"], "Clear")
+        self.assertNotIn("Alerts", [metric["label"] for metric in result[0]["metrics"]])
+        self.assertIn("User-Agent", request.call_args_list[0].kwargs["headers"])
+
+    @mock.patch(
+        "controller_runtime.providers._nws_glance",
+        side_effect=providers.ProviderError("No forecast for this point."),
+    )
+    def test_weather_failure_keeps_the_point_so_the_request_can_complete(self, _nws):
+        result = providers.dashboard_glance(
+            {
+                "panels": ["weather"],
+                "targets": {"weather": {"point": "41.0000,-87.0000"}},
+            }
+        )
+
+        self.assertEqual(result[0]["panel_id"], "weather")
+        self.assertEqual(result[0]["point"], "41.0000,-87.0000")
+        self.assertEqual(result[0]["status"], "serious")
+
     @mock.patch.dict(
         "os.environ",
         {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"},
@@ -796,9 +936,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    def test_tls_observer_reports_consumer_drift_and_public_artifact(
-        self, observe
-    ):
+    def test_tls_observer_reports_consumer_drift_and_public_artifact(self, observe):
         observe.side_effect = [
             {
                 "domain": "hq.example",
@@ -1251,7 +1389,15 @@ class WorkerTests(TestCase):
         # against the credential that would have filled it.
         self.assertEqual(
             called,
-            ["sweep-due", "connections", "inventory", "analytics", "schedule", "claim"],
+            [
+                "glance-plan",
+                "sweep-due",
+                "connections",
+                "inventory",
+                "analytics",
+                "schedule",
+                "claim",
+            ],
         )
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
@@ -1365,6 +1511,7 @@ class WorkerTests(TestCase):
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
                 "analytics": {"ok": True, "recorded": {}},
+                "glance-plan": {"ok": True, "panels": [], "targets": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},
@@ -1398,6 +1545,7 @@ class WorkerTests(TestCase):
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
                 "analytics": {"ok": True, "recorded": {}},
+                "glance-plan": {"ok": True, "panels": [], "targets": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},
@@ -2798,15 +2946,18 @@ class CaddyRouteSweepTests(TestCase):
     def test_an_edge_that_refuses_the_operation_is_skipped_not_fatal(self):
         """Most SSH hosts are not an edge, and one down host is not a blackout."""
 
-        with mock.patch.object(
-            providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
-        ), mock.patch.object(
-            providers,
-            "_ssh",
-            side_effect=[
-                providers.ProviderError("denied"),
-                json.dumps(ADAPTED_CADDY).encode(),
-            ],
+        with (
+            mock.patch.object(
+                providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
+            ),
+            mock.patch.object(
+                providers,
+                "_ssh",
+                side_effect=[
+                    providers.ProviderError("denied"),
+                    json.dumps(ADAPTED_CADDY).encode(),
+                ],
+            ),
         ):
             found = providers.list_caddy_routes()
 
@@ -2854,9 +3005,7 @@ class CapabilityMatchesTheHandlersTests(TestCase):
     def test_nothing_claims_to_apply_without_code_behind_it(self):
         empty = sorted(self._declared("apply") - self._real())
 
-        self.assertEqual(
-            empty, [], f"declared apply, no handler: {empty}"
-        )
+        self.assertEqual(empty, [], f"declared apply, no handler: {empty}")
 
     def test_nothing_is_locked_while_quietly_having_a_handler(self):
         contradicted = sorted(self._declared("locked") & self._real())

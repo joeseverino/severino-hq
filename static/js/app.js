@@ -353,18 +353,199 @@ document.querySelectorAll("dialog.modal").forEach((dialog) => {
   });
 });
 
-// The command center is global, so its shortcut is global too. The header
-// field remains a normal GET form; this only removes the click needed to reach
-// it and leaves local table search's `/` shortcut untouched.
-document.addEventListener("keydown", (event) => {
-  if (!(event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
-  if (event.target.closest("input, textarea, select, [contenteditable]")) return;
-  const search = document.querySelector(".global-search input[type=search]");
-  if (!search) return;
-  event.preventDefault();
-  search.focus();
-  search.select();
+// The command center is an operator palette over the same authorization-aware
+// discovery used by the full search page. The normal GET form remains the
+// fallback: without JavaScript, or with no palette choice active, Enter searches
+// every record scope as usual.
+document.querySelectorAll("[data-command-center-form]").forEach((form) => {
+  const dialog = form.closest("dialog");
+  const input = form.querySelector("[data-command-center-input]");
+  let results = form.querySelector("[data-command-center-results]");
+  let options = [];
+  let activeIndex = -1;
+  let requestController;
+  let debounceTimer;
+
+  const setActive = (index, { scroll = true } = {}) => {
+    if (!options.length) index = -1;
+    if (index >= options.length) index = 0;
+    if (index < -1) index = options.length - 1;
+    activeIndex = index;
+    options.forEach((option, optionIndex) => {
+      const active = optionIndex === activeIndex;
+      option.classList.toggle("is-active", active);
+      option.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    const active = options[activeIndex];
+    if (active) {
+      input.setAttribute("aria-activedescendant", active.id);
+      if (scroll) active.scrollIntoView({ block: "nearest" });
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
+    form.classList.toggle("has-active-option", Boolean(active));
+  };
+
+  const bindResults = () => {
+    options = [...results.querySelectorAll("[data-command-center-option]")];
+    setActive(-1, { scroll: false });
+    options.forEach((option, index) => {
+      // Movement, not merely appearing under a stationary pointer. Results are
+      // replaced while the operator types; `pointerenter` promoted whatever
+      // new row happened to land under the cursor and made Enter navigate when
+      // the operator intended the full search fallback.
+      option.addEventListener("pointermove", () => setActive(index, { scroll: false }));
+      option.addEventListener("focus", () => setActive(index, { scroll: false }));
+    });
+  };
+
+  const load = async () => {
+    requestController?.abort();
+    requestController = new AbortController();
+    const url = new URL(form.action, window.location.href);
+    if (input.value.trim()) url.searchParams.set("q", input.value.trim());
+    form.classList.add("is-loading");
+    try {
+      const response = await hqFetch(url, {
+        credentials: "same-origin",
+        headers: { "X-Command-Center": "palette" },
+        signal: requestController.signal,
+      });
+      const next = hqParseDocument(await response.text()).querySelector(
+        "[data-command-center-results]",
+      );
+      if (!next) return;
+      results.replaceWith(next);
+      results = next;
+      bindResults();
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        results.replaceChildren();
+        const message = document.createElement("p");
+        message.className = "notice notice-attention";
+        message.textContent = "Could not load results. Press Enter to search.";
+        results.append(message);
+      }
+    } finally {
+      form.classList.remove("is-loading");
+    }
+  };
+
+  const open = () => {
+    if (typeof dialog?.showModal !== "function") return false;
+    if (!dialog.open) dialog.showModal();
+    input.setAttribute("aria-expanded", "true");
+    input.focus();
+    input.select();
+    load();
+    return true;
+  };
+
+  // The header search is the visible doorway into this same search surface.
+  // It stays a normal GET form for progressive enhancement; with JS, clicking
+  // it opens the richer palette and carries over any query already present.
+  document.querySelectorAll("[data-command-center-open]").forEach((opener) => {
+    opener.addEventListener("click", (event) => {
+      const openerInput = opener.querySelector("input[name=q]");
+      if (openerInput?.value.trim()) input.value = openerInput.value;
+      if (!open()) return;
+      event.preventDefault();
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!(event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey))) return;
+    if (!open()) return;
+    event.preventDefault();
+  });
+  dialog?.addEventListener("close", () => {
+    input.setAttribute("aria-expanded", "false");
+    requestController?.abort();
+    clearTimeout(debounceTimer);
+    setActive(-1, { scroll: false });
+  });
+  input.addEventListener("input", () => {
+    setActive(-1, { scroll: false });
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(load, 110);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      dialog?.close();
+    }
+  });
+  form.addEventListener("submit", (event) => {
+    const active = options[activeIndex];
+    if (!active) return;
+    event.preventDefault();
+    window.location.assign(active.href);
+  });
 });
+
+// At-a-glance readings are intentionally cold until requested. One click
+// rings the controller doorbell, then this performs a short bounded follow-up
+// for the reported observation; there is no page-lifetime polling loop.
+const hqBindDashboardGlance = (root) => {
+  const form = root.querySelector("[data-dashboard-glance-refresh]");
+  if (!form || form.dataset.bound === "true") return;
+  form.dataset.bound = "true";
+
+  const replace = async (current, response) => {
+    const next = hqParseDocument(await response.text()).querySelector(
+      "[data-dashboard-glance]",
+    );
+    if (!next) return current;
+    const currentPanels = current.querySelector(".glance-panels");
+    const nextPanels = next.querySelector(".glance-panels");
+    if (!currentPanels || !nextPanels) return current;
+    currentPanels.replaceWith(nextPanels);
+    return current;
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    let current = root;
+    current.classList.add("is-loading");
+    current.setAttribute("aria-busy", "true");
+    try {
+      current = await replace(
+        current,
+        await hqFetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          credentials: "same-origin",
+        }),
+      );
+      current.classList.add("is-loading");
+      current.setAttribute("aria-busy", "true");
+      for (
+        let attempt = 0;
+        attempt < 12 && current.querySelector("[data-refreshing]");
+        attempt += 1
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        current = await replace(
+          current,
+          await hqFetch(current.dataset.source, { credentials: "same-origin" }),
+        );
+        current.classList.add("is-loading");
+        current.setAttribute("aria-busy", "true");
+      }
+    } catch (_error) {
+      const status = current.querySelector("[data-dashboard-glance-status]");
+      if (status) status.textContent = "At-a-glance refresh failed.";
+    } finally {
+      current.classList.remove("is-loading");
+      current.removeAttribute("aria-busy");
+    }
+  });
+};
+
+document.querySelectorAll("[data-dashboard-glance]").forEach(hqBindDashboardGlance);
 
 // Dropzones. The file input already is the click and drop target, so this adds
 // only what the browser will not: the drag highlight, and telling the operator

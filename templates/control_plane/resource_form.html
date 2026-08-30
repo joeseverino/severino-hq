@@ -62,6 +62,15 @@ model validates the submission. Nothing here knows what kind of resource this is
       {% for field in spec.advanced %}{% include "partials/_form_field.html" %}{% endfor %}
       {% if resource %}
         {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
+        {% if kind == "machine" %}
+          <div class="field checkbox-field">
+            <label for="id_show_on_dashboard">
+              <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
+              Show on dashboard
+            </label>
+            <span class="help">Use this machine's observed CPU, memory, and storage in the dashboard page head.</span>
+          </div>
+        {% endif %}
       {% endif %}
     </details>
   {% endif %}

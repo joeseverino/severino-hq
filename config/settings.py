@@ -438,9 +438,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ----- Auth --------------------------------------------------------------------
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-     "OPTIONS": {"min_length": 12}},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -521,7 +525,9 @@ SEVERINO_OIDC_ALLOWED_EMAILS = {
 }
 SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 
-OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com").rstrip("/")
+OIDC_ISSUER = os.environ.get(
+    "SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com"
+).rstrip("/")
 OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
 # The `email` scope is requested only when an email allowlist is configured.
@@ -632,8 +638,6 @@ SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
 # status page is a fact about that deployment; the consoles HQ can reach are
 # derived from the connections a controller reported and need no entry here.
 SEVERINO_DASHBOARD_LINKS = os.environ.get("SEVERINO_DASHBOARD_LINKS", "")
-
-
 # ----- I18N --------------------------------------------------------------------
 
 LANGUAGE_CODE = "en-us"

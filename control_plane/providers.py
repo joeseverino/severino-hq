@@ -9,7 +9,6 @@ from collections.abc import Mapping, Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
 from typing import Annotated, Any, Callable, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
@@ -182,14 +181,14 @@ class TLSDeliveryTargetSpec(ProviderModel):
     def kind_decides_which_settings_apply(self):
         # Refused rather than ignored. A directory typed against an NPM target
         # would sit there looking configured while nothing ever read it.
-        for field, kind in (
+        for field_name, kind in (
             ("certificate_directory", "caddy"),
             ("discover_covered_hosts", "npm"),
             ("install_domains", "cpanel"),
         ):
-            if getattr(self, field) and self.kind != kind:
+            if getattr(self, field_name) and self.kind != kind:
                 raise ValueError(
-                    f"{TLSDeliveryTargetSpec.model_fields[field].title!r} "
+                    f"{TLSDeliveryTargetSpec.model_fields[field_name].title!r} "
                     f"applies to {kind} targets, and this one is {self.kind}."
                 )
         if self.kind == "caddy" and not self.certificate_directory:

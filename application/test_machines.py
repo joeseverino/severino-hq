@@ -231,6 +231,26 @@ class DeclaredMachineTests(TestCase):
     def test_it_shows_an_address_it_was_told_about(self):
         self.assertEqual(self.machine().address, "10.0.0.5")
 
+    def test_it_projects_telemetry_from_the_same_declaration(self):
+        from control_plane.models import ManagedResource
+        from django.utils import timezone
+
+        observed = timezone.now()
+        declared = ManagedResource.objects.get(key="a-laptop")
+        declared.status = {
+            "telemetry": {
+                "status": "good",
+                "metrics": [{"label": "CPU", "value": "8%"}],
+            }
+        }
+        declared.last_observed_at = observed
+        declared.save(update_fields=("status", "last_observed_at", "updated_at"))
+
+        found = self.machine()
+
+        self.assertEqual(found.telemetry["metrics"][0]["value"], "8%")
+        self.assertEqual(found.telemetry_observed_at, observed)
+
     def test_a_machine_nobody_declared_links_nothing(self):
         from control_plane.models import ProviderInventory
         from django.utils import timezone
@@ -277,12 +297,12 @@ class TailnetPresenceTests(TestCase):
         self.sweep(
             {
                 **self.device("a-peer"),
-                "public_key": "nodekey:abc",
+                "public_key": "test-key-a",
                 "last_handshake": "2026-08-25T22:18:24Z",
                 "direct_endpoint": "198.51.100.4:41641",
                 "relay": "ord",
             },
-            {**self.device("never-spoken"), "public_key": "nodekey:def"},
+            {**self.device("never-spoken"), "public_key": "test-key-b"},
         )
 
         found = tailnet_presence()
@@ -298,17 +318,17 @@ class TailnetPresenceTests(TestCase):
 
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-relayed-peer"),
-            "public_key": "nodekey:abc",
-            "last_handshake": "2026-08-25T22:18:24Z",
-            "direct_endpoint": "",
-            "relay": "ord",
-        })
-
-        self.assertEqual(
-            tailnet_presence()["a-relayed-peer"].peer_path, "relayed"
+        self.sweep(
+            {
+                **self.device("a-relayed-peer"),
+                "public_key": "test-key-a",
+                "last_handshake": "2026-08-25T22:18:24Z",
+                "direct_endpoint": "",
+                "relay": "ord",
+            }
         )
+
+        self.assertEqual(tailnet_presence()["a-relayed-peer"].peer_path, "relayed")
 
     def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
         """The silent failure. `--advertise-routes` succeeds, the machine
@@ -318,13 +338,15 @@ class TailnetPresenceTests(TestCase):
 
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-router"),
-            "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
-            "enabled_routes": ["198.51.100.0/24"],
-            "offers_exit_node": True,
-            "exit_node_approved": False,
-        })
+        self.sweep(
+            {
+                **self.device("a-router"),
+                "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
+                "enabled_routes": ["198.51.100.0/24"],
+                "offers_exit_node": True,
+                "exit_node_approved": False,
+            }
+        )
 
         presence = tailnet_presence()["a-router"]
 
@@ -344,11 +366,13 @@ class TailnetPresenceTests(TestCase):
     def test_every_advertised_route_approved_is_silent(self):
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-router"),
-            "advertised_routes": ["198.51.100.0/24"],
-            "enabled_routes": ["198.51.100.0/24"],
-        })
+        self.sweep(
+            {
+                **self.device("a-router"),
+                "advertised_routes": ["198.51.100.0/24"],
+                "enabled_routes": ["198.51.100.0/24"],
+            }
+        )
 
         self.assertEqual(tailnet_presence()["a-router"].unapproved_routes, ())
 
@@ -478,10 +502,12 @@ class OneMachineManyNamesTests(TestCase):
         ProviderInventory.objects.create(
             kind="tailscale.device",
             records=[
-                {"name": "Someone's Laptop", "online": True,
-                 "addresses": ["100.64.0.5"]},
-                {"name": "a-stranger", "online": True,
-                 "addresses": ["100.64.0.99"]},
+                {
+                    "name": "Someone's Laptop",
+                    "online": True,
+                    "addresses": ["100.64.0.5"],
+                },
+                {"name": "a-stranger", "online": True, "addresses": ["100.64.0.99"]},
             ],
             observed_at=timezone.now(),
         )
@@ -721,9 +747,7 @@ class ObservedAddressAnnotationTests(TestCase):
         )
         rendered = str(form["addresses"])
 
-        self.assertLess(
-            rendered.index("100.101.102.103"), rendered.index("192.0.2.50")
-        )
+        self.assertLess(rendered.index("100.101.102.103"), rendered.index("192.0.2.50"))
 
 
 class IdentifierIsFixedTests(TestCase):

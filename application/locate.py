@@ -262,6 +262,32 @@ def container_hosts() -> dict[str, str]:
     return found
 
 
+def _observed_record(provider, record) -> tuple[tuple, tuple]:
+    """Read one provider record without letting a stale row end the sweep."""
+
+    try:
+        spec = provider.from_record(record)
+        return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
+    except (KeyError, TypeError, ValueError):
+        # The inventory sweep reports its own health. One unreadable row is
+        # evidence about that row, not a reason to hide every healthy answer.
+        return (), ()
+
+
+def _record_observed_answers(
+    found: dict[str, set[str]], names: tuple, addresses: tuple
+) -> None:
+    """Normalize one provider's vocabulary into the shared answer index."""
+
+    answered = tuple(str(address) for address in addresses if address)
+    if not answered:
+        return
+    for name in names:
+        label = str(name or "").strip().lower().rstrip(".")
+        if label:
+            found.setdefault(label, set()).update(answered)
+
+
 def observed_answers() -> dict[str, tuple[str, ...]]:
     """Every address each hostname is *seen* answering at.
 
@@ -289,22 +315,8 @@ def observed_answers() -> dict[str, tuple[str, ...]]:
         if provider.answers is None or provider.hostnames is None:
             continue
         for record in snapshot.records:
-            try:
-                spec = provider.from_record(record)
-                names = provider.hostnames(spec)
-                addresses = provider.answers(spec)
-            except (KeyError, TypeError, ValueError):
-                # One unreadable record is that record's problem, and the sweep
-                # that produced it reports its own health. It must not take the
-                # rest of the sweep's names down with it.
-                continue
-            for name in names:
-                label = str(name or "").strip().lower().rstrip(".")
-                if not label:
-                    continue
-                for address in addresses:
-                    if address:
-                        found.setdefault(label, set()).add(str(address))
+            names, addresses = _observed_record(provider, record)
+            _record_observed_answers(found, names, addresses)
     return {name: tuple(sorted(addresses)) for name, addresses in found.items()}
 
 

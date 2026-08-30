@@ -488,6 +488,124 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
    the two controls beside it different heights. */
 .page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .page-head .page-actions > * { white-space: nowrap; }
+.dashboard-glance {
+  position: relative;
+  margin-left: auto;
+  min-width: min(620px, 66vw);
+}
+.page-head:has(.dashboard-glance) { align-items: center; }
+.glance-panels {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.glance-panel {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 11px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.glance-panel + .glance-panel { border-top: 1px solid var(--line); }
+.glance-panel:first-child { padding-right: 78px; }
+.glance-panel-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.glance-panel-head h2 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.glance-panel-head time { color: var(--muted-2); font-size: 9.5px; white-space: nowrap; }
+.glance-summary { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.glance-panel > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.25; }
+.glance-metrics { display: flex; align-items: baseline; gap: 6px 14px; min-width: 0; margin: 0; }
+.glance-metrics > div {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.glance-metrics dt { color: var(--muted); font-size: 10px; font-weight: 500; white-space: nowrap; }
+.glance-metrics dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glance-panel.status-serious { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.glance-controls {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.glance-controls > form { margin: 0; }
+.glance-settings { position: relative; color: var(--muted); }
+.glance-settings > summary,
+.glance-refresh {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent-tint));
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+}
+.glance-settings > summary { list-style: none; }
+.glance-settings > summary::-webkit-details-marker { display: none; }
+.glance-settings > summary::marker { content: ""; }
+.glance-settings > summary svg,
+.glance-refresh svg { display: block; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.glance-settings > summary:hover { color: var(--accent); }
+.glance-settings > form {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 6;
+  display: grid;
+  gap: 10px;
+  width: 280px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.glance-settings label { display: grid; gap: 4px; color: var(--ink-2); font-size: 11px; font-weight: 600; }
+.glance-settings input { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; font-size: 12px; }
+.glance-settings label span { color: var(--muted); font-size: 10px; font-weight: 400; }
+.glance-settings .btn { justify-self: end; }
+.glance-refresh {
+  appearance: none;
+  font-family: inherit;
+}
+.glance-refresh:hover, .glance-settings > summary:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-tint); }
+.glance-refresh:focus-visible, .glance-settings > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dashboard-glance.is-loading .glance-refresh { pointer-events: none; }
+.dashboard-glance.is-loading .glance-refresh span:first-child { animation: glance-spin 700ms linear infinite; }
+@keyframes glance-spin { to { transform: rotate(360deg); } }
 
 /* A page declares its sections; the shell owns how they are traversed. Like
    the global navigation this is one row at every width, horizontally
@@ -596,6 +714,31 @@ h3 { font-size: 14px; margin: 16px 0 6px; font-weight: 600; }
 .btn:disabled, button:disabled { cursor: not-allowed; opacity: .52; }
 .control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .control-summary > *, .two-col > * { min-width: 0; }
+.machine-telemetry {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.machine-telemetry .section-head { margin-bottom: 12px; }
+.machine-telemetry .section-head h2 { margin-bottom: 2px; }
+.machine-telemetry .section-head p { margin: 0; font-size: 12px; }
+.machine-telemetry .section-head time { font-size: 11px; white-space: nowrap; }
+.machine-telemetry-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--line-2);
+}
+.machine-telemetry-metrics > div { min-width: 0; padding: 10px 12px; background: var(--surface-2); }
+.machine-telemetry-metrics dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.machine-telemetry-metrics dd { margin: 3px 0 1px; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.machine-telemetry-metrics span { color: var(--muted); font-size: 11px; }
 .control-metric, .control-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-sm); }
 /* Label and headline share a line when they fit: the label is three small
    words and the value is usually two, so stacking them spent a whole row on
@@ -1479,6 +1622,40 @@ a.kpi:hover { background: var(--surface-2); }
   color: var(--attn);
   font-variant-numeric: tabular-nums;
 }
+.action-list .action-arrow { margin-left: auto; color: var(--muted-2); }
+.priority-card .action-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-attention-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dashboard-attention-list a {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.dashboard-attention-list a:hover { border-color: var(--line); background: var(--bg-tint); text-decoration: none; }
+.dashboard-attention-list .attention-source {
+  grid-column: 1;
+  color: var(--attn);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.dashboard-attention-list strong { grid-column: 1; font-size: 13.5px; }
+.dashboard-attention-list .attention-detail {
+  grid-column: 1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dashboard-attention-list .action-arrow { grid-column: 2; grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
 .health-list {
@@ -1555,18 +1732,19 @@ a.kpi:hover { background: var(--surface-2); }
    the space is not there, so no breakpoint has to say when. */
 .card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
-/* The rail sits beside the main column while both fit and drops beneath it
-   when they do not. Flex wrapping decides that from the content's own minimum
-   widths, so the point at which it happens moves with the content instead of
-   being asserted at a fixed viewport width. */
-.dashboard-command {
-  display: flex;
-  flex-wrap: wrap;
+/* The dashboard is one board, not a stack of full-width rows. The main column
+   keeps flowing while the utility rail takes only its own width and height;
+   otherwise a tall rail forces the next useful card below a blank rectangle. */
+.dashboard-board {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr);
   gap: var(--layout-gap);
   margin-bottom: var(--stack-gap);
+  align-items: start;
 }
-.command-main { flex: 3 1 420px; }
-.command-side { flex: 1 1 240px; }
+.dashboard-command { display: contents; }
+.command-main { grid-column: 1; grid-row: 1; }
+.command-side { grid-column: 2; grid-row: 1 / span 3; }
 .command-main,
 .command-side {
   display: grid;
@@ -1574,10 +1752,13 @@ a.kpi:hover { background: var(--surface-2); }
   gap: var(--layout-gap);
 }
 .snapshot-grid {
+  grid-column: 1;
+  grid-row: 2;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
   gap: var(--layout-gap);
-  margin-bottom: var(--stack-gap);
+  margin-bottom: 0;
 }
 .two-col > section, .two-col > div, .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
 /* Inside a layout container the gap is the separation, so a section's own
@@ -1813,11 +1994,12 @@ a.kpi:hover { background: var(--surface-2); }
   font-size: 12px;
   font-weight: 500;
 }
-.activity-tail { margin-top: 0; }
+.activity-tail { grid-column: 1; grid-row: 3; margin-top: 0; }
 
 .section-foot { margin: 12px 0 0; font-size: 13px; }
 .section-foot a { color: var(--muted); font-weight: 500; }
 .section-foot a:hover { color: var(--accent); }
+.snapshot-grid .section-foot { text-align: right; }
 
 /* The trailing action in a section head — "Edit →", "All →". Shipped unstyled
    for a while: two plugins used the class and no rule ever defined it, because
@@ -1836,6 +2018,14 @@ a.kpi:hover { background: var(--surface-2); }
 .empty.compact { padding: 4px 0 0; }
 .empty p { margin: 0 0 6px; }
 .empty .empty-cta { color: var(--accent-2); font-weight: 500; }
+.dashboard-empty-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+}
+.dashboard-empty-row p { margin-bottom: 0; }
 
 /* ── KV grid ────────────────────────────────────────────────────── */
 
@@ -1855,6 +2045,47 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .audit-list li:last-child { border-bottom: 0; }
 .audit-list .ts { color: var(--muted-2); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+.activity-tail .compact-audit li { display: block; padding: 0; }
+.activity-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  color: var(--ink);
+}
+.activity-event:hover { text-decoration: none; background: var(--bg-tint); }
+.activity-copy { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-copy .muted { white-space: nowrap; }
+.activity-arrow { color: var(--muted-2); transition: transform 100ms ease; }
+.activity-event:hover .activity-arrow { transform: translateX(2px); }
+
+@media (max-width: 640px) {
+  .priority-card .action-list { grid-template-columns: 1fr; }
+  .activity-event { grid-template-columns: minmax(0, 1fr) 14px; gap: 8px; }
+  .activity-copy { display: grid; gap: 2px; }
+  .activity-copy .muted { white-space: normal; }
+  .activity-event .ts { grid-column: 1; grid-row: 2; }
+  .activity-arrow { grid-column: 2; grid-row: 1 / span 2; }
+}
+
+@media (max-width: 900px) {
+  .page-head:has(.dashboard-glance) { flex-wrap: wrap; }
+  .dashboard-glance { width: 100%; min-width: 0; margin: 10px 0 0; }
+  .glance-panel { max-width: none; }
+  .dashboard-board { grid-template-columns: minmax(0, 1fr); }
+  .command-main { grid-column: 1; grid-row: 1; }
+  .snapshot-grid { grid-column: 1; grid-row: 2; }
+  .activity-tail { grid-column: 1; grid-row: 3; }
+  .command-side { grid-column: 1; grid-row: 4; }
+}
+
+@media (max-width: 640px) {
+  .glance-panel { grid-template-columns: minmax(0, 1fr); gap: 3px; padding-block: 8px; }
+  .glance-panel-head time { display: none; }
+  .glance-metrics { flex-wrap: wrap; gap: 3px 12px; }
+}
 
 /* ── Forms ──────────────────────────────────────────────────────── */
 
@@ -1961,6 +2192,149 @@ a.kpi:hover { background: var(--surface-2); }
 .modal-close:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 .modal-lede { margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.5; }
 .modal .form { background: none; border: 0; padding: 0; box-shadow: none; max-width: none; }
+
+.command-center-modal {
+  width: min(780px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+}
+.command-center-modal .modal-panel { padding: 18px 18px 12px; }
+.command-center-modal .modal-head { margin-bottom: 2px; }
+.command-center-modal .modal-head h2 { font-size: 18px; letter-spacing: -.02em; text-transform: none; }
+.command-center-modal .modal-lede { margin-bottom: 12px; }
+.command-center-palette { display: grid; min-height: 0; }
+.command-center-query {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.command-center-query:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.command-center-query svg { fill: none; stroke: var(--muted); stroke-width: 1.8; }
+.command-center-query input[type=search] {
+  width: 100%;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 15px;
+}
+.command-center-query kbd { white-space: nowrap; }
+.command-center-results {
+  min-height: 120px;
+  max-height: min(56vh, 520px);
+  margin-top: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.command-center-palette.is-loading .command-center-results { opacity: .62; }
+.command-center-options { display: grid; gap: 10px; }
+.command-center-group h3 {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  margin: 0;
+  padding: 7px 8px 5px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.command-center-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(100px, auto) 16px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+.command-center-option.is-active {
+  background: var(--accent-tint);
+  color: inherit;
+}
+.command-center-kind {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+.command-center-kind-command { border-color: var(--accent); color: var(--accent); }
+.command-center-kind-resource { border-color: var(--ok); color: var(--ok); }
+.command-center-kind-check { border-color: var(--warn); color: var(--warn); }
+.command-center-copy { display: grid; gap: 2px; min-width: 0; }
+.command-center-copy > .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.command-center-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.command-center-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-center-title code { color: var(--muted-2); font-size: 10.5px; overflow-wrap: anywhere; }
+.command-center-evidence {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.command-center-evidence .scope-chip { padding: 2px 6px; font-size: 9.5px; white-space: nowrap; }
+.command-center-destination { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+.command-center-arrow { color: var(--muted-2); opacity: 0; transform: translateX(-3px); transition: 100ms ease; }
+.command-center-option.is-active .command-center-arrow { opacity: 1; transform: none; }
+.command-center-empty {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  min-height: 120px;
+  padding: 20px;
+  text-align: center;
+}
+.command-center-loading, .command-center-more { padding: 14px 8px; font-size: 12px; }
+.command-center-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-2);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.command-center-footer span { white-space: nowrap; }
+.command-center-footer kbd { margin-right: 3px; }
+.command-center-palette.has-active-option .command-center-enter-hint { display: none; }
+
+@media (max-width: 640px) {
+  .command-center-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .command-center-modal .modal-panel { padding: 14px 12px 10px; }
+  .command-center-option { grid-template-columns: 26px minmax(0, 1fr) 14px; }
+  .command-center-evidence { grid-column: 2; justify-content: flex-start; overflow: hidden; }
+  .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .command-center-arrow { grid-column: 3; grid-row: 1; }
+  .command-center-footer { justify-content: center; }
+  .command-center-footer span:nth-child(2) { display: none; }
+}
 
 .list-rows .row-empty { color: var(--muted); }
 
@@ -2271,6 +2645,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   list-style: none;
   overflow-x: auto;
   scrollbar-width: thin;
+  max-width: 100%;
 }
 .connection-trust-path li {
   position: relative;
@@ -3698,7 +4073,7 @@ textarea.code {
 /* A lens is chosen by following a link, so these are the shared chip primitive
    with one modifier for the current choice. aria-current carries it for anyone
    the border weight does not reach. */
-.topology-lenses { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.topology-lenses { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; margin-bottom: 10px; }
 .topology-lenses .scope-chip.is-active {
   background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
 }
@@ -3732,7 +4107,7 @@ textarea.code {
 .topology-search input { width: 100%; min-height: 36px; }
 .topology-kind-filters {
   display: flex; flex-wrap: wrap; gap: 5px 12px;
-  min-width: 0; margin: 0; padding: 0; border: 0;
+  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
 }
 .topology-kind-filters label {
   display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2);
@@ -3743,7 +4118,7 @@ textarea.code {
 .topology-map {
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(218px, 1fr);
   align-items: stretch; gap: 1px; overflow: auto; background: var(--line);
-  max-height: min(68vh, 680px);
+  max-width: 100%; max-height: min(68vh, 680px);
   overscroll-behavior-inline: contain;
   scroll-behavior: smooth;
 }

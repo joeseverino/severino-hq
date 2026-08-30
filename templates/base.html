@@ -95,7 +95,7 @@
       you tap. Focusing it is what opens it -- no state, no script, and the
       form still submits identically at every width.
       {% endcomment %}
-      <form class="global-search" action="{% url 'search' %}" method="get">
+      <form class="global-search" action="{% url 'search' %}" method="get" data-command-center-open>
         <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <circle cx="11" cy="11" r="6"></circle>
           <line x1="15.5" y1="15.5" x2="20" y2="20"></line>
@@ -106,6 +106,8 @@
           value="{{ search_query|default:'' }}"
           placeholder="Find anything"
           aria-label="Find anything"
+          aria-haspopup="dialog"
+          aria-controls="modal-command-center"
         >
       </form>
       {% comment %}
@@ -190,6 +192,7 @@
   </footer>
 
   {% if user.is_authenticated %}
+    {% include "partials/_modal.html" with id="command-center" title="Command center" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and
     evaluates the access policy, and this dialog is on every page -- so it

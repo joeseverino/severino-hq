@@ -232,7 +232,9 @@ class DerivedConsumerTests(TestCase):
     def test_a_name_the_certificate_does_not_cover_is_not_a_consumer(self):
         """Sharing a host is not being covered by the same certificate."""
 
-        self.assertNotIn("unrelated.example.com", self._caddy_consumer()["verify_domains"])
+        self.assertNotIn(
+            "unrelated.example.com", self._caddy_consumer()["verify_domains"]
+        )
 
     def test_a_covered_name_answering_elsewhere_is_not_a_consumer(self):
         """Coverage alone would make every name a consumer of every target."""
@@ -340,7 +342,9 @@ class DesiredStateOwnershipTests(TestCase):
 
         resolved = resolved_spec(self._certificate())
 
-        self.assertEqual(resolved["consumers"], resolved_certificate_spec()["consumers"])
+        self.assertEqual(
+            resolved["consumers"], resolved_certificate_spec()["consumers"]
+        )
 
     def test_a_certificate_naming_a_target_that_is_gone_covers_nothing(self):
         """Reported as an uncovered name, which is exactly what is true."""
@@ -361,8 +365,11 @@ class DesiredStateOwnershipTests(TestCase):
         other = ManagedResource.objects.create(
             key="another",
             kind="tls.certificate",
-            spec={**certificate_spec(), "certificate_name": "another",
-                  "install_on": ["edge"]},
+            spec={
+                **certificate_spec(),
+                "certificate_name": "another",
+                "install_on": ["edge"],
+            },
         )
 
         self.assertEqual(resolved_spec(other)["consumers"][0]["name"], "another-caddy")
@@ -411,7 +418,10 @@ class DesiredStateOwnershipTests(TestCase):
     def test_saving_a_target_advances_them_without_a_separate_step(self):
         """Editing the target is the whole action; nothing else has to be run."""
 
-        from application.infrastructure import ManagedResourceCommand, save_managed_resource
+        from application.infrastructure import (
+            ManagedResourceCommand,
+            save_managed_resource,
+        )
         from application.security import cli_principal
 
         resource = self._certificate()
@@ -500,24 +510,18 @@ class RegistrySymmetryTests(TestCase):
 class ProviderContractTests(TestCase):
     def test_resolved_certificate_accepts_wildcard_covered_cpanel_vhost(self):
         spec = resolved_certificate_spec()
-        cpanel = next(
-            item for item in spec["consumers"] if item["kind"] == "cpanel"
-        )
+        cpanel = next(item for item in spec["consumers"] if item["kind"] == "cpanel")
         cpanel["install_domains"] = ["quiz.jseverino.net"]
 
         validate_resolved_certificate(spec)
 
     def test_provider_catalog_is_stable_strict_and_marks_public_effects(self):
         self.assertEqual(describe_providers(), describe_providers())
-        providers = {
-            item["kind"]: item for item in describe_providers()["providers"]
-        }
+        providers = {item["kind"]: item for item in describe_providers()["providers"]}
         self.assertFalse(providers["adguard.rewrite"]["public_effect"])
         self.assertTrue(providers["cloudflare.dns_record"]["public_effect"])
         self.assertEqual(
-            providers["adguard.rewrite"]["controller"]["actions"]["reconcile"][
-                "mode"
-            ],
+            providers["adguard.rewrite"]["controller"]["actions"]["reconcile"]["mode"],
             "apply",
         )
         self.assertEqual(
@@ -613,6 +617,36 @@ class InfrastructureWebTests(TestCase):
             principal=cli_principal(),
         )
         self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
+
+    def test_machine_edit_can_choose_the_dashboard_telemetry_owner(self):
+        from control_plane.models import DashboardMachine
+
+        machine = ManagedResource.objects.create(
+            key="homelab-server",
+            kind="machine",
+            spec={
+                "name": "homelab-server",
+                "role": "Infrastructure host",
+                "addresses": ["100.64.0.9"],
+            },
+        )
+        edit_url = reverse("control_plane:edit", kwargs={"key": machine.key})
+
+        page = self.client.get(edit_url)
+        response = self.client.post(
+            edit_url,
+            {
+                "name": "homelab-server",
+                "role": "Infrastructure host",
+                "addresses": "100.64.0.9",
+                "enabled": "on",
+                "show_on_dashboard": "on",
+            },
+        )
+
+        self.assertContains(page, "Show on dashboard")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(DashboardMachine.objects.get().machine, machine)
 
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
         self.resource.status = {
@@ -809,9 +843,7 @@ class OperationPolicyTests(TestCase):
     def test_failed_automatic_renewal_retries_once_on_the_next_day(self, now):
         current = timezone.now()
         now.return_value = current
-        self.resource.status = {
-            "not_after": (current + timedelta(days=29)).isoformat()
-        }
+        self.resource.status = {"not_after": (current + timedelta(days=29)).isoformat()}
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
@@ -934,9 +966,7 @@ class OperationPolicyTests(TestCase):
             stdout=claimed,
         )
         claim_payload = json.loads(claimed.getvalue())
-        self.assertEqual(
-            claim_payload["operation"]["id"], queued["operation"]["id"]
-        )
+        self.assertEqual(claim_payload["operation"]["id"], queued["operation"]["id"])
         self.assertEqual(
             claim_payload["resource"]["spec"]["certificate_name"],
             "jseverino",
@@ -953,9 +983,7 @@ class OperationPolicyTests(TestCase):
                     "success": True,
                     "observed_generation": self.resource.generation,
                     "status": {
-                        "not_after": (
-                            timezone.now() + timedelta(days=89)
-                        ).isoformat()
+                        "not_after": (timezone.now() + timedelta(days=89)).isoformat()
                     },
                     "conditions": [
                         {"type": "Ready", "status": True, "reason": "Verified"}
@@ -966,9 +994,7 @@ class OperationPolicyTests(TestCase):
             stdout=reported,
         )
         self.resource.refresh_from_db()
-        self.assertEqual(
-            self.resource.observed_generation, self.resource.generation
-        )
+        self.assertEqual(self.resource.observed_generation, self.resource.generation)
         self.assertEqual(
             json.loads(reported.getvalue())["operation"]["state"], "succeeded"
         )
@@ -1082,15 +1108,18 @@ class InfrastructureViewsTests(TestCase):
         from application.topology import Topology, TopologyNode
 
         subject = TopologyNode(
-            "controller:one", "controller", "HQ dev", "Controller",
+            "controller:one",
+            "controller",
+            "HQ dev",
+            "Controller",
         )
         finding = Finding(
-            "controller-sweep-stale", subject.id,
-            "HQ dev stopped confirming two kinds", "serious",
+            "controller-sweep-stale",
+            subject.id,
+            "HQ dev stopped confirming two kinds",
+            "serious",
             "The graph proves one shared cause.",
-            offers=(
-                ActionLink("open", "Open connections", "read", "/connections/"),
-            ),
+            offers=(ActionLink("open", "Open connections", "read", "/connections/"),),
             investigations=(
                 ActionLink("impact", "Trace impact", "read", "/topology/?trace"),
             ),
@@ -1211,9 +1240,7 @@ class InfrastructureViewsTests(TestCase):
                 ControllerReport(
                     success=True,
                     observed_generation=self.resource.generation,
-                    status={
-                        "certificate_pem": "-----BEGIN PRIVATE KEY-----\nnope"
-                    },
+                    status={"certificate_pem": "-----BEGIN PRIVATE KEY-----\nnope"},
                 ),
                 controller_id="controller",
             )
@@ -1271,8 +1298,13 @@ class DnsRecordReadoutTests(TestCase):
         from control_plane.providers import _dns_record_readout
 
         spec = {
-            "zone": "example.com", "name": "example.com", "record_type": "CNAME",
-            "content": "example.pages.dev", "priority": None, "proxied": True, "ttl": 1,
+            "zone": "example.com",
+            "name": "example.com",
+            "record_type": "CNAME",
+            "content": "example.pages.dev",
+            "priority": None,
+            "proxied": True,
+            "ttl": 1,
         }
         status = {**spec, "record_id": "abc"}
         label, desired, observed = _dns_record_readout(spec, status)[0]
@@ -1343,8 +1375,13 @@ class QueueHeadTests(TestCase):
         wanted = self.queue(self.rewrite, "wanted")
         ManagedResource.objects.filter(kind="tls.delivery_target").delete()
 
-        claimed = self.claim("a-controller", capabilities=(("adguard.rewrite", "reconcile"),
-                                                           ("tls.certificate", "reconcile")))
+        claimed = self.claim(
+            "a-controller",
+            capabilities=(
+                ("adguard.rewrite", "reconcile"),
+                ("tls.certificate", "reconcile"),
+            ),
+        )
 
         self.assertEqual(claimed["operation"]["id"], str(wanted.id))
         broken.refresh_from_db()
@@ -1362,7 +1399,9 @@ class QueueHeadTests(TestCase):
     def test_a_resolvable_queue_is_untouched(self):
         wanted = self.queue(self.certificate, "wanted")
 
-        claimed = self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
+        claimed = self.claim(
+            "a-controller", capabilities=(("tls.certificate", "reconcile"),)
+        )
 
         self.assertEqual(claimed["operation"]["id"], str(wanted.id))
         self.assertIn("resource", claimed)
@@ -1412,10 +1451,13 @@ class ReadoutsSayNothingBlankTests(TestCase):
     def test_a_container_does_not_print_a_state_nothing_records(self):
         """A sweep confirms a container by its identity, which holds no state."""
 
-        labels = [label for label, _, _ in self._rows(
-            "portainer.container",
-            {"connection_ref": "a-portainer", "host": "a-box", "name": "app"},
-        )]
+        labels = [
+            label
+            for label, _, _ in self._rows(
+                "portainer.container",
+                {"connection_ref": "a-portainer", "host": "a-box", "name": "app"},
+            )
+        ]
 
         self.assertNotIn("State", labels)
 
@@ -1427,9 +1469,12 @@ class ReadoutsSayNothingBlankTests(TestCase):
         the derivation would have gone.
         """
 
-        labels = [label for label, _, _ in self._rows(
-            "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"}
-        )]
+        labels = [
+            label
+            for label, _, _ in self._rows(
+                "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"}
+            )
+        ]
 
         for absent in ("Records", "Mail (MX)", "SPF", "DMARC"):
             self.assertNotIn(absent, labels)

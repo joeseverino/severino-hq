@@ -124,6 +124,45 @@ class ProviderConnection(TimestampedModel):
         return self.connection_ref
 
 
+class DashboardRefreshRequest(TimestampedModel):
+    """A credential-free request the controller may claim by panel id."""
+
+    panel_id = models.SlugField(max_length=80, unique=True)
+    requested_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class DashboardConfiguration(TimestampedModel):
+    """Operator-managed sources for the shared dashboard glance."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    infrastructure_label = models.CharField(max_length=40, default="Homelab")
+    weather_point = models.CharField(max_length=64, blank=True)
+    weather_label = models.CharField(max_length=40, default="Weather")
+
+
+class DashboardMachine(TimestampedModel):
+    """A machine selected for the dashboard, ordered independently of its state."""
+
+    machine = models.OneToOneField(
+        ManagedResource,
+        on_delete=models.CASCADE,
+        related_name="dashboard_placement",
+    )
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("position", "pk")
+
+
+class WeatherObservation(TimestampedModel):
+    """The last explicitly refreshed NWS reading for one configured point."""
+
+    point = models.CharField(max_length=64, unique=True)
+    payload = models.JSONField(default=dict)
+    observed_at = models.DateTimeField()
+
+
 class CertificateMaterial(TimestampedModel):
     """A certificate an operator generated elsewhere, held so it can be reused.
 
@@ -189,9 +228,7 @@ class OperationRequest(TimestampedModel):
         ManagedResource, on_delete=models.PROTECT, related_name="operations"
     )
     action = models.CharField(max_length=20, choices=Action.choices)
-    state = models.CharField(
-        max_length=20, choices=State.choices, default=State.QUEUED
-    )
+    state = models.CharField(max_length=20, choices=State.choices, default=State.QUEUED)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

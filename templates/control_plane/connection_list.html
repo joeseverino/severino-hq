@@ -113,17 +113,17 @@
           </td>
           <td class="connection-next">
             {% if connection.recommended_action %}
-              <a class="btn compact primary" href="{{ connection.recommended_action.url }}" title="{{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
+              <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }} — {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
               <span class="muted">{{ connection.recommended_action.reason }}</span>
             {% endif %}
             {% if connection.other_actions|length == 1 and not connection.recommended_action %}
-              {% for action in connection.other_actions %}<a class="connection-direct-action" href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>{% endfor %}
+              {% for action in connection.other_actions %}<a class="connection-direct-action" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>{% endfor %}
             {% elif connection.other_actions %}
               <details class="connection-actions">
                 <summary>{% if connection.recommended_action %}Other paths{% else %}Available paths{% endif %}</summary>
                 <span>
                   {% for action in connection.other_actions %}
-                    <a href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>
+                    <a href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
                   {% endfor %}
                 </span>
               </details>

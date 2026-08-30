@@ -14,7 +14,7 @@ alphabetical is the order and there is nothing to move.
         <th>Service</th>
         {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
         <th>Runs on</th>
-        <th>Project</th>
+        {% if show_service_projects %}<th>Project</th>{% endif %}
         <th>State</th>
       </tr>
     </thead>
@@ -79,11 +79,11 @@ alphabetical is the order and there is nothing to move.
               <span class="muted">—</span>
             {% endif %}
           </td>
-          <td>{% if service.project %}<a href="{{ service.project.url }}">{{ service.project.name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+          {% if show_service_projects %}<td>{% if service.project %}<a href="{{ service.project.url }}">{{ service.project.name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>{% endif %}
           <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
         </tr>
       {% empty %}
-        <tr><td colspan="{{ facets|length|add:4 }}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish your first one" %}</td></tr>
+        <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:4 }}{% else %}{{ facets|length|add:3 }}{% endif %}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish your first one" %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

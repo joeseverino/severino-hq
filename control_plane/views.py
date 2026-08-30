@@ -38,6 +38,7 @@ from application.infrastructure import (
     serialize_public_status,
     suggest_key,
 )
+from application.glance import dashboard_machine_selected, select_dashboard_machine
 from application.inventory import (
     AdoptCommand,
     AdoptServiceCommand,
@@ -92,6 +93,7 @@ from .models import ManagedResource, OperationRequest
 from .providers import (
     CERTIFICATE_KIND,
     DELIVERY_TARGET_KIND,
+    MACHINE_KIND,
     NameContext,
     PROVIDERS,
     normalized_hostname,
@@ -206,6 +208,11 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # about the names it covers or where it is installed, which is
                 # the whole of what a person came to check.
                 "facts": _form_facts(resource, spec) if resource else (),
+                "show_on_dashboard": bool(
+                    resource
+                    and kind == MACHINE_KIND
+                    and dashboard_machine_selected(resource.key)
+                ),
             },
         )
 
@@ -233,9 +240,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                         # The identifier is never asked for again once a
                         # resource exists, so an edit keeps the one it has.
                         key=(
-                            resource.key
-                            if resource
-                            else _derived_key(kind, spec.spec)
+                            resource.key if resource else _derived_key(kind, spec.spec)
                         ),
                         kind=kind,
                         spec=spec.spec,
@@ -249,6 +254,12 @@ class ResourceFormView(LoginRequiredMixin, View):
                 spec.add_error(None, _readable_error(exc))
             else:
                 saved = result["resource"]["key"]
+                if resource and kind == MACHINE_KIND:
+                    select_dashboard_machine(
+                        saved,
+                        selected="show_on_dashboard" in request.POST,
+                        principal=web_principal(request.user),
+                    )
                 if material is not None:
                     try:
                         _store_material(kind, saved, material.cleaned_data, request)
@@ -256,9 +267,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                         # The declaration exists and the material does not, so
                         # say which half landed rather than reporting success.
                         messages.error(request, str(exc))
-                        return redirect(
-                            "control_plane:upload_certificate", key=saved
-                        )
+                        return redirect("control_plane:upload_certificate", key=saved)
                 messages.success(
                     request,
                     f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
@@ -280,6 +289,11 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "identity": identity,
                 "spec": spec,
                 "material": material,
+                "show_on_dashboard": bool(
+                    resource
+                    and kind == MACHINE_KIND
+                    and dashboard_machine_selected(resource.key)
+                ),
             },
         )
 
@@ -418,7 +432,9 @@ def _service_links(resource) -> tuple[tuple[str, str], ...]:
     return tuple(
         (
             name,
-            reverse("control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}),
+            reverse(
+                "control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}
+            ),
         )
         for name in names
         # A wildcard covers names rather than naming one, and there is no
@@ -491,7 +507,9 @@ def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
 
     asked = {str(field.label).strip().casefold() for field in form}
     return (("Identifier", "", resource.key),) + tuple(
-        row for row in _readout_rows(resource) if str(row[0]).strip().casefold() not in asked
+        row
+        for row in _readout_rows(resource)
+        if str(row[0]).strip().casefold() not in asked
     )
 
 
@@ -850,6 +868,12 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         # and reordering only means anything within the first.
         context["favorites"] = [item for item in found if item.pinned]
         context["services"] = [item for item in found if not item.pinned]
+        context["favorite_service_projects"] = any(
+            item.project for item in context["favorites"]
+        )
+        context["other_service_projects"] = any(
+            item.project for item in context["services"]
+        )
         # Where a service runs is one column, not two. The runtime facet named
         # the container declaration and the origin named the machine it runs
         # on, side by side, in two different vocabularies for one fact.
@@ -1172,7 +1196,13 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 }
             )
         for rows in relations.values():
-            rows.sort(key=lambda row: (row["direction"], row["label"], row["other"].label.casefold()))
+            rows.sort(
+                key=lambda row: (
+                    row["direction"],
+                    row["label"],
+                    row["other"].label.casefold(),
+                )
+            )
         groups: dict[str, list[dict[str, Any]]] = {}
         for node in topology.nodes:
             groups.setdefault(node.kind, []).append(
@@ -1294,9 +1324,7 @@ class TopologyView(LoginRequiredMixin, TemplateView):
         return topology_url(node_id, lens=lens)
 
     @staticmethod
-    def _trace_url(
-        focus: str, direction: str, lens: str = "", depth: int = 3
-    ) -> str:
+    def _trace_url(focus: str, direction: str, lens: str = "", depth: int = 3) -> str:
         return topology_url(focus, direction=direction, depth=depth, lens=lens)
 
 
@@ -1474,7 +1502,8 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                 # A malformed provider timestamp must not break the resource page.
                 pass
         context["operations"] = [
-            operation_summary(operation) for operation in self.object.operations.all()[:20]
+            operation_summary(operation)
+            for operation in self.object.operations.all()[:20]
         ]
         for operation in context["operations"]:
             operation["created_at"] = datetime.fromisoformat(operation["created_at"])
@@ -1485,13 +1514,15 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         context["resolved_spec"] = self.object.spec
         if self.object.kind == CERTIFICATE_KIND:
             try:
-                context["resolved_spec"] = controller_contract(self.object)["resource"]["spec"]
+                context["resolved_spec"] = controller_contract(self.object)["resource"][
+                    "spec"
+                ]
                 context["resolution_error"] = ""
                 observed_names: dict[str, set[str]] = {}
                 for observation in self.object.status.get("consumers", []):
-                    observed_names.setdefault(observation.get("consumer", ""), set()).add(
-                        observation.get("domain", "")
-                    )
+                    observed_names.setdefault(
+                        observation.get("consumer", ""), set()
+                    ).add(observation.get("domain", ""))
                 # The target each consumer came from, so the page that shows
                 # where a certificate goes links to where those settings are
                 # changed rather than making the operator find it by name.

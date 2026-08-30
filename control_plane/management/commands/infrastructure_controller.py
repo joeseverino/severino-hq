@@ -35,6 +35,7 @@ from application.inventory import record_connections
 from application.sweep import record_sweep
 from application.security import cli_principal
 from application.infrastructure import controller_contract
+from application.glance import dashboard_refresh_plan, record_dashboard_observations
 from control_plane.models import ManagedResource
 
 
@@ -128,6 +129,19 @@ def _sweep_due(options: dict) -> Any:
     return sweep_due()
 
 
+def _glance_plan(options: dict) -> Any:
+    return dashboard_refresh_plan(options["controller_id"])
+
+
+def _glance(options: dict) -> Any:
+    payload = json.loads(options["payload"])
+    return record_dashboard_observations(
+        payload,
+        principal=cli_principal(),
+        controller_id=options["controller_id"],
+    )
+
+
 def _schedule(options: dict) -> Any:
     return schedule_automatic_operations(options["controller_id"])
 
@@ -158,6 +172,8 @@ ACTIONS: tuple[Action, ...] = (
     Action("analytics", ("controller_id", "payload"), _analytics),
     Action("analytics-plan", ("payload",), _analytics_plan),
     Action("sweep-due", (), _sweep_due),
+    Action("glance-plan", ("controller_id",), _glance_plan),
+    Action("glance", ("controller_id", "payload"), _glance),
     Action("report", ("controller_id", "operation", "payload"), _report),
 )
 

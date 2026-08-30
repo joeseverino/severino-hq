@@ -16,6 +16,7 @@ from .providers import (
     analytics,
     analytics_sites,
     connections,
+    dashboard_glance,
     execute,
     inventory,
     provider_snapshot,
@@ -215,6 +216,20 @@ def _report_findings(controller_id: str) -> None:
             _post("analytics", controller_id, readings)
 
 
+def _report_glance(controller_id: str) -> None:
+    """Read expensive dashboard context only after an operator requests it."""
+
+    try:
+        plan = _manage("glance-plan", "--controller-id", controller_id)
+    except BridgeError as exc:
+        print(f"glance plan unavailable: {type(exc).__name__}", file=sys.stderr)
+        return
+    panels = plan.get("panels") if isinstance(plan, dict) else []
+    if not isinstance(panels, list) or not panels:
+        return
+    _post("glance", controller_id, dashboard_glance(plan))
+
+
 def run_once(controller_id: str, *, apply: bool) -> int:
     if not apply:
         peek_args = ["peek"]
@@ -248,6 +263,7 @@ def run_once(controller_id: str, *, apply: bool) -> int:
         )
         return 0 if healthy else 1
 
+    _report_glance(controller_id)
     _report_findings(controller_id)
     _manage("schedule", "--controller-id", controller_id)
     claim_args = ["claim", "--controller-id", controller_id]
