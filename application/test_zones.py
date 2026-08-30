@@ -2041,3 +2041,61 @@ class PendingIsNotAFaultTests(TestCase):
         health = resource_health(self._resource(generation=3, observed_generation=2))
 
         self.assertEqual(health["state"], "pending")
+
+
+class TLSPostureInsightTests(TestCase):
+    """A domain's TLS posture, read through the credential that can see it.
+
+    The DNS token holds records and nothing else, which is why this was blank
+    for as long as it existed -- and why the zone page printed five em dashes
+    under labels promising observations. `cloudflare_api` carries the account
+    surface and had been sitting beside it the whole time.
+    """
+
+    def _zone(self, posture=None):
+        from django.utils import timezone
+        from control_plane.models import ProviderInventory
+        from .zones import Zone
+
+        record = {"zone": "example.com", "connection_ref": "a-dns"}
+        if posture is not None:
+            record["posture"] = posture
+        ProviderInventory.objects.update_or_create(
+            kind="cloudflare.zone",
+            defaults={"records": [record], "observed_at": timezone.now()},
+        )
+        return Zone(zone="example.com", connection_ref="a-dns")
+
+    def test_it_says_what_the_mode_means_rather_than_repeating_its_name(self):
+        """"Flexible" tells you nothing unless you already know what it does."""
+
+        from .zone_insights import posture
+
+        found = posture(self._zone({"ssl": "flexible"}))
+
+        self.assertEqual(found.value, "Flexible")
+        self.assertIn("plain HTTP onward to the origin", found.detail)
+
+    def test_it_carries_the_minimum_version_and_the_redirect(self):
+        from .zone_insights import posture
+
+        found = posture(
+            self._zone(
+                {"ssl": "strict", "min_tls_version": "1.2", "always_use_https": "on"}
+            )
+        )
+
+        self.assertEqual(found.value, "Full (strict)")
+        self.assertIn("below TLS 1.2", found.detail)
+        self.assertIn("redirected to HTTPS", found.detail)
+
+    def test_a_posture_hq_could_not_read_is_absent_rather_than_off(self):
+        """The account token is separate and may refuse.
+
+        A card reading "Off" because a permission was missing is worse than no
+        card: it describes a domain served over plain HTTP that is not.
+        """
+
+        from .zone_insights import posture
+
+        self.assertIsNone(posture(self._zone()))

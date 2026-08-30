@@ -297,3 +297,63 @@ def _dmarc_policy(content: str) -> str:
         "quarantine": "DMARC quarantines forgeries",
         "none": "DMARC is monitoring only",
     }.get(match.group(1).lower(), f"DMARC p={match.group(1).lower()}")
+
+
+# How Cloudflare's own words for a TLS mode read to somebody who did not set it.
+# "flexible" means the browser gets TLS and the origin gets plain HTTP, which is
+# worth saying in those terms rather than repeating the label.
+_TLS_MODE = {
+    "off": ("Off", "Served over plain HTTP."),
+    "flexible": (
+        "Flexible",
+        "Encrypted to Cloudflare and plain HTTP onward to the origin.",
+    ),
+    "full": ("Full", "Encrypted to the origin, whose certificate is not checked."),
+    "strict": ("Full (strict)", "Encrypted to the origin and its certificate checked."),
+    "full_strict": (
+        "Full (strict)",
+        "Encrypted to the origin and its certificate checked.",
+    ),
+}
+
+
+def posture(zone) -> ZoneInsight | None:
+    """How this domain answers over TLS, as Cloudflare currently holds it.
+
+    Stated, never flagged. HQ can read this now -- `cloudflare_api` carries the
+    account surface and the sweep collects it -- but it holds no declared
+    posture to compare against, and a control plane that reports drift from a
+    policy nobody wrote is inventing one. The two things here that are wrong by
+    their own definition already have their own insights.
+
+    Absent rather than empty when the account credential could not answer. A
+    domain whose posture HQ could not read is not a domain served over plain
+    HTTP, and a card saying "Off" because a token lacked a permission is worse
+    than no card.
+    """
+
+    from control_plane.models import ProviderInventory
+
+    wanted = zone.zone.strip().lower().rstrip(".")
+    found: dict[str, str] = {}
+    for snapshot in ProviderInventory.objects.filter(kind="cloudflare.zone"):
+        for record in snapshot.records:
+            if str(record.get("zone", "")).strip().lower().rstrip(".") != wanted:
+                continue
+            found = dict(record.get("posture") or {})
+    if not found:
+        return None
+
+    mode = str(found.get("ssl", "")).lower()
+    label, explanation = _TLS_MODE.get(mode, (mode.replace("_", " ").title(), ""))
+    minimum = str(found.get("min_tls_version", "")).strip()
+    detail = [explanation] if explanation else []
+    if minimum:
+        detail.append(f"Nothing below TLS {minimum} is accepted.")
+    if found.get("always_use_https") == "on":
+        detail.append("HTTP is redirected to HTTPS.")
+    return ZoneInsight(
+        label="TLS posture",
+        value=label or "Unknown",
+        detail=" ".join(detail),
+    )

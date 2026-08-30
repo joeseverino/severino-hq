@@ -2122,6 +2122,50 @@ def delete_cloudflare_record(
     )
 
 
+# The zone settings worth carrying: how a domain answers over TLS. Named rather
+# than taken whole, because the settings endpoint returns eighty entries and
+# most of them -- minify, rocket loader, browser cache TTL -- are not posture.
+ZONE_POSTURE_SETTINGS = (
+    "ssl",
+    "min_tls_version",
+    "tls_1_3",
+    "always_use_https",
+    "automatic_https_rewrites",
+)
+
+
+def _cloudflare_zone_posture(zone_id: str) -> dict[str, str]:
+    """How a zone answers over TLS, read through the credential that can see it.
+
+    The DNS token cannot: it holds records and nothing else, which is why this
+    was blank for as long as it existed. `cloudflare_api` carries the account
+    surface, zone settings included, and has been sitting beside it.
+
+    A failure here is not a failed sweep. The account token is a separate
+    credential with its own permissions, and a zone that answers with its
+    records and no posture is a smaller thing to report than no zone at all --
+    so a refusal leaves the key absent and the page says nothing rather than
+    guessing.
+    """
+
+    if not zone_id:
+        return {}
+    try:
+        envelope = _cloudflare_api_request(f"/zones/{zone_id}/settings")
+    except (ProviderError, OSError, ValueError):
+        return {}
+    settings = (envelope or {}).get("result")
+    if not isinstance(settings, list):
+        return {}
+    return {
+        str(item["id"]): str(item.get("value", ""))
+        for item in settings
+        if isinstance(item, dict)
+        and item.get("id") in ZONE_POSTURE_SETTINGS
+        and item.get("value") not in (None, "")
+    }
+
+
 def list_cloudflare_zones() -> list[dict[str, Any]]:
     """Every zone the credential can see, declared or not.
 
@@ -2137,6 +2181,7 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
             "connection_ref": connection_ref,
             "status": zone.get("status", ""),
             "plan": (zone.get("plan") or {}).get("name", ""),
+            "posture": _cloudflare_zone_posture(str(zone.get("id", ""))),
         }
         for zone in _cloudflare_zones()
         if zone.get("name")
