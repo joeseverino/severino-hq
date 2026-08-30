@@ -119,12 +119,15 @@ class NameListWidget(forms.Widget):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
 
-        # What can be edited first, what HQ found underneath it. Interleaved in
-        # whatever order the declaration happened to store them, a read-only row
-        # sat between two inputs and the blank row for adding one drifted away
-        # from the rest, so the field read as though the editable rows were the
-        # odd ones out.
-        values = sorted(self.format_value(value), key=lambda item: item in self.notes)
+        # What HQ found first, what only this field records underneath it. The
+        # observed one is the address the machine actually answers at on the
+        # network everything reaches it over; the typed ones are the exceptions
+        # nothing reports. Interleaved in whatever order the declaration
+        # happened to store them, a read-only row sat between two inputs and
+        # the blank row for adding one drifted away from the rest.
+        values = sorted(
+            self.format_value(value), key=lambda item: item not in self.notes
+        )
         rows = format_html_join(
             "", "{}", ((self._row(name, item),) for item in values)
         )

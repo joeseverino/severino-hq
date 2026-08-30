@@ -704,22 +704,25 @@ class ObservedAddressAnnotationTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertIn("100.101.102.103", form.spec["addresses"])
 
-    def test_what_can_be_edited_comes_before_what_hq_found(self):
-        """A read-only row between two inputs made the inputs look like the
-        exception, and pushed the blank row for adding one away from them."""
+    def test_what_hq_found_comes_before_what_only_this_field_records(self):
+        """The observed address is where the machine actually answers.
+
+        A read-only row between two inputs also pushed the blank row for adding
+        one away from the rest of them.
+        """
 
         from application.provider_forms import spec_form_class
 
         form = spec_form_class("machine")(
             initial={
                 "name": "a-box",
-                "addresses": ["100.101.102.103", "192.0.2.50"],
+                "addresses": ["192.0.2.50", "100.101.102.103"],
             }
         )
         rendered = str(form["addresses"])
 
         self.assertLess(
-            rendered.index("192.0.2.50"), rendered.index("100.101.102.103")
+            rendered.index("100.101.102.103"), rendered.index("192.0.2.50")
         )
 
 

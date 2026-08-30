@@ -166,6 +166,13 @@ class ResourceFormView(LoginRequiredMixin, View):
             )
         material_class = _material_form(kind) if not resource else None
         material = material_class() if material_class else None
+        # Built before the context, because the facts panel above it is decided
+        # by which questions it turns out to be asking.
+        spec = spec_form_class(
+            kind,
+            lock_identity=bool(resource),
+            context=_form_context(request, resource),
+        )(initial=_initial_spec(request, kind, resource))
         return render(
             request,
             self.template_name,
@@ -186,11 +193,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # menus can offer what suits that name rather than everything
                 # that exists. A certificate menu with one entry was right by
                 # luck; the second certificate is what makes it a question.
-                "spec": spec_form_class(
-                    kind,
-                    lock_identity=bool(resource),
-                    context=_form_context(request, resource),
-                )(initial=_initial_spec(request, kind, resource)),
+                "spec": spec,
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
                 # without it.
@@ -202,7 +205,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # nothing else -- an edit page for a certificate said nothing
                 # about the names it covers or where it is installed, which is
                 # the whole of what a person came to check.
-                "facts": _form_facts(resource) if resource else (),
+                "facts": _form_facts(resource, spec) if resource else (),
             },
         )
 
@@ -445,21 +448,34 @@ def _readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
         return ()
 
 
-def _form_facts(resource) -> tuple[tuple[str, str, str], ...]:
-    """What the form is about, with its filing at the top.
+def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
+    """What this resource is that the form below does not already ask.
 
-    The identifier leads because it is the one fact on this page that is
-    settled. It used to be an input near the bottom, behind the Options
-    disclosure, directly beneath a field called "Name" -- so the resource
-    appeared to have two names, the fixed one looked like the optional one, and
-    reading it meant opening a drawer.
+    The panel exists for the fields a form cannot show: a certificate's edit
+    page asks which target it installs on and says nothing about the names it
+    covers or what is actually served with it, which is the whole of what a
+    person came to check.
 
-    Added here rather than in the readout above, which every list and detail
-    surface shares: they identify the resource in their own way already, and a
-    row repeating it on each of them is the same fact three times.
+    On a machine it had the opposite problem. Every field on that form is on
+    that form, so the panel repeated them -- "What it is for" twice and the
+    addresses twice, once as text and once as inputs, on one screen. Matched by
+    label against the form's own fields, a row survives only when nothing below
+    is asking about it.
+
+    The identifier leads, and is the reason this is not empty for a machine. It
+    used to be an input near the bottom behind the Options disclosure, directly
+    beneath a field called "Name", so the resource appeared to have two names
+    and the fixed one looked like the optional one.
+
+    Added here rather than in the readout, which every list and detail surface
+    shares: they identify the resource in their own way already, and a row
+    repeating it on each of them is the same fact three times.
     """
 
-    return (("Identifier", "", resource.key),) + _readout_rows(resource)
+    asked = {str(field.label).strip().casefold() for field in form}
+    return (("Identifier", "", resource.key),) + tuple(
+        row for row in _readout_rows(resource) if str(row[0]).strip().casefold() not in asked
+    )
 
 
 def _removal_note(resource) -> str:
