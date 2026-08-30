@@ -143,9 +143,12 @@ there is no second credential registry. A restart cannot lose the schedule:
 systemd owns it, catches up missed runs, and the deployment revalidates the
 pull before declaring the release healthy.
 
-The controller claims only kind/action pairs marked `apply` in the strictly
-validated `config/controller-capabilities.json`. The same document declares
-automatic actions and drives worker dispatch parity. Its persistent systemd
+The controller claims only kind/action pairs a provider marks `apply`. Each
+provider declares what may be done to it, and which of those may run
+unprompted, beside its own definition in `control_plane/providers.py`; the
+contract handed to the worker is assembled from those. A test cross-checks the
+claim against the handler table, so a kind cannot declare `apply` with no code
+behind it, or `locked` while quietly having some. Its persistent systemd
 timer runs after boot and every five minutes. Each run drains infrastructure
 work and derives
 new work from HQ's verified state: it queues

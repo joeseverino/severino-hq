@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 import os
 import re
-from collections.abc import Set as AbstractSet
-from dataclasses import dataclass
+from collections.abc import Mapping, Set as AbstractSet
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -52,6 +52,24 @@ class ControllerProviderCapability(ProviderModel):
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
     capabilities: dict[str, ControllerProviderCapability]
+
+
+def applies(*, automatic: bool = False, verification=None) -> ControllerActionPolicy:
+    """The controller may run this action."""
+
+    return ControllerActionPolicy(
+        mode="apply", automatic=automatic, verification=verification
+    )
+
+
+def locked(reason: str) -> ControllerActionPolicy:
+    """The controller may not run this action, and this is why.
+
+    The reason is shown to whoever pressed the button, so it says what is true
+    rather than that a policy said no.
+    """
+
+    return ControllerActionPolicy(mode="locked", reason=reason)
 
 
 class TLSConsumerBase(ProviderModel):
@@ -1336,6 +1354,16 @@ class ProviderSpec:
     # the same reason ``choices`` is one: the answer needs the database, and
     # this module must not.
     notes: str = ""
+    # What the controller may do to this kind, and which of those it may do
+    # unprompted. Declared here, beside the provider it is about.
+    #
+    # This lived in `config/controller-capabilities.json`, a hand-kept file that
+    # had to name every provider exactly once or HQ refused to start. So a new
+    # provider was two edits in two languages, and the file could only ever
+    # repeat what the registry already knew. HQ is the source of truth for what
+    # HQ can do; a second copy of that is a thing to keep in sync, not a
+    # contract.
+    actions: Mapping[str, ControllerActionPolicy] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
@@ -2348,6 +2376,13 @@ _PROVIDERS = (
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
+        actions={
+            'reconcile': applies(automatic=True),
+            'renew': applies(automatic=True, verification=ControllerVerification(
+                    timeout_seconds=180,
+                    interval_seconds=5,
+                )),
+        },
         label="TLS certificate",
         applies=_managed_certificate_applies,
         connection_providers=("cloudflare_dns", "ssh"),
@@ -2373,6 +2408,10 @@ _PROVIDERS = (
         UploadedCertificateSpec,
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Uploaded certificate",
         seed=_uploaded_certificate_seed,
         connection_providers=("ssh",),
@@ -2391,6 +2430,10 @@ _PROVIDERS = (
         NPMProxyHostSpec,
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Proxy host",
         connection_providers=("npm",),
         removal_note=lambda spec: (
@@ -2436,6 +2479,10 @@ _PROVIDERS = (
         "Runs a set of containers on one of your machines. Created in Portainer "
         "if it is not there yet.",
         PortainerStackSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Container stack",
         connection_providers=("portainer",),
         # Which Portainer is folded away with the tuning. There is normally one,
@@ -2467,6 +2514,14 @@ _PROVIDERS = (
         "does not define the container -- whatever compose file created it "
         "still does.",
         PortainerContainerSpec,
+        actions={
+            'reconcile': locked(
+                'The container is defined by a compose file HQ has never seen. HQ can watch it and cycle it, not define it.'
+            ),
+            'restart': applies(),
+            'start': applies(),
+            'stop': applies(),
+        },
         label="Container",
         connection_providers=("portainer",),
         # No facet, no hostnames and no seed, so it is never offered as a way
@@ -2503,6 +2558,13 @@ _PROVIDERS = (
         "made once and then has no symptom until the day it matters. It does "
         "not define the device; running Tailscale on the machine did that.",
         TailnetDeviceSpec,
+        actions={
+            'reconcile': applies(automatic=True, verification=ControllerVerification(
+                    timeout_seconds=60,
+                    interval_seconds=10,
+                )),
+            'approve-routes': applies(),
+        },
         label="Tailnet device",
         connection_providers=("tailscale",),
         readout=_tailnet_device_readout,
@@ -2534,6 +2596,12 @@ _PROVIDERS = (
         "The tailnet's access policy. HQ reads it, shows what it implies, and "
         "checks a change against your own tests before applying one.",
         TailnetPolicySpec,
+        actions={
+            'reconcile': applies(verification=ControllerVerification(
+                    timeout_seconds=60,
+                    interval_seconds=10,
+                )),
+        },
         label="Tailnet policy",
         connection_providers=("tailscale",),
         hostnames=None,
@@ -2564,6 +2632,11 @@ _PROVIDERS = (
         "from whatever answers at them and never learns what range they "
         "belong to, which is what decides who can reach them.",
         NetworkSpec,
+        actions={
+            'reconcile': locked(
+                'HQ cannot create a subnet. This entry records one so the addresses inside it resolve.'
+            ),
+        },
         label="Network",
         declaration_only=True,
         hostnames=None,
@@ -2582,6 +2655,11 @@ _PROVIDERS = (
         "renews -- the authority one was issued by, including a root kept "
         "offline that nothing can reach by design.",
         CertificateAuthoritySpec,
+        actions={
+            'reconcile': locked(
+                'The root is kept offline so nothing can reach it. A controller that could would defeat the point.'
+            ),
+        },
         label="Certificate authority",
         declaration_only=True,
         hostnames=None,
@@ -2598,6 +2676,11 @@ _PROVIDERS = (
         "addresses that reach it. Machines behind a Portainer or a credential "
         "are already known and need no entry here.",
         MachineSpec,
+        actions={
+            'reconcile': locked(
+                'HQ cannot create a machine. This entry records one so the addresses that reach it resolve.'
+            ),
+        },
         label="Machine",
         declaration_only=True,
         hostnames=None,
@@ -2622,6 +2705,11 @@ _PROVIDERS = (
         "Somewhere a certificate can be installed, and how it gets there. "
         "Declaring one is what lets a certificate name it as a place to go.",
         TLSDeliveryTargetSpec,
+        actions={
+            'reconcile': locked(
+                'This describes how a place takes a certificate. The certificates installed there are what get deployed and verified.'
+            ),
+        },
         label="Certificate target",
         connection_providers=("npm", "ssh"),
         # Nothing to reconcile: this states how a target takes a certificate,
@@ -2644,6 +2732,11 @@ _PROVIDERS = (
         "caddy.route",
         "A name an edge Caddy already serves. Found by asking it, not declared.",
         CaddyRouteSpec,
+        actions={
+            'reconcile': locked(
+                "HQ reads these out of the edge's Caddyfile. It does not write that file."
+            ),
+        },
         label="Caddy route",
         connection_providers=("ssh",),
         declaration_only=True,
@@ -2665,6 +2758,10 @@ _PROVIDERS = (
         "Makes a hostname resolve to an IP on your network. Created in AdGuard "
         "if it is not there yet.",
         AdGuardRewriteSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Internal DNS record",
         connection_providers=("adguard",),
         removal_note=lambda spec: (
@@ -2684,6 +2781,10 @@ _PROVIDERS = (
         "cloudflare.dns_record",
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Public DNS record",
         applies=_public_dns_applies,
         connection_providers=("cloudflare_dns",),
@@ -2713,6 +2814,11 @@ _PROVIDERS = (
         "records under HQ's management; the credential can see every zone on "
         "the account, which is not the same as being asked to manage them.",
         CloudflareZoneSpec,
+        actions={
+            'reconcile': locked(
+                'Changing zone settings needs a token with Zone Settings:Edit. The DNS token does not carry it.'
+            ),
+        },
         label="Domain",
         connection_providers=("cloudflare_dns",),
         public_effect=True,
@@ -2794,19 +2900,33 @@ for _named in (
 
 @lru_cache(maxsize=1)
 def controller_capability_registry() -> ControllerCapabilityRegistry:
-    registry_path = (
-        Path(__file__).resolve().parents[1]
-        / "config"
-        / "controller-capabilities.json"
-    )
-    registry = ControllerCapabilityRegistry.model_validate_json(
-        registry_path.read_text(encoding="utf-8")
-    )
-    if set(registry.capabilities) != set(PROVIDERS):
+    """What the controller may do, assembled from the providers themselves.
+
+    This used to be read from a committed JSON file that had to name every
+    provider exactly once or HQ refused to start -- so declaring a provider
+    meant writing it twice, in two languages, and the check that kept them
+    honest could only ever confirm that a copy was still a copy.
+
+    Nothing was ever in that file which the provider did not already own. A
+    provider knows whether the controller can converge it, whether it should do
+    so unprompted, and why not when not; those are properties of the thing, not
+    of a deployment. HQ is where they are stated now, and there is no longer a
+    second place for them to disagree with.
+    """
+
+    missing = sorted(kind for kind, provider in PROVIDERS.items() if not provider.actions)
+    if missing:
         raise ValueError(
-            "Controller capability registry must declare every provider exactly once."
+            "Every provider must declare what the controller may do to it. "
+            "Missing: " + ", ".join(missing)
         )
-    return registry
+    return ControllerCapabilityRegistry(
+        schema_version=1,
+        capabilities={
+            kind: ControllerProviderCapability(actions=dict(provider.actions))
+            for kind, provider in PROVIDERS.items()
+        },
+    )
 
 
 def controller_id() -> str:

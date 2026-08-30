@@ -29,6 +29,7 @@ from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from control_plane.providers import (
+    CERTIFICATE_KIND,
     caa_parts,
     certificate_covers,
     controller_capability_registry,
@@ -724,17 +725,6 @@ def controller_config_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config"
 
 
-def _certificate_registry(name: str) -> dict[str, Any]:
-    path = controller_config_dir() / name
-    try:
-        registry = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ProviderError("Certificate controller registry is invalid.") from exc
-    if registry.get("schema_version") != 1:
-        raise ProviderError("Certificate controller registry version is unsupported.")
-    return registry
-
-
 def _run(
     command: list[str], *, input_bytes: bytes | None = None, step: str = "command"
 ) -> bytes:
@@ -1115,18 +1105,20 @@ def _deploy_certificate(
 
 
 def _tls_verification_policy() -> tuple[int, int]:
-    registry = _certificate_registry("controller-capabilities.json")
-    policy = (
-        registry.get("capabilities", {})
-        .get("tls.certificate", {})
-        .get("actions", {})
-        .get("renew", {})
-        .get("verification", {})
-    )
-    timeout = policy.get("timeout_seconds")
-    interval = policy.get("interval_seconds")
-    if not isinstance(timeout, int) or not isinstance(interval, int):
-        raise ProviderError("TLS renewal verification policy is invalid.")
+    """How long to keep checking that a renewed certificate is actually served.
+
+    Read from the provider that owns the action rather than from a file beside
+    it. The bounds stay: this decides how long a renewal blocks, so a value the
+    controller cannot live with is a failure here rather than an hour spent
+    polling.
+    """
+
+    capability = controller_capability_registry().capabilities.get(CERTIFICATE_KIND)
+    policy = capability.actions.get("renew") if capability else None
+    verification = policy.verification if policy else None
+    if verification is None:
+        raise ProviderError("TLS renewal declares no verification policy.")
+    timeout, interval = verification.timeout_seconds, verification.interval_seconds
     if not 30 <= timeout <= 600 or not 1 <= interval <= 30 or interval > timeout:
         raise ProviderError("TLS renewal verification policy is out of bounds.")
     return timeout, interval
