@@ -223,6 +223,30 @@ class StyleContractTests(SimpleTestCase):
             outside, [], "Rules outside @layer beat every layer. Put them in one."
         )
 
+    def test_font_size_comes_from_the_type_scale(self):
+        """Three hundred declarations had drifted across twenty sizes.
+
+        Thirteen of them sat inside a six-pixel band in half-pixel steps --
+        13px and 13.5px used fifty-three and thirty-four times, which is not a
+        distinction anyone can see or intended to make. A size is now one of
+        the scale's steps or it is drift.
+
+        `em` is exempt and stays exempt. It means "relative to whatever this
+        sits in" -- a unit suffix shrinking beside its number, a glyph tracking
+        its label -- which is a different statement from choosing a step, and
+        one an absolute scale cannot make.
+        """
+
+        import re
+
+        literals = re.findall(r"font-size:\s*([0-9.]+(?:px|rem))", self._stylesheet())
+
+        self.assertEqual(
+            sorted(set(literals)),
+            [],
+            "font-size belongs to the --text-* scale, not a literal.",
+        )
+
     def test_status_colour_comes_from_a_tone_token(self):
         """One status, one set of colours, named once.
 
