@@ -1387,3 +1387,57 @@ class QueueHeadTests(TestCase):
         self.assertGreater(
             self.certificate.generation, self.certificate.observed_generation
         )
+
+
+class ReadoutsSayNothingBlankTests(TestCase):
+    """A readout row must be able to hold a value.
+
+    Two of these shipped and neither was noticed from the code: a zone printed
+    a record count and an MX, SPF, DMARC and CAA summary from five `status`
+    keys nothing has ever written, and a container printed a state from a key a
+    sweep does not store. Ten container pages and four domain pages, every one
+    of them an em dash under a label promising an observation.
+
+    Blank on the resource in front of you is normal -- a certificate that has
+    not been reconciled yet has no expiry. Blank on *every* resource of a kind,
+    across desired and observed both, means the row reads a key with no writer.
+    """
+
+    def _rows(self, kind, spec, status=None):
+        from .providers import PROVIDERS
+
+        provider = PROVIDERS[kind]
+        return provider.readout(spec, status or {}) if provider.readout else ()
+
+    def test_a_container_does_not_print_a_state_nothing_records(self):
+        """A sweep confirms a container by its identity, which holds no state."""
+
+        labels = [label for label, _, _ in self._rows(
+            "portainer.container",
+            {"connection_ref": "a-portainer", "host": "a-box", "name": "app"},
+        )]
+
+        self.assertNotIn("State", labels)
+
+    def test_a_zone_does_not_print_summaries_it_cannot_derive(self):
+        """A readout gets a spec and a status and no database.
+
+        The domain page derives all of these from the records HQ sweeps, and
+        says more besides. This one could only ever print the placeholder where
+        the derivation would have gone.
+        """
+
+        labels = [label for label, _, _ in self._rows(
+            "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"}
+        )]
+
+        for absent in ("Records", "Mail (MX)", "SPF", "DMARC"):
+            self.assertNotIn(absent, labels)
+
+    # No generic "every row can hold a value" test here. Fed a synthetic status
+    # that answers every key, four rows that are populated in production came
+    # back blank -- a certificate's consumers and the tailnet policy's grants,
+    # groups and tests all read lists, and a fixture cannot fake a list without
+    # knowing its shape. The sound version of this check needs the real estate,
+    # so it is an audit run against it rather than a test that would cry wolf
+    # on every future provider that reads a collection.

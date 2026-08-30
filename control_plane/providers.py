@@ -1971,22 +1971,23 @@ def _zone_key_hint(spec: dict[str, Any]) -> str:
 def _zone_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    """What is true of this domain right now, stated without judgement.
+    """What HQ holds about this domain that is not said better elsewhere.
 
-    Every row is an observation. HQ has no credential that could change any of
-    them yet, and a control plane that flags drift against a policy it cannot
-    enforce is just an opinion with a red pill next to it. When zone posture
-    becomes declarable these become desired-vs-observed like every other row.
+    Five rows used to sit above this one -- a record count, and a summary each
+    of MX, SPF, DMARC and CAA. Every one of them read a `status` key that
+    nothing has ever written, so every zone page in the estate printed five em
+    dashes and called them observations.
+
+    The facts were never missing. HQ sweeps every record in these zones, and
+    `application.zone_insights` already derives exactly those summaries from
+    them for the domain page, which says all of it and more. A readout is handed
+    a spec and a status and no database, so this is the one surface that could
+    not have derived them -- and the answer to that is to stop pretending, not
+    to print a placeholder where the derivation would go.
     """
 
-    return (
-        ("Records", "", str(status.get("record_count", "")) if status else ""),
-        ("Mail (MX)", "", status.get("mx_summary", "")),
-        ("SPF", "", status.get("spf_summary", "")),
-        ("DMARC", "", status.get("dmarc_summary", "")),
-        ("Certificate authorities (CAA)", "", status.get("caa_summary", "")),
-        ("Served by", spec.get("connection_ref", ""), ""),
-    )
+    del status
+    return (("Served by", spec.get("connection_ref", ""), ""),)
 
 
 def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -2241,10 +2242,13 @@ def _container_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     # No "Runs on" row: the card carries the machine as a link, and printing it
     # here as text would say it twice in the same box.
-    return (
-        ("Container", spec.get("name", ""), status.get("container", "")),
-        ("State", "", status.get("state", "")),
-    )
+    #
+    # No "State" row either. It read `status["state"]`, which nothing writes for
+    # a container -- a container is confirmed by the sweep, and `confirm_observed`
+    # stores the spec it derived, which is identity and holds no state. So the
+    # row was an em dash on all ten of them, every time. What a container is
+    # doing comes from the sweep and is on the card above, with its uptime.
+    return (("Container", spec.get("name", ""), status.get("container", "")),)
 
 
 def _container_from_record(record: dict[str, Any]) -> dict[str, Any]:
