@@ -724,25 +724,42 @@ class ObservedAddressAnnotationTests(TestCase):
 
 
 class IdentifierIsFixedTests(TestCase):
-    """The identifier is this page's address, not a second name to choose."""
+    """The identifier is filing, and a form should not ask about filing.
+
+    It was an input near the bottom of the form, behind the Options disclosure,
+    directly beneath a field called "Name". So the resource appeared to have two
+    names, the fixed one looked like the optional one, and reading it meant
+    opening a drawer.
+    """
 
     def setUp(self):
         self.resource = ManagedResource.objects.create(
             key="a-box", kind="machine", spec={"name": "a-box", "addresses": []}
         )
+        user = get_user_model().objects.create_user(
+            username="op", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(user)
 
-    def test_it_cannot_be_edited(self):
+    def test_the_form_does_not_ask_for_it(self):
         from application.provider_forms import ResourceIdentityForm
 
-        self.assertTrue(ResourceIdentityForm().fields["key"].disabled)
+        self.assertNotIn("key", ResourceIdentityForm().fields)
 
-    def test_a_posted_rename_is_ignored_rather_than_applied(self):
-        from application.provider_forms import ResourceIdentityForm
-
-        form = ResourceIdentityForm(
-            {"key": "something-else", "enabled": "on"},
-            initial={"key": "a-box", "enabled": True},
+    def test_it_is_shown_at_the_top_instead(self):
+        response = self.client.get(
+            reverse("control_plane:edit", kwargs={"key": "a-box"})
         )
 
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.cleaned_data["key"], "a-box")
+        self.assertContains(response, "Identifier")
+
+    def test_a_save_keeps_the_identifier_it_already_had(self):
+        response = self.client.post(
+            reverse("control_plane:edit", kwargs={"key": "a-box"}),
+            {"name": "a-box", "role": "A renamed purpose", "enabled": "on"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.resource.refresh_from_db()
+        self.assertEqual(self.resource.key, "a-box")
+        self.assertEqual(self.resource.spec["role"], "A renamed purpose")

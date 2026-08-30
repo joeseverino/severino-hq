@@ -188,16 +188,16 @@ class ResourceIdentityForm(forms.Form):
     # which is true of a proxy host and not of a machine, whose identifier comes
     # from its name. What it really is is the string in this page's address and
     # in every operation and audit entry, which is why it must not move.
-    key = forms.SlugField(
-        max_length=180,
-        required=False,
-        label="Identifier",
-        help_text=(
-            "Used in this page's address and in every operation recorded "
-            "against it. Derived from the name when the resource is created, "
-            "and fixed afterwards."
-        ),
-    )
+    # No identifier field. It was an input labelled "Name in HQ" sitting
+    # directly beneath one labelled "Name", so a machine appeared to have two
+    # names and no way to tell which it was actually called -- and the honest
+    # answer is neither: it is the string in this page's address and in every
+    # operation and audit entry recorded against the resource.
+    #
+    # Disabling it was not enough. A greyed-out box is still a box, and a form
+    # that shows one is still asking. It is derived from the name when the
+    # resource is created and never asked about again; the readout above the
+    # form is where it is now shown, as the filing it is.
     enabled = forms.BooleanField(
         required=False,
         initial=True,
@@ -208,23 +208,6 @@ class ResourceIdentityForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, **kwargs):
-        """This form is only ever built for a resource that already exists.
-
-        Which makes the identifier the one field on it that must not move: it
-        is this page's address and the name every operation and audit entry
-        recorded against this resource refers to. Presented as an input beside
-        the machine's own name, it read as a second name to choose, and the
-        question "which one is it actually called" has no good answer because
-        the honest one is "neither, that is its filing".
-
-        Disabled rather than hidden -- the value is worth seeing, and Django
-        takes a disabled field from the initial data and ignores whatever the
-        request tried to say about it, so a rename cannot be posted at all.
-        """
-
-        super().__init__(*args, **kwargs)
-        self.fields["key"].disabled = True
 
 
 class ProviderSpecForm(forms.Form):

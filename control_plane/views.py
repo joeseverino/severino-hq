@@ -178,9 +178,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # know and nothing else: a name it can derive, and a pause
                 # switch for a thing that does not exist yet, are not questions.
                 "identity": (
-                    ResourceIdentityForm(
-                        initial={"key": resource.key, "enabled": resource.enabled}
-                    )
+                    ResourceIdentityForm(initial={"enabled": resource.enabled})
                     if resource
                     else None
                 ),
@@ -204,7 +202,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # nothing else -- an edit page for a certificate said nothing
                 # about the names it covers or where it is installed, which is
                 # the whole of what a person came to check.
-                "facts": _readout_rows(resource) if resource else (),
+                "facts": _form_facts(resource) if resource else (),
             },
         )
 
@@ -213,17 +211,7 @@ class ResourceFormView(LoginRequiredMixin, View):
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
-        # The identifier is disabled, so its value comes from here rather than
-        # from the request -- without the initial, a save would post a blank key
-        # for a resource that has one.
-        identity = (
-            ResourceIdentityForm(
-                request.POST,
-                initial={"key": resource.key, "enabled": resource.enabled},
-            )
-            if resource
-            else None
-        )
+        identity = ResourceIdentityForm(request.POST) if resource else None
         spec = spec_form_class(
             kind,
             lock_identity=bool(resource),
@@ -239,9 +227,11 @@ class ResourceFormView(LoginRequiredMixin, View):
             try:
                 result = save_managed_resource(
                     ManagedResourceCommand(
+                        # The identifier is never asked for again once a
+                        # resource exists, so an edit keeps the one it has.
                         key=(
-                            identity.cleaned_data["key"] or resource.key
-                            if identity
+                            resource.key
+                            if resource
                             else _derived_key(kind, spec.spec)
                         ),
                         kind=kind,
@@ -453,6 +443,23 @@ def _readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
         return tuple(provider.readout(resource.spec, resource.status or {}))
     except (KeyError, TypeError, ValueError):
         return ()
+
+
+def _form_facts(resource) -> tuple[tuple[str, str, str], ...]:
+    """What the form is about, with its filing at the top.
+
+    The identifier leads because it is the one fact on this page that is
+    settled. It used to be an input near the bottom, behind the Options
+    disclosure, directly beneath a field called "Name" -- so the resource
+    appeared to have two names, the fixed one looked like the optional one, and
+    reading it meant opening a drawer.
+
+    Added here rather than in the readout above, which every list and detail
+    surface shares: they identify the resource in their own way already, and a
+    row repeating it on each of them is the same fact three times.
+    """
+
+    return (("Identifier", "", resource.key),) + _readout_rows(resource)
 
 
 def _removal_note(resource) -> str:
