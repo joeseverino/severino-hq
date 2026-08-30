@@ -1,0 +1,23 @@
+<form class="command-center-palette" action="{% url 'search' %}" method="get" data-command-center-form>
+  <label class="visually-hidden" for="command-center-query">Find a command or destination</label>
+  <div class="command-center-query">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6.5"></circle>
+      <path d="m15.5 15.5 5 5"></path>
+    </svg>
+    <input id="command-center-query" name="q" type="search"
+           placeholder="Try “deploy”, “certificate”, or “unreachable”"
+           autocomplete="off" spellcheck="false" role="combobox"
+           aria-autocomplete="list" aria-controls="command-center-options"
+           aria-expanded="false" data-command-center-input>
+    <kbd>⌘ K</kbd>
+  </div>
+  <div class="command-center-results" data-command-center-results aria-live="polite">
+    <p class="command-center-loading muted">Loading…</p>
+  </div>
+  <footer class="command-center-footer">
+    <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
+    <span><kbd>Enter</kbd> open <span class="command-center-enter-hint">or search everything</span></span>
+    <span><kbd>Esc</kbd> close</span>
+  </footer>
+</form>

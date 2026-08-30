@@ -5,11 +5,10 @@ from __future__ import annotations
 import math
 import os
 import re
-from collections.abc import Set as AbstractSet
-from dataclasses import dataclass
+from collections.abc import Mapping, Set as AbstractSet
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
 from typing import Annotated, Any, Callable, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
@@ -52,6 +51,24 @@ class ControllerProviderCapability(ProviderModel):
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
     capabilities: dict[str, ControllerProviderCapability]
+
+
+def applies(*, automatic: bool = False, verification=None) -> ControllerActionPolicy:
+    """The controller may run this action."""
+
+    return ControllerActionPolicy(
+        mode="apply", automatic=automatic, verification=verification
+    )
+
+
+def locked(reason: str) -> ControllerActionPolicy:
+    """The controller may not run this action, and this is why.
+
+    The reason is shown to whoever pressed the button, so it says what is true
+    rather than that a policy said no.
+    """
+
+    return ControllerActionPolicy(mode="locked", reason=reason)
 
 
 class TLSConsumerBase(ProviderModel):
@@ -164,14 +181,14 @@ class TLSDeliveryTargetSpec(ProviderModel):
     def kind_decides_which_settings_apply(self):
         # Refused rather than ignored. A directory typed against an NPM target
         # would sit there looking configured while nothing ever read it.
-        for field, kind in (
+        for field_name, kind in (
             ("certificate_directory", "caddy"),
             ("discover_covered_hosts", "npm"),
             ("install_domains", "cpanel"),
         ):
-            if getattr(self, field) and self.kind != kind:
+            if getattr(self, field_name) and self.kind != kind:
                 raise ValueError(
-                    f"{TLSDeliveryTargetSpec.model_fields[field].title!r} "
+                    f"{TLSDeliveryTargetSpec.model_fields[field_name].title!r} "
                     f"applies to {kind} targets, and this one is {self.kind}."
                 )
         if self.kind == "caddy" and not self.certificate_directory:
@@ -283,6 +300,26 @@ class ResolvedTLSCertificateSpec(ProviderModel):
                     + ", ".join(uncovered)
                 )
         return self
+
+
+def origin_is_authoritative(provider: "ProviderSpec") -> bool:
+    """Whether this provider's origin says where a request is *finally* served.
+
+    Two kinds of provider answer "and then what serves it", and they mean
+    different things by it. One that also *answers* for the name states where
+    the name points -- which for a proxied name is the proxy. One that only
+    routes states where the request ends up. Both are origins; only the second
+    is the answer to "what serves this", so the first has to yield wherever both
+    are present.
+
+    Stated once, here, because two surfaces rank origins: the service catalogue
+    and the machine board. Ranked differently, a name appears under one machine
+    on its own page and another on the board -- which is precisely the
+    disagreement the shared origin was introduced to end, reintroduced one level
+    up.
+    """
+
+    return provider.answers is None
 
 
 def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
@@ -589,45 +626,24 @@ class MachineSpec(ProviderModel):
         title="Addresses",
         description=(
             "Every address that reaches it — LAN, tailnet, public. A resource "
-            "forwarding to one of these is understood to be pointing here."
+            "forwarding to one of these is understood to be pointing here. "
+            "Marked ones HQ also sees for itself; the rest exist only here, "
+            "because nothing in the estate reports them."
         ),
     )
-    # How you get in, and what you are getting into. An address says where a
-    # machine is; none of these are derivable from one, and an authored
-    # inventory outside HQ was carrying them because HQ had nowhere to put
-    # them.
-    operating_system: str = Field(
-        default="",
-        max_length=120,
-        title="Operating system",
-        description="What it runs. Free text — this is a label, not a contract.",
-    )
-    form: str = Field(
-        default="",
-        max_length=60,
-        title="Kind",
-        description=(
-            "What sort of thing it is — a VM, a host, a printer, a phone. "
-            "Decides nothing; it is how a list of machines reads as an estate "
-            "rather than as seven names."
-        ),
-    )
-    ssh_alias: str = Field(
-        default="",
-        max_length=120,
-        title="SSH alias",
-        description=(
-            "The name in `~/.ssh/config` that reaches it, if any. Recorded so "
-            "the way in is written down once rather than remembered."
-        ),
-    )
-    ssh_port: int | None = Field(
-        default=None,
-        ge=1,
-        le=65535,
-        title="SSH port",
-        description="Only when it is not 22. A moved port is worth stating.",
-    )
+
+    # Three more fields lived here: an operating system, a kind, an SSH alias
+    # and port. All four were blank on every machine in the estate, and only
+    # one thing read any of them -- the readout at the top of the form they
+    # were typed into. Nothing resolved through them, nothing connected with
+    # them, no page decided anything by them.
+    #
+    # The operating system had a source all along: the tailnet reports `os` for
+    # every device it carries. The other three had none and needed none. A
+    # field that is empty everywhere and read by nobody is not an unfilled
+    # field, it is a question HQ was asking for no reason -- and asking it
+    # beside an address that genuinely matters made the whole form look like
+    # guesswork.
 
 
 class PortainerStackEnvVar(ProviderModel):
@@ -804,6 +820,113 @@ class AdGuardRewriteSpec(ProviderModel):
         max_length=253,
         title="Points at",
         description="The address this hostname resolves to, usually an IP.",
+    )
+
+
+class CaddyRouteSpec(ProviderModel):
+    """One name an edge Caddy serves, and what it hands the request to.
+
+    Observed, never authored, and locked for the same reason a container is:
+    the route lives in a Caddyfile that HQ has never seen and must not pretend
+    to own. Declaring one here says "this is mine to watch", and there is
+    nothing for a reconcile to converge toward.
+
+    It exists because the only ingress HQ could describe was a proxy, and the
+    edge does not run one. Every name served from that box reported "nothing
+    supplies this" on its own page while answering over TLS -- from a machine
+    HQ sweeps, holds a credential for, and installs the certificate on. The
+    knowledge was one `ssh` away the whole time.
+    """
+
+    connection_ref: str = Field(
+        default="",
+        max_length=160,
+        title="Caddy",
+        description="The credential that reaches the host this route is served from.",
+    )
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name this route answers for.",
+    )
+    upstream: str = Field(
+        default="",
+        max_length=253,
+        title="Hands off to",
+        description="Where Caddy sends the request -- a container and port, usually.",
+    )
+
+
+class CaddyRouteInFile(ProviderModel):
+    """One route as it appears in the file HQ writes."""
+
+    domain: str = Field(min_length=1, max_length=253)
+    upstream: str = Field(min_length=1, max_length=253)
+
+
+class ResolvedCaddyRouteSpec(CaddyRouteSpec):
+    """A route, and every route sharing the file its edge imports.
+
+    Caddy is configured by a file rather than by a route, so reconciling one
+    means writing all of them. The contract carries the siblings for the same
+    reason a certificate's carries every place it installs: ``execute`` is
+    handed one resource, and one resource is not what gets written.
+
+    ``certificate_directory`` comes from the delivery target for the same
+    connection, which already records where the certificate is installed. HQ
+    writes the TLS lines out from it rather than importing the snippet the
+    operator's own file defines, so the file HQ owns stands on its own.
+    """
+
+    certificate_directory: str = Field(default="", max_length=500)
+    routes: list[CaddyRouteInFile] = Field(default_factory=list)
+
+
+def _caddy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (spec["domain"],)
+
+
+def _caddy_origin(spec: dict[str, Any]) -> str:
+    """Where the request goes after Caddy, when Caddy says.
+
+    A route that terminates in Caddy itself -- a redirect, a static file, a
+    status page it writes -- hands off to nothing, and an empty origin is the
+    honest answer rather than pointing the name back at the proxy in front of
+    it.
+    """
+
+    return str(spec.get("upstream", "") or "").strip()
+
+
+def _caddy_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    """One route per name per host, which is what Caddy itself enforces."""
+
+    return (
+        str(spec.get("connection_ref", "") or ""),
+        normalized_hostname(str(spec.get("domain", "") or "")),
+    )
+
+
+def _caddy_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "connection_ref": str(record.get("connection_ref", "") or ""),
+        "domain": str(record.get("domain", "") or ""),
+        "upstream": str(record.get("upstream", "") or ""),
+    }
+
+
+def _caddy_key_hint(spec: dict[str, Any]) -> str:
+    return f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
+
+
+def _caddy_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    upstream = str(spec.get("upstream", "") or "")
+    return (
+        ("Served by", "", f"caddy on {spec.get('connection_ref', '') or 'the edge'}"),
+        ("Hands off to", "", upstream or "Caddy answers this itself"),
     )
 
 
@@ -997,6 +1120,12 @@ class CloudflareZoneSpec(ProviderModel):
     -- is the natural next field set here, and is deliberately absent until the
     controller holds a credential that could reconcile it. Declaring desired
     state nothing can act on is how a control plane starts lying.
+
+    That credential now exists: `cloudflare_api` carries the account surface,
+    zone settings included, beside the DNS token that deliberately does not. So
+    the precondition written here has been met and the field set is the only
+    thing still missing -- and the refusal shown on the page had gone on blaming
+    the token, which explains something that stopped being true.
     """
 
     zone: str = Field(
@@ -1250,6 +1379,21 @@ class ProviderSpec:
     # "cloudflare.dns_record" written into it, and the second provider with
     # anything inside it would have added an ``elif``.
     contains: tuple[str, str, str] | None = None
+    # ``module:function`` returning ``{field: {value: note}}`` -- which of the
+    # values already in a field HQ can see without being told. A dotted path for
+    # the same reason ``choices`` is one: the answer needs the database, and
+    # this module must not.
+    notes: str = ""
+    # What the controller may do to this kind, and which of those it may do
+    # unprompted. Declared here, beside the provider it is about.
+    #
+    # This lived in `config/controller-capabilities.json`, a hand-kept file that
+    # had to name every provider exactly once or HQ refused to start. So a new
+    # provider was two edits in two languages, and the file could only ever
+    # repeat what the registry already knew. HQ is the source of truth for what
+    # HQ can do; a second copy of that is a thing to keep in sync, not a
+    # contract.
+    actions: Mapping[str, ControllerActionPolicy] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
@@ -1286,6 +1430,27 @@ class ProviderResolutionContext:
     # resource is asking -- a target's name belongs to one certificate, and the
     # rest are named after themselves.
     resource_key: str = ""
+    # Every Caddy route HQ declares. A route reconciles by writing the file its
+    # edge imports, and that file is all of them at once -- so one route's
+    # contract has to carry its siblings, the way a certificate's carries every
+    # place it installs.
+    #
+    # Called rather than passed, because resolution runs for every declaration
+    # on a page and only a route asks this. Read eagerly it was a query per
+    # resource for an answer almost none of them wanted -- which is the cost
+    # the machine board's own test measures and refused.
+    caddy_routes: Callable[[], tuple[dict[str, Any], ...]] | None = None
+    # ``connection_ref -> hostnames observed landing on that connection's
+    # machine``. Passed in for the same reason the targets are: this module
+    # states what a certificate installs and must not be the thing that queries
+    # a sweep to find out.
+    #
+    # Every site that resolves a spec has to supply it, including the one that
+    # fingerprints desired state. Resolution that differs between the two is a
+    # generation that advances every time it is computed -- the certificate
+    # would queue itself forever, each run disagreeing with the last about what
+    # it had asked for.
+    names_at: Callable[[str], tuple[str, ...]] | None = None
 
 
 def _delivery_target(
@@ -1306,23 +1471,51 @@ def _consumer_at(
     certificate_key: str,
     certificate_name: str,
     domains: list[str],
+    names_at: Callable[[str], tuple[str, ...]] | None = None,
 ) -> dict[str, Any]:
     """One certificate's declaration of how it arrives at one target.
 
     The name is the target's own only for the certificate that owns it. Any
     other certificate installed there is named after itself, or the second
     would land on top of the first.
+
+    Which names to check at that target is derived, not typed. It used to be
+    typed: a proxy discovered its own covered hosts through its API and every
+    other kind of target carried a hand-written list, so a name added to the
+    estate became a verified consumer only if somebody also remembered to add
+    it here. One did not get remembered, and the result was a certificate page
+    listing one name on a host serving two -- while the *service* page for the
+    missing one showed the certificate correctly, because that side asks which
+    names the certificate covers rather than which names were written down.
+
+    Two answers to one question is the whole defect, so this asks the question
+    once: a name is a consumer at this target when the certificate covers it and
+    it is observed landing on that target's machine. Both halves are things HQ
+    already reconciles. The declared list stays and is unioned in, because a
+    target may legitimately serve a name no sweep can see -- it is now an
+    addition to the derivation rather than the entirety of it.
+
+    Derivation only proposes. Each name is still probed at the target and
+    matched on fingerprint by the controller, so a name derived wrongly shows up
+    as a mismatch rather than as a false claim of coverage.
     """
 
     kind = target["kind"]
     owns_the_name = bool(certificate_key) and (
         target.get("certificate_resource") == certificate_key
     )
+    covered = set(domains)
+    landing = names_at(target["connection_ref"]) if names_at else ()
     consumer = {
         "kind": kind,
         "connection_ref": target["connection_ref"],
         "name": target["name"] if owns_the_name else f"{certificate_name}-{kind}",
-        "verify_domains": list(target.get("verify_domains") or []),
+        "verify_domains": sorted(
+            {
+                *(target.get("verify_domains") or []),
+                *(name for name in landing if certificate_covers(name, covered)),
+            }
+        ),
     }
     if kind == "caddy":
         consumer["certificate_directory"] = target["certificate_directory"]
@@ -1335,7 +1528,6 @@ def _consumer_at(
         # for; otherwise every non-wildcard name it covers, since shared hosting
         # takes one certificate per name.
         declared = list(target.get("install_domains") or []) if owns_the_name else []
-        covered = set(domains)
         consumer["install_domains"] = declared or [
             domain
             for domain in domains
@@ -1347,6 +1539,45 @@ def _consumer_at(
                 "install against."
             )
     return consumer
+
+
+def _resolve_caddy_route(
+    authored: dict[str, Any], context: ProviderResolutionContext
+) -> dict[str, Any]:
+    """One route, plus the whole file it is part of.
+
+    Caddy is configured by a file, not by a route, so reconciling one means
+    writing all of them for that edge. `execute` is handed a single resource --
+    which is right for everything else -- so the contract carries the siblings,
+    exactly as a certificate's carries every consumer it installs on.
+
+    The certificate directory comes from the delivery target for the same
+    connection, which already records where the certificate is installed. HQ
+    writes the TLS lines out from it rather than importing the operator's
+    snippet, so its file stands on its own.
+    """
+
+    connection_ref = authored.get("connection_ref", "")
+    directory = ""
+    for target in context.delivery_targets:
+        if (
+            target.get("connection_ref") == connection_ref
+            and target.get("kind") == "caddy"
+        ):
+            directory = str(target.get("certificate_directory", "") or "")
+    return {
+        **authored,
+        "certificate_directory": directory,
+        "routes": [
+            {
+                "domain": route.get("domain", ""),
+                "upstream": route.get("upstream", ""),
+            }
+            for route in (context.caddy_routes() if context.caddy_routes else ())
+            if route.get("connection_ref") == connection_ref
+            and route.get("upstream")
+        ],
+    }
 
 
 def _resolve_tls(
@@ -1362,6 +1593,7 @@ def _resolve_tls(
                 certificate_key=context.resource_key,
                 certificate_name=authored["certificate_name"],
                 domains=domains,
+                names_at=context.names_at,
             )
             for connection_ref in authored["install_on"]
         ],
@@ -1608,6 +1840,32 @@ def _dns_record_origin(spec: dict[str, Any]) -> str:
     return str(spec.get("content", "")).strip()
 
 
+def _rewrite_origin(spec: dict[str, Any]) -> str:
+    """Where a rewrite sends the name, for the same reason a record does.
+
+    The note on ``_dns_record_origin`` above says an internal name is routed by
+    a proxy, so the proxy declares the origin and the rewrite need not. That
+    holds for every internal name the proxy actually fronts, and for no other:
+    a rewrite pointing straight at a box that is not the proxy is the whole
+    statement of where that name is served, and HQ was not reading it. The
+    result was a service page reporting "nothing supplies this" for a name
+    answering over TLS from a machine HQ sweeps, holds a credential for, and
+    installs certificates on.
+
+    Which is the same bug that note describes, one provider over. So the answer
+    is the same: the record that points somewhere is a statement of origin.
+    Precedence keeps it from displacing a proxy -- see ``_declarations``, where
+    a routed origin outranks a resolved one -- and this stays a fallback for the
+    names nothing else routes.
+
+    The answer itself, not a second reading of the spec, so a rewrite cannot
+    resolve one way and originate another.
+    """
+
+    answer = _rewrite_answers(spec)
+    return answer[0] if answer else ""
+
+
 def _dns_record_value(spec: dict[str, Any]) -> str:
     """The record as one line, the way a zone file would state it."""
 
@@ -1786,22 +2044,23 @@ def _zone_key_hint(spec: dict[str, Any]) -> str:
 def _zone_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    """What is true of this domain right now, stated without judgement.
+    """What HQ holds about this domain that is not said better elsewhere.
 
-    Every row is an observation. HQ has no credential that could change any of
-    them yet, and a control plane that flags drift against a policy it cannot
-    enforce is just an opinion with a red pill next to it. When zone posture
-    becomes declarable these become desired-vs-observed like every other row.
+    Five rows used to sit above this one -- a record count, and a summary each
+    of MX, SPF, DMARC and CAA. Every one of them read a `status` key that
+    nothing has ever written, so every zone page in the estate printed five em
+    dashes and called them observations.
+
+    The facts were never missing. HQ sweeps every record in these zones, and
+    `application.zone_insights` already derives exactly those summaries from
+    them for the domain page, which says all of it and more. A readout is handed
+    a spec and a status and no database, so this is the one surface that could
+    not have derived them -- and the answer to that is to stop pretending, not
+    to print a placeholder where the derivation would go.
     """
 
-    return (
-        ("Records", "", str(status.get("record_count", "")) if status else ""),
-        ("Mail (MX)", "", status.get("mx_summary", "")),
-        ("SPF", "", status.get("spf_summary", "")),
-        ("DMARC", "", status.get("dmarc_summary", "")),
-        ("Certificate authorities (CAA)", "", status.get("caa_summary", "")),
-        ("Served by", spec.get("connection_ref", ""), ""),
-    )
+    del status
+    return (("Served by", spec.get("connection_ref", ""), ""),)
 
 
 def _zone_from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -1875,18 +2134,17 @@ def _machine_key_hint(spec: dict[str, Any]) -> str:
 def _machine_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    """What was declared. Whether it answers is the machine page's to say."""
+    """What was declared. Whether it answers is the machine page's to say.
 
-    port = spec.get("ssh_port")
-    reached_by = str(spec.get("ssh_alias", ""))
-    if reached_by and port:
-        reached_by = f"{reached_by} :{port}"
+    Four lines shorter than it was, and it says the same amount. The operating
+    system is the tailnet's to report and the machine page reports it; a kind,
+    an SSH alias and a port were blank on every machine and read by this
+    function alone, which is a readout of nothing.
+    """
+
     return (
         ("What it is for", "", str(spec.get("role", ""))),
-        ("Kind", "", str(spec.get("form", ""))),
-        ("Operating system", "", str(spec.get("operating_system", ""))),
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
-        ("Reached by", "", reached_by),
     )
 
 
@@ -2057,10 +2315,13 @@ def _container_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     # No "Runs on" row: the card carries the machine as a link, and printing it
     # here as text would say it twice in the same box.
-    return (
-        ("Container", spec.get("name", ""), status.get("container", "")),
-        ("State", "", status.get("state", "")),
-    )
+    #
+    # No "State" row either. It read `status["state"]`, which nothing writes for
+    # a container -- a container is confirmed by the sweep, and `confirm_observed`
+    # stores the spec it derived, which is identity and holds no state. So the
+    # row was an em dash on all ten of them, every time. What a container is
+    # doing comes from the sweep and is on the card above, with its uptime.
+    return (("Container", spec.get("name", ""), status.get("container", "")),)
 
 
 def _container_from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -2198,6 +2459,13 @@ _PROVIDERS = (
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
+        actions={
+            'reconcile': applies(automatic=True),
+            'renew': applies(automatic=True, verification=ControllerVerification(
+                    timeout_seconds=180,
+                    interval_seconds=5,
+                )),
+        },
         label="TLS certificate",
         applies=_managed_certificate_applies,
         connection_providers=("cloudflare_dns", "ssh"),
@@ -2223,6 +2491,10 @@ _PROVIDERS = (
         UploadedCertificateSpec,
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Uploaded certificate",
         seed=_uploaded_certificate_seed,
         connection_providers=("ssh",),
@@ -2241,6 +2513,10 @@ _PROVIDERS = (
         NPMProxyHostSpec,
         ResolvedNPMProxyHostSpec,
         _resolve_npm,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Proxy host",
         connection_providers=("npm",),
         removal_note=lambda spec: (
@@ -2286,6 +2562,10 @@ _PROVIDERS = (
         "Runs a set of containers on one of your machines. Created in Portainer "
         "if it is not there yet.",
         PortainerStackSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Container stack",
         connection_providers=("portainer",),
         # Which Portainer is folded away with the tuning. There is normally one,
@@ -2317,6 +2597,14 @@ _PROVIDERS = (
         "does not define the container -- whatever compose file created it "
         "still does.",
         PortainerContainerSpec,
+        actions={
+            'reconcile': locked(
+                'The container is defined by a compose file HQ has never seen. HQ can watch it and cycle it, not define it.'
+            ),
+            'restart': applies(),
+            'start': applies(),
+            'stop': applies(),
+        },
         label="Container",
         connection_providers=("portainer",),
         # No facet, no hostnames and no seed, so it is never offered as a way
@@ -2353,6 +2641,13 @@ _PROVIDERS = (
         "made once and then has no symptom until the day it matters. It does "
         "not define the device; running Tailscale on the machine did that.",
         TailnetDeviceSpec,
+        actions={
+            'reconcile': applies(automatic=True, verification=ControllerVerification(
+                    timeout_seconds=60,
+                    interval_seconds=10,
+                )),
+            'approve-routes': applies(),
+        },
         label="Tailnet device",
         connection_providers=("tailscale",),
         readout=_tailnet_device_readout,
@@ -2384,6 +2679,12 @@ _PROVIDERS = (
         "The tailnet's access policy. HQ reads it, shows what it implies, and "
         "checks a change against your own tests before applying one.",
         TailnetPolicySpec,
+        actions={
+            'reconcile': applies(verification=ControllerVerification(
+                    timeout_seconds=60,
+                    interval_seconds=10,
+                )),
+        },
         label="Tailnet policy",
         connection_providers=("tailscale",),
         hostnames=None,
@@ -2414,6 +2715,11 @@ _PROVIDERS = (
         "from whatever answers at them and never learns what range they "
         "belong to, which is what decides who can reach them.",
         NetworkSpec,
+        actions={
+            'reconcile': locked(
+                'HQ cannot create a subnet. This entry records one so the addresses inside it resolve.'
+            ),
+        },
         label="Network",
         declaration_only=True,
         hostnames=None,
@@ -2432,6 +2738,11 @@ _PROVIDERS = (
         "renews -- the authority one was issued by, including a root kept "
         "offline that nothing can reach by design.",
         CertificateAuthoritySpec,
+        actions={
+            'reconcile': locked(
+                'The root is kept offline so nothing can reach it. A controller that could would defeat the point.'
+            ),
+        },
         label="Certificate authority",
         declaration_only=True,
         hostnames=None,
@@ -2448,6 +2759,11 @@ _PROVIDERS = (
         "addresses that reach it. Machines behind a Portainer or a credential "
         "are already known and need no entry here.",
         MachineSpec,
+        actions={
+            'reconcile': locked(
+                'HQ cannot create a machine. This entry records one so the addresses that reach it resolve.'
+            ),
+        },
         label="Machine",
         declaration_only=True,
         hostnames=None,
@@ -2456,6 +2772,12 @@ _PROVIDERS = (
         # there is no record to adopt one from. What HQ observes about a machine
         # arrives as containers and connections, which name it in passing.
         key_hint=_machine_key_hint,
+        # Half the addresses on a machine are the only record of it -- nothing
+        # reports the printer on the LAN -- and half repeat what the tailnet
+        # says. The field has to stay writable for the first kind, and it is
+        # also the key that ties HQ's name for a machine to the tailnet's
+        # different one, so this marks which is which rather than locking it.
+        notes="application.provider_choices:machine_address_notes",
         removal_note=lambda spec: (
             f"{spec.get('name', 'This machine')} stops being a place in HQ. "
             "Anything forwarding to its addresses reads as pointing nowhere."
@@ -2466,6 +2788,11 @@ _PROVIDERS = (
         "Somewhere a certificate can be installed, and how it gets there. "
         "Declaring one is what lets a certificate name it as a place to go.",
         TLSDeliveryTargetSpec,
+        actions={
+            'reconcile': locked(
+                'This describes how a place takes a certificate. The certificates installed there are what get deployed and verified.'
+            ),
+        },
         label="Certificate target",
         connection_providers=("npm", "ssh"),
         # Nothing to reconcile: this states how a target takes a certificate,
@@ -2485,10 +2812,38 @@ _PROVIDERS = (
         ),
     ),
     ProviderSpec(
+        "caddy.route",
+        "A name an edge Caddy serves, and where it hands the request on.",
+        CaddyRouteSpec,
+        ResolvedCaddyRouteSpec,
+        _resolve_caddy_route,
+        actions={
+            "reconcile": applies(automatic=True),
+        },
+        label="Caddy route",
+        connection_providers=("ssh",),
+        facet="proxy",
+        hostnames=_caddy_hostnames,
+        origin=_caddy_origin,
+        identity=_caddy_identity,
+        from_record=_caddy_from_record,
+        key_hint=_caddy_key_hint,
+        readout=_caddy_readout,
+        sample_record={
+            "connection_ref": "an-edge",
+            "domain": "app.example.com",
+            "upstream": "app:8080",
+        },
+    ),
+    ProviderSpec(
         "adguard.rewrite",
         "Makes a hostname resolve to an IP on your network. Created in AdGuard "
         "if it is not there yet.",
         AdGuardRewriteSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Internal DNS record",
         connection_providers=("adguard",),
         removal_note=lambda spec: (
@@ -2499,6 +2854,7 @@ _PROVIDERS = (
         hostnames=_rewrite_hostnames,
         seed=_rewrite_seed,
         answers=_rewrite_answers,
+        origin=_rewrite_origin,
         from_record=_rewrite_from_record,
         sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
         readout=_rewrite_readout,
@@ -2507,6 +2863,10 @@ _PROVIDERS = (
         "cloudflare.dns_record",
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
+        actions={
+            'reconcile': applies(automatic=True),
+            'delete': applies(),
+        },
         label="Public DNS record",
         applies=_public_dns_applies,
         connection_providers=("cloudflare_dns",),
@@ -2536,6 +2896,12 @@ _PROVIDERS = (
         "records under HQ's management; the credential can see every zone on "
         "the account, which is not the same as being asked to manage them.",
         CloudflareZoneSpec,
+        actions={
+            "reconcile": locked(
+                "A zone declaration records which domains are HQ's business. It "
+                "carries no settings, so there is nothing to converge toward."
+            ),
+        },
         label="Domain",
         connection_providers=("cloudflare_dns",),
         public_effect=True,
@@ -2600,6 +2966,7 @@ def observer_abilities() -> tuple[ObserverAbility, ...]:
 # nothing and reports it as an empty world.
 CERTIFICATE_KIND = "tls.certificate"
 UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"
+CADDY_ROUTE_KIND = "caddy.route"
 CONTAINER_KIND = "portainer.container"
 DELIVERY_TARGET_KIND = "tls.delivery_target"
 MACHINE_KIND = "machine"
@@ -2617,19 +2984,33 @@ for _named in (
 
 @lru_cache(maxsize=1)
 def controller_capability_registry() -> ControllerCapabilityRegistry:
-    registry_path = (
-        Path(__file__).resolve().parents[1]
-        / "config"
-        / "controller-capabilities.json"
-    )
-    registry = ControllerCapabilityRegistry.model_validate_json(
-        registry_path.read_text(encoding="utf-8")
-    )
-    if set(registry.capabilities) != set(PROVIDERS):
+    """What the controller may do, assembled from the providers themselves.
+
+    This used to be read from a committed JSON file that had to name every
+    provider exactly once or HQ refused to start -- so declaring a provider
+    meant writing it twice, in two languages, and the check that kept them
+    honest could only ever confirm that a copy was still a copy.
+
+    Nothing was ever in that file which the provider did not already own. A
+    provider knows whether the controller can converge it, whether it should do
+    so unprompted, and why not when not; those are properties of the thing, not
+    of a deployment. HQ is where they are stated now, and there is no longer a
+    second place for them to disagree with.
+    """
+
+    missing = sorted(kind for kind, provider in PROVIDERS.items() if not provider.actions)
+    if missing:
         raise ValueError(
-            "Controller capability registry must declare every provider exactly once."
+            "Every provider must declare what the controller may do to it. "
+            "Missing: " + ", ".join(missing)
         )
-    return registry
+    return ControllerCapabilityRegistry(
+        schema_version=1,
+        capabilities={
+            kind: ControllerProviderCapability(actions=dict(provider.actions))
+            for kind, provider in PROVIDERS.items()
+        },
+    )
 
 
 def controller_id() -> str:

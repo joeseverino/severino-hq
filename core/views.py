@@ -8,13 +8,14 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import formats
 from django.views.decorators.csrf import csrf_exempt
@@ -24,6 +25,12 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 from application.connections import link_choices, outward_links
 from application.command_center import command_center
 from application.dashboard import operating_snapshot, work_queue
+from application.glance import (
+    dashboard_configuration,
+    dashboard_panels,
+    request_dashboard_refresh,
+    save_dashboard_settings,
+)
 from application.projection import projection_scope
 from application.plugins import plugin_health
 from application.search import global_search
@@ -60,7 +67,10 @@ class ThrottledLoginView(LoginView):
 
     @property
     def sso_only(self) -> bool:
-        return settings.SEVERINO_OIDC_ENABLED and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
+        return (
+            settings.SEVERINO_OIDC_ENABLED
+            and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
+        )
 
     def get(self, request, *args, **kwargs):
         """Go straight to Pocket ID rather than asking which door to use.
@@ -211,6 +221,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 record["last_reviewed"] = date.fromisoformat(record["last_reviewed"])
         for event in snapshot["recent_activity"]:
             event["created_at"] = datetime.fromisoformat(event["created_at"])
+            event["url"] = reverse("core:audit_detail", args=[event["id"]])
         # No mapping step: every queue entry already carries the link to the
         # filtered list that shows it, supplied by the domain that raised it.
         action_queue = snapshot["priority"]
@@ -266,6 +277,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             )
             for record in snapshot["docs_needing_review"]
         ]
+        glance_settings = dashboard_configuration()
+        glance_panels = dashboard_panels(glance_settings)
 
         ctx.update(
             recent_contacts=contact_rows,
@@ -296,8 +309,59 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             show_action_count=True,
             this_year=snapshot["year"],
             dashboard_cards=snapshot["cards"],
+            dashboard_panels=glance_panels,
+            dashboard_can_refresh=any(panel["refreshable"] for panel in glance_panels),
+            dashboard_glance_settings=glance_settings,
         )
         return ctx
+
+
+class DashboardGlanceView(LoginRequiredMixin, View):
+    template_name = "core/_dashboard_glance.html"
+
+    def get(self, request):
+        configuration = dashboard_configuration()
+        panels = dashboard_panels(configuration)
+        return render(
+            request,
+            self.template_name,
+            {
+                "dashboard_panels": panels,
+                "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
+                "dashboard_glance_settings": configuration,
+            },
+        )
+
+    def post(self, request):
+        request_dashboard_refresh(principal=web_principal(request.user))
+        configuration = dashboard_configuration()
+        panels = dashboard_panels(configuration)
+        return render(
+            request,
+            self.template_name,
+            {
+                "dashboard_panels": panels,
+                "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
+                "dashboard_glance_settings": configuration,
+            },
+            status=202,
+        )
+
+
+class DashboardGlanceSettingsView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            save_dashboard_settings(
+                weather_point=request.POST.get("weather_point", ""),
+                weather_label=request.POST.get("weather_label", ""),
+                infrastructure_label=request.POST.get("infrastructure_label", ""),
+                principal=web_principal(request.user),
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Dashboard settings saved.")
+        return redirect("dashboard")
 
 
 class ActionItemsView(LoginRequiredMixin, TemplateView):
@@ -320,9 +384,7 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
             and (
                 not query
                 or query
-                in " ".join(
-                    (item["source"], item["label"], item["detail"])
-                ).casefold()
+                in " ".join((item["source"], item["label"], item["detail"])).casefold()
             )
         ]
         sources = tuple(
@@ -380,6 +442,61 @@ class ActionItemCountView(LoginRequiredMixin, View):
 class SearchView(LoginRequiredMixin, TemplateView):
     template_name = "search.html"
     result_limit = 8
+    palette_search_limit = 3
+    palette_search_total_limit = 12
+    palette_result_limit = 25
+    palette_group_limit = 5
+    palette_scope_priority = {
+        "infrastructure.resources": 0,
+        "projects": 1,
+        "content": 2,
+        "documentation": 3,
+        "assets": 4,
+        "expenses": 5,
+        "receipts": 6,
+        "audit": 100,
+    }
+
+    def get_template_names(self):
+        if self.request.headers.get("X-Command-Center") == "palette":
+            return ["core/_command_center_results.html"]
+        return super().get_template_names()
+
+    def _palette_groups(self, discovery):
+        remaining = self.palette_result_limit
+        groups = []
+        for key, label in (
+            ("commands", "Commands"),
+            ("views", "Topology views"),
+            ("resources", "Resources"),
+            ("connections", "Connections"),
+            ("checks", "Checks"),
+        ):
+            items = tuple(item for item in discovery[key] if item.url)[
+                : min(self.palette_group_limit, remaining)
+            ]
+            if items:
+                groups.append({"key": key, "label": label, "items": items})
+                remaining -= len(items)
+            if not remaining:
+                break
+        return groups
+
+    def _palette_search_groups(self, groups):
+        remaining = self.palette_search_total_limit
+        visible = []
+        ordered = sorted(
+            groups,
+            key=lambda group: self.palette_scope_priority.get(group["scope"], 20),
+        )
+        for group in ordered:
+            items = tuple(group["items"][:remaining])
+            if items:
+                visible.append({**group, "items": items})
+                remaining -= len(items)
+            if not remaining:
+                break
+        return visible
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -388,20 +505,32 @@ class SearchView(LoginRequiredMixin, TemplateView):
         contacts: list = []
         total = 0
         principal = web_principal(self.request.user)
-        if q:
+        palette_request = self.request.headers.get("X-Command-Center") == "palette"
+        if q and (not palette_request or len(q) >= 2):
             outcome = global_search(
                 q,
                 principal=principal,
-                limit_per_scope=self.result_limit,
+                limit_per_scope=(
+                    self.palette_search_limit if palette_request else self.result_limit
+                ),
             )
             groups = outcome["groups"]
             total = outcome["total"]
-            try:
-                contacts = search_submissions(q, limit=self.result_limit)
-            except D1Error:
-                contacts = []
-            total += len(contacts)
-        discovery = command_center(q, principal=principal)
+            if not palette_request:
+                try:
+                    contacts = search_submissions(q, limit=self.result_limit)
+                except D1Error:
+                    contacts = []
+                total += len(contacts)
+        discovery = command_center(
+            q, principal=principal, include_live_connections=True
+        )
+        palette_groups = self._palette_groups(discovery)
+        palette_search_groups = self._palette_search_groups(groups)
+        palette_search_count = sum(
+            len(group["items"]) for group in palette_search_groups
+        )
+        discovery_total = sum(len(discovery[key]) for key in discovery)
         ctx.update(
             q=q,
             search_query=q,
@@ -413,13 +542,15 @@ class SearchView(LoginRequiredMixin, TemplateView):
             discovered_connections=discovery["connections"],
             discovered_views=discovery["views"],
             discovered_checks=discovery["checks"],
-            discovery_total=(
-                len(discovery["resources"])
-                + len(discovery["commands"])
-                + len(discovery["connections"])
-                + len(discovery["views"])
-                + len(discovery["checks"])
+            discovery_total=discovery_total,
+            palette_groups=palette_groups,
+            palette_search_groups=palette_search_groups,
+            palette_count=(
+                sum(len(group["items"]) for group in palette_groups)
+                + palette_search_count
             ),
+            palette_total=discovery_total + total,
+            palette_result_limit=self.palette_result_limit,
         )
         return ctx
 
@@ -482,7 +613,8 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
         ]
         # Everything else in the metadata, minus what is already rendered.
         context["extra"] = {
-            key: value for key, value in sorted(event.metadata.items())
+            key: value
+            for key, value in sorted(event.metadata.items())
             if key != "changes"
         }
 

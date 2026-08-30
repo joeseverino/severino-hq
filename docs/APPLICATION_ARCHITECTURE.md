@@ -64,6 +64,23 @@ health, and structured operation evidence without provider credentials. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
+The page-head glance is also a projection, never an owner. Whole-host CPU,
+memory, and storage observations are stored under the selected machine
+resource's observed `status.telemetry`, so its machine page, resource API, and
+dashboard summarize the same timestamped fact. The operator selects that owner
+with “Show on dashboard” on the machine edit form; the relationship lives in
+`DashboardConfiguration`, not in deployment environment or desired machine
+state. NWS data is separately owned by the dashboard-configured point's
+`WeatherObservation`; its coordinates and labels are edited in the dashboard
+Settings popover. Both are cold until an operator
+requests a refresh: HQ records a credential-free `DashboardRefreshRequest`,
+rings the existing controller doorbell, and the responsible controller derives
+its target and connection from the machine graph. The browser follows that one
+request for a bounded interval; it never installs a page-lifetime polling loop.
+An SSH-capable connection yields whole-host readings. A Portainer fallback is
+explicitly labeled as container and Docker scope rather than being presented as
+machine utilization.
+
 Priority work has one source: every domain's `Insight` provider is composed by
 `domain_attention_items()`. The dashboard preview, `/action-items/`, and the
 machine snapshot project that same queue; none owns a parallel inbox. Derived

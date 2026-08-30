@@ -16,7 +16,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from control_plane.models import ProviderConnection, ProviderInventory
+from control_plane.models import (
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+)
 
 from .machines import machine, machine_catalog
 from .services import CONTAINER_KIND
@@ -227,6 +231,26 @@ class DeclaredMachineTests(TestCase):
     def test_it_shows_an_address_it_was_told_about(self):
         self.assertEqual(self.machine().address, "10.0.0.5")
 
+    def test_it_projects_telemetry_from_the_same_declaration(self):
+        from control_plane.models import ManagedResource
+        from django.utils import timezone
+
+        observed = timezone.now()
+        declared = ManagedResource.objects.get(key="a-laptop")
+        declared.status = {
+            "telemetry": {
+                "status": "good",
+                "metrics": [{"label": "CPU", "value": "8%"}],
+            }
+        }
+        declared.last_observed_at = observed
+        declared.save(update_fields=("status", "last_observed_at", "updated_at"))
+
+        found = self.machine()
+
+        self.assertEqual(found.telemetry["metrics"][0]["value"], "8%")
+        self.assertEqual(found.telemetry_observed_at, observed)
+
     def test_a_machine_nobody_declared_links_nothing(self):
         from control_plane.models import ProviderInventory
         from django.utils import timezone
@@ -273,12 +297,12 @@ class TailnetPresenceTests(TestCase):
         self.sweep(
             {
                 **self.device("a-peer"),
-                "public_key": "nodekey:abc",
+                "public_key": "test-key-a",
                 "last_handshake": "2026-08-25T22:18:24Z",
                 "direct_endpoint": "198.51.100.4:41641",
                 "relay": "ord",
             },
-            {**self.device("never-spoken"), "public_key": "nodekey:def"},
+            {**self.device("never-spoken"), "public_key": "test-key-b"},
         )
 
         found = tailnet_presence()
@@ -294,17 +318,17 @@ class TailnetPresenceTests(TestCase):
 
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-relayed-peer"),
-            "public_key": "nodekey:abc",
-            "last_handshake": "2026-08-25T22:18:24Z",
-            "direct_endpoint": "",
-            "relay": "ord",
-        })
-
-        self.assertEqual(
-            tailnet_presence()["a-relayed-peer"].peer_path, "relayed"
+        self.sweep(
+            {
+                **self.device("a-relayed-peer"),
+                "public_key": "test-key-a",
+                "last_handshake": "2026-08-25T22:18:24Z",
+                "direct_endpoint": "",
+                "relay": "ord",
+            }
         )
+
+        self.assertEqual(tailnet_presence()["a-relayed-peer"].peer_path, "relayed")
 
     def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
         """The silent failure. `--advertise-routes` succeeds, the machine
@@ -314,13 +338,15 @@ class TailnetPresenceTests(TestCase):
 
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-router"),
-            "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
-            "enabled_routes": ["198.51.100.0/24"],
-            "offers_exit_node": True,
-            "exit_node_approved": False,
-        })
+        self.sweep(
+            {
+                **self.device("a-router"),
+                "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
+                "enabled_routes": ["198.51.100.0/24"],
+                "offers_exit_node": True,
+                "exit_node_approved": False,
+            }
+        )
 
         presence = tailnet_presence()["a-router"]
 
@@ -340,11 +366,13 @@ class TailnetPresenceTests(TestCase):
     def test_every_advertised_route_approved_is_silent(self):
         from .machines import tailnet_presence
 
-        self.sweep({
-            **self.device("a-router"),
-            "advertised_routes": ["198.51.100.0/24"],
-            "enabled_routes": ["198.51.100.0/24"],
-        })
+        self.sweep(
+            {
+                **self.device("a-router"),
+                "advertised_routes": ["198.51.100.0/24"],
+                "enabled_routes": ["198.51.100.0/24"],
+            }
+        )
 
         self.assertEqual(tailnet_presence()["a-router"].unapproved_routes, ())
 
@@ -474,10 +502,12 @@ class OneMachineManyNamesTests(TestCase):
         ProviderInventory.objects.create(
             kind="tailscale.device",
             records=[
-                {"name": "Someone's Laptop", "online": True,
-                 "addresses": ["100.64.0.5"]},
-                {"name": "a-stranger", "online": True,
-                 "addresses": ["100.64.0.99"]},
+                {
+                    "name": "Someone's Laptop",
+                    "online": True,
+                    "addresses": ["100.64.0.5"],
+                },
+                {"name": "a-stranger", "online": True, "addresses": ["100.64.0.99"]},
             ],
             observed_at=timezone.now(),
         )
@@ -597,3 +627,166 @@ class ReadingThisOnTheMachineTests(TestCase):
         request = RequestFactory().get("/", REMOTE_ADDR="100.64.0.5")
         with self.assertNumQueries(0):
             client_ip(request)
+
+
+class ObservedAddressAnnotationTests(TestCase):
+    """A field that records two unrelated things should say which is which.
+
+    Half a machine's addresses are the only record there is -- nothing in the
+    estate reports the printer on the LAN. The rest repeat what the tailnet
+    says on every sweep, and are also the key that ties HQ's name for a machine
+    to the tailnet's, which calls the same laptop something else. Locking the
+    field breaks the printer; leaving it silent invites somebody to correct HQ
+    about a value HQ is watching.
+    """
+
+    def setUp(self):
+        ManagedResource.objects.create(
+            key="a-box",
+            kind="machine",
+            spec={
+                "name": "a-box",
+                "addresses": ["192.0.2.50", "100.101.102.103"],
+            },
+        )
+        ProviderInventory.objects.create(
+            kind="tailscale.device",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "name": "A Box",
+                    "addresses": ["100.101.102.103"],
+                    "os": "linux",
+                }
+            ],
+        )
+
+    def _notes(self):
+        from application.provider_choices import machine_address_notes
+
+        return machine_address_notes()["addresses"]
+
+    def test_an_address_the_tailnet_reports_is_marked_as_seen(self):
+        self.assertIn("100.101.102.103", self._notes())
+
+    def test_an_address_nothing_reports_is_left_unmarked(self):
+        """It is not unverified. It is the only place that address exists."""
+
+        self.assertNotIn("192.0.2.50", self._notes())
+
+    def test_the_form_carries_the_marks_onto_the_field(self):
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")()
+
+        self.assertEqual(
+            form.fields["addresses"].widget.notes.get("100.101.102.103"),
+            "seen on the tailnet",
+        )
+
+    def test_a_machine_still_declares_an_address_nothing_can_see(self):
+        """The printer case, which is why this is annotated and not locked."""
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            data={"name": "laserjet", "addresses": ["192.0.2.137"]}
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.spec["addresses"], ["192.0.2.137"])
+
+    def test_an_observed_address_is_not_offered_for_removal(self):
+        """HQ holds it whether or not this field does.
+
+        Offering to remove it was offering to delete a fact -- and until the
+        tailnet's addresses reached the index, removing one silently broke the
+        resolution it looked redundant to.
+        """
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]}
+        )
+        rendered = str(form["addresses"])
+
+        self.assertIn('value="100.101.102.103"', rendered)
+        self.assertIn('aria-label="Remove 192.0.2.50"', rendered)
+        self.assertNotIn('aria-label="Remove 100.101.102.103"', rendered)
+
+    def test_a_save_keeps_the_observed_address_it_did_not_ask_about(self):
+        """Rendered read-only, it still has to come back on submit."""
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            data={
+                "name": "a-box",
+                "addresses": ["192.0.2.50", "100.101.102.103"],
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIn("100.101.102.103", form.spec["addresses"])
+
+    def test_what_hq_found_comes_before_what_only_this_field_records(self):
+        """The observed address is where the machine actually answers.
+
+        A read-only row between two inputs also pushed the blank row for adding
+        one away from the rest of them.
+        """
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            initial={
+                "name": "a-box",
+                "addresses": ["192.0.2.50", "100.101.102.103"],
+            }
+        )
+        rendered = str(form["addresses"])
+
+        self.assertLess(rendered.index("100.101.102.103"), rendered.index("192.0.2.50"))
+
+
+class IdentifierIsFixedTests(TestCase):
+    """The identifier is filing, and a form should not ask about filing.
+
+    It was an input near the bottom of the form, behind the Options disclosure,
+    directly beneath a field called "Name". So the resource appeared to have two
+    names, the fixed one looked like the optional one, and reading it meant
+    opening a drawer.
+    """
+
+    def setUp(self):
+        self.resource = ManagedResource.objects.create(
+            key="a-box", kind="machine", spec={"name": "a-box", "addresses": []}
+        )
+        user = get_user_model().objects.create_user(
+            username="op", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(user)
+
+    def test_the_form_does_not_ask_for_it(self):
+        from application.provider_forms import ResourceIdentityForm
+
+        self.assertNotIn("key", ResourceIdentityForm().fields)
+
+    def test_it_is_shown_at_the_top_instead(self):
+        response = self.client.get(
+            reverse("control_plane:edit", kwargs={"key": "a-box"})
+        )
+
+        self.assertContains(response, "Identifier")
+
+    def test_a_save_keeps_the_identifier_it_already_had(self):
+        response = self.client.post(
+            reverse("control_plane:edit", kwargs={"key": "a-box"}),
+            {"name": "a-box", "role": "A renamed purpose", "enabled": "on"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.resource.refresh_from_db()
+        self.assertEqual(self.resource.key, "a-box")
+        self.assertEqual(self.resource.spec["role"], "A renamed purpose")

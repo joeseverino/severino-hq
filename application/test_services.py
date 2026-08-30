@@ -185,7 +185,32 @@ class ServiceCompositionTests(TestCase):
         service = find_service("app.example.com")
 
         self.assertFalse(facet(service, "proxy").present)
-        self.assertIsNone(service.origin)
+
+    def test_disabling_the_ingress_leaves_the_name_still_pointed_somewhere(self):
+        """Losing the proxy is not the name forgetting where it was sent.
+
+        This assertion used to read ``assertIsNone(service.origin)``, in the
+        same test as the one above. It passed for a reason that was never the
+        point being made: only an ingress declared an origin, so removing the
+        ingress removed the last thing that could name one.
+
+        The DNS record was always still there, still reconciled, still pointing
+        this name at a machine HQ knows by name. Reporting nothing was not
+        caution -- it was HQ declining to read a declaration it holds. What is
+        true with the proxy disabled is that requests still arrive at app-host
+        and nothing there answers them, and those are two facts rather than the
+        absence of one.
+
+        The facet is what went away, and the test above says so on its own.
+        """
+
+        self._wire()
+        ManagedResource.objects.filter(key="app-proxy").update(enabled=False)
+
+        service = find_service("app.example.com")
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertFalse(service.origin.external)
 
 
 class OriginResolutionTests(TestCase):
@@ -236,6 +261,171 @@ class OriginResolutionTests(TestCase):
 
         self.assertFalse(service.origin.known)
         self.assertIn("cannot match to any machine", " ".join(service.faults))
+
+    def _rewrite(self, answer="10.0.0.10"):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": answer},
+            )
+        )
+
+    def test_a_record_with_no_ingress_names_where_the_name_is_sent(self):
+        """A rewrite pointing at a machine is a statement of where it is served.
+
+        Nothing proxies this name, so nothing else in HQ is in a position to say
+        -- and the page said "nothing supplies this" about a name whose entire
+        configuration is an instruction to send it to a machine HQ sweeps,
+        credentials and installs certificates on.
+        """
+
+        self._rewrite()
+
+        origin = find_service("app.example.com").origin
+
+        self.assertEqual(origin.host, "app-host")
+        self.assertFalse(origin.external)
+
+    def test_an_ingress_outranks_the_record_that_points_at_it(self):
+        """Both name an origin, and they mean different things by it.
+
+        The record says where the name goes, which for a proxied name is the
+        proxy. The proxy says where the request is finally served. Filled in
+        whichever order the rows came back, the record would have described ten
+        proxied names as being served by the proxy box itself.
+        """
+
+        self._rewrite(answer="10.0.0.9")
+        origin = self._proxy().origin
+
+        self.assertEqual(origin.address, "10.0.0.10:8000")
+        self.assertEqual(origin.container, "web")
+
+
+class OriginProvenanceTests(TestCase):
+    """A page must not describe an ingress a name does not have."""
+
+    def setUp(self):
+        declare_world(containers=True)
+
+    def _page(self, hostname="app.example.com"):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        user = get_user_model().objects.create_user(
+            username="op", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(user)
+        return self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": hostname})
+        )
+
+    def test_a_name_with_only_a_record_is_not_told_an_ingress_forwards_it(self):
+        """The sentence used to come from the only branch there was.
+
+        A record-derived origin rendered as "ingress forwards to 10.0.0.10"
+        directly beneath an Ingress card reading "Not declared" -- one page
+        contradicting itself in two adjacent elements.
+        """
+
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+            )
+        )
+
+        response = self._page()
+
+        self.assertContains(response, "this name answers at")
+        self.assertNotContains(response, "ingress forwards to")
+
+    def test_a_proxied_name_still_says_its_ingress_forwards(self):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-proxy",
+                kind="npm.proxy_host",
+                spec={
+                    "domain_names": ["app.example.com"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.10",
+                    "forward_port": 6379,
+                },
+            )
+        )
+
+        response = self._page()
+
+        self.assertContains(response, "ingress forwards to")
+
+
+class SurfacesAgreeTests(TestCase):
+    """The service page and the machine board must name the same machine.
+
+    Both answer "where is this served", from the same declarations, through the
+    same index -- and they answer it in two different functions. Every time one
+    of those grew a rule the other did not, a name appeared under one machine on
+    its own page and under another, or none, on the board. The rule they share
+    is now stated once; this is what notices when only one of them reads it.
+    """
+
+    def setUp(self):
+        declare_world(containers=True)
+
+    def _boards(self):
+        from application.machines import machine_catalog
+
+        # Read as an attribute, not through getattr with a default: a default
+        # turns a renamed field into an empty set, and an empty set is what this
+        # is trying to tell the difference between.
+        return {entry.name: set(entry.hostnames) for entry in machine_catalog()}
+
+    def test_a_proxied_name_is_filed_where_the_ingress_forwards(self):
+        """And not also under the box the record points at."""
+
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                # The ingress itself, which is where the *name* goes.
+                spec={"domain": "app.example.com", "answer": "10.0.0.99"},
+            )
+        )
+        healthy(
+            ManagedResource.objects.create(
+                key="app-proxy",
+                kind="npm.proxy_host",
+                spec={
+                    "domain_names": ["app.example.com"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.10",
+                    "forward_port": 8000,
+                },
+            )
+        )
+
+        service = find_service("app.example.com")
+        boards = self._boards()
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertIn("app.example.com", boards.get("app-host", set()))
+
+    def test_a_name_with_only_a_record_is_filed_where_the_record_points(self):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+            )
+        )
+
+        service = find_service("app.example.com")
+        boards = self._boards()
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertIn("app.example.com", boards.get("app-host", set()))
 
 
 class WiringFaultTests(TestCase):

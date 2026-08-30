@@ -106,6 +106,29 @@
   {% endif %}
 </div>
 
+{% if machine.telemetry.metrics %}
+  <section class="machine-telemetry" aria-labelledby="machine-telemetry-heading">
+    <div class="section-head">
+      <div>
+        <h2 id="machine-telemetry-heading">Current load</h2>
+        {% if machine.telemetry.summary %}<p class="muted">{{ machine.telemetry.summary }}</p>{% endif %}
+      </div>
+      {% if machine.telemetry_observed_at %}
+        <time class="muted" title="{{ machine.telemetry_observed_at }}">Observed {{ machine.telemetry_observed_at|timesince }} ago</time>
+      {% endif %}
+    </div>
+    <dl class="machine-telemetry-metrics">
+      {% for metric in machine.telemetry.metrics %}
+        <div title="{{ metric.detail }}">
+          <dt>{{ metric.label }}</dt>
+          <dd>{{ metric.value }}</dd>
+          {% if metric.detail %}<span>{{ metric.detail }}</span>{% endif %}
+        </div>
+      {% endfor %}
+    </dl>
+  </section>
+{% endif %}
+
 {% if machine.containers %}
   <h2>What is running</h2>
   <div class="table-scroll">

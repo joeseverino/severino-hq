@@ -918,3 +918,54 @@ class ReachedButUnmeasuredTests(TestCase):
 
         self.assertEqual(evidence["Measured"], "nothing reports traffic for this name")
         self.assertTrue(evidence["Reached by"])
+
+
+class RegistrationLapsingTests(TestCase):
+    """A domain that runs out and will not renew itself.
+
+    Everything HQ does for a domain -- the records, the certificate, every name
+    served inside the zone -- stops the day the registration lapses, and no
+    other credential here can see it coming.
+    """
+
+    def _finding(self, days, auto_renew):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from application.findings import _registration_lapsing, _estate
+        from application.topology import Topology, TopologyNode
+
+        expires = (timezone.now() + timedelta(days=days)).date().isoformat()
+        node = TopologyNode(
+            id="resource:a-zone",
+            kind="resource",
+            label="a-zone",
+            subtitle="Domain",
+            kind_key="cloudflare.zone",
+            facts=(
+                ("domain", "example.com"),
+                ("expires_at", expires),
+                ("auto_renew", "yes" if auto_renew else "no"),
+                ("registrar", "Cloudflare"),
+            ),
+        )
+        return _registration_lapsing(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_it_fires_when_a_domain_will_not_renew_itself(self):
+        found = self._finding(days=40, auto_renew=False)
+
+        self.assertEqual(len(found), 1)
+        self.assertIn("will not renew", found[0].title)
+        self.assertEqual(found[0].severity, "attention")
+
+    def test_it_is_serious_inside_a_month(self):
+        self.assertEqual(self._finding(days=10, auto_renew=False)[0].severity, "serious")
+
+    def test_the_same_date_with_auto_renew_on_is_not_a_finding(self):
+        """Every domain expires every year. That is a calendar, not a queue."""
+
+        self.assertEqual(self._finding(days=40, auto_renew=True), ())
+
+    def test_a_domain_far_out_is_not_a_finding(self):
+        self.assertEqual(self._finding(days=200, auto_renew=False), ())

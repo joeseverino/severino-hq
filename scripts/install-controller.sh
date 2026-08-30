@@ -53,7 +53,16 @@ install -o root -g root -m 0644 \
 # Watches the doorbell, so pressing Save applies now rather than within a
 # minute. The directory has to exist before the unit starts watching it, and
 # compose creates it as the bind mount's source on first boot.
-install -d -o root -g root -m 0755 /run/severino-hq
+#
+# Owned by the application's uid, because the application is what rings the
+# doorbell. Created root-owned it is readable by everyone and writable by
+# nobody that matters: the container runs unprivileged, its write fails with
+# EACCES, and `ring_doorbell` reports the failure honestly -- so pressing Save
+# waited for the timer instead of applying now, and every wake-up request
+# answered "The controller doorbell could not be reached". The watcher only
+# needs to read it; the writer is the one whose permissions decide whether the
+# feature exists at all.
+install -d -o 10001 -g 10001 -m 0755 /run/severino-hq
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.path" \
     "${systemd_dir}/severino-hq-controller.path"

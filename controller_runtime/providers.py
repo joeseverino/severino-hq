@@ -29,6 +29,7 @@ from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from control_plane.providers import (
+    CERTIFICATE_KIND,
     caa_parts,
     certificate_covers,
     controller_capability_registry,
@@ -724,17 +725,6 @@ def controller_config_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config"
 
 
-def _certificate_registry(name: str) -> dict[str, Any]:
-    path = controller_config_dir() / name
-    try:
-        registry = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ProviderError("Certificate controller registry is invalid.") from exc
-    if registry.get("schema_version") != 1:
-        raise ProviderError("Certificate controller registry version is unsupported.")
-    return registry
-
-
 def _run(
     command: list[str], *, input_bytes: bytes | None = None, step: str = "command"
 ) -> bytes:
@@ -1115,18 +1105,20 @@ def _deploy_certificate(
 
 
 def _tls_verification_policy() -> tuple[int, int]:
-    registry = _certificate_registry("controller-capabilities.json")
-    policy = (
-        registry.get("capabilities", {})
-        .get("tls.certificate", {})
-        .get("actions", {})
-        .get("renew", {})
-        .get("verification", {})
-    )
-    timeout = policy.get("timeout_seconds")
-    interval = policy.get("interval_seconds")
-    if not isinstance(timeout, int) or not isinstance(interval, int):
-        raise ProviderError("TLS renewal verification policy is invalid.")
+    """How long to keep checking that a renewed certificate is actually served.
+
+    Read from the provider that owns the action rather than from a file beside
+    it. The bounds stay: this decides how long a renewal blocks, so a value the
+    controller cannot live with is a failure here rather than an hour spent
+    polling.
+    """
+
+    capability = controller_capability_registry().capabilities.get(CERTIFICATE_KIND)
+    policy = capability.actions.get("renew") if capability else None
+    verification = policy.verification if policy else None
+    if verification is None:
+        raise ProviderError("TLS renewal declares no verification policy.")
+    timeout, interval = verification.timeout_seconds, verification.interval_seconds
     if not 30 <= timeout <= 600 or not 1 <= interval <= 30 or interval > timeout:
         raise ProviderError("TLS renewal verification policy is out of bounds.")
     return timeout, interval
@@ -1575,6 +1567,192 @@ def list_adguard() -> list[dict[str, Any]]:
         for item in records
         if item.get("domain") and item.get("answer")
     ]
+
+
+def _caddy_upstreams(node: Any) -> list[str]:
+    """Every address a handler tree eventually forwards to.
+
+    Walked rather than indexed, because Caddy nests. A route's handlers are a
+    list, a ``subroute`` handler contains its own routes, each of those has
+    handlers again, and the depth depends on how the Caddyfile was written --
+    an ``handle_path`` block, a matcher, a ``route`` directive all add a level.
+    Reaching for a fixed path would read the estate that exists today and miss
+    the one that exists after the next edit.
+
+    So this looks for the shape it needs anywhere below the node it is given,
+    and ignores everything else. A route that serves a file, writes a response
+    or redirects has no upstream at all, which is a real answer.
+    """
+
+    found: list[str] = []
+    if isinstance(node, dict):
+        if node.get("handler") == "reverse_proxy":
+            for upstream in node.get("upstreams") or ():
+                dial = str((upstream or {}).get("dial", "") or "").strip()
+                if dial:
+                    found.append(dial)
+        for value in node.values():
+            found.extend(_caddy_upstreams(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_caddy_upstreams(item))
+    return found
+
+
+def _caddy_routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
+    """One record per name this Caddy answers for.
+
+    A route can match several names and a server can hold several routes, so
+    the record is per name rather than per route -- the rest of HQ joins on a
+    hostname, and a row carrying three of them joins to nothing.
+
+    A route with no host matcher is Caddy's catch-all. It answers for anything
+    that reaches it, which is not a hostname and must not be recorded as one.
+    """
+
+    servers = (((config or {}).get("apps") or {}).get("http") or {}).get(
+        "servers"
+    ) or {}
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for server in servers.values():
+        for route in (server or {}).get("routes") or ():
+            hosts = [
+                str(host).strip().lower().rstrip(".")
+                for match in (route or {}).get("match") or ()
+                for host in (match or {}).get("host") or ()
+                if str(host).strip()
+            ]
+            if not hosts:
+                continue
+            upstreams = _caddy_upstreams(route.get("handle"))
+            for host in hosts:
+                # First wins. Caddy evaluates routes in order and the first
+                # terminal match answers, so a later route for the same name is
+                # what the earlier one shadows.
+                found.setdefault(
+                    (connection_ref, host),
+                    {
+                        "connection_ref": connection_ref,
+                        "domain": host,
+                        "upstream": upstreams[0] if len(upstreams) == 1 else "",
+                    },
+                )
+    return list(found.values())
+
+
+def list_caddy_routes() -> list[dict[str, Any]]:
+    """What every reachable edge is serving, asked of the edge itself.
+
+    Every SSH connection is tried, because which of them fronts a Caddy is not
+    something to write down here -- one that does not answers with a refusal and
+    is skipped, and an edge added later is swept without this learning its name.
+
+    One unreachable host does not fail the sweep. The others still have
+    something true to say, and a provider that reports nothing because one of
+    its endpoints was down is how a whole facet blinks out during a reboot.
+    """
+
+    found: list[dict[str, Any]] = []
+    for connection_ref in ssh_connection_refs():
+        try:
+            payload = _ssh(connection_ref, "routes")
+        except (ProviderError, OSError, ValueError):
+            continue
+        try:
+            config = json.loads(payload)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(config, dict):
+            found.extend(_caddy_routes(config, connection_ref))
+    return found
+
+
+def _caddy_route_block(spec: dict[str, Any], certificate_directory: str) -> str:
+    """One site block, in the shape the operator's own file already uses.
+
+    The TLS lines are written out rather than importing the snippet that file
+    defines. HQ owns this file and not that one, and a file that imports a name
+    from somewhere else breaks the moment the somewhere else is edited -- which
+    is the coupling the separate file exists to avoid. The paths come from the
+    delivery target, which already holds the directory the certificate is
+    installed into.
+    """
+
+    lines = [f"{spec['domain']} {{"]
+    if certificate_directory:
+        directory = certificate_directory.rstrip("/")
+        lines.append(f"\ttls {directory}/fullchain.pem {directory}/privkey.pem")
+    lines.append(f"\treverse_proxy {spec['upstream']}")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_caddy_routes(
+    specs: list[dict[str, Any]], certificate_directory: str = ""
+) -> str:
+    """Every route HQ declares for one edge, as a file it owns outright.
+
+    Written to its own file rather than into the operator's Caddyfile, which
+    imports it. HQ never edits a line somebody else wrote: the edge answers one
+    name with `respond`, which no route HQ can declare expresses, and a writer
+    owning the whole file would have had to reproduce it or drop it.
+
+    Sorted by name so the same declarations render the same bytes. A file whose
+    order depends on a query is a file that looks changed on every pass.
+    """
+
+    ordered = sorted(
+        (spec for spec in specs if spec.get("domain") and spec.get("upstream")),
+        key=lambda spec: spec["domain"],
+    )
+    header = (
+        "# Written by Severino HQ. Edits here are replaced on the next reconcile;\n"
+        "# routes this file does not name are the operator's and are untouched.\n"
+    )
+    return (
+        header
+        + "\n"
+        + "\n\n".join(
+            _caddy_route_block(spec, certificate_directory) for spec in ordered
+        )
+        + "\n"
+    )
+
+
+def reconcile_caddy(
+    spec: dict[str, Any], *, apply: bool = True, observed: dict[str, Any] | None = None
+) -> ProviderResult:
+    """Write the routes this edge serves, as one file.
+
+    Every route in the contract, not just the one being reconciled: Caddy is
+    configured by a file and a file is all of them. Reconciling any one of them
+    converges the same file, so they cannot disagree about its contents.
+
+    In plan mode nothing is sent. The rendered file is the plan -- it is the
+    whole of what would change, and printing it is more useful than a sentence
+    describing it.
+    """
+
+    del observed
+    rendered = render_caddy_routes(
+        [dict(route) for route in spec.get("routes", ())],
+        spec.get("certificate_directory", ""),
+    )
+    if not apply:
+        return ProviderResult(
+            changed=False,
+            status={"routes": len(spec.get("routes", ()))},
+            message="Would write the routes this edge serves.",
+        )
+    _ssh(spec["connection_ref"], "routes:write", rendered.encode("utf-8"))
+    return ProviderResult(
+        changed=True,
+        status={"routes": len(spec.get("routes", ()))},
+        conditions=[
+            _condition("Ready", True, "Written", "Caddy reloaded with these routes.")
+        ],
+        message="Routes written and Caddy reloaded.",
+    )
 
 
 def list_npm() -> list[dict[str, Any]]:
@@ -2032,6 +2210,84 @@ def delete_cloudflare_record(
     )
 
 
+# The zone settings worth carrying: how a domain answers over TLS. Named rather
+# than taken whole, because the settings endpoint returns eighty entries and
+# most of them -- minify, rocket loader, browser cache TTL -- are not posture.
+ZONE_POSTURE_SETTINGS = (
+    "ssl",
+    "min_tls_version",
+    "tls_1_3",
+    "always_use_https",
+    "automatic_https_rewrites",
+)
+
+
+def _registrar_domains() -> dict[str, dict[str, Any]]:
+    """What the registrar holds for every domain on the account, by name.
+
+    Read from Cloudflare rather than from RDAP, which was the first attempt.
+    RDAP is public and needs no credential, and it can only ever answer *when* a
+    domain expires. The registrar knows whether it will renew itself -- and that
+    is the fact worth acting on. A domain three months out with auto-renew on is
+    a date; the same domain with auto-renew off is an outage with a countdown,
+    and nothing else in HQ would know the difference.
+
+    The account credential already carries the registration surface, so this
+    costs no new secret. A refusal leaves the map empty and the zones report
+    their records as before.
+    """
+
+    try:
+        account = _analytics_account()
+        domains = _cloudflare_api_list(f"/accounts/{account}/registrar/domains")
+    except (ProviderError, OSError, ValueError):
+        return {}
+    found: dict[str, dict[str, Any]] = {}
+    for domain in domains:
+        name = str(domain.get("name", "")).strip().lower().rstrip(".")
+        if not name:
+            continue
+        found[name] = {
+            "expires_at": str(domain.get("expires_at", ""))[:10],
+            "auto_renew": bool(domain.get("auto_renew")),
+            "locked": bool(domain.get("locked")),
+            "registrar": "Cloudflare",
+        }
+    return found
+
+
+def _cloudflare_zone_posture(zone_id: str) -> dict[str, str]:
+    """How a zone answers over TLS, read through the credential that can see it.
+
+    The DNS token cannot: it holds records and nothing else, which is why this
+    was blank for as long as it existed. `cloudflare_api` carries the account
+    surface, zone settings included, and has been sitting beside it.
+
+    A failure here is not a failed sweep. The account token is a separate
+    credential with its own permissions, and a zone that answers with its
+    records and no posture is a smaller thing to report than no zone at all --
+    so a refusal leaves the key absent and the page says nothing rather than
+    guessing.
+    """
+
+    if not zone_id:
+        return {}
+    try:
+        envelope = _cloudflare_api_request(f"/zones/{zone_id}/settings")
+    except (ProviderError, OSError, ValueError):
+        return {}
+    settings = (envelope or {}).get("result")
+    if not isinstance(settings, list):
+        return {}
+    return {
+        str(item["id"]): str(item.get("value", ""))
+        for item in settings
+        if isinstance(item, dict)
+        and item.get("id") in ZONE_POSTURE_SETTINGS
+        and item.get("value") not in (None, "")
+    }
+
+
 def list_cloudflare_zones() -> list[dict[str, Any]]:
     """Every zone the credential can see, declared or not.
 
@@ -2041,12 +2297,19 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
     """
 
     connection_ref = _required(connection_prefix("cloudflare_dns"), "CONNECTION_REF")
+    # Read once for the whole sweep rather than once per zone: it is one list
+    # for the account, and asking per zone would be four calls for one answer.
+    registrars = _registrar_domains()
     return [
         {
             "zone": zone["name"],
             "connection_ref": connection_ref,
             "status": zone.get("status", ""),
             "plan": (zone.get("plan") or {}).get("name", ""),
+            "posture": _cloudflare_zone_posture(str(zone.get("id", ""))),
+            "registration": registrars.get(
+                str(zone.get("name", "")).strip().lower().rstrip("."), {}
+            ),
         }
         for zone in _cloudflare_zones()
         if zone.get("name")
@@ -3523,6 +3786,7 @@ def _ports_worth_asking() -> tuple[int, ...]:
 
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
+    "caddy.route": list_caddy_routes,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
@@ -3989,6 +4253,340 @@ def _probe_portainer(connection_ref: str) -> dict[str, Any]:
     }
 
 
+def _human_bytes(value: int | float) -> str:
+    amount = max(0.0, float(value))
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if amount < 1024 or unit == "TB":
+            return (
+                f"{amount:.0f} {unit}"
+                if unit in {"B", "KB", "MB"}
+                else f"{amount:.1f} {unit}"
+            )
+        amount /= 1024
+    return "0 B"
+
+
+def _container_cpu_percent(stats: dict[str, Any]) -> float:
+    cpu = stats.get("cpu_stats") or {}
+    previous = stats.get("precpu_stats") or {}
+    cpu_delta = float((cpu.get("cpu_usage") or {}).get("total_usage") or 0) - float(
+        (previous.get("cpu_usage") or {}).get("total_usage") or 0
+    )
+    system_delta = float(cpu.get("system_cpu_usage") or 0) - float(
+        previous.get("system_cpu_usage") or 0
+    )
+    online = float(
+        cpu.get("online_cpus")
+        or len((cpu.get("cpu_usage") or {}).get("percpu_usage") or ())
+        or 1
+    )
+    return (
+        (cpu_delta / system_delta) * online * 100
+        if cpu_delta > 0 and system_delta > 0
+        else 0.0
+    )
+
+
+_HOST_GLANCE_SCRIPT = b"""\
+import json
+import os
+import shutil
+import time
+
+def cpu_reading():
+    with open('/proc/stat', encoding='utf-8') as source:
+        values = [int(value) for value in source.readline().split()[1:]]
+    return sum(values), values[3] + values[4]
+
+before_total, before_idle = cpu_reading()
+time.sleep(0.2)
+after_total, after_idle = cpu_reading()
+elapsed = after_total - before_total
+cpu = 100 * (1 - ((after_idle - before_idle) / elapsed)) if elapsed else 0
+memory = {}
+with open('/proc/meminfo', encoding='utf-8') as source:
+    for line in source:
+        key, value = line.split(':', 1)
+        memory[key] = int(value.split()[0]) * 1024
+total_memory = memory.get('MemTotal', 0)
+available_memory = memory.get('MemAvailable', memory.get('MemFree', 0))
+disk = shutil.disk_usage('/')
+print(json.dumps({
+    'cpu_percent': cpu,
+    'cores': os.cpu_count() or 0,
+    'load_1m': os.getloadavg()[0],
+    'memory_used': max(0, total_memory - available_memory),
+    'memory_total': total_memory,
+    'storage_used': disk.used,
+    'storage_total': disk.total,
+}))
+"""
+
+
+def _host_glance(key: str, connection_ref: str) -> dict[str, Any]:
+    reading = json.loads(_ssh(connection_ref, "python3 -", _HOST_GLANCE_SCRIPT))
+    memory_used = int(reading.get("memory_used") or 0)
+    memory_total = int(reading.get("memory_total") or 0)
+    storage_used = int(reading.get("storage_used") or 0)
+    storage_total = int(reading.get("storage_total") or 0)
+    memory_percent = memory_used / memory_total * 100 if memory_total else 0
+    storage_percent = storage_used / storage_total * 100 if storage_total else 0
+    return {
+        "key": key,
+        "status": "good",
+        "summary": f"Host load {float(reading.get('load_1m') or 0):.2f}",
+        "metrics": [
+            {
+                "label": "CPU",
+                "value": f"{float(reading.get('cpu_percent') or 0):.0f}%",
+                "detail": f"{int(reading.get('cores') or 0)} cores",
+            },
+            {
+                "label": "Memory",
+                "value": f"{memory_percent:.0f}%",
+                "detail": (
+                    f"{_human_bytes(memory_used)} of {_human_bytes(memory_total)} used"
+                ),
+            },
+            {
+                "label": "Storage",
+                "value": f"{storage_percent:.0f}%",
+                "detail": (
+                    f"{_human_bytes(storage_used)} of "
+                    f"{_human_bytes(storage_total)} used on /"
+                ),
+            },
+        ],
+    }
+
+
+def _portainer_glance() -> dict[str, Any]:
+    refs = provider_connection_refs("portainer")
+    if not refs:
+        raise ProviderError("No Portainer connection was supplied.")
+    machines = []
+    for connection_ref in refs:
+        base = _portainer_url(connection_ref)
+        headers = _portainer_headers(connection_ref)
+        for environment in _load_portainer_environments(connection_ref):
+            if not environment["reachable"]:
+                continue
+            cpu_percent = 0.0
+            memory_used = 0
+            storage_used = 0
+            running = 0
+            prefix = f"{base}/endpoints/{environment['id']}/docker"
+            info = _request(f"{prefix}/info", headers=headers) or {}
+            disk = _request(f"{prefix}/system/df", headers=headers) or {}
+            containers = (
+                _request(f"{prefix}/containers/json?all=false", headers=headers) or []
+            )
+            cores = int(info.get("NCPU") or 0)
+            memory_total = int(info.get("MemTotal") or 0)
+            storage_used += int(disk.get("LayersSize") or 0)
+            storage_used += sum(
+                int((volume.get("UsageData") or {}).get("Size") or 0)
+                for volume in disk.get("Volumes") or []
+            )
+            storage_used += sum(
+                int(item.get("Size") or 0) for item in disk.get("BuildCache") or []
+            )
+            for container in containers:
+                stats = (
+                    _request(
+                        f"{prefix}/containers/{container['Id']}/stats?stream=false&one-shot=true",
+                        headers=headers,
+                    )
+                    or {}
+                )
+                memory = stats.get("memory_stats") or {}
+                cache = (memory.get("stats") or {}).get("inactive_file") or 0
+                memory_used += max(0, int(memory.get("usage") or 0) - int(cache))
+                cpu_percent += _container_cpu_percent(stats)
+                running += 1
+            machine_key = (
+                controller_id()
+                if environment["local"] and controller_id()
+                else str(environment["name"])
+            )
+            machines.append(
+                {
+                    "key": machine_key,
+                    "status": "good",
+                    "summary": f"{running} containers running",
+                    "metrics": [
+                        {
+                            "label": "Container CPU",
+                            "value": f"{cpu_percent:.0f}%",
+                            "detail": f"{cores} cores",
+                        },
+                        {
+                            "label": "Container memory",
+                            "value": _human_bytes(memory_used),
+                            "detail": f"of {_human_bytes(memory_total)} available",
+                        },
+                        {
+                            "label": "Docker storage",
+                            "value": _human_bytes(storage_used),
+                            "detail": "layers, volumes, and build cache",
+                        },
+                    ],
+                }
+            )
+    return {
+        "panel_id": "infrastructure",
+        "machines": machines,
+    }
+
+
+def _nws_glance(point: str) -> dict[str, Any]:
+    point = point.strip()
+    parts = point.split(",")
+    if len(parts) != 2:
+        raise ProviderError("SEVERINO_NWS_POINT must be latitude,longitude.")
+    try:
+        latitude, longitude = (float(part.strip()) for part in parts)
+    except ValueError as exc:
+        raise ProviderError("SEVERINO_NWS_POINT is not numeric.") from exc
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        raise ProviderError("SEVERINO_NWS_POINT is outside valid coordinates.")
+    headers = {
+        "Accept": "application/geo+json",
+        "User-Agent": "Severino-HQ/1.0 (https://github.com/jseverino/severino-hq)",
+    }
+    point_data = (
+        _request(
+            f"https://api.weather.gov/points/{latitude:.4f},{longitude:.4f}",
+            headers=headers,
+        )
+        or {}
+    )
+    properties = point_data.get("properties") or {}
+    hourly = (
+        _request(str(properties.get("forecastHourly") or ""), headers=headers) or {}
+    )
+    periods = (hourly.get("properties") or {}).get("periods") or []
+    current = periods[0] if periods else {}
+    alerts = (
+        _request(
+            f"https://api.weather.gov/alerts/active?point={latitude:.4f},{longitude:.4f}",
+            headers=headers,
+        )
+        or {}
+    )
+    active = alerts.get("features") or []
+    place = (properties.get("relativeLocation") or {}).get("properties") or {}
+    location = ", ".join(
+        part for part in (place.get("city"), place.get("state")) if part
+    )
+    status = "serious" if active else "good"
+    metrics = [
+        {
+            "label": "Now",
+            "value": str(current.get("shortForecast") or "Unavailable"),
+            "detail": str(current.get("name") or ""),
+        },
+        {
+            "label": "Temperature",
+            "value": f"{current.get('temperature', '—')}°{current.get('temperatureUnit', 'F')}",
+            "detail": str(current.get("windChill") or ""),
+        },
+        {
+            "label": "Wind",
+            "value": f"{current.get('windDirection', '')} {current.get('windSpeed', '—')}".strip(),
+            "detail": "NWS hourly forecast",
+        },
+    ]
+    if active:
+        metrics.append(
+            {
+                "label": "Alerts",
+                "value": str(len(active)),
+                "detail": "active for this point",
+            }
+        )
+    return {
+        "panel_id": "weather",
+        "point": f"{latitude:.4f},{longitude:.4f}",
+        "status": status,
+        "summary": location or "National Weather Service",
+        "metrics": metrics,
+    }
+
+
+def _infrastructure_glance(targets: list[dict[str, Any]]) -> dict[str, Any]:
+    available_ssh = set(ssh_connection_refs())
+    unresolved = [
+        target
+        for target in targets
+        if not any(str(ref) in available_ssh for ref in target.get("connections") or [])
+    ]
+    docker_by_key = {}
+    if unresolved:
+        portainer = _portainer_glance()
+        docker_by_key = {
+            str(item.get("key", "")): item for item in portainer.get("machines", [])
+        }
+    machines = []
+    for target in targets:
+        key = str(target.get("key", "")).strip()
+        connection_ref = next(
+            (
+                str(ref)
+                for ref in target.get("connections") or []
+                if str(ref) in available_ssh
+            ),
+            "",
+        )
+        if connection_ref:
+            machines.append(_host_glance(key, connection_ref))
+        elif key in docker_by_key:
+            machines.append(docker_by_key[key])
+        else:
+            machines.append(
+                {
+                    "key": key,
+                    "status": "attention",
+                    "summary": "No host telemetry connection is available.",
+                    "metrics": [],
+                }
+            )
+    return {"panel_id": "infrastructure", "machines": machines}
+
+
+def dashboard_glance(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    readings = []
+    panel_ids = plan.get("panels") if isinstance(plan, dict) else []
+    targets = plan.get("targets") if isinstance(plan, dict) else {}
+    for panel_id in panel_ids or []:
+        try:
+            if panel_id == "infrastructure":
+                readings.append(_infrastructure_glance(targets.get(panel_id) or []))
+            elif panel_id == "weather":
+                readings.append(
+                    _nws_glance(str((targets.get("weather") or {}).get("point", "")))
+                )
+        except (ProviderError, OSError, ValueError, KeyError) as exc:
+            failure = {
+                "status": "serious",
+                "summary": f"Refresh failed ({type(exc).__name__}).",
+                "metrics": [],
+            }
+            readings.append(
+                {
+                    "panel_id": panel_id,
+                    "machines": [{"key": controller_id(), **failure}],
+                }
+                if panel_id == "infrastructure"
+                else {
+                    "panel_id": panel_id,
+                    "point": str((targets.get("weather") or {}).get("point", "")),
+                    **failure,
+                }
+            )
+    return readings
+
+
 def _probe_tailscale(connection_ref: str) -> dict[str, Any]:
     """Prove the OAuth client is accepted without retaining its access token."""
 
@@ -4136,6 +4734,7 @@ PROVIDER_ACTIONS = {
         if policy.mode == "locked"
     },
     ("adguard.rewrite", "reconcile"): reconcile_adguard,
+    ("caddy.route", "reconcile"): reconcile_caddy,
     ("portainer.stack", "reconcile"): reconcile_portainer,
     ("portainer.stack", "delete"): delete_portainer,
     ("portainer.container", "restart"): restart_portainer_container,

@@ -38,6 +38,7 @@ from application.infrastructure import (
     serialize_public_status,
     suggest_key,
 )
+from application.glance import dashboard_machine_selected, select_dashboard_machine
 from application.inventory import (
     AdoptCommand,
     AdoptServiceCommand,
@@ -92,6 +93,7 @@ from .models import ManagedResource, OperationRequest
 from .providers import (
     CERTIFICATE_KIND,
     DELIVERY_TARGET_KIND,
+    MACHINE_KIND,
     NameContext,
     PROVIDERS,
     normalized_hostname,
@@ -166,6 +168,13 @@ class ResourceFormView(LoginRequiredMixin, View):
             )
         material_class = _material_form(kind) if not resource else None
         material = material_class() if material_class else None
+        # Built before the context, because the facts panel above it is decided
+        # by which questions it turns out to be asking.
+        spec = spec_form_class(
+            kind,
+            lock_identity=bool(resource),
+            context=_form_context(request, resource),
+        )(initial=_initial_spec(request, kind, resource))
         return render(
             request,
             self.template_name,
@@ -178,9 +187,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # know and nothing else: a name it can derive, and a pause
                 # switch for a thing that does not exist yet, are not questions.
                 "identity": (
-                    ResourceIdentityForm(
-                        initial={"key": resource.key, "enabled": resource.enabled}
-                    )
+                    ResourceIdentityForm(initial={"enabled": resource.enabled})
                     if resource
                     else None
                 ),
@@ -188,11 +195,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # menus can offer what suits that name rather than everything
                 # that exists. A certificate menu with one entry was right by
                 # luck; the second certificate is what makes it a question.
-                "spec": spec_form_class(
-                    kind,
-                    lock_identity=bool(resource),
-                    context=_form_context(request, resource),
-                )(initial=_initial_spec(request, kind, resource)),
+                "spec": spec,
                 # Collected here rather than on a page of its own. A resource
                 # that is not usable without material should not be creatable
                 # without it.
@@ -204,7 +207,12 @@ class ResourceFormView(LoginRequiredMixin, View):
                 # nothing else -- an edit page for a certificate said nothing
                 # about the names it covers or where it is installed, which is
                 # the whole of what a person came to check.
-                "facts": _readout_rows(resource) if resource else (),
+                "facts": _form_facts(resource, spec) if resource else (),
+                "show_on_dashboard": bool(
+                    resource
+                    and kind == MACHINE_KIND
+                    and dashboard_machine_selected(resource.key)
+                ),
             },
         )
 
@@ -229,10 +237,10 @@ class ResourceFormView(LoginRequiredMixin, View):
             try:
                 result = save_managed_resource(
                     ManagedResourceCommand(
+                        # The identifier is never asked for again once a
+                        # resource exists, so an edit keeps the one it has.
                         key=(
-                            identity.cleaned_data["key"] or resource.key
-                            if identity
-                            else _derived_key(kind, spec.spec)
+                            resource.key if resource else _derived_key(kind, spec.spec)
                         ),
                         kind=kind,
                         spec=spec.spec,
@@ -246,6 +254,12 @@ class ResourceFormView(LoginRequiredMixin, View):
                 spec.add_error(None, _readable_error(exc))
             else:
                 saved = result["resource"]["key"]
+                if resource and kind == MACHINE_KIND:
+                    select_dashboard_machine(
+                        saved,
+                        selected="show_on_dashboard" in request.POST,
+                        principal=web_principal(request.user),
+                    )
                 if material is not None:
                     try:
                         _store_material(kind, saved, material.cleaned_data, request)
@@ -253,9 +267,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                         # The declaration exists and the material does not, so
                         # say which half landed rather than reporting success.
                         messages.error(request, str(exc))
-                        return redirect(
-                            "control_plane:upload_certificate", key=saved
-                        )
+                        return redirect("control_plane:upload_certificate", key=saved)
                 messages.success(
                     request,
                     f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
@@ -277,6 +289,11 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "identity": identity,
                 "spec": spec,
                 "material": material,
+                "show_on_dashboard": bool(
+                    resource
+                    and kind == MACHINE_KIND
+                    and dashboard_machine_selected(resource.key)
+                ),
             },
         )
 
@@ -315,6 +332,11 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
 
     provider = PROVIDERS[resource.kind]
     fields = provider.spec_type.model_fields
+    # What the readout above already printed. On anything with a handful of
+    # fields the readout *is* the spec, so the disclosure repeated it whole --
+    # a machine showed "What it is for" and its addresses, then offered "every
+    # field of this declaration" and showed the same two again with the name.
+    shown = {str(label).strip().casefold() for label, _, _ in _readout_rows(resource)}
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
     for name, value in resource.spec.items():
@@ -325,7 +347,19 @@ def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
             if name in fields
             else name
         )
-        row = (label, _spec_value(value))
+        if label.strip().casefold() in shown:
+            continue
+        rendered = _spec_value(value)
+        # And not the thing the page is already titled. A machine's name is its
+        # identifier here, so the last row left after the readout was the
+        # heading repeated inside a disclosure offering more.
+        #
+        # Only when they are the same string: a declaration whose name differs
+        # from its filing is telling you something, and that is the case worth
+        # showing.
+        if rendered == resource.key:
+            continue
+        row = (label, rendered)
         (advanced if name in provider.advanced_fields else primary).append(row)
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
 
@@ -398,7 +432,9 @@ def _service_links(resource) -> tuple[tuple[str, str], ...]:
     return tuple(
         (
             name,
-            reverse("control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}),
+            reverse(
+                "control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}
+            ),
         )
         for name in names
         # A wildcard covers names rather than naming one, and there is no
@@ -443,6 +479,38 @@ def _readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
         return tuple(provider.readout(resource.spec, resource.status or {}))
     except (KeyError, TypeError, ValueError):
         return ()
+
+
+def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
+    """What this resource is that the form below does not already ask.
+
+    The panel exists for the fields a form cannot show: a certificate's edit
+    page asks which target it installs on and says nothing about the names it
+    covers or what is actually served with it, which is the whole of what a
+    person came to check.
+
+    On a machine it had the opposite problem. Every field on that form is on
+    that form, so the panel repeated them -- "What it is for" twice and the
+    addresses twice, once as text and once as inputs, on one screen. Matched by
+    label against the form's own fields, a row survives only when nothing below
+    is asking about it.
+
+    The identifier leads, and is the reason this is not empty for a machine. It
+    used to be an input near the bottom behind the Options disclosure, directly
+    beneath a field called "Name", so the resource appeared to have two names
+    and the fixed one looked like the optional one.
+
+    Added here rather than in the readout, which every list and detail surface
+    shares: they identify the resource in their own way already, and a row
+    repeating it on each of them is the same fact three times.
+    """
+
+    asked = {str(field.label).strip().casefold() for field in form}
+    return (("Identifier", "", resource.key),) + tuple(
+        row
+        for row in _readout_rows(resource)
+        if str(row[0]).strip().casefold() not in asked
+    )
 
 
 def _removal_note(resource) -> str:
@@ -800,6 +868,12 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         # and reordering only means anything within the first.
         context["favorites"] = [item for item in found if item.pinned]
         context["services"] = [item for item in found if not item.pinned]
+        context["favorite_service_projects"] = any(
+            item.project for item in context["favorites"]
+        )
+        context["other_service_projects"] = any(
+            item.project for item in context["services"]
+        )
         # Where a service runs is one column, not two. The runtime facet named
         # the container declaration and the origin named the machine it runs
         # on, side by side, in two different vocabularies for one fact.
@@ -1122,7 +1196,13 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 }
             )
         for rows in relations.values():
-            rows.sort(key=lambda row: (row["direction"], row["label"], row["other"].label.casefold()))
+            rows.sort(
+                key=lambda row: (
+                    row["direction"],
+                    row["label"],
+                    row["other"].label.casefold(),
+                )
+            )
         groups: dict[str, list[dict[str, Any]]] = {}
         for node in topology.nodes:
             groups.setdefault(node.kind, []).append(
@@ -1244,9 +1324,7 @@ class TopologyView(LoginRequiredMixin, TemplateView):
         return topology_url(node_id, lens=lens)
 
     @staticmethod
-    def _trace_url(
-        focus: str, direction: str, lens: str = "", depth: int = 3
-    ) -> str:
+    def _trace_url(focus: str, direction: str, lens: str = "", depth: int = 3) -> str:
         return topology_url(focus, direction=direction, depth=depth, lens=lens)
 
 
@@ -1394,7 +1472,14 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             action=OperationRequest.Action.DELETE,
             state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
         ).exists()
-        context["readout_rows"] = _readout_rows(self.object)
+        # Nothing for a container: the panel above is the sweep's answer and
+        # the readout is the declaration's, and a container declares identity
+        # and nothing else. So it could only repeat what the panel had just said
+        # better -- "State: running, up 3 months" followed by "State: --", and
+        # the container's own name under a page titled after it.
+        context["readout_rows"] = (
+            () if self.object.kind == CONTAINER_KIND else _readout_rows(self.object)
+        )
         context["spec_rows"] = _spec_rows(self.object)
         context["days_left"] = None
         context["renewal_at"] = None
@@ -1417,7 +1502,8 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                 # A malformed provider timestamp must not break the resource page.
                 pass
         context["operations"] = [
-            operation_summary(operation) for operation in self.object.operations.all()[:20]
+            operation_summary(operation)
+            for operation in self.object.operations.all()[:20]
         ]
         for operation in context["operations"]:
             operation["created_at"] = datetime.fromisoformat(operation["created_at"])
@@ -1428,13 +1514,15 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         context["resolved_spec"] = self.object.spec
         if self.object.kind == CERTIFICATE_KIND:
             try:
-                context["resolved_spec"] = controller_contract(self.object)["resource"]["spec"]
+                context["resolved_spec"] = controller_contract(self.object)["resource"][
+                    "spec"
+                ]
                 context["resolution_error"] = ""
                 observed_names: dict[str, set[str]] = {}
                 for observation in self.object.status.get("consumers", []):
-                    observed_names.setdefault(observation.get("consumer", ""), set()).add(
-                        observation.get("domain", "")
-                    )
+                    observed_names.setdefault(
+                        observation.get("consumer", ""), set()
+                    ).add(observation.get("domain", ""))
                 # The target each consumer came from, so the page that shows
                 # where a certificate goes links to where those settings are
                 # changed rather than making the operator find it by name.

@@ -282,6 +282,27 @@ class ConnectionRegistrationTests(TestCase):
 
         self.assertEqual(discovered["connections"][0].badges[0], "1 ability")
 
+    def test_command_center_finds_the_live_instance_not_only_its_family(self):
+        spec = _finance_spec()
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            discovered = command_center(
+                "capital", principal=FINANCE, include_live_connections=True
+            )
+
+        self.assertEqual(discovered["connections"][0].label, "Capital One")
+        self.assertEqual(discovered["connections"][0].badges, ("healthy", "2 abilities"))
+
+    def test_two_letter_query_matches_word_starts_not_word_middles(self):
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            discovered = command_center("sp", principal=READ)
+
+        self.assertNotIn(
+            "infrastructure.resource.create",
+            {item.name for item in discovered["commands"]},
+        )
+
     def test_command_center_finds_a_connection_by_its_declared_ability(self):
         with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("tailscale", principal=READ)

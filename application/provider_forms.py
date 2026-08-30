@@ -69,22 +69,67 @@ class NameListWidget(forms.Widget):
             return []
         return [line.strip() for line in str(value).splitlines() if line.strip()]
 
+    # ``{value: note}`` for values HQ can see for itself. A machine's addresses
+    # are the case this exists for: half of them are the only record there is --
+    # nothing reports a printer's address -- and half repeat a reading from the
+    # tailnet. Presented identically, the field invites somebody to correct HQ
+    # about something HQ is watching, and gives no way to tell which is which.
+    notes: dict[str, str] = {}
+
+    def _row(self, name: str, item: str):
+        """One value, editable unless HQ is the one that found it.
+
+        A value carrying a note is a value a sweep reports, so HQ holds it
+        whether or not this field does -- and offering to remove it was
+        offering to delete a fact. It read as though the tailnet address of a
+        machine on the tailnet were HQ's to forget.
+
+        Submitted as a hidden input rather than left out, so a save keeps what
+        it did not ask about instead of quietly dropping it.
+        """
+
+        from django.utils.html import format_html
+
+        note = self.notes.get(item, "")
+        if note:
+            return format_html(
+                '<div class="name-list-row name-list-row-observed">'
+                '<input type="hidden" name="{}" value="{}">'
+                '<span class="name-list-observed">{}</span>'
+                '<span class="name-list-note">{}</span>'
+                "</div>",
+                name,
+                item,
+                item,
+                note,
+            )
+        return format_html(
+            '<div class="name-list-row">'
+            '<input type="text" name="{}" value="{}" spellcheck="false"'
+            ' autocapitalize="off" autocorrect="off">'
+            '<button type="button" class="btn ghost" data-name-list-remove'
+            ' aria-label="Remove {}">Remove</button>'
+            "</div>",
+            name,
+            item,
+            item,
+        )
+
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
 
-        values = self.format_value(value)
+        # What HQ found first, what only this field records underneath it. The
+        # observed one is the address the machine actually answers at on the
+        # network everything reaches it over; the typed ones are the exceptions
+        # nothing reports. Interleaved in whatever order the declaration
+        # happened to store them, a read-only row sat between two inputs and
+        # the blank row for adding one drifted away from the rest.
+        values = sorted(
+            self.format_value(value), key=lambda item: item not in self.notes
+        )
         rows = format_html_join(
-            "",
-            (
-                '<div class="name-list-row">'
-                '<input type="text" name="{}" value="{}" spellcheck="false"'
-                ' autocapitalize="off" autocorrect="off">'
-                '<button type="button" class="btn ghost" data-name-list-remove'
-                ' aria-label="Remove {}">Remove</button>'
-                "</div>"
-            ),
-            ((name, item, item) for item in values),
+            "", "{}", ((self._row(name, item),) for item in values)
         )
         # Always one empty row, so adding a name needs no script and no
         # thinking about where the cursor goes.
@@ -140,15 +185,22 @@ class ResourceIdentityForm(forms.Form):
     generated form that has to remember which of its own fields are not spec.
     """
 
-    key = forms.SlugField(
-        max_length=180,
-        required=False,
-        label="Name in HQ",
-        help_text=(
-            "Optional. Left blank, HQ names it after the hostname. Stable once "
-            "set — operations refer to it."
-        ),
-    )
+    # Labelled for what it is. "Name in HQ" sat directly beneath a field called
+    # "Name" and read as a second one, inviting the question of which the
+    # machine is actually called -- and the help text answered "the hostname",
+    # which is true of a proxy host and not of a machine, whose identifier comes
+    # from its name. What it really is is the string in this page's address and
+    # in every operation and audit entry, which is why it must not move.
+    # No identifier field. It was an input labelled "Name in HQ" sitting
+    # directly beneath one labelled "Name", so a machine appeared to have two
+    # names and no way to tell which it was actually called -- and the honest
+    # answer is neither: it is the string in this page's address and in every
+    # operation and audit entry recorded against the resource.
+    #
+    # Disabling it was not enough. A greyed-out box is still a box, and a form
+    # that shows one is still asking. It is derived from the name when the
+    # resource is created and never asked about again; the readout above the
+    # form is where it is now shown, as the filing it is.
     enabled = forms.BooleanField(
         required=False,
         initial=True,
@@ -158,6 +210,7 @@ class ResourceIdentityForm(forms.Form):
             "not remove anything already applied at the provider."
         ),
     )
+
 
 
 class ProviderSpecForm(forms.Form):
@@ -310,6 +363,15 @@ def spec_form_class(
         if name in fields:
             fields[name].change_effect = effect
 
+    # Which of the values already in a list field HQ can see for itself. Same
+    # late resolution and same swallow as the live choices above: a form that
+    # will not render because an annotation could not be looked up is the least
+    # useful moment to fail.
+    for name, notes in _live_notes(provider).items():
+        field = fields.get(name)
+        if field is not None and isinstance(field.widget, NameListWidget):
+            field.widget.notes = notes
+
     if lock_identity:
         for name in identity_fields(kind):
             if name not in fields:
@@ -427,6 +489,17 @@ def _live_choices(
         return {}
     try:
         return _import(provider.choices)(context) or {}
+    except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
+        return {}
+
+
+def _live_notes(provider: Any) -> dict[str, dict[str, str]]:
+    """``{field: {value: note}}`` for values a provider says HQ observes."""
+
+    if not getattr(provider, "notes", ""):
+        return {}
+    try:
+        return _import(provider.notes)() or {}
     except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
         return {}
 

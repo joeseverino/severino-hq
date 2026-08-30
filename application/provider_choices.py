@@ -266,3 +266,23 @@ def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
         )
         for connection in connections_for(provider)
     )
+
+
+def machine_address_notes() -> dict[str, dict[str, str]]:
+    """Which of a machine's addresses HQ can see without being told.
+
+    A declaration carries addresses for two unrelated reasons, and the form
+    presented both the same way. Some are the only record there is: nothing in
+    the estate reports the printer on the LAN, or the public address of a VPS.
+    The rest repeat a reading the tailnet gives on every sweep -- and those are
+    also the key that ties HQ's name for a machine to the tailnet's, which calls
+    the same laptop something else entirely.
+
+    So the field stays writable and says which is which. Locking it would break
+    the printer; leaving it silent invites somebody to correct HQ about a value
+    HQ is watching.
+    """
+
+    from .machines import observed_addresses
+
+    return {"addresses": observed_addresses()}

@@ -262,6 +262,126 @@ def container_hosts() -> dict[str, str]:
     return found
 
 
+def _observed_record(provider, record) -> tuple[tuple, tuple]:
+    """Read one provider record without letting a stale row end the sweep."""
+
+    try:
+        spec = provider.from_record(record)
+        return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
+    except (KeyError, TypeError, ValueError):
+        # The inventory sweep reports its own health. One unreadable row is
+        # evidence about that row, not a reason to hide every healthy answer.
+        return (), ()
+
+
+def _record_observed_answers(
+    found: dict[str, set[str]], names: tuple, addresses: tuple
+) -> None:
+    """Normalize one provider's vocabulary into the shared answer index."""
+
+    answered = tuple(str(address) for address in addresses if address)
+    if not answered:
+        return
+    for name in names:
+        label = str(name or "").strip().lower().rstrip(".")
+        if label:
+            found.setdefault(label, set()).update(answered)
+
+
+def observed_answers() -> dict[str, tuple[str, ...]]:
+    """Every address each hostname is *seen* answering at.
+
+    Observed rather than declared, because of what the callers do with it. A
+    record HQ has written down but not yet applied is an intention, and a
+    certificate that counted intentions as evidence would report consumers no
+    request has ever reached -- the opposite of the problem this is here to fix.
+
+    Driven by the provider registry rather than by a list of DNS kinds. A
+    provider that can read its own records back and can say what a record
+    answers with is a provider that resolves names, whatever it is called, and
+    the next one joins by declaring the two hooks it needs anyway. Naming the
+    kinds here would mean a DNS provider added later resolved names everywhere
+    in HQ except in the one place that decides who consumes a certificate.
+    """
+
+    from control_plane.models import ProviderInventory
+    from control_plane.providers import PROVIDERS
+
+    found: dict[str, set[str]] = {}
+    for snapshot in ProviderInventory.objects.all():
+        provider = PROVIDERS.get(snapshot.kind)
+        if provider is None or provider.from_record is None:
+            continue
+        if provider.answers is None or provider.hostnames is None:
+            continue
+        for record in snapshot.records:
+            names, addresses = _observed_record(provider, record)
+            _record_observed_answers(found, names, addresses)
+    return {name: tuple(sorted(addresses)) for name, addresses in found.items()}
+
+
+def names_by_connection() -> dict[str, tuple[str, ...]]:
+    """The hostnames that land on the machine each connection reaches.
+
+    The join everything below it already had the halves of: a sweep says which
+    names answer at which address, a credential says which address it opens, and
+    this index says which of those addresses are the same machine. Nothing new is
+    recorded -- the fact was derivable from three things HQ reconciles, and was
+    being typed into a list by hand instead.
+
+    Both sides are placed through the one index rather than compared as strings,
+    so a machine reached at one of its addresses and named at another is still
+    one machine. Where the index cannot place an address it stands in for
+    itself, which makes the comparison exact rather than absent.
+    """
+
+    from control_plane.models import ProviderConnection
+
+    index = machines_index()
+    answers = observed_answers()
+    at_machine: dict[str, set[str]] = {}
+    for name, addresses in answers.items():
+        for address in addresses:
+            placed = index.resolve(address) or host_of(address)
+            if placed:
+                at_machine.setdefault(placed, set()).add(name)
+
+    def place(endpoint: Any) -> str:
+        """Which machine a connection's endpoint opens onto.
+
+        A name has to become an address before it can name a machine, and the
+        hop is one more thing HQ already sweeps. Skipping it places a connection
+        addressed by name at its own credential rather than at the box: the
+        index deliberately files a URL endpoint under the connection's ref, so
+        that a proxy forwarding somewhere HQ holds a credential for stops
+        reading as an unknown host -- which is right there and circular here.
+        Resolved that way, a connection reached by name and the names answering
+        at that host's address were two different machines, and nothing was ever
+        derived for it.
+
+        An address the index cannot name still places: it stands in for itself,
+        the same way it does on the other side of this join. Returning the name
+        instead would compare a name against an address and match nothing.
+        """
+
+        host = host_of(endpoint)
+        if not host:
+            return ""
+        for address in answers.get(host.lower().rstrip("."), ()):
+            placed = index.resolve(address) or host_of(address)
+            if placed:
+                return placed
+        return index.resolve(host) or host
+
+    found: dict[str, tuple[str, ...]] = {}
+    for connection in ProviderConnection.objects.all():
+        ref = str(getattr(connection, "connection_ref", "") or "").strip()
+        placed = place(getattr(connection, "endpoint", "") or "")
+        if ref and placed:
+            found[ref] = tuple(sorted(at_machine.get(placed, ())))
+    return found
+
+
 def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machines:
     """The index over everything HQ holds, read from the database.
 

@@ -106,12 +106,152 @@ def _bridge(**responses):
         action = args[0] if args else ""
         if action in responses:
             return responses[action]
+        if action == "glance-plan":
+            return {"ok": True, "panels": [], "targets": {}}
         raise AssertionError(f"Unexpected bridge call: {action}")
 
     return respond
 
 
 class ProviderAdapterTests(TestCase):
+    @mock.patch("controller_runtime.providers._portainer_glance")
+    @mock.patch("controller_runtime.providers._ssh")
+    @mock.patch(
+        "controller_runtime.providers.ssh_connection_refs",
+        return_value=("homelab-ssh",),
+    )
+    def test_dashboard_glance_prefers_whole_host_telemetry(
+        self, _connection_refs, ssh, portainer
+    ):
+        ssh.return_value = json.dumps(
+            {
+                "cpu_percent": 17.4,
+                "cores": 8,
+                "load_1m": 0.42,
+                "memory_used": 8 * 1024**3,
+                "memory_total": 32 * 1024**3,
+                "storage_used": 250 * 1024**3,
+                "storage_total": 1000 * 1024**3,
+            }
+        ).encode()
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["infrastructure"],
+                "targets": {
+                    "infrastructure": [
+                        {
+                            "key": "homelab-server",
+                            "connections": ["homelab-ssh"],
+                        }
+                    ]
+                },
+            }
+        )
+
+        machine = result[0]["machines"][0]
+        self.assertEqual(machine["key"], "homelab-server")
+        self.assertEqual(
+            [metric["value"] for metric in machine["metrics"]],
+            ["17%", "25%", "25%"],
+        )
+        ssh.assert_called_once_with(
+            "homelab-ssh", "python3 -", providers._HOST_GLANCE_SCRIPT
+        )
+        portainer.assert_not_called()
+
+    @mock.patch("controller_runtime.providers.ssh_connection_refs", return_value=())
+    @mock.patch("controller_runtime.providers._portainer_glance")
+    def test_dashboard_glance_labels_docker_fallback_by_scope(
+        self, portainer, _connection_refs
+    ):
+        portainer.return_value = {
+            "panel_id": "infrastructure",
+            "machines": [
+                {
+                    "key": "homelab-server",
+                    "status": "good",
+                    "summary": "4 containers running",
+                    "metrics": [
+                        {"label": "Container CPU", "value": "7%", "detail": ""},
+                        {
+                            "label": "Container memory",
+                            "value": "2 GB",
+                            "detail": "",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["infrastructure"],
+                "targets": {
+                    "infrastructure": [{"key": "homelab-server", "connections": []}]
+                },
+            }
+        )
+
+        labels = [metric["label"] for metric in result[0]["machines"][0]["metrics"]]
+        self.assertEqual(labels, ["Container CPU", "Container memory"])
+
+    @mock.patch("controller_runtime.providers._request")
+    def test_weather_glance_uses_the_nws_point_contract(self, request):
+        request.side_effect = [
+            {
+                "properties": {
+                    "forecastHourly": "https://api.weather.gov/hourly",
+                    "relativeLocation": {
+                        "properties": {"city": "Chicago", "state": "IL"}
+                    },
+                }
+            },
+            {
+                "properties": {
+                    "periods": [
+                        {
+                            "name": "This Hour",
+                            "shortForecast": "Clear",
+                            "temperature": 72,
+                            "temperatureUnit": "F",
+                            "windDirection": "NW",
+                            "windSpeed": "5 mph",
+                        }
+                    ]
+                }
+            },
+            {"features": []},
+        ]
+
+        result = providers.dashboard_glance(
+            {
+                "panels": ["weather"],
+                "targets": {"weather": {"point": "41.0000,-87.0000"}},
+            }
+        )
+
+        self.assertEqual(result[0]["summary"], "Chicago, IL")
+        self.assertEqual(result[0]["metrics"][0]["value"], "Clear")
+        self.assertNotIn("Alerts", [metric["label"] for metric in result[0]["metrics"]])
+        self.assertIn("User-Agent", request.call_args_list[0].kwargs["headers"])
+
+    @mock.patch(
+        "controller_runtime.providers._nws_glance",
+        side_effect=providers.ProviderError("No forecast for this point."),
+    )
+    def test_weather_failure_keeps_the_point_so_the_request_can_complete(self, _nws):
+        result = providers.dashboard_glance(
+            {
+                "panels": ["weather"],
+                "targets": {"weather": {"point": "41.0000,-87.0000"}},
+            }
+        )
+
+        self.assertEqual(result[0]["panel_id"], "weather")
+        self.assertEqual(result[0]["point"], "41.0000,-87.0000")
+        self.assertEqual(result[0]["status"], "serious")
+
     @mock.patch.dict(
         "os.environ",
         {"HQ_CONTROLLER_CA_FILE": "/run/secrets/homelab-ca.pem"},
@@ -780,10 +920,9 @@ class ProviderAdapterTests(TestCase):
         refused there.
         """
 
-        with self.assertRaisesRegex(providers.ProviderError, "Zone Settings"):
+        with self.assertRaisesRegex(providers.ProviderError, "nothing to converge"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
 
-    @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
@@ -797,14 +936,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    def test_tls_observer_reports_consumer_drift_and_public_artifact(
-        self, observe, registry
-    ):
-        registry.return_value = {
-            "connections": {
-                "edge": {"projection": "ssh_transport", "env_prefix": "EDGE"}
-            }
-        }
+    def test_tls_observer_reports_consumer_drift_and_public_artifact(self, observe):
         observe.side_effect = [
             {
                 "domain": "hq.example",
@@ -854,7 +986,6 @@ class ProviderAdapterTests(TestCase):
             ],
         )
 
-    @mock.patch("controller_runtime.providers._certificate_registry")
     @mock.patch("controller_runtime.providers._observe_tls_domain")
     @mock.patch.dict(
         "os.environ",
@@ -867,12 +998,7 @@ class ProviderAdapterTests(TestCase):
         },
         clear=True,
     )
-    def test_cpanel_tls_observation_bypasses_public_proxy(self, observe, registry):
-        registry.return_value = {
-            "connections": {
-                "cpanel": {"projection": "ssh_transport", "env_prefix": "CPANEL"}
-            }
-        }
+    def test_cpanel_tls_observation_bypasses_public_proxy(self, observe):
         observe.return_value = {
             "domain": "quiz.example.test",
             "not_after": "2026-10-23T00:00:00+00:00",
@@ -1263,7 +1389,15 @@ class WorkerTests(TestCase):
         # against the credential that would have filled it.
         self.assertEqual(
             called,
-            ["sweep-due", "connections", "inventory", "analytics", "schedule", "claim"],
+            [
+                "glance-plan",
+                "sweep-due",
+                "connections",
+                "inventory",
+                "analytics",
+                "schedule",
+                "claim",
+            ],
         )
         arguments = manage.call_args.args
         self.assertEqual(arguments[:3], ("claim", "--controller-id", "test"))
@@ -1377,6 +1511,7 @@ class WorkerTests(TestCase):
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
                 "analytics": {"ok": True, "recorded": {}},
+                "glance-plan": {"ok": True, "panels": [], "targets": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},
@@ -1410,6 +1545,7 @@ class WorkerTests(TestCase):
                 "connections": {"ok": True, "recorded": []},
                 "inventory": {"ok": True, "recorded": []},
                 "analytics": {"ok": True, "recorded": {}},
+                "glance-plan": {"ok": True, "panels": [], "targets": {}},
                 "schedule": {"ok": True, "scheduled": []},
                 "claim": {
                     "operation": {"id": "operation-1", "action": "reconcile"},
@@ -2583,3 +2719,357 @@ class _Answer:
 
     def __exit__(self, *exc):
         return False
+
+
+ADAPTED_CADDY = {
+    "apps": {
+        "http": {
+            "servers": {
+                "srv0": {
+                    "listen": [":443"],
+                    "routes": [
+                        {
+                            "match": [{"host": ["status.example.com"]}],
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {"dial": "uptime-kuma:3001"}
+                                                    ],
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                            "terminal": True,
+                        },
+                        {
+                            "match": [{"host": ["health.example.com"]}],
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "static_response",
+                                                    "body": "ok",
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                            "terminal": True,
+                        },
+                    ],
+                }
+            }
+        }
+    }
+}
+
+
+class CaddyRouteSweepTests(TestCase):
+    """What the edge serves, read out of the config Caddy itself runs on.
+
+    The names here answer over TLS from a box HQ sweeps, holds a credential for
+    and installs the certificate on -- and every one of their service pages
+    read "nothing supplies this", because the only ingress HQ could describe was
+    a proxy this box does not run.
+    """
+
+    def _routes(self, config):
+        return {
+            record["domain"]: record["upstream"]
+            for record in providers._caddy_routes(config, "an-edge")
+        }
+
+    def test_a_proxied_name_carries_the_container_it_hands_off_to(self):
+        self.assertEqual(
+            self._routes(ADAPTED_CADDY)["status.example.com"], "uptime-kuma:3001"
+        )
+
+    def test_a_name_caddy_answers_itself_has_no_upstream(self):
+        """A redirect or a static response forwards nowhere, and that is a fact."""
+
+        self.assertEqual(self._routes(ADAPTED_CADDY)["health.example.com"], "")
+
+    def test_the_upstream_is_found_however_deeply_it_is_nested(self):
+        """Caddy nests by how the Caddyfile was written, not by a fixed depth."""
+
+        deep = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [{"host": ["deep.example.com"]}],
+                                    "handle": [
+                                        {
+                                            "handler": "subroute",
+                                            "routes": [
+                                                {
+                                                    "handle": [
+                                                        {
+                                                            "handler": "subroute",
+                                                            "routes": [
+                                                                {
+                                                                    "handle": [
+                                                                        {
+                                                                            "handler": "reverse_proxy",
+                                                                            "upstreams": [
+                                                                                {
+                                                                                    "dial": "app:8080"
+                                                                                }
+                                                                            ],
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ],
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(self._routes(deep)["deep.example.com"], "app:8080")
+
+    def test_a_route_matching_no_host_is_not_a_hostname(self):
+        """Caddy's catch-all answers for anything, which is not a name."""
+
+        catch_all = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [{"dial": "app:8080"}],
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(providers._caddy_routes(catch_all, "an-edge"), [])
+
+    def test_one_route_serving_several_names_becomes_one_record_each(self):
+        """The rest of HQ joins on a hostname; a row holding three joins to none."""
+
+        shared = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [
+                                        {
+                                            "host": [
+                                                "one.example.com",
+                                                "two.example.com",
+                                            ]
+                                        }
+                                    ],
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [{"dial": "app:8080"}],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(
+            self._routes(shared),
+            {"one.example.com": "app:8080", "two.example.com": "app:8080"},
+        )
+
+    def test_a_balanced_route_names_no_single_upstream(self):
+        """Two backends is not one answer, and a guess reads as a fifth fact."""
+
+        balanced = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [{"host": ["ha.example.com"]}],
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [
+                                                {"dial": "a:8080"},
+                                                {"dial": "b:8080"},
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(self._routes(balanced)["ha.example.com"], "")
+
+    def test_an_edge_that_refuses_the_operation_is_skipped_not_fatal(self):
+        """Most SSH hosts are not an edge, and one down host is not a blackout."""
+
+        with (
+            mock.patch.object(
+                providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
+            ),
+            mock.patch.object(
+                providers,
+                "_ssh",
+                side_effect=[
+                    providers.ProviderError("denied"),
+                    json.dumps(ADAPTED_CADDY).encode(),
+                ],
+            ),
+        ):
+            found = providers.list_caddy_routes()
+
+        self.assertEqual(
+            sorted(record["domain"] for record in found),
+            ["health.example.com", "status.example.com"],
+        )
+
+
+class CapabilityMatchesTheHandlersTests(TestCase):
+    """What a provider claims the controller may do, against what it can do.
+
+    Half of this is a choice and half is a fact. Whether an action should run
+    unprompted, and why it is refused when it is, are decisions somebody makes.
+    Whether the controller is *able* to run it is not -- there is either code
+    behind it or there is not, and that is checkable rather than assertable.
+
+    So the declaration stays where the provider is and this is what stops it
+    drifting from the handlers it describes.
+    """
+
+    def _real(self):
+        """The handlers that act, minus the refusals generated from the policy."""
+
+        # Told apart by where the function was defined, not by what it is
+        # called: a refusal generated by `_refuses` carries that in its
+        # qualname, and a rename of the inner function cannot quietly turn
+        # every locked action into a handler that looks real.
+        return {
+            identity
+            for identity, handler in providers.PROVIDER_ACTIONS.items()
+            if not getattr(handler, "__qualname__", "").startswith("_refuses")
+        }
+
+    def _declared(self, mode):
+        from control_plane.providers import controller_capability_registry
+
+        return {
+            (kind, action)
+            for kind, capability in controller_capability_registry().capabilities.items()
+            for action, policy in capability.actions.items()
+            if policy.mode == mode
+        }
+
+    def test_nothing_claims_to_apply_without_code_behind_it(self):
+        empty = sorted(self._declared("apply") - self._real())
+
+        self.assertEqual(empty, [], f"declared apply, no handler: {empty}")
+
+    def test_nothing_is_locked_while_quietly_having_a_handler(self):
+        contradicted = sorted(self._declared("locked") & self._real())
+
+        self.assertEqual(
+            contradicted, [], f"declared locked, acts anyway: {contradicted}"
+        )
+
+    def test_every_handler_is_something_a_provider_declared(self):
+        """A handler nothing declares is unreachable -- `execute` is gated on
+        the policy, so the code would sit there looking implemented."""
+
+        undeclared = sorted(
+            self._real() - self._declared("apply") - self._declared("locked")
+        )
+
+        self.assertEqual(undeclared, [], f"handler nothing declares: {undeclared}")
+
+
+class CaddyRouteRenderingTests(TestCase):
+    """The file HQ writes for an edge, in the shape that edge already uses."""
+
+    def _rendered(self, specs, certificate_directory="/opt/apps/caddy/certs"):
+        return providers.render_caddy_routes(specs, certificate_directory)
+
+    def test_a_route_becomes_a_site_block_that_serves_its_own_tls(self):
+        """Written out rather than importing the operator's snippet.
+
+        A file that imports a name from a file HQ does not own breaks the moment
+        that file is edited, which is the coupling the separate file exists to
+        avoid.
+        """
+
+        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
+
+        self.assertIn("a.example.com {", out)
+        self.assertIn("\ttls /opt/apps/caddy/certs/fullchain.pem", out)
+        self.assertIn("\treverse_proxy app:8080", out)
+
+    def test_the_same_declarations_render_the_same_bytes(self):
+        """A file whose order follows a query looks changed on every pass."""
+
+        specs = [
+            {"domain": "b.example.com", "upstream": "b:1"},
+            {"domain": "a.example.com", "upstream": "a:1"},
+        ]
+
+        self.assertEqual(self._rendered(specs), self._rendered(list(reversed(specs))))
+
+    def test_a_route_with_nowhere_to_forward_is_left_out(self):
+        """Caddy answers some names itself. A block with no upstream is invalid."""
+
+        out = self._rendered(
+            [
+                {"domain": "a.example.com", "upstream": "app:8080"},
+                {"domain": "answered-here.example.com", "upstream": ""},
+            ]
+        )
+
+        self.assertNotIn("answered-here", out)
+
+    def test_it_says_whose_file_it_is(self):
+        """It replaces this file wholesale, so it has to say so in the file."""
+
+        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
+
+        self.assertIn("Written by Severino HQ", out)

@@ -12,6 +12,7 @@ from django.db import transaction
 
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import (
+    CADDY_ROUTE_KIND,
     CERTIFICATE_KIND,
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
@@ -100,6 +101,34 @@ def delivery_targets() -> tuple[dict[str, Any], ...]:
     return _declared(DELIVERY_TARGET_KIND)[DELIVERY_TARGET_KIND]
 
 
+def caddy_routes() -> tuple[dict[str, Any], ...]:
+    """Every Caddy route HQ declares, for the file each edge imports."""
+
+    return _declared(CADDY_ROUTE_KIND)[CADDY_ROUTE_KIND]
+
+
+class _NamesByConnection:
+    """The observed name map, read at most once and only if asked.
+
+    Resolution happens for every declaration on a page, and only certificates
+    ask this. Read eagerly, a dashboard listing thirty resources would pay for
+    a sweep join thirty times to answer a question none of them asked.
+    """
+
+    def __init__(self) -> None:
+        self._found: dict[str, tuple[str, ...]] | None = None
+
+    def __call__(self, connection_ref: str) -> tuple[str, ...]:
+        if self._found is None:
+            # Deferred on purpose: locate imports this module, so at module
+            # scope this is a cycle. Resolved on first call, which is also the
+            # first point the answer is wanted.
+            from .locate import names_by_connection
+
+            self._found = names_by_connection()
+        return self._found.get(connection_ref, ())
+
+
 def declared_machines() -> tuple[dict[str, Any], ...]:
     """Machines HQ has been told about, with the addresses that reach them.
 
@@ -137,6 +166,8 @@ def resolved_spec(
             context=ProviderResolutionContext(
                 delivery_targets=(delivery_targets() if targets is None else targets),
                 resource_key=resource.key,
+                names_at=_NamesByConnection(),
+                caddy_routes=caddy_routes,
             ),
         )
     except (KeyError, TypeError, ValueError):
@@ -372,6 +403,8 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             delivery_targets=delivery_targets(),
             resource_status=resource_status,
             resource_key=resource.key,
+            names_at=_NamesByConnection(),
+            caddy_routes=caddy_routes,
         ),
     )
     return {

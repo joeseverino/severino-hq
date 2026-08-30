@@ -35,7 +35,10 @@ from .ui import (
 class UiProjectionTests(TestCase):
     def test_page_navigation_is_a_stable_accessible_fragment_map(self):
         navigation = PageNavigation(
-            (PageSection("overview", "Overview"), PageSection("recent-work", "Recent work"))
+            (
+                PageSection("overview", "Overview"),
+                PageSection("recent-work", "Recent work"),
+            )
         )
 
         rendered = render_to_string(
@@ -64,9 +67,7 @@ class UiProjectionTests(TestCase):
         )
         timeline = Timeline("Next", "The planning horizon.", (item,))
 
-        rendered = render_to_string(
-            "partials/_timeline.html", {"timeline": timeline}
-        )
+        rendered = render_to_string("partials/_timeline.html", {"timeline": timeline})
 
         self.assertIn('datetime="2026-11-01"', rendered)
         self.assertIn('href="/tasks/enroll/"', rendered)
@@ -256,9 +257,7 @@ class LineChartTests(TestCase):
             marks=((date(2026, 1, 15), "Care"),),
         )
         self.assertEqual(len(chart.marks), 1)
-        self.assertAlmostEqual(
-            chart.marks[0].x, chart.series[0].points[1].x, places=1
-        )
+        self.assertAlmostEqual(chart.marks[0].x, chart.series[0].points[1].x, places=1)
 
     def test_a_mark_outside_the_window_is_dropped(self):
         chart = line_chart(
@@ -287,9 +286,7 @@ class LineChartTests(TestCase):
         self.assertNotIn('r="3" data-tip', rendered)
         # And the target has to be drawn after the lines, or a line crossing it
         # takes the pointer first.
-        self.assertGreater(
-            rendered.index("chart-hit"), rendered.rindex("chart-line-")
-        )
+        self.assertGreater(rendered.index("chart-hit"), rendered.rindex("chart-line-"))
 
     def test_every_point_carries_the_hosts_own_tooltip(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
@@ -394,7 +391,14 @@ class DashboardProjectionTests(TestCase):
         # card row and the recent lists -- in one call, so this covers all of it
         # rather than a part. Section readings and the service join are shared
         # only for this projection; a later snapshot always reads again.
-        with patch("application.domains.extension_domains", return_value=()):
+        with (
+            patch("application.domains.extension_domains", return_value=()),
+            # Infrastructure attention traverses the composed connection graph.
+            # Removing extension domains alone does not make that graph host-only;
+            # extension connection providers must be excluded from this one
+            # host-cost assertion too.
+            patch("application.plugins.plugin_connection_specs", return_value=()),
+        ):
             queries = self._snapshot_queries()
 
         # Counts only. This assertion runs in the composed image too, where the

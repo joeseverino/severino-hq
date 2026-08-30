@@ -150,7 +150,9 @@ class AuthGateTests(TestCase):
             "js/tables.js",
         ):
             with self.subTest(asset=asset):
-                self.assertRegex(content, rf"/static/{re.escape(asset)}\?v=[0-9a-f]{{12}}")
+                self.assertRegex(
+                    content, rf"/static/{re.escape(asset)}\?v=[0-9a-f]{{12}}"
+                )
 
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
@@ -336,9 +338,7 @@ class _AuthedTestCase(TestCase):
 
     def setUp(self):
         self.client = Client()
-        assert self.client.login(
-            username="tester", password="strongtestpass-1234"
-        )
+        assert self.client.login(username="tester", password="strongtestpass-1234")
 
 
 class NavigationSmokeTests(_AuthedTestCase):
@@ -367,7 +367,8 @@ class NavigationSmokeTests(_AuthedTestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(
-                    response.status_code, 200,
+                    response.status_code,
+                    200,
                     f"{url} returned {response.status_code}",
                 )
 
@@ -395,6 +396,74 @@ class SearchPageTests(_AuthedTestCase):
         self.assertNotIn("project.create", content)
         self.assertNotIn("No resources match this query.", content)
 
+    def test_palette_is_a_small_fragment_with_local_record_search(self):
+        with (
+            patch(
+                "core.views.global_search",
+                return_value={"groups": [], "total": 0},
+            ) as records,
+            patch("core.views.search_submissions") as contacts,
+        ):
+            response = self.client.get(
+                "/search/",
+                {"q": "certificate"},
+                HTTP_X_COMMAND_CENTER="palette",
+            )
+
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "core/_command_center_results.html")
+        self.assertIn("data-command-center-results", content)
+        self.assertIn("certificate", content)
+        self.assertNotIn("<html", content)
+        records.assert_called_once()
+        self.assertEqual(records.call_args.args, ("certificate",))
+        self.assertEqual(records.call_args.kwargs["limit_per_scope"], 3)
+        contacts.assert_not_called()
+
+    def test_palette_includes_indexed_records_beside_destinations(self):
+        project = Project.objects.create(
+            name="Palette record target",
+            description="A uniquely indexed command center result.",
+        )
+
+        response = self.client.get(
+            "/search/",
+            {"q": "Palette record target"},
+            HTTP_X_COMMAND_CENTER="palette",
+        )
+
+        content = response.content.decode()
+        self.assertIn("Palette record target", content)
+        self.assertIn(project.get_absolute_url(), content)
+        self.assertIn("Projects", content)
+
+    def test_palette_searches_content_not_only_navigation(self):
+        item = ContentItem.objects.create(
+            title="Palette content target",
+            notes="A uniquely indexed piece of content.",
+        )
+
+        response = self.client.get(
+            "/search/",
+            {"q": "Palette content target"},
+            HTTP_X_COMMAND_CENTER="palette",
+        )
+
+        content = response.content.decode()
+        self.assertIn("Palette content target", content)
+        self.assertIn(item.get_absolute_url(), content)
+        self.assertIn("Content", content)
+
+    def test_authenticated_pages_ship_the_global_palette_progressively(self):
+        response = self.client.get("/projects/")
+
+        self.assertContains(response, 'id="modal-command-center"')
+        self.assertContains(response, 'action="/search/"')
+        self.assertContains(response, "data-command-center-form")
+        self.assertContains(response, "data-command-center-open")
+        self.assertContains(response, 'aria-controls="modal-command-center"')
+
     def test_results_highlight_matches_and_skip_empty_scopes(self):
         from unittest import mock
 
@@ -414,6 +483,95 @@ class SearchPageTests(_AuthedTestCase):
 
 
 class DashboardWorkflowTests(_AuthedTestCase):
+    def test_dashboard_and_machine_page_share_the_machine_observation(self):
+        from control_plane.models import DashboardMachine, ManagedResource
+
+        observed = timezone.now()
+        machine = ManagedResource.objects.create(
+            key="homelab-server",
+            kind="machine",
+            spec={"name": "homelab-server"},
+            status={
+                "telemetry": {
+                    "status": "good",
+                    "summary": "Host load 0.30",
+                    "metrics": [{"label": "CPU", "value": "9%", "detail": "8 cores"}],
+                }
+            },
+            last_observed_at=observed,
+        )
+        DashboardMachine.objects.create(machine=machine)
+
+        dashboard = self.client.get("/")
+        machine_page = self.client.get("/infrastructure/machines/homelab-server/")
+
+        self.assertContains(dashboard, "CPU")
+        self.assertContains(dashboard, "9%")
+        self.assertContains(machine_page, "Current load")
+        self.assertContains(machine_page, "9%")
+
+    def test_dashboard_refresh_is_one_explicit_controller_request(self):
+        from control_plane.models import (
+            DashboardMachine,
+            DashboardRefreshRequest,
+            ManagedResource,
+            ProviderConnection,
+        )
+
+        machine = ManagedResource.objects.create(
+            key="homelab-server",
+            kind="machine",
+            spec={"name": "homelab-server"},
+        )
+        DashboardMachine.objects.create(machine=machine)
+        ProviderConnection.objects.create(
+            connection_ref="homelab-portainer",
+            controller_id="homelab-server",
+            provider="portainer",
+            endpoint="https://portainer.example.test",
+            reaches=["homelab-server"],
+            reachable=True,
+            observed_at=timezone.now(),
+        )
+
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            patch("application.glance.ring_doorbell") as ring,
+        ):
+            response = self.client.post("/dashboard/glance/")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertContains(response, "Refreshing", status_code=202)
+        self.assertEqual(
+            list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
+            [f"machine-{machine.pk}"],
+        )
+        ring.assert_called_once_with()
+
+    def test_dashboard_omits_generic_quick_actions_and_empty_publishing(self):
+        response = self.client.get("/")
+
+        self.assertNotContains(response, "Quick actions")
+        self.assertNotContains(response, "Publishing")
+
+    def test_dashboard_weather_settings_are_managed_in_the_ui(self):
+        from control_plane.models import DashboardConfiguration
+
+        response = self.client.post(
+            "/dashboard/glance/settings/",
+            {
+                "infrastructure_label": "Server room",
+                "weather_point": "41.1, -87.2",
+                "weather_label": "Outside",
+            },
+        )
+
+        self.assertRedirects(response, "/")
+        configuration = DashboardConfiguration.objects.get()
+        self.assertEqual(configuration.infrastructure_label, "Server room")
+        self.assertEqual(configuration.weather_point, "41.1000,-87.2000")
+        self.assertEqual(configuration.weather_label, "Outside")
+
     def test_action_items_is_the_full_existing_queue_and_filters_it(self):
         ContentItem.objects.create(
             title="Unfinished post", status=ContentItem.Status.DRAFT
@@ -433,9 +591,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertNotContains(filtered, "Draft content")
 
     def test_profile_count_is_lazy_off_dashboard(self):
-        ContentItem.objects.create(
-            title="Count me", status=ContentItem.Status.DRAFT
-        )
+        ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
 
         page = self.client.get("/projects/")
         with (
@@ -444,7 +600,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         ):
             count = self.client.get("/action-items/count/")
 
-        self.assertContains(page, 'data-action-count hidden')
+        self.assertContains(page, "data-action-count hidden")
         self.assertEqual(count.json()["count"], 1)
 
     def test_dashboard_uses_one_combined_contact_read(self):
@@ -470,6 +626,28 @@ class DashboardWorkflowTests(_AuthedTestCase):
         separate.assert_not_called()
         self.assertContains(response, "One call")
         self.assertContains(response, "3")
+
+    def test_dashboard_does_not_spend_a_card_on_an_empty_contact_feed(self):
+        with patch("core.views.get_dashboard_state", return_value=([], 0)):
+            response = self.client.get("/")
+
+        self.assertNotContains(response, "Recent contacts")
+        self.assertContains(response, "Priority queue")
+
+    def test_recent_activity_links_to_the_event_in_plain_language(self):
+        event = AuditLog.objects.create(
+            action=AuditLog.Action.UPDATED,
+            object_type="example.resource",
+            object_repr="Useful dashboard target",
+            user=self.user,
+        )
+
+        with patch("core.views.get_dashboard_state", return_value=([], 0)):
+            response = self.client.get("/")
+
+        self.assertContains(response, "Useful dashboard target")
+        self.assertContains(response, "updated by")
+        self.assertContains(response, reverse("core:audit_detail", args=[event.pk]))
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from control_plane.models import ManagedResource
@@ -599,7 +777,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertCountEqual(response.context["projects"], [active_lab, idea_lab])
         status_filter = next(
-            item for item in response.context["table"]["filters"]
+            item
+            for item in response.context["table"]["filters"]
             if item["name"] == "status"
         )
         self.assertEqual(status_filter["selected_count"], 2)
@@ -832,22 +1011,48 @@ class ManifestImportTests(TestCase):
         # the reverse. Each doc_type is held to its own vocabulary.
         with self.assertRaises(ManifestImportError):
             import_manifest_data(
-                [{"doc_id": "rb-x", "title": "x", "doc_type": "runbook", "status": "parked"}]
+                [
+                    {
+                        "doc_id": "rb-x",
+                        "title": "x",
+                        "doc_type": "runbook",
+                        "status": "parked",
+                    }
+                ]
             )
         with self.assertRaises(ManifestImportError):
             import_manifest_data(
-                [{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "deprecated"}]
+                [
+                    {
+                        "doc_id": "task-x",
+                        "title": "x",
+                        "doc_type": "task",
+                        "status": "deprecated",
+                    }
+                ]
             )
 
     def test_validate_manifest_data_flags_bad_enums_without_db(self):
         # The read-only preflight catches the contract-drift class (an invalid
         # status/doc_type/environment) before it reaches the deployed importer,
         # and writes nothing.
-        problems = validate_manifest_data([
-            {"doc_id": "rb-ok", "title": "ok", "doc_type": "runbook", "status": "active"},
-            {"doc_id": "task-bad", "title": "bad", "doc_type": "task", "status": "deprecated"},
-            {"doc_id": "rb-bad-env", "doc_type": "runbook", "environment": "nope"},
-        ])
+        problems = validate_manifest_data(
+            [
+                {
+                    "doc_id": "rb-ok",
+                    "title": "ok",
+                    "doc_type": "runbook",
+                    "status": "active",
+                },
+                {
+                    "doc_id": "task-bad",
+                    "title": "bad",
+                    "doc_type": "task",
+                    "status": "deprecated",
+                },
+                {"doc_id": "rb-bad-env", "doc_type": "runbook", "environment": "nope"},
+            ]
+        )
         by = {p["doc_id"]: p for p in problems}
         self.assertNotIn("rb-ok", by)
         self.assertIn("task-bad", by)
@@ -855,19 +1060,36 @@ class ManifestImportTests(TestCase):
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
     def test_check_only_command_gates_an_invalid_manifest(self):
-        bad = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "deprecated"}])
+        bad = json.dumps(
+            [
+                {
+                    "doc_id": "task-x",
+                    "title": "x",
+                    "doc_type": "task",
+                    "status": "deprecated",
+                }
+            ]
+        )
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(bad)
             bad_path = f.name
-        ok = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}])
+        ok = json.dumps(
+            [{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}]
+        )
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(ok)
             ok_path = f.name
         try:
             with self.assertRaises(CommandError):
-                call_command("import_docs_manifest", bad_path, "--check-only", stdout=StringIO())
-            call_command("import_docs_manifest", ok_path, "--check-only", stdout=StringIO())  # no raise
-            self.assertEqual(DocumentationRecord.objects.count(), 0)  # read-only either way
+                call_command(
+                    "import_docs_manifest", bad_path, "--check-only", stdout=StringIO()
+                )
+            call_command(
+                "import_docs_manifest", ok_path, "--check-only", stdout=StringIO()
+            )  # no raise
+            self.assertEqual(
+                DocumentationRecord.objects.count(), 0
+            )  # read-only either way
         finally:
             Path(bad_path).unlink()
             Path(ok_path).unlink()
@@ -1206,7 +1428,9 @@ class NavigationTests(TestCase):
             item.group for item in domain_navigation() if item.route == "expenses:list"
         )
         entries = self._entries(reverse("expenses:create"))
-        groups = {entry["label"]: entry for entry in entries if entry["kind"] == "group"}
+        groups = {
+            entry["label"]: entry for entry in entries if entry["kind"] == "group"
+        }
         self.assertTrue(groups[holder]["active"])
         self.assertEqual(
             [label for label, entry in groups.items() if entry["active"]], [holder]
@@ -1276,7 +1500,9 @@ class CompressedResponseTests(TestCase):
         )
 
         start = next(m for m in sent if m["type"] == "http.response.start")
-        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
+        lengths = [
+            v for name, v in start["headers"] if name.lower() == b"content-length"
+        ]
         self.assertEqual(len(lengths), 1)
         self.assertEqual(int(lengths[0]), len(sent[-1]["body"]))
 
@@ -1291,7 +1517,9 @@ class CompressedResponseTests(TestCase):
         )
 
         start = next(m for m in sent if m["type"] == "http.response.start")
-        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
+        lengths = [
+            v for name, v in start["headers"] if name.lower() == b"content-length"
+        ]
         self.assertEqual(len(lengths), 2)
 
     def test_every_header_name_reaching_the_server_is_lowercase(self):

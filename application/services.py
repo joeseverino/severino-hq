@@ -32,7 +32,7 @@ earlier sketch of this:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -47,6 +47,7 @@ from control_plane.providers import (
     PROVIDERS,
     NameContext,
     certificate_covers,
+    origin_is_authoritative,
     service_facets,
     names_a_host,
     normalized_hostname,
@@ -60,7 +61,7 @@ from .infrastructure import (
     resolved_spec,
     resource_health,
 )
-from .locate import Machines, machines_index, split_endpoint
+from .locate import Machines, host_of, machines_index, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .reach import UNKNOWN, Reach, reach_of
@@ -380,6 +381,17 @@ class Origin:
     address: str
     host: str = ""
     container: str = ""
+    # Whether an ingress declared this, or a record merely pointed here. Both
+    # are origins and they are not the same sentence: an ingress *forwards* to
+    # somewhere, while a record says the name simply answers there. Rendered
+    # from one wording, a name with no ingress at all was told that its ingress
+    # forwards somewhere -- directly beneath its own Ingress card reading "not
+    # declared", on the same page.
+    #
+    # Defaults true because every origin that existed before a record could
+    # declare one came from an ingress, and because the sentence it selects is
+    # the one those origins have always been rendered with.
+    routed: bool = True
 
     @property
     def external(self) -> bool:
@@ -398,9 +410,34 @@ class Origin:
         colon. A bare IPv6 answer is full of colons and carries no port at all,
         and counting them called it an ingress -- after which the address was
         split at its last colon and matched against nothing.
+
+        The absent port is necessary and was briefly taken as sufficient, which
+        is only true while the records that name an origin are public ones. An
+        internal rewrite names an origin too, and it names a *private* address:
+        no port, no machine HQ happens to have been told about, and read on
+        punctuation alone that came out as "served outside this network" for a
+        name served one subnet away. The page then withdrew its offer to add an
+        ingress, on the grounds that a name answered elsewhere needs nothing
+        here -- which is the right rule applied to the wrong reading.
+
+        So the question is asked of the address rather than of its spelling.
+        Where an address lives is ``reach``'s to answer and it already does, for
+        the badge on this same page; a private, tailnet or loopback answer is
+        inside by definition, and an unknown host inside the network is what
+        ``qualifier`` exists to say. A name rather than an address -- a CNAME to
+        somewhere that hosts pages -- classifies as nothing and stays external,
+        which is the case this property was written for.
         """
 
-        return not self.known and not split_endpoint(self.address)[1]
+        from .reach import network_of
+
+        if self.known or split_endpoint(self.address)[1]:
+            return False
+        return network_of(host_of(self.address)) not in (
+            "network",
+            "tailnet",
+            "loopback",
+        )
 
     @property
     def operator(self) -> str:
@@ -641,7 +678,22 @@ def _declarations():
     machines, targets = context_for_resolution()
     declared: dict[str, dict[str, list[Claim]]] = {}
     covering: list[tuple[str, frozenset[str], Claim]] = []
-    origins: dict[str, str] = {}
+    # Origins in two ranks, because two kinds of provider answer "and then what
+    # serves it" and only one of them is really answering it. A provider that
+    # also *answers* for a name states where the name points; a provider that
+    # only routes states where the request is finally served. For a proxied name
+    # those are different addresses -- the record points at the proxy, and the
+    # proxy forwards to the thing -- so a single dictionary filled in iteration
+    # order would have let a DNS record describe ten proxied names as being
+    # served by the proxy box itself, depending on which row the database
+    # returned first.
+    #
+    # Split, the rule is stated rather than raced: routed wins, resolved fills
+    # the gaps. That is what lets a rewrite pointing straight at a machine
+    # describe a name nothing proxies, without displacing any name something
+    # does.
+    routed: dict[str, str] = {}
+    resolved: dict[str, str] = {}
     # Every address each name resolves to, so who can reach it can be derived
     # rather than recorded. Collected here because this is the one pass that
     # already reads every enabled declaration.
@@ -682,9 +734,11 @@ def _declarations():
                 claim
             )
             if origin:
-                origins.setdefault(hostname, origin)
+                rank = routed if origin_is_authoritative(provider) else resolved
+                rank.setdefault(hostname, origin)
             answers.setdefault(hostname, []).extend(resolves_to)
 
+    origins = {**resolved, **routed}
     aliases = _aliases(declared, origins)
     alias_claims: dict[str, list[tuple[str, Claim]]] = {}
     for alias, target in aliases.items():
@@ -701,7 +755,22 @@ def _declarations():
             for claim in claims:
                 alias_claims.setdefault(target, []).append((alias, claim))
         origins.pop(alias, None)
-    return declared, covering, origins, aliases, alias_claims, machines, answers
+    # ``routed`` rides along so a page can say *how* it knows. An origin an
+    # ingress declared and an origin a record implied are both "where this is
+    # served" and read as different sentences: one forwards, the other simply
+    # answers there. Told apart by looking for a port -- which is how the first
+    # attempt did it -- a portless ingress becomes a record and a record with a
+    # port becomes an ingress, so the provenance is carried rather than guessed.
+    return (
+        declared,
+        covering,
+        origins,
+        aliases,
+        alias_claims,
+        machines,
+        answers,
+        frozenset(routed),
+    )
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:
@@ -781,7 +850,9 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     a property of a Service -- it is a fact about a person, not a hostname.
     """
 
-    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
+    (
+        declared, covering, origins, aliases, alias_claims, machines, answers, routed
+    ) = _declarations()
     estate = _Estate.read(covering, machines)
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
@@ -795,6 +866,7 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
             tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())),
             tuple(answers.get(hostname, ())),
+            hostname in routed,
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -844,7 +916,7 @@ def alias_target(hostname: str) -> str:
     """
 
     wanted = _normalise(hostname)
-    _, _, _, aliases, _, _, _ = _declarations()
+    _, _, _, aliases, _, _, _, _ = _declarations()
     return aliases.get(wanted, "")
 
 
@@ -864,7 +936,9 @@ def service_or_prospect(hostname: str) -> Service:
     """
 
     wanted = _normalise(hostname)
-    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
+    (
+        declared, covering, origins, aliases, alias_claims, machines, answers, routed
+    ) = _declarations()
     return _assemble(
         wanted,
         declared.get(wanted, {}),
@@ -873,6 +947,7 @@ def service_or_prospect(hostname: str) -> Service:
         tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
         tuple(alias_claims.get(wanted, ())),
         answers=tuple(answers.get(wanted, ())),
+        routed=wanted in routed,
     )
 
 
@@ -1030,13 +1105,18 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
     answers: tuple[str, ...] = (),
+    routed: bool = True,
 ) -> Service:
     covering = estate.covering
     projects = estate.projects
     machines = estate.machines
     containers = estate.containers
     in_use = estate.in_use
-    origin = _locate(origin_address, machines, estate.at) if origin_address else None
+    origin = (
+        replace(_locate(origin_address, machines, estate.at), routed=routed)
+        if origin_address
+        else None
+    )
     context = name_context(hostname)
     # A container declaration names a machine and a container, not a hostname,
     # so nothing tied it to the name it serves -- the runtime card knew the
@@ -1143,6 +1223,7 @@ class _Whereabouts:
         self._machines = machines
         self._index: "Machines | None" = None
         self._answering: "dict[tuple[str, Any], list[str]] | None" = None
+        self._hosting: "dict[str, list[str]] | None" = None
 
     def index(self) -> "Machines":
         if self._index is None:
@@ -1153,6 +1234,11 @@ class _Whereabouts:
         if self._answering is None:
             self._answering = _answering()
         return self._answering
+
+    def hosting(self) -> "dict[str, list[str]]":
+        if self._hosting is None:
+            self._hosting = _containers_by_name()
+        return self._hosting
 
 
 def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> _Whereabouts:
@@ -1370,6 +1456,22 @@ def _locate(
         return Origin(address=address)
     name = at.index().resolve(host_address)
     if not name:
+        # Not an address at all, but a container name on a docker network --
+        # which is how everything behind a proxy sharing that network is
+        # addressed, and what a Caddy route hands off to. HQ sweeps containers,
+        # so the name is not opaque: it names something HQ can already see, and
+        # the machine running it is the answer to where this is served.
+        #
+        # Without this the page said an ingress forwarded somewhere it "cannot
+        # match to any machine it knows", about a container listed by name three
+        # rows further down the same board.
+        #
+        # Silent when more than one machine runs that name, for the reason every
+        # other ambiguity here is silent: a guess printed beside four facts reads
+        # as a fifth.
+        hosts = _hosting(host_address, at)
+        if len(hosts) == 1:
+            return Origin(address=address, host=hosts[0], container=host_address)
         # Nothing HQ holds says what is there. The address stays on the page,
         # which is the true answer and the one an operator can act on.
         return Origin(address=address)
@@ -1402,6 +1504,40 @@ def _listening(host: str, port: str, at: "_Whereabouts | None" = None) -> list[s
         return []
     found = at.answering() if at is not None else _answering()
     return found.get((host, int(port)), [])
+
+
+def _hosting(container: str, at: "_Whereabouts | None" = None) -> list[str]:
+    """Machines running a container of this name, seen or declared."""
+
+    if not container:
+        return []
+    found = at.hosting() if at is not None else _containers_by_name()
+    return found.get(container, [])
+
+
+def _containers_by_name() -> dict[str, list[str]]:
+    """Which machines run a container of each name.
+
+    The inverse of the index below, and read from the same two tables, because
+    a forwarding target is sometimes a port on a machine and sometimes the name
+    of the thing itself.
+    """
+
+    found: dict[str, set[str]] = {}
+    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+        for record in snapshot.records:
+            host = str(record.get("host", "") or "")
+            name = str(record.get("name", "") or "")
+            if host and name:
+                found.setdefault(name, set()).add(host)
+    for spec in ManagedResource.objects.filter(
+        kind=CONTAINER_KIND, enabled=True
+    ).values_list("spec", flat=True):
+        host = str(spec.get("host", "") or "")
+        name = str(spec.get("name", "") or "")
+        if host and name:
+            found.setdefault(name, set()).add(host)
+    return {name: sorted(hosts) for name, hosts in found.items()}
 
 
 def _answering() -> dict[tuple[str, Any], list[str]]:

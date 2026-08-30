@@ -5,8 +5,8 @@
 <div class="page-head">
   <div>
     <h1>Dashboard</h1>
-    <p class="page-lede">Work queue, operating snapshot, and fast paths.</p>
   </div>
+  {% include "core/_dashboard_glance.html" %}
 </div>
 
 {% comment %}
@@ -31,34 +31,24 @@ that summarises every domain at once.
   {% endfor %}
 </section>
 
+<div class="dashboard-board">
 <section class="dashboard-command">
   <div class="command-main">
-    <section class="card">
-      <div class="section-head">
-        <h2>Recent contacts</h2>
-        {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
-      </div>
-      {% if recent_contacts %}
-        {% include "partials/_record_list.html" with rows=recent_contacts %}
-        <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
-      {% else %}
-        <div class="empty"><p>No contact submissions yet.</p></div>
-      {% endif %}
-    </section>
-
     <section class="card priority-card">
       <div class="section-head">
         <h2>Priority queue</h2>
         <a class="count" href="{% url 'action_items' %}">{% if action_queue_count %}{{ action_queue_count }} item{{ action_queue_count|pluralize }}{% else %}Open{% endif %} &rarr;</a>
       </div>
       {% if action_queue_count %}
-        <ul class="action-list action-list-compact">
-          {% for item in action_queue|slice:":5" %}
+        <ul class="dashboard-attention-list">
+          {% for item in action_queue|slice:":4" %}
             {% if item.count %}
               <li>
                 <a href="{{ item.url }}">
-                  <strong>{{ item.count }}</strong>
-                  <span>{{ item.label }}</span>
+                  <span class="attention-source">{{ item.source }} · {{ item.count }}</span>
+                  <strong>{{ item.label }}</strong>
+                  {% if item.detail %}<span class="attention-detail">{{ item.detail }}</span>{% endif %}
+                  <span class="action-arrow" aria-hidden="true">&rarr;</span>
                 </a>
               </li>
             {% endif %}
@@ -70,22 +60,20 @@ that summarises every domain at once.
       {% endif %}
     </section>
 
+    {% if recent_contacts %}
+      <section class="card">
+        <div class="section-head">
+          <h2>Recent contacts</h2>
+          {% if unread_contacts_count %}<span class="count">{{ unread_contacts_count }} unread</span>{% endif %}
+        </div>
+        {% include "partials/_record_list.html" with rows=recent_contacts %}
+        <p class="section-foot"><a href="{% url 'contacts:list' %}">All submissions &rarr;</a></p>
+      </section>
+    {% endif %}
+
   </div>
 
   <aside class="command-side">
-    <section class="ops-panel">
-      <div class="section-head">
-        <h2>Quick actions</h2>
-      </div>
-      <div class="quick-actions vertical">
-        <a class="btn primary" href="{% url 'expenses:create' %}">New expense</a>
-        <a class="btn" href="{% url 'receipts:create' %}">Upload receipt</a>
-        <a class="btn" href="{% url 'projects:create' %}">New project</a>
-        <a class="btn" href="{% url 'content:create' %}">New content</a>
-        <a class="btn" href="{% url 'docs_index:import' %}">Import manifest</a>
-      </div>
-    </section>
-
     <section class="ops-panel">
       <div class="section-head">
         <h2>Live &amp; external</h2>
@@ -141,7 +129,7 @@ that summarises every domain at once.
 </section>
 
 <section class="snapshot-grid">
-  <section class="card">
+  {% if content_rows or published_rows %}<section class="card">
     <div class="section-head">
       <h2>Active projects</h2>
       <span class="count">{{ active_project_count }}</span>
@@ -151,7 +139,8 @@ that summarises every domain at once.
         {% for p in active_projects %}
           <li>
             <span class="row-main">
-              <span class="cat-dot cat-{{ p.category }}" title="{{ p.get_category_display }}"></span>
+              <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
+              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
               <a href="{% url 'projects:detail' p.slug %}"><strong>{{ p.name }}</strong></a>
               {% if p.repository_url %}<a class="subtle-link" href="{{ p.repository_url }}" target="_blank" rel="noopener">code</a>{% endif %}
               {% if p.public_url %}<a class="subtle-link" href="{{ p.public_url }}" target="_blank" rel="noopener">live</a>{% endif %}
@@ -162,7 +151,7 @@ that summarises every domain at once.
       </ul>
       <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
     {% else %}
-      <div class="empty">
+      <div class="empty dashboard-empty-row">
         <p>No active projects yet.</p>
         <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
       </div>
@@ -180,13 +169,8 @@ that summarises every domain at once.
     {% elif published_rows %}
       {% include "partials/_record_list.html" with rows=published_rows %}
       <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
-    {% else %}
-      <div class="empty">
-        <p>No publishing work tracked yet.</p>
-        <p><a class="empty-cta" href="{% url 'content:create' %}">Add content &rarr;</a></p>
-      </div>
     {% endif %}
-  </section>
+  </section>{% endif %}
 
   <section class="card">
     <div class="section-head">
@@ -197,7 +181,7 @@ that summarises every domain at once.
       {% include "partials/_record_list.html" with rows=docs_rows %}
       <p class="section-foot"><a href="{% url 'docs_index:list' %}?needs_review=1">Review queue &rarr;</a></p>
     {% else %}
-      <div class="empty"><p>All active docs reviewed recently.</p></div>
+      <div class="empty dashboard-empty-row"><p>All active docs reviewed recently.</p></div>
     {% endif %}
   </section>
 
@@ -206,23 +190,26 @@ that summarises every domain at once.
 <section class="card activity-tail">
   <div class="section-head">
     <h2>Recent activity</h2>
-    {% if recent_audit %}<span class="count">{{ recent_audit|length }}</span>{% endif %}
+    {% if recent_audit %}<a class="section-action" href="{% url 'core:audit_list' %}">Full log &rarr;</a>{% endif %}
   </div>
   {% if recent_audit %}
     <ul class="audit-list compact-audit">
-      {% for ev in recent_audit|slice:":8" %}
+      {% for ev in recent_audit|slice:":6" %}
         <li>
-          <span class="ts">{{ ev.created_at }}</span>
-          <strong>{{ ev.actor }}</strong>
-          <span class="muted">{{ ev.action_label|lower }}</span>
-          {% if ev.object_type %}<span class="muted-2">{{ ev.object_type }}</span>{% endif %}
-          {% if ev.object_repr %}<span>{{ ev.object_repr|truncatechars:70 }}</span>{% endif %}
+          <a class="activity-event" href="{{ ev.url }}">
+            <span class="activity-copy">
+              <strong>{% if ev.object_repr %}{{ ev.object_repr|truncatechars:70 }}{% elif ev.object_type %}{{ ev.object_type }}{% else %}HQ{% endif %}</strong>
+              <span class="muted">{{ ev.action_label|lower }} by {{ ev.actor }}</span>
+            </span>
+            <time class="ts" datetime="{{ ev.created_at|date:'c' }}" title="{{ ev.created_at }}">{{ ev.created_at|naturaltime }}</time>
+            <span class="activity-arrow" aria-hidden="true">&rarr;</span>
+          </a>
         </li>
       {% endfor %}
     </ul>
-    <p class="section-foot"><a href="{% url 'core:audit_list' %}">Full audit log &rarr;</a></p>
   {% else %}
     <div class="empty"><p>No activity yet.</p></div>
   {% endif %}
 </section>
+</div>
 {% endblock %}

@@ -1,0 +1,57 @@
+{% load humanize %}
+<section class="dashboard-glance" data-dashboard-glance data-source="{% url 'dashboard_glance' %}">
+  <div class="glance-controls">
+    <details class="glance-settings">
+      <summary aria-label="Dashboard settings">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M14 4v6M8 14v6"/></svg>
+      </summary>
+      <form method="post" action="{% url 'dashboard_glance_settings' %}">
+        {% csrf_token %}
+        <label>
+          Homelab label
+          <input name="infrastructure_label" maxlength="40" value="{{ dashboard_glance_settings.infrastructure_label }}">
+        </label>
+        <label>
+          Weather location
+          <input name="weather_point" maxlength="64" placeholder="41.8781, -87.6298" value="{{ dashboard_glance_settings.weather_point }}">
+          <span>Latitude, longitude. Longitudes west of Greenwich are negative. Leave blank to hide.</span>
+        </label>
+        <label>
+          Weather label
+          <input name="weather_label" maxlength="40" value="{{ dashboard_glance_settings.weather_label }}">
+        </label>
+        <button class="btn primary" type="submit">Save</button>
+      </form>
+    </details>
+    <form method="post" action="{% url 'dashboard_glance' %}" data-dashboard-glance-refresh>
+      {% csrf_token %}
+      <button class="glance-refresh" type="submit" aria-label="Refresh at-a-glance information"{% if not dashboard_can_refresh %} disabled{% endif %}>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M19 11a7.5 7.5 0 1 0 .4 6"/></svg>
+      </button>
+    </form>
+  </div>
+  <div class="glance-panels">
+    {% for panel in dashboard_panels %}
+      <article class="glance-panel status-{{ panel.payload.status|default:'neutral' }}"{% if panel.refreshing %} data-refreshing{% endif %}>
+        <div class="glance-panel-head">
+          <h2>{{ panel.label }}</h2>
+          {% if panel.payload.metrics and panel.payload.summary %}<span class="glance-summary">{{ panel.payload.summary }}</span>{% endif %}
+          {% if panel.observed_at %}<time title="{{ panel.observed_at }}">{{ panel.observed_at|naturaltime }}</time>{% endif %}
+        </div>
+        {% if panel.payload.metrics %}
+          <dl class="glance-metrics">
+            {% for metric in panel.payload.metrics %}
+              <div title="{{ metric.detail }}">
+                <dt>{{ metric.label }}</dt>
+                <dd>{{ metric.value }}</dd>
+              </div>
+            {% endfor %}
+          </dl>
+        {% else %}
+          <p>{% if panel.refreshing %}Refreshing…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+  <span class="glance-status visually-hidden" data-dashboard-glance-status role="status"></span>
+</section>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -11,6 +12,7 @@ from .capabilities import CapabilitySpec, capability_label, capability_specs
 from .connections import (
     ConnectionAbility,
     ConnectionSpec,
+    connection_catalog,
     connection_specs,
 )
 from .contracts import route_url
@@ -21,6 +23,7 @@ from .topology import topology_lenses
 
 
 _MATCHING_ABILITY_BADGE_LIMIT = 3
+_SEARCH_WORD = re.compile(r"[a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -53,14 +56,63 @@ def _matches(item: DiscoveryItem, query: str) -> bool:
 
 
 def _contains_all(values: tuple[str, ...], query: str) -> bool:
-    terms = query.casefold().split()
-    haystack = " ".join(values).casefold()
-    return all(term in haystack for term in terms)
+    terms = _SEARCH_WORD.findall(query.casefold())
+    words = _SEARCH_WORD.findall(" ".join(values).casefold())
+    # Two-letter input is a person beginning a word, not permission to match
+    # the same two characters in the middle of everything. `sp` should find
+    # splits and spending; it should never find infrastructure.
+    return all(
+        any(word.startswith(term) if len(term) <= 2 else term in word for word in words)
+        for term in terms
+    )
+
+
+def _term_score(value: str, term: str) -> int:
+    words = _SEARCH_WORD.findall(value.casefold())
+    if term in words:
+        return 12
+    if any(word.startswith(term) for word in words):
+        return 8
+    if len(term) > 2 and any(term in word for word in words):
+        return 3
+    return 0
+
+
+def _match_score(item: DiscoveryItem, query: str) -> int:
+    """Prefer what an operator named over incidental supporting evidence."""
+
+    terms = _SEARCH_WORD.findall(query.casefold())
+    # A controller-qualified connection id is globally unique, but its prefix
+    # is context rather than the connection's own name. Searching `homelab`
+    # should rank `homelab-npm` above every unrelated credential observed by a
+    # controller named `homelab-server`.
+    primary_name = (
+        item.name.rpartition(":")[2]
+        if item.kind == "connection" and ":" in item.name
+        else item.name
+    )
+    return sum(
+        max(
+            *(_term_score(value, term) * 4 for value in (item.label, primary_name)),
+            *(_term_score(value, term) * 2 for value in (item.summary, *item.badges)),
+            *(_term_score(value, term) for value in item.search_terms),
+        )
+        for term in terms
+    )
+
+
+def _matching(items: tuple[DiscoveryItem, ...], query: str) -> tuple[DiscoveryItem, ...]:
+    matched = tuple(item for item in items if _matches(item, query))
+    if not query:
+        return matched
+    return tuple(sorted(matched, key=lambda item: _match_score(item, query), reverse=True))
 
 
 def _ability_contains_any(ability: ConnectionAbility, query: str) -> bool:
-    haystack = " ".join((ability.name, ability.label, ability.summary)).casefold()
-    return any(term in haystack for term in query.casefold().split())
+    return any(
+        _contains_all((ability.name, ability.label, ability.summary), term)
+        for term in _SEARCH_WORD.findall(query.casefold())
+    )
 
 
 def _connection_matches(spec: ConnectionSpec, query: str) -> bool:
@@ -219,7 +271,46 @@ def _ability_count(count: int) -> str:
     return f"{count} {'ability' if count == 1 else 'abilities'}"
 
 
-def command_center(query: str, *, principal: Principal) -> dict:
+def _live_connection_url(group, connection) -> str:
+    relationship = next(
+        (action.url for action in connection.actions if action.name == "relationships"),
+        "",
+    )
+    return relationship or route_url(group.spec.web_route)
+
+
+def _live_connection_item(group, connection) -> DiscoveryItem:
+    instance = connection.instance
+    abilities = tuple(state.ability for state in connection.abilities)
+    return DiscoveryItem(
+        kind="connection",
+        name=instance.id,
+        label=instance.label,
+        summary=instance.detail or instance.endpoint or group.spec.summary,
+        url=_live_connection_url(group, connection),
+        destination_label=group.spec.label,
+        badges=(instance.status_label, _ability_count(len(abilities))),
+        search_terms=(
+            group.spec.label,
+            group.spec.summary,
+            instance.kind,
+            instance.endpoint,
+            instance.controller_id,
+            *(fact.label for fact in instance.facts),
+            *(fact.value for fact in instance.facts),
+            *(target.label for target in instance.targets),
+            *(dependency.label for dependency in instance.dependencies),
+            *(ability.name for ability in abilities),
+            *(ability.label for ability in abilities),
+            *(ability.summary for ability in abilities),
+            *(scope for state in connection.abilities for scope in state.missing_scopes),
+        ),
+    )
+
+
+def command_center(
+    query: str, *, principal: Principal, include_live_connections: bool = False
+) -> dict:
     """Return every permitted resource and capability matching ``query``."""
 
     registered_resources = resource_specs()
@@ -229,6 +320,19 @@ def command_center(query: str, *, principal: Principal) -> dict:
         spec
         for spec in registered_connections
         if _permitted(spec.required_capabilities, principal)
+    )
+    # Registry discovery is a zero-query application primitive used by CLI,
+    # MCP and contract checks. The web palette explicitly opts into cached live
+    # instances because operator-entered names and current reachability are the
+    # point of that surface; other adapters keep the original cheap contract.
+    live_connections = (
+        tuple(
+            _live_connection_item(group, connection)
+            for group in connection_catalog(principal=principal)
+            for connection in group.connections
+        )
+        if include_live_connections
+        else ()
     )
     related_commands = _related_command_labels(
         permitted_connections,
@@ -261,7 +365,14 @@ def command_center(query: str, *, principal: Principal) -> dict:
         for spec in registered_commands
         if _permitted(spec.required_capabilities, principal)
         for item in (
-            _command_item(spec, related_commands.get(spec.name, CommandRelation())),
+            _command_item(
+                spec,
+                (
+                    CommandRelation()
+                    if query.casefold() == spec.name.casefold()
+                    else related_commands.get(spec.name, CommandRelation())
+                ),
+            ),
         )
         if _matches(item, query) or spec.name in related_commands
     )
@@ -324,9 +435,19 @@ def command_center(query: str, *, principal: Principal) -> dict:
         else ()
     )
     return {
-        "resources": tuple(item for item in resources if _matches(item, query)),
-        "commands": commands,
-        "connections": tuple(item for item in connections if _matches(item, query)),
-        "views": tuple(item for item in views if _matches(item, query)),
-        "checks": tuple(item for item in checks if _matches(item, query)),
+        "resources": _matching(resources, query),
+        "commands": (
+            tuple(
+                sorted(
+                    commands,
+                    key=lambda item: _match_score(item, query),
+                    reverse=True,
+                )
+            )
+            if query
+            else commands
+        ),
+        "connections": _matching((*live_connections, *connections), query),
+        "views": _matching(views, query),
+        "checks": _matching(checks, query),
     }

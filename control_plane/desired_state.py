@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from typing import Any
 
 from .models import ManagedResource
@@ -35,6 +36,7 @@ def desired_fingerprint(
     *,
     targets: tuple[dict[str, Any], ...] = (),
     resource_key: str = "",
+    names_at: Callable[[str], tuple[str, ...]] | None = None,
 ) -> str:
     """Fingerprint the complete desired input, including resolved references.
 
@@ -42,15 +44,37 @@ def desired_fingerprint(
     HQ can hold a certificate naming a target that does not exist yet; that is a
     thing to show on the resource, not a reason to refuse the save that would
     fix it.
+
+    ``names_at`` defaults to the real derivation rather than to nothing, and
+    that choice is load-bearing. This fingerprint decides whether desired state
+    has moved, and the contract handed to a controller is resolved separately by
+    a caller that supplies its own. Resolve those two differently -- which is
+    what a forgotten argument at any of three call sites would do -- and the
+    fingerprint never matches the thing it is fingerprinting: every pass sees a
+    change, advances the generation, and queues the work again. Silently, and
+    forever.
+
+    So the safe value is the real one, and an explicit argument is the override
+    rather than the requirement.
     """
 
+    if names_at is None:
+        # Deferred on purpose: application.infrastructure imports this module,
+        # so at module scope this is a cycle. Inside the call it is resolved
+        # after both modules exist, which is the whole reason for the default
+        # being constructed here rather than in the signature.
+        from application.infrastructure import _NamesByConnection
+
+        names_at = _NamesByConnection()
     desired: dict[str, Any] = {"kind": kind, "spec": spec, "enabled": enabled}
     try:
         resolved = resolve_provider_spec(
             kind,
             spec,
             context=ProviderResolutionContext(
-                delivery_targets=targets, resource_key=resource_key
+                delivery_targets=targets,
+                resource_key=resource_key,
+                names_at=names_at,
             ),
         )
     except (KeyError, TypeError, ValueError):

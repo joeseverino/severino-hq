@@ -9,7 +9,9 @@ being given a credential rather than by anything here being edited.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from control_plane.models import ProviderConnection
@@ -182,7 +184,9 @@ class DerivationTests(TestCase):
     def test_which_domains_can_be_declared_is_what_the_token_may_edit(self):
         sweep(A_DNS_TOKEN)
 
-        self.assertEqual(zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,))
+        self.assertEqual(
+            zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,)
+        )
 
     def test_a_broken_connection_is_offered_last_and_says_so(self):
         """Still offered, because it is the one that already exists.
@@ -251,8 +255,10 @@ class ConnectionPageTests(TestCase):
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):
         # One constant inventory read derives Tailscale policy and NPM edge proof.
-        # It does not grow with connections and never probes either provider.
-        with self.assertNumQueries(12):
+        # Installed extensions may contribute their own constant connection
+        # reads, so the invariant is growth rather than one host-only absolute.
+        # It never probes a provider and twenty more rows cost no more queries.
+        with CaptureQueriesContext(connection) as baseline:
             self.client.get(reverse("control_plane:connections"))
 
         sweep(
@@ -265,8 +271,10 @@ class ConnectionPageTests(TestCase):
                 for index in range(20)
             )
         )
-        with self.assertNumQueries(12):
+        with CaptureQueriesContext(connection) as expanded:
             self.client.get(reverse("control_plane:connections"))
+
+        self.assertEqual(len(expanded), len(baseline))
 
 
 class OfferTests(TestCase):
@@ -295,9 +303,7 @@ class OfferTests(TestCase):
     def test_the_option_that_works_is_offered_in_its_place(self):
         sweep(A_DNS_TOKEN)
 
-        offers = dict(
-            _certificate_and_dns("probe.invalid")["certificate"].declarable
-        )
+        offers = dict(_certificate_and_dns("probe.invalid")["certificate"].declarable)
 
         self.assertIn("tls.uploaded_certificate", offers)
 
@@ -451,24 +457,26 @@ class AdoptionSafetyTests(TestCase):
         ManagedResource.objects.update_or_create(
             key="probe-proxy",
             kind="npm.proxy_host",
-            defaults={"spec": {
-                "domain_names": ["probe.invalid"],
-                "forward_scheme": "http",
-                "forward_host": "10.0.0.9",
-                "forward_port": 8099,
-                "certificate_resource": "",
-                "ssl_forced": True,
-                "http2": True,
-                "websocket": True,
-                "caching_enabled": False,
-                "block_exploits": True,
-                "access_list_id": 0,
-                "advanced_config": "",
-                "hsts_enabled": True,
-                "hsts_subdomains": True,
-                "trust_forwarded_proto": True,
-                "serving": True,
-            }},
+            defaults={
+                "spec": {
+                    "domain_names": ["probe.invalid"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.9",
+                    "forward_port": 8099,
+                    "certificate_resource": "",
+                    "ssl_forced": True,
+                    "http2": True,
+                    "websocket": True,
+                    "caching_enabled": False,
+                    "block_exploits": True,
+                    "access_list_id": 0,
+                    "advanced_config": "",
+                    "hsts_enabled": True,
+                    "hsts_subdomains": True,
+                    "trust_forwarded_proto": True,
+                    "serving": True,
+                }
+            },
         )
         ManagedResource.objects.update_or_create(
             key="a-docker-host",
@@ -506,9 +514,7 @@ class AdoptionSafetyTests(TestCase):
 
         for created_by_portainer in (True, False):
             with self.subTest(portainer_managed=created_by_portainer):
-                response = self._service_page(
-                    portainer_managed=created_by_portainer
-                )
+                response = self._service_page(portainer_managed=created_by_portainer)
 
                 self.assertContains(response, "Watch this container")
 
@@ -650,7 +656,9 @@ class OutwardLinkChoiceTests(TestCase):
         offered, curated = outward_links(self.user)
 
         self.assertTrue(curated)
-        self.assertEqual([item["href"] for item in offered], ["https://portainer.example"])
+        self.assertEqual(
+            [item["href"] for item in offered], ["https://portainer.example"]
+        )
 
     def test_choosing_again_replaces_rather_than_adds(self):
         """A chooser answers with the whole set, so applying it as toggles would
