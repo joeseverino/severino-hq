@@ -198,6 +198,145 @@ class StyleContractTests(SimpleTestCase):
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
 
+    def test_user_menu_rows_share_one_element_independent_primitive(self):
+        """A link and a POST action in one menu must render as one kind of row.
+
+        Styling ``a`` and ``button`` separately lets the generic button
+        primitive turn only the POST actions back into boxed controls. Every
+        interactive row names the menu primitive instead, so adding another
+        action cannot reintroduce that split by choosing the wrong element.
+        """
+
+        import re
+
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        panel = template.split('<div class="user-menu-panel">', 1)[1].split(
+            "</details>", 1
+        )[0]
+        rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
+
+        self.assertTrue(rows)
+        self.assertEqual([row for row in rows if "menu-item" not in row], [])
+        self.assertIn(".menu-item {", self._stylesheet())
+
+    def test_every_rule_sits_inside_a_cascade_layer(self):
+        """Unlayered rules beat every layer, at any specificity.
+
+        Nine hundred lines had collected outside the layers, and the effect
+        compounds: a component written there cannot be overridden from
+        `components`, so the only available fix is to write the next rule
+        outside the layers too -- a responsive rule nothing could reach,
+        answered by another rule nothing could reach.
+
+        Checked by brace depth rather than by parsing CSS: at depth zero the
+        only thing allowed to open a block is an at-rule.
+        """
+
+        outside = []
+        depth = 0
+        for number, line in enumerate(self._stylesheet().splitlines(), 1):
+            stripped = line.strip()
+            if depth == 0 and "{" in stripped and not stripped.startswith(("@", "/*", "*")):
+                outside.append(f"{number}: {stripped[:60]}")
+            depth += line.count("{") - line.count("}")
+
+        self.assertEqual(
+            outside, [], "Rules outside @layer beat every layer. Put them in one."
+        )
+
+    def test_font_size_comes_from_the_type_scale(self):
+        """Three hundred declarations had drifted across twenty sizes.
+
+        Thirteen of them sat inside a six-pixel band in half-pixel steps --
+        13px and 13.5px used fifty-three and thirty-four times, which is not a
+        distinction anyone can see or intended to make. A size is now one of
+        the scale's steps or it is drift.
+
+        `em` is exempt and stays exempt. It means "relative to whatever this
+        sits in" -- a unit suffix shrinking beside its number, a glyph tracking
+        its label -- which is a different statement from choosing a step, and
+        one an absolute scale cannot make.
+        """
+
+        import re
+
+        literals = re.findall(r"font-size:\s*([0-9.]+(?:px|rem))", self._stylesheet())
+
+        self.assertEqual(
+            sorted(set(literals)),
+            [],
+            "font-size belongs to the --text-* scale, not a literal.",
+        )
+
+    def test_spacing_on_the_scale_is_written_as_a_token(self):
+        """A value that is on the scale must say so.
+
+        Eight hundred spacing declarations had spread across twenty-nine
+        values -- every integer from one to eighteen. The even rungs are now
+        `--space-*`; this stops one being written back as a literal, which is
+        how the ladder came apart the first time.
+
+        Odd values are still literals and are deliberately not failed here.
+        Rounding padding by a pixel is visible in a dense table in a way that
+        moving type by half a pixel is not, so each is being looked at rather
+        than swept. `1px` is exempt for good: it is a hairline rule -- the grid
+        lines in `.sweep-grid` are a 1px gap over a coloured background -- and
+        not a space at all.
+        """
+
+        import re
+
+        on_scale = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40}
+        declaration = re.compile(
+            r"\b(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?:\s*([^;{}]+)",
+        )
+        offenders = sorted(
+            {
+                f"{value}px"
+                for match in declaration.finditer(self._stylesheet())
+                # calc() and max() carry their own arithmetic; the scale is
+                # still the input, and rewriting inside them buys nothing.
+                if not re.search(r"\b(?:calc|max|min|clamp)\(", match.group(1))
+                for value in re.findall(r"(?<![-\w.])([0-9]+)px", match.group(1))
+                if int(value) in on_scale
+            }
+        )
+
+        self.assertEqual(
+            offenders, [], "This spacing is on the scale; write it as --space-*."
+        )
+
+    def test_status_colour_comes_from_a_tone_token(self):
+        """One status, one set of colours, named once.
+
+        The same seven fill/ink/border trios were written out in hex across
+        pills, messages, connection ticks and worth readouts -- five families
+        that knew nothing about each other -- so `published`, `reachable` and
+        `success` were three different greens. Components now read `--tone-*`
+        and only the token block names a colour.
+
+        Scoped to the families that carry status. Charts, category dots and
+        print rules legitimately name absolute colours: a categorical palette
+        is identity, not state.
+        """
+
+        import re
+
+        status = re.compile(
+            r"^\s*\.(?:pill|msg|conn-kind|conn-decision|worth|control)-[^{\n]*\{([^}]*)\}",
+            re.MULTILINE,
+        )
+        offenders = [
+            colour
+            for match in status.finditer(self._stylesheet())
+            for colour in re.findall(r"#[0-9a-fA-F]{3,8}\b", match.group(1))
+        ]
+
+        self.assertEqual(
+            offenders, [], "Status colour belongs in a --tone-* token, not the component."
+        )
+
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
 
