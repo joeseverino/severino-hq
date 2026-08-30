@@ -119,7 +119,12 @@ class NameListWidget(forms.Widget):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
 
-        values = self.format_value(value)
+        # What can be edited first, what HQ found underneath it. Interleaved in
+        # whatever order the declaration happened to store them, a read-only row
+        # sat between two inputs and the blank row for adding one drifted away
+        # from the rest, so the field read as though the editable rows were the
+        # odd ones out.
+        values = sorted(self.format_value(value), key=lambda item: item in self.notes)
         rows = format_html_join(
             "", "{}", ((self._row(name, item),) for item in values)
         )
@@ -189,8 +194,8 @@ class ResourceIdentityForm(forms.Form):
         label="Identifier",
         help_text=(
             "Used in this page's address and in every operation recorded "
-            "against it. Left blank, HQ derives one from what you entered "
-            "above. Stable once set."
+            "against it. Derived from the name when the resource is created, "
+            "and fixed afterwards."
         ),
     )
     enabled = forms.BooleanField(
@@ -202,6 +207,24 @@ class ResourceIdentityForm(forms.Form):
             "not remove anything already applied at the provider."
         ),
     )
+
+    def __init__(self, *args, **kwargs):
+        """This form is only ever built for a resource that already exists.
+
+        Which makes the identifier the one field on it that must not move: it
+        is this page's address and the name every operation and audit entry
+        recorded against this resource refers to. Presented as an input beside
+        the machine's own name, it read as a second name to choose, and the
+        question "which one is it actually called" has no good answer because
+        the honest one is "neither, that is its filing".
+
+        Disabled rather than hidden -- the value is worth seeing, and Django
+        takes a disabled field from the initial data and ignores whatever the
+        request tried to say about it, so a rename cannot be posted at all.
+        """
+
+        super().__init__(*args, **kwargs)
+        self.fields["key"].disabled = True
 
 
 class ProviderSpecForm(forms.Form):

@@ -703,3 +703,46 @@ class ObservedAddressAnnotationTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertIn("100.101.102.103", form.spec["addresses"])
+
+    def test_what_can_be_edited_comes_before_what_hq_found(self):
+        """A read-only row between two inputs made the inputs look like the
+        exception, and pushed the blank row for adding one away from them."""
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            initial={
+                "name": "a-box",
+                "addresses": ["100.101.102.103", "192.0.2.50"],
+            }
+        )
+        rendered = str(form["addresses"])
+
+        self.assertLess(
+            rendered.index("192.0.2.50"), rendered.index("100.101.102.103")
+        )
+
+
+class IdentifierIsFixedTests(TestCase):
+    """The identifier is this page's address, not a second name to choose."""
+
+    def setUp(self):
+        self.resource = ManagedResource.objects.create(
+            key="a-box", kind="machine", spec={"name": "a-box", "addresses": []}
+        )
+
+    def test_it_cannot_be_edited(self):
+        from application.provider_forms import ResourceIdentityForm
+
+        self.assertTrue(ResourceIdentityForm().fields["key"].disabled)
+
+    def test_a_posted_rename_is_ignored_rather_than_applied(self):
+        from application.provider_forms import ResourceIdentityForm
+
+        form = ResourceIdentityForm(
+            {"key": "something-else", "enabled": "on"},
+            initial={"key": "a-box", "enabled": True},
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["key"], "a-box")

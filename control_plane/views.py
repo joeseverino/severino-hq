@@ -213,7 +213,17 @@ class ResourceFormView(LoginRequiredMixin, View):
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
             raise Http404("Unknown provider kind.")
-        identity = ResourceIdentityForm(request.POST) if resource else None
+        # The identifier is disabled, so its value comes from here rather than
+        # from the request -- without the initial, a save would post a blank key
+        # for a resource that has one.
+        identity = (
+            ResourceIdentityForm(
+                request.POST,
+                initial={"key": resource.key, "enabled": resource.enabled},
+            )
+            if resource
+            else None
+        )
         spec = spec_form_class(
             kind,
             lock_identity=bool(resource),
