@@ -682,7 +682,12 @@ class InfrastructureWebTests(TestCase):
 
         self.assertEqual(response.context["provider_machine"]["name"], "homelab-server")
         self.assertEqual(response.context["origin_machine"].name, "app-server")
-        self.assertContains(response, "Runs on")
+        # Two edges, two sentences. Both said "Runs on" once, which on a
+        # container managed by a Portainer one box over printed "Runs on
+        # homelab-server" directly above "Runs on sl-cloud-edge-01" -- the same
+        # words for the machine the provider is on and the machine the thing is
+        # on, wrong one first.
+        self.assertContains(response, "Managed through")
         self.assertContains(response, "Forwards to")
 
     def test_public_certificate_download_never_serves_private_key(self):

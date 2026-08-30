@@ -1444,7 +1444,14 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             action=OperationRequest.Action.DELETE,
             state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
         ).exists()
-        context["readout_rows"] = _readout_rows(self.object)
+        # Nothing for a container: the panel above is the sweep's answer and
+        # the readout is the declaration's, and a container declares identity
+        # and nothing else. So it could only repeat what the panel had just said
+        # better -- "State: running, up 3 months" followed by "State: --", and
+        # the container's own name under a page titled after it.
+        context["readout_rows"] = (
+            () if self.object.kind == CONTAINER_KIND else _readout_rows(self.object)
+        )
         context["spec_rows"] = _spec_rows(self.object)
         context["days_left"] = None
         context["renewal_at"] = None
