@@ -28,17 +28,17 @@ from .security import cli_principal
 class DashboardGlanceTests(TestCase):
     def setUp(self):
         self.machine = ManagedResource.objects.create(
-            key="homelab-server",
+            key="app-server",
             kind="machine",
-            spec={"name": "homelab", "addresses": ["100.64.0.10"]},
+            spec={"name": "app", "addresses": ["100.64.0.10"]},
             status={"kept": True},
         )
         ProviderConnection.objects.create(
-            connection_ref="homelab-ssh",
-            controller_id="homelab-server",
+            connection_ref="app-ssh",
+            controller_id="app-server",
             provider="ssh",
             endpoint="100.64.0.10",
-            reaches=["homelab"],
+            reaches=["app"],
             observed_at=timezone.now(),
         )
         DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000")
@@ -51,15 +51,15 @@ class DashboardGlanceTests(TestCase):
     def test_refresh_plan_names_the_record_and_derived_connection(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
 
-        plan = dashboard_refresh_plan("homelab-server")
+        plan = dashboard_refresh_plan("app-server")
 
         self.assertEqual(plan["panels"], ["infrastructure"])
         self.assertEqual(
             plan["targets"]["infrastructure"],
             [
                 {
-                    "key": "homelab-server",
-                    "connections": ["homelab-ssh"],
+                    "key": "app-server",
+                    "connections": ["app-ssh"],
                     "request_id": self.machine_request_id,
                 }
             ],
@@ -74,7 +74,7 @@ class DashboardGlanceTests(TestCase):
                     "panel_id": "infrastructure",
                     "machines": [
                         {
-                            "key": "homelab-server",
+                            "key": "app-server",
                             "status": "good",
                             "summary": "Host load 0.20",
                             "metrics": [
@@ -89,7 +89,7 @@ class DashboardGlanceTests(TestCase):
                 }
             ],
             principal=cli_principal(),
-            controller_id="homelab-server",
+            controller_id="app-server",
         )
 
         self.machine.refresh_from_db()
@@ -97,7 +97,7 @@ class DashboardGlanceTests(TestCase):
         self.assertTrue(self.machine.status["kept"])
         self.assertEqual(self.machine.status["telemetry"]["metrics"][0]["value"], "12%")
         self.assertEqual(
-            self.machine.status["telemetry"]["controller_id"], "homelab-server"
+            self.machine.status["telemetry"]["controller_id"], "app-server"
         )
         self.assertIsNotNone(self.machine.last_observed_at)
         self.assertIsNotNone(
@@ -177,7 +177,7 @@ class DashboardGlanceTests(TestCase):
                     }
                 ],
                 principal=cli_principal(),
-                controller_id="homelab-server",
+                controller_id="app-server",
             )
 
         self.assertFalse(ManagedResource.objects.filter(key="not-declared").exists())
@@ -203,7 +203,7 @@ class DashboardGlanceTests(TestCase):
             list(
                 DashboardMachine.objects.values_list("machine__key", flat=True)
             ),
-            ["homelab-server", "other-machine"],
+            ["app-server", "other-machine"],
         )
 
     def test_weather_settings_validate_and_normalize_coordinates(self):
@@ -228,7 +228,7 @@ class DashboardGlanceTests(TestCase):
                         "panel_id": "infrastructure",
                         "machines": [
                             {
-                                "key": "homelab-server",
+                                "key": "app-server",
                                 "status": "made-up",
                                 "metrics": [{"label": "CPU", "value": "1%"}],
                             }
@@ -236,7 +236,7 @@ class DashboardGlanceTests(TestCase):
                     }
                 ],
                 principal=cli_principal(),
-                controller_id="homelab-server",
+                controller_id="app-server",
             )
 
     def test_unsolicited_observation_is_rejected(self):
@@ -247,7 +247,7 @@ class DashboardGlanceTests(TestCase):
                         "panel_id": "infrastructure",
                         "machines": [
                             {
-                                "key": "homelab-server",
+                                "key": "app-server",
                                 "status": "good",
                                 "metrics": [{"label": "CPU", "value": "1%"}],
                             }
@@ -255,7 +255,7 @@ class DashboardGlanceTests(TestCase):
                     }
                 ],
                 principal=cli_principal(),
-                controller_id="homelab-server",
+                controller_id="app-server",
             )
 
     def test_refresh_is_explicit_and_rings_the_existing_doorbell(self):
