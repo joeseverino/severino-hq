@@ -741,3 +741,25 @@ def container_context(host: str, name: str) -> dict[str, object]:
         "running": running,
         "serves": tuple(sorted(item for item in serves if item)),
     }
+
+
+def observed_addresses() -> dict[str, str]:
+    """Every address HQ sees for itself, and what saw it.
+
+    Read from the two sweeps that report where a machine answers: the tailnet
+    names every address it hands out, and a container sweep names the host it
+    found containers on. Neither is a machine declaration, which is the point --
+    these are the addresses nobody needs to type.
+    """
+
+    found: dict[str, str] = {}
+    for presence in tailnet_presence().values():
+        for address in presence.addresses:
+            if address:
+                found.setdefault(address, "seen on the tailnet")
+    from .locate import container_hosts
+
+    for address in container_hosts().values():
+        if address:
+            found.setdefault(address, "seen by the container sweep")
+    return found

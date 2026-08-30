@@ -69,6 +69,13 @@ class NameListWidget(forms.Widget):
             return []
         return [line.strip() for line in str(value).splitlines() if line.strip()]
 
+    # ``{value: note}`` for values HQ can see for itself. A machine's addresses
+    # are the case this exists for: half of them are the only record there is --
+    # nothing reports a printer's address -- and half repeat a reading from the
+    # tailnet. Presented identically, the field invites somebody to correct HQ
+    # about something HQ is watching, and gives no way to tell which is which.
+    notes: dict[str, str] = {}
+
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
@@ -82,9 +89,25 @@ class NameListWidget(forms.Widget):
                 ' autocapitalize="off" autocorrect="off">'
                 '<button type="button" class="btn ghost" data-name-list-remove'
                 ' aria-label="Remove {}">Remove</button>'
+                "{}"
                 "</div>"
             ),
-            ((name, item, item) for item in values),
+            (
+                (
+                    name,
+                    item,
+                    item,
+                    (
+                        format_html(
+                            '<span class="name-list-note">{}</span>',
+                            self.notes[item],
+                        )
+                        if item in self.notes
+                        else ""
+                    ),
+                )
+                for item in values
+            ),
         )
         # Always one empty row, so adding a name needs no script and no
         # thinking about where the cursor goes.
@@ -140,13 +163,20 @@ class ResourceIdentityForm(forms.Form):
     generated form that has to remember which of its own fields are not spec.
     """
 
+    # Labelled for what it is. "Name in HQ" sat directly beneath a field called
+    # "Name" and read as a second one, inviting the question of which the
+    # machine is actually called -- and the help text answered "the hostname",
+    # which is true of a proxy host and not of a machine, whose identifier comes
+    # from its name. What it really is is the string in this page's address and
+    # in every operation and audit entry, which is why it must not move.
     key = forms.SlugField(
         max_length=180,
         required=False,
-        label="Name in HQ",
+        label="Identifier",
         help_text=(
-            "Optional. Left blank, HQ names it after the hostname. Stable once "
-            "set — operations refer to it."
+            "Used in this page's address and in every operation recorded "
+            "against it. Left blank, HQ derives one from what you entered "
+            "above. Stable once set."
         ),
     )
     enabled = forms.BooleanField(
@@ -310,6 +340,15 @@ def spec_form_class(
         if name in fields:
             fields[name].change_effect = effect
 
+    # Which of the values already in a list field HQ can see for itself. Same
+    # late resolution and same swallow as the live choices above: a form that
+    # will not render because an annotation could not be looked up is the least
+    # useful moment to fail.
+    for name, notes in _live_notes(provider).items():
+        field = fields.get(name)
+        if field is not None and isinstance(field.widget, NameListWidget):
+            field.widget.notes = notes
+
     if lock_identity:
         for name in identity_fields(kind):
             if name not in fields:
@@ -427,6 +466,17 @@ def _live_choices(
         return {}
     try:
         return _import(provider.choices)(context) or {}
+    except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
+        return {}
+
+
+def _live_notes(provider: Any) -> dict[str, dict[str, str]]:
+    """``{field: {value: note}}`` for values a provider says HQ observes."""
+
+    if not getattr(provider, "notes", ""):
+        return {}
+    try:
+        return _import(provider.notes)() or {}
     except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
         return {}
 

@@ -3185,6 +3185,18 @@ kbd {
 .name-list-row { display: flex; gap: 6px; width: 100%; }
 .name-list-row input { flex: 1 1 auto; min-width: 0; }
 .name-list-add { margin-top: 2px; }
+/* Says which values HQ can see for itself, beside the ones only this field
+   records. Wraps under the input on a narrow screen rather than squeezing it. */
+.name-list-note {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+@media (max-width: 40rem) {
+  .name-list-row { flex-wrap: wrap; }
+  .name-list-note { flex-basis: 100%; }
+}
 
 /* What a field will cause, said before it is caused. */
 .field-effect { color: var(--warn); font-weight: 500; }

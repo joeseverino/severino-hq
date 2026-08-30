@@ -609,44 +609,24 @@ class MachineSpec(ProviderModel):
         title="Addresses",
         description=(
             "Every address that reaches it — LAN, tailnet, public. A resource "
-            "forwarding to one of these is understood to be pointing here."
+            "forwarding to one of these is understood to be pointing here. "
+            "Marked ones HQ also sees for itself; the rest exist only here, "
+            "because nothing in the estate reports them."
         ),
     )
-    # How you get in, and what you are getting into. An address says where a
-    # machine is and none of these follow from one.
+
+    # Three more fields lived here: an operating system, a kind, an SSH alias
+    # and port. All four were blank on every machine in the estate, and only
+    # one thing read any of them -- the readout at the top of the form they
+    # were typed into. Nothing resolved through them, nothing connected with
+    # them, no page decided anything by them.
     #
-    # `operating_system` was here too, and should not have been: the tailnet
-    # sweep reports `os` for every device it carries, so the field was a second
-    # place to write down something HQ already reads. It stayed blank on all
-    # seven machines while the tailnet panel on the same page printed the
-    # answer, which is the worst of both -- an empty field implying HQ does not
-    # know, beside the fact it knows.
-    form: str = Field(
-        default="",
-        max_length=60,
-        title="Kind",
-        description=(
-            "What sort of thing it is — a VM, a host, a printer, a phone. "
-            "Decides nothing; it is how a list of machines reads as an estate "
-            "rather than as seven names."
-        ),
-    )
-    ssh_alias: str = Field(
-        default="",
-        max_length=120,
-        title="SSH alias",
-        description=(
-            "The name in `~/.ssh/config` that reaches it, if any. Recorded so "
-            "the way in is written down once rather than remembered."
-        ),
-    )
-    ssh_port: int | None = Field(
-        default=None,
-        ge=1,
-        le=65535,
-        title="SSH port",
-        description="Only when it is not 22. A moved port is worth stating.",
-    )
+    # The operating system had a source all along: the tailnet reports `os` for
+    # every device it carries. The other three had none and needed none. A
+    # field that is empty everywhere and read by nobody is not an unfilled
+    # field, it is a question HQ was asking for no reason -- and asking it
+    # beside an address that genuinely matters made the whole form look like
+    # guesswork.
 
 
 class PortainerStackEnvVar(ProviderModel):
@@ -1351,6 +1331,11 @@ class ProviderSpec:
     # "cloudflare.dns_record" written into it, and the second provider with
     # anything inside it would have added an ``elif``.
     contains: tuple[str, str, str] | None = None
+    # ``module:function`` returning ``{field: {value: note}}`` -- which of the
+    # values already in a field HQ can see without being told. A dotted path for
+    # the same reason ``choices`` is one: the answer needs the database, and
+    # this module must not.
+    notes: str = ""
 
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
@@ -2041,20 +2026,17 @@ def _machine_key_hint(spec: dict[str, Any]) -> str:
 def _machine_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    """What was declared. Whether it answers is the machine page's to say."""
+    """What was declared. Whether it answers is the machine page's to say.
 
-    port = spec.get("ssh_port")
-    reached_by = str(spec.get("ssh_alias", ""))
-    if reached_by and port:
-        reached_by = f"{reached_by} :{port}"
+    Four lines shorter than it was, and it says the same amount. The operating
+    system is the tailnet's to report and the machine page reports it; a kind,
+    an SSH alias and a port were blank on every machine and read by this
+    function alone, which is a readout of nothing.
+    """
+
     return (
         ("What it is for", "", str(spec.get("role", ""))),
-        ("Kind", "", str(spec.get("form", ""))),
-        # No operating system line. A readout is handed the declaration and
-        # nothing else, so it is the one surface that cannot answer this -- and
-        # the machine page, which holds the tailnet reading, already does.
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
-        ("Reached by", "", reached_by),
     )
 
 
@@ -2624,6 +2606,12 @@ _PROVIDERS = (
         # there is no record to adopt one from. What HQ observes about a machine
         # arrives as containers and connections, which name it in passing.
         key_hint=_machine_key_hint,
+        # Half the addresses on a machine are the only record of it -- nothing
+        # reports the printer on the LAN -- and half repeat what the tailnet
+        # says. The field has to stay writable for the first kind, and it is
+        # also the key that ties HQ's name for a machine to the tailnet's
+        # different one, so this marks which is which rather than locking it.
+        notes="application.provider_choices:machine_address_notes",
         removal_note=lambda spec: (
             f"{spec.get('name', 'This machine')} stops being a place in HQ. "
             "Anything forwarding to its addresses reads as pointing nowhere."

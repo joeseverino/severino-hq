@@ -16,7 +16,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from control_plane.models import ProviderConnection, ProviderInventory
+from control_plane.models import (
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+)
 
 from .machines import machine, machine_catalog
 from .services import CONTAINER_KIND
@@ -597,3 +601,71 @@ class ReadingThisOnTheMachineTests(TestCase):
         request = RequestFactory().get("/", REMOTE_ADDR="100.64.0.5")
         with self.assertNumQueries(0):
             client_ip(request)
+
+
+class ObservedAddressAnnotationTests(TestCase):
+    """A field that records two unrelated things should say which is which.
+
+    Half a machine's addresses are the only record there is -- nothing in the
+    estate reports the printer on the LAN. The rest repeat what the tailnet
+    says on every sweep, and are also the key that ties HQ's name for a machine
+    to the tailnet's, which calls the same laptop something else. Locking the
+    field breaks the printer; leaving it silent invites somebody to correct HQ
+    about a value HQ is watching.
+    """
+
+    def setUp(self):
+        ManagedResource.objects.create(
+            key="a-box",
+            kind="machine",
+            spec={
+                "name": "a-box",
+                "addresses": ["192.0.2.50", "100.101.102.103"],
+            },
+        )
+        ProviderInventory.objects.create(
+            kind="tailscale.device",
+            observed_at=timezone.now(),
+            records=[
+                {
+                    "name": "A Box",
+                    "addresses": ["100.101.102.103"],
+                    "os": "linux",
+                }
+            ],
+        )
+
+    def _notes(self):
+        from application.provider_choices import machine_address_notes
+
+        return machine_address_notes()["addresses"]
+
+    def test_an_address_the_tailnet_reports_is_marked_as_seen(self):
+        self.assertIn("100.101.102.103", self._notes())
+
+    def test_an_address_nothing_reports_is_left_unmarked(self):
+        """It is not unverified. It is the only place that address exists."""
+
+        self.assertNotIn("192.0.2.50", self._notes())
+
+    def test_the_form_carries_the_marks_onto_the_field(self):
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")()
+
+        self.assertEqual(
+            form.fields["addresses"].widget.notes.get("100.101.102.103"),
+            "seen on the tailnet",
+        )
+
+    def test_a_machine_still_declares_an_address_nothing_can_see(self):
+        """The printer case, which is why this is annotated and not locked."""
+
+        from application.provider_forms import spec_form_class
+
+        form = spec_form_class("machine")(
+            data={"name": "laserjet", "addresses": ["192.0.2.137"]}
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.spec["addresses"], ["192.0.2.137"])
