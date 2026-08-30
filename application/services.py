@@ -1223,6 +1223,7 @@ class _Whereabouts:
         self._machines = machines
         self._index: "Machines | None" = None
         self._answering: "dict[tuple[str, Any], list[str]] | None" = None
+        self._hosting: "dict[str, list[str]] | None" = None
 
     def index(self) -> "Machines":
         if self._index is None:
@@ -1233,6 +1234,11 @@ class _Whereabouts:
         if self._answering is None:
             self._answering = _answering()
         return self._answering
+
+    def hosting(self) -> "dict[str, list[str]]":
+        if self._hosting is None:
+            self._hosting = _containers_by_name()
+        return self._hosting
 
 
 def whereabouts(machines: "tuple[dict[str, Any], ...] | None" = None) -> _Whereabouts:
@@ -1450,6 +1456,22 @@ def _locate(
         return Origin(address=address)
     name = at.index().resolve(host_address)
     if not name:
+        # Not an address at all, but a container name on a docker network --
+        # which is how everything behind a proxy sharing that network is
+        # addressed, and what a Caddy route hands off to. HQ sweeps containers,
+        # so the name is not opaque: it names something HQ can already see, and
+        # the machine running it is the answer to where this is served.
+        #
+        # Without this the page said an ingress forwarded somewhere it "cannot
+        # match to any machine it knows", about a container listed by name three
+        # rows further down the same board.
+        #
+        # Silent when more than one machine runs that name, for the reason every
+        # other ambiguity here is silent: a guess printed beside four facts reads
+        # as a fifth.
+        hosts = _hosting(host_address, at)
+        if len(hosts) == 1:
+            return Origin(address=address, host=hosts[0], container=host_address)
         # Nothing HQ holds says what is there. The address stays on the page,
         # which is the true answer and the one an operator can act on.
         return Origin(address=address)
@@ -1482,6 +1504,40 @@ def _listening(host: str, port: str, at: "_Whereabouts | None" = None) -> list[s
         return []
     found = at.answering() if at is not None else _answering()
     return found.get((host, int(port)), [])
+
+
+def _hosting(container: str, at: "_Whereabouts | None" = None) -> list[str]:
+    """Machines running a container of this name, seen or declared."""
+
+    if not container:
+        return []
+    found = at.hosting() if at is not None else _containers_by_name()
+    return found.get(container, [])
+
+
+def _containers_by_name() -> dict[str, list[str]]:
+    """Which machines run a container of each name.
+
+    The inverse of the index below, and read from the same two tables, because
+    a forwarding target is sometimes a port on a machine and sometimes the name
+    of the thing itself.
+    """
+
+    found: dict[str, set[str]] = {}
+    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+        for record in snapshot.records:
+            host = str(record.get("host", "") or "")
+            name = str(record.get("name", "") or "")
+            if host and name:
+                found.setdefault(name, set()).add(host)
+    for spec in ManagedResource.objects.filter(
+        kind=CONTAINER_KIND, enabled=True
+    ).values_list("spec", flat=True):
+        host = str(spec.get("host", "") or "")
+        name = str(spec.get("name", "") or "")
+        if host and name:
+            found.setdefault(name, set()).add(host)
+    return {name: sorted(hosts) for name, hosts in found.items()}
 
 
 def _answering() -> dict[tuple[str, Any], list[str]]:
