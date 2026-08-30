@@ -1667,6 +1667,42 @@ def list_caddy_routes() -> list[dict[str, Any]]:
     return found
 
 
+def _caddy_route_block(spec: dict[str, Any], snippet: str) -> str:
+    """One site block, in the shape the operator's own file already uses."""
+
+    lines = [f"{spec['domain']} {{"]
+    if snippet:
+        lines.append(f"\timport {snippet}")
+    lines.append(f"\treverse_proxy {spec['upstream']}")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_caddy_routes(specs: list[dict[str, Any]], snippet: str = "") -> str:
+    """Every route HQ declares for one edge, as a file it owns outright.
+
+    Written to its own file rather than into the operator's Caddyfile, which
+    imports it. HQ never edits a line somebody else wrote: the edge answers one
+    name with `respond`, which no route HQ can declare expresses, and a writer
+    owning the whole file would have had to reproduce it or drop it.
+
+    Sorted by name so the same declarations render the same bytes. A file whose
+    order depends on a query is a file that looks changed on every pass.
+    """
+
+    ordered = sorted(
+        (spec for spec in specs if spec.get("domain") and spec.get("upstream")),
+        key=lambda spec: spec["domain"],
+    )
+    header = (
+        "# Written by Severino HQ. Edits here are replaced on the next reconcile;\n"
+        "# routes this file does not name are the operator's and are untouched.\n"
+    )
+    return header + "\n" + "\n\n".join(
+        _caddy_route_block(spec, snippet) for spec in ordered
+    ) + "\n"
+
+
 def list_npm() -> list[dict[str, Any]]:
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}

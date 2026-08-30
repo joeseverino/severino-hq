@@ -48,3 +48,44 @@ if env PATH="${bin_dir}:${PATH}" \
 fi
 
 echo "Edge controller deploy, routes, and refusal all behave."
+
+# The write arm, stubbed at `docker` again. What is checked here is the
+# transaction: a good file is installed, and a reload that fails puts the
+# previous one back rather than leaving the edge serving nothing.
+routes_dir="${root}/routes"
+mkdir -p "${routes_dir}"
+printf 'old.example.test {\n\trespond "old" 200\n}\n' >"${routes_dir}/hq-routes.caddy"
+
+cat >"${bin_dir}/docker" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "${bin_dir}/docker"
+
+printf 'new.example.test {\n\trespond "new" 200\n}\n' | \
+    env PATH="${bin_dir}:${PATH}" \
+    SEVERINO_HQ_CADDY_ROUTES="${routes_dir}/hq-routes.caddy" \
+    SEVERINO_HQ_CERT_OWNER="$(id -un)" SEVERINO_HQ_CERT_GROUP="$(id -gn)" \
+    deploy/targets/severino-hq-edge-controller routes:write
+grep -q "new.example.test" "${routes_dir}/hq-routes.caddy"
+
+# Now a docker that fails the reload. The routes must come back.
+cat >"${bin_dir}/docker" <<'EOF'
+#!/bin/sh
+for arg in "$@"; do
+    [ "$arg" = "reload" ] && exit 1
+done
+exit 0
+EOF
+chmod +x "${bin_dir}/docker"
+
+printf 'broken.example.test {\n\trespond "broken" 200\n}\n' | \
+    env PATH="${bin_dir}:${PATH}" \
+    SEVERINO_HQ_CADDY_ROUTES="${routes_dir}/hq-routes.caddy" \
+    SEVERINO_HQ_CERT_OWNER="$(id -un)" SEVERINO_HQ_CERT_GROUP="$(id -gn)" \
+    deploy/targets/severino-hq-edge-controller routes:write && {
+        echo "a failed reload reported success" >&2; exit 1; }
+grep -q "new.example.test" "${routes_dir}/hq-routes.caddy" || {
+    echo "a failed reload did not restore the previous routes" >&2; exit 1; }
+
+echo "Edge controller route writes install, and roll back when the reload fails."

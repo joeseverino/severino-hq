@@ -3,6 +3,7 @@ set -eu
 
 readonly operation="${1:-}"
 readonly cert_dir="${SEVERINO_HQ_CADDY_CERT_DIR:-/opt/apps/caddy/certs}"
+readonly routes_file="${SEVERINO_HQ_CADDY_ROUTES:-/opt/apps/caddy/config/hq-routes.caddy}"
 readonly cert_owner="${SEVERINO_HQ_CERT_OWNER:-root}"
 readonly cert_group="${SEVERINO_HQ_CERT_GROUP:-root}"
 
@@ -30,6 +31,43 @@ case "${operation}" in
         # of this likely to need changing on a host that takes a root install to
         # update, while the repository keeps the half that never moves.
         exec docker exec caddy caddy adapt --config /etc/caddy/Caddyfile
+        ;;
+    routes:write)
+        # The routes HQ declares, and only those. They go in a file of their
+        # own that the operator's Caddyfile imports, so HQ never edits a line
+        # somebody else wrote -- health.jseverino.com answers with `respond`,
+        # which no route HQ can declare expresses, and a writer that owned the
+        # whole file would have had to reproduce it or drop it.
+        #
+        # Validated before it is installed and rolled back if the reload fails,
+        # the same shape the certificate deploy uses. A Caddyfile that does not
+        # parse takes every name on this box down, so the failure has to happen
+        # while the old one is still the one running.
+        work="$(mktemp -d /tmp/severino-hq-routes.XXXXXX)"
+        trap 'rm -rf "${work}"' EXIT HUP INT TERM
+        cat >"${work}/hq-routes.caddy"
+        test -s "${work}/hq-routes.caddy"
+        # Parsed on its own first. This catches a malformed route while the
+        # running config is still the old one, which is the only moment it can
+        # be caught cheaply -- a Caddyfile that does not parse takes every name
+        # on this box down. It cannot catch a *conflict* with the operator's own
+        # file, because the two are only one config once installed; the reload
+        # below is what catches that, and it rolls back when it does.
+        docker cp "${work}/hq-routes.caddy" caddy:/tmp/hq-routes.candidate
+        docker exec caddy caddy validate --adapter caddyfile \
+            --config /tmp/hq-routes.candidate
+        if [ -f "${routes_file}" ]; then
+            install -m 0644 "${routes_file}" "${work}/previous.caddy"
+        else
+            : >"${work}/previous.caddy"
+        fi
+        install -o "${cert_owner}" -g "${cert_group}" -m 0644 "${work}/hq-routes.caddy" "${routes_file}"
+        if ! docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force; then
+            install -o "${cert_owner}" -g "${cert_group}" -m 0644 "${work}/previous.caddy" "${routes_file}"
+            docker exec caddy caddy reload --config /etc/caddy/Caddyfile --force
+            echo "Severino HQ route reload failed; previous routes restored." >&2
+            exit 1
+        fi
         ;;
     deploy)
         work="$(mktemp -d /tmp/severino-hq-cert.XXXXXX)"

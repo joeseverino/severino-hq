@@ -2874,3 +2874,46 @@ class CapabilityMatchesTheHandlersTests(TestCase):
         )
 
         self.assertEqual(undeclared, [], f"handler nothing declares: {undeclared}")
+
+
+class CaddyRouteRenderingTests(TestCase):
+    """The file HQ writes for an edge, in the shape that edge already uses."""
+
+    def _rendered(self, specs, snippet="jseverino_wildcard"):
+        return providers.render_caddy_routes(specs, snippet)
+
+    def test_a_route_becomes_a_site_block_that_imports_the_tls_snippet(self):
+        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
+
+        self.assertIn("a.example.com {", out)
+        self.assertIn("\timport jseverino_wildcard", out)
+        self.assertIn("\treverse_proxy app:8080", out)
+
+    def test_the_same_declarations_render_the_same_bytes(self):
+        """A file whose order follows a query looks changed on every pass."""
+
+        specs = [
+            {"domain": "b.example.com", "upstream": "b:1"},
+            {"domain": "a.example.com", "upstream": "a:1"},
+        ]
+
+        self.assertEqual(self._rendered(specs), self._rendered(list(reversed(specs))))
+
+    def test_a_route_with_nowhere_to_forward_is_left_out(self):
+        """Caddy answers some names itself. A block with no upstream is invalid."""
+
+        out = self._rendered(
+            [
+                {"domain": "a.example.com", "upstream": "app:8080"},
+                {"domain": "answered-here.example.com", "upstream": ""},
+            ]
+        )
+
+        self.assertNotIn("answered-here", out)
+
+    def test_it_says_whose_file_it_is(self):
+        """It replaces this file wholesale, so it has to say so in the file."""
+
+        out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
+
+        self.assertIn("Written by Severino HQ", out)
