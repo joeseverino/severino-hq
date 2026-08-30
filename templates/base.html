@@ -125,11 +125,11 @@
           </svg>
         </summary>
         <div class="user-menu-panel">
-          <a class="user-menu-action-items" href="{% url 'action_items' %}">
+          <a class="menu-item menu-item-split" href="{% url 'action_items' %}">
             <span>Action items</span>
-            <span class="user-menu-count" data-action-count{% if not show_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
+            <span class="menu-item-status user-menu-count" data-action-count{% if not show_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
           </a>
-          <a href="{% url 'admin:index' %}">Admin</a>
+          <a class="menu-item" href="{% url 'admin:index' %}">Admin</a>
           {% comment %}
           A real link to the page that answers this, so it works with the dialog
           closed, unopenable, or bookmarked. The dialog fetches the same page
@@ -137,12 +137,12 @@
           request came over; the word stays put so the control does not change
           shape depending on where you are sitting.
           {% endcomment %}
-          <a class="conn-badge conn-badge-{{ CONNECTION_CHANNEL.id }}"
+          <a class="menu-item menu-item-split conn-badge-{{ CONNECTION_CHANNEL.id }}"
              href="{% url 'connection' %}"
              data-modal-open="connection"
              data-connection-source="{% url 'connection' %}">
-            Connection
-            <span class="conn-dot" aria-hidden="true"></span>
+            <span>Connection</span>
+            <span class="menu-item-status" aria-hidden="true"><span class="conn-dot"></span></span>
           </a>
           {% comment %}
           A switch, not a verb. The state is the label -- a menu entry that
@@ -154,14 +154,14 @@
           <form action="{% url 'demo_mode' %}" method="post">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="menu-switch" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
+            <button type="submit" class="menu-item menu-item-split" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
               <span>Demo</span>
-              <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+              <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
             </button>
           </form>
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}
-            <button type="submit">Sign out</button>
+            <button type="submit" class="menu-item">Sign out</button>
           </form>
         </div>
       </details>

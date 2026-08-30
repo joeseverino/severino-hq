@@ -198,6 +198,28 @@ class StyleContractTests(SimpleTestCase):
         # comparison deliberately ignores whether one was supplied.
         self.assertEqual(sorted(referenced - defined), [])
 
+    def test_user_menu_rows_share_one_element_independent_primitive(self):
+        """A link and a POST action in one menu must render as one kind of row.
+
+        Styling ``a`` and ``button`` separately lets the generic button
+        primitive turn only the POST actions back into boxed controls. Every
+        interactive row names the menu primitive instead, so adding another
+        action cannot reintroduce that split by choosing the wrong element.
+        """
+
+        import re
+
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        panel = template.split('<div class="user-menu-panel">', 1)[1].split(
+            "</details>", 1
+        )[0]
+        rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
+
+        self.assertTrue(rows)
+        self.assertEqual([row for row in rows if "menu-item" not in row], [])
+        self.assertIn(".menu-item {", self._stylesheet())
+
     def test_every_rule_sits_inside_a_cascade_layer(self):
         """Unlayered rules beat every layer, at any specificity.
 

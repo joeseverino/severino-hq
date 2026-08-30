@@ -14,7 +14,7 @@
    add another rule outside the layers too. Every one of them turned out to
    need nothing but source order -- narrowing a component at a breakpoint is
    exactly what "later in the same layer" already means -- so they were folded
-   back in rather than given a layer of their own. `StylesheetTests` fails the
+   back in rather than given a layer of their own. `StyleContractTests` fails the
    build if a rule ever lands outside a layer again. */
 @layer tokens, base, components;
 
@@ -303,27 +303,6 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
   .demo-flag { display: none; }
 }
 
-/* A switch in the profile menu. The track carries the state, so the label
-   never has to rename itself to say what is currently true. */
-.user-menu-panel button.menu-switch {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-6);
-}
-.switch-track {
-  flex: none; width: 26px; height: 15px; border-radius: 20px;
-  background: var(--line); border: 1px solid var(--line);
-  transition: background .12s ease-out, border-color .12s ease-out;
-}
-.switch-knob {
-  display: block; width: 11px; height: 11px; margin: 1px; border-radius: 50%;
-  background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
-  transition: transform .12s ease-out;
-}
-[aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
-[aria-checked="true"] .switch-knob { transform: translateX(11px); }
-@media (prefers-reduced-motion: reduce) {
-  .switch-track, .switch-knob { transition: none; }
-}
-
 /* ── Header ─────────────────────────────────────────────────────── */
 
 /* Off-screen rather than `display: none`, which would take it out of the tab
@@ -517,84 +496,6 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 }
 
 .inline { display: inline-flex; align-items: center; gap: var(--space-3); }
-
-/* User menu — account actions tucked behind the username to save nav space */
-.user-menu { position: relative; flex: 0 0 auto; }
-.user-menu > summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  list-style: none;
-  min-height: var(--control-size);
-}
-.user-menu > summary::-webkit-details-marker { display: none; }
-.user-menu > summary:hover,
-.user-menu[open] > summary { background: var(--bg-tint); color: var(--ink); }
-.user-menu .user-icon {
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  transition: stroke .12s ease;
-}
-.user-menu > summary:hover .user-icon,
-.user-menu[open] > summary .user-icon { stroke: var(--ink); }
-.user-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
-  min-width: 156px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: var(--space-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-}
-.user-menu-panel form { margin: 0; }
-.user-menu-panel a,
-.user-menu-panel button {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: var(--space-3) var(--space-5);
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  box-shadow: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-}
-.user-menu-panel a:hover,
-.user-menu-panel button:hover {
-  border: 0;
-  background: var(--bg-tint);
-  color: var(--ink);
-  text-decoration: none;
-}
-.user-menu-panel .user-menu-action-items { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); }
-.user-menu-count {
-  min-width: 20px; padding: 1px var(--space-3); border-radius: 999px;
-  background: var(--accent-tint); color: var(--accent); font-size: var(--text-2xs);
-  font-weight: 700; line-height: 18px; text-align: center;
-  font-variant-numeric: tabular-nums;
-}
 
 /* ── Layout ─────────────────────────────────────────────────────── */
 
@@ -943,6 +844,118 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 .btn:disabled, button:disabled { cursor: not-allowed; opacity: .52; }
+
+/* ── User menu ────────────────────────────────────────────────────
+   This whole component lives after the generic button primitive in the same
+   layer. A POST row and a link row therefore share `.menu-item`; their HTML
+   element never changes their visual hierarchy. */
+.user-menu { position: relative; flex: 0 0 auto; }
+.user-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-size);
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  list-style: none;
+  white-space: nowrap;
+}
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu > summary:hover,
+.user-menu[open] > summary { background: var(--bg-tint); color: var(--ink); }
+.user-menu .user-icon {
+  fill: none;
+  stroke: var(--muted);
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  transition: stroke .12s ease;
+}
+.user-menu > summary:hover .user-icon,
+.user-menu[open] > summary .user-icon { stroke: var(--ink); }
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  min-width: 156px;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.user-menu-panel form { margin: 0; }
+.menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  align-items: center;
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: inherit;
+  text-align: left;
+}
+.menu-item:hover {
+  border: 0;
+  background: var(--bg-tint);
+  color: var(--ink);
+  text-decoration: none;
+}
+.menu-item-split { justify-content: space-between; gap: var(--space-6); }
+/* One trailing column for counts, connection state and switches. New menu
+   statuses align by taking this slot instead of inventing their own margin. */
+.menu-item-status {
+  display: inline-grid;
+  min-width: 32px;
+  flex: none;
+  place-items: center;
+}
+.user-menu-count {
+  padding: 1px var(--space-3);
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+/* A switch in the profile menu. The track carries the state, so the label
+   never has to rename itself to say what is currently true. */
+.switch-track {
+  width: 26px; height: 15px; border: 1px solid var(--line); border-radius: 20px;
+  background: var(--line);
+  transition: background .12s ease-out, border-color .12s ease-out;
+}
+.switch-knob {
+  display: block; width: 11px; height: 11px; margin: 1px; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  transition: transform .12s ease-out;
+}
+[aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
+[aria-checked="true"] .switch-knob { transform: translateX(11px); }
+@media (prefers-reduced-motion: reduce) {
+  .switch-track, .switch-knob { transition: none; }
+}
 .control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .control-summary > *, .two-col > * { min-width: 0; }
 .machine-telemetry {
@@ -3240,7 +3253,6 @@ kbd {
   .btn, button { padding: var(--space-4) var(--space-7); font-size: var(--text-md); min-height: 38px; }
   .btn.ghost { min-height: 0; }
   .user-menu > summary { min-height: var(--control-size); }
-  .user-menu-panel button { min-height: 0; }
 
   .data-table th, .data-table td { padding: var(--space-4) var(--space-5); font-size: var(--text-sm); }
 
@@ -3874,7 +3886,6 @@ textarea.code {
   background: var(--surface);
 }
 
-.conn-badge { display: flex; align-items: center; gap: var(--space-4); }
 .conn-dot {
   width: 8px; height: 8px; border-radius: 50%; flex: none;
   background: var(--muted-2);
