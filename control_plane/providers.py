@@ -613,15 +613,14 @@ class MachineSpec(ProviderModel):
         ),
     )
     # How you get in, and what you are getting into. An address says where a
-    # machine is; none of these are derivable from one, and an authored
-    # inventory outside HQ was carrying them because HQ had nowhere to put
-    # them.
-    operating_system: str = Field(
-        default="",
-        max_length=120,
-        title="Operating system",
-        description="What it runs. Free text — this is a label, not a contract.",
-    )
+    # machine is and none of these follow from one.
+    #
+    # `operating_system` was here too, and should not have been: the tailnet
+    # sweep reports `os` for every device it carries, so the field was a second
+    # place to write down something HQ already reads. It stayed blank on all
+    # seven machines while the tailnet panel on the same page printed the
+    # answer, which is the worst of both -- an empty field implying HQ does not
+    # know, beside the fact it knows.
     form: str = Field(
         default="",
         max_length=60,
@@ -2051,7 +2050,9 @@ def _machine_readout(
     return (
         ("What it is for", "", str(spec.get("role", ""))),
         ("Kind", "", str(spec.get("form", ""))),
-        ("Operating system", "", str(spec.get("operating_system", ""))),
+        # No operating system line. A readout is handed the declaration and
+        # nothing else, so it is the one surface that cannot answer this -- and
+        # the machine page, which holds the tailnet reading, already does.
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
         ("Reached by", "", reached_by),
     )
