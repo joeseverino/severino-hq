@@ -62,7 +62,13 @@ install -o root -g root -m 0644 \
 # answered "The controller doorbell could not be reached". The watcher only
 # needs to read it; the writer is the one whose permissions decide whether the
 # feature exists at all.
-install -d -o 10001 -g 10001 -m 0755 /run/severino-hq
+#
+# Ownership goes through chown rather than `install -o`. The uid exists only
+# inside the image, and uutils coreutils -- which this host runs -- resolves the
+# argument as a name and refuses a bare number, where GNU install accepts one.
+# chown takes numeric ids under both, which is what refresh-secrets.sh relies on.
+install -d -m 0755 /run/severino-hq
+chown 10001:10001 /run/severino-hq
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.path" \
     "${systemd_dir}/severino-hq-controller.path"
