@@ -60,7 +60,7 @@ from .infrastructure import (
     resolved_spec,
     resource_health,
 )
-from .locate import Machines, machines_index, split_endpoint
+from .locate import Machines, host_of, machines_index, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .reach import UNKNOWN, Reach, reach_of
@@ -398,9 +398,34 @@ class Origin:
         colon. A bare IPv6 answer is full of colons and carries no port at all,
         and counting them called it an ingress -- after which the address was
         split at its last colon and matched against nothing.
+
+        The absent port is necessary and was briefly taken as sufficient, which
+        is only true while the records that name an origin are public ones. An
+        internal rewrite names an origin too, and it names a *private* address:
+        no port, no machine HQ happens to have been told about, and read on
+        punctuation alone that came out as "served outside this network" for a
+        name served one subnet away. The page then withdrew its offer to add an
+        ingress, on the grounds that a name answered elsewhere needs nothing
+        here -- which is the right rule applied to the wrong reading.
+
+        So the question is asked of the address rather than of its spelling.
+        Where an address lives is ``reach``'s to answer and it already does, for
+        the badge on this same page; a private, tailnet or loopback answer is
+        inside by definition, and an unknown host inside the network is what
+        ``qualifier`` exists to say. A name rather than an address -- a CNAME to
+        somewhere that hosts pages -- classifies as nothing and stays external,
+        which is the case this property was written for.
         """
 
-        return not self.known and not split_endpoint(self.address)[1]
+        from .reach import network_of
+
+        if self.known or split_endpoint(self.address)[1]:
+            return False
+        return network_of(host_of(self.address)) not in (
+            "network",
+            "tailnet",
+            "loopback",
+        )
 
     @property
     def operator(self) -> str:
@@ -641,7 +666,22 @@ def _declarations():
     machines, targets = context_for_resolution()
     declared: dict[str, dict[str, list[Claim]]] = {}
     covering: list[tuple[str, frozenset[str], Claim]] = []
-    origins: dict[str, str] = {}
+    # Origins in two ranks, because two kinds of provider answer "and then what
+    # serves it" and only one of them is really answering it. A provider that
+    # also *answers* for a name states where the name points; a provider that
+    # only routes states where the request is finally served. For a proxied name
+    # those are different addresses -- the record points at the proxy, and the
+    # proxy forwards to the thing -- so a single dictionary filled in iteration
+    # order would have let a DNS record describe ten proxied names as being
+    # served by the proxy box itself, depending on which row the database
+    # returned first.
+    #
+    # Split, the rule is stated rather than raced: routed wins, resolved fills
+    # the gaps. That is what lets a rewrite pointing straight at a machine
+    # describe a name nothing proxies, without displacing any name something
+    # does.
+    routed: dict[str, str] = {}
+    resolved: dict[str, str] = {}
     # Every address each name resolves to, so who can reach it can be derived
     # rather than recorded. Collected here because this is the one pass that
     # already reads every enabled declaration.
@@ -682,9 +722,11 @@ def _declarations():
                 claim
             )
             if origin:
-                origins.setdefault(hostname, origin)
+                rank = resolved if provider.answers else routed
+                rank.setdefault(hostname, origin)
             answers.setdefault(hostname, []).extend(resolves_to)
 
+    origins = {**resolved, **routed}
     aliases = _aliases(declared, origins)
     alias_claims: dict[str, list[tuple[str, Claim]]] = {}
     for alias, target in aliases.items():

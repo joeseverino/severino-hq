@@ -185,7 +185,32 @@ class ServiceCompositionTests(TestCase):
         service = find_service("app.example.com")
 
         self.assertFalse(facet(service, "proxy").present)
-        self.assertIsNone(service.origin)
+
+    def test_disabling_the_ingress_leaves_the_name_still_pointed_somewhere(self):
+        """Losing the proxy is not the name forgetting where it was sent.
+
+        This assertion used to read ``assertIsNone(service.origin)``, in the
+        same test as the one above. It passed for a reason that was never the
+        point being made: only an ingress declared an origin, so removing the
+        ingress removed the last thing that could name one.
+
+        The DNS record was always still there, still reconciled, still pointing
+        this name at a machine HQ knows by name. Reporting nothing was not
+        caution -- it was HQ declining to read a declaration it holds. What is
+        true with the proxy disabled is that requests still arrive at app-host
+        and nothing there answers them, and those are two facts rather than the
+        absence of one.
+
+        The facet is what went away, and the test above says so on its own.
+        """
+
+        self._wire()
+        ManagedResource.objects.filter(key="app-proxy").update(enabled=False)
+
+        service = find_service("app.example.com")
+
+        self.assertEqual(service.origin.host, "app-host")
+        self.assertFalse(service.origin.external)
 
 
 class OriginResolutionTests(TestCase):
@@ -236,6 +261,46 @@ class OriginResolutionTests(TestCase):
 
         self.assertFalse(service.origin.known)
         self.assertIn("cannot match to any machine", " ".join(service.faults))
+
+    def _rewrite(self, answer="10.0.0.10"):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": answer},
+            )
+        )
+
+    def test_a_record_with_no_ingress_names_where_the_name_is_sent(self):
+        """A rewrite pointing at a machine is a statement of where it is served.
+
+        Nothing proxies this name, so nothing else in HQ is in a position to say
+        -- and the page said "nothing supplies this" about a name whose entire
+        configuration is an instruction to send it to a machine HQ sweeps,
+        credentials and installs certificates on.
+        """
+
+        self._rewrite()
+
+        origin = find_service("app.example.com").origin
+
+        self.assertEqual(origin.host, "app-host")
+        self.assertFalse(origin.external)
+
+    def test_an_ingress_outranks_the_record_that_points_at_it(self):
+        """Both name an origin, and they mean different things by it.
+
+        The record says where the name goes, which for a proxied name is the
+        proxy. The proxy says where the request is finally served. Filled in
+        whichever order the rows came back, the record would have described ten
+        proxied names as being served by the proxy box itself.
+        """
+
+        self._rewrite(answer="10.0.0.9")
+        origin = self._proxy().origin
+
+        self.assertEqual(origin.address, "10.0.0.10:8000")
+        self.assertEqual(origin.container, "web")
 
 
 class WiringFaultTests(TestCase):

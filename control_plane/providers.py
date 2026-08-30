@@ -1286,6 +1286,17 @@ class ProviderResolutionContext:
     # resource is asking -- a target's name belongs to one certificate, and the
     # rest are named after themselves.
     resource_key: str = ""
+    # ``connection_ref -> hostnames observed landing on that connection's
+    # machine``. Passed in for the same reason the targets are: this module
+    # states what a certificate installs and must not be the thing that queries
+    # a sweep to find out.
+    #
+    # Every site that resolves a spec has to supply it, including the one that
+    # fingerprints desired state. Resolution that differs between the two is a
+    # generation that advances every time it is computed -- the certificate
+    # would queue itself forever, each run disagreeing with the last about what
+    # it had asked for.
+    names_at: Callable[[str], tuple[str, ...]] | None = None
 
 
 def _delivery_target(
@@ -1306,23 +1317,51 @@ def _consumer_at(
     certificate_key: str,
     certificate_name: str,
     domains: list[str],
+    names_at: Callable[[str], tuple[str, ...]] | None = None,
 ) -> dict[str, Any]:
     """One certificate's declaration of how it arrives at one target.
 
     The name is the target's own only for the certificate that owns it. Any
     other certificate installed there is named after itself, or the second
     would land on top of the first.
+
+    Which names to check at that target is derived, not typed. It used to be
+    typed: a proxy discovered its own covered hosts through its API and every
+    other kind of target carried a hand-written list, so a name added to the
+    estate became a verified consumer only if somebody also remembered to add
+    it here. One did not get remembered, and the result was a certificate page
+    listing one name on a host serving two -- while the *service* page for the
+    missing one showed the certificate correctly, because that side asks which
+    names the certificate covers rather than which names were written down.
+
+    Two answers to one question is the whole defect, so this asks the question
+    once: a name is a consumer at this target when the certificate covers it and
+    it is observed landing on that target's machine. Both halves are things HQ
+    already reconciles. The declared list stays and is unioned in, because a
+    target may legitimately serve a name no sweep can see -- it is now an
+    addition to the derivation rather than the entirety of it.
+
+    Derivation only proposes. Each name is still probed at the target and
+    matched on fingerprint by the controller, so a name derived wrongly shows up
+    as a mismatch rather than as a false claim of coverage.
     """
 
     kind = target["kind"]
     owns_the_name = bool(certificate_key) and (
         target.get("certificate_resource") == certificate_key
     )
+    covered = set(domains)
+    landing = names_at(target["connection_ref"]) if names_at else ()
     consumer = {
         "kind": kind,
         "connection_ref": target["connection_ref"],
         "name": target["name"] if owns_the_name else f"{certificate_name}-{kind}",
-        "verify_domains": list(target.get("verify_domains") or []),
+        "verify_domains": sorted(
+            {
+                *(target.get("verify_domains") or []),
+                *(name for name in landing if certificate_covers(name, covered)),
+            }
+        ),
     }
     if kind == "caddy":
         consumer["certificate_directory"] = target["certificate_directory"]
@@ -1335,7 +1374,6 @@ def _consumer_at(
         # for; otherwise every non-wildcard name it covers, since shared hosting
         # takes one certificate per name.
         declared = list(target.get("install_domains") or []) if owns_the_name else []
-        covered = set(domains)
         consumer["install_domains"] = declared or [
             domain
             for domain in domains
@@ -1362,6 +1400,7 @@ def _resolve_tls(
                 certificate_key=context.resource_key,
                 certificate_name=authored["certificate_name"],
                 domains=domains,
+                names_at=context.names_at,
             )
             for connection_ref in authored["install_on"]
         ],
@@ -1606,6 +1645,32 @@ def _dns_record_origin(spec: dict[str, Any]) -> str:
     if record_type is None or not record_type.declares_service:
         return ""
     return str(spec.get("content", "")).strip()
+
+
+def _rewrite_origin(spec: dict[str, Any]) -> str:
+    """Where a rewrite sends the name, for the same reason a record does.
+
+    The note on ``_dns_record_origin`` above says an internal name is routed by
+    a proxy, so the proxy declares the origin and the rewrite need not. That
+    holds for every internal name the proxy actually fronts, and for no other:
+    a rewrite pointing straight at a box that is not the proxy is the whole
+    statement of where that name is served, and HQ was not reading it. The
+    result was a service page reporting "nothing supplies this" for a name
+    answering over TLS from a machine HQ sweeps, holds a credential for, and
+    installs certificates on.
+
+    Which is the same bug that note describes, one provider over. So the answer
+    is the same: the record that points somewhere is a statement of origin.
+    Precedence keeps it from displacing a proxy -- see ``_declarations``, where
+    a routed origin outranks a resolved one -- and this stays a fallback for the
+    names nothing else routes.
+
+    The answer itself, not a second reading of the spec, so a rewrite cannot
+    resolve one way and originate another.
+    """
+
+    answer = _rewrite_answers(spec)
+    return answer[0] if answer else ""
 
 
 def _dns_record_value(spec: dict[str, Any]) -> str:
@@ -2499,6 +2564,7 @@ _PROVIDERS = (
         hostnames=_rewrite_hostnames,
         seed=_rewrite_seed,
         answers=_rewrite_answers,
+        origin=_rewrite_origin,
         from_record=_rewrite_from_record,
         sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
         readout=_rewrite_readout,

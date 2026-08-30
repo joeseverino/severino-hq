@@ -27,6 +27,55 @@ class ControllerReport:
     message: str = ""
 
 
+def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
+    """Mark the places a certificate was just verified at as observed.
+
+    A delivery target is the one declaration nothing could ever confirm. No
+    sweep reports one -- how a place takes a certificate is not something any
+    provider volunteers, which is exactly why it has to be stated -- so
+    ``confirm_observed`` skips it, and "last confirmed" read *never* for as long
+    as the target existed. On a board, permanently unconfirmable and simply
+    unchecked look identical, and every target was being shown as the latter.
+
+    It was never unobserved. Reconciling the certificate opens a connection to
+    each target, asks what it is serving and matches the fingerprint against
+    what HQ issued -- a stronger check than any sweep performs. The answer was
+    thrown away because it came back under the certificate's name rather than
+    the target's.
+
+    Joined on the connection each consumer names rather than on the consumer
+    name itself. That name belongs to the certificate: a target holding a second
+    certificate is named after *that* certificate there, so matching by name
+    would confirm the wrong row or silently confirm nothing.
+    """
+
+    from control_plane.providers import DELIVERY_TARGET_KIND, UPLOADED_CERTIFICATE_KIND
+
+    if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
+        return
+    verified = {
+        str(item.get("consumer", ""))
+        for item in (status or {}).get("consumers", ())
+        if item.get("consumer")
+    }
+    if not verified:
+        return
+    from .infrastructure import resolved_spec
+
+    reached = {
+        consumer.get("connection_ref")
+        for consumer in resolved_spec(resource).get("consumers", ())
+        if consumer.get("name") in verified and consumer.get("connection_ref")
+    }
+    if not reached:
+        return
+    now = timezone.now()
+    for target in ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND):
+        if target.spec.get("connection_ref") in reached:
+            target.last_observed_at = now
+            target.save(update_fields=("last_observed_at", "updated_at"))
+
+
 def _assert_public_status(value: Any, path: str = "status") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -387,6 +436,8 @@ def report_operation(
     else:
         resource_fields = ("conditions", "updated_at")
     resource.save(update_fields=resource_fields)
+    if report.success:
+        _confirm_delivery_targets(resource, report.status)
 
     if report.success and operation.action == OperationRequest.Action.DELETE:
         # The declaration outlived the thing it described. Keeping it would put
