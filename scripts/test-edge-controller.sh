@@ -26,3 +26,25 @@ tar -C "${new_dir}" -cf - fullchain.pem privkey.pem | \
 
 test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256)" = \
     "${expected_fingerprint}"
+
+# The read-only arm. Stubbed at `docker`, because what is being checked is that
+# the operation is allowlisted and passes the adapted config through untouched
+# -- not that Caddy adapts a Caddyfile, which is Caddy's own test to run.
+cat >"${bin_dir}/docker" <<'EOF'
+#!/bin/sh
+printf '%s' '{"apps":{"http":{"servers":{"srv0":{"routes":[]}}}}}'
+EOF
+chmod +x "${bin_dir}/docker"
+
+routes="$(env PATH="${bin_dir}:${PATH}" \
+    deploy/targets/severino-hq-edge-controller routes)"
+test "${routes}" = '{"apps":{"http":{"servers":{"srv0":{"routes":[]}}}}}'
+
+# And anything not named is still refused.
+if env PATH="${bin_dir}:${PATH}" \
+    deploy/targets/severino-hq-edge-controller rm-rf >/dev/null 2>&1; then
+    echo "edge controller ran an operation it does not allowlist" >&2
+    exit 1
+fi
+
+echo "Edge controller deploy, routes, and refusal all behave."

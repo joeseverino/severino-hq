@@ -827,6 +827,88 @@ class AdGuardRewriteSpec(ProviderModel):
     )
 
 
+class CaddyRouteSpec(ProviderModel):
+    """One name an edge Caddy serves, and what it hands the request to.
+
+    Observed, never authored, and locked for the same reason a container is:
+    the route lives in a Caddyfile that HQ has never seen and must not pretend
+    to own. Declaring one here says "this is mine to watch", and there is
+    nothing for a reconcile to converge toward.
+
+    It exists because the only ingress HQ could describe was a proxy, and the
+    edge does not run one. Every name served from that box reported "nothing
+    supplies this" on its own page while answering over TLS -- from a machine
+    HQ sweeps, holds a credential for, and installs the certificate on. The
+    knowledge was one `ssh` away the whole time.
+    """
+
+    connection_ref: str = Field(
+        default="",
+        max_length=160,
+        title="Caddy",
+        description="The credential that reaches the host this route is served from.",
+    )
+    domain: str = Field(
+        min_length=1,
+        max_length=253,
+        title="Hostname",
+        description="The name this route answers for.",
+    )
+    upstream: str = Field(
+        default="",
+        max_length=253,
+        title="Hands off to",
+        description="Where Caddy sends the request -- a container and port, usually.",
+    )
+
+
+def _caddy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
+    return (spec["domain"],)
+
+
+def _caddy_origin(spec: dict[str, Any]) -> str:
+    """Where the request goes after Caddy, when Caddy says.
+
+    A route that terminates in Caddy itself -- a redirect, a static file, a
+    status page it writes -- hands off to nothing, and an empty origin is the
+    honest answer rather than pointing the name back at the proxy in front of
+    it.
+    """
+
+    return str(spec.get("upstream", "") or "").strip()
+
+
+def _caddy_identity(spec: dict[str, Any]) -> tuple[str, ...]:
+    """One route per name per host, which is what Caddy itself enforces."""
+
+    return (
+        str(spec.get("connection_ref", "") or ""),
+        normalized_hostname(str(spec.get("domain", "") or "")),
+    )
+
+
+def _caddy_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "connection_ref": str(record.get("connection_ref", "") or ""),
+        "domain": str(record.get("domain", "") or ""),
+        "upstream": str(record.get("upstream", "") or ""),
+    }
+
+
+def _caddy_key_hint(spec: dict[str, Any]) -> str:
+    return f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
+
+
+def _caddy_readout(
+    spec: dict[str, Any], status: dict[str, Any]
+) -> tuple[tuple[str, str, str], ...]:
+    upstream = str(spec.get("upstream", "") or "")
+    return (
+        ("Served by", "", f"caddy on {spec.get('connection_ref', '') or 'the edge'}"),
+        ("Hands off to", "", upstream or "Caddy answers this itself"),
+    )
+
+
 @dataclass(frozen=True)
 class DNSRecordType:
     """One record type, and everything the rest of HQ needs to know about it.
@@ -2568,6 +2650,26 @@ _PROVIDERS = (
             f"Certificates stop being installed on {spec.get('name', 'this target')}, "
             "and any that name it can no longer be resolved at all."
         ),
+    ),
+    ProviderSpec(
+        "caddy.route",
+        "A name an edge Caddy already serves. Found by asking it, not declared.",
+        CaddyRouteSpec,
+        label="Caddy route",
+        connection_providers=("ssh",),
+        declaration_only=True,
+        facet="proxy",
+        hostnames=_caddy_hostnames,
+        origin=_caddy_origin,
+        identity=_caddy_identity,
+        from_record=_caddy_from_record,
+        key_hint=_caddy_key_hint,
+        readout=_caddy_readout,
+        sample_record={
+            "connection_ref": "an-edge",
+            "domain": "app.example.com",
+            "upstream": "app:8080",
+        },
     ),
     ProviderSpec(
         "adguard.rewrite",

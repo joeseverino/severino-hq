@@ -1577,6 +1577,104 @@ def list_adguard() -> list[dict[str, Any]]:
     ]
 
 
+def _caddy_upstreams(node: Any) -> list[str]:
+    """Every address a handler tree eventually forwards to.
+
+    Walked rather than indexed, because Caddy nests. A route's handlers are a
+    list, a ``subroute`` handler contains its own routes, each of those has
+    handlers again, and the depth depends on how the Caddyfile was written --
+    an ``handle_path`` block, a matcher, a ``route`` directive all add a level.
+    Reaching for a fixed path would read the estate that exists today and miss
+    the one that exists after the next edit.
+
+    So this looks for the shape it needs anywhere below the node it is given,
+    and ignores everything else. A route that serves a file, writes a response
+    or redirects has no upstream at all, which is a real answer.
+    """
+
+    found: list[str] = []
+    if isinstance(node, dict):
+        if node.get("handler") == "reverse_proxy":
+            for upstream in node.get("upstreams") or ():
+                dial = str((upstream or {}).get("dial", "") or "").strip()
+                if dial:
+                    found.append(dial)
+        for value in node.values():
+            found.extend(_caddy_upstreams(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_caddy_upstreams(item))
+    return found
+
+
+def _caddy_routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
+    """One record per name this Caddy answers for.
+
+    A route can match several names and a server can hold several routes, so
+    the record is per name rather than per route -- the rest of HQ joins on a
+    hostname, and a row carrying three of them joins to nothing.
+
+    A route with no host matcher is Caddy's catch-all. It answers for anything
+    that reaches it, which is not a hostname and must not be recorded as one.
+    """
+
+    servers = (
+        ((config or {}).get("apps") or {}).get("http") or {}
+    ).get("servers") or {}
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for server in servers.values():
+        for route in (server or {}).get("routes") or ():
+            hosts = [
+                str(host).strip().lower().rstrip(".")
+                for match in (route or {}).get("match") or ()
+                for host in (match or {}).get("host") or ()
+                if str(host).strip()
+            ]
+            if not hosts:
+                continue
+            upstreams = _caddy_upstreams(route.get("handle"))
+            for host in hosts:
+                # First wins. Caddy evaluates routes in order and the first
+                # terminal match answers, so a later route for the same name is
+                # what the earlier one shadows.
+                found.setdefault(
+                    (connection_ref, host),
+                    {
+                        "connection_ref": connection_ref,
+                        "domain": host,
+                        "upstream": upstreams[0] if len(upstreams) == 1 else "",
+                    },
+                )
+    return list(found.values())
+
+
+def list_caddy_routes() -> list[dict[str, Any]]:
+    """What every reachable edge is serving, asked of the edge itself.
+
+    Every SSH connection is tried, because which of them fronts a Caddy is not
+    something to write down here -- one that does not answers with a refusal and
+    is skipped, and an edge added later is swept without this learning its name.
+
+    One unreachable host does not fail the sweep. The others still have
+    something true to say, and a provider that reports nothing because one of
+    its endpoints was down is how a whole facet blinks out during a reboot.
+    """
+
+    found: list[dict[str, Any]] = []
+    for connection_ref in ssh_connection_refs():
+        try:
+            payload = _ssh(connection_ref, "routes")
+        except (ProviderError, OSError, ValueError):
+            continue
+        try:
+            config = json.loads(payload)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(config, dict):
+            found.extend(_caddy_routes(config, connection_ref))
+    return found
+
+
 def list_npm() -> list[dict[str, Any]]:
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
@@ -3523,6 +3621,7 @@ def _ports_worth_asking() -> tuple[int, ...]:
 
 PROVIDER_INVENTORY = {
     "adguard.rewrite": list_adguard,
+    "caddy.route": list_caddy_routes,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,

@@ -15,6 +15,22 @@ case "${operation}" in
     snapshot)
         exec tar -C "${cert_dir}" -cf - fullchain.pem privkey.pem
         ;;
+    routes)
+        # What this edge actually serves, so HQ stops having to be told. The
+        # names here answer over TLS from a box HQ sweeps, holds a credential
+        # for and installs certificates on -- and every service page for one of
+        # them read "nothing supplies this", because the only ingress HQ could
+        # describe was a proxy this box does not run.
+        #
+        # Adapted rather than read: a Caddyfile is a syntax, and the JSON it
+        # adapts to is the structure Caddy itself works from. Deploy reloads
+        # from this same file, so it is also what is running.
+        #
+        # Emitted whole and parsed by HQ. Parsing it here would put the one part
+        # of this likely to need changing on a host that takes a root install to
+        # update, while the repository keeps the half that never moves.
+        exec docker exec caddy caddy adapt --config /etc/caddy/Caddyfile
+        ;;
     deploy)
         work="$(mktemp -d /tmp/severino-hq-cert.XXXXXX)"
         archive="$(mktemp /tmp/severino-hq-certificate.XXXXXX.tar)"

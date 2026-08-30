@@ -13,6 +13,14 @@
         }
       }
     },
+    "caddy.route": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "A Caddy route lives in a Caddyfile HQ has never seen. HQ watches what the edge serves; the file that decides it is not HQ's to write."
+        }
+      }
+    },
     "cloudflare.dns_record": {
       "actions": {
         "reconcile": {
@@ -41,6 +49,14 @@
         }
       }
     },
+    "network": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "A network entry says what a range is and who reaches it. Nothing converges toward that -- HQ cannot make a subnet exist, and the addresses inside one are found by sweeping whatever answers there."
+        }
+      }
+    },
     "npm.proxy_host": {
       "actions": {
         "reconcile": {
@@ -50,6 +66,14 @@
         "delete": {
           "mode": "apply",
           "automatic": false
+        }
+      }
+    },
+    "pki.authority": {
+      "actions": {
+        "reconcile": {
+          "mode": "locked",
+          "reason": "An authority is recorded, not reconciled. The one that matters most is kept offline precisely so nothing can reach it, and a controller that could converge toward it would be the thing that control exists to prevent."
         }
       }
     },
@@ -146,22 +170,6 @@
         "delete": {
           "mode": "apply",
           "automatic": false
-        }
-      }
-    },
-    "network": {
-      "actions": {
-        "reconcile": {
-          "mode": "locked",
-          "reason": "A network entry says what a range is and who reaches it. Nothing converges toward that -- HQ cannot make a subnet exist, and the addresses inside one are found by sweeping whatever answers there."
-        }
-      }
-    },
-    "pki.authority": {
-      "actions": {
-        "reconcile": {
-          "mode": "locked",
-          "reason": "An authority is recorded, not reconciled. The one that matters most is kept offline precisely so nothing can reach it, and a controller that could converge toward it would be the thing that control exists to prevent."
         }
       }
     }

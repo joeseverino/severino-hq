@@ -2583,3 +2583,246 @@ class _Answer:
 
     def __exit__(self, *exc):
         return False
+
+
+ADAPTED_CADDY = {
+    "apps": {
+        "http": {
+            "servers": {
+                "srv0": {
+                    "listen": [":443"],
+                    "routes": [
+                        {
+                            "match": [{"host": ["status.example.com"]}],
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {"dial": "uptime-kuma:3001"}
+                                                    ],
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                            "terminal": True,
+                        },
+                        {
+                            "match": [{"host": ["health.example.com"]}],
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "static_response",
+                                                    "body": "ok",
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                            "terminal": True,
+                        },
+                    ],
+                }
+            }
+        }
+    }
+}
+
+
+class CaddyRouteSweepTests(TestCase):
+    """What the edge serves, read out of the config Caddy itself runs on.
+
+    The names here answer over TLS from a box HQ sweeps, holds a credential for
+    and installs the certificate on -- and every one of their service pages
+    read "nothing supplies this", because the only ingress HQ could describe was
+    a proxy this box does not run.
+    """
+
+    def _routes(self, config):
+        return {
+            record["domain"]: record["upstream"]
+            for record in providers._caddy_routes(config, "an-edge")
+        }
+
+    def test_a_proxied_name_carries_the_container_it_hands_off_to(self):
+        self.assertEqual(
+            self._routes(ADAPTED_CADDY)["status.example.com"], "uptime-kuma:3001"
+        )
+
+    def test_a_name_caddy_answers_itself_has_no_upstream(self):
+        """A redirect or a static response forwards nowhere, and that is a fact."""
+
+        self.assertEqual(self._routes(ADAPTED_CADDY)["health.example.com"], "")
+
+    def test_the_upstream_is_found_however_deeply_it_is_nested(self):
+        """Caddy nests by how the Caddyfile was written, not by a fixed depth."""
+
+        deep = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [{"host": ["deep.example.com"]}],
+                                    "handle": [
+                                        {
+                                            "handler": "subroute",
+                                            "routes": [
+                                                {
+                                                    "handle": [
+                                                        {
+                                                            "handler": "subroute",
+                                                            "routes": [
+                                                                {
+                                                                    "handle": [
+                                                                        {
+                                                                            "handler": "reverse_proxy",
+                                                                            "upstreams": [
+                                                                                {
+                                                                                    "dial": "app:8080"
+                                                                                }
+                                                                            ],
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ],
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(self._routes(deep)["deep.example.com"], "app:8080")
+
+    def test_a_route_matching_no_host_is_not_a_hostname(self):
+        """Caddy's catch-all answers for anything, which is not a name."""
+
+        catch_all = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [{"dial": "app:8080"}],
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(providers._caddy_routes(catch_all, "an-edge"), [])
+
+    def test_one_route_serving_several_names_becomes_one_record_each(self):
+        """The rest of HQ joins on a hostname; a row holding three joins to none."""
+
+        shared = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [
+                                        {
+                                            "host": [
+                                                "one.example.com",
+                                                "two.example.com",
+                                            ]
+                                        }
+                                    ],
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [{"dial": "app:8080"}],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(
+            self._routes(shared),
+            {"one.example.com": "app:8080", "two.example.com": "app:8080"},
+        )
+
+    def test_a_balanced_route_names_no_single_upstream(self):
+        """Two backends is not one answer, and a guess reads as a fifth fact."""
+
+        balanced = {
+            "apps": {
+                "http": {
+                    "servers": {
+                        "srv0": {
+                            "routes": [
+                                {
+                                    "match": [{"host": ["ha.example.com"]}],
+                                    "handle": [
+                                        {
+                                            "handler": "reverse_proxy",
+                                            "upstreams": [
+                                                {"dial": "a:8080"},
+                                                {"dial": "b:8080"},
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(self._routes(balanced)["ha.example.com"], "")
+
+    def test_an_edge_that_refuses_the_operation_is_skipped_not_fatal(self):
+        """Most SSH hosts are not an edge, and one down host is not a blackout."""
+
+        with mock.patch.object(
+            providers, "ssh_connection_refs", return_value=("a-box", "an-edge")
+        ), mock.patch.object(
+            providers,
+            "_ssh",
+            side_effect=[
+                providers.ProviderError("denied"),
+                json.dumps(ADAPTED_CADDY).encode(),
+            ],
+        ):
+            found = providers.list_caddy_routes()
+
+        self.assertEqual(
+            sorted(record["domain"] for record in found),
+            ["health.example.com", "status.example.com"],
+        )
