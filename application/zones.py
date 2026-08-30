@@ -231,6 +231,7 @@ ZONE_INSIGHTS: tuple[str, ...] = (
     "application.zone_insights:email",
     "application.zone_insights:leftover_challenges",
     "application.zone_insights:posture",
+    "application.zone_insights:registration",
 )
 
 

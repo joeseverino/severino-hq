@@ -2217,6 +2217,40 @@ ZONE_POSTURE_SETTINGS = (
 )
 
 
+def _registrar_domains() -> dict[str, dict[str, Any]]:
+    """What the registrar holds for every domain on the account, by name.
+
+    Read from Cloudflare rather than from RDAP, which was the first attempt.
+    RDAP is public and needs no credential, and it can only ever answer *when* a
+    domain expires. The registrar knows whether it will renew itself -- and that
+    is the fact worth acting on. A domain three months out with auto-renew on is
+    a date; the same domain with auto-renew off is an outage with a countdown,
+    and nothing else in HQ would know the difference.
+
+    The account credential already carries the registration surface, so this
+    costs no new secret. A refusal leaves the map empty and the zones report
+    their records as before.
+    """
+
+    try:
+        account = _analytics_account()
+        domains = _cloudflare_api_list(f"/accounts/{account}/registrar/domains")
+    except (ProviderError, OSError, ValueError):
+        return {}
+    found: dict[str, dict[str, Any]] = {}
+    for domain in domains:
+        name = str(domain.get("name", "")).strip().lower().rstrip(".")
+        if not name:
+            continue
+        found[name] = {
+            "expires_at": str(domain.get("expires_at", ""))[:10],
+            "auto_renew": bool(domain.get("auto_renew")),
+            "locked": bool(domain.get("locked")),
+            "registrar": "Cloudflare",
+        }
+    return found
+
+
 def _cloudflare_zone_posture(zone_id: str) -> dict[str, str]:
     """How a zone answers over TLS, read through the credential that can see it.
 
@@ -2258,6 +2292,9 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
     """
 
     connection_ref = _required(connection_prefix("cloudflare_dns"), "CONNECTION_REF")
+    # Read once for the whole sweep rather than once per zone: it is one list
+    # for the account, and asking per zone would be four calls for one answer.
+    registrars = _registrar_domains()
     return [
         {
             "zone": zone["name"],
@@ -2265,6 +2302,9 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
             "status": zone.get("status", ""),
             "plan": (zone.get("plan") or {}).get("name", ""),
             "posture": _cloudflare_zone_posture(str(zone.get("id", ""))),
+            "registration": registrars.get(
+                str(zone.get("name", "")).strip().lower().rstrip("."), {}
+            ),
         }
         for zone in _cloudflare_zones()
         if zone.get("name")

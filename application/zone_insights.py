@@ -357,3 +357,48 @@ def posture(zone) -> ZoneInsight | None:
         value=label or "Unknown",
         detail=" ".join(detail),
     )
+
+
+def registration(zone) -> ZoneInsight | None:
+    """When this domain stops being yours, and whether it renews itself.
+
+    Read from the registrar rather than from RDAP. RDAP is public and needs no
+    credential and can only ever say *when* -- and a date on its own is a
+    calendar entry. Whether it renews itself is the half that decides whether
+    anyone needs to do anything, and only the registrar knows it.
+
+    The one fact on this page no other provider HQ talks to can supply.
+    Cloudflare serves a zone happily whether or not the registration behind it
+    is about to lapse.
+    """
+
+    from datetime import datetime, timezone
+
+    from control_plane.models import ProviderInventory
+
+    wanted = zone.zone.strip().lower().rstrip(".")
+    found: dict[str, object] = {}
+    for snapshot in ProviderInventory.objects.filter(kind="cloudflare.zone"):
+        for record in snapshot.records:
+            if str(record.get("zone", "")).strip().lower().rstrip(".") == wanted:
+                found = dict(record.get("registration") or {})
+    expires = str(found.get("expires_at", ""))
+    if not expires:
+        return None
+    try:
+        when = datetime.fromisoformat(expires).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    renews = bool(found.get("auto_renew"))
+    days = (when - datetime.now(timezone.utc)).days
+    return ZoneInsight(
+        label="Registration",
+        value=expiry_phrase(when.isoformat()),
+        detail=(
+            "Renews itself at the registrar."
+            if renews
+            else "Auto-renew is off, so this has to be renewed by hand."
+        ),
+        # Only when both halves are true. A date alone is a calendar entry.
+        concern=days <= 90 and not renews,
+    )

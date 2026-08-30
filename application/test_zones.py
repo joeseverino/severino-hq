@@ -2099,3 +2099,64 @@ class TLSPostureInsightTests(TestCase):
         from .zone_insights import posture
 
         self.assertIsNone(posture(self._zone()))
+
+
+class DomainRegistrationInsightTests(TestCase):
+    """When a domain stops being yours, and whether it renews itself.
+
+    The one fact about a domain no other credential here can supply. HQ renews
+    the certificate, reconciles the records and serves the names inside it, and
+    none of that survives the registration lapsing -- Cloudflare will serve a
+    zone perfectly for a domain about to stop being yours.
+    """
+
+    def _zone(self, registration=None):
+        from django.utils import timezone
+        from control_plane.models import ProviderInventory
+        from .zones import Zone
+
+        record = {"zone": "example.com", "connection_ref": "a-dns"}
+        if registration is not None:
+            record["registration"] = registration
+        ProviderInventory.objects.update_or_create(
+            kind="cloudflare.zone",
+            defaults={"records": [record], "observed_at": timezone.now()},
+        )
+        return Zone(zone="example.com", connection_ref="a-dns")
+
+    def _soon(self, days):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        return (timezone.now() + timedelta(days=days)).date().isoformat()
+
+    def test_a_domain_that_will_not_renew_itself_is_a_concern(self):
+        from .zone_insights import registration
+
+        found = registration(
+            self._zone({"expires_at": self._soon(40), "auto_renew": False})
+        )
+
+        self.assertTrue(found.concern)
+        self.assertIn("has to be renewed by hand", found.detail)
+
+    def test_the_same_date_with_auto_renew_on_is_not(self):
+        """A date on its own is a calendar entry, not something to act on.
+
+        Every domain expires every year. Flagging that would put four findings
+        in the queue permanently and teach the operator to ignore the card.
+        """
+
+        from .zone_insights import registration
+
+        found = registration(
+            self._zone({"expires_at": self._soon(40), "auto_renew": True})
+        )
+
+        self.assertFalse(found.concern)
+        self.assertIn("Renews itself", found.detail)
+
+    def test_a_domain_the_registrar_did_not_answer_for_says_nothing(self):
+        from .zone_insights import registration
+
+        self.assertIsNone(registration(self._zone()))
