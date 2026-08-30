@@ -252,11 +252,27 @@ answering. That is a claim about the row, so it reads under it.
     Served by <strong>{{ service.origin.operator }}</strong> from
     <code>{{ service.origin.address }}</code>.
   {% elif service.origin.known %}
-    Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
-    <code>{{ service.origin.address }}</code>.
-    {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
+    {% comment %}
+    Two sentences, because there are two ways HQ knows. An ingress forwards
+    somewhere; a record just says the name answers there. Written only the first
+    way, a name with no ingress at all was told "ingress forwards to …" directly
+    beneath its own Ingress card reading "Not declared".
+    {% endcomment %}
+    {% if service.origin.routed %}
+      Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
+      <code>{{ service.origin.address }}</code>.
+      {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
+    {% else %}
+      Served from <strong>{{ service.origin.label }}</strong> — this name answers at
+      <code>{{ service.origin.address }}</code>.
+      {% if not service.origin.container %}The record names a machine rather than a port, so HQ cannot tell which container answers.{% endif %}
+    {% endif %}
   {% else %}
-    Ingress forwards to <code>{{ service.origin.address }}</code>, which
+    {% if service.origin.routed %}
+      Ingress forwards to <code>{{ service.origin.address }}</code>, which
+    {% else %}
+      This name answers at <code>{{ service.origin.address }}</code>, which
+    {% endif %}
     <strong>HQ cannot match to any machine it knows</strong>. Add it to a
     machine's addresses if it is one.
   {% endif %}

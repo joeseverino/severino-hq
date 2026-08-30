@@ -30,7 +30,7 @@ from .inventory import (
     unmanaged,
     unmanaged_services,
 )
-from .inventory import record_inventory
+from .inventory import confirm_observed, record_inventory
 from .sweep import record_sweep
 from .infrastructure import NotFoundError
 from .security import cli_principal
@@ -606,6 +606,84 @@ def _adoptable():
 
     return [(kind, p) for kind, p in sorted(PROVIDERS.items())
             if p.from_record and p.sample_record]
+
+
+class DriftIsSaidOutLoudTests(TestCase):
+    """A sweep that finds a contradiction has to report one.
+
+    Drift was skipped in silence: not confirmed, and not described. The
+    declaration kept the condition from the last time it *did* match -- "the
+    last sweep found this exactly as declared" -- beside a timestamp slowly
+    ageing away from it, so the page read Healthy and In sync while the world
+    said the opposite. Five tailnet devices sat like that for days.
+    """
+
+    def setUp(self):
+        self.resource = ManagedResource.objects.create(
+            key="a-device",
+            kind="tailscale.device",
+            spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
+        )
+        self.resource.conditions = [
+            {
+                "type": "Ready",
+                "status": True,
+                "reason": "Observed",
+                "message": "The last sweep found this exactly as declared.",
+            }
+        ]
+        self.resource.save(update_fields=["conditions"])
+
+    def _sweep(self, key_expiry_disabled):
+        # A sweep reports the expiry date, and its *absence* is the setting --
+        # see `_tailnet_device_from_record`. Built from the record shape rather
+        # than from the spec shape, so this exercises the same mapping the real
+        # sweep goes through.
+        confirm_observed(
+            {
+                "tailscale.device": {
+                    "ok": True,
+                    "records": [
+                        {
+                            "name": "a-box",
+                            "key_expires": (
+                                "" if key_expiry_disabled else "2027-01-01T00:00:00Z"
+                            ),
+                            "tags": [],
+                        }
+                    ],
+                }
+            }
+        )
+        self.resource.refresh_from_db()
+
+    def test_the_message_names_the_field_and_both_values(self):
+        self._sweep(True)
+
+        self.assertIn(
+            "key_expiry_disabled is True, where this asks for False",
+            self.resource.conditions[0]["message"],
+        )
+
+    def test_the_summary_card_reports_the_drift_too(self):
+        """A condition nothing reads is a condition that was not written.
+
+        Asserted through `resource_health`, because that is what the page shows
+        above the conditions table -- and a false `Ready` is not the opposite of
+        a true one, it is a row that surface skips entirely.
+        """
+
+        from application.infrastructure import resource_health
+
+        self._sweep(True)
+
+        self.assertEqual(resource_health(self.resource)["state"], "drifted")
+
+    def test_a_matching_record_is_still_confirmed(self):
+        self._sweep(False)
+
+        self.assertIsNotNone(self.resource.last_observed_at)
+        self.assertEqual(self.resource.conditions[0]["reason"], "Observed")
 
 
 class UnobservableFieldTests(TestCase):

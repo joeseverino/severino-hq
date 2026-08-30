@@ -303,10 +303,15 @@ def _record_drift(
     about.
     """
 
+    # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
+    # is a fact that holds, and ``resource_health`` reads only the ones that do
+    # -- so a false Ready is not the opposite of a true one, it is a condition
+    # nothing looks at, and the summary card went on saying "not observed" above
+    # a table that described the drift in full.
     resource.conditions = [
         {
-            "type": "Ready",
-            "status": False,
+            "type": "Drifted",
+            "status": True,
             "reason": "Drifted",
             "message": "The last sweep found "
             + "; ".join(

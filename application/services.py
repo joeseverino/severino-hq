@@ -32,7 +32,7 @@ earlier sketch of this:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -381,6 +381,17 @@ class Origin:
     address: str
     host: str = ""
     container: str = ""
+    # Whether an ingress declared this, or a record merely pointed here. Both
+    # are origins and they are not the same sentence: an ingress *forwards* to
+    # somewhere, while a record says the name simply answers there. Rendered
+    # from one wording, a name with no ingress at all was told that its ingress
+    # forwards somewhere -- directly beneath its own Ingress card reading "not
+    # declared", on the same page.
+    #
+    # Defaults true because every origin that existed before a record could
+    # declare one came from an ingress, and because the sentence it selects is
+    # the one those origins have always been rendered with.
+    routed: bool = True
 
     @property
     def external(self) -> bool:
@@ -744,7 +755,22 @@ def _declarations():
             for claim in claims:
                 alias_claims.setdefault(target, []).append((alias, claim))
         origins.pop(alias, None)
-    return declared, covering, origins, aliases, alias_claims, machines, answers
+    # ``routed`` rides along so a page can say *how* it knows. An origin an
+    # ingress declared and an origin a record implied are both "where this is
+    # served" and read as different sentences: one forwards, the other simply
+    # answers there. Told apart by looking for a port -- which is how the first
+    # attempt did it -- a portless ingress becomes a record and a record with a
+    # port becomes an ingress, so the provenance is carried rather than guessed.
+    return (
+        declared,
+        covering,
+        origins,
+        aliases,
+        alias_claims,
+        machines,
+        answers,
+        frozenset(routed),
+    )
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:
@@ -824,7 +850,9 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     a property of a Service -- it is a fact about a person, not a hostname.
     """
 
-    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
+    (
+        declared, covering, origins, aliases, alias_claims, machines, answers, routed
+    ) = _declarations()
     estate = _Estate.read(covering, machines)
     by_target: dict[str, list[str]] = {}
     for alias, target in sorted(aliases.items()):
@@ -838,6 +866,7 @@ def _service_catalog(favorites: tuple[str, ...]) -> tuple[Service, ...]:
             tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())),
             tuple(answers.get(hostname, ())),
+            hostname in routed,
         )
         for hostname, facets in sorted(declared.items())
     )
@@ -887,7 +916,7 @@ def alias_target(hostname: str) -> str:
     """
 
     wanted = _normalise(hostname)
-    _, _, _, aliases, _, _, _ = _declarations()
+    _, _, _, aliases, _, _, _, _ = _declarations()
     return aliases.get(wanted, "")
 
 
@@ -907,7 +936,9 @@ def service_or_prospect(hostname: str) -> Service:
     """
 
     wanted = _normalise(hostname)
-    declared, covering, origins, aliases, alias_claims, machines, answers = _declarations()
+    (
+        declared, covering, origins, aliases, alias_claims, machines, answers, routed
+    ) = _declarations()
     return _assemble(
         wanted,
         declared.get(wanted, {}),
@@ -916,6 +947,7 @@ def service_or_prospect(hostname: str) -> Service:
         tuple(alias for alias, target in sorted(aliases.items()) if target == wanted),
         tuple(alias_claims.get(wanted, ())),
         answers=tuple(answers.get(wanted, ())),
+        routed=wanted in routed,
     )
 
 
@@ -1073,13 +1105,18 @@ def _assemble(
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, "Claim"], ...] = (),
     answers: tuple[str, ...] = (),
+    routed: bool = True,
 ) -> Service:
     covering = estate.covering
     projects = estate.projects
     machines = estate.machines
     containers = estate.containers
     in_use = estate.in_use
-    origin = _locate(origin_address, machines, estate.at) if origin_address else None
+    origin = (
+        replace(_locate(origin_address, machines, estate.at), routed=routed)
+        if origin_address
+        else None
+    )
     context = name_context(hostname)
     # A container declaration names a machine and a container, not a hostname,
     # so nothing tied it to the name it serves -- the runtime card knew the

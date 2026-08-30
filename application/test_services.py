@@ -303,6 +303,64 @@ class OriginResolutionTests(TestCase):
         self.assertEqual(origin.container, "web")
 
 
+class OriginProvenanceTests(TestCase):
+    """A page must not describe an ingress a name does not have."""
+
+    def setUp(self):
+        declare_world(containers=True)
+
+    def _page(self, hostname="app.example.com"):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        user = get_user_model().objects.create_user(
+            username="op", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(user)
+        return self.client.get(
+            reverse("control_plane:service", kwargs={"hostname": hostname})
+        )
+
+    def test_a_name_with_only_a_record_is_not_told_an_ingress_forwards_it(self):
+        """The sentence used to come from the only branch there was.
+
+        A record-derived origin rendered as "ingress forwards to 10.0.0.10"
+        directly beneath an Ingress card reading "Not declared" -- one page
+        contradicting itself in two adjacent elements.
+        """
+
+        healthy(
+            ManagedResource.objects.create(
+                key="app-rewrite",
+                kind="adguard.rewrite",
+                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+            )
+        )
+
+        response = self._page()
+
+        self.assertContains(response, "this name answers at")
+        self.assertNotContains(response, "ingress forwards to")
+
+    def test_a_proxied_name_still_says_its_ingress_forwards(self):
+        healthy(
+            ManagedResource.objects.create(
+                key="app-proxy",
+                kind="npm.proxy_host",
+                spec={
+                    "domain_names": ["app.example.com"],
+                    "forward_scheme": "http",
+                    "forward_host": "10.0.0.10",
+                    "forward_port": 6379,
+                },
+            )
+        )
+
+        response = self._page()
+
+        self.assertContains(response, "ingress forwards to")
+
+
 class SurfacesAgreeTests(TestCase):
     """The service page and the machine board must name the same machine.
 
