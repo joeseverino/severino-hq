@@ -73,6 +73,14 @@ class TopologyNode:
     # is unverified rather than agreed -- the difference between "we set this"
     # and "we checked this".
     unconfirmed_fields: tuple[str, ...] = ()
+    # Facts a sweep reports that no declaration carries, as flat strings. A
+    # findings rule derives from this topology and is not allowed a query of its
+    # own -- the suite measures that -- so an observation a rule has to reason
+    # about has to arrive here or not at all.
+    #
+    # Flat and small on purpose. This is not a second copy of the inventory; it
+    # is the handful of observed facts that decide something.
+    facts: tuple[tuple[str, str], ...] = ()
     # What this name actually served, where anything measures it. ``None`` is
     # not zero: nobody visited and nobody looked are opposite findings, and the
     # second is the one worth acting on -- a target HQ reaches, and nothing
@@ -500,6 +508,56 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
             )
 
 
+def _observed_facts(
+    resources: tuple[Any, ...],
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    """The observed facts a rule needs, keyed by the node they belong to.
+
+    Only a domain's registration today. It lives in the zone sweep rather than
+    in any declaration -- nobody writes down when a domain expires, the
+    registrar is asked -- so a rule reasoning about it has no other way to see
+    it, and rules may not query.
+    """
+
+    from control_plane.models import ProviderInventory
+
+    from .zones import ZONE_KIND
+
+    # Nothing at all when the estate holds no zone, the way `_measure` pays
+    # nothing when nothing is named like a host. This runs inside the shared
+    # projection that the dashboard budget measures, so a deployment with no
+    # domains must not buy a query to learn it has none.
+    zones = tuple(
+        resource for resource in resources if resource.kind == ZONE_KIND
+    )
+    if not zones:
+        return {}
+
+    registrations: dict[str, dict[str, Any]] = {}
+    for snapshot in ProviderInventory.objects.filter(kind=ZONE_KIND):
+        for record in snapshot.records:
+            name = str(record.get("zone", "")).strip().lower().rstrip(".")
+            registration = record.get("registration") or {}
+            if name and registration:
+                registrations[name] = registration
+    if not registrations:
+        return {}
+
+    found: dict[str, tuple[tuple[str, str], ...]] = {}
+    for resource in zones:
+        name = str(resource.spec.get("zone", "")).strip().lower().rstrip(".")
+        registration = registrations.get(name)
+        if not registration:
+            continue
+        found[f"resource:{resource.key}"] = (
+            ("domain", name),
+            ("expires_at", str(registration.get("expires_at", ""))),
+            ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
+            ("registrar", str(registration.get("registrar", ""))),
+        )
+    return found
+
+
 def derive_topology(*, principal: Principal) -> Topology:
     """Derive the complete topology visible to ``principal`` from live state."""
 
@@ -533,6 +591,12 @@ def derive_topology(*, principal: Principal) -> Topology:
             unconfirmed_fields=_unconfirmed(resource, provider),
             actions=_resource_actions(resource, principal),
         )
+
+    # Observed facts that decide a finding, attached to the resource they are
+    # about. Read once here rather than by a rule, which must cost no queries.
+    for resource_id, extra in _observed_facts(resources).items():
+        if resource_id in nodes:
+            nodes[resource_id] = replace(nodes[resource_id], facts=extra)
 
     groups = connection_catalog(principal=principal)
     _connection_nodes(groups, nodes, edges, principal)
