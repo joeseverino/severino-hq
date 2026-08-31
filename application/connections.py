@@ -150,11 +150,11 @@ class ConnectionSpec:
     secret_store: str = ""
     # What this family's emptiness means, in its own words. One sentence about
     # a controller not having reported was shown for all of them, which is true
-    # of the controller family and misleading for every self-emitting one: D1
-    # and Plaid are empty in development because no credential is configured,
-    # and sending the reader to wait for a sweep points them at the wrong
-    # thing. The default suits a family that emits from configuration; a family
-    # fed by controller reports overrides it to say so.
+    # of the controller family and misleading for every self-emitting one: a
+    # credential-backed family is empty in development because no credential is
+    # configured, and sending the reader to wait for a sweep points them at the
+    # wrong thing. The default suits a family that emits from configuration; a
+    # family fed by controller reports overrides it to say so.
     empty_message: str = (
         "No credential for this is configured in this environment. "
         "Connections appear once one is present."
