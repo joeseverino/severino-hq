@@ -2925,18 +2925,60 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-control-good { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ok) 65%, transparent); }
 .connection-control-attention,
 .connection-control-serious { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 65%, transparent); }
-.connection-group { margin-bottom: var(--layout-gap); }
-.connection-group-head { align-items: flex-start; }
-.connection-group-head h2 { margin-bottom: var(--space-1); }
-.connection-group-head p { margin: 0; }
-.connection-group-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+/* Nothing here restates .data-table. The primitive already gives padding,
+   alignment, a sticky head, break-word cells and .tight-col; this is only what
+   is particular to connections. Cells keep their own display -- grid or flex on
+   a td drops it out of table layout and stacks the row into one column. */
+.connection-table .muted,
+.connection-table code { font-size: var(--text-2xs); }
+.connection-row-kind {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--text-3xs);
 }
-.connection-table td { vertical-align: top; }
+.connection-ability-chip {
+  display: inline-block;
+  background: var(--bg-tint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px var(--space-3);
+  margin: 0 var(--space-2) var(--space-2) 0;
+  font-size: var(--text-3xs);
+}
+.connection-ability-chip.is-unavailable { color: var(--muted); border-style: dashed; }
+.connection-ability-more { font-size: var(--text-3xs); color: var(--muted); }
+/* Each destination is its own target, so two commands on one row cannot read
+   as one link. */
+.connection-next > a,
+.connection-next > .btn { display: inline-block; margin: 0 var(--space-2) var(--space-2) 0; }
+.connection-next > a:last-child,
+.connection-next > .btn:last-child { margin-bottom: 0; }
+.connection-next .connection-direct-action { font-size: var(--text-2xs); }
+.connection-topology-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.connection-topology-link:hover { color: var(--accent); border-color: var(--accent); }
+.connection-row-empty td { background: var(--bg-tint); }
+
+/* Family destinations once each, rather than a banner above every group. */
+.connection-family-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line);
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-2xs);
+}
+.connection-legend-item { display: flex; align-items: baseline; gap: var(--space-2); }
+.connection-legend-item strong { color: var(--ink); }
 .connection-ability { margin-bottom: var(--space-2); }
 .connection-ability summary { cursor: pointer; }
 .connection-ability[open] { display: grid; gap: var(--space-1); }
@@ -4249,8 +4291,6 @@ textarea.code {
   .table-scroll .data-table th { overflow-wrap: normal; }
   .discovery-link { display: grid; gap: var(--space-3); }
   .discovery-meta { justify-content: flex-start; max-width: 100%; }
-  .connection-group-head { display: grid; gap: var(--space-5); }
-  .connection-group-actions { justify-content: flex-start; }
   .connection-security-story { display: grid; padding: var(--space-8) var(--space-8) var(--space-7); }
   .connection-security-story .button { width: max-content; }
   .connection-security-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }

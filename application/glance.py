@@ -59,19 +59,20 @@ def connection_specs():
             required_capability=Capability.READ,
             instance_provider=instances,
             abilities=(
+                # No capability: no command performs these. The dashboard reads
+                # the forecast as it renders, so the family's own routes are
+                # where a reader goes.
                 ConnectionAbility(
                     "nws.hourly_forecast",
                     "Hourly forecast",
-                    "Refresh the current conditions and hourly forecast.",
-                    effect="infrastructure_change",
-                    capability="infrastructure.controller.refresh",
+                    "Current conditions and the hourly forecast for the point.",
+                    effect="read",
                 ),
                 ConnectionAbility(
                     "nws.active_alerts",
                     "Active weather alerts",
-                    "Refresh active National Weather Service alerts for this point.",
-                    effect="infrastructure_change",
-                    capability="infrastructure.controller.refresh",
+                    "Active National Weather Service alerts for the point.",
+                    effect="read",
                 ),
             ),
             web_route="dashboard",

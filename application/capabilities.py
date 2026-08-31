@@ -113,6 +113,10 @@ class CapabilitySpec:
     target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
     execution_notes: tuple[str, ...] = ()
     target_initial_fields: tuple[str, ...] = ()
+    # The connection families this command reaches. An ability names the
+    # capability that performs it; this is the other half of that claim, so it
+    # can be checked from both ends. Empty means undeclared and stays legal.
+    exercises: tuple[str, ...] = ()
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -181,6 +185,7 @@ _SPECS = (
             "Ask GitHub for current push metadata using the configured connection.",
             "Persist the observed timestamp and attribute the refresh to this operator.",
         ),
+        exercises=("hq.github",),
     ),
     CapabilitySpec(
         "contact.submissions.list",
@@ -195,6 +200,7 @@ _SPECS = (
             "Read submissions through the configured D1 connection.",
             "Return only the requested bounded result set.",
         ),
+        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "contact.submission.review",
@@ -212,6 +218,7 @@ _SPECS = (
             "Write the review fields through the configured D1 connection.",
             "Record the attributed change in HQ's audit log.",
         ),
+        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "contact.submission.delete",
@@ -229,6 +236,7 @@ _SPECS = (
             "Delete the record through the configured D1 connection.",
             "Treat an already-absent record as a successful retry and audit the change.",
         ),
+        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "asset.create",
@@ -462,6 +470,7 @@ _SPECS = (
             "Ring the credential-free controller doorbell; no provider authority enters the web process.",
             "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
         ),
+        exercises=("infrastructure.controllers",),
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -528,6 +537,7 @@ _SPECS = (
             "Return the records as the resolver gave them, with no TTL: this "
             "provider reports a constant, which is not a measurement.",
         ),
+        exercises=("hq.public_registries",),
     ),
     CapabilitySpec(
         "lookup.address",
@@ -544,6 +554,7 @@ _SPECS = (
             "Read the RDAP allocation, which the registry publishes and which "
             "carries the company. Either registry may fail without the other.",
         ),
+        exercises=("hq.public_registries",),
     ),
 )
 

@@ -148,13 +148,9 @@ class ConnectionSpec:
     setup_route: str = ""
     documentation_url: str = ""
     secret_store: str = ""
-    # What this family's emptiness means, in its own words. One sentence about
-    # a controller not having reported was shown for all of them, which is true
-    # of the controller family and misleading for every self-emitting one: a
-    # credential-backed family is empty in development because no credential is
-    # configured, and sending the reader to wait for a sweep points them at the
-    # wrong thing. The default suits a family that emits from configuration; a
-    # family fed by controller reports overrides it to say so.
+    # What this family's emptiness means, in its own words. The default suits a
+    # family that emits from configuration; one fed by controller reports
+    # overrides it to say so.
     empty_message: str = (
         "No credential for this is configured in this environment. "
         "Connections appear once one is present."
@@ -183,6 +179,10 @@ class ConnectionAbilityState:
     action: ActionLink | None = None
 
 
+# Actions derived from the family's spec rather than from one connection.
+FAMILY_ACTIONS = frozenset({"open", "manage", "set_up", "documentation"})
+
+
 @dataclass(frozen=True)
 class ConnectionView:
     instance: ConnectionInstance
@@ -201,6 +201,20 @@ class ConnectionView:
             action
             for action in self.actions
             if action.name != "open" and not action.recommended
+        )
+
+    @property
+    def row_actions(self) -> tuple[ActionLink, ...]:
+        """What is true of this connection rather than of its whole family.
+
+        Documentation, Manage and Set up come from the family's spec, so every
+        instance repeats them: twelve rows carrying the same two links to the
+        same two pages. They belong once, beside the family, and what stays on
+        the row is the command this connection can run and its topology node.
+        """
+
+        return tuple(
+            action for action in self.other_actions if action.name not in FAMILY_ACTIONS
         )
 
 
@@ -637,6 +651,10 @@ def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...
 def _ability_state(
     ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
+    # At call time: capabilities compose plugin specs, which may declare
+    # connections. Same reason action_links defers it.
+    from .capabilities import capability_label
+
     if ability.required_scopes and not instance.scopes_known:
         return ConnectionAbilityState(ability, None)
     missing = tuple(
@@ -649,10 +667,13 @@ def _ability_state(
         ability,
         available,
         missing,
+        # Named for the command it opens, not for the ability that led here.
+        # Several abilities are commonly performed by one command, and a button
+        # labelled with the ability lands on a page that says something else.
         capability_action_link(
             ability.capability,
             ability.effect,
-            f"Use {ability.label}",
+            capability_label(ability.capability),
             principal=principal,
         )
         if available
@@ -674,10 +695,14 @@ def _connection_view(
     relationship = connection_relationship_link(spec.name, instance.id)
     if relationship is not None:
         actions = (*actions, relationship)
-    actions = (
-        *actions,
-        *(state.action for state in states if state.action is not None),
-    )
+    # One row action per destination. Four vehicle abilities are performed by
+    # one refresh command, which offered the same URL four times under four
+    # labels.
+    seen: set[str] = {action.url for action in actions}
+    for state in states:
+        if state.action is not None and state.action.url not in seen:
+            seen.add(state.action.url)
+            actions = (*actions, state.action)
     return ConnectionView(
         instance,
         states,
