@@ -130,7 +130,7 @@ def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
             name, identifier, principal=mcp_principal(), strict=True
         )
     except ResourceNotFound as exc:
-        raise NotFoundError(str(exc)) from exc
+        raise NotFoundError(exc.reason) from exc
 
 
 def audit_registry() -> dict[str, Any]:

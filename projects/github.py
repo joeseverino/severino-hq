@@ -11,6 +11,14 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.urls import reverse
 
+from application.connection_contracts import (
+    ConnectionAbility,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
+from application.security import Capability
+
 
 class GitHubMetadataError(RuntimeError):
     """GitHub metadata could not be fetched or parsed."""
@@ -18,14 +26,6 @@ class GitHubMetadataError(RuntimeError):
 
 def connection_specs():
     """Emit the GitHub gateway's safe connection and executable process."""
-
-    from application.connections import (
-        ConnectionAbility,
-        ConnectionInstance,
-        ConnectionLink,
-        ConnectionSpec,
-    )
-    from application.security import Capability
 
     def instances():
         token_configured = bool(getattr(settings, "GITHUB_API_TOKEN", "").strip())

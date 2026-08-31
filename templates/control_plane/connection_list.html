@@ -70,7 +70,7 @@ they stay visible and stay in the same table.
               <strong>{{ connection.instance.label }}</strong>
               {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
               <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
-              {% for fact in connection.instance.facts %}<br><span class="muted">{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}</span>{% endfor %}
+              {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
             </td>
             {% comment %}
             A family earns a name only when it groups more than one connection.
@@ -86,11 +86,17 @@ they stay visible and stay in the same table.
               {% for state in connection.abilities|slice:":3" %}<span class="connection-ability-chip{% if state.missing_scopes %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{{ state.ability.label }}{% if state.missing_scopes %} <span class="connection-ability-state">Needs scope</span>{% endif %}</span>{% empty %}<span class="muted">—</span>{% endfor %}
               {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }}</span>{% endif %}
             </td>
+            {% comment %}
+            Inline and wrapping rather than one line per link: four stacked
+            links made this the tallest cell in the table, and slicing to one
+            hid a machine the connection genuinely reaches.
+            {% endcomment %}
             <td class="optional-col">
-              {% for link in connection.instance.targets|slice:":2" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}<br>{% endfor %}
-              {% if connection.instance.targets|length > 2 %}<span class="muted">+{{ connection.instance.targets|length|add:"-2" }} more reached</span>{% endif %}
-              {% for link in connection.instance.dependencies|slice:":2" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}<br>{% endfor %}
-              {% if connection.instance.dependencies|length > 2 %}<span class="muted">+{{ connection.instance.dependencies|length|add:"-2" }} more</span>{% endif %}
+              {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
+              {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
+              {% for link in connection.instance.dependencies|slice:":3" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
             </td>
             <td class="tight-col">

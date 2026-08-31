@@ -1,0 +1,20 @@
+name: "Severino HQ"
+
+# The full quality suite, minus one rule this codebase cannot satisfy.
+queries:
+  - uses: security-and-quality
+
+query-filters:
+  # py/cyclic-import counts an import wherever it sits, including inside a
+  # function. Deferring an import to call time is how this codebase breaks
+  # registry cycles on purpose -- capabilities compose plugin specs, which may
+  # themselves declare connections -- and each of those deliberate deferrals is
+  # commented where it sits. The rule reports them anyway, at note severity,
+  # with no form the code can take that would satisfy it short of re-siting
+  # settled design.
+  #
+  # Dismissing them one at a time does not hold: a dismissal is tied to an
+  # alert, and moving the line raises a new one. Excluded here so the finding
+  # stops recurring, rather than being triaged forever.
+  - exclude:
+      id: py/cyclic-import

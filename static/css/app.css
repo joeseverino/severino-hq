@@ -1073,8 +1073,13 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    scrolls horizontally, so the honest answer is to keep the label whole. */
 .data-table .pill { white-space: nowrap; }
 /* Two links in one cell need to read as two. Separated by whitespace alone
-   they rendered as "Edit Remove" -- one control with a strange name. */
-.row-actions { display: inline-flex; gap: var(--space-6); white-space: nowrap; }
+   they rendered as "Edit Remove" -- one control with a strange name.
+   The class sits on a span in one place and on a td in two others, and a cell
+   given a flex display leaves table layout, so only the span gets the box and
+   the cells space their children directly. */
+.row-actions { white-space: nowrap; }
+span.row-actions { display: inline-flex; gap: var(--space-6); }
+td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, not <text> inside it.
 
@@ -2950,11 +2955,16 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-more { font-size: var(--text-3xs); color: var(--muted); }
 /* Each destination is its own target, so two commands on one row cannot read
    as one link. */
+/* Spacing only. Setting `display` here would be (0,1,1) and would silently
+   beat any single-class variant, which is what un-centred the icon. */
 .connection-next > a,
-.connection-next > .btn { display: inline-block; margin: 0 var(--space-2) var(--space-2) 0; }
+.connection-next > .btn { margin: 0 var(--space-2) var(--space-2) 0; }
 .connection-next > a:last-child,
 .connection-next > .btn:last-child { margin-bottom: 0; }
-.connection-next .connection-direct-action { font-size: var(--text-2xs); }
+.connection-next .connection-direct-action {
+  display: inline-block;
+  font-size: var(--text-2xs);
+}
 .connection-topology-link {
   display: inline-flex;
   align-items: center;

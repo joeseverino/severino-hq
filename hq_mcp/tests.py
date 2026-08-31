@@ -122,7 +122,7 @@ class ServiceTests(TestCase):
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
 
     def test_missing_object_uses_structured_service_error(self):
-        with self.assertRaisesRegex(services.NotFoundError, "was not found"):
+        with self.assertRaisesRegex(services.NotFoundError, "No 'assets' record"):
             services.get_asset("missing")
 
     def test_registry_audit_is_a_registered_read_tool(self):

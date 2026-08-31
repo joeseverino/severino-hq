@@ -24,16 +24,16 @@ import urllib.request
 
 from django.conf import settings
 
+from application.connection_contracts import (
+    ConnectionAbility,
+    ConnectionInstance,
+    ConnectionSpec,
+)
+from application.security import Capability
+
 
 def connection_specs():
     """Emit the keyless public registries used by lookup capabilities."""
-
-    from application.connections import (
-        ConnectionAbility,
-        ConnectionInstance,
-        ConnectionSpec,
-    )
-    from application.security import Capability
 
     def configured_instance(
         *, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]

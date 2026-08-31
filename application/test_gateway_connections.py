@@ -84,9 +84,13 @@ class GatewayConnectionTests(TestCase):
         nws = groups["hq.nws"]["instances"][0]
         self.assertEqual(nws["status_label"], "keyless")
         self.assertEqual(nws["targets"][0]["label"], "Dashboard weather")
+        # No command performs a weather read, so the abilities name none. They
+        # named the privileged controller refresh, which resolved and so passed
+        # every check, and rendered a button to wake the controller under the
+        # label "Active weather alerts".
         self.assertEqual(
             {ability["capability"] for ability in nws["abilities"]},
-            {"infrastructure.controller.refresh"},
+            {None},
         )
 
     def test_nws_discovery_is_query_free(self):

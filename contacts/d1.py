@@ -17,6 +17,15 @@ import urllib.request
 from django.conf import settings
 from django.urls import reverse
 
+from application.connection_contracts import (
+    ConnectionAbility,
+    ConnectionFact,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
+from application.security import Capability
+
 
 class D1Error(RuntimeError):
     """Raised when D1 is unconfigured, unreachable, or returns an error."""
@@ -25,45 +34,41 @@ class D1Error(RuntimeError):
 def connection_specs():
     """Emit D1's configured authority and its registered HQ processes."""
 
-    from application.connections import (
-        ConnectionAbility,
-        ConnectionFact,
-        ConnectionInstance,
-        ConnectionLink,
-        ConnectionSpec,
-    )
-    from application.security import Capability
-
     def instances():
         account = getattr(settings, "CLOUDFLARE_ACCOUNT_ID", "").strip()
         database = getattr(settings, "CLOUDFLARE_D1_DATABASE_ID", "").strip()
         token = getattr(settings, "CLOUDFLARE_API_TOKEN", "").strip()
-        if not account or not database or not token:
-            return ()
-        return (
-            ConnectionInstance(
-                id="cloudflare-d1-contacts",
-                label="Cloudflare D1 contacts",
-                kind="cloudflare_d1",
-                status="good",
-                status_label="configured",
-                detail=(
-                    "Account, database, and token configured; external health is "
-                    "established only when a registered operation runs."
-                ),
-                endpoint=(
-                    f"https://api.cloudflare.com/client/v4/accounts/{account}"
-                    f"/d1/database/{database}"
-                ),
-                ability_names=(
-                    "cloudflare.d1_submissions_read",
-                    "cloudflare.d1_submission_review",
-                    "cloudflare.d1_submission_delete",
-                ),
-                targets=(ConnectionLink("Contact submissions", reverse("contacts:list")),),
-                facts=(ConnectionFact("Database", database),),
-            ),
-        )
+        # One collection built and returned once: an unconfigured environment
+        # differs in length, never in the shape a caller unpacks.
+        emitted = []
+        if account and database and token:
+            emitted.append(
+                ConnectionInstance(
+                    id="cloudflare-d1-contacts",
+                    label="Cloudflare D1 contacts",
+                    kind="cloudflare_d1",
+                    status="good",
+                    status_label="configured",
+                    detail=(
+                        "Account, database, and token configured; external health is "
+                        "established only when a registered operation runs."
+                    ),
+                    endpoint=(
+                        f"https://api.cloudflare.com/client/v4/accounts/{account}"
+                        f"/d1/database/{database}"
+                    ),
+                    ability_names=(
+                        "cloudflare.d1_submissions_read",
+                        "cloudflare.d1_submission_review",
+                        "cloudflare.d1_submission_delete",
+                    ),
+                    targets=(
+                        ConnectionLink("Contact submissions", reverse("contacts:list")),
+                    ),
+                    facts=(ConnectionFact("Database", database),),
+                )
+            )
+        return tuple(emitted)
 
     return (
         ConnectionSpec(
