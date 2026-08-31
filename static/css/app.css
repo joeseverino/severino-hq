@@ -4299,7 +4299,10 @@ textarea.code {
    this file's tail is outside `@layer components` and unlayered styles win
    over every layer: from in there, no amount of specificity reaches this. */
 @media (max-width: 760px) {
-  .table-scroll .data-table { min-width: max-content; }
+  /* A stacking table is about to become blocks, so forcing it as wide as its
+     longest cell keeps nothing readable and made one table 14299px inside a
+     631px wrapper. */
+  .table-scroll .data-table:not(.stacks) { min-width: max-content; }
   .table-scroll .data-table td,
   .table-scroll .data-table th { overflow-wrap: normal; }
   .discovery-link { display: grid; gap: var(--space-3); }

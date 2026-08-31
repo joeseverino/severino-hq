@@ -52,7 +52,7 @@ they stay visible and stay in the same table.
 {% if connection_groups %}
 <section class="card connection-all">
   <div class="table-scroll">
-    <table class="data-table connection-table">
+    <table class="data-table stacks connection-table">
       <thead>
         <tr>
           <th>Connection</th>
@@ -66,7 +66,7 @@ they stay visible and stay in the same table.
         {% for group in connection_groups %}
           {% for connection in group.connections %}
           <tr>
-            <td>
+            <td data-label="Connection">
               <strong>{{ connection.instance.label }}</strong>
               {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
               <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
@@ -77,7 +77,7 @@ they stay visible and stay in the same table.
             A single-instance API is its own family, and printing "National
             Weather Service" beside "National Weather Service" says nothing.
             {% endcomment %}
-            <td>
+            <td data-label="Can do">
               {% comment %}
               Capped, because a controller credential governs a dozen kinds and
               a dozen chips made one row four hundred pixels tall. The count
@@ -91,7 +91,7 @@ they stay visible and stay in the same table.
             links made this the tallest cell in the table, and slicing to one
             hid a machine the connection genuinely reaches.
             {% endcomment %}
-            <td class="optional-col">
+            <td class="optional-col" data-label="Depends">
               {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
               {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
@@ -99,11 +99,11 @@ they stay visible and stay in the same table.
               {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
             </td>
-            <td class="tight-col">
+            <td class="tight-col" data-label="State">
               <span class="pill pill-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
               {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
             </td>
-            <td class="connection-next">
+            <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}
                 <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }} — {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
               {% endif %}
