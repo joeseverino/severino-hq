@@ -25,7 +25,15 @@ from expenses.models import Expense
 from projects.models import Project
 from receipts.models import Receipt
 
-from . import analytics, assets, infrastructure, projects, read_models, services
+from . import (
+    analytics,
+    assets,
+    contact_submissions,
+    infrastructure,
+    projects,
+    read_models,
+    services,
+)
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
 from .plugins import plugin_resource_specs, plugin_search_definitions
 from .search_contracts import SearchDefinition
@@ -95,6 +103,11 @@ class EmptyQuery(ResourceQuery):
     pass
 
 
+class ContactSubmissionQuery(BoundedQuery):
+    status: str = ""
+    query: str = ""
+
+
 @dataclass(frozen=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""
@@ -139,6 +152,19 @@ CORE_RESOURCE_SPECS = (
             title_field="name",
         ),
         web_route="projects:list",
+    ),
+    ResourceSpec(
+        "contact.submissions",
+        "Contact submissions",
+        "Contact requests held in Cloudflare D1 and reviewed through HQ.",
+        Capability.MANAGE_CONTACTS,
+        contact_submissions.list_contact_submissions,
+        ContactSubmissionQuery,
+        contact_submissions.get_contact_submission,
+        "id",
+        int,
+        not_found_errors=(contact_submissions.ContactSubmissionNotFound,),
+        web_route="contacts:list",
     ),
     ResourceSpec(
         "assets",
@@ -297,21 +323,33 @@ CORE_RESOURCE_SPECS = (
 )
 
 
-class UnknownResource(ValueError):
+class ResourceError(ValueError):
+    """Base for resource failures: ``reason`` is this module's own text.
+
+    Adapters answer a caller with ``reason``, never ``str(exc)`` -- a relayed
+    handler message can name internals the caller has no business seeing.
+    """
+
+    def __init__(self, reason: str = "", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class UnknownResource(ResourceError):
     pass
 
 
-class UnsupportedResourceOperation(ValueError):
+class UnsupportedResourceOperation(ResourceError):
     pass
 
 
-class InvalidResourceInput(ValueError):
+class InvalidResourceInput(ResourceError):
     def __init__(self, errors: list[dict[str, Any]]):
         super().__init__("Resource input did not match its schema.")
         self.errors = errors
 
 
-class ResourceNotFound(ValueError):
+class ResourceNotFound(ResourceError):
     pass
 
 
@@ -543,7 +581,11 @@ def get_resource(
     try:
         result = spec.detail_handler(parsed)
     except spec.not_found_errors as exc:
-        raise ResourceNotFound(str(exc)) from exc
+        # A provider declares these types; their text is written for the
+        # provider, not for a caller, so answer with this module's own.
+        raise ResourceNotFound(
+            f"No {name!r} record matches the requested identifier."
+        ) from exc
     if not isinstance(result, dict):
         raise RuntimeError(f"Resource {name!r} detail handler returned a non-object.")
     return result

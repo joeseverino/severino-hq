@@ -59,7 +59,7 @@ def _finance_spec() -> ConnectionSpec:
     instance = ConnectionInstance(
         "capital-one",
         "Capital One",
-        "plaid",
+        "aggregator",
         "good",
         "healthy",
         granted_scopes=("accounts:read",),
@@ -77,11 +77,23 @@ def _finance_spec() -> ConnectionSpec:
         abilities,
         setup_route="dashboard",
         management_route="dashboard",
-        secret_store="Plaid",
+        secret_store="Example Vault",
     )
 
 
 class ConnectionExecutionTests(TestCase):
+    def test_hyphenated_plugin_route_names_are_valid(self):
+        spec = replace(
+            _finance_spec(),
+            web_route="example:connection-list",
+            management_route="example:connection-list",
+        )
+
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=(spec,)
+        ):
+            self.assertIn(spec, connection_specs())
+
     def test_core_spec_derives_controller_abilities_and_safe_state(self):
         from django.utils import timezone
 
@@ -258,7 +270,7 @@ class ConnectionRegistrationTests(TestCase):
             for item in described["connections"]
             if item["name"] == "example.finance"
         )
-        self.assertEqual(finance["secret_store"], "Plaid")
+        self.assertEqual(finance["secret_store"], "Example Vault")
         self.assertEqual(
             finance["abilities"][1]["required_scopes"],
             ["transactions:read"],
@@ -576,7 +588,7 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Capital One")
         self.assertContains(response, "Sync transactions")
         self.assertContains(response, "Needs scope")
-        self.assertContains(response, "Secrets in Plaid")
+        self.assertContains(response, "Secrets in Example Vault")
         self.assertContains(response, "Security posture")
         self.assertContains(response, "Security controls and proof")
         self.assertContains(response, "External edge")

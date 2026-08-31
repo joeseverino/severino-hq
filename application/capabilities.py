@@ -13,6 +13,14 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
+from .contact_submissions import (
+    ContactDeleteCommand,
+    ContactListCommand,
+    ContactReviewCommand,
+    execute_contact_delete,
+    execute_contact_list,
+    execute_contact_review,
+)
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .contracts import DOTTED_NAME, EFFECTS
 from .deletion import (
@@ -47,7 +55,13 @@ from .lookup import (
     look_up_address,
     look_up_name,
 )
-from .projects import ProjectCommand, save_project, upsert_project
+from .projects import (
+    ProjectCommand,
+    ProjectRefreshCommand,
+    execute_project_refresh,
+    save_project,
+    upsert_project,
+)
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
@@ -99,6 +113,10 @@ class CapabilitySpec:
     target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
     execution_notes: tuple[str, ...] = ()
     target_initial_fields: tuple[str, ...] = ()
+    # The connection families this command reaches. An ability names the
+    # capability that performs it; this is the other half of that claim, so it
+    # can be checked from both ends. Empty means undeclared and stays legal.
+    exercises: tuple[str, ...] = ()
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -150,6 +168,75 @@ _SPECS = (
         "projects",
         target_label="Project slug",
         target_help="The project to update.",
+    ),
+    CapabilitySpec(
+        "project.refresh",
+        "Refresh a project's GitHub and published-content metadata.",
+        "remote_write",
+        Capability.WRITE_PROJECTS,
+        ProjectRefreshCommand,
+        execute_project_refresh,
+        "slug",
+        "projects",
+        target_label="Project slug",
+        target_help="The project whose external metadata to refresh.",
+        execution_notes=(
+            "Read the selected project's registered repository URL.",
+            "Ask GitHub for current push metadata using the configured connection.",
+            "Persist the observed timestamp and attribute the refresh to this operator.",
+        ),
+        exercises=("hq.github",),
+    ),
+    CapabilitySpec(
+        "contact.submissions.list",
+        "List contact submissions held in Cloudflare D1.",
+        "read",
+        Capability.MANAGE_CONTACTS,
+        ContactListCommand,
+        execute_contact_list,
+        subject_resource="contact.submissions",
+        execution_notes=(
+            "Validate the requested status and result bound locally.",
+            "Read submissions through the configured D1 connection.",
+            "Return only the requested bounded result set.",
+        ),
+        exercises=("hq.cloudflare_d1",),
+    ),
+    CapabilitySpec(
+        "contact.submission.review",
+        "Review and update one contact submission in Cloudflare D1.",
+        "remote_write",
+        Capability.MANAGE_CONTACTS,
+        ContactReviewCommand,
+        execute_contact_review,
+        "integer",
+        "contact.submissions",
+        target_label="Submission ID",
+        target_help="The contact submission to review.",
+        execution_notes=(
+            "Read the selected submission and validate its new review state.",
+            "Write the review fields through the configured D1 connection.",
+            "Record the attributed change in HQ's audit log.",
+        ),
+        exercises=("hq.cloudflare_d1",),
+    ),
+    CapabilitySpec(
+        "contact.submission.delete",
+        "Delete one explicitly confirmed contact submission from Cloudflare D1.",
+        "destructive",
+        Capability.MANAGE_CONTACTS,
+        ContactDeleteCommand,
+        execute_contact_delete,
+        "integer",
+        "contact.submissions",
+        target_label="Submission ID",
+        target_help="The contact submission to delete.",
+        execution_notes=(
+            "Require confirmation that exactly matches the selected submission ID.",
+            "Delete the record through the configured D1 connection.",
+            "Treat an already-absent record as a successful retry and audit the change.",
+        ),
+        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "asset.create",
@@ -383,6 +470,7 @@ _SPECS = (
             "Ring the credential-free controller doorbell; no provider authority enters the web process.",
             "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
         ),
+        exercises=("infrastructure.controllers",),
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -449,6 +537,7 @@ _SPECS = (
             "Return the records as the resolver gave them, with no TTL: this "
             "provider reports a constant, which is not a measurement.",
         ),
+        exercises=("hq.public_registries",),
     ),
     CapabilitySpec(
         "lookup.address",
@@ -465,6 +554,7 @@ _SPECS = (
             "Read the RDAP allocation, which the registry publishes and which "
             "carries the company. Either registry may fail without the other.",
         ),
+        exercises=("hq.public_registries",),
     ),
 )
 
@@ -680,13 +770,19 @@ def execute_capability(
     except _UnusableTarget:
         return _error("invalid_input", f"{name} requires a {spec.target_kind} target.")
     except AuthorizationError as exc:
-        return _error(exc.code, str(exc))
+        return _error(exc.code, exc.reason)
     except PydanticValidationError as exc:
         return _error("invalid_input", "Payload validation failed.", exc.errors())
     except DjangoValidationError as exc:
         details = getattr(exc, "message_dict", None) or exc.messages
         return _error("invalid_input", "Domain validation failed.", details)
-    except (ValueError, TypeError) as exc:
+    except TypeError:
+        # A handler called wrongly is HQ's bug, not the caller's business: a
+        # TypeError names arguments and signatures, so it never leaves here.
+        return _error("operation_failed", f"{name} could not be executed.")
+    except ValueError as exc:
+        # ValueError is the deliberate refusal channel: handlers raise it with
+        # a message written for the caller.
         return _error("operation_failed", str(exc))
 
 

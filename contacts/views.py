@@ -15,18 +15,19 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from application.security import safe_next
-from core.audit import record_event
-from core.models import AuditLog
+from application.contact_submissions import (
+    ContactDeleteCommand,
+    ContactReviewCommand,
+    execute_contact_delete,
+    execute_contact_review,
+)
+from application.security import safe_next, web_principal
 
 from .d1 import (
     D1Error,
-    delete_submission,
     get_submission,
     list_submissions,
-    set_status,
     status_counts,
-    update_submission,
 )
 from .forms import STATUS_CHOICES, ContactReviewForm
 
@@ -82,26 +83,18 @@ def contact_detail(request, pk: int):
         form = ContactReviewForm(request.POST)
         if form.is_valid():
             try:
-                update_submission(
-                    pk,
-                    form.cleaned_data["status"],
-                    form.cleaned_data["assigned_to"],
-                    form.cleaned_data["admin_notes"],
+                execute_contact_review(
+                    ContactReviewCommand(
+                        status=form.cleaned_data["status"],
+                        assigned_to=form.cleaned_data["assigned_to"],
+                        admin_notes=form.cleaned_data["admin_notes"],
+                    ),
+                    principal=web_principal(request.user),
+                    current_id=pk,
                 )
-            except D1Error as exc:
+            except (D1Error, ValueError) as exc:
                 messages.error(request, str(exc))
                 return redirect("contacts:detail", pk=pk)
-
-            record_event(
-                action=AuditLog.Action.UPDATED,
-                type_label="Contact submission",
-                message=(
-                    f"Reviewed contact submission #{pk} "
-                    f"({submission.get('email', '')}) — status "
-                    f"{form.cleaned_data['status']}"
-                ),
-                metadata={"id": pk, "status": form.cleaned_data["status"]},
-            )
             messages.success(request, f"Submission #{pk} updated.")
             return redirect("contacts:detail", pk=pk)
     else:
@@ -139,20 +132,18 @@ def contact_set_status(request, pk: int):
         if not submission:
             messages.error(request, f"Contact submission #{pk} was not found.")
             return redirect("contacts:list")
-        set_status(pk, status)
-    except D1Error as exc:
+        execute_contact_review(
+            ContactReviewCommand(
+                status=status,
+                assigned_to=submission.get("assigned_to") or "",
+                admin_notes=submission.get("admin_notes") or "",
+            ),
+            principal=web_principal(request.user),
+            current_id=pk,
+        )
+    except (D1Error, ValueError) as exc:
         messages.error(request, str(exc))
         return redirect(_safe_next(request))
-
-    record_event(
-        action=AuditLog.Action.UPDATED,
-        type_label="Contact submission",
-        message=(
-            f"Marked contact submission #{pk} "
-            f"({submission.get('email', '')}) {status}"
-        ),
-        metadata={"id": pk, "status": status},
-    )
     messages.success(request, f"Submission #{pk} marked {status}.")
     return redirect(_safe_next(request))
 
@@ -171,20 +162,14 @@ def contact_delete(request, pk: int):
 
     if request.method == "POST":
         try:
-            delete_submission(pk)
-        except D1Error as exc:
+            execute_contact_delete(
+                ContactDeleteCommand(confirm=str(pk)),
+                principal=web_principal(request.user),
+                current_id=pk,
+            )
+        except (D1Error, ValueError) as exc:
             messages.error(request, str(exc))
             return redirect("contacts:detail", pk=pk)
-
-        record_event(
-            action=AuditLog.Action.DELETED,
-            type_label="Contact submission",
-            message=(
-                f"Deleted contact submission #{pk} "
-                f"({submission.get('email', '')})"
-            ),
-            metadata={"id": pk},
-        )
         messages.success(request, f"Submission #{pk} deleted.")
         return redirect("contacts:list")
 

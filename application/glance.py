@@ -24,6 +24,64 @@ from .machines import machine_catalog
 from .security import Capability, Principal
 
 
+def connection_specs():
+    """Emit the keyless NWS boundary without spending a discovery query."""
+
+    from django.urls import reverse
+
+    from .connections import (
+        ConnectionAbility,
+        ConnectionInstance,
+        ConnectionLink,
+        ConnectionSpec,
+    )
+
+    def instances():
+        return (
+            ConnectionInstance(
+                id="national-weather-service",
+                label="National Weather Service",
+                kind="nws",
+                status="good",
+                status_label="keyless",
+                detail="Public forecasts and alerts; configured points refresh through HQ.",
+                endpoint="https://api.weather.gov",
+                ability_names=("nws.hourly_forecast", "nws.active_alerts"),
+                targets=(ConnectionLink("Dashboard weather", reverse("dashboard")),),
+            ),
+        )
+
+    return (
+        ConnectionSpec(
+            name="hq.nws",
+            label="National Weather Service",
+            summary="Keyless hourly forecasts and active alerts for the configured point.",
+            required_capability=Capability.READ,
+            instance_provider=instances,
+            abilities=(
+                # No capability: no command performs these. The dashboard reads
+                # the forecast as it renders, so the family's own routes are
+                # where a reader goes.
+                ConnectionAbility(
+                    "nws.hourly_forecast",
+                    "Hourly forecast",
+                    "Current conditions and the hourly forecast for the point.",
+                    effect="read",
+                ),
+                ConnectionAbility(
+                    "nws.active_alerts",
+                    "Active weather alerts",
+                    "Active National Weather Service alerts for the point.",
+                    effect="read",
+                ),
+            ),
+            web_route="dashboard",
+            management_route="dashboard_glance_settings",
+            documentation_url="https://www.weather.gov/documentation/services-web-api",
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class DashboardPanelSpec:
     id: str

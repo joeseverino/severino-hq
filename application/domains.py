@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Any, Iterable
 
+from django.utils.module_loading import import_string
+
 from .plugins import (
     NavigationItem,
     gather_attention,
@@ -72,6 +74,10 @@ class DomainDescriptor:
     # A section with nothing worth reporting returns none and simply does not
     # appear, which is how a dormant section stays out of the way.
     cards_provider: str = ""
+    # ``module:attribute`` returning this host domain's ConnectionSpecs. The
+    # gateway that owns an endpoint owns this declaration too; downstream
+    # surfaces never keep a second connector inventory.
+    connection_provider: str = ""
 
 
 @dataclass(frozen=True)
@@ -89,6 +95,7 @@ class Domain:
     navigation: tuple[NavigationItem, ...]
     attention_provider: str = ""
     cards_provider: str = ""
+    connection_provider: str = ""
 
     @property
     def bar_order(self) -> int:
@@ -116,6 +123,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # The one inline entry: no group, so it renders as a bare link at the
         # head of the bar rather than a dropdown of one.
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
+        connection_provider="application.glance:connection_specs",
     ),
     DomainDescriptor(
         id="hq.projects",
@@ -129,6 +137,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # queue as its largest entry and never moved. The number still shows,
         # on the projects card, as "N need output".
         cards_provider="application.sections:projects",
+        connection_provider="projects.github:connection_specs",
     ),
     DomainDescriptor(
         id="hq.docs",
@@ -172,6 +181,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             NavigationItem("Contacts", "contacts:list", "contacts", 112, "Web"),
         ),
         attention_provider="application.attention:contacts",
+        connection_provider="contacts.d1:connection_specs",
     ),
     DomainDescriptor(
         id="hq.zones",
@@ -289,6 +299,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        connection_provider="control_plane.dns_lookup:connection_specs",
     ),
     DomainDescriptor(
         id="hq.machines",
@@ -359,6 +370,7 @@ def host_domains() -> tuple[Domain, ...]:
             navigation=descriptor.navigation,
             attention_provider=descriptor.attention_provider,
             cards_provider=descriptor.cards_provider,
+            connection_provider=descriptor.connection_provider,
         )
         for descriptor in HOST_DOMAINS
     )
@@ -379,6 +391,7 @@ def extension_domains() -> tuple[Domain, ...]:
             navigation=plugin.navigation,
             attention_provider=plugin.attention_provider,
             cards_provider=plugin.dashboard_provider,
+            connection_provider=plugin.connection_provider,
         )
         for plugin in installed_plugins()
     )
@@ -394,6 +407,28 @@ def all_domains() -> tuple[Domain, ...]:
     return tuple(
         sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id)
     )
+
+
+def host_connection_specs() -> tuple[Any, ...]:
+    """Connection declarations emitted by the host gateways that own them.
+
+    Extensions cross a separate admission boundary and continue through the
+    plugin registry. Host domains use the same late-bound provider shape, so a
+    new gateway is registered once beside its domain instead of being copied
+    into the Connections workspace, Command Center, API, MCP, and topology.
+    """
+
+    emitted: list[Any] = []
+    for domain in host_domains():
+        if not domain.connection_provider:
+            continue
+        module, separator, attribute = domain.connection_provider.partition(":")
+        if not separator:
+            raise ValueError(
+                f"Connection provider {domain.connection_provider!r} must use module:attribute."
+            )
+        emitted.extend(import_string(f"{module}.{attribute}")())
+    return tuple(emitted)
 
 
 def domain_navigation() -> tuple[NavigationItem, ...]:

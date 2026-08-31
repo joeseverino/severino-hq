@@ -27,6 +27,7 @@ class Capability(StrEnum):
     WRITE_CONTENT = "write_content"
     WRITE_EXPENSES = "write_expenses"
     WRITE_RECEIPTS = "write_receipts"
+    MANAGE_CONTACTS = "manage_contacts"
     SYNC_DOCUMENTATION = "sync_documentation"
     WRITE_DOCUMENTATION = "write_documentation"
     PRUNE_DOCUMENTATION = "prune_documentation"

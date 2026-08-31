@@ -119,6 +119,33 @@ def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
                 id="hq_api.E007",
             )
         )
+    # E007 proves the capability exists; this proves it serves the family that
+    # named it. Undeclared `exercises` stays legal, so only a stated
+    # disagreement is an error.
+    capability_by_name = {spec.name: spec for spec in capabilities}
+    disagreements = sorted(
+        {
+            f"{spec.name} -> {ability.capability}"
+            for spec in connections
+            for ability in spec.abilities
+            if ability.capability
+            and (served := capability_by_name.get(ability.capability)) is not None
+            and served.exercises
+            and spec.name not in served.exercises
+        }
+    )
+    if disagreements:
+        errors.append(
+            Error(
+                "Connection abilities name capabilities that do not serve them: "
+                f"{', '.join(disagreements)}.",
+                hint=(
+                    "Either the ability names the wrong command, or the "
+                    "capability's `exercises` should include this family."
+                ),
+                id="hq_api.E010",
+            )
+        )
     unknown_ability_resources = sorted(
         {
             ability.subject_resource

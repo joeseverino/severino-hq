@@ -42,104 +42,126 @@
   {% if observed_at %}<span>Oldest reading {{ observed_at|timesince }} ago</span>{% endif %}
 </div>
 
-{% for group in connection_groups %}
-<section class="card connection-group">
-  <div class="section-head connection-group-head">
-    <div>
-      <h2>{{ group.spec.label }}</h2>
-      <p class="muted">{{ group.spec.summary }}</p>
-    </div>
-    <div class="connection-group-actions">
-      <span class="count">{{ group.connections|length }}</span>
-      {% if group.spec.secret_store %}<span class="scope-chip">Secrets in {{ group.spec.secret_store }}</span>{% endif %}
-      {% if group.spec.documentation_url %}<a class="button button-small" href="{{ group.spec.documentation_url }}">Documentation</a>{% endif %}
-      {% if group.spec.management_route %}<a class="button button-small" href="{% url group.spec.management_route %}">Manage</a>{% endif %}
-      {% if group.spec.setup_route %}<a class="button button-primary button-small" href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
-    </div>
-  </div>
-
+{% comment %}
+One table of every connection HQ has. The family is a column, not a band: a
+section per family meant seven headers, seven counts and seven sets of buttons
+for twelve rows, and a family holding one connection got the furniture of one
+holding twelve. Families with nothing configured keep a single muted row so
+they stay visible and stay in the same table.
+{% endcomment %}
+{% if connection_groups %}
+<section class="card connection-all">
   <div class="table-scroll">
-    <table class="data-table connection-table">
+    <table class="data-table stacks connection-table">
       <thead>
         <tr>
           <th>Connection</th>
-          <th>Kind</th>
           <th>Can do</th>
-          <th>Reaches</th>
-          <th>Used by</th>
-          <th>State</th>
+          <th class="optional-col">Depends</th>
+          <th class="tight-col">State</th>
           <th>Next</th>
         </tr>
       </thead>
       <tbody>
-        {% for connection in group.connections %}
-        <tr>
-          <td>
-            <strong>{{ connection.instance.label }}</strong>
-            {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
-            {% for fact in connection.instance.facts %}<br><span class="muted">{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}</span>{% endfor %}
-          </td>
-          <td><code>{{ connection.instance.kind }}</code></td>
-          <td>
-            {% for state in connection.abilities %}
-              <details class="connection-ability{% if state.missing_scopes %} is-unavailable{% endif %}">
-                <summary><strong>{{ state.ability.label }}</strong>{% if state.missing_scopes %} <span class="connection-ability-state">Needs scope</span>{% endif %}</summary>
-                <span class="muted">{{ state.ability.summary }}</span>
-                {% if state.ability.required_scopes %}
-                  <span class="muted">{% for scope in state.ability.required_scopes %}<code>{{ scope }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+        {% for group in connection_groups %}
+          {% for connection in group.connections %}
+          <tr>
+            <td data-label="Connection">
+              <strong>{{ connection.instance.label }}</strong>
+              {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
+              <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
+              {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+            </td>
+            {% comment %}
+            A family earns a name only when it groups more than one connection.
+            A single-instance API is its own family, and printing "National
+            Weather Service" beside "National Weather Service" says nothing.
+            {% endcomment %}
+            <td data-label="Can do">
+              {% comment %}
+              Capped, because a controller credential governs a dozen kinds and
+              a dozen chips made one row four hundred pixels tall. The count
+              carries the rest; the connection's own page carries the detail.
+              {% endcomment %}
+              {% for state in connection.abilities|slice:":3" %}<span class="connection-ability-chip{% if state.missing_scopes %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{{ state.ability.label }}{% if state.missing_scopes %} <span class="connection-ability-state">Needs scope</span>{% endif %}</span>{% empty %}<span class="muted">—</span>{% endfor %}
+              {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }}</span>{% endif %}
+            </td>
+            {% comment %}
+            Inline and wrapping rather than one line per link: four stacked
+            links made this the tallest cell in the table, and slicing to one
+            hid a machine the connection genuinely reaches.
+            {% endcomment %}
+            <td class="optional-col" data-label="Depends">
+              {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
+              {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
+              {% for link in connection.instance.dependencies|slice:":3" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
+              {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="tight-col" data-label="State">
+              <span class="pill pill-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
+              {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
+            </td>
+            <td class="connection-next" data-label="Next">
+              {% if connection.recommended_action %}
+                <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }} — {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
+              {% endif %}
+              {% for action in connection.row_actions %}
+                {% if action.name == "relationships" %}
+                  {# The topology node, as the glyph it opens rather than a sentence on every row. #}
+                  <a class="connection-topology-link" href="{{ action.url }}" title="{{ action.label }} — {{ action.reason }}" aria-label="{{ action.label }} — {{ action.reason }}">
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                      <circle cx="12" cy="4.5" r="2.4"/>
+                      <circle cx="5" cy="18" r="2.4"/>
+                      <circle cx="19" cy="18" r="2.4"/>
+                      <path d="M10.4 6.6 6.4 15.7M13.6 6.6l4 9.1M7.4 18h9.2"/>
+                    </svg>
+                  </a>
+                {% else %}
+                  <a class="connection-direct-action" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
                 {% endif %}
-              </details>
-            {% empty %}<span class="muted">No declared abilities</span>{% endfor %}
-            {% if connection.instance.scopes_known %}
-              <span class="connection-scope-summary muted">Granted: {% for scope in connection.instance.granted_scopes %}<code>{{ scope }}</code>{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</span>
-            {% endif %}
-          </td>
-          <td>
-            {% for link in connection.instance.targets %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
-          </td>
-          <td>
-            {% for link in connection.instance.dependencies|slice:":4" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
-            {% if connection.instance.dependencies|length > 4 %}
-              <details class="connection-more">
-                <summary>{{ connection.instance.dependencies|length|add:"-4" }} more</summary>
-                {% for link in connection.instance.dependencies|slice:"4:" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-              </details>
-            {% endif %}
-          </td>
-          <td>
-            <span class="pill pill-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
-            {% if connection.instance.detail %}<br><span class="muted">{{ connection.instance.detail }}</span>{% endif %}
-            {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
-          </td>
-          <td class="connection-next">
-            {% if connection.recommended_action %}
-              <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }} — {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
-              <span class="muted">{{ connection.recommended_action.reason }}</span>
-            {% endif %}
-            {% if connection.other_actions|length == 1 and not connection.recommended_action %}
-              {% for action in connection.other_actions %}<a class="connection-direct-action" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>{% endfor %}
-            {% elif connection.other_actions %}
-              <details class="connection-actions">
-                <summary>{% if connection.recommended_action %}Other paths{% else %}Available paths{% endif %}</summary>
-                <span>
-                  {% for action in connection.other_actions %}
-                    <a href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
-                  {% endfor %}
-                </span>
-              </details>
-            {% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="7">{% include "partials/_empty_state.html" with compact=True message="No controller has reported yet. Connections appear here automatically when their provider reports an instance." %}</td></tr>
+              {% endfor %}
+              {% if not connection.recommended_action and not connection.row_actions %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  {% comment %}
+  Families, once each. A family owns the secret store, the documentation and
+  the setup route; a connection owns none of those, so repeating them on every
+  row said the same thing twelve times. One with nothing configured is reported
+  here rather than as a row in a table of connections it has none of.
+  {% endcomment %}
+  <div class="connection-family-legend">
+    {% for group in connection_groups %}
+    <div class="connection-legend-item{% if not group.connections %} is-unconfigured{% endif %}">
+      <span class="connection-legend-name">
+        <strong>{{ group.spec.label }}</strong>
+        <span class="count">{{ group.connections|length }}</span>
+      </span>
+      {% if group.connections %}
+        <span class="muted">{{ group.spec.summary }}</span>
+      {% else %}
+        <span class="muted">{{ group.spec.empty_message }}</span>
+      {% endif %}
+      <span class="connection-legend-links">
+        {% if group.spec.secret_store %}<span class="scope-chip">Secrets in {{ group.spec.secret_store }}</span>{% endif %}
+        {% if group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Documentation</a>{% endif %}
+        {% if group.spec.management_route %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
+        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
 </section>
-{% empty %}
+{% else %}
   {% include "partials/_empty_state.html" with message="No connection types are installed." %}
-{% endfor %}
+{% endif %}
 
 {% if unlabelled %}
   <div class="notice notice-attention">

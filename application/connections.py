@@ -19,7 +19,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 import inspect
-from typing import Callable
 
 from django.core.exceptions import ImproperlyConfigured
 from control_plane.models import ProviderConnection
@@ -31,6 +30,16 @@ from .contracts import (
     EFFECTS,
     SCOPE_NAME,
     endpoint_has_private_parts,
+)
+# Declared next to the domains that emit them, so a gateway can import the
+# record without importing this reader. Re-exported here as the one name
+# callers already use.
+from .connection_contracts import (
+    ConnectionAbility,
+    ConnectionFact,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
 )
 from .action_links import (
     ActionLink,
@@ -70,93 +79,6 @@ class ConnectionReading:
 
 
 @dataclass(frozen=True)
-class ConnectionAbility:
-    """One thing a connection permits HQ to do, without credential material."""
-
-    name: str
-    label: str
-    summary: str
-    effect: str = "read"
-    required_scopes: tuple[str, ...] = ()
-    capability: str = ""
-    # Resource kinds this ability governs. The relation is explicit because an
-    # ability name describes what a connection can do; it is not inherently a
-    # ManagedResource kind, and separate connection families may reuse it.
-    governs_kinds: tuple[str, ...] = ()
-    # The canonical resource catalog these governed kinds belong to. Commands
-    # against that resource can then be discovered from this ability without a
-    # provider-specific command list.
-    subject_resource: str = ""
-
-
-@dataclass(frozen=True)
-class ConnectionLink:
-    """A safe relationship from a connection to something HQ can name."""
-
-    label: str
-    url: str = ""
-    # Explicit identity for a ManagedResource dependency. A rendered label is
-    # presentation and must never become a join key by coincidence.
-    resource_key: str = ""
-
-
-@dataclass(frozen=True)
-class ConnectionFact:
-    """A small provider-owned fact that is useful in a generic connection row."""
-
-    label: str
-    value: str
-
-
-@dataclass(frozen=True)
-class ConnectionInstance:
-    """One configured connection as its owning domain last observed it."""
-
-    id: str
-    label: str
-    kind: str
-    status: str
-    status_label: str
-    detail: str = ""
-    endpoint: str = ""
-    observed_at: datetime | None = None
-    granted_scopes: tuple[str, ...] = ()
-    scopes_known: bool = False
-    ability_names: tuple[str, ...] = ()
-    targets: tuple[ConnectionLink, ...] = ()
-    dependencies: tuple[ConnectionLink, ...] = ()
-    facts: tuple[ConnectionFact, ...] = ()
-    # The observer that supplied this reading. Optional because an extension
-    # may read an account directly rather than through an infrastructure
-    # controller; when present it gives topology a real edge instead of asking
-    # a rendered label to carry identity.
-    controller_id: str = ""
-
-
-@dataclass(frozen=True)
-class ConnectionSpec:
-    """One declaration of a connection family and its cached instance provider."""
-
-    name: str
-    label: str
-    summary: str
-    required_capability: Capability | str | tuple[Capability | str, ...]
-    instance_provider: Callable[[], tuple[ConnectionInstance, ...]]
-    abilities: tuple[ConnectionAbility, ...] = ()
-    web_route: str = "control_plane:connections"
-    management_route: str = ""
-    setup_route: str = ""
-    documentation_url: str = ""
-    secret_store: str = ""
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
-
-
-@dataclass(frozen=True)
 class ConnectionGroup:
     """A permitted spec beside the instances it produced."""
 
@@ -170,6 +92,10 @@ class ConnectionAbilityState:
     available: bool | None
     missing_scopes: tuple[str, ...] = ()
     action: ActionLink | None = None
+
+
+# Actions derived from the family's spec rather than from one connection.
+FAMILY_ACTIONS = frozenset({"open", "manage", "set_up", "documentation"})
 
 
 @dataclass(frozen=True)
@@ -190,6 +116,20 @@ class ConnectionView:
             action
             for action in self.actions
             if action.name != "open" and not action.recommended
+        )
+
+    @property
+    def row_actions(self) -> tuple[ActionLink, ...]:
+        """What is true of this connection rather than of its whole family.
+
+        Documentation, Manage and Set up come from the family's spec, so every
+        instance repeats them: twelve rows carrying the same two links to the
+        same two pages. They belong once, beside the family, and what stays on
+        the row is the command this connection can run and its topology node.
+        """
+
+        return tuple(
+            action for action in self.other_actions if action.name not in FAMILY_ACTIONS
         )
 
 
@@ -384,6 +324,12 @@ def _controller_connection_spec() -> ConnectionSpec:
         instance_provider=lambda: _controller_instances(ability_names),
         abilities=abilities,
         secret_store="1Password",
+        # The one family fed by sweeps rather than by its own configuration,
+        # so the one whose emptiness means a report has not arrived.
+        empty_message=(
+            "No controller has reported yet. Connections appear here "
+            "automatically when their provider reports an instance."
+        ),
     )
 
 
@@ -476,9 +422,14 @@ def _validate_connection_spec(spec: ConnectionSpec) -> None:
 
 
 def connection_specs() -> tuple[ConnectionSpec, ...]:
+    from .domains import host_connection_specs
     from .plugins import plugin_connection_specs
 
-    specs = (_controller_connection_spec(), *plugin_connection_specs())
+    specs = (
+        _controller_connection_spec(),
+        *host_connection_specs(),
+        *plugin_connection_specs(),
+    )
     for spec in specs:
         _validate_connection_spec(spec)
     names = [spec.name for spec in specs]
@@ -615,6 +566,10 @@ def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...
 def _ability_state(
     ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
+    # At call time: capabilities compose plugin specs, which may declare
+    # connections. Same reason action_links defers it.
+    from .capabilities import capability_label
+
     if ability.required_scopes and not instance.scopes_known:
         return ConnectionAbilityState(ability, None)
     missing = tuple(
@@ -627,10 +582,13 @@ def _ability_state(
         ability,
         available,
         missing,
+        # Named for the command it opens, not for the ability that led here.
+        # Several abilities are commonly performed by one command, and a button
+        # labelled with the ability lands on a page that says something else.
         capability_action_link(
             ability.capability,
             ability.effect,
-            f"Use {ability.label}",
+            capability_label(ability.capability),
             principal=principal,
         )
         if available
@@ -652,10 +610,14 @@ def _connection_view(
     relationship = connection_relationship_link(spec.name, instance.id)
     if relationship is not None:
         actions = (*actions, relationship)
-    actions = (
-        *actions,
-        *(state.action for state in states if state.action is not None),
-    )
+    # One row action per destination. Four vehicle abilities are performed by
+    # one refresh command, which offered the same URL four times under four
+    # labels.
+    seen: set[str] = {action.url for action in actions}
+    for state in states:
+        if state.action is not None and state.action.url not in seen:
+            seen.add(state.action.url)
+            actions = (*actions, state.action)
     return ConnectionView(
         instance,
         states,

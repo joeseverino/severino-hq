@@ -8,9 +8,69 @@ import urllib.request
 from datetime import datetime
 from urllib.parse import urlparse
 
+from django.conf import settings
+from django.urls import reverse
+
+from application.connection_contracts import (
+    ConnectionAbility,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
+from application.security import Capability
+
 
 class GitHubMetadataError(RuntimeError):
     """GitHub metadata could not be fetched or parsed."""
+
+
+def connection_specs():
+    """Emit the GitHub gateway's safe connection and executable process."""
+
+    def instances():
+        token_configured = bool(getattr(settings, "GITHUB_API_TOKEN", "").strip())
+        return (
+            ConnectionInstance(
+                id="github-api",
+                label="GitHub",
+                kind="github",
+                status="good" if token_configured else "neutral",
+                status_label="authenticated" if token_configured else "public access",
+                detail=(
+                    "Token configured; external health is established only when a "
+                    "registered operation runs."
+                    if token_configured
+                    else "Registered public repositories use GitHub's anonymous API limits."
+                ),
+                endpoint="https://api.github.com",
+                ability_names=("github.repository_metadata",),
+                targets=(ConnectionLink("Registered projects", reverse("projects:list")),),
+            ),
+        )
+
+    return (
+        ConnectionSpec(
+            name="hq.github",
+            label="GitHub",
+            summary="Repository metadata used by registered HQ projects.",
+            required_capability=Capability.READ,
+            instance_provider=instances,
+            abilities=(
+                ConnectionAbility(
+                    name="github.repository_metadata",
+                    label="Refresh repository metadata",
+                    summary="Read the latest push metadata for a registered project.",
+                    effect="remote_write",
+                    capability="project.refresh",
+                    subject_resource="projects",
+                ),
+            ),
+            web_route="projects:list",
+            management_route="projects:list",
+            documentation_url="https://docs.github.com/en/rest/repos/repos",
+            secret_store="Deployment secrets",
+        ),
+    )
 
 
 def fetch_last_push(

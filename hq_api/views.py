@@ -361,15 +361,19 @@ def connections(request, version: int):
 
 
 def _resource_failure(exc: Exception) -> HttpResponse:
+    # Every branch answers with the exception's curated ``reason``, never
+    # ``str(exc)``: the message a client reads is written by HQ, not relayed.
     if isinstance(exc, UnknownResource):
-        return _fail(str(exc), code="unknown_resource", status=404)
+        return _fail(exc.reason, code="unknown_resource", status=404)
     if isinstance(exc, ResourceNotFound):
-        return _fail(str(exc), code="not_found", status=404)
+        return _fail(exc.reason, code="not_found", status=404)
     if isinstance(exc, UnsupportedResourceOperation):
-        return _fail(str(exc), code="unsupported_operation", status=405)
+        return _fail(exc.reason, code="unsupported_operation", status=405)
     if isinstance(exc, InvalidResourceInput):
+        # ``details`` stays the pydantic error list: a documented part of the
+        # invalid_input contract, describing the request the client sent.
         return _fail(
-            str(exc), code="invalid_input", status=400, details=exc.errors
+            exc.reason, code="invalid_input", status=400, details=exc.errors
         )
     if isinstance(exc, AuthorizationError):
         return _fail(exc.reason, code=exc.code, status=403)

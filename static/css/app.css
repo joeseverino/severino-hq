@@ -1073,8 +1073,13 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    scrolls horizontally, so the honest answer is to keep the label whole. */
 .data-table .pill { white-space: nowrap; }
 /* Two links in one cell need to read as two. Separated by whitespace alone
-   they rendered as "Edit Remove" -- one control with a strange name. */
-.row-actions { display: inline-flex; gap: var(--space-6); white-space: nowrap; }
+   they rendered as "Edit Remove" -- one control with a strange name.
+   The class sits on a span in one place and on a td in two others, and a cell
+   given a flex display leaves table layout, so only the span gets the box and
+   the cells space their children directly. */
+.row-actions { white-space: nowrap; }
+span.row-actions { display: inline-flex; gap: var(--space-6); }
+td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, not <text> inside it.
 
@@ -2925,18 +2930,68 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-control-good { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ok) 65%, transparent); }
 .connection-control-attention,
 .connection-control-serious { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 65%, transparent); }
-.connection-group { margin-bottom: var(--layout-gap); }
-.connection-group-head { align-items: flex-start; }
-.connection-group-head h2 { margin-bottom: var(--space-1); }
-.connection-group-head p { margin: 0; }
-.connection-group-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+/* Nothing here restates .data-table. The primitive already gives padding,
+   alignment, a sticky head, break-word cells and .tight-col; this is only what
+   is particular to connections. Cells keep their own display -- grid or flex on
+   a td drops it out of table layout and stacks the row into one column. */
+.connection-table .muted,
+.connection-table code { font-size: var(--text-2xs); }
+.connection-row-kind {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--text-3xs);
 }
-.connection-table td { vertical-align: top; }
+.connection-ability-chip {
+  display: inline-block;
+  background: var(--bg-tint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px var(--space-3);
+  margin: 0 var(--space-2) var(--space-2) 0;
+  font-size: var(--text-3xs);
+}
+.connection-ability-chip.is-unavailable { color: var(--muted); border-style: dashed; }
+.connection-ability-more { font-size: var(--text-3xs); color: var(--muted); }
+/* Each destination is its own target, so two commands on one row cannot read
+   as one link. */
+/* Spacing only. Setting `display` here would be (0,1,1) and would silently
+   beat any single-class variant, which is what un-centred the icon. */
+.connection-next > a,
+.connection-next > .btn { margin: 0 var(--space-2) var(--space-2) 0; }
+.connection-next > a:last-child,
+.connection-next > .btn:last-child { margin-bottom: 0; }
+.connection-next .connection-direct-action {
+  display: inline-block;
+  font-size: var(--text-2xs);
+}
+.connection-topology-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.connection-topology-link:hover { color: var(--accent); border-color: var(--accent); }
+.connection-row-empty td { background: var(--bg-tint); }
+
+/* Families, once each: a readable grid rather than a run-on line. */
+.connection-family-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--line);
+  padding: var(--space-5);
+  font-size: var(--text-2xs);
+}
+.connection-legend-item { display: grid; gap: var(--space-2); align-content: start; }
+.connection-legend-name { display: flex; align-items: baseline; gap: var(--space-2); }
+.connection-legend-name strong { color: var(--ink); font-size: var(--text-xs); }
+.connection-legend-links { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.connection-legend-item.is-unconfigured .connection-legend-name strong { color: var(--muted); }
 .connection-ability { margin-bottom: var(--space-2); }
 .connection-ability summary { cursor: pointer; }
 .connection-ability[open] { display: grid; gap: var(--space-1); }
@@ -4244,13 +4299,14 @@ textarea.code {
    this file's tail is outside `@layer components` and unlayered styles win
    over every layer: from in there, no amount of specificity reaches this. */
 @media (max-width: 760px) {
-  .table-scroll .data-table { min-width: max-content; }
+  /* A stacking table is about to become blocks, so forcing it as wide as its
+     longest cell keeps nothing readable and made one table 14299px inside a
+     631px wrapper. */
+  .table-scroll .data-table:not(.stacks) { min-width: max-content; }
   .table-scroll .data-table td,
   .table-scroll .data-table th { overflow-wrap: normal; }
   .discovery-link { display: grid; gap: var(--space-3); }
   .discovery-meta { justify-content: flex-start; max-width: 100%; }
-  .connection-group-head { display: grid; gap: var(--space-5); }
-  .connection-group-actions { justify-content: flex-start; }
   .connection-security-story { display: grid; padding: var(--space-8) var(--space-8) var(--space-7); }
   .connection-security-story .button { width: max-content; }
   .connection-security-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -224,6 +224,17 @@ query-free projection over that already-authorized catalog and the current
 request; it does not perform a second sweep or claim to attest the external
 router and firewall boundary that the process cannot observe.
 
+The gateway that owns an endpoint owns this declaration. Host domains attach a
+`connection_provider` to their `DomainDescriptor`; extensions attach the same
+provider to `PluginManifest`. Adding a gateway therefore consists of one local
+provider plus the capabilities/resources its abilities name, rather than edits
+to the Connections page, Command Center, API, MCP, and topology separately.
+Keyless services are connections too when they provide a real external boundary.
+A provider emits cached/configured truth even when it currently has no token
+(for example, public GitHub access), and status describes that reduced mode.
+Supplying credentials upgrades the observation; it does not create a second
+kind of integration.
+
 The web Command Center is another projection of those three registries, not a
 fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a
 `CapabilitySpec.subject_resource` connects each operation to the domain it acts

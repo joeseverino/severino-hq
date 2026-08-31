@@ -188,6 +188,60 @@ class StyleContractTests(SimpleTestCase):
             css,
         )
 
+    def test_a_table_cell_is_never_given_a_flex_or_grid_display(self):
+        """`display: flex` on a td or th drops it out of table layout.
+
+        The row then stacks into a single narrow column, and a colspan header
+        collapses to one column's width. Neither fails loudly and both read as
+        a styling nudge, so this reads the classes the templates actually put
+        on cells and rejects the declaration there. Lay out a div inside the
+        cell instead.
+        """
+
+        import re
+
+        root = Path(__file__).resolve().parents[1]
+        cell_classes: set[str] = set()
+        for template in (root / "templates").rglob("*.html"):
+            for attrs in re.findall(
+                r"<(?:td|th)\b([^>]*)>", template.read_text(encoding="utf-8")
+            ):
+                found = re.search(r'class="([^"{}]*)"', attrs)
+                if found:
+                    cell_classes.update(found.group(1).split())
+
+        boxes = {"flex", "grid", "inline-flex", "inline-grid"}
+        offences = []
+        # Comments first: one sitting above a rule is otherwise read as part of
+        # that rule's selector.
+        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
+            declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
+            if not declared or declared.group(1) not in boxes:
+                continue
+            for part in selector.split(","):
+                # The subject is the rightmost compound selector: what the rule
+                # actually styles, rather than what it is scoped by.
+                trimmed = part.strip()
+                # `.stacks` is the sanctioned opt-out: below 640px that variant
+                # deliberately abandons table layout for stacked cards, with
+                # cells opting in through data-label.
+                if not trimmed or ".stacks" in trimmed:
+                    continue
+                subject = trimmed.split()[-1].split(">")[-1].strip()
+                # An element qualifier settles it either way: `span.x` cannot
+                # match a cell however `.x` is used elsewhere, and `td.x` always
+                # does. Only an unqualified class has to be judged by where the
+                # templates put it.
+                qualifier = re.match(r"^([A-Za-z][\w-]*)", subject)
+                if qualifier and qualifier.group(1) not in {"td", "th"}:
+                    continue
+                names = set(re.findall(r"\.([A-Za-z0-9_-]+)", subject))
+                if qualifier or names & cell_classes:
+                    offences.append(f"{trimmed} sets display: {declared.group(1)}")
+
+        self.assertEqual(sorted(set(offences)), [])
+
     def test_every_referenced_custom_property_is_defined(self):
         import re
 

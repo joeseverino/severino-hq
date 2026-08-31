@@ -15,10 +15,99 @@ import urllib.error
 import urllib.request
 
 from django.conf import settings
+from django.urls import reverse
+
+from application.connection_contracts import (
+    ConnectionAbility,
+    ConnectionFact,
+    ConnectionInstance,
+    ConnectionLink,
+    ConnectionSpec,
+)
+from application.security import Capability
 
 
 class D1Error(RuntimeError):
     """Raised when D1 is unconfigured, unreachable, or returns an error."""
+
+
+def connection_specs():
+    """Emit D1's configured authority and its registered HQ processes."""
+
+    def instances():
+        account = getattr(settings, "CLOUDFLARE_ACCOUNT_ID", "").strip()
+        database = getattr(settings, "CLOUDFLARE_D1_DATABASE_ID", "").strip()
+        token = getattr(settings, "CLOUDFLARE_API_TOKEN", "").strip()
+        # One collection built and returned once: an unconfigured environment
+        # differs in length, never in the shape a caller unpacks.
+        emitted = []
+        if account and database and token:
+            emitted.append(
+                ConnectionInstance(
+                    id="cloudflare-d1-contacts",
+                    label="Cloudflare D1 contacts",
+                    kind="cloudflare_d1",
+                    status="good",
+                    status_label="configured",
+                    detail=(
+                        "Account, database, and token configured; external health is "
+                        "established only when a registered operation runs."
+                    ),
+                    endpoint=(
+                        f"https://api.cloudflare.com/client/v4/accounts/{account}"
+                        f"/d1/database/{database}"
+                    ),
+                    ability_names=(
+                        "cloudflare.d1_submissions_read",
+                        "cloudflare.d1_submission_review",
+                        "cloudflare.d1_submission_delete",
+                    ),
+                    targets=(
+                        ConnectionLink("Contact submissions", reverse("contacts:list")),
+                    ),
+                    facts=(ConnectionFact("Database", database),),
+                )
+            )
+        return tuple(emitted)
+
+    return (
+        ConnectionSpec(
+            name="hq.cloudflare_d1",
+            label="Cloudflare D1",
+            summary="Remote application databases reached directly by HQ.",
+            required_capability=Capability.MANAGE_CONTACTS,
+            instance_provider=instances,
+            abilities=(
+                ConnectionAbility(
+                    "cloudflare.d1_submissions_read",
+                    "Read contact submissions",
+                    "List and inspect bounded contact-submission results.",
+                    capability="contact.submissions.list",
+                    subject_resource="contact.submissions",
+                ),
+                ConnectionAbility(
+                    "cloudflare.d1_submission_review",
+                    "Review contact submission",
+                    "Update review status, assignment, and operator notes.",
+                    effect="remote_write",
+                    capability="contact.submission.review",
+                    subject_resource="contact.submissions",
+                ),
+                ConnectionAbility(
+                    "cloudflare.d1_submission_delete",
+                    "Delete contact submission",
+                    "Delete one explicitly confirmed contact submission.",
+                    effect="destructive",
+                    capability="contact.submission.delete",
+                    subject_resource="contact.submissions",
+                ),
+            ),
+            web_route="contacts:list",
+            management_route="contacts:list",
+            documentation_url="https://developers.cloudflare.com/api/resources/d1/",
+            secret_store="Deployment secrets",
+        ),
+    )
 
 
 def _endpoint() -> str:
