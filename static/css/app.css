@@ -2968,17 +2968,20 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-topology-link:hover { color: var(--accent); border-color: var(--accent); }
 .connection-row-empty td { background: var(--bg-tint); }
 
-/* Family destinations once each, rather than a banner above every group. */
+/* Families, once each: a readable grid rather than a run-on line. */
 .connection-family-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-4) var(--space-6);
   border-top: 1px solid var(--line);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5);
   font-size: var(--text-2xs);
 }
-.connection-legend-item { display: flex; align-items: baseline; gap: var(--space-2); }
-.connection-legend-item strong { color: var(--ink); }
+.connection-legend-item { display: grid; gap: var(--space-2); align-content: start; }
+.connection-legend-name { display: flex; align-items: baseline; gap: var(--space-2); }
+.connection-legend-name strong { color: var(--ink); font-size: var(--text-xs); }
+.connection-legend-links { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.connection-legend-item.is-unconfigured .connection-legend-name strong { color: var(--muted); }
 .connection-ability { margin-bottom: var(--space-2); }
 .connection-ability summary { cursor: pointer; }
 .connection-ability[open] { display: grid; gap: var(--space-1); }

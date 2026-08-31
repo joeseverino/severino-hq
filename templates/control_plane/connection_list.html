@@ -56,7 +56,6 @@ they stay visible and stay in the same table.
       <thead>
         <tr>
           <th>Connection</th>
-          <th class="optional-col">Family</th>
           <th>Can do</th>
           <th class="optional-col">Depends</th>
           <th class="tight-col">State</th>
@@ -70,6 +69,7 @@ they stay visible and stay in the same table.
             <td>
               <strong>{{ connection.instance.label }}</strong>
               {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
+              <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
               {% for fact in connection.instance.facts %}<br><span class="muted">{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}</span>{% endfor %}
             </td>
             {% comment %}
@@ -77,10 +77,6 @@ they stay visible and stay in the same table.
             A single-instance API is its own family, and printing "National
             Weather Service" beside "National Weather Service" says nothing.
             {% endcomment %}
-            <td class="optional-col">
-              {% if group.connections|length > 1 %}{{ group.spec.label }}<br>{% endif %}
-              <span class="connection-row-kind">{{ connection.instance.kind }}</span>
-            </td>
             <td>
               {% comment %}
               Capped, because a controller credential governs a dozen kinds and
@@ -123,32 +119,36 @@ they stay visible and stay in the same table.
               {% if not connection.recommended_action and not connection.row_actions %}<span class="muted">—</span>{% endif %}
             </td>
           </tr>
-          {% empty %}
-          <tr class="connection-row-empty">
-            <td><strong>{{ group.spec.label }}</strong></td>
-            <td class="optional-col"></td>
-            <td colspan="3" class="muted">{{ group.spec.empty_message }}</td>
-            <td>
-              {% if group.spec.setup_route %}<a class="btn compact primary" href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
-              {% if group.spec.management_route %}<a class="connection-direct-action" href="{% url group.spec.management_route %}">Manage</a>{% endif %}
-            </td>
-          </tr>
           {% endfor %}
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  {% comment %}Family-level destinations, once each, under the one table.{% endcomment %}
+  {% comment %}
+  Families, once each. A family owns the secret store, the documentation and
+  the setup route; a connection owns none of those, so repeating them on every
+  row said the same thing twelve times. One with nothing configured is reported
+  here rather than as a row in a table of connections it has none of.
+  {% endcomment %}
   <div class="connection-family-legend">
     {% for group in connection_groups %}
-    <div class="connection-legend-item">
-      <strong>{{ group.spec.label }}</strong>
-      <span class="count">{{ group.connections|length }}</span>
-      {% if group.spec.secret_store %}<span class="scope-chip">Secrets in {{ group.spec.secret_store }}</span>{% endif %}
-      {% if group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Documentation</a>{% endif %}
-      {% if group.spec.management_route %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
-      {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
+    <div class="connection-legend-item{% if not group.connections %} is-unconfigured{% endif %}">
+      <span class="connection-legend-name">
+        <strong>{{ group.spec.label }}</strong>
+        <span class="count">{{ group.connections|length }}</span>
+      </span>
+      {% if group.connections %}
+        <span class="muted">{{ group.spec.summary }}</span>
+      {% else %}
+        <span class="muted">{{ group.spec.empty_message }}</span>
+      {% endif %}
+      <span class="connection-legend-links">
+        {% if group.spec.secret_store %}<span class="scope-chip">Secrets in {{ group.spec.secret_store }}</span>{% endif %}
+        {% if group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Documentation</a>{% endif %}
+        {% if group.spec.management_route %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
+        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
+      </span>
     </div>
     {% endfor %}
   </div>
