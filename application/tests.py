@@ -467,6 +467,31 @@ class ProjectApplicationServiceTests(TestCase):
         self.assertEqual(event.metadata["operation"], "project.refresh")
         self.assertEqual(event.metadata["interface"], "web")
 
+    def test_refresh_does_not_pass_itself_off_as_an_edit(self):
+        """``updated_at`` answers when the operator last changed the project:
+        the "Updated" column, the default sort and the model's ordering. It is
+        also the ``expected_updated_at`` token. When the repository last moved
+        is ``last_push_at``.
+        """
+
+        project = Project.objects.create(
+            name="HQ",
+            slug="hq",
+            repository_url="https://github.com/joeseverino/severino-hq",
+        )
+        before = project.updated_at
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+
+        refresh_project(
+            project.slug,
+            principal=Principal("operator", "web", OPERATOR_CAPABILITIES),
+            github_fetcher=lambda repository_url, **kwargs: pushed_at,
+        )
+
+        project.refresh_from_db()
+        self.assertEqual(project.last_push_at, pushed_at)
+        self.assertEqual(project.updated_at, before)
+
 
 @override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
 class AdapterParityTests(TestCase):
