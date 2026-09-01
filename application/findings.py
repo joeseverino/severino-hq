@@ -45,6 +45,8 @@ from urllib.parse import urlencode
 
 from django.utils import timezone
 
+from control_plane.providers import PROVIDERS
+
 from .action_links import ActionLink, action_with_return, topology_investigation_links
 from .capabilities import capability_specs
 from .cadence import sweep_interval
@@ -295,7 +297,9 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
                     f"A sweep confirmed other {node.kind_key} records "
                     f"{_ago(behind)} more recently than this one. It ran and "
                     "did not match this declaration, which leaves the record "
-                    "reporting whatever it last said about itself."
+                    "reporting whatever it last said about itself. Reconcile if "
+                    "it drifted; if the thing is gone, open it and remove the "
+                    "declaration, which another pass cannot do for you."
                 ),
                 evidence=(
                     ("Last observed", node.observed_at),
@@ -308,6 +312,29 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
             )
         )
     return tuple(found)
+
+
+def _is_observable(kind_key: str) -> bool:
+    """Whether anything can ever produce an observation of this kind.
+
+    A printer, a network, an offline CA, a certificate delivery target: HQ was
+    told about them, nothing adopts them from a sweep and no controller acts on
+    them. Judging one by when it was last observed asks for a reading that
+    cannot exist, so the claim it raises can never be cleared.
+
+    This rule measures against the sweep interval, so it only means anything
+    for a kind a sweep visits. A certificate is observed when an operation
+    issues or installs it, which is nothing like every sixty seconds -- judged
+    on that cadence it is permanently overdue and no sweep or reconcile can
+    ever settle it. Its real risk, expiry, is reported where it belongs.
+
+    `unobserved_reason` is the provider's own statement that no collector
+    sweeps it, and the collector registry is joined to it by test, so this is
+    read rather than derived a second time.
+    """
+
+    provider = PROVIDERS.get(kind_key)
+    return not (provider and provider.unobserved_reason)
 
 
 def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
@@ -324,7 +351,13 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
     found = []
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
         silent = estate.now - newest
-        if silent <= interval:
+        if silent <= interval or not _is_observable(kind_key):
+            continue
+        # Staleness is a statement about declarations, and a kind HQ declares
+        # nothing of has none to be stale. An inventory also carries rows
+        # written on their own schedule by something that is not the sweep;
+        # against the sweep interval those are overdue on every read.
+        if kind_key not in estate.declared_kinds:
             continue
         found.append(
             Finding(
@@ -343,6 +376,14 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
                     ("Silent for", _ago(silent)),
                     ("Sweep interval", _ago(sweep_interval())),
                 ),
+                remedies=(
+                    Remedy(
+                        capability="infrastructure.controller.refresh",
+                        target="",
+                        label="Request fresh sweep",
+                        effect="",
+                    ),
+                ),
             )
         )
     # A kind with no observation at all has no newest to be behind, so the loop
@@ -351,6 +392,8 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
     # same thing once each, which is how a queue stops being read. Said once
     # about the kind, it is one line and the same information.
     for kind_key in sorted(estate.declared_kinds - set(estate.latest_by_kind)):
+        if not _is_observable(kind_key):
+            continue
         found.append(
             Finding(
                 rule="kind-never-swept",
@@ -371,6 +414,14 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
                         str(estate.declared_counts.get(kind_key, 0)),
                     ),
                     ("Sweep interval", _ago(sweep_interval())),
+                ),
+                remedies=(
+                    Remedy(
+                        capability="infrastructure.controller.refresh",
+                        target="",
+                        label="Request fresh sweep",
+                        effect="",
+                    ),
                 ),
             )
         )
@@ -430,6 +481,46 @@ def _controller_sweep_stale(estate: _Estate) -> tuple[Finding, ...]:
     )
 
 
+def _reporting_a_fault(estate: _Estate) -> tuple[Finding, ...]:
+    """A resource whose own condition says it is wrong, now.
+
+    `reconciled-but-still-wrong` covers the case where a reconcile has already
+    been tried against this exact declaration. This is the rest: a fault the
+    resource is reporting while a change is still outstanding, which nothing
+    else here was watching. A certificate marked expiring reached the queue
+    only through an unrelated staleness rule, so it left with it.
+    """
+
+    return tuple(
+        Finding(
+            rule="reporting-a-fault",
+            subject=node.id,
+            title=f"{node.label} reports {node.status_label or node.status}",
+            severity="serious" if node.status == "serious" else "attention",
+            explanation=(
+                "The resource itself is reporting this, so it is a fault now "
+                "rather than a disagreement about what was asked for. The "
+                "detail below is the provider's own words."
+            ),
+            evidence=(
+                ("Status", node.status_label or node.status),
+                ("Condition reason", node.reason or "none"),
+                ("Detail", node.detail or "none"),
+                ("Declared revision", str(node.declared_revision)),
+                ("Observed revision", str(node.observed_revision)),
+            ),
+            remedies=_reconcile(node),
+        )
+        for node in estate.nodes()
+        if node.kind == "resource"
+        and node.managed
+        and node.status in {"attention", "serious"}
+        # The other rule owns the converged case and says something sharper
+        # about it, so this one takes what is left rather than doubling it.
+        and node.declared_revision != node.observed_revision
+    )
+
+
 def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
     """Converged on paper, disagreeing in practice.
 
@@ -459,6 +550,16 @@ def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
                 ("Observed revision", str(node.observed_revision)),
                 ("Condition reason", node.reason or "none"),
                 ("Detail", node.detail or "none"),
+            ),
+            # Reconciling again is the one thing already known not to work, so
+            # the remedy is the declaration this rule points at.
+            remedies=(
+                Remedy(
+                    capability="infrastructure.resource.update",
+                    target=node.label,
+                    label="Edit the declaration",
+                    effect="",
+                ),
             ),
         )
         for node in estate.nodes()
@@ -705,6 +806,12 @@ RULES: tuple[FindingRule, ...] = (
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
         subsumes=("skipped-by-a-sweep", "never-observed"),
+    ),
+    FindingRule(
+        "reporting-a-fault",
+        "Reporting a fault",
+        "serious",
+        _reporting_a_fault,
     ),
     FindingRule(
         "reconciled-but-still-wrong",

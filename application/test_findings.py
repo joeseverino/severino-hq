@@ -969,3 +969,171 @@ class RegistrationLapsingTests(TestCase):
 
     def test_a_domain_far_out_is_not_a_finding(self):
         self.assertEqual(self._finding(days=200, auto_renew=False), ())
+
+
+class EveryFindingIsActionableTests(TestCase):
+    """A claim HQ cannot act on is a claim it should not make.
+
+    HQ holds the connections, so every finding it raises has to end in
+    something: a capability it can run, or a subject whose page it can open.
+    A finding with neither is a dead end that stays in the queue forever --
+    ``kind-never-swept`` was exactly that, and the two reconcile-only sweep
+    misses could never clear for a record the provider no longer has.
+    """
+
+    def _findings(self):
+        """Every rule, run against an estate built to trip as many as possible."""
+
+        now = timezone.now()
+        stale = now - timedelta(days=2)
+        nodes = []
+        # One sibling swept just now and one left two days behind it, so the
+        # sweep-miss rule has something to compare against.
+        for index, (kind, status, declared, observed_rev, seen) in enumerate((
+            ("tailscale.device", "good", 1, 1, now),
+            ("tailscale.device", "good", 1, 1, stale),
+            ("adguard.rewrite", "serious", 2, 2, now),
+            # A kind with nothing fresh in it, so the whole-kind rule fires.
+            ("npm.proxy_host", "good", 1, 1, stale),
+        )):
+            nodes.append(
+                TopologyNode(
+                    f"resource:node-{index}", "resource", f"node-{index}", "Resource",
+                    kind_key=kind,
+                    status=status,
+                    managed=True,
+                    observed_at=seen.isoformat(),
+                    declared_revision=declared,
+                    observed_revision=observed_rev,
+                    unconfirmed_fields=("something",),
+                )
+            )
+        topology = Topology(nodes=tuple(nodes), edges=())
+        return derive_findings(topology, principal=MANAGE)
+
+    def test_no_rule_emits_a_finding_with_nothing_to_do(self):
+        emitted = self._findings()
+        self.assertTrue(emitted, "the fixture tripped no rules, so it guards nothing")
+        for finding in emitted:
+            with self.subTest(rule=finding.rule, title=finding.title):
+                self.assertTrue(
+                    finding.remedies or finding.subject,
+                    f"{finding.rule} raises a claim with no capability to run and "
+                    "no subject to open, so nothing can ever clear it",
+                )
+
+    def test_a_sweep_that_missed_a_record_says_what_reconciling_cannot_fix(self):
+        """Reconciling cannot make a sweep find what no longer exists, and a
+        delete is never handed over from a finding, so the other outcome is
+        named and the subject's own page is where it is done."""
+
+        missed = [f for f in self._findings() if f.rule == "skipped-by-a-sweep"]
+        self.assertTrue(missed)
+        for finding in missed:
+            self.assertIn("remove the declaration", finding.explanation)
+            self.assertTrue(finding.subject)
+
+
+class DeclarationOnlyKindsTests(TestCase):
+    """A kind nothing sweeps cannot be judged by when it was last swept.
+
+    A printer, an offline CA, a certificate delivery target: HQ was told about
+    them and no provider reports them back. Asked when they were last observed
+    the answer is "never", which no sweep or reconcile can change.
+    """
+
+    def _kinds_raised(self, kind):
+        from .findings import _kind_never_swept, _Estate
+
+        node = TopologyNode(
+            f"resource:{kind}-one", "resource", "one", "Resource",
+            kind_key=kind, managed=True,
+        )
+        estate = _Estate(
+            topology=Topology(nodes=(node,), edges=()),
+            now=timezone.now(),
+            observed={},
+            latest_by_kind={},
+            declared_kinds=frozenset({kind}),
+            declared_counts={kind: 1},
+            governed={},
+            controllers_by_kind={},
+        )
+        return tuple(f.scope for f in _kind_never_swept(estate))
+
+    def test_a_declaration_only_kind_raises_nothing(self):
+        self.assertEqual(self._kinds_raised("machine"), ())
+        self.assertEqual(self._kinds_raised("tls.delivery_target"), ())
+
+    def test_a_swept_kind_still_does(self):
+        self.assertEqual(
+            self._kinds_raised("tailscale.policy"), ("tailscale.policy",)
+        )
+
+
+class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):
+    """`kind-never-swept` compares against the sweep interval, so it means
+    something only for a kind a sweep visits.
+
+    A certificate is observed when an operation issues or installs it, which is
+    nothing like every sixty seconds. Measured on that cadence it is
+    permanently overdue and no sweep or reconcile settles it. Expiry, which is
+    the risk a certificate actually carries, is reported where it belongs.
+    """
+
+    def test_a_kind_no_collector_sweeps_is_not_judged_on_sweep_cadence(self):
+        from .findings import _is_observable
+        from control_plane.providers import PROVIDERS
+
+        for kind in ("tls.certificate", "machine", "tls.delivery_target"):
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    PROVIDERS[kind].unobserved_reason,
+                    f"{kind} has no collector and should say so",
+                )
+                self.assertFalse(_is_observable(kind))
+
+    def test_a_swept_kind_is_still_judged(self):
+        """The exemption must not quietly turn staleness reporting off."""
+
+        from .findings import _is_observable
+
+        for kind in ("adguard.rewrite", "tailscale.device", "npm.proxy_host"):
+            with self.subTest(kind=kind):
+                self.assertTrue(_is_observable(kind))
+
+
+class StalenessNeedsSomethingDeclaredTests(TestCase):
+    """An inventory carries rows HQ declares nothing of.
+
+    A finance feed and a vehicle lookup are written on their own schedule by
+    something that is not the sweep. Measured against the sweep interval each
+    was overdue every time it was read, and no sweep or reconcile could settle
+    it, because there was no declaration of that kind to settle.
+    """
+
+    def _raised(self, *, declared):
+        from .findings import _kind_never_swept, _Estate
+
+        now = timezone.now()
+        return tuple(
+            f.scope
+            for f in _kind_never_swept(
+                _Estate(
+                    topology=Topology(nodes=(), edges=()),
+                    now=now,
+                    observed={},
+                    latest_by_kind={"adguard.rewrite": now - timedelta(days=2)},
+                    declared_kinds=frozenset({"adguard.rewrite"} if declared else set()),
+                    declared_counts={},
+                    governed={},
+                    controllers_by_kind={},
+                )
+            )
+        )
+
+    def test_an_observed_kind_nothing_declares_raises_nothing(self):
+        self.assertEqual(self._raised(declared=False), ())
+
+    def test_the_same_kind_with_a_declaration_still_does(self):
+        self.assertEqual(self._raised(declared=True), ("adguard.rewrite",))

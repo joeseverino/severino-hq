@@ -1094,11 +1094,21 @@ class InfrastructureViewsTests(TestCase):
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
     def test_findings_page_explains_the_claim_and_its_evidence(self):
+        # A kind a sweep actually visits. The certificate in `setUp` is not
+        # one: nothing collects certificates, so measuring them against the
+        # sweep interval says only that they are not swept, which this rule
+        # no longer claims.
+        ManagedResource.objects.create(
+            key="unswept-rewrite",
+            kind="adguard.rewrite",
+            spec={"domain": "unswept.example", "answer": "10.0.0.9"},
+        )
+
         response = self.client.get(reverse("control_plane:findings"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Findings")
-        self.assertContains(response, "Nothing has ever observed tls.certificate")
+        self.assertContains(response, "Nothing has ever observed adguard.rewrite")
         self.assertContains(response, "Records of this kind")
         self.assertContains(response, reverse("action_items"))
 
