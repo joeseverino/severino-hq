@@ -35,7 +35,8 @@ from . import (
     services,
 )
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
-from .plugins import plugin_resource_specs, plugin_search_definitions
+from .integrations import integration_graph
+from .plugins import plugin_resource_specs
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
 
@@ -467,35 +468,14 @@ def _collect_resources() -> tuple[ResourceSpec, ...]:
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
-    from .integrations import integration_graph
-
     return dict(integration_graph().resources)
 
 
 def resource_search_definitions() -> tuple[SearchDefinition, ...]:
-    from .integrations import integration_graph
-
-    definitions = tuple(
-        spec.search for spec in integration_graph().resources.values() if spec.search
-    )
-    # Retain the v1 search-only plugin hook while resources become the canonical
-    # declaration. A plugin may migrate independently, but cannot emit a scope twice.
-    definitions += tuple(plugin_search_definitions())
-    if any(not isinstance(definition, SearchDefinition) for definition in definitions):
-        raise ImproperlyConfigured(
-            "A search provider returned something other than SearchDefinition."
-        )
-    scopes = [definition.scope for definition in definitions]
-    if any(not RESOURCE_NAME.fullmatch(scope) for scope in scopes):
-        raise ImproperlyConfigured("Every search definition must use a valid scope.")
-    if len(scopes) != len(set(scopes)):
-        raise ImproperlyConfigured("Duplicate search scope across HQ core and plugins.")
-    return definitions
+    return tuple(integration_graph().search.values())
 
 
 def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
-    from .integrations import integration_graph
-
     return {
         spec.search.scope: spec.required_capabilities
         for spec in integration_graph().resources.values()
@@ -504,8 +484,6 @@ def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
 
 
 def describe_resources() -> dict[str, Any]:
-    from .integrations import integration_graph
-
     return {
         "ok": True,
         "schema_version": 1,

@@ -236,9 +236,15 @@ A provider emits cached/configured truth even when it currently has no token
 Supplying credentials upgrades the observation; it does not create a second
 kind of integration.
 
-At composition, HQ compiles those independently emitted specs into one frozen
-`IntegrationGraph`, indexed by stable name. The compiler owns uniqueness and
-every cross-spec edge; registry-local validation remains beside each spec type.
+At composition, HQ compiles those independently emitted specs and standalone
+search projections into one frozen `IntegrationGraph`, indexed by stable name.
+The compiler owns uniqueness and every cross-spec edge; registry-local
+validation remains beside each spec type. It collects every graph violation in
+one pass, so one failed composition reports the complete repair list. The valid
+graph is memoized for the process because composition is fixed at image boot.
+The one plugin-composition reset clears both plugin identity and the derived
+graph; the test runner applies that reset between fixtures, while isolated
+composition proofs use an explicit graph override.
 There is no second public assembly path.
 
 The web Command Center is a projection of that graph, not another inventory.
@@ -247,7 +253,9 @@ Its resource links come from `ResourceSpec.web_route`, and a
 on. A matching `ConnectionAbility.subject_resource` plus `governs_kinds`
 connects a searched external-system ability to the registered commands that can
 act on those kinds; `ConnectionAbility.capability` names an exact command when
-the operation is not resource-shaped. This is a registry join, not a command
+the operation is not resource-shaped. That ability is the sole authored
+connection-to-capability edge; the capability does not repeat a reciprocal list
+that could drift. This is a registry join, not a command
 invented from a credential scope: only a real typed handler can become
 executable. Every permitted command links to one generic execution surface. The host
 derives its controls from the canonical JSON Schema, rejects unknown and

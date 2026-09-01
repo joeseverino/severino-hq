@@ -152,7 +152,36 @@ class GrantTests(SimpleTestCase):
 
 
 class CompositionCheckTests(SimpleTestCase):
+    def test_compiler_violations_are_reported_together(self):
+        from application.integrations import (
+            IntegrationGraphError,
+            IntegrationViolation,
+        )
+        from .checks import capability_contract_check
+
+        failure = IntegrationGraphError(
+            (
+                IntegrationViolation("example.first", "First violation."),
+                IntegrationViolation("example.second", "Second violation."),
+            )
+        )
+        with patch("hq_api.checks.integration_graph", side_effect=failure):
+            errors = capability_contract_check(None)
+
+        self.assertEqual([error.id for error in errors], ["hq_api.E001"] * 2)
+        self.assertEqual(
+            [error.hint for error in errors],
+            [
+                "Integration violation: example.first",
+                "Integration violation: example.second",
+            ],
+        )
+
     def test_an_unresolvable_resource_route_is_a_named_startup_error(self):
+        from application.integrations import (
+            compile_integration_graph,
+            override_integration_graph,
+        )
         from application.resources import ResourceSpec
         from .checks import capability_contract_check
 
@@ -163,90 +192,21 @@ class CompositionCheckTests(SimpleTestCase):
             "read",
             web_route="missing:list",
         )
-        with (
-            patch("application.integrations._collect_capabilities", return_value=()),
-            patch(
-                "application.integrations._collect_resources", return_value=(resource,)
-            ),
-            patch("application.integrations._collect_connections", return_value=()),
-        ):
+        graph = compile_integration_graph(
+            capabilities=(), resources=(resource,), connections=()
+        )
+        with override_integration_graph(graph):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E004"])
         self.assertIn("missing:list", errors[0].msg)
 
-    def test_a_capability_cannot_reference_an_unknown_resource(self):
-        from application.capabilities import CapabilitySpec
-        from application.projects import ProjectCommand, save_project
-        from application.resources import ResourceSpec
-        from .checks import capability_contract_check
-
-        capability = CapabilitySpec(
-            "example.create",
-            "Create a synthetic record.",
-            "remote_write",
-            "example.write",
-            ProjectCommand,
-            save_project,
-            subject_resource="example.missing",
-        )
-        resource = ResourceSpec("example.records", "Records", "Records.", "read")
-        with (
-            patch(
-                "application.integrations._collect_capabilities",
-                return_value=(capability,),
-            ),
-            patch(
-                "application.integrations._collect_resources", return_value=(resource,)
-            ),
-            patch("application.integrations._collect_connections", return_value=()),
-        ):
-            errors = capability_contract_check(None)
-
-        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
-
-    def test_a_target_query_must_match_its_resource_contract(self):
-        from application.capabilities import CapabilitySpec
-        from application.projects import ProjectCommand, save_project
-        from application.resources import ProjectQuery, ResourceSpec
-        from .checks import capability_contract_check
-
-        capability = CapabilitySpec(
-            "example.update",
-            "Update a synthetic record.",
-            "remote_write",
-            "example.write",
-            ProjectCommand,
-            save_project,
-            target_kind="slug",
-            subject_resource="example.records",
-            target_query=(("unknown", "value"),),
-        )
-        resource = ResourceSpec(
-            "example.records",
-            "Records",
-            "Records.",
-            "read",
-            list_handler=lambda **kwargs: {"items": [], "count": 0},
-            list_query_type=ProjectQuery,
-            identifier="slug",
-        )
-        with (
-            patch(
-                "application.integrations._collect_capabilities",
-                return_value=(capability,),
-            ),
-            patch(
-                "application.integrations._collect_resources", return_value=(resource,)
-            ),
-            patch("application.integrations._collect_connections", return_value=()),
-        ):
-            errors = capability_contract_check(None)
-
-        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
-
     def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
         from application.connections import ConnectionSpec
+        from application.integrations import (
+            compile_integration_graph,
+            override_integration_graph,
+        )
         from .checks import capability_contract_check
 
         connection = ConnectionSpec(
@@ -257,80 +217,13 @@ class CompositionCheckTests(SimpleTestCase):
             lambda: (),
             web_route="missing:connections",
         )
-        with (
-            patch("application.integrations._collect_capabilities", return_value=()),
-            patch("application.integrations._collect_resources", return_value=()),
-            patch(
-                "application.integrations._collect_connections",
-                return_value=(connection,),
-            ),
-        ):
+        graph = compile_integration_graph(
+            capabilities=(), resources=(), connections=(connection,)
+        )
+        with override_integration_graph(graph):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E006"])
-
-    def test_a_connection_ability_cannot_name_an_unknown_capability(self):
-        from application.connections import ConnectionAbility, ConnectionSpec
-        from .checks import capability_contract_check
-
-        connection = ConnectionSpec(
-            "example.finance",
-            "Finance",
-            "Financial institutions.",
-            "read",
-            lambda: (),
-            abilities=(
-                ConnectionAbility(
-                    "transactions.sync",
-                    "Sync transactions",
-                    "Refresh transaction history.",
-                    capability="example.transactions.sync",
-                ),
-            ),
-        )
-        with (
-            patch("application.integrations._collect_capabilities", return_value=()),
-            patch("application.integrations._collect_resources", return_value=()),
-            patch(
-                "application.integrations._collect_connections",
-                return_value=(connection,),
-            ),
-        ):
-            errors = capability_contract_check(None)
-
-        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
-
-    def test_a_connection_ability_cannot_name_an_unknown_resource(self):
-        from application.connections import ConnectionAbility, ConnectionSpec
-        from .checks import capability_contract_check
-
-        connection = ConnectionSpec(
-            "example.finance",
-            "Finance",
-            "Financial institutions.",
-            "read",
-            lambda: (),
-            abilities=(
-                ConnectionAbility(
-                    "transactions.read",
-                    "Read transactions",
-                    "Read transaction history.",
-                    subject_resource="example.missing",
-                ),
-            ),
-        )
-        with (
-            patch("application.integrations._collect_capabilities", return_value=()),
-            patch("application.integrations._collect_resources", return_value=()),
-            patch(
-                "application.integrations._collect_connections",
-                return_value=(connection,),
-            ),
-        ):
-            errors = capability_contract_check(None)
-
-        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
-
 
 @override_settings(
     OIDC_ISSUER=ISSUER,

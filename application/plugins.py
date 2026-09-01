@@ -61,8 +61,8 @@ class PluginManifest:
     distribution: str
     source_repository: str
     source_workflow: str
+    api_version: int
     integration_provider: str
-    api_version: int = PLUGIN_API_VERSION
     django_apps: tuple[str, ...] = ()
     url_prefix: str = ""
     urlconf: str = ""
@@ -92,6 +92,39 @@ def _import(spec: str) -> Any:
         return getattr(import_module(module_name), attribute)
     except (ImportError, AttributeError) as exc:
         raise ImproperlyConfigured(f"Cannot load HQ plugin reference {spec!r}.") from exc
+
+
+def _load_manifest(reference: str) -> PluginManifest:
+    """Load identity metadata, translating only manifest-constructor breaks."""
+
+    try:
+        return _import(reference)
+    except TypeError as exc:
+        detail = str(exc)
+        if not detail.startswith("PluginManifest.__init__()"):
+            raise
+        legacy_fields = tuple(
+            field
+            for field in (
+                "capability_provider",
+                "resource_provider",
+                "connection_provider",
+                "search_provider",
+            )
+            if field in detail
+        )
+        if legacy_fields:
+            raise ImproperlyConfigured(
+                f"Plugin reference {reference!r} uses plugin API 1 provider "
+                f"fields ({', '.join(legacy_fields)}); HQ supports "
+                f"{PLUGIN_API_VERSION}."
+            ) from exc
+        if "api_version" in detail and "required" in detail:
+            raise ImproperlyConfigured(
+                f"Plugin reference {reference!r} does not declare api_version; "
+                f"HQ supports {PLUGIN_API_VERSION}."
+            ) from exc
+        raise
 
 
 def _references() -> tuple[str, ...]:
@@ -281,11 +314,11 @@ def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
 
 
 @cache
-def installed_plugins() -> tuple[PluginManifest, ...]:
+def _installed_plugins() -> tuple[PluginManifest, ...]:
     plugins = []
     ids = set()
     for reference in _references():
-        manifest = _import(reference)
+        manifest = _load_manifest(reference)
         _validate(manifest, reference)
         if manifest.id in ids:
             raise ImproperlyConfigured(f"Duplicate HQ plugin id {manifest.id!r}.")
@@ -297,6 +330,21 @@ def installed_plugins() -> tuple[PluginManifest, ...]:
 
     enforce_plugin_admission(installed)
     return installed
+
+
+def installed_plugins() -> tuple[PluginManifest, ...]:
+    """The admitted manifest set for this immutable process composition."""
+
+    return _installed_plugins()
+
+
+def clear_plugin_composition_cache() -> None:
+    """Forget plugin identity and every graph derived from that identity."""
+
+    _installed_plugins.cache_clear()
+    from .integrations import clear_integration_graph_cache
+
+    clear_integration_graph_cache()
 
 
 def installed_plugin_apps() -> list[str]:

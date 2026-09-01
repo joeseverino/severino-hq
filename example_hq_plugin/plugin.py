@@ -15,6 +15,7 @@ plugin = PluginManifest(
     distribution="severino-hq",
     source_repository="joeseverino/severino-hq",
     source_workflow=".github/workflows/ci.yml",
+    api_version=2,
     integration_provider="example_hq_plugin.plugin:integration",
     django_apps=("example_hq_plugin",),
     url_prefix="examples/notes/",

@@ -32,7 +32,11 @@ import re
 from typing import Any, Iterable
 from unittest import mock
 
-from .plugins import PluginIntegration, PluginManifest, installed_plugins
+from .plugins import (
+    PluginIntegration,
+    PluginManifest,
+    clear_plugin_composition_cache,
+)
 from .ui import Insight
 
 # Deliberately not a name any real extension would take. A synthetic sibling
@@ -104,6 +108,7 @@ def sibling(
         distribution=identifier.replace(".", "-"),
         source_repository=f"example/{identifier.replace('.', '-')}",
         source_workflow=".github/workflows/admit-plugin.yml",
+        api_version=2,
         integration_provider=f"{identifier}:integration",
         **manifest_fields,
     )
@@ -132,8 +137,8 @@ class ComposedPluginTestCase:
         self.addCleanup(self._composition.close)
         # The registry is cached for the process; a sibling appearing or leaving
         # mid-suite would otherwise be invisible or permanent.
-        installed_plugins.cache_clear()
-        self.addCleanup(installed_plugins.cache_clear)
+        clear_plugin_composition_cache()
+        self.addCleanup(clear_plugin_composition_cache)
 
         real = os.environ.get("SEVERINO_HQ_PLUGINS", "")
         manifests = [manifest for manifest, _ in self.siblings]

@@ -63,6 +63,7 @@ from .projects import (
     upsert_project,
 )
 from .receipts import ReceiptMetadataCommand, update_receipt
+from .integrations import integration_graph
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 from .plugins import plugin_capability_specs
@@ -671,8 +672,6 @@ def capability_label(name: str) -> str:
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
-    from .integrations import integration_graph
-
     return dict(integration_graph().capabilities)
 
 
@@ -685,8 +684,6 @@ def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
 
 def describe_capabilities() -> dict[str, Any]:
     """Return stable JSON Schemas and operational effects for every capability."""
-
-    from .integrations import integration_graph
 
     return {
         "ok": True,

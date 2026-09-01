@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import MISSING, fields, replace
 import json
 import os
 from pathlib import Path
@@ -18,6 +18,7 @@ from .plugins import (
     NavigationItem,
     PluginIntegration,
     PluginManifest,
+    clear_plugin_composition_cache,
     describe_plugins,
     installed_integrations,
     installed_plugins,
@@ -76,6 +77,7 @@ VALID = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
+    api_version=2,
     integration_provider="example.plugin:integration",
     navigation=(NavigationItem("Notes", "notes:list", "notes", 40),),
     operator_capabilities=("notes.read", "notes.write"),
@@ -85,10 +87,10 @@ VALID = PluginManifest(
 
 class PluginContractTests(TestCase):
     def tearDown(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
 
     def load(self, manifest=VALID):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         env = mock.patch.dict(
             os.environ,
             {
@@ -114,7 +116,7 @@ class PluginContractTests(TestCase):
 
     def test_empty_allowlist_is_the_secure_default(self):
         with mock.patch.dict(os.environ, {"SEVERINO_HQ_PLUGINS": ""}):
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             self.assertEqual(installed_plugins(), ())
 
     def test_the_committed_inventory_stays_a_shape_and_not_a_list(self):
@@ -252,7 +254,7 @@ class PluginContractTests(TestCase):
             installed_plugins()
 
     def test_duplicate_ids_fail_closed(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -278,7 +280,7 @@ class PluginContractTests(TestCase):
             url_prefix="records/",
             urlconf="example_second.urls",
         )
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -307,7 +309,7 @@ class PluginContractTests(TestCase):
             url_prefix="records/archive/",
             urlconf="example_second.urls",
         )
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -345,6 +347,55 @@ class PluginContractTests(TestCase):
         ]
 
         self.assertEqual(provider_fields, ["integration_provider"])
+
+    def test_plugin_api_version_is_authored_not_inherited_from_the_host(self):
+        api_version = next(
+            field for field in fields(PluginManifest) if field.name == "api_version"
+        )
+
+        self.assertIs(api_version.default, MISSING)
+
+    def test_plugin_registry_cannot_be_cleared_without_its_derived_graph(self):
+        self.assertFalse(hasattr(installed_plugins, "cache_clear"))
+
+    def test_a_legacy_manifest_shape_fails_with_the_api_epoch(self):
+        from application import plugins
+
+        with (
+            mock.patch.object(
+                plugins,
+                "import_module",
+                side_effect=TypeError(
+                    "PluginManifest.__init__() got an unexpected keyword "
+                    "argument 'capability_provider'"
+                ),
+            ),
+            self.assertRaisesRegex(
+                ImproperlyConfigured,
+                "plugin API 1 provider fields.*capability_provider.*supports 2",
+            ),
+        ):
+            plugins._load_manifest("example.legacy:plugin")
+
+    def test_a_provider_type_error_is_not_misattributed_to_the_plugin_api(self):
+        from application import plugins
+
+        with mock.patch.object(
+            plugins,
+            "import_module",
+            side_effect=TypeError("extension initialization bug"),
+        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+            plugins._import("example.provider:integration")
+
+    def test_an_unrelated_manifest_import_type_error_keeps_its_real_cause(self):
+        from application import plugins
+
+        with mock.patch.object(
+            plugins,
+            "import_module",
+            side_effect=TypeError("extension initialization bug"),
+        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+            plugins._load_manifest("example.plugin:manifest")
 
     def test_integration_surfaces_stay_lazy_and_independent(self):
         dashboard = mock.Mock(return_value=())
@@ -475,7 +526,7 @@ class PluginContractTests(TestCase):
         self.assertIn('href="#notes"', page_navigation)
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -520,7 +571,7 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -569,7 +620,7 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -601,6 +652,7 @@ class AttentionContractTests(TestCase):
             distribution="demo",
             source_repository="owner/demo",
             source_workflow=".github/workflows/admit-plugin.yml",
+            api_version=2,
             integration_provider="demo:integration",
         )
         return PluginManifest(**{**base, **overrides})
@@ -679,7 +731,7 @@ class ComposedPluginTestKitTests(TestCase):
     """
 
     def tearDown(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
 
     def case(self, **attributes):
         from .plugin_testing import ComposedPluginTestCase

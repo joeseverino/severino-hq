@@ -48,7 +48,7 @@ from django.utils import timezone
 from control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, action_with_return, topology_investigation_links
-from .integrations import integration_graph
+from .integrations import IntegrationGraph, integration_graph
 from .cadence import sweep_interval
 from .contracts import route_url
 from .security import AuthorizationError, Principal
@@ -852,10 +852,12 @@ def rule_for(name: str) -> FindingRule | None:
     return _RULE_BY_NAME.get(name)
 
 
-def _permitted(capability: str, principal: Principal) -> tuple[bool, str]:
+def _permitted(
+    capability: str, principal: Principal, graph: IntegrationGraph
+) -> tuple[bool, str]:
     """Whether this principal may run it, and what the registry says it does."""
 
-    spec = integration_graph().capabilities.get(capability)
+    spec = graph.capabilities.get(capability)
     if spec is not None:
         try:
             for required in spec.required_capabilities:
@@ -879,9 +881,10 @@ def _resolved(
     described as destructive tomorrow without anyone editing a rule.
     """
 
+    graph = integration_graph()
     kept = []
     for remedy in finding.remedies:
-        allowed, effect = _permitted(remedy.capability, principal)
+        allowed, effect = _permitted(remedy.capability, principal, graph)
         if not allowed or effect == "destructive":
             continue
         action = next(

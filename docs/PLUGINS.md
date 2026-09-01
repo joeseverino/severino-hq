@@ -32,6 +32,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
+    api_version=2,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -177,10 +178,13 @@ through runtime code loading. Providers contain projection logic only; domain
 rules remain in the plugin's application services so web pages, commands,
 search, MCP, and future native clients cannot develop conflicting behavior.
 
-`api_version` fails closed on incompatibility. Additive manifest fields remain
-compatible within a version; removals or semantic changes require the next API
-version. Plugin identifiers are stable, reverse-DNS-style names and must not be
-reused.
+`api_version` is required and must be authored as a literal by the extension;
+it must never default to the host's current constant. That lets a host loading
+an older wheel report the incompatible epoch instead of silently relabeling the
+wheel or failing with an unexplained constructor error. Additive manifest fields
+remain compatible within a version; removals or semantic changes require the
+next API version. Plugin identifiers are stable, reverse-DNS-style names and
+must not be reused.
 
 ### Public host, private first-party domains
 
@@ -275,7 +279,9 @@ its provider kinds in `governs_kinds`. Command Center then discovers registered
 commands against that resource whose target filters include one of those kinds.
 For an operation that does not map through a resource, set `capability` to the
 exact `CapabilitySpec` name. Composition refuses unknown resource and capability
-references. Scope coverage decides whether the observed connection can perform
+references. `ConnectionAbility` is the sole authored connection-to-capability
+edge: `CapabilitySpec` deliberately does not repeat a reciprocal list that could
+drift. Scope coverage decides whether the observed connection can perform
 the declared ability; it never fabricates an executable command from token text
 alone, so every offered mutation still has a schema, handler, authorization,
 audit, and idempotency boundary. Command discovery remains declaration-driven,

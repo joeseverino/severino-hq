@@ -1,7 +1,7 @@
 from django.core.checks import Error, Tags, register
 from django.urls import NoReverseMatch, reverse
 
-from application.integrations import integration_graph
+from application.integrations import IntegrationGraphError, integration_graph
 
 
 def _route_error(owner: str, name: str, route: str, error_id: str):
@@ -21,6 +21,15 @@ def _route_error(owner: str, name: str, route: str, error_id: str):
 def capability_contract_check(app_configs, **kwargs):  # noqa: ARG001
     try:
         graph = integration_graph()
+    except IntegrationGraphError as exc:
+        return [
+            Error(
+                violation.message,
+                hint=f"Integration violation: {violation.code}",
+                id="hq_api.E001",
+            )
+            for violation in exc.violations
+        ]
     except Exception as exc:
         return [
             Error(

@@ -41,6 +41,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .integrations import integration_graph
 from .action_links import (
     ActionLink,
     capability_action_link,
@@ -533,8 +534,6 @@ def _safe_link_url(url: str) -> bool:
 def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     """Every permitted connection family and its locally cached instances."""
 
-    from .integrations import integration_graph
-
     groups = []
     for spec in integration_graph().connections.values():
         if not _permitted(spec, principal):
@@ -633,8 +632,6 @@ def _connection_view(
 
 
 def describe_connections() -> dict:
-    from .integrations import integration_graph
-
     return {
         "ok": True,
         "schema_version": 1,
