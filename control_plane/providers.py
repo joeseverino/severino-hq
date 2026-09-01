@@ -826,128 +826,6 @@ class ResolvedUploadedCertificateSpec(ProviderModel):
     domains: list[str] = Field(default_factory=list)
 
 
-class AdGuardRewriteSpec(ProviderModel):
-    domain: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Hostname",
-        description="The name that should resolve on your network.",
-    )
-    answer: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Points at",
-        description="The address this hostname resolves to, usually an IP.",
-    )
-
-
-class CaddyRouteSpec(ProviderModel):
-    """One name an edge Caddy serves, and what it hands the request to.
-
-    Observed, never authored, and locked for the same reason a container is:
-    the route lives in a Caddyfile that HQ has never seen and must not pretend
-    to own. Declaring one here says "this is mine to watch", and there is
-    nothing for a reconcile to converge toward.
-
-    It exists because the only ingress HQ could describe was a proxy, and the
-    edge does not run one. Every name served from that box reported "nothing
-    supplies this" on its own page while answering over TLS -- from a machine
-    HQ sweeps, holds a credential for, and installs the certificate on. The
-    knowledge was one `ssh` away the whole time.
-    """
-
-    connection_ref: str = Field(
-        default="",
-        max_length=160,
-        title="Caddy",
-        description="The credential that reaches the host this route is served from.",
-    )
-    domain: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Hostname",
-        description="The name this route answers for.",
-    )
-    upstream: str = Field(
-        default="",
-        max_length=253,
-        title="Hands off to",
-        description="Where Caddy sends the request -- a container and port, usually.",
-    )
-
-
-class CaddyRouteInFile(ProviderModel):
-    """One route as it appears in the file HQ writes."""
-
-    domain: str = Field(min_length=1, max_length=253)
-    upstream: str = Field(min_length=1, max_length=253)
-
-
-class ResolvedCaddyRouteSpec(CaddyRouteSpec):
-    """A route, and every route sharing the file its edge imports.
-
-    Caddy is configured by a file rather than by a route, so reconciling one
-    means writing all of them. The contract carries the siblings for the same
-    reason a certificate's carries every place it installs: ``execute`` is
-    handed one resource, and one resource is not what gets written.
-
-    ``certificate_directory`` comes from the delivery target for the same
-    connection, which already records where the certificate is installed. HQ
-    writes the TLS lines out from it rather than importing the snippet the
-    operator's own file defines, so the file HQ owns stands on its own.
-    """
-
-    certificate_directory: str = Field(default="", max_length=500)
-    routes: list[CaddyRouteInFile] = Field(default_factory=list)
-
-
-def _caddy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    return (spec["domain"],)
-
-
-def _caddy_origin(spec: dict[str, Any]) -> str:
-    """Where the request goes after Caddy, when Caddy says.
-
-    A route that terminates in Caddy itself -- a redirect, a static file, a
-    status page it writes -- hands off to nothing, and an empty origin is the
-    honest answer rather than pointing the name back at the proxy in front of
-    it.
-    """
-
-    return str(spec.get("upstream", "") or "").strip()
-
-
-def _caddy_identity(spec: dict[str, Any]) -> tuple[str, ...]:
-    """One route per name per host, which is what Caddy itself enforces."""
-
-    return (
-        str(spec.get("connection_ref", "") or ""),
-        normalized_hostname(str(spec.get("domain", "") or "")),
-    )
-
-
-def _caddy_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "connection_ref": str(record.get("connection_ref", "") or ""),
-        "domain": str(record.get("domain", "") or ""),
-        "upstream": str(record.get("upstream", "") or ""),
-    }
-
-
-def _caddy_key_hint(spec: dict[str, Any]) -> str:
-    return f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
-
-
-def _caddy_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
-    upstream = str(spec.get("upstream", "") or "")
-    return (
-        ("Served by", "", f"caddy on {spec.get('connection_ref', '') or 'the edge'}"),
-        ("Hands off to", "", upstream or "Caddy answers this itself"),
-    )
-
-
 @dataclass(frozen=True)
 class DNSRecordType:
     """One record type, and everything the rest of HQ needs to know about it.
@@ -1576,45 +1454,6 @@ def _consumer_at(
     return consumer
 
 
-def _resolve_caddy_route(
-    authored: dict[str, Any], context: ProviderResolutionContext
-) -> dict[str, Any]:
-    """One route, plus the whole file it is part of.
-
-    Caddy is configured by a file, not by a route, so reconciling one means
-    writing all of them for that edge. `execute` is handed a single resource --
-    which is right for everything else -- so the contract carries the siblings,
-    exactly as a certificate's carries every consumer it installs on.
-
-    The certificate directory comes from the delivery target for the same
-    connection, which already records where the certificate is installed. HQ
-    writes the TLS lines out from it rather than importing the operator's
-    snippet, so its file stands on its own.
-    """
-
-    connection_ref = authored.get("connection_ref", "")
-    directory = ""
-    for target in context.delivery_targets:
-        if (
-            target.get("connection_ref") == connection_ref
-            and target.get("kind") == "caddy"
-        ):
-            directory = str(target.get("certificate_directory", "") or "")
-    return {
-        **authored,
-        "certificate_directory": directory,
-        "routes": [
-            {
-                "domain": route.get("domain", ""),
-                "upstream": route.get("upstream", ""),
-            }
-            for route in (context.caddy_routes() if context.caddy_routes else ())
-            if route.get("connection_ref") == connection_ref
-            and route.get("upstream")
-        ],
-    }
-
-
 def _resolve_tls(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
@@ -1696,11 +1535,6 @@ def _proxy_origin(spec: dict[str, Any]) -> str:
     return f"{spec['forward_host']}:{spec['forward_port']}"
 
 
-def _rewrite_answers(spec: dict[str, Any]) -> tuple[str, ...]:
-    answer = str(spec.get("answer", "")).strip()
-    return (answer,) if answer else ()
-
-
 def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
     """Only the record types that name an address.
 
@@ -1714,10 +1548,6 @@ def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
     return (content,) if content else ()
 
 
-def _rewrite_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    return (spec["domain"],)
-
-
 def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     # A TXT record carries policy -- an SPF entry, a validation challenge -- not
     # a service. Naming one would put a hostname on the board that nothing is
@@ -1728,12 +1558,6 @@ def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     if record_type is None or not record_type.declares_service:
         return ()
     return (spec["name"],)
-
-
-def _rewrite_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
-    return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
 
 
 def _stack_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1873,32 +1697,6 @@ def _dns_record_origin(spec: dict[str, Any]) -> str:
     if record_type is None or not record_type.declares_service:
         return ""
     return str(spec.get("content", "")).strip()
-
-
-def _rewrite_origin(spec: dict[str, Any]) -> str:
-    """Where a rewrite sends the name, for the same reason a record does.
-
-    The note on ``_dns_record_origin`` above says an internal name is routed by
-    a proxy, so the proxy declares the origin and the rewrite need not. That
-    holds for every internal name the proxy actually fronts, and for no other:
-    a rewrite pointing straight at a box that is not the proxy is the whole
-    statement of where that name is served, and HQ was not reading it. The
-    result was a service page reporting "nothing supplies this" for a name
-    answering over TLS from a machine HQ sweeps, holds a credential for, and
-    installs certificates on.
-
-    Which is the same bug that note describes, one provider over. So the answer
-    is the same: the record that points somewhere is a statement of origin.
-    Precedence keeps it from displacing a proxy -- see ``_declarations``, where
-    a routed origin outranks a resolved one -- and this stays a fallback for the
-    names nothing else routes.
-
-    The answer itself, not a second reading of the spec, so a rewrite cannot
-    resolve one way and originate another.
-    """
-
-    answer = _rewrite_answers(spec)
-    return answer[0] if answer else ""
 
 
 def _dns_record_value(spec: dict[str, Any]) -> str:
@@ -2242,10 +2040,6 @@ def _uploaded_certificate_readout(
     )
 
 
-def _rewrite_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {"domain": record["domain"], "answer": record["answer"]}
-
-
 def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
     """An NPM proxy host, as the spec that would reproduce it exactly.
 
@@ -2273,10 +2067,6 @@ def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
         "serving": bool(record.get("enabled", True)),
     }
-
-
-def _rewrite_seed(context: NameContext) -> dict[str, Any]:
-    return {"domain": context.hostname}
 
 
 def _proxy_seed(context: NameContext) -> dict[str, Any]:
@@ -2484,6 +2274,27 @@ def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "name": record.get("name", ""),
         "key_expiry_disabled": not record.get("key_expires"),
     }
+
+
+def _admitted_provider_definitions() -> dict[str, ProviderSpec]:
+    from .provider_adapters.contracts import admit_controller_adapters
+
+    return dict(admit_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS))
+
+
+def _admitted_controller_adapters():
+    from .provider_adapters import build_controller_provider_adapters
+
+    return build_controller_provider_adapters(
+        provider_model=ProviderModel,
+        provider_spec=ProviderSpec,
+        applies=applies,
+        normalized_hostname=normalized_hostname,
+    )
+
+
+CONTROLLER_PROVIDER_ADAPTERS = _admitted_controller_adapters()
+_ADMITTED_PROVIDER_DEFINITIONS = _admitted_provider_definitions()
 
 
 _PROVIDERS = (
@@ -2895,59 +2706,8 @@ _PROVIDERS = (
             "arrives there is observed as the certificate itself."
         ),
     ),
-    ProviderSpec(
-        "caddy.route",
-        "A name an edge Caddy serves, and where it hands the request on.",
-        CaddyRouteSpec,
-        ResolvedCaddyRouteSpec,
-        _resolve_caddy_route,
-        actions={
-            "reconcile": applies(automatic=True),
-        },
-        label="Caddy route",
-        connection_providers=("ssh",),
-        facet="proxy",
-        hostnames=_caddy_hostnames,
-        origin=_caddy_origin,
-        identity=_caddy_identity,
-        from_record=_caddy_from_record,
-        key_hint=_caddy_key_hint,
-        readout=_caddy_readout,
-        sample_record={
-            "connection_ref": "an-edge",
-            "domain": "app.example.com",
-            "upstream": "app:8080",
-        },
-        removal_gap=(
-            "Removing the declaration must take the route with it -- forgetting it "
-            "would leave the edge serving a route nothing points at. The "
-            "controller has no delete for this yet."
-        ),
-    ),
-    ProviderSpec(
-        "adguard.rewrite",
-        "Makes a hostname resolve to an IP on your network. Created in AdGuard "
-        "if it is not there yet.",
-        AdGuardRewriteSpec,
-        actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
-        },
-        label="Internal DNS record",
-        connection_providers=("adguard",),
-        removal_note=lambda spec: (
-            f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
-            "anything reached by that name goes dark inside the network."
-        ),
-        facet="dns",
-        hostnames=_rewrite_hostnames,
-        seed=_rewrite_seed,
-        answers=_rewrite_answers,
-        origin=_rewrite_origin,
-        from_record=_rewrite_from_record,
-        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
-        readout=_rewrite_readout,
-    ),
+    _ADMITTED_PROVIDER_DEFINITIONS["caddy.route"],
+    _ADMITTED_PROVIDER_DEFINITIONS["adguard.rewrite"],
     ProviderSpec(
         "cloudflare.dns_record",
         "A DNS record anyone on the internet can look up.",

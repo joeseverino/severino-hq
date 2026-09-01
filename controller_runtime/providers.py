@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -24,7 +23,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
@@ -34,8 +32,14 @@ from control_plane.providers import (
     certificate_covers,
     controller_capability_registry,
     controller_id,
+    CONTROLLER_PROVIDER_ADAPTERS,
     normalized_record_content,
     normalized_hostname,
+)
+from control_plane.provider_adapters.contracts import (
+    ProviderError,
+    ProviderResult,
+    compile_controller_adapters,
 )
 
 
@@ -67,22 +71,6 @@ def _snapshot_value(
     if key not in snapshot:
         snapshot[key] = load()
     return cast(_SnapshotValue, snapshot[key])
-
-
-class ProviderError(RuntimeError):
-    """A provider operation failed without exposing credential material."""
-
-    def __init__(self, message: str, *, status: dict[str, Any] | None = None):
-        super().__init__(message)
-        self.status = status or {}
-
-
-@dataclass(frozen=True)
-class ProviderResult:
-    changed: bool
-    status: dict[str, Any]
-    conditions: list[dict[str, Any]]
-    message: str
 
 
 def _tls_context() -> ssl.SSLContext:
@@ -192,102 +180,6 @@ def _required(prefix: str, name: str) -> str:
     if not value:
         raise ProviderError(f"{prefix}_{name} is required.")
     return value
-
-
-def _adguard_url(connection_ref: str = "") -> str:
-    return _required(connection_prefix("adguard", connection_ref), "URL").rstrip("/")
-
-
-def _adguard_headers(connection_ref: str = "") -> dict[str, str]:
-    prefix = connection_prefix("adguard", connection_ref)
-    encoded = base64.b64encode(
-        f"{_required(prefix, 'USERNAME')}:{_required(prefix, 'PASSWORD')}".encode()
-    ).decode()
-    return {"Authorization": f"Basic {encoded}"}
-
-
-def reconcile_adguard(
-    spec: dict[str, Any],
-    *,
-    apply: bool = True,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    base_url = _adguard_url()
-    headers = _adguard_headers()
-    rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
-    desired = {"domain": spec["domain"], "answer": spec["answer"]}
-    matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
-    if not matches:
-        # Nothing answers to the desired name. If HQ was last seen holding a
-        # different one, this is a rename rather than a new rewrite, and
-        # AdGuard's update takes exactly that shape: the record as it is, and
-        # the record as it should be. Creating instead would leave the old name
-        # resolving forever with nothing in HQ pointing at it.
-        previous = (observed or {}).get("domain")
-        if previous and previous != spec["domain"]:
-            matches = [item for item in rewrites if item.get("domain") == previous]
-    if len(matches) > 1:
-        raise ProviderError("AdGuard contains duplicate rewrites for the domain.")
-    if len(matches) == 1 and all(
-        matches[0].get(key) == value for key, value in desired.items()
-    ):
-        changed = False
-    elif matches:
-        if apply:
-            _request(
-                f"{base_url}/control/rewrite/update",
-                method="PUT",
-                headers=headers,
-                payload={
-                    "target": {
-                        "domain": matches[0]["domain"],
-                        "answer": matches[0]["answer"],
-                    },
-                    "update": desired,
-                },
-            )
-        changed = True
-    else:
-        if apply:
-            _request(
-                f"{base_url}/control/rewrite/add",
-                method="POST",
-                headers=headers,
-                payload=desired,
-            )
-        changed = True
-    # AdGuard reports whether a rewrite is switched on, and HQ does not set it:
-    # the add and update payloads carry only domain and answer, so claiming to
-    # manage it would mean asserting a field this code never sends. It is
-    # observed and reported instead -- a rewrite that exists but is switched off
-    # does not resolve, and reporting that as Ready was HQ stating something
-    # untrue about the world rather than merely knowing less than it could.
-    live = matches[0] if matches else {}
-    switched_off = live.get("enabled") is False
-    status = {**desired, "enabled": live.get("enabled", True)}
-    if switched_off:
-        return ProviderResult(
-            changed=changed,
-            status=status,
-            conditions=[
-                _condition(
-                    "Degraded",
-                    True,
-                    "Disabled",
-                    "The rewrite exists in AdGuard but is switched off, so the "
-                    "name does not resolve. Re-enable it in AdGuard.",
-                )
-            ],
-            message="AdGuard rewrite is present but disabled.",
-        )
-    return ProviderResult(
-        changed=changed,
-        status=status,
-        conditions=[
-            _condition("Ready", True, "Reconciled", "AdGuard rewrite is current.")
-        ],
-        message="AdGuard rewrite updated." if changed else "AdGuard rewrite unchanged.",
-    )
 
 
 def _npm_url(connection_ref: str = "") -> str:
@@ -1467,52 +1359,6 @@ def delete_uploaded_certificate(
     )
 
 
-def delete_adguard(
-    spec: dict[str, Any],
-    *,
-    apply: bool = True,
-    observed: dict[str, Any] | None = None,
-) -> ProviderResult:
-    """Remove the rewrite, and treat an already-absent one as success.
-
-    Deletion has to be idempotent because the operation queue is: a delete that
-    applied and then failed to report is retried, and a second attempt finding
-    nothing there has achieved exactly what was asked.
-    """
-
-    base_url = _adguard_url()
-    headers = _adguard_headers()
-    rewrites = _request(f"{base_url}/control/rewrite/list", headers=headers)
-    matches = [item for item in rewrites if item.get("domain") == spec["domain"]]
-    if not matches:
-        return ProviderResult(
-            changed=False,
-            status={"domain": spec["domain"], "removed": True},
-            conditions=[
-                _condition("Ready", True, "Absent", "No such rewrite in AdGuard.")
-            ],
-            message="AdGuard rewrite was already absent.",
-        )
-    if apply:
-        for match in matches:
-            # The live record, not the desired one: AdGuard identifies a rewrite
-            # by the pair, and a spec whose answer has drifted would not match.
-            _request(
-                f"{base_url}/control/rewrite/delete",
-                method="POST",
-                headers=headers,
-                payload={"domain": match["domain"], "answer": match["answer"]},
-            )
-    return ProviderResult(
-        changed=True,
-        status={"domain": spec["domain"], "removed": True},
-        conditions=[
-            _condition("Ready", True, "Removed", "AdGuard rewrite was removed.")
-        ],
-        message="AdGuard rewrite removed.",
-    )
-
-
 def delete_npm(
     spec: dict[str, Any],
     *,
@@ -1552,206 +1398,6 @@ def delete_npm(
             _condition("Ready", True, "Removed", "NPM proxy host was removed.")
         ],
         message="NPM proxy host removed.",
-    )
-
-
-def list_adguard() -> list[dict[str, Any]]:
-    base_url = _adguard_url()
-    records = _request(f"{base_url}/control/rewrite/list", headers=_adguard_headers())
-    return [
-        {
-            "domain": item["domain"],
-            "answer": item["answer"],
-            "enabled": item.get("enabled", True),
-        }
-        for item in records
-        if item.get("domain") and item.get("answer")
-    ]
-
-
-def _caddy_upstreams(node: Any) -> list[str]:
-    """Every address a handler tree eventually forwards to.
-
-    Walked rather than indexed, because Caddy nests. A route's handlers are a
-    list, a ``subroute`` handler contains its own routes, each of those has
-    handlers again, and the depth depends on how the Caddyfile was written --
-    an ``handle_path`` block, a matcher, a ``route`` directive all add a level.
-    Reaching for a fixed path would read the estate that exists today and miss
-    the one that exists after the next edit.
-
-    So this looks for the shape it needs anywhere below the node it is given,
-    and ignores everything else. A route that serves a file, writes a response
-    or redirects has no upstream at all, which is a real answer.
-    """
-
-    found: list[str] = []
-    if isinstance(node, dict):
-        if node.get("handler") == "reverse_proxy":
-            for upstream in node.get("upstreams") or ():
-                dial = str((upstream or {}).get("dial", "") or "").strip()
-                if dial:
-                    found.append(dial)
-        for value in node.values():
-            found.extend(_caddy_upstreams(value))
-    elif isinstance(node, list):
-        for item in node:
-            found.extend(_caddy_upstreams(item))
-    return found
-
-
-def _caddy_routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
-    """One record per name this Caddy answers for.
-
-    A route can match several names and a server can hold several routes, so
-    the record is per name rather than per route -- the rest of HQ joins on a
-    hostname, and a row carrying three of them joins to nothing.
-
-    A route with no host matcher is Caddy's catch-all. It answers for anything
-    that reaches it, which is not a hostname and must not be recorded as one.
-    """
-
-    servers = (((config or {}).get("apps") or {}).get("http") or {}).get(
-        "servers"
-    ) or {}
-    found: dict[tuple[str, str], dict[str, Any]] = {}
-    for server in servers.values():
-        for route in (server or {}).get("routes") or ():
-            hosts = [
-                str(host).strip().lower().rstrip(".")
-                for match in (route or {}).get("match") or ()
-                for host in (match or {}).get("host") or ()
-                if str(host).strip()
-            ]
-            if not hosts:
-                continue
-            upstreams = _caddy_upstreams(route.get("handle"))
-            for host in hosts:
-                # First wins. Caddy evaluates routes in order and the first
-                # terminal match answers, so a later route for the same name is
-                # what the earlier one shadows.
-                found.setdefault(
-                    (connection_ref, host),
-                    {
-                        "connection_ref": connection_ref,
-                        "domain": host,
-                        "upstream": upstreams[0] if len(upstreams) == 1 else "",
-                    },
-                )
-    return list(found.values())
-
-
-def list_caddy_routes() -> list[dict[str, Any]]:
-    """What every reachable edge is serving, asked of the edge itself.
-
-    Every SSH connection is tried, because which of them fronts a Caddy is not
-    something to write down here -- one that does not answers with a refusal and
-    is skipped, and an edge added later is swept without this learning its name.
-
-    One unreachable host does not fail the sweep. The others still have
-    something true to say, and a provider that reports nothing because one of
-    its endpoints was down is how a whole facet blinks out during a reboot.
-    """
-
-    found: list[dict[str, Any]] = []
-    for connection_ref in ssh_connection_refs():
-        try:
-            payload = _ssh(connection_ref, "routes")
-        except (ProviderError, OSError, ValueError):
-            continue
-        try:
-            config = json.loads(payload)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            continue
-        if isinstance(config, dict):
-            found.extend(_caddy_routes(config, connection_ref))
-    return found
-
-
-def _caddy_route_block(spec: dict[str, Any], certificate_directory: str) -> str:
-    """One site block, in the shape the operator's own file already uses.
-
-    The TLS lines are written out rather than importing the snippet that file
-    defines. HQ owns this file and not that one, and a file that imports a name
-    from somewhere else breaks the moment the somewhere else is edited -- which
-    is the coupling the separate file exists to avoid. The paths come from the
-    delivery target, which already holds the directory the certificate is
-    installed into.
-    """
-
-    lines = [f"{spec['domain']} {{"]
-    if certificate_directory:
-        directory = certificate_directory.rstrip("/")
-        lines.append(f"\ttls {directory}/fullchain.pem {directory}/privkey.pem")
-    lines.append(f"\treverse_proxy {spec['upstream']}")
-    lines.append("}")
-    return "\n".join(lines)
-
-
-def render_caddy_routes(
-    specs: list[dict[str, Any]], certificate_directory: str = ""
-) -> str:
-    """Every route HQ declares for one edge, as a file it owns outright.
-
-    Written to its own file rather than into the operator's Caddyfile, which
-    imports it. HQ never edits a line somebody else wrote: the edge answers one
-    name with `respond`, which no route HQ can declare expresses, and a writer
-    owning the whole file would have had to reproduce it or drop it.
-
-    Sorted by name so the same declarations render the same bytes. A file whose
-    order depends on a query is a file that looks changed on every pass.
-    """
-
-    ordered = sorted(
-        (spec for spec in specs if spec.get("domain") and spec.get("upstream")),
-        key=lambda spec: spec["domain"],
-    )
-    header = (
-        "# Written by Severino HQ. Edits here are replaced on the next reconcile;\n"
-        "# routes this file does not name are the operator's and are untouched.\n"
-    )
-    return (
-        header
-        + "\n"
-        + "\n\n".join(
-            _caddy_route_block(spec, certificate_directory) for spec in ordered
-        )
-        + "\n"
-    )
-
-
-def reconcile_caddy(
-    spec: dict[str, Any], *, apply: bool = True, observed: dict[str, Any] | None = None
-) -> ProviderResult:
-    """Write the routes this edge serves, as one file.
-
-    Every route in the contract, not just the one being reconciled: Caddy is
-    configured by a file and a file is all of them. Reconciling any one of them
-    converges the same file, so they cannot disagree about its contents.
-
-    In plan mode nothing is sent. The rendered file is the plan -- it is the
-    whole of what would change, and printing it is more useful than a sentence
-    describing it.
-    """
-
-    del observed
-    rendered = render_caddy_routes(
-        [dict(route) for route in spec.get("routes", ())],
-        spec.get("certificate_directory", ""),
-    )
-    if not apply:
-        return ProviderResult(
-            changed=False,
-            status={"routes": len(spec.get("routes", ()))},
-            message="Would write the routes this edge serves.",
-        )
-    _ssh(spec["connection_ref"], "routes:write", rendered.encode("utf-8"))
-    return ProviderResult(
-        changed=True,
-        status={"routes": len(spec.get("routes", ()))},
-        conditions=[
-            _condition("Ready", True, "Written", "Caddy reloaded with these routes.")
-        ],
-        message="Routes written and Caddy reloaded.",
     )
 
 
@@ -3787,15 +3433,52 @@ def _ports_worth_asking() -> tuple[int, ...]:
     return tuple(sorted(found))
 
 
+class _ProviderRuntime:
+    """Bind adapters to the controller's narrow, patchable I/O boundary."""
+
+    def request(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> Any:
+        return _request(url, method=method, headers=headers, payload=payload)
+
+    def required(self, prefix: str, name: str) -> str:
+        return _required(prefix, name)
+
+    def connection_prefix(self, provider: str, connection_ref: str = "") -> str:
+        return connection_prefix(provider, connection_ref)
+
+    def condition(
+        self, condition_type: str, status: bool, reason: str, message: str
+    ) -> dict[str, Any]:
+        return _condition(condition_type, status, reason, message)
+
+    def ssh_connection_refs(self) -> tuple[str, ...]:
+        return ssh_connection_refs()
+
+    def ssh(
+        self, connection_ref: str, operation: str, payload: bytes | None = None
+    ) -> bytes:
+        return _ssh(connection_ref, operation, payload)
+
+
+_ADAPTER_REGISTRY = compile_controller_adapters(
+    CONTROLLER_PROVIDER_ADAPTERS, _ProviderRuntime()
+)
+
+
 PROVIDER_INVENTORY = {
-    "adguard.rewrite": list_adguard,
-    "caddy.route": list_caddy_routes,
     "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
     "portainer.container": list_portainer_containers,
     "tailscale.device": list_tailnet_devices,
     "tailscale.policy": list_tailnet_policy,
+    **_ADAPTER_REGISTRY.inventory,
 }
 
 
@@ -3813,16 +3496,6 @@ PROVIDER_INVENTORY = {
 # it may touch, and both are facts HQ can only get by asking. Reported as names
 # so every menu that offers "which machine" or "which domain" is derived from
 # the credential that would have to carry out the answer.
-
-
-def _probe_adguard(connection_ref: str) -> dict[str, Any]:
-    status = _request(
-        f"{_adguard_url(connection_ref)}/control/status",
-        headers=_adguard_headers(connection_ref),
-    )
-    if not isinstance(status, dict) or "dns_addresses" not in status:
-        raise ProviderError("AdGuard did not return a status.")
-    return {"detail": f"AdGuard {status.get('version', '')}".strip(), "reaches": []}
 
 
 def _probe_npm(connection_ref: str) -> dict[str, Any]:
@@ -4607,12 +4280,12 @@ def _probe_ssh(connection_ref: str) -> dict[str, Any]:
 
 
 _CONNECTION_PROBES = {
-    "adguard": _probe_adguard,
     "npm": _probe_npm,
     "cloudflare_dns": _probe_cloudflare_dns,
     "cloudflare_api": _probe_cloudflare_api,
     "portainer": _probe_portainer,
     "tailscale": _probe_tailscale,
+    **_ADAPTER_REGISTRY.connection_probes,
 }
 
 _DEFAULT_CONNECTION_ENDPOINTS = {"tailscale": TAILNET_API}
@@ -4736,8 +4409,6 @@ PROVIDER_ACTIONS = {
         for action, policy in capability.actions.items()
         if policy.mode == "locked"
     },
-    ("adguard.rewrite", "reconcile"): reconcile_adguard,
-    ("caddy.route", "reconcile"): reconcile_caddy,
     ("portainer.stack", "reconcile"): reconcile_portainer,
     ("portainer.stack", "delete"): delete_portainer,
     ("portainer.container", "restart"): restart_portainer_container,
@@ -4745,7 +4416,6 @@ PROVIDER_ACTIONS = {
     ("portainer.container", "stop"): stop_portainer_container,
     ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
     ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
-    ("adguard.rewrite", "delete"): delete_adguard,
     ("npm.proxy_host", "reconcile"): reconcile_npm,
     ("npm.proxy_host", "delete"): delete_npm,
     ("cloudflare.dns_record", "reconcile"): reconcile_cloudflare_record,
@@ -4755,6 +4425,7 @@ PROVIDER_ACTIONS = {
     ("tailscale.device", "reconcile"): reconcile_tailnet_device,
     ("tailscale.device", "approve-routes"): approve_tailnet_routes,
     ("tailscale.policy", "reconcile"): reconcile_tailnet_policy,
+    **_ADAPTER_REGISTRY.actions,
 }
 
 

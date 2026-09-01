@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from unittest import TestCase, mock
 
+from control_plane.provider_adapters import caddy
+
 from . import providers, worker
 
 
@@ -114,6 +116,17 @@ def _bridge(**responses):
 
 
 class ProviderAdapterTests(TestCase):
+    def adguard(self, action, spec, *, apply=True, observed=None):
+        return providers.execute(
+            {
+                "kind": "adguard.rewrite",
+                "spec": spec,
+                "observed": observed or {},
+            },
+            action,
+            apply=apply,
+        )
+
     @mock.patch("controller_runtime.providers._portainer_glance")
     @mock.patch("controller_runtime.providers._ssh")
     @mock.patch(
@@ -292,8 +305,8 @@ class ProviderAdapterTests(TestCase):
     def test_adguard_noop_is_idempotent(self, request):
         request.return_value = [{"domain": "hq.example", "answer": "192.0.2.10"}]
 
-        result = providers.reconcile_adguard(
-            {"domain": "hq.example", "answer": "192.0.2.10"}
+        result = self.adguard(
+            "reconcile", {"domain": "hq.example", "answer": "192.0.2.10"}
         )
 
         self.assertFalse(result.changed)
@@ -320,8 +333,8 @@ class ProviderAdapterTests(TestCase):
             {"domain": "hq.example", "answer": "192.0.2.10", "enabled": False}
         ]
 
-        result = providers.reconcile_adguard(
-            {"domain": "hq.example", "answer": "192.0.2.10"}
+        result = self.adguard(
+            "reconcile", {"domain": "hq.example", "answer": "192.0.2.10"}
         )
 
         self.assertEqual(result.conditions[0]["type"], "Degraded")
@@ -348,8 +361,8 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.delete_adguard(
-            {"domain": "hq.example", "answer": "192.0.2.10"}
+        result = self.adguard(
+            "delete", {"domain": "hq.example", "answer": "192.0.2.10"}
         )
 
         self.assertTrue(result.changed)
@@ -379,7 +392,9 @@ class ProviderAdapterTests(TestCase):
         """
         request.return_value = []
 
-        result = providers.delete_adguard({"domain": "gone.example", "answer": "x"})
+        result = self.adguard(
+            "delete", {"domain": "gone.example", "answer": "x"}
+        )
 
         self.assertFalse(result.changed)
         self.assertEqual(result.conditions[0]["type"], "Ready")
@@ -400,8 +415,10 @@ class ProviderAdapterTests(TestCase):
             {"domain": "hq.example", "answer": "192.0.2.10", "enabled": True}
         ]
 
-        result = providers.delete_adguard(
-            {"domain": "hq.example", "answer": "192.0.2.10"}, apply=False
+        result = self.adguard(
+            "delete",
+            {"domain": "hq.example", "answer": "192.0.2.10"},
+            apply=False,
         )
 
         self.assertTrue(result.changed)
@@ -423,8 +440,8 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.reconcile_adguard(
-            {"domain": "hq.example", "answer": "192.0.2.10"}
+        result = self.adguard(
+            "reconcile", {"domain": "hq.example", "answer": "192.0.2.10"}
         )
 
         self.assertTrue(result.changed)
@@ -755,7 +772,8 @@ class ProviderAdapterTests(TestCase):
             None,
         ]
 
-        result = providers.reconcile_adguard(
+        result = self.adguard(
+            "reconcile",
             {"domain": "new.example", "answer": "192.0.2.10"},
             observed={"domain": "old.example", "answer": "192.0.2.10"},
         )
@@ -785,8 +803,10 @@ class ProviderAdapterTests(TestCase):
         """Only a *changed* name is a rename. A new resource is still a create."""
         request.side_effect = [[], None]
 
-        providers.reconcile_adguard(
-            {"domain": "new.example", "answer": "192.0.2.10"}, observed={}
+        self.adguard(
+            "reconcile",
+            {"domain": "new.example", "answer": "192.0.2.10"},
+            observed={},
         )
 
         self.assertTrue(request.call_args_list[-1].args[0].endswith("/rewrite/add"))
@@ -2788,7 +2808,7 @@ class CaddyRouteSweepTests(TestCase):
     def _routes(self, config):
         return {
             record["domain"]: record["upstream"]
-            for record in providers._caddy_routes(config, "an-edge")
+            for record in caddy.routes(config, "an-edge")
         }
 
     def test_a_proxied_name_carries_the_container_it_hands_off_to(self):
@@ -2874,7 +2894,7 @@ class CaddyRouteSweepTests(TestCase):
             }
         }
 
-        self.assertEqual(providers._caddy_routes(catch_all, "an-edge"), [])
+        self.assertEqual(caddy.routes(catch_all, "an-edge"), [])
 
     def test_one_route_serving_several_names_becomes_one_record_each(self):
         """The rest of HQ joins on a hostname; a row holding three joins to none."""
@@ -2959,7 +2979,7 @@ class CaddyRouteSweepTests(TestCase):
                 ],
             ),
         ):
-            found = providers.list_caddy_routes()
+            found = providers.PROVIDER_INVENTORY["caddy.route"]()
 
         self.assertEqual(
             sorted(record["domain"] for record in found),
@@ -3029,7 +3049,7 @@ class CaddyRouteRenderingTests(TestCase):
     """The file HQ writes for an edge, in the shape that edge already uses."""
 
     def _rendered(self, specs, certificate_directory="/opt/apps/caddy/certs"):
-        return providers.render_caddy_routes(specs, certificate_directory)
+        return caddy.render_routes(specs, certificate_directory)
 
     def test_a_route_becomes_a_site_block_that_serves_its_own_tls(self):
         """Written out rather than importing the operator's snippet.
@@ -3073,6 +3093,45 @@ class CaddyRouteRenderingTests(TestCase):
         out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
 
         self.assertIn("Written by Severino HQ", out)
+
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_plan_mode_is_a_complete_result_and_writes_nothing(self, ssh):
+        result = providers.execute(
+            {
+                "kind": "caddy.route",
+                "spec": {
+                    "connection_ref": "edge",
+                    "certificate_directory": "/certs",
+                    "routes": [{"domain": "a.example.com", "upstream": "app:80"}],
+                },
+            },
+            "reconcile",
+            apply=False,
+        )
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.conditions, [])
+        self.assertEqual(result.status, {"routes": 1})
+        ssh.assert_not_called()
+
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_apply_writes_the_complete_owned_file(self, ssh):
+        result = providers.execute(
+            {
+                "kind": "caddy.route",
+                "spec": {
+                    "connection_ref": "edge",
+                    "certificate_directory": "/certs",
+                    "routes": [{"domain": "a.example.com", "upstream": "app:80"}],
+                },
+            },
+            "reconcile",
+        )
+
+        self.assertTrue(result.changed)
+        ssh.assert_called_once()
+        self.assertEqual(ssh.call_args.args[:2], ("edge", "routes:write"))
+        self.assertIn(b"reverse_proxy app:80", ssh.call_args.args[2])
 
 
 class CollectorFailureIsReportedTests(TestCase):
