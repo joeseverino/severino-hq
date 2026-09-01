@@ -11,7 +11,19 @@ entry point with `SEVERINO_HQ_PLUGINS`, using comma-separated
 executed automatically.
 
 ```python
-from hq_sdk.plugin import NavigationItem, PluginManifest
+from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
+
+
+def integration():
+    return PluginIntegration(
+        capabilities=capability_specs,
+        resources=resource_specs,
+        connections=connection_specs,
+        dashboard=dashboard_cards,
+        overview=domain_overview,
+        attention=attention_items,
+        health=ready,
+    )
 
 plugin = PluginManifest(
     id="example.notes",
@@ -20,16 +32,11 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
+    integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
     urlconf="example_notes.urls",
     navigation=(NavigationItem("Notes", "notes:list", "notes"),),
-    dashboard_provider="example_notes.projections:dashboard_cards",
-    overview_provider="example_notes.projections:domain_overview",
-    capability_provider="example_notes.capabilities:specs",
-    resource_provider="example_notes.resources:specs",
-    connection_provider="example_notes.connections:specs",
-    health_provider="example_notes.health:ready",
     token_authenticated_routes=("api/v1/",),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
@@ -191,7 +198,14 @@ capability execution, audit attribution, table behavior, UI vocabulary,
 composition, or testing infrastructure. Domain-specific calculations stay in
 their private package even if the host is their only current consumer.
 
-Capability providers fail closed too. HQ validates every contributed
+Integration providers return one frozen `PluginIntegration` containing lazy,
+typed callables for every runtime contribution: capabilities, resources,
+connections, dashboard cards, overview, attention, search, and health. HQ calls
+only the projection a surface needs. A plugin manifest carries static install,
+routing, navigation, and authority metadata plus exactly one executable entry
+point; an extension never registers runtime surfaces independently.
+
+Capabilities fail closed too. HQ validates every contributed
 `CapabilitySpec` before describing or invoking the registry: names, effects,
 required permissions, target kinds and labels, command JSON Schema, duplicate
 names, and the handler call signature are all part of the host contract. MCP grants must
@@ -204,9 +218,9 @@ list handler with a `ResourceQuery` subclass, a detail handler with one stable
 identifier, a `SearchDefinition`, or any useful combination. The host validates
 names, permissions, query and handler compatibility, identifier contracts,
 duplicate resources, and duplicate search scopes at composition startup. API,
-MCP, and global search then derive their surfaces from that spec. The older
-`search_provider` hook remains compatible for search-only plugins; new domains
-should attach search to their resource so the declaration cannot drift.
+MCP, and global search then derive their surfaces from that spec. A standalone
+search projection, when it cannot belong to a resource, is emitted from the
+same `PluginIntegration.search` callable rather than another manifest hook.
 Set `web_route` to the resource's list route to make it directly reachable from
 the Command Center. It must reverse without arguments; HQ checks that contract
 at startup and renders plain discovery text as a fail-safe if checks were

@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .capabilities import CapabilitySpec, capability_label
-from .resources import get_resource, list_resource, resource_specs
+from .integrations import integration_graph
+from .resources import get_resource, list_resource
 from .security import Principal
 
 
@@ -43,9 +44,7 @@ def capability_target_options(
 
     if not spec.target_kind or not spec.subject_resource:
         return None
-    resource = next(
-        (item for item in resource_specs() if item.name == spec.subject_resource), None
-    )
+    resource = integration_graph().resources.get(spec.subject_resource)
     if not resource or not resource.list_handler or not resource.identifier:
         return None
 

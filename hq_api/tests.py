@@ -164,9 +164,11 @@ class CompositionCheckTests(SimpleTestCase):
             web_route="missing:list",
         )
         with (
-            patch("hq_api.checks.capability_specs", return_value=()),
-            patch("hq_api.checks.resource_specs", return_value=(resource,)),
-            patch("hq_api.checks.connection_specs", return_value=()),
+            patch("application.integrations._collect_capabilities", return_value=()),
+            patch(
+                "application.integrations._collect_resources", return_value=(resource,)
+            ),
+            patch("application.integrations._collect_connections", return_value=()),
         ):
             errors = capability_contract_check(None)
 
@@ -190,13 +192,18 @@ class CompositionCheckTests(SimpleTestCase):
         )
         resource = ResourceSpec("example.records", "Records", "Records.", "read")
         with (
-            patch("hq_api.checks.capability_specs", return_value=(capability,)),
-            patch("hq_api.checks.resource_specs", return_value=(resource,)),
-            patch("hq_api.checks.connection_specs", return_value=()),
+            patch(
+                "application.integrations._collect_capabilities",
+                return_value=(capability,),
+            ),
+            patch(
+                "application.integrations._collect_resources", return_value=(resource,)
+            ),
+            patch("application.integrations._collect_connections", return_value=()),
         ):
             errors = capability_contract_check(None)
 
-        self.assertEqual([error.id for error in errors], ["hq_api.E003"])
+        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
 
     def test_a_target_query_must_match_its_resource_contract(self):
         from application.capabilities import CapabilitySpec
@@ -225,13 +232,18 @@ class CompositionCheckTests(SimpleTestCase):
             identifier="slug",
         )
         with (
-            patch("hq_api.checks.capability_specs", return_value=(capability,)),
-            patch("hq_api.checks.resource_specs", return_value=(resource,)),
-            patch("hq_api.checks.connection_specs", return_value=()),
+            patch(
+                "application.integrations._collect_capabilities",
+                return_value=(capability,),
+            ),
+            patch(
+                "application.integrations._collect_resources", return_value=(resource,)
+            ),
+            patch("application.integrations._collect_connections", return_value=()),
         ):
             errors = capability_contract_check(None)
 
-        self.assertEqual([error.id for error in errors], ["hq_api.E008"])
+        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
 
     def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
         from application.connections import ConnectionSpec
@@ -246,9 +258,12 @@ class CompositionCheckTests(SimpleTestCase):
             web_route="missing:connections",
         )
         with (
-            patch("hq_api.checks.capability_specs", return_value=()),
-            patch("hq_api.checks.resource_specs", return_value=()),
-            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+            patch("application.integrations._collect_capabilities", return_value=()),
+            patch("application.integrations._collect_resources", return_value=()),
+            patch(
+                "application.integrations._collect_connections",
+                return_value=(connection,),
+            ),
         ):
             errors = capability_contract_check(None)
 
@@ -274,13 +289,16 @@ class CompositionCheckTests(SimpleTestCase):
             ),
         )
         with (
-            patch("hq_api.checks.capability_specs", return_value=()),
-            patch("hq_api.checks.resource_specs", return_value=()),
-            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+            patch("application.integrations._collect_capabilities", return_value=()),
+            patch("application.integrations._collect_resources", return_value=()),
+            patch(
+                "application.integrations._collect_connections",
+                return_value=(connection,),
+            ),
         ):
             errors = capability_contract_check(None)
 
-        self.assertEqual([error.id for error in errors], ["hq_api.E007"])
+        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
 
     def test_a_connection_ability_cannot_name_an_unknown_resource(self):
         from application.connections import ConnectionAbility, ConnectionSpec
@@ -302,13 +320,16 @@ class CompositionCheckTests(SimpleTestCase):
             ),
         )
         with (
-            patch("hq_api.checks.capability_specs", return_value=()),
-            patch("hq_api.checks.resource_specs", return_value=()),
-            patch("hq_api.checks.connection_specs", return_value=(connection,)),
+            patch("application.integrations._collect_capabilities", return_value=()),
+            patch("application.integrations._collect_resources", return_value=()),
+            patch(
+                "application.integrations._collect_connections",
+                return_value=(connection,),
+            ),
         ):
             errors = capability_contract_check(None)
 
-        self.assertEqual([error.id for error in errors], ["hq_api.E009"])
+        self.assertEqual([error.id for error in errors], ["hq_api.E001"])
 
 
 @override_settings(

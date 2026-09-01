@@ -34,7 +34,7 @@ from application.idempotency import (
     request_fingerprint,
     validate_key,
 )
-from application.resources import resource_specs
+from application.integrations import integration_graph
 from application.security import AuthorizationError, safe_next, web_principal
 
 
@@ -109,8 +109,7 @@ class CommandView(LoginRequiredMixin, View):
         return saved
 
     def _context(self, form, *, result=None):
-        resources = {spec.name: spec for spec in resource_specs()}
-        resource = resources.get(self.spec.subject_resource)
+        resource = integration_graph().resources.get(self.spec.subject_resource)
         schema = command_schema(self.spec.command_type)
         required_capabilities = tuple(
             item.value if hasattr(item, "value") else str(item)

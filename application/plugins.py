@@ -14,7 +14,7 @@ from django.urls import include, path, reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 
-PLUGIN_API_VERSION = 1
+PLUGIN_API_VERSION = 2
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -40,6 +40,20 @@ class NavigationItem:
 
 
 @dataclass(frozen=True)
+class PluginIntegration:
+    """One extension's complete, lazy executable contribution to HQ."""
+
+    capabilities: Callable[[], Iterable[Any]] | None = None
+    resources: Callable[[], Iterable[Any]] | None = None
+    connections: Callable[[], Iterable[Any]] | None = None
+    dashboard: Callable[[], Iterable[dict[str, Any]]] | None = None
+    overview: Callable[[], DomainOverview] | None = None
+    attention: Callable[[], Iterable[Any]] | None = None
+    search: Callable[[], Iterable[Any]] | None = None
+    health: Callable[[], bool] | None = None
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     id: str
     name: str
@@ -47,21 +61,12 @@ class PluginManifest:
     distribution: str
     source_repository: str
     source_workflow: str
+    integration_provider: str
     api_version: int = PLUGIN_API_VERSION
     django_apps: tuple[str, ...] = ()
     url_prefix: str = ""
     urlconf: str = ""
     navigation: tuple[NavigationItem, ...] = ()
-    dashboard_provider: str = ""
-    overview_provider: str = ""
-    # Optional. Returns Insight-shaped items this extension believes need an
-    # operator decision now. Composing surfaces gather these across extensions,
-    # so a thing that needs doing is visible without opening its own page.
-    attention_provider: str = ""
-    capability_provider: str = ""
-    resource_provider: str = ""
-    search_provider: str = ""
-    health_provider: str = ""
     # Optional. Routes under this plugin's own url_prefix that carry their own
     # request authentication (a bearer token, a signed body) instead of the
     # session cookie. They are exempted from the session login *redirect*, not
@@ -75,9 +80,6 @@ class PluginManifest:
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
     mcp_write_capabilities: tuple[str, ...] = ()
-    # Appended so positional manifests built against earlier SDKs cannot have a
-    # later optional value silently rebound to a new field.
-    connection_provider: str = ""
 
 
 def _import(spec: str) -> Any:
@@ -150,23 +152,13 @@ def _validate_mount(manifest: PluginManifest) -> None:
 
 
 def _validate_providers(manifest: PluginManifest) -> None:
-    """Optional hooks the host will import by name if they are declared."""
+    """The one executable entry point every extension must declare."""
 
-    for field in (
-        "dashboard_provider",
-        "overview_provider",
-        "attention_provider",
-        "capability_provider",
-        "resource_provider",
-        "connection_provider",
-        "search_provider",
-        "health_provider",
-    ):
-        provider = getattr(manifest, field)
-        if provider and not PYTHON_REFERENCE.fullmatch(provider):
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} has invalid {field} {provider!r}."
-            )
+    if not PYTHON_REFERENCE.fullmatch(manifest.integration_provider):
+        raise ImproperlyConfigured(
+            f"Plugin {manifest.id!r} has invalid integration_provider "
+            f"{manifest.integration_provider!r}."
+        )
 
 
 def _validate_token_routes(manifest: PluginManifest) -> None:
@@ -333,14 +325,51 @@ def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
     )
 
 
-def _provided(attribute: str) -> tuple[Any, ...]:
-    values = []
+def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], ...]:
+    """Pair installed identity with its typed, query-lazy contribution."""
+
+    integrations = []
     for plugin in installed_plugins():
-        reference = getattr(plugin, attribute)
-        if reference:
-            provider: Callable[[], Iterable[Any]] = _import(reference)
-            values.extend(provider())
-    return tuple(values)
+        provider: Callable[[], PluginIntegration] = _import(
+            plugin.integration_provider
+        )
+        integration = provider()
+        if not isinstance(integration, PluginIntegration):
+            raise ImproperlyConfigured(
+                f"Plugin {plugin.id!r} integration provider must return "
+                "PluginIntegration."
+            )
+        invalid = [
+            field
+            for field in (
+                "capabilities",
+                "resources",
+                "connections",
+                "dashboard",
+                "overview",
+                "attention",
+                "search",
+                "health",
+            )
+            if (value := getattr(integration, field)) is not None
+            and not callable(value)
+        ]
+        if invalid:
+            raise ImproperlyConfigured(
+                f"Plugin {plugin.id!r} integration fields must be callable: "
+                f"{', '.join(invalid)}."
+            )
+        integrations.append((plugin, integration))
+    return tuple(integrations)
+
+
+def _provided(attribute: str) -> tuple[Any, ...]:
+    return tuple(
+        value
+        for _, integration in installed_integrations()
+        if (provider := getattr(integration, attribute)) is not None
+        for value in provider()
+    )
 
 
 # A card is a scalar and a link, plus optional interpretation. Kept deliberately
@@ -364,10 +393,10 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
     infer ownership from an id-naming convention that nothing enforces.
     """
     sections = []
-    for plugin in installed_plugins():
-        if not plugin.dashboard_provider:
+    for plugin, integration in installed_integrations():
+        if integration.dashboard is None:
             continue
-        cards = tuple(_import(plugin.dashboard_provider)())
+        cards = tuple(integration.dashboard())
         _validate_dashboard_cards(cards)
         sections.append(
             {
@@ -393,7 +422,7 @@ def plugin_dashboard_cards() -> tuple[dict[str, Any], ...]:
 
 
 def gather_cards(
-    sources: Iterable[tuple[str, str]],
+    sources: Iterable[tuple[str, Callable[[], Iterable[dict[str, Any]]] | None]],
 ) -> tuple[dict[str, Any], ...]:
     """Flatten and validate dashboard cards from any ``(id, provider)`` sources.
 
@@ -404,9 +433,9 @@ def gather_cards(
 
     cards = tuple(
         card
-        for _, reference in sources
-        if reference
-        for card in _import(reference)()
+        for _, provider in sources
+        if provider is not None
+        for card in provider()
     )
     _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
@@ -420,13 +449,13 @@ def gather_cards(
 def plugin_overviews() -> tuple[dict[str, Any], ...]:
     """Typed rich overviews with attribution owned by the host registry."""
     sections = []
-    for plugin in installed_plugins():
-        if not plugin.overview_provider:
+    for plugin, integration in installed_integrations():
+        if integration.overview is None:
             continue
-        overview = _import(plugin.overview_provider)()
+        overview = integration.overview()
         if not isinstance(overview, DomainOverview):
             raise ImproperlyConfigured(
-                f"Plugin {plugin.id!r} overview_provider must return DomainOverview."
+                f"Plugin {plugin.id!r} overview must return DomainOverview."
             )
         sections.append({"id": plugin.id, "label": plugin.name, "overview": overview})
     return tuple(sections)
@@ -466,11 +495,13 @@ ATTENTION_ORDER = ("serious", "attention")
 
 
 def gather_attention(
-    sources: Iterable[tuple[str, str, str]],
+    sources: Iterable[
+        tuple[str, str, Callable[[], Iterable[Any]] | None]
+    ],
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
-    ``sources`` is ``(id, label, provider_reference)`` per contributor, which is
+    ``sources`` is ``(id, label, provider)`` per contributor, which is
     all this needs to know -- so the host's own sections and installed
     extensions are gathered by one implementation rather than two that could
     drift on what "urgent" means or on which statuses count.
@@ -482,10 +513,10 @@ def gather_attention(
     """
 
     gathered: list[dict[str, Any]] = []
-    for source_id, label, reference in sources:
-        if not reference:
+    for source_id, label, provider in sources:
+        if provider is None:
             continue
-        for item in _import(reference)():
+        for item in provider():
             status = getattr(item, "status", None)
             if status not in STATUS_VALUES:
                 raise ImproperlyConfigured(
@@ -523,34 +554,32 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     """
 
     return gather_attention(
-        (plugin.id, plugin.name, plugin.attention_provider)
-        for plugin in installed_plugins()
+        (plugin.id, plugin.name, integration.attention)
+        for plugin, integration in installed_integrations()
     )
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:
-    return _provided("capability_provider")
+    return _provided("capabilities")
 
 
 def plugin_resource_specs() -> tuple[Any, ...]:
-    return _provided("resource_provider")
+    return _provided("resources")
 
 
 def plugin_connection_specs() -> tuple[Any, ...]:
-    return _provided("connection_provider")
+    return _provided("connections")
 
 
 def plugin_search_definitions() -> tuple[Any, ...]:
-    return _provided("search_provider")
+    return _provided("search")
 
 
 def plugin_health() -> dict[str, bool]:
-    checks = {}
-    for plugin in installed_plugins():
-        checks[plugin.id] = (
-            bool(_import(plugin.health_provider)()) if plugin.health_provider else True
-        )
-    return checks
+    return {
+        plugin.id: bool(integration.health()) if integration.health else True
+        for plugin, integration in installed_integrations()
+    }
 
 
 def plugin_capabilities(kind: str) -> frozenset[str]:

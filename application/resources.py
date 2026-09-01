@@ -454,7 +454,7 @@ def _validate_resource_spec(spec: ResourceSpec) -> None:
     _validate_search_contract(spec)
 
 
-def resource_specs() -> tuple[ResourceSpec, ...]:
+def _collect_resources() -> tuple[ResourceSpec, ...]:
     specs = (*CORE_RESOURCE_SPECS, *plugin_resource_specs())
     for spec in specs:
         _validate_resource_spec(spec)
@@ -467,11 +467,17 @@ def resource_specs() -> tuple[ResourceSpec, ...]:
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
-    return {spec.name: spec for spec in resource_specs()}
+    from .integrations import integration_graph
+
+    return dict(integration_graph().resources)
 
 
 def resource_search_definitions() -> tuple[SearchDefinition, ...]:
-    definitions = tuple(spec.search for spec in resource_specs() if spec.search)
+    from .integrations import integration_graph
+
+    definitions = tuple(
+        spec.search for spec in integration_graph().resources.values() if spec.search
+    )
     # Retain the v1 search-only plugin hook while resources become the canonical
     # declaration. A plugin may migrate independently, but cannot emit a scope twice.
     definitions += tuple(plugin_search_definitions())
@@ -488,14 +494,18 @@ def resource_search_definitions() -> tuple[SearchDefinition, ...]:
 
 
 def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
+    from .integrations import integration_graph
+
     return {
         spec.search.scope: spec.required_capabilities
-        for spec in resource_specs()
+        for spec in integration_graph().resources.values()
         if spec.search
     }
 
 
 def describe_resources() -> dict[str, Any]:
+    from .integrations import integration_graph
+
     return {
         "ok": True,
         "schema_version": 1,
@@ -520,7 +530,7 @@ def describe_resources() -> dict[str, Any]:
                     "search": ({"scope": spec.search.scope} if spec.search else None),
                 },
             }
-            for spec in resource_specs()
+            for spec in integration_graph().resources.values()
         ],
     }
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .capabilities import capability_specs
+from .integrations import integration_graph
 from .security import Principal
 
 
@@ -41,7 +41,7 @@ class ToolTab:
         that can only answer 403 teaches an operator to distrust the page.
         """
 
-        specs = {spec.name: spec for spec in capability_specs()}
+        specs = integration_graph().capabilities
         return any(
             principal.permits(*specs[name].required_capabilities)
             for name in self.capabilities

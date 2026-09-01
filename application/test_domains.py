@@ -26,6 +26,7 @@ from .domains import (
     domain_dashboard_cards,
     domain_navigation,
 )
+from .plugins import PluginIntegration
 from .ui import Insight
 
 
@@ -196,8 +197,8 @@ class ComposedQueueTests(TestCase):
             label="Pretend",
             origin="extension",
             navigation=(),
-            attention_provider=(
-                "application.test_domains:_pretend_extension_attention"
+            integration=PluginIntegration(
+                attention=_pretend_extension_attention
             ),
         )
 

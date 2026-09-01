@@ -16,8 +16,9 @@ from .resources import (
     describe_resources,
     get_resource,
     list_resource,
-    resource_specs,
 )
+from .integrations import integration_graph
+from .plugins import plugin_resource_specs
 from .security import AuthorizationError, Capability, Principal
 
 
@@ -69,8 +70,10 @@ class ResourceExecutionTests(TestCase):
             list_query_type=EmptyQuery,
             web_route="missing:list",
         )
+        installed = plugin_resource_specs()
         with mock.patch(
-            "application.resources.plugin_resource_specs", return_value=(plugin,)
+            "application.resources.plugin_resource_specs",
+            return_value=(*installed, plugin),
         ):
             outcome = command_center("example.records", principal=OPERATOR)
 
@@ -139,7 +142,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate resource name"),
         ):
-            resource_specs()
+            integration_graph()
 
     def test_incomplete_list_contract_fails_at_registry_construction(self):
         invalid = ResourceSpec(
@@ -155,7 +158,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "handler and query together"),
         ):
-            resource_specs()
+            integration_graph()
 
     def test_nested_django_namespaces_are_valid_web_routes(self):
         nested = ResourceSpec(
@@ -167,10 +170,12 @@ class ResourceRegistrationTests(SimpleTestCase):
             list_query_type=EmptyQuery,
             web_route="example:records:list",
         )
+        installed = plugin_resource_specs()
         with mock.patch(
-            "application.resources.plugin_resource_specs", return_value=(nested,)
+            "application.resources.plugin_resource_specs",
+            return_value=(*installed, nested),
         ):
-            self.assertIn(nested, resource_specs())
+            self.assertIn(nested, integration_graph().resources.values())
 
 
 class TailnetDeviceKeyTests(TestCase):

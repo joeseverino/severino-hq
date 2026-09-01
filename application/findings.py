@@ -48,7 +48,7 @@ from django.utils import timezone
 from control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, action_with_return, topology_investigation_links
-from .capabilities import capability_specs
+from .integrations import integration_graph
 from .cadence import sweep_interval
 from .contracts import route_url
 from .security import AuthorizationError, Principal
@@ -855,9 +855,8 @@ def rule_for(name: str) -> FindingRule | None:
 def _permitted(capability: str, principal: Principal) -> tuple[bool, str]:
     """Whether this principal may run it, and what the registry says it does."""
 
-    for spec in capability_specs():
-        if spec.name != capability:
-            continue
+    spec = integration_graph().capabilities.get(capability)
+    if spec is not None:
         try:
             for required in spec.required_capabilities:
                 principal.require(required)
