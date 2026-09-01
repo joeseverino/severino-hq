@@ -22,12 +22,28 @@
 {% if result %}
 <section class="card command-result command-result-good" aria-labelledby="command-result-title">
   <div class="section-head">
-    <div>
-      <span class="eyebrow">Execution result</span>
-      <h2 id="command-result-title">Command completed</h2>
-    </div>
-    {% if result.replayed %}<span class="scope-chip">Safely replayed</span>{% else %}<span class="pill pill-good">Committed once</span>{% endif %}
+    <h2 id="command-result-title">Command completed</h2>
+    {% comment %}
+    The badge is about retry protection. "Committed once" contradicts a
+    command whose stated effect is that it changes nothing, so the word comes
+    from what the command does.
+    {% endcomment %}
+    {% if result.replayed %}
+      <span class="scope-chip">Safely replayed</span>
+    {% elif command.effect == "read" %}
+      <span class="pill pill-good">Ran once</span>
+    {% else %}
+      <span class="pill pill-good">Committed once</span>
+    {% endif %}
   </div>
+  {% comment %}Said in words too: a two-word badge assumed knowledge.{% endcomment %}
+  <p class="muted command-result-note">
+    {% if result.replayed %}
+      This was already run. HQ returned the first result instead of running it again.
+    {% else %}
+      Running this form again returns this same result rather than {% if command.effect == "read" %}asking again{% else %}running a second time{% endif %}.
+    {% endif %}
+  </p>
   <pre><code>{{ result_json }}</code></pre>
   {% if return_url %}<a class="btn" href="{{ return_url }}">Return to previous workflow</a>{% endif %}
 </section>
@@ -35,11 +51,12 @@
 
 <div class="command-layout">
   <section class="card command-runner">
+    {% comment %}
+    One heading per section. `h2` is already a small-caps section label, so a
+    kicker above it said the same thing twice.
+    {% endcomment %}
     <div class="section-head">
-      <div>
-        <span class="eyebrow">Authorized execution</span>
-        <h2>Run command</h2>
-      </div>
+      <h2>Run command</h2>
     </div>
 
     {% if command.effect == "destructive" %}
@@ -48,6 +65,22 @@
       <div class="notice notice-attention"><strong>External change</strong><p>This may queue or perform work outside HQ. HQ protects it against double-clicks and network retries.</p></div>
     {% elif command.effect == "remote_write" %}
       <p class="muted command-effect-note">This changes HQ state through the same atomic, audited application service used by API, MCP, and CLI.</p>
+    {% endif %}
+
+    {% comment %}
+    A command that acts on an existing record writes every field of it, so a
+    field left blank here is saved blank. That is the right contract for API
+    and MCP callers, which send the whole record; it is a trap in a browser,
+    where the form opens empty unless the command declares
+    `target_initial_fields`, and only one does. Said plainly rather than
+    hydrating part of the record, which would leave the same fields being
+    cleared behind a form that now looked complete.
+    {% endcomment %}
+    {% if command.target_kind and command.effect == "remote_write" and not hydrates_target %}
+      <div class="notice notice-attention">
+        <strong>This replaces the whole record</strong>
+        <p>Every field is written as submitted, and this form does not load the current values. Anything left blank is saved blank — including fields this form does not show. Send the full record, or use the record's own edit page.</p>
+      </div>
     {% endif %}
 
     <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Running…">
@@ -67,11 +100,15 @@
       {% endif %}
       <section class="command-preview" data-command-preview aria-labelledby="command-preview-title">
         <div class="section-head">
-          <div>
-            <span class="eyebrow">Execution preview</span>
-            <h3 id="command-preview-title">What HQ will do</h3>
-          </div>
-          <span class="muted">Updates locally as you fill the form</span>
+          <h3 id="command-preview-title">What HQ will do</h3>
+          {% comment %}
+          The rows below are the only things that track what is typed, and both
+          are conditional, so with neither a target nor a reason nothing here
+          ever changes. Claim live updating only when it is true.
+          {% endcomment %}
+          {% if command.target_kind or has_reason %}
+            <span class="muted">Updates as you fill the form</span>
+          {% endif %}
         </div>
         <dl class="command-preview-live">
           {% if command.target_kind %}
