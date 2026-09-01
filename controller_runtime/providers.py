@@ -3547,11 +3547,14 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
     the rules are small enough to put on a page.
     """
 
-    try:
-        token = _tailnet_token("")
-        policy = _tailnet_policy(token)
-    except ProviderError:
-        return []
+    # Not caught here. The sweep records a raising collector as unreachable,
+    # keeps what the kind last held and carries the reason. Every failure on
+    # this path -- no credential rendered, a client that is not an OAuth
+    # client, a refused read -- raises with its own message. Swallowed into an
+    # empty list they all became the same thing: a successful sweep of a
+    # tailnet with no policy, so nothing was unreachable and nothing said why.
+    token = _tailnet_token("")
+    policy = _tailnet_policy(token)
     return [
         {
             "record": "policy",
