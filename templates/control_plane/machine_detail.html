@@ -171,6 +171,14 @@
           <th scope="row">State</th>
           <td>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|slice:":10" }}{% endif %}{% endif %}</td>
         </tr>
+        {% comment %}
+        Every tailnet reading here is observer-relative, and on this machine
+        the observer is the subject. Said once, instead of a peering panel
+        about itself.
+        {% endcomment %}
+        {% if machine.presence.observer %}
+          <tr><th scope="row">Readings</th><td>Taken here. This is the machine HQ runs on, so the tailnet facts on this page come from its own daemon.</td></tr>
+        {% endif %}
         <tr>
           <th scope="row">Node key</th>
           <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days }} days, then it leaves the tailnet{% else %}Does not expire{% endif %}</td>
@@ -249,7 +257,10 @@
         {% endcomment %}
         <tr>
           <th scope="row">Addresses</th>
-          <td>{% for address in machine.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+          {% comment %}
+          One per line: three addresses are three answers, not a phrase.
+          {% endcomment %}
+          <td>{% for address in machine.addresses %}<code>{{ address }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td>
         </tr>
       </tbody>
     </table>

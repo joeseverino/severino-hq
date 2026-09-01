@@ -15,11 +15,11 @@ which now shares the "Runs on" column with the origin it was duplicating.
 {% endcomment %}
 {% if favorites %}
   <h2 class="section-heading">Favorites</h2>
-  {% include "control_plane/_service_rows.html" with rows=favorites reorderable=True show_service_projects=favorite_service_projects %}
+  {% include "control_plane/_service_rows.html" with rows=favorites reorderable=True show_service_projects=service_projects %}
 {% endif %}
 
 {% if favorites %}<h2 class="section-heading">Everything else</h2>{% endif %}
-{% include "control_plane/_service_rows.html" with rows=services show_service_projects=other_service_projects empty_message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." %}
+{% include "control_plane/_service_rows.html" with rows=services show_service_projects=service_projects empty_message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." %}
 
 {% if unmanaged %}
   {% comment %}

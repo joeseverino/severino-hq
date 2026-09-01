@@ -868,12 +868,9 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         # and reordering only means anything within the first.
         context["favorites"] = [item for item in found if item.pinned]
         context["services"] = [item for item in found if not item.pinned]
-        context["favorite_service_projects"] = any(
-            item.project for item in context["favorites"]
-        )
-        context["other_service_projects"] = any(
-            item.project for item in context["services"]
-        )
+        # One answer for both tables: asked separately, the two halves of one
+        # catalogue could render different columns.
+        context["service_projects"] = any(item.project for item in found)
         # Where a service runs is one column, not two. The runtime facet named
         # the container declaration and the origin named the machine it runs
         # on, side by side, in two different vocabularies for one fact.
