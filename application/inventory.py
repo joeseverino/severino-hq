@@ -279,8 +279,22 @@ def _differences(
         for field, value in declared.items()
         if field in found
         and field not in unobservable
-        and str(found.get(field, "")) != str(value)
+        and _text(found.get(field, "")) != _text(value)
     )
+
+
+def _text(value: Any) -> str:
+    """One value as a string, with line endings settled.
+
+    A browser submits a textarea as CRLF and every provider returns LF, so a
+    multi-line field saved through a form differs from the identical document
+    read back -- byte for byte the same but for the line endings. A tailnet
+    policy sat drifted on that for a week, having been applied successfully and
+    accepted by Tailscale seconds earlier.
+    """
+
+    text = str(value)
+    return text.replace("\r\n", "\n").replace("\r", "\n") if "\r" in text else text
 
 
 def _record_drift(

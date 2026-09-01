@@ -326,6 +326,14 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
 
     if not resource.last_observed_at or not isinstance(resource.status, dict):
         return ()
+    # A provider with no ``from_record`` cannot turn a reading into a spec, so
+    # no field of that spec is ever echoed back. A certificate declares what was
+    # asked for -- which name, which domains, where to install -- and its
+    # reading reports what exists: issuer, expiry, the PEM. Two vocabularies
+    # that were never meant to overlap, and a per-field exemption list for them
+    # is a list that goes stale.
+    if provider is not None and not provider.from_record:
+        return ()
     unobservable = set(getattr(provider, "unobservable_fields", ()) or ())
     return tuple(
         sorted(

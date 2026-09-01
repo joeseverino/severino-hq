@@ -754,6 +754,43 @@ class UnobservableFieldTests(TestCase):
                         f"{kind}.{field} is blanked by from_record but not declared "
                         "unobservable, so a declaration naming it is never confirmed")
 
+    def test_a_field_the_reading_never_carries_is_declared_even_when_omitted(self):
+        """The guard above skips fields its sample record omits, which is
+        exactly what a field the reading never carries looks like.
+
+        Asked behaviourally instead: set the field, sweep the record it was
+        built from, and nothing should be left unconfirmed.
+        """
+
+        from .topology import _unconfirmed
+
+        for kind, provider in _adoptable():
+            declared = set(provider.unobservable_fields or ())
+            absent = set(provider.spec_type.model_fields) - set(provider.sample_record)
+            for field in sorted(absent - declared):
+                # Typed from the model, not the built spec: `from_record`
+                # never emits these, so the result has no type to read.
+                if provider.spec_type.model_fields[field].annotation is not str:
+                    continue
+                spec = provider.from_record(provider.sample_record)
+                spec[field] = "held-by-hq"
+                with self.subTest(kind=kind, field=field):
+                    resource = ManagedResource.objects.create(
+                        key=f"unconfirmed-{kind.replace('.', '-')}-{field}",
+                        kind=kind,
+                        spec=spec,
+                    )
+                    record_sweep(
+                        a_sweep(**{kind: [provider.sample_record]}),
+                        principal=cli_principal(),
+                    )
+                    resource.refresh_from_db()
+                    self.assertEqual(
+                        _unconfirmed(resource, provider), (),
+                        f"{kind}.{field} is asserted by a declaration and never "
+                        "read back, so it raises a finding no sweep or reconcile "
+                        "can clear. Declare it in unobservable_fields.")
+
     def test_an_unobservable_field_that_does_round_trip_is_a_false_exemption(self):
         """Exemptions accrete, and each one forgives drift forever."""
         for kind, provider in _adoptable():
@@ -842,3 +879,186 @@ class ObservationIsNotAnEventTests(TestCase):
         # The stamp rides along with the real change rather than vanishing.
         self.assertIn("status", changed)
         self.assertIn("last_observed_at", changed)
+
+
+class EveryKindIsWatchedOrSaysWhyNotTests(TestCase):
+    """The collector registry and the provider list were never joined.
+
+    One is a dict in the controller, the other is this list of kinds, and
+    nothing compared them -- so a kind could be declared and swept by nothing
+    at all, indefinitely, with the only symptom a staleness finding no sweep
+    could ever clear.
+    """
+
+    def _collected(self):
+        try:
+            from controller_runtime.providers import PROVIDER_INVENTORY
+        except Exception:  # pragma: no cover - controller extras absent
+            self.skipTest("the controller runtime is not importable here")
+        return set(PROVIDER_INVENTORY)
+
+    def test_a_kind_nothing_collects_says_why(self):
+        collected = self._collected()
+        for kind, provider in sorted(PROVIDERS.items()):
+            if kind in collected:
+                continue
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    provider.unobserved_reason,
+                    f"nothing sweeps {kind!r} and its provider does not say why. "
+                    "Either add a collector or state what cannot be reached.",
+                )
+
+    def test_a_kind_that_is_collected_does_not_claim_otherwise(self):
+        """Exemptions rot: a collector arriving must retire the excuse."""
+
+        for kind in sorted(self._collected()):
+            provider = PROVIDERS.get(kind)
+            if provider is None:
+                continue
+            with self.subTest(kind=kind):
+                self.assertFalse(
+                    provider.unobserved_reason,
+                    f"{kind!r} is swept but still claims nothing observes it",
+                )
+
+
+class LineEndingsAreNotDriftTests(TestCase):
+    """A document saved through a form is the same document the API returns.
+
+    HTML submits a textarea as CRLF and every provider returns LF, so the two
+    differ byte for byte while saying exactly the same thing. A tailnet policy
+    sat "drifted" on that for a week, seconds after a reconcile that Tailscale
+    accepted and that HQ recorded as "the policy is as declared".
+    """
+
+    DOCUMENT = '{\n  "grants": [],\n  "groups": {}\n}'
+
+    def test_crlf_and_lf_are_the_same_declaration(self):
+        from .inventory import _differences
+
+        declared = {"document": self.DOCUMENT.replace("\n", "\r\n")}
+        found = {"document": self.DOCUMENT}
+
+        self.assertEqual(_differences("tailscale.policy", declared, found), ())
+
+    def test_a_document_really_changing_is_still_drift(self):
+        """The normalisation must not swallow a difference that matters."""
+
+        from .inventory import _differences
+
+        declared = {"document": self.DOCUMENT.replace("\n", "\r\n")}
+        found = {"document": self.DOCUMENT.replace("grants", "grant")}
+
+        self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
+
+    def test_a_spec_saved_with_crlf_is_stored_with_one_newline(self):
+        """Fixed on the way in as well, so the stored value is comparable to
+        anything, not only to what this one comparison normalises."""
+
+        spec = validate_spec(
+            "tailscale.policy",
+            {"connection_ref": "", "document": self.DOCUMENT.replace("\n", "\r\n")},
+        )
+
+        self.assertNotIn("\r", spec["document"])
+        self.assertEqual(spec["document"], self.DOCUMENT)
+
+
+class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
+    """A spec and a reading are two vocabularies, and some never overlap.
+
+    A certificate declares what was asked for -- which name, which domains,
+    where to install -- and its reading reports what exists: issuer, expiry,
+    the PEM. Compared by field name every declared field is unconfirmed
+    forever, and no sweep or reconcile can clear it. The same was true of a
+    machine, whose only reading is telemetry.
+
+    The test is `from_record`: without one there is no way to turn a reading
+    into a spec, so there is nothing to compare and nothing to report.
+    """
+
+    class _Resource:
+        def __init__(self, spec, status):
+            self.spec = spec
+            self.status = status
+            self.last_observed_at = timezone.now()
+
+    def _unconfirmed(self, kind, status):
+        from .topology import _unconfirmed
+
+        provider = PROVIDERS[kind]
+        spec = {field: "declared" for field in provider.spec_type.model_fields}
+        return _unconfirmed(self._Resource(spec, status), provider)
+
+    def test_a_provider_with_no_reading_reports_nothing_unconfirmed(self):
+        for kind, provider in sorted(PROVIDERS.items()):
+            if provider.from_record:
+                continue
+            with self.subTest(kind=kind):
+                self.assertEqual(
+                    self._unconfirmed(kind, {"something": "else"}), (),
+                    f"{kind} has no from_record, so every declared field would "
+                    "report unconfirmed forever with nothing able to clear it",
+                )
+
+    def test_a_provider_with_a_reading_is_still_judged(self):
+        """The exemption must not quietly turn drift detection off."""
+
+        unconfirmed = self._unconfirmed("tailscale.device", {"name": "declared"})
+        self.assertTrue(
+            unconfirmed,
+            "a provider that can be read back must still report what its "
+            "reading did not confirm",
+        )
+        self.assertNotIn("name", unconfirmed)
+
+
+class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
+    """Removing a declaration must not depend on HQ being able to delete the
+    thing it describes.
+
+    A tailnet device joined by somebody running `tailscale up` on it. HQ never
+    created it and has no delete for it, so removal queued a controller action
+    the provider does not implement and was refused -- leaving a declaration
+    for a device that had been renamed away impossible to remove, and a finding
+    about it that nothing could clear.
+    """
+
+    def test_removal_is_offered_for_everything_hq_did_not_create(self):
+        from control_plane.models import OperationRequest
+        from control_plane.providers import controller_action_policy
+
+        for kind, provider in sorted(PROVIDERS.items()):
+            if provider.declaration_only:
+                continue  # removal forgets the declaration; always available
+            allowed, explanation = controller_action_policy(
+                kind, OperationRequest.Action.DELETE
+            )
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    allowed or provider.removal_gap,
+                    f"{kind} is not declaration-only, so removal queues a "
+                    f"controller delete -- which is refused: {explanation}. "
+                    "Implement the delete, mark it declaration-only, or say in "
+                    "`removal_gap` why its declarations cannot be removed.",
+                )
+
+    def test_a_stated_removal_gap_is_retired_once_removal_works(self):
+        """Exemptions accrete, and each one hides a declaration nobody can
+        get rid of."""
+
+        from control_plane.models import OperationRequest
+        from control_plane.providers import controller_action_policy
+
+        for kind, provider in sorted(PROVIDERS.items()):
+            if not provider.removal_gap:
+                continue
+            allowed, _ = controller_action_policy(
+                kind, OperationRequest.Action.DELETE
+            )
+            with self.subTest(kind=kind):
+                self.assertFalse(
+                    allowed or provider.declaration_only,
+                    f"{kind} can be removed now and should stop saying it cannot",
+                )

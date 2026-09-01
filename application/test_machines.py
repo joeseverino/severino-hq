@@ -313,6 +313,51 @@ class TailnetPresenceTests(TestCase):
         self.assertFalse(found["never-spoken"].peered)
         self.assertEqual(found["never-spoken"].peer_path, "")
 
+    def test_a_zero_handshake_is_not_a_handshake(self):
+        """Tailscale dates a peer it has never spoken to ``0001-01-01``, a
+        non-empty string. A peer with no live path still carries its home DERP
+        region, so an unparsed timestamp reads as a relayed peering.
+        """
+
+        from .machines import tailnet_presence
+
+        self.sweep(
+            {
+                **self.device("switched-off", online=False),
+                "public_key": "test-key-c",
+                "last_handshake": "0001-01-01T00:00:00Z",
+                "relay": "ord",
+            },
+        )
+
+        found = tailnet_presence()
+
+        self.assertFalse(found["switched-off"].peered)
+        self.assertEqual(found["switched-off"].peer_path, "")
+
+    def test_the_observer_does_not_peer_with_itself(self):
+        """The observer's row is the vantage, not a peering seen from it. Its
+        ``Relay`` is the DERP region it homes to, not a path to anywhere.
+        """
+
+        from .machines import tailnet_presence
+
+        self.sweep(
+            {
+                **self.device("hq-itself"),
+                "public_key": "test-key-d",
+                "last_handshake": "2026-08-25T22:18:24Z",
+                "relay": "ord",
+                "self": True,
+            },
+        )
+
+        found = tailnet_presence()
+
+        self.assertTrue(found["hq-itself"].observer)
+        self.assertFalse(found["hq-itself"].peered)
+        self.assertEqual(found["hq-itself"].peer_path, "")
+
     def test_a_relayed_peer_says_so_rather_than_reading_as_direct(self):
         """Still end to end encrypted, still slower, and worth knowing which."""
 

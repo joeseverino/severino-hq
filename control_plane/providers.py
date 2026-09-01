@@ -17,6 +17,24 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator,
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    @field_validator("*", mode="after")
+    @classmethod
+    def _settle_line_endings(cls, value: Any) -> Any:
+        """Store one newline, whatever the browser sent.
+
+        HTML submits a textarea as CRLF and every provider returns LF, so a
+        multi-line field saved through a form never again equals the identical
+        document read back. Normalised on the way in, so the declaration and
+        the reading are comparable at all -- and asked of every string field
+        rather than the two that have textareas today. Runs ``after`` because
+        a ``before`` validator is not allowed on a discriminated union's
+        discriminator, and this one matches every field.
+        """
+
+        if isinstance(value, str) and "\r" in value:
+            return value.replace("\r\n", "\n").replace("\r", "\n")
+        return value
+
 
 class ControllerVerification(ProviderModel):
     timeout_seconds: int = Field(ge=1, le=3600)
@@ -1265,6 +1283,23 @@ class ProviderSpec:
     # every host that named a certificate compared unequal forever and was
     # skipped by ``confirm_observed`` while still reading healthy.
     unobservable_fields: tuple[str, ...] = ()
+    # Why nothing sweeps this kind, or "" when something does.
+    #
+    # The collector registry is a dict in the controller and this is the list
+    # of kinds; nothing joined them, so a kind could be declared here and swept
+    # by nothing at all, with no symptom but a staleness claim no sweep clears.
+    #
+    # A sentence rather than a boolean: "nothing can reach it" and "no
+    # collector has been written yet" are different states, and the second is
+    # work rather than a fact about the world.
+    unobserved_reason: str = ""
+    # Why removing this declaration is not offered, or "" when it is.
+    #
+    # Removal queues a controller delete unless the provider is
+    # `declaration_only`, so a kind whose controller implements no delete has
+    # declarations that cannot be removed. Stated here rather than discovered
+    # at the point somebody tries.
+    removal_gap: str = ""
     # One record shaped exactly as this provider's sweep reports them, for the
     # contract tests to rebuild a spec from. It lives beside the provider
     # because a list the tests keep is a list that goes stale.
@@ -2483,6 +2518,15 @@ _PROVIDERS = (
         hostnames=_certificate_hostnames,
         seed=_certificate_seed,
         covers=True,
+        unobserved_reason=(
+            "No collector lists certificates. What HQ knows about one "
+            "arrives when an operation issues or installs it, so the "
+            "record ages between operations rather than between sweeps."
+        ),
+        removal_gap=(
+            "Removing the declaration should stop the renewals it drives, and the "
+            "controller has no delete for this yet."
+        ),
     ),
     ProviderSpec(
         "tls.uploaded_certificate",
@@ -2505,6 +2549,10 @@ _PROVIDERS = (
         hostnames=_uploaded_certificate_hostnames,
         covers=True,
         readout=_uploaded_certificate_readout,
+        unobserved_reason=(
+            "HQ holds the bytes; where they are installed is observed as "
+            "the certificate."
+        ),
     ),
     ProviderSpec(
         "npm.proxy_host",
@@ -2590,6 +2638,10 @@ _PROVIDERS = (
             "hostnames": ["shop.example.com"], "port": 3000,
         },
         choices="application.provider_choices:container_stack",
+        unobserved_reason=(
+            "A stack is observed through the containers it runs, which are "
+            "swept."
+        ),
     ),
     ProviderSpec(
         "portainer.container",
@@ -2662,6 +2714,16 @@ _PROVIDERS = (
         identity=_tailnet_device_identity,
         key_hint=_tailnet_device_key_hint,
         choices="application.provider_choices:tailnet_device",
+        # HQ's own bookkeeping: Tailscale does not hold it and no device
+        # reading echoes it back, so a declaration setting it would assert a
+        # field nothing can confirm.
+        unobservable_fields=("connection_ref",),
+        # HQ did not create the device and cannot delete it: running
+        # `tailscale up` on the machine is what put it there. Removal means HQ
+        # stops keeping its settings, as for a watched container. Left False,
+        # removal queues a delete this provider has no action for and is
+        # refused, leaving the declaration impossible to remove.
+        declaration_only=True,
         change_effects=(
             (
                 "key_expiry_disabled",
@@ -2696,6 +2758,12 @@ _PROVIDERS = (
         sample_record={"document": ""},
         identity=lambda spec: ("tailnet",),
         key_hint=lambda spec: "tailnet-policy",
+        # As for a device: a policy reading returns the document, not how HQ
+        # fetched it.
+        unobservable_fields=("connection_ref",),
+        # One policy per tailnet, which HQ did not create and cannot delete.
+        # Removal means HQ stops keeping it, as for a device.
+        declaration_only=True,
         change_effects=(
             (
                 "document",
@@ -2731,6 +2799,10 @@ _PROVIDERS = (
             f"{spec.get('name', 'This network')} stops being a range HQ knows. "
             "Addresses inside it stay, with nothing saying what they are on."
         ),
+        unobserved_reason=(
+            "A subnet is a statement about addressing rather than a thing "
+            "that answers."
+        ),
     ),
     ProviderSpec(
         "pki.authority",
@@ -2752,6 +2824,10 @@ _PROVIDERS = (
             f"{spec.get('name', 'This authority')} stops being recorded. "
             "Certificates it issued stay, with nothing saying what signed them."
         ),
+        unobserved_reason=(
+            "An offline authority is offline by definition; being "
+            "unreachable is the point of it."
+        ),
     ),
     ProviderSpec(
         "machine",
@@ -2765,6 +2841,10 @@ _PROVIDERS = (
             ),
         },
         label="Machine",
+        unobserved_reason=(
+            "A reachability probe would answer for the declared addresses. "
+            "None is written, so a printer with an address sits unchecked."
+        ),
         declaration_only=True,
         hostnames=None,
         readout=_machine_readout,
@@ -2810,6 +2890,10 @@ _PROVIDERS = (
             f"Certificates stop being installed on {spec.get('name', 'this target')}, "
             "and any that name it can no longer be resolved at all."
         ),
+        unobserved_reason=(
+            "Nothing reads back how a place takes a certificate. What "
+            "arrives there is observed as the certificate itself."
+        ),
     ),
     ProviderSpec(
         "caddy.route",
@@ -2834,6 +2918,11 @@ _PROVIDERS = (
             "domain": "app.example.com",
             "upstream": "app:8080",
         },
+        removal_gap=(
+            "Removing the declaration must take the route with it -- forgetting it "
+            "would leave the edge serving a route nothing points at. The "
+            "controller has no delete for this yet."
+        ),
     ),
     ProviderSpec(
         "adguard.rewrite",

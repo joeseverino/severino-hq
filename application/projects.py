@@ -180,7 +180,12 @@ def refresh_project(
     ):
         project = Project.objects.select_for_update().get(pk=project.pk)
         project.last_push_at = pushed_at
-        project.save(update_fields=["last_push_at", "updated_at"])
+        # `updated_at` is left out on purpose: it is the "Updated" column, the
+        # default sort and this model's ordering, and reading GitHub is not an
+        # operator edit. When the repository last moved is `last_push_at`. It
+        # is also the `expected_updated_at` token, which a refresh must not
+        # invalidate mid-edit.
+        project.save(update_fields=["last_push_at"])
     result["github"] = {"ok": True, "last_push_at": pushed_at.isoformat()}
     return result
 

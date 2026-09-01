@@ -91,6 +91,9 @@ class Presence:
     direct_endpoint: str = ""
     relay: str = ""
     last_handshake: str = ""
+    # Whether this device is the one taking the reading. The peering fields
+    # above are observer-relative; the observer's own row is not a peering.
+    observer: bool = False
     active: bool = False
     rx_bytes: int = 0
     tx_bytes: int = 0
@@ -109,9 +112,18 @@ class Presence:
         the machine HQ runs on, so a device appearing at all means HQ has it in
         its network map -- but a key in a map is a machine HQ *could* talk to.
         A handshake is one it has.
+
+        Tailscale dates a peer it has never spoken to ``0001-01-01``, so the
+        timestamp is parsed rather than tested for emptiness. The observer is
+        excluded separately: its ``relay`` is the DERP region it homes to, not
+        a path to anywhere.
         """
 
-        return bool(self.public_key and self.last_handshake)
+        from .ui import moment
+
+        if self.observer:
+            return False
+        return bool(self.public_key and moment(self.last_handshake))
 
     @property
     def handshake(self) -> str:
@@ -622,6 +634,7 @@ def tailnet_presence() -> dict[str, Presence]:
                 direct_endpoint=str(record.get("direct_endpoint", "")),
                 relay=str(record.get("relay", "")),
                 last_handshake=str(record.get("last_handshake", "")),
+                observer=bool(record.get("self")),
                 active=bool(record.get("active")),
                 rx_bytes=int(record.get("rx_bytes") or 0),
                 tx_bytes=int(record.get("tx_bytes") or 0),

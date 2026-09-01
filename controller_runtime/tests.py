@@ -3073,3 +3073,37 @@ class CaddyRouteRenderingTests(TestCase):
         out = self._rendered([{"domain": "a.example.com", "upstream": "app:8080"}])
 
         self.assertIn("Written by Severino HQ", out)
+
+
+class CollectorFailureIsReportedTests(TestCase):
+    """A collector that cannot read raises, and never reports emptiness.
+
+    ``inventory`` already turns a raising collector into an unreachable kind
+    that keeps what it last held and carries the reason. A collector that
+    catches its own error and returns ``[]`` defeats that: the sweep succeeds,
+    the kind reads as reachable and empty, and the declaration simply stops
+    being confirmed with nothing anywhere saying why.
+
+    ``tailscale.policy`` did this for a week. Every failure on that path
+    raises with its own message and all of them were thrown away, which is why
+    the cause had to be guessed at rather than read.
+    """
+
+    def test_a_policy_read_that_is_refused_is_reported_not_swallowed(self):
+        refused = providers.ProviderError(
+            "Tailscale refused the policy read (403). The credential needs the "
+            "policy_file scope."
+        )
+        with (
+            mock.patch.object(providers, "_tailnet_token", return_value="t"),
+            mock.patch.object(providers, "_tailnet_policy", side_effect=refused),
+        ):
+            swept = providers.inventory()
+
+        entry = swept["tailscale.policy"]
+        self.assertFalse(
+            entry["ok"],
+            "a refused policy read reported a successful sweep, so the tailnet "
+            "reads as having no policy at all",
+        )
+        self.assertIn("policy_file", entry["error"])
