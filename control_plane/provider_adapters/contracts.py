@@ -38,23 +38,30 @@ class ProviderRuntime(Protocol):
         method: str = "GET",
         headers: dict[str, str] | None = None,
         payload: dict[str, Any] | None = None,
-    ) -> Any: ...
+    ) -> Any:
+        raise NotImplementedError
 
-    def required(self, prefix: str, name: str) -> str: ...
+    def required(self, prefix: str, name: str) -> str:
+        raise NotImplementedError
 
-    def connection_prefix(self, provider: str, connection_ref: str = "") -> str: ...
+    def connection_prefix(self, provider: str, connection_ref: str = "") -> str:
+        raise NotImplementedError
 
-    def snapshot_value(self, key: tuple[str, ...], load: Callable[[], T]) -> T: ...
+    def snapshot_value(self, key: tuple[str, ...], load: Callable[[], T]) -> T:
+        raise NotImplementedError
 
     def condition(
         self, condition_type: str, status: bool, reason: str, message: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        raise NotImplementedError
 
-    def ssh_connection_refs(self) -> tuple[str, ...]: ...
+    def ssh_connection_refs(self) -> tuple[str, ...]:
+        raise NotImplementedError
 
     def ssh(
         self, connection_ref: str, operation: str, payload: bytes | None = None
-    ) -> bytes: ...
+    ) -> bytes:
+        raise NotImplementedError
 
 
 class ControllerActionDefinition(Protocol):

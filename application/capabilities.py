@@ -49,6 +49,7 @@ from .infrastructure import (
     request_removal,
     save_managed_resource,
 )
+from .integration_specs import CapabilitySpec
 from .lookup import (
     AddressCommand,
     NameCommand,
@@ -97,29 +98,6 @@ TARGET_KINDS: dict[str, TargetKind] = {
 
 class _UnusableTarget(Exception):
     """The target arrived, but not as the kind the capability declared."""
-
-
-@dataclass(frozen=True)
-class CapabilitySpec:
-    name: str
-    summary: str
-    effect: str
-    required_capability: Capability | str | tuple[Capability | str, ...]
-    command_type: type
-    handler: Callable
-    target_kind: str | None = None
-    subject_resource: str | None = None
-    target_label: str = ""
-    target_help: str = ""
-    target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
-    execution_notes: tuple[str, ...] = ()
-    target_initial_fields: tuple[str, ...] = ()
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
 
 
 _SPECS = (

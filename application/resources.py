@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import inspect
-from typing import Any, Callable
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import (
@@ -35,6 +34,7 @@ from . import (
     services,
 )
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
+from .integration_specs import ResourceSpec
 from .integrations import integration_graph
 from .plugins import plugin_resource_specs
 from .search_contracts import SearchDefinition
@@ -107,30 +107,6 @@ class EmptyQuery(ResourceQuery):
 class ContactSubmissionQuery(BoundedQuery):
     status: str = ""
     query: str = ""
-
-
-@dataclass(frozen=True)
-class ResourceSpec:
-    """One declaration of a readable domain and every operation it supports."""
-
-    name: str
-    label: str
-    summary: str
-    required_capability: Capability | str | tuple[Capability | str, ...]
-    list_handler: Callable[..., dict[str, Any]] | None = None
-    list_query_type: type[BaseModel] | None = None
-    detail_handler: Callable[[Any], dict[str, Any]] | None = None
-    identifier: str | None = None
-    identifier_type: type = str
-    not_found_errors: tuple[type[Exception], ...] = ()
-    search: SearchDefinition | None = None
-    web_route: str = ""
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
 
 
 CORE_RESOURCE_SPECS = (

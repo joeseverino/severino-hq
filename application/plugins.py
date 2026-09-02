@@ -15,6 +15,23 @@ from django.urls import include, path, reverse
 from .ui import STATUS_VALUES, DomainOverview
 
 PLUGIN_API_VERSION = 2
+
+# Every manifest field plugin API 1 used to name a runtime provider. API 2
+# replaced them with the single integration_provider entry point. A wheel that
+# still passes one fails in the manifest constructor, and the constructor names
+# only the first unexpected keyword -- whichever the wheel happened to pass
+# first -- so the loader has to recognise all of them to report the epoch
+# instead of an unexplained constructor error.
+PLUGIN_API_1_PROVIDER_FIELDS = (
+    "attention_provider",
+    "capability_provider",
+    "connection_provider",
+    "dashboard_provider",
+    "health_provider",
+    "overview_provider",
+    "resource_provider",
+    "search_provider",
+)
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -104,14 +121,7 @@ def _load_manifest(reference: str) -> PluginManifest:
         if not detail.startswith("PluginManifest.__init__()"):
             raise
         legacy_fields = tuple(
-            field
-            for field in (
-                "capability_provider",
-                "resource_provider",
-                "connection_provider",
-                "search_provider",
-            )
-            if field in detail
+            field for field in PLUGIN_API_1_PROVIDER_FIELDS if field in detail
         )
         if legacy_fields:
             raise ImproperlyConfigured(

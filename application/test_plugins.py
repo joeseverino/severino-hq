@@ -107,7 +107,7 @@ class PluginContractTests(TestCase):
         importer = mock.patch(
             "application.plugins._import",
             side_effect=lambda reference: (
-                (lambda: PluginIntegration())
+                PluginIntegration
                 if reference == manifest.integration_provider
                 else manifest
             ),
@@ -376,6 +376,34 @@ class PluginContractTests(TestCase):
             ),
         ):
             plugins._load_manifest("example.legacy:plugin")
+
+    def test_every_api_1_provider_field_is_reported_as_the_epoch(self):
+        """The constructor names only the first unexpected keyword, so the
+        loader must recognise each removed field, not just the ones a
+        hand-written example happens to pass first."""
+        from application import plugins
+
+        removed = set(plugins.PLUGIN_API_1_PROVIDER_FIELDS)
+        current = {f.name: getattr(VALID, f.name) for f in fields(PluginManifest)}
+        self.assertTrue(removed.isdisjoint(current))
+        for field in sorted(removed):
+
+            def import_legacy_module(name, field=field):
+                # What an API 1 wheel does at import: build its manifest.
+                PluginManifest(**{**current, field: "example_notes.legacy:hook"})
+                raise AssertionError(f"the manifest accepted {field}")
+
+            with self.subTest(field=field):
+                with (
+                    mock.patch.object(
+                        plugins, "import_module", side_effect=import_legacy_module
+                    ),
+                    self.assertRaisesRegex(
+                        ImproperlyConfigured,
+                        f"plugin API 1 provider fields.*{field}.*supports 2",
+                    ),
+                ):
+                    plugins._load_manifest("example.legacy:plugin")
 
     def test_a_provider_type_error_is_not_misattributed_to_the_plugin_api(self):
         from application import plugins

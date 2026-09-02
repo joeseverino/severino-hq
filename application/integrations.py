@@ -8,18 +8,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cache
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, TypeVar
+from typing import Any, Iterable, Iterator, Mapping, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import ValidationError
 
+from .connection_contracts import ConnectionSpec
 from .contracts import DOTTED_NAME
+from .integration_specs import CapabilitySpec, ResourceSpec
 from .search_contracts import SearchDefinition
-
-if TYPE_CHECKING:
-    from .capabilities import CapabilitySpec
-    from .connection_contracts import ConnectionSpec
-    from .resources import ResourceSpec
 
 
 Spec = TypeVar("Spec")
