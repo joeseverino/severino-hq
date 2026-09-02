@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import inspect
-from typing import Any, Callable
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import (
@@ -35,7 +34,9 @@ from . import (
     services,
 )
 from .contracts import DJANGO_ROUTE, DOTTED_NAME
-from .plugins import plugin_resource_specs, plugin_search_definitions
+from .integration_specs import ResourceSpec
+from .integrations import integration_graph
+from .plugins import plugin_resource_specs
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
 
@@ -106,30 +107,6 @@ class EmptyQuery(ResourceQuery):
 class ContactSubmissionQuery(BoundedQuery):
     status: str = ""
     query: str = ""
-
-
-@dataclass(frozen=True)
-class ResourceSpec:
-    """One declaration of a readable domain and every operation it supports."""
-
-    name: str
-    label: str
-    summary: str
-    required_capability: Capability | str | tuple[Capability | str, ...]
-    list_handler: Callable[..., dict[str, Any]] | None = None
-    list_query_type: type[BaseModel] | None = None
-    detail_handler: Callable[[Any], dict[str, Any]] | None = None
-    identifier: str | None = None
-    identifier_type: type = str
-    not_found_errors: tuple[type[Exception], ...] = ()
-    search: SearchDefinition | None = None
-    web_route: str = ""
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
 
 
 CORE_RESOURCE_SPECS = (
@@ -454,7 +431,7 @@ def _validate_resource_spec(spec: ResourceSpec) -> None:
     _validate_search_contract(spec)
 
 
-def resource_specs() -> tuple[ResourceSpec, ...]:
+def _collect_resources() -> tuple[ResourceSpec, ...]:
     specs = (*CORE_RESOURCE_SPECS, *plugin_resource_specs())
     for spec in specs:
         _validate_resource_spec(spec)
@@ -467,30 +444,17 @@ def resource_specs() -> tuple[ResourceSpec, ...]:
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
-    return {spec.name: spec for spec in resource_specs()}
+    return dict(integration_graph().resources)
 
 
 def resource_search_definitions() -> tuple[SearchDefinition, ...]:
-    definitions = tuple(spec.search for spec in resource_specs() if spec.search)
-    # Retain the v1 search-only plugin hook while resources become the canonical
-    # declaration. A plugin may migrate independently, but cannot emit a scope twice.
-    definitions += tuple(plugin_search_definitions())
-    if any(not isinstance(definition, SearchDefinition) for definition in definitions):
-        raise ImproperlyConfigured(
-            "A search provider returned something other than SearchDefinition."
-        )
-    scopes = [definition.scope for definition in definitions]
-    if any(not RESOURCE_NAME.fullmatch(scope) for scope in scopes):
-        raise ImproperlyConfigured("Every search definition must use a valid scope.")
-    if len(scopes) != len(set(scopes)):
-        raise ImproperlyConfigured("Duplicate search scope across HQ core and plugins.")
-    return definitions
+    return tuple(integration_graph().search.values())
 
 
 def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
     return {
         spec.search.scope: spec.required_capabilities
-        for spec in resource_specs()
+        for spec in integration_graph().resources.values()
         if spec.search
     }
 
@@ -520,7 +484,7 @@ def describe_resources() -> dict[str, Any]:
                     "search": ({"scope": spec.search.scope} if spec.search else None),
                 },
             }
-            for spec in resource_specs()
+            for spec in integration_graph().resources.values()
         ],
     }
 

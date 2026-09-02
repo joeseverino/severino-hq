@@ -26,8 +26,38 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 
 from __future__ import annotations
 
+import unittest
+
 from django.db import connections
-from django.test.runner import DiscoverRunner, ParallelTestSuite, _init_worker
+from django.test.runner import (
+    DiscoverRunner,
+    ParallelTestSuite,
+    RemoteTestResult,
+    RemoteTestRunner,
+    _init_worker,
+)
+
+
+class _CompositionIsolation:
+    """Make process caches obey the same per-test isolation as the database."""
+
+    def startTest(self, test):  # noqa: N802 - unittest's protocol
+        from application.plugins import clear_plugin_composition_cache
+
+        clear_plugin_composition_cache()
+        return super().startTest(test)
+
+
+class CompositionTextResult(_CompositionIsolation, unittest.TextTestResult):
+    pass
+
+
+class CompositionRemoteResult(_CompositionIsolation, RemoteTestResult):
+    pass
+
+
+class CompositionRemoteRunner(RemoteTestRunner):
+    resultclass = CompositionRemoteResult
 
 
 def _use_the_file_clone(creation, worker_id):
@@ -73,6 +103,7 @@ class FileClonedParallelSuite(ParallelTestSuite):
     # A plain function, not a staticmethod: Django reads `self.init_worker
     # .__func__`, which only exists on a bound method.
     init_worker = _init_worker_on_file_databases
+    runner_class = CompositionRemoteRunner
 
 
 def _checkpoint(alias: str) -> None:
@@ -95,6 +126,9 @@ class SeverinoTestRunner(DiscoverRunner):
     """Django's runner, with parallel workers on checkpointed database files."""
 
     parallel_test_suite = FileClonedParallelSuite
+
+    def get_resultclass(self):
+        return super().get_resultclass() or CompositionTextResult
 
     def setup_databases(self, **kwargs):
         # Build the database first and clone it second, rather than letting one

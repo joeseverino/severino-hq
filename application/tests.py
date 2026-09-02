@@ -29,10 +29,10 @@ from .assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asse
 from .content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from .capabilities import (
     CapabilitySpec,
-    capability_specs,
     describe_capabilities,
     execute_capability,
 )
+from .integrations import integration_graph
 from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from .projects import ConflictError, ProjectCommand, refresh_project, save_project
 from .security import (
@@ -96,7 +96,7 @@ class CapabilityTests(TestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid effect"),
         ):
-            capability_specs()
+            integration_graph()
 
     def test_plugin_capabilities_fail_fast_on_a_wrong_handler_contract(self):
         def wrong_handler(command):
@@ -117,7 +117,7 @@ class CapabilityTests(TestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "host call contract"),
         ):
-            capability_specs()
+            integration_graph()
 
     def test_plugin_capabilities_must_name_a_valid_resource(self):
         malformed = CapabilitySpec(
@@ -136,7 +136,7 @@ class CapabilityTests(TestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid resource"),
         ):
-            capability_specs()
+            integration_graph()
 
     def test_mcp_writes_fail_closed_by_default(self):
         with self.assertRaisesRegex(AuthorizationError, "write_projects"):

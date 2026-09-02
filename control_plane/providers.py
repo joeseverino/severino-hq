@@ -11,7 +11,14 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Annotated, Any, Callable, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 
 class ProviderModel(BaseModel):
@@ -173,8 +180,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
         max_length=500,
         title="Certificate directory",
         description=(
-            "Caddy only. Where on the target the certificate and key are "
-            "written."
+            "Caddy only. Where on the target the certificate and key are written."
         ),
     )
     discover_covered_hosts: bool = Field(
@@ -386,7 +392,9 @@ def service_facets() -> tuple[tuple[str, str], ...]:
     """
 
     supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
-    return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
+    return tuple(
+        (facet, label) for facet, label in SERVICE_FACETS if facet in supplyable
+    )
 
 
 class PortainerContainerSpec(ProviderModel):
@@ -716,76 +724,6 @@ class PortainerStackSpec(ProviderModel):
     )
 
 
-class NPMProxyHostSpec(ProviderModel):
-    domain_names: list[str] = Field(
-        min_length=1,
-        title="Hostnames",
-        description="One per line. Every name this proxy should answer for.",
-    )
-    forward_scheme: Literal["http", "https"] = Field(
-        title="Reach it over",
-        description="How the proxy talks to your service, not how visitors do.",
-    )
-    forward_host: str = Field(
-        min_length=1, max_length=255,
-        title="Send traffic to",
-        description="The address of the service itself, usually an internal IP.",
-    )
-    forward_port: int = Field(ge=1, le=65535, title="Port")
-    certificate_resource: str = Field(
-        default="",
-        title="Certificate",
-        description=(
-            "Which certificate secures these names. Required when forcing "
-            "HTTPS, which Nginx Proxy Manager cannot do without one."
-        ),
-    )
-    force_ssl: bool = Field(
-        default=True,
-        title="Force HTTPS",
-        description="Redirect anyone arriving over plain HTTP.",
-    )
-    http2: bool = Field(default=True, title="HTTP/2")
-    websocket: bool = Field(
-        default=False,
-        title="Allow websockets",
-        description="Needed for live updates, terminals and chat.",
-    )
-    caching_enabled: bool = Field(default=False, title="Cache assets")
-    block_exploits: bool = Field(
-        default=True,
-        title="Block common exploits",
-        description="Nginx Proxy Manager's built-in request filtering.",
-    )
-    access_list_id: int = Field(
-        default=0, ge=0,
-        title="Access list",
-        description="An Nginx Proxy Manager access list id. 0 means none.",
-    )
-    advanced_config: str = Field(
-        default="",
-        title="Extra nginx configuration",
-        description="Passed through as-is. Leave blank unless you need it.",
-    )
-    # Settings the reconciler used to assert rather than read. It sends the
-    # whole proxy-host object on every pass, so a field absent from this model
-    # was not left alone -- it was overwritten with a constant. HSTS was pinned
-    # off, which meant turning it on in Nginx Proxy Manager survived until the
-    # next reconciliation and then silently switched itself back off.
-    hsts_enabled: bool = False
-    hsts_subdomains: bool = False
-    trust_forwarded_proto: bool = False
-    # Whether the host serves at all. Named apart from ``ManagedResource.enabled``
-    # deliberately: that one decides whether HQ reconciles this declaration,
-    # this one is a property of the declaration itself. Collapsing them would
-    # mean pausing HQ's management of a host also took the host down.
-    serving: bool = True
-
-
-class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
-    certificate_id: int | None = Field(default=None, ge=1)
-
-
 class UploadedCertificateSpec(ProviderModel):
     """A certificate generated elsewhere, that HQ installs and keeps.
 
@@ -824,128 +762,6 @@ class ResolvedUploadedCertificateSpec(ProviderModel):
     install_on: list[str] = Field(min_length=1)
     consumers: list[TLSConsumer] = Field(min_length=1)
     domains: list[str] = Field(default_factory=list)
-
-
-class AdGuardRewriteSpec(ProviderModel):
-    domain: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Hostname",
-        description="The name that should resolve on your network.",
-    )
-    answer: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Points at",
-        description="The address this hostname resolves to, usually an IP.",
-    )
-
-
-class CaddyRouteSpec(ProviderModel):
-    """One name an edge Caddy serves, and what it hands the request to.
-
-    Observed, never authored, and locked for the same reason a container is:
-    the route lives in a Caddyfile that HQ has never seen and must not pretend
-    to own. Declaring one here says "this is mine to watch", and there is
-    nothing for a reconcile to converge toward.
-
-    It exists because the only ingress HQ could describe was a proxy, and the
-    edge does not run one. Every name served from that box reported "nothing
-    supplies this" on its own page while answering over TLS -- from a machine
-    HQ sweeps, holds a credential for, and installs the certificate on. The
-    knowledge was one `ssh` away the whole time.
-    """
-
-    connection_ref: str = Field(
-        default="",
-        max_length=160,
-        title="Caddy",
-        description="The credential that reaches the host this route is served from.",
-    )
-    domain: str = Field(
-        min_length=1,
-        max_length=253,
-        title="Hostname",
-        description="The name this route answers for.",
-    )
-    upstream: str = Field(
-        default="",
-        max_length=253,
-        title="Hands off to",
-        description="Where Caddy sends the request -- a container and port, usually.",
-    )
-
-
-class CaddyRouteInFile(ProviderModel):
-    """One route as it appears in the file HQ writes."""
-
-    domain: str = Field(min_length=1, max_length=253)
-    upstream: str = Field(min_length=1, max_length=253)
-
-
-class ResolvedCaddyRouteSpec(CaddyRouteSpec):
-    """A route, and every route sharing the file its edge imports.
-
-    Caddy is configured by a file rather than by a route, so reconciling one
-    means writing all of them. The contract carries the siblings for the same
-    reason a certificate's carries every place it installs: ``execute`` is
-    handed one resource, and one resource is not what gets written.
-
-    ``certificate_directory`` comes from the delivery target for the same
-    connection, which already records where the certificate is installed. HQ
-    writes the TLS lines out from it rather than importing the snippet the
-    operator's own file defines, so the file HQ owns stands on its own.
-    """
-
-    certificate_directory: str = Field(default="", max_length=500)
-    routes: list[CaddyRouteInFile] = Field(default_factory=list)
-
-
-def _caddy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    return (spec["domain"],)
-
-
-def _caddy_origin(spec: dict[str, Any]) -> str:
-    """Where the request goes after Caddy, when Caddy says.
-
-    A route that terminates in Caddy itself -- a redirect, a static file, a
-    status page it writes -- hands off to nothing, and an empty origin is the
-    honest answer rather than pointing the name back at the proxy in front of
-    it.
-    """
-
-    return str(spec.get("upstream", "") or "").strip()
-
-
-def _caddy_identity(spec: dict[str, Any]) -> tuple[str, ...]:
-    """One route per name per host, which is what Caddy itself enforces."""
-
-    return (
-        str(spec.get("connection_ref", "") or ""),
-        normalized_hostname(str(spec.get("domain", "") or "")),
-    )
-
-
-def _caddy_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "connection_ref": str(record.get("connection_ref", "") or ""),
-        "domain": str(record.get("domain", "") or ""),
-        "upstream": str(record.get("upstream", "") or ""),
-    }
-
-
-def _caddy_key_hint(spec: dict[str, Any]) -> str:
-    return f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
-
-
-def _caddy_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
-    upstream = str(spec.get("upstream", "") or "")
-    return (
-        ("Served by", "", f"caddy on {spec.get('connection_ref', '') or 'the edge'}"),
-        ("Hands off to", "", upstream or "Caddy answers this itself"),
-    )
 
 
 @dataclass(frozen=True)
@@ -989,25 +805,36 @@ class DNSRecordType:
 
 DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     DNSRecordType(
-        "A", "A — IPv4 address", True,
-        "IPv4 address", "For example 203.0.113.10.",
+        "A",
+        "A — IPv4 address",
+        True,
+        "IPv4 address",
+        "For example 203.0.113.10.",
         proxyable=True,
         removal_impact="This name stops resolving, so anything served at it goes dark.",
     ),
     DNSRecordType(
-        "AAAA", "AAAA — IPv6 address", True,
-        "IPv6 address", "For example 2001:db8::10.",
+        "AAAA",
+        "AAAA — IPv6 address",
+        True,
+        "IPv6 address",
+        "For example 2001:db8::10.",
         proxyable=True,
         removal_impact="This name stops resolving over IPv6.",
     ),
     DNSRecordType(
-        "CNAME", "CNAME — alias to another name", True,
-        "Target hostname", "The name this one is an alias for.",
+        "CNAME",
+        "CNAME — alias to another name",
+        True,
+        "Target hostname",
+        "The name this one is an alias for.",
         proxyable=True,
         removal_impact="This name stops resolving, so anything served at it goes dark.",
     ),
     DNSRecordType(
-        "TXT", "TXT — text record", False,
+        "TXT",
+        "TXT — text record",
+        False,
         "Text value",
         "Quoted text. Carries policy such as SPF, or a verification challenge.",
         removal_impact=(
@@ -1017,12 +844,17 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
         secondary=True,
     ),
     DNSRecordType(
-        "MX", "MX — mail exchanger", False,
-        "Mail server hostname", "The host that accepts mail for this domain.",
+        "MX",
+        "MX — mail exchanger",
+        False,
+        "Mail server hostname",
+        "The host that accepts mail for this domain.",
         removal_impact="Mail for this domain stops being delivered.",
     ),
     DNSRecordType(
-        "CAA", "CAA — permitted certificate authority", False,
+        "CAA",
+        "CAA — permitted certificate authority",
+        False,
         "CAA value",
         'Flags, tag and value — for example: 0 issue "letsencrypt.org".',
         removal_impact=(
@@ -1033,7 +865,9 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     ),
 )
 
-DNS_RECORD_TYPES_BY_ID = {record_type.id: record_type for record_type in DNS_RECORD_TYPES}
+DNS_RECORD_TYPES_BY_ID = {
+    record_type.id: record_type for record_type in DNS_RECORD_TYPES
+}
 
 # Declared statically so the annotation is a real type, and checked against the
 # registry below so the two cannot drift.
@@ -1054,18 +888,21 @@ _CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 class CloudflareDNSRecordSpec(ProviderModel):
     zone: str = Field(
-        min_length=1, max_length=253,
+        min_length=1,
+        max_length=253,
         title="Zone",
         description="The domain this record belongs to, e.g. example.com.",
     )
     name: str = Field(
-        min_length=1, max_length=253,
+        min_length=1,
+        max_length=253,
         title="Hostname",
         description="The full name being published, e.g. app.example.com.",
     )
     record_type: DNSRecordTypeId = Field(title="Record type")
     content: str = Field(
-        min_length=1, max_length=2048,
+        min_length=1,
+        max_length=2048,
         title="Value",
         description=(
             "What this record says, and it depends on the type chosen above: "
@@ -1074,7 +911,9 @@ class CloudflareDNSRecordSpec(ProviderModel):
         ),
     )
     priority: int | None = Field(
-        default=None, ge=0, le=65535,
+        default=None,
+        ge=0,
+        le=65535,
         title="Priority",
         description="MX only. Lower numbers are tried first.",
     )
@@ -1090,7 +929,9 @@ class CloudflareDNSRecordSpec(ProviderModel):
         ),
     )
     ttl: int = Field(
-        default=1, ge=1, le=86400,
+        default=1,
+        ge=1,
+        le=86400,
         title="TTL",
         description="Seconds resolvers may cache this. 1 means automatic.",
     )
@@ -1110,9 +951,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
         if self.record_type == "MX" and self.priority is None:
             raise ValueError("an MX record needs a priority")
         if self.proxied and not record_type.proxyable:
-            raise ValueError(
-                f"Cloudflare cannot proxy a {self.record_type} record"
-            )
+            raise ValueError(f"Cloudflare cannot proxy a {self.record_type} record")
         if self.proxied and self.ttl != 1:
             # Cloudflare drives the TTL of a proxied record itself and returns 1
             # for it regardless of what was sent. Storing anything else would
@@ -1120,9 +959,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
             # provider will never agree to.
             raise ValueError("a proxied record must leave TTL automatic (1)")
         if self.record_type == "CAA" and not re.match(_CAA_VALUE_PARTS, self.content):
-            raise ValueError(
-                'a CAA value looks like: 0 issue "letsencrypt.org"'
-            )
+            raise ValueError('a CAA value looks like: 0 issue "letsencrypt.org"')
         return self
 
 
@@ -1147,12 +984,14 @@ class CloudflareZoneSpec(ProviderModel):
     """
 
     zone: str = Field(
-        min_length=1, max_length=253,
+        min_length=1,
+        max_length=253,
         title="Domain",
         description="The domain itself, e.g. example.com.",
     )
     connection_ref: str = Field(
-        min_length=1, max_length=160,
+        min_length=1,
+        max_length=160,
         title="Served by",
         description="The provider connection that holds this zone.",
     )
@@ -1215,7 +1054,9 @@ class ProviderSpec:
     summary: str
     spec_type: type
     resolved_type: type | None = None
-    resolver: Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None = None
+    resolver: (
+        Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None
+    ) = None
     destructive: bool = False
     public_effect: bool = False
     # Declared after the positional fields, and always passed by keyword: the
@@ -1345,9 +1186,10 @@ class ProviderSpec:
     # loudest, and the useful one not rendered at all. Desired and observed sit
     # side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
-    readout: Callable[
-        [dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]
-    ] | None = None
+    readout: (
+        Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]]
+        | None
+    ) = None
     # ----- Identity ----------------------------------------------------------
     #
     # How to tell that a live record and a declaration are the same thing.
@@ -1458,9 +1300,9 @@ class ProviderResolutionContext:
     # ``(key, kinds) -> status``. Kinds rather than one kind because a proxy
     # host can be bound to a certificate HQ issued or one it was given, and it
     # names the resource without saying which it is.
-    resource_status: (
-        Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None
-    ) = None
+    resource_status: Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None = (
+        None
+    )
     # The key of the resource being resolved, where resolution depends on which
     # resource is asking -- a target's name belongs to one certificate, and the
     # rest are named after themselves.
@@ -1555,9 +1397,7 @@ def _consumer_at(
     if kind == "caddy":
         consumer["certificate_directory"] = target["certificate_directory"]
     elif kind == "npm":
-        consumer["discover_covered_hosts"] = bool(
-            target.get("discover_covered_hosts")
-        )
+        consumer["discover_covered_hosts"] = bool(target.get("discover_covered_hosts"))
     elif kind == "cpanel":
         # Named here only if this certificate is the one the target lists them
         # for; otherwise every non-wildcard name it covers, since shared hosting
@@ -1574,45 +1414,6 @@ def _consumer_at(
                 "install against."
             )
     return consumer
-
-
-def _resolve_caddy_route(
-    authored: dict[str, Any], context: ProviderResolutionContext
-) -> dict[str, Any]:
-    """One route, plus the whole file it is part of.
-
-    Caddy is configured by a file, not by a route, so reconciling one means
-    writing all of them for that edge. `execute` is handed a single resource --
-    which is right for everything else -- so the contract carries the siblings,
-    exactly as a certificate's carries every consumer it installs on.
-
-    The certificate directory comes from the delivery target for the same
-    connection, which already records where the certificate is installed. HQ
-    writes the TLS lines out from it rather than importing the operator's
-    snippet, so its file stands on its own.
-    """
-
-    connection_ref = authored.get("connection_ref", "")
-    directory = ""
-    for target in context.delivery_targets:
-        if (
-            target.get("connection_ref") == connection_ref
-            and target.get("kind") == "caddy"
-        ):
-            directory = str(target.get("certificate_directory", "") or "")
-    return {
-        **authored,
-        "certificate_directory": directory,
-        "routes": [
-            {
-                "domain": route.get("domain", ""),
-                "upstream": route.get("upstream", ""),
-            }
-            for route in (context.caddy_routes() if context.caddy_routes else ())
-            if route.get("connection_ref") == connection_ref
-            and route.get("upstream")
-        ],
-    }
 
 
 def _resolve_tls(
@@ -1666,19 +1467,6 @@ def _resolve_uploaded(
     }
 
 
-def _resolve_npm(
-    authored: dict[str, Any], context: ProviderResolutionContext
-) -> dict[str, Any]:
-    certificate_id = None
-    resource_key = authored.get("certificate_resource")
-    if resource_key and context.resource_status:
-        status = context.resource_status(
-            resource_key, (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
-        )
-        certificate_id = status.get("npm_certificate_id") if status else None
-    return {**authored, "certificate_id": certificate_id}
-
-
 # Each reads a *resolved* spec. A certificate's names are authored and survive a
 # failed resolution, which is why an unresolvable one still reports what it
 # covers; what resolution adds is where it installs.
@@ -1686,19 +1474,6 @@ def _resolve_npm(
 
 def _certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple(spec.get("domains", ()))
-
-
-def _proxy_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(spec["domain_names"])
-
-
-def _proxy_origin(spec: dict[str, Any]) -> str:
-    return f"{spec['forward_host']}:{spec['forward_port']}"
-
-
-def _rewrite_answers(spec: dict[str, Any]) -> tuple[str, ...]:
-    answer = str(spec.get("answer", "")).strip()
-    return (answer,) if answer else ()
 
 
 def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1714,10 +1489,6 @@ def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
     return (content,) if content else ()
 
 
-def _rewrite_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    return (spec["domain"],)
-
-
 def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     # A TXT record carries policy -- an SPF entry, a validation challenge -- not
     # a service. Naming one would put a hostname on the board that nothing is
@@ -1728,12 +1499,6 @@ def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     if record_type is None or not record_type.declares_service:
         return ()
     return (spec["name"],)
-
-
-def _rewrite_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
-    return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
 
 
 def _stack_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -1793,19 +1558,6 @@ def _stack_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "hostnames": list(record.get("hostnames") or ()),
         "connection_ref": record.get("connection_ref", ""),
     }
-
-
-def _proxy_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
-    desired = (
-        f"{spec.get('forward_scheme', '')}://{spec.get('forward_host', '')}"
-        f":{spec.get('forward_port', '')}"
-    )
-    return (
-        ("Forwards to", desired, status.get("forward", "")),
-        ("TLS", "forced" if spec.get("force_ssl") else "optional", ""),
-    )
 
 
 def expiry_phrase(stamp: str) -> str:
@@ -1873,32 +1625,6 @@ def _dns_record_origin(spec: dict[str, Any]) -> str:
     if record_type is None or not record_type.declares_service:
         return ""
     return str(spec.get("content", "")).strip()
-
-
-def _rewrite_origin(spec: dict[str, Any]) -> str:
-    """Where a rewrite sends the name, for the same reason a record does.
-
-    The note on ``_dns_record_origin`` above says an internal name is routed by
-    a proxy, so the proxy declares the origin and the rewrite need not. That
-    holds for every internal name the proxy actually fronts, and for no other:
-    a rewrite pointing straight at a box that is not the proxy is the whole
-    statement of where that name is served, and HQ was not reading it. The
-    result was a service page reporting "nothing supplies this" for a name
-    answering over TLS from a machine HQ sweeps, holds a credential for, and
-    installs certificates on.
-
-    Which is the same bug that note describes, one provider over. So the answer
-    is the same: the record that points somewhere is a statement of origin.
-    Precedence keeps it from displacing a proxy -- see ``_declarations``, where
-    a routed origin outranks a resolved one -- and this stays a fallback for the
-    names nothing else routes.
-
-    The answer itself, not a second reading of the spec, so a rewrite cannot
-    resolve one way and originate another.
-    """
-
-    answer = _rewrite_answers(spec)
-    return answer[0] if answer else ""
 
 
 def _dns_record_value(spec: dict[str, Any]) -> str:
@@ -2061,9 +1787,7 @@ def _dns_record_key_hint(spec: dict[str, Any]) -> str:
 
 
 def _dns_record_removal_note(spec: dict[str, Any]) -> str:
-    record_type = DNS_RECORD_TYPES_BY_ID.get(
-        str(spec.get("record_type", "")).upper()
-    )
+    record_type = DNS_RECORD_TYPES_BY_ID.get(str(spec.get("record_type", "")).upper())
     return record_type.removal_impact if record_type else ""
 
 
@@ -2240,67 +1964,6 @@ def _uploaded_certificate_readout(
         ("Expires", "", expiry_phrase(status.get("not_after", ""))),
         ("Installed on", ", ".join(spec.get("install_on", ())), ""),
     )
-
-
-def _rewrite_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {"domain": record["domain"], "answer": record["answer"]}
-
-
-def _proxy_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    """An NPM proxy host, as the spec that would reproduce it exactly.
-
-    ``certificate_resource`` is deliberately blank: it names an HQ resource, and
-    the provider has only a numeric certificate id which HQ may not manage. The
-    reconciler keeps whatever certificate the host already has when this is
-    empty, so adopting does not detach one.
-    """
-
-    return {
-        "domain_names": list(record["domain_names"]),
-        "forward_scheme": record["forward_scheme"],
-        "forward_host": record["forward_host"],
-        "forward_port": record["forward_port"],
-        "certificate_resource": "",
-        "force_ssl": bool(record.get("ssl_forced")),
-        "http2": bool(record.get("http2_support")),
-        "websocket": bool(record.get("allow_websocket_upgrade")),
-        "caching_enabled": bool(record.get("caching_enabled")),
-        "block_exploits": bool(record.get("block_exploits")),
-        "access_list_id": record.get("access_list_id") or 0,
-        "advanced_config": record.get("advanced_config") or "",
-        "hsts_enabled": bool(record.get("hsts_enabled")),
-        "hsts_subdomains": bool(record.get("hsts_subdomains")),
-        "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
-        "serving": bool(record.get("enabled", True)),
-    }
-
-
-def _rewrite_seed(context: NameContext) -> dict[str, Any]:
-    return {"domain": context.hostname}
-
-
-def _proxy_seed(context: NameContext) -> dict[str, Any]:
-    """A proxy for this name, pointed at whatever already serves it.
-
-    The address is not a guess. Something declared or observed answers this name
-    on a host and a port, and the form used to open with an empty "Send traffic
-    to" beside a page stating exactly that -- so the operator read the answer off
-    one card and typed it into the next.
-
-    Blank when nothing serves it yet, which is the honest form of not knowing.
-    """
-
-    host, _, port = (context.origin_address or context.origin).rpartition(":")
-    seeded: dict[str, Any] = {"domain_names": [context.hostname]}
-    if host and port.isdigit():
-        seeded["forward_host"] = host
-        seeded["forward_port"] = int(port)
-    # The certificate that already answers for this name, rather than whichever
-    # sorted first. With one certificate the menu was right by luck; the second
-    # one would have bound a proxy to a certificate that does not cover it.
-    if len(context.certificates) == 1:
-        seeded["certificate_resource"] = context.certificates[0]
-    return seeded
 
 
 def _certificate_seed(context: NameContext) -> dict[str, Any]:
@@ -2486,6 +2149,27 @@ def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _admitted_provider_definitions() -> dict[str, ProviderSpec]:
+    from .provider_adapters.contracts import admit_controller_adapters
+
+    return dict(admit_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS))
+
+
+def _admitted_controller_adapters():
+    from .provider_adapters import build_controller_provider_adapters
+
+    return build_controller_provider_adapters(
+        provider_model=ProviderModel,
+        provider_spec=ProviderSpec,
+        applies=applies,
+        normalized_hostname=normalized_hostname,
+    )
+
+
+CONTROLLER_PROVIDER_ADAPTERS = _admitted_controller_adapters()
+_ADMITTED_PROVIDER_DEFINITIONS = _admitted_provider_definitions()
+
+
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
@@ -2495,11 +2179,14 @@ _PROVIDERS = (
         ResolvedTLSCertificateSpec,
         _resolve_tls,
         actions={
-            'reconcile': applies(automatic=True),
-            'renew': applies(automatic=True, verification=ControllerVerification(
+            "reconcile": applies(automatic=True),
+            "renew": applies(
+                automatic=True,
+                verification=ControllerVerification(
                     timeout_seconds=180,
                     interval_seconds=5,
-                )),
+                ),
+            ),
         },
         label="TLS certificate",
         applies=_managed_certificate_applies,
@@ -2536,8 +2223,8 @@ _PROVIDERS = (
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
         actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
+            "reconcile": applies(automatic=True),
+            "delete": applies(),
         },
         label="Uploaded certificate",
         seed=_uploaded_certificate_seed,
@@ -2554,65 +2241,15 @@ _PROVIDERS = (
             "the certificate."
         ),
     ),
-    ProviderSpec(
-        "npm.proxy_host",
-        "Sends a hostname to something running on your network, over HTTPS. "
-        "Created in Nginx Proxy Manager if it is not there yet.",
-        NPMProxyHostSpec,
-        ResolvedNPMProxyHostSpec,
-        _resolve_npm,
-        actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
-        },
-        label="Proxy host",
-        connection_providers=("npm",),
-        removal_note=lambda spec: (
-            "Every name this answers for stops being served: "
-            + ", ".join(spec.get("domain_names", ()))
-            + "."
-        ),
-        choices="application.provider_choices:proxy_choices",
-        required_on_create=("certificate_resource",),
-        # NPM answers with a certificate id, never an HQ resource key, so
-        # `_proxy_from_record` blanks this and a sweep cannot speak to it.
-        unobservable_fields=("certificate_resource",),
-        advanced_fields=(
-            "http2",
-            "websocket",
-            "caching_enabled",
-            "block_exploits",
-            "access_list_id",
-            "advanced_config",
-            "hsts_enabled",
-            "hsts_subdomains",
-            "trust_forwarded_proto",
-            "serving",
-        ),
-        facet="proxy",
-        hostnames=_proxy_hostnames,
-        origin=_proxy_origin,
-        seed=_proxy_seed,
-        from_record=_proxy_from_record,
-        sample_record={
-            "domain_names": ["shop.example.com"], "forward_scheme": "http",
-            "forward_host": "10.0.0.20", "forward_port": 3000,
-            "ssl_forced": True, "http2_support": True,
-            "allow_websocket_upgrade": False, "caching_enabled": False,
-            "block_exploits": True, "access_list_id": 0, "advanced_config": "",
-            "hsts_enabled": False, "hsts_subdomains": False,
-            "trust_forwarded_proto": False, "enabled": True,
-        },
-        readout=_proxy_readout,
-    ),
+    _ADMITTED_PROVIDER_DEFINITIONS["npm.proxy_host"],
     ProviderSpec(
         "portainer.stack",
         "Runs a set of containers on one of your machines. Created in Portainer "
         "if it is not there yet.",
         PortainerStackSpec,
         actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
+            "reconcile": applies(automatic=True),
+            "delete": applies(),
         },
         label="Container stack",
         connection_providers=("portainer",),
@@ -2632,15 +2269,16 @@ _PROVIDERS = (
         readout=_stack_readout,
         from_record=_stack_from_record,
         sample_record={
-            "stack": "example-stack", "host": "example-host",
+            "stack": "example-stack",
+            "host": "example-host",
             "connection_ref": "example-portainer",
             "compose": "services:\\n  web:\\n    image: example/web:1\\n",
-            "hostnames": ["shop.example.com"], "port": 3000,
+            "hostnames": ["shop.example.com"],
+            "port": 3000,
         },
         choices="application.provider_choices:container_stack",
         unobserved_reason=(
-            "A stack is observed through the containers it runs, which are "
-            "swept."
+            "A stack is observed through the containers it runs, which are swept."
         ),
     ),
     ProviderSpec(
@@ -2650,12 +2288,12 @@ _PROVIDERS = (
         "still does.",
         PortainerContainerSpec,
         actions={
-            'reconcile': locked(
-                'The container is defined by a compose file HQ has never seen. HQ can watch it and cycle it, not define it.'
+            "reconcile": locked(
+                "The container is defined by a compose file HQ has never seen. HQ can watch it and cycle it, not define it."
             ),
-            'restart': applies(),
-            'start': applies(),
-            'stop': applies(),
+            "restart": applies(),
+            "start": applies(),
+            "stop": applies(),
         },
         label="Container",
         connection_providers=("portainer",),
@@ -2668,7 +2306,8 @@ _PROVIDERS = (
         readout=_container_readout,
         from_record=_container_from_record,
         sample_record={
-            "name": "example-web", "host": "example-host",
+            "name": "example-web",
+            "host": "example-host",
             "connection_ref": "example-portainer",
         },
         identity=_container_identity,
@@ -2694,11 +2333,14 @@ _PROVIDERS = (
         "not define the device; running Tailscale on the machine did that.",
         TailnetDeviceSpec,
         actions={
-            'reconcile': applies(automatic=True, verification=ControllerVerification(
+            "reconcile": applies(
+                automatic=True,
+                verification=ControllerVerification(
                     timeout_seconds=60,
                     interval_seconds=10,
-                )),
-            'approve-routes': applies(),
+                ),
+            ),
+            "approve-routes": applies(),
         },
         label="Tailnet device",
         connection_providers=("tailscale",),
@@ -2742,10 +2384,12 @@ _PROVIDERS = (
         "checks a change against your own tests before applying one.",
         TailnetPolicySpec,
         actions={
-            'reconcile': applies(verification=ControllerVerification(
+            "reconcile": applies(
+                verification=ControllerVerification(
                     timeout_seconds=60,
                     interval_seconds=10,
-                )),
+                )
+            ),
         },
         label="Tailnet policy",
         connection_providers=("tailscale",),
@@ -2784,8 +2428,8 @@ _PROVIDERS = (
         "belong to, which is what decides who can reach them.",
         NetworkSpec,
         actions={
-            'reconcile': locked(
-                'HQ cannot create a subnet. This entry records one so the addresses inside it resolve.'
+            "reconcile": locked(
+                "HQ cannot create a subnet. This entry records one so the addresses inside it resolve."
             ),
         },
         label="Network",
@@ -2800,8 +2444,7 @@ _PROVIDERS = (
             "Addresses inside it stay, with nothing saying what they are on."
         ),
         unobserved_reason=(
-            "A subnet is a statement about addressing rather than a thing "
-            "that answers."
+            "A subnet is a statement about addressing rather than a thing that answers."
         ),
     ),
     ProviderSpec(
@@ -2811,8 +2454,8 @@ _PROVIDERS = (
         "offline that nothing can reach by design.",
         CertificateAuthoritySpec,
         actions={
-            'reconcile': locked(
-                'The root is kept offline so nothing can reach it. A controller that could would defeat the point.'
+            "reconcile": locked(
+                "The root is kept offline so nothing can reach it. A controller that could would defeat the point."
             ),
         },
         label="Certificate authority",
@@ -2836,8 +2479,8 @@ _PROVIDERS = (
         "are already known and need no entry here.",
         MachineSpec,
         actions={
-            'reconcile': locked(
-                'HQ cannot create a machine. This entry records one so the addresses that reach it resolve.'
+            "reconcile": locked(
+                "HQ cannot create a machine. This entry records one so the addresses that reach it resolve."
             ),
         },
         label="Machine",
@@ -2869,8 +2512,8 @@ _PROVIDERS = (
         "Declaring one is what lets a certificate name it as a place to go.",
         TLSDeliveryTargetSpec,
         actions={
-            'reconcile': locked(
-                'This describes how a place takes a certificate. The certificates installed there are what get deployed and verified.'
+            "reconcile": locked(
+                "This describes how a place takes a certificate. The certificates installed there are what get deployed and verified."
             ),
         },
         label="Certificate target",
@@ -2895,66 +2538,15 @@ _PROVIDERS = (
             "arrives there is observed as the certificate itself."
         ),
     ),
-    ProviderSpec(
-        "caddy.route",
-        "A name an edge Caddy serves, and where it hands the request on.",
-        CaddyRouteSpec,
-        ResolvedCaddyRouteSpec,
-        _resolve_caddy_route,
-        actions={
-            "reconcile": applies(automatic=True),
-        },
-        label="Caddy route",
-        connection_providers=("ssh",),
-        facet="proxy",
-        hostnames=_caddy_hostnames,
-        origin=_caddy_origin,
-        identity=_caddy_identity,
-        from_record=_caddy_from_record,
-        key_hint=_caddy_key_hint,
-        readout=_caddy_readout,
-        sample_record={
-            "connection_ref": "an-edge",
-            "domain": "app.example.com",
-            "upstream": "app:8080",
-        },
-        removal_gap=(
-            "Removing the declaration must take the route with it -- forgetting it "
-            "would leave the edge serving a route nothing points at. The "
-            "controller has no delete for this yet."
-        ),
-    ),
-    ProviderSpec(
-        "adguard.rewrite",
-        "Makes a hostname resolve to an IP on your network. Created in AdGuard "
-        "if it is not there yet.",
-        AdGuardRewriteSpec,
-        actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
-        },
-        label="Internal DNS record",
-        connection_providers=("adguard",),
-        removal_note=lambda spec: (
-            f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
-            "anything reached by that name goes dark inside the network."
-        ),
-        facet="dns",
-        hostnames=_rewrite_hostnames,
-        seed=_rewrite_seed,
-        answers=_rewrite_answers,
-        origin=_rewrite_origin,
-        from_record=_rewrite_from_record,
-        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
-        readout=_rewrite_readout,
-    ),
+    _ADMITTED_PROVIDER_DEFINITIONS["caddy.route"],
+    _ADMITTED_PROVIDER_DEFINITIONS["adguard.rewrite"],
     ProviderSpec(
         "cloudflare.dns_record",
         "A DNS record anyone on the internet can look up.",
         CloudflareDNSRecordSpec,
         actions={
-            'reconcile': applies(automatic=True),
-            'delete': applies(),
+            "reconcile": applies(automatic=True),
+            "delete": applies(),
         },
         label="Public DNS record",
         applies=_public_dns_applies,
@@ -2968,9 +2560,13 @@ _PROVIDERS = (
         readout=_dns_record_readout,
         from_record=_dns_record_from_record,
         sample_record={
-            "zone": "example.com", "name": "www.example.com",
-            "record_type": "A", "content": "203.0.113.10", "ttl": 300,
-            "proxied": False, "priority": None,
+            "zone": "example.com",
+            "name": "www.example.com",
+            "record_type": "A",
+            "content": "203.0.113.10",
+            "ttl": 300,
+            "proxied": False,
+            "priority": None,
         },
         choices="application.provider_choices:dns_record",
         identity=_dns_record_identity,
@@ -3087,7 +2683,9 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
     second place for them to disagree with.
     """
 
-    missing = sorted(kind for kind, provider in PROVIDERS.items() if not provider.actions)
+    missing = sorted(
+        kind for kind, provider in PROVIDERS.items() if not provider.actions
+    )
     if missing:
         raise ValueError(
             "Every provider must declare what the controller may do to it. "
@@ -3126,7 +2724,9 @@ def controller_capabilities() -> dict[str, Any]:
     return contract
 
 
-def enabled_controller_actions(*, automatic_only: bool = False) -> tuple[tuple[str, str], ...]:
+def enabled_controller_actions(
+    *, automatic_only: bool = False
+) -> tuple[tuple[str, str], ...]:
     registry = controller_capability_registry()
     return tuple(
         sorted(

@@ -923,7 +923,7 @@ class DomainOverview:
     so adding a domain requires no import or template change in the composer.
 
     Deliberately carries no insights. A domain says "this needs a decision"
-    through `attention_provider` and nowhere else, because that channel is
+    through `PluginIntegration.attention` and nowhere else, because that channel is
     complete and severity-ordered by the host. An overview is a display
     surface, and display surfaces truncate -- the first version of this field
     was populated with `insights[:3]` from a list built in derivation order, so

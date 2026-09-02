@@ -10,7 +10,8 @@ from projects.models import Project
 
 from .capabilities import capability_registry, execute_capability
 from .command_center import command_center
-from .connections import connection_specs, list_connections
+from .connections import list_connections
+from .integrations import integration_graph
 from .security import Capability, Principal
 
 
@@ -53,7 +54,7 @@ class GatewayConnectionTests(TestCase):
         )
 
     def test_host_gateways_emit_from_the_domain_registry(self):
-        names = {spec.name for spec in connection_specs()}
+        names = set(integration_graph().connections)
 
         self.assertLessEqual(
             {"hq.github", "hq.cloudflare_d1", "hq.public_registries", "hq.nws"},
@@ -94,7 +95,7 @@ class GatewayConnectionTests(TestCase):
         )
 
     def test_nws_discovery_is_query_free(self):
-        spec = next(spec for spec in connection_specs() if spec.name == "hq.nws")
+        spec = integration_graph().connections["hq.nws"]
 
         with self.assertNumQueries(0):
             instances = spec.instance_provider()
@@ -119,7 +120,7 @@ class GatewayConnectionTests(TestCase):
         self.assertEqual(github["targets"][0]["label"], "Registered projects")
 
     def test_github_discovery_is_query_free(self):
-        spec = next(spec for spec in connection_specs() if spec.name == "hq.github")
+        spec = integration_graph().connections["hq.github"]
 
         with self.assertNumQueries(0):
             instances = spec.instance_provider()

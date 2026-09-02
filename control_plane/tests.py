@@ -34,11 +34,7 @@ from .models import (
     ProviderConnection,
     ProviderInventory,
 )
-from .providers import (
-    NPMProxyHostSpec,
-    describe_providers,
-    validate_resolved_certificate,
-)
+from .providers import PROVIDERS, describe_providers, validate_resolved_certificate
 from application.infrastructure import delivery_targets as delivery_targets_for_test
 
 from .desired_state import advance_dependents
@@ -170,7 +166,7 @@ class ControllerContractCompletenessTests(TestCase):
 
         spec = controller_contract(resource)["resource"]["spec"]
 
-        for field in NPMProxyHostSpec.model_fields:
+        for field in PROVIDERS["npm.proxy_host"].spec_type.model_fields:
             self.assertIn(field, spec, f"{field} would KeyError in the controller")
 
 

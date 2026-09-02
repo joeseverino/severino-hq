@@ -594,10 +594,12 @@ class FindingsTests(TestCase):
     def test_no_rule_offers_a_destructive_capability(self):
         """A finding may link to a review page; it may never hand over a delete."""
 
-        from .capabilities import capability_specs
+        from .integrations import integration_graph
 
         destructive = {
-            spec.name for spec in capability_specs() if spec.effect == "destructive"
+            spec.name
+            for spec in integration_graph().capabilities.values()
+            if spec.effect == "destructive"
         }
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
@@ -609,9 +611,9 @@ class FindingsTests(TestCase):
         self.assertEqual(offered & destructive, set())
 
     def test_every_remedy_names_a_capability_the_registry_holds(self):
-        from .capabilities import capability_specs
+        from .integrations import integration_graph
 
-        known = {spec.name for spec in capability_specs()}
+        known = set(integration_graph().capabilities)
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 

@@ -3,6 +3,7 @@
 from application.plugins import (
     PLUGIN_API_VERSION,
     NavigationItem,
+    PluginIntegration,
     PluginManifest,
     installed_plugins,
     plugin_attention_items,
@@ -14,6 +15,7 @@ from application.plugins import (
 __all__ = [
     "PLUGIN_API_VERSION",
     "NavigationItem",
+    "PluginIntegration",
     "PluginManifest",
     "installed_plugins",
     "plugin_attention_items",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import MISSING, fields, replace
 import json
 import os
 from pathlib import Path
@@ -16,10 +16,14 @@ from django.template.loader import render_to_string
 from .plugins import (
     PLUGIN_API_VERSION,
     NavigationItem,
+    PluginIntegration,
     PluginManifest,
+    clear_plugin_composition_cache,
     describe_plugins,
+    installed_integrations,
     installed_plugins,
     plugin_capabilities,
+    plugin_health,
     plugin_token_authenticated_prefixes,
 )
 from .domains import domain_navigation
@@ -73,6 +77,8 @@ VALID = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
+    api_version=2,
+    integration_provider="example.plugin:integration",
     navigation=(NavigationItem("Notes", "notes:list", "notes", 40),),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
@@ -81,10 +87,10 @@ VALID = PluginManifest(
 
 class PluginContractTests(TestCase):
     def tearDown(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
 
     def load(self, manifest=VALID):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         env = mock.patch.dict(
             os.environ,
             {
@@ -98,12 +104,19 @@ class PluginContractTests(TestCase):
             },
             clear=False,
         )
-        importer = mock.patch("application.plugins._import", return_value=manifest)
+        importer = mock.patch(
+            "application.plugins._import",
+            side_effect=lambda reference: (
+                PluginIntegration
+                if reference == manifest.integration_provider
+                else manifest
+            ),
+        )
         return env, importer
 
     def test_empty_allowlist_is_the_secure_default(self):
         with mock.patch.dict(os.environ, {"SEVERINO_HQ_PLUGINS": ""}):
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             self.assertEqual(installed_plugins(), ())
 
     def test_the_committed_inventory_stays_a_shape_and_not_a_list(self):
@@ -241,7 +254,7 @@ class PluginContractTests(TestCase):
             installed_plugins()
 
     def test_duplicate_ids_fail_closed(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -267,7 +280,7 @@ class PluginContractTests(TestCase):
             url_prefix="records/",
             urlconf="example_second.urls",
         )
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -296,7 +309,7 @@ class PluginContractTests(TestCase):
             url_prefix="records/archive/",
             urlconf="example_second.urls",
         )
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -310,35 +323,161 @@ class PluginContractTests(TestCase):
         ):
             installed_plugins()
 
-    def test_invalid_provider_reference_fails_at_startup(self):
-        env, importer = self.load(
-            replace(VALID, health_provider="not a module reference")
-        )
+    def test_every_plugin_must_declare_its_integration(self):
+        env, importer = self.load(replace(VALID, integration_provider=""))
         with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid health_provider"
+            ImproperlyConfigured, "invalid integration_provider"
         ):
             installed_plugins()
 
-    def test_invalid_connection_provider_reference_fails_at_startup(self):
+    def test_invalid_integration_provider_reference_fails_at_startup(self):
         env, importer = self.load(
-            replace(VALID, connection_provider="not a module reference")
+            replace(VALID, integration_provider="not a module reference")
         )
         with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid connection_provider"
+            ImproperlyConfigured, "invalid integration_provider"
         ):
             installed_plugins()
 
-    def test_new_manifest_fields_append_to_the_positional_contract(self):
-        legacy_fields = [
+    def test_the_manifest_has_one_executable_integration_provider(self):
+        provider_fields = [
             field.name
             for field in fields(PluginManifest)
-            if field.name != "connection_provider"
+            if field.name.endswith("provider")
         ]
 
-        rebuilt = PluginManifest(*(getattr(VALID, name) for name in legacy_fields))
+        self.assertEqual(provider_fields, ["integration_provider"])
 
-        self.assertEqual(rebuilt, VALID)
-        self.assertEqual(fields(PluginManifest)[-1].name, "connection_provider")
+    def test_plugin_api_version_is_authored_not_inherited_from_the_host(self):
+        api_version = next(
+            field for field in fields(PluginManifest) if field.name == "api_version"
+        )
+
+        self.assertIs(api_version.default, MISSING)
+
+    def test_plugin_registry_cannot_be_cleared_without_its_derived_graph(self):
+        self.assertFalse(hasattr(installed_plugins, "cache_clear"))
+
+    def test_a_legacy_manifest_shape_fails_with_the_api_epoch(self):
+        from application import plugins
+
+        with (
+            mock.patch.object(
+                plugins,
+                "import_module",
+                side_effect=TypeError(
+                    "PluginManifest.__init__() got an unexpected keyword "
+                    "argument 'capability_provider'"
+                ),
+            ),
+            self.assertRaisesRegex(
+                ImproperlyConfigured,
+                "plugin API 1 provider fields.*capability_provider.*supports 2",
+            ),
+        ):
+            plugins._load_manifest("example.legacy:plugin")
+
+    def test_every_api_1_provider_field_is_reported_as_the_epoch(self):
+        """The constructor names only the first unexpected keyword, so the
+        loader must recognise each removed field, not just the ones a
+        hand-written example happens to pass first."""
+        from application import plugins
+
+        removed = set(plugins.PLUGIN_API_1_PROVIDER_FIELDS)
+        current = {f.name: getattr(VALID, f.name) for f in fields(PluginManifest)}
+        self.assertTrue(removed.isdisjoint(current))
+        for field in sorted(removed):
+
+            def import_legacy_module(name, field=field):
+                # What an API 1 wheel does at import: build its manifest.
+                PluginManifest(**{**current, field: "example_notes.legacy:hook"})
+                raise AssertionError(f"the manifest accepted {field}")
+
+            with self.subTest(field=field):
+                with (
+                    mock.patch.object(
+                        plugins, "import_module", side_effect=import_legacy_module
+                    ),
+                    self.assertRaisesRegex(
+                        ImproperlyConfigured,
+                        f"plugin API 1 provider fields.*{field}.*supports 2",
+                    ),
+                ):
+                    plugins._load_manifest("example.legacy:plugin")
+
+    def test_a_provider_type_error_is_not_misattributed_to_the_plugin_api(self):
+        from application import plugins
+
+        with mock.patch.object(
+            plugins,
+            "import_module",
+            side_effect=TypeError("extension initialization bug"),
+        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+            plugins._import("example.provider:integration")
+
+    def test_an_unrelated_manifest_import_type_error_keeps_its_real_cause(self):
+        from application import plugins
+
+        with mock.patch.object(
+            plugins,
+            "import_module",
+            side_effect=TypeError("extension initialization bug"),
+        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+            plugins._load_manifest("example.plugin:manifest")
+
+    def test_integration_surfaces_stay_lazy_and_independent(self):
+        dashboard = mock.Mock(return_value=())
+        health = mock.Mock(return_value=True)
+        contribution = PluginIntegration(dashboard=dashboard, health=health)
+        factory = mock.Mock(return_value=contribution)
+        env = mock.patch.dict(
+            os.environ,
+            {
+                "SEVERINO_HQ_PLUGINS": "example.plugin:manifest",
+                "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+            },
+            clear=False,
+        )
+
+        with (
+            env,
+            mock.patch(
+                "application.plugins._import",
+                side_effect=lambda reference: (
+                    factory if reference == VALID.integration_provider else VALID
+                ),
+            ),
+        ):
+            self.assertEqual(installed_integrations(), ((VALID, contribution),))
+            dashboard.assert_not_called()
+            health.assert_not_called()
+            self.assertEqual(plugin_health(), {VALID.id: True})
+            health.assert_called_once_with()
+            dashboard.assert_not_called()
+
+    def test_integration_fields_fail_closed_when_not_callable(self):
+        contribution = PluginIntegration(health=True)  # type: ignore[arg-type]
+        env = mock.patch.dict(
+            os.environ,
+            {
+                "SEVERINO_HQ_PLUGINS": "example.plugin:manifest",
+                "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+            },
+            clear=False,
+        )
+        with (
+            env,
+            mock.patch(
+                "application.plugins._import",
+                side_effect=lambda reference: (
+                    (lambda: contribution)
+                    if reference == VALID.integration_provider
+                    else VALID
+                ),
+            ),
+            self.assertRaisesRegex(ImproperlyConfigured, "must be callable: health"),
+        ):
+            installed_integrations()
 
     def test_malformed_url_prefix_fails_at_startup(self):
         env, importer = self.load(
@@ -415,7 +554,7 @@ class PluginContractTests(TestCase):
         self.assertIn('href="#notes"', page_navigation)
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -460,7 +599,7 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -509,7 +648,7 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            installed_plugins.cache_clear()
+            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -541,31 +680,40 @@ class AttentionContractTests(TestCase):
             distribution="demo",
             source_repository="owner/demo",
             source_workflow=".github/workflows/admit-plugin.yml",
-            attention_provider="demo:items",
+            api_version=2,
+            integration_provider="demo:integration",
         )
         return PluginManifest(**{**base, **overrides})
 
     def _gather(self, manifests, items_by_ref):
         from application import plugins
 
-        with (
-            mock.patch.object(plugins, "installed_plugins", return_value=manifests),
-            mock.patch.object(
-                plugins, "_import", side_effect=lambda ref: (lambda: items_by_ref[ref])
-            ),
+        integrations = tuple(
+            (
+                manifest,
+                PluginIntegration(
+                    attention=(lambda items=tuple(items_by_ref[manifest.id]): items)
+                    if manifest.id in items_by_ref
+                    else None
+                ),
+            )
+            for manifest in manifests
+        )
+        with mock.patch.object(
+            plugins, "installed_integrations", return_value=integrations
         ):
             return plugins.plugin_attention_items()
 
     def test_serious_items_sort_ahead_of_attention_across_extensions(self):
         from application.ui import Insight
 
-        a = self._manifest(id="example.a", name="Aaa", attention_provider="a:items")
-        b = self._manifest(id="example.b", name="Bbb", attention_provider="b:items")
+        a = self._manifest(id="example.a", name="Aaa")
+        b = self._manifest(id="example.b", name="Bbb")
         gathered = self._gather(
             (a, b),
             {
-                "a:items": [Insight("attention", "e", "A watch", "1", "body")],
-                "b:items": [Insight("serious", "e", "B urgent", "2", "body")],
+                "example.a": [Insight("attention", "e", "A watch", "1", "body")],
+                "example.b": [Insight("serious", "e", "B urgent", "2", "body")],
             },
         )
         # Severity must beat source ordering, or the urgent item hides below.
@@ -578,7 +726,7 @@ class AttentionContractTests(TestCase):
         gathered = self._gather(
             (manifest,),
             {
-                "demo:items": [
+                "example.demo": [
                     Insight("good", "e", "Fine", "1", "body"),
                     Insight("neutral", "e", "Context", "2", "body"),
                     Insight("serious", "e", "Broken", "3", "body"),
@@ -591,13 +739,14 @@ class AttentionContractTests(TestCase):
         from application.ui import Insight
 
         gathered = self._gather(
-            (self._manifest(),), {"demo:items": [Insight("serious", "e", "T", "1", "b")]}
+            (self._manifest(),),
+            {"example.demo": [Insight("serious", "e", "T", "1", "b")]},
         )
         self.assertEqual(gathered[0]["source"], "Demo")
         self.assertEqual(gathered[0]["source_id"], "example.demo")
 
     def test_extension_without_a_provider_is_skipped(self):
-        gathered = self._gather((self._manifest(attention_provider=""),), {})
+        gathered = self._gather((self._manifest(),), {})
         self.assertEqual(gathered, ())
 
 
@@ -610,7 +759,7 @@ class ComposedPluginTestKitTests(TestCase):
     """
 
     def tearDown(self):
-        installed_plugins.cache_clear()
+        clear_plugin_composition_cache()
 
     def case(self, **attributes):
         from .plugin_testing import ComposedPluginTestCase

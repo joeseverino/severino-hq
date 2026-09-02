@@ -8,15 +8,15 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from .capabilities import CapabilitySpec, capability_label, capability_specs
+from .capabilities import CapabilitySpec, capability_label
 from .connections import (
     ConnectionAbility,
     ConnectionSpec,
     connection_catalog,
-    connection_specs,
 )
 from .contracts import route_url
-from .resources import ResourceSpec, resource_specs
+from .integrations import integration_graph
+from .resources import ResourceSpec
 from .security import Capability, Principal
 from .findings import finding_rules
 from .topology import topology_lenses
@@ -313,9 +313,10 @@ def command_center(
 ) -> dict:
     """Return every permitted resource and capability matching ``query``."""
 
-    registered_resources = resource_specs()
-    registered_commands = capability_specs()
-    registered_connections = connection_specs()
+    graph = integration_graph()
+    registered_resources = tuple(graph.resources.values())
+    registered_commands = tuple(graph.capabilities.values())
+    registered_connections = tuple(graph.connections.values())
     permitted_connections = tuple(
         spec
         for spec in registered_connections

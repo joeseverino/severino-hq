@@ -49,6 +49,7 @@ from .infrastructure import (
     request_removal,
     save_managed_resource,
 )
+from .integration_specs import CapabilitySpec
 from .lookup import (
     AddressCommand,
     NameCommand,
@@ -63,6 +64,7 @@ from .projects import (
     upsert_project,
 )
 from .receipts import ReceiptMetadataCommand, update_receipt
+from .integrations import integration_graph
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 from .plugins import plugin_capability_specs
@@ -96,33 +98,6 @@ TARGET_KINDS: dict[str, TargetKind] = {
 
 class _UnusableTarget(Exception):
     """The target arrived, but not as the kind the capability declared."""
-
-
-@dataclass(frozen=True)
-class CapabilitySpec:
-    name: str
-    summary: str
-    effect: str
-    required_capability: Capability | str | tuple[Capability | str, ...]
-    command_type: type
-    handler: Callable
-    target_kind: str | None = None
-    subject_resource: str | None = None
-    target_label: str = ""
-    target_help: str = ""
-    target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
-    execution_notes: tuple[str, ...] = ()
-    target_initial_fields: tuple[str, ...] = ()
-    # The connection families this command reaches. An ability names the
-    # capability that performs it; this is the other half of that claim, so it
-    # can be checked from both ends. Empty means undeclared and stays legal.
-    exercises: tuple[str, ...] = ()
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
 
 
 _SPECS = (
@@ -185,7 +160,6 @@ _SPECS = (
             "Ask GitHub for current push metadata using the configured connection.",
             "Persist the observed timestamp and attribute the refresh to this operator.",
         ),
-        exercises=("hq.github",),
     ),
     CapabilitySpec(
         "contact.submissions.list",
@@ -200,7 +174,6 @@ _SPECS = (
             "Read submissions through the configured D1 connection.",
             "Return only the requested bounded result set.",
         ),
-        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "contact.submission.review",
@@ -218,7 +191,6 @@ _SPECS = (
             "Write the review fields through the configured D1 connection.",
             "Record the attributed change in HQ's audit log.",
         ),
-        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "contact.submission.delete",
@@ -236,7 +208,6 @@ _SPECS = (
             "Delete the record through the configured D1 connection.",
             "Treat an already-absent record as a successful retry and audit the change.",
         ),
-        exercises=("hq.cloudflare_d1",),
     ),
     CapabilitySpec(
         "asset.create",
@@ -470,7 +441,6 @@ _SPECS = (
             "Ring the credential-free controller doorbell; no provider authority enters the web process.",
             "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
         ),
-        exercises=("infrastructure.controllers",),
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -537,7 +507,6 @@ _SPECS = (
             "Return the records as the resolver gave them, with no TTL: this "
             "provider reports a constant, which is not a measurement.",
         ),
-        exercises=("hq.public_registries",),
     ),
     CapabilitySpec(
         "lookup.address",
@@ -554,12 +523,11 @@ _SPECS = (
             "Read the RDAP allocation, which the registry publishes and which "
             "carries the company. Either registry may fail without the other.",
         ),
-        exercises=("hq.public_registries",),
     ),
 )
 
 
-def capability_specs() -> tuple[CapabilitySpec, ...]:
+def _collect_capabilities() -> tuple[CapabilitySpec, ...]:
     specs = (*_SPECS, *plugin_capability_specs())
     for spec in specs:
         _validate_capability_spec(spec)
@@ -682,7 +650,7 @@ def capability_label(name: str) -> str:
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
-    return {spec.name: spec for spec in capability_specs()}
+    return dict(integration_graph().capabilities)
 
 
 def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
@@ -719,7 +687,7 @@ def describe_capabilities() -> dict[str, Any]:
                 "resource": spec.subject_resource,
                 "input_schema": command_schema(spec.command_type),
             }
-            for spec in capability_specs()
+            for spec in integration_graph().capabilities.values()
         ],
     }
 

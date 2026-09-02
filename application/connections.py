@@ -41,6 +41,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .integrations import integration_graph
 from .action_links import (
     ActionLink,
     capability_action_link,
@@ -421,7 +422,7 @@ def _validate_connection_spec(spec: ConnectionSpec) -> None:
         raise ImproperlyConfigured(f"Connection {spec.name!r} repeats an ability name.")
 
 
-def connection_specs() -> tuple[ConnectionSpec, ...]:
+def _collect_connections() -> tuple[ConnectionSpec, ...]:
     from .domains import host_connection_specs
     from .plugins import plugin_connection_specs
 
@@ -534,7 +535,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
     """Every permitted connection family and its locally cached instances."""
 
     groups = []
-    for spec in connection_specs():
+    for spec in integration_graph().connections.values():
         if not _permitted(spec, principal):
             continue
         instances = _connection_instances(spec)
@@ -659,7 +660,7 @@ def describe_connections() -> dict:
                     for ability in spec.abilities
                 ],
             }
-            for spec in connection_specs()
+            for spec in integration_graph().connections.values()
         ],
     }
 

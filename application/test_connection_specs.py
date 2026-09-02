@@ -17,10 +17,10 @@ from .connections import (
     ConnectionLink,
     ConnectionSpec,
     connection_catalog,
-    connection_specs,
     describe_connections,
     list_connections,
 )
+from .integrations import integration_graph
 from .command_center import command_center
 from .security import Capability, Principal
 
@@ -92,7 +92,7 @@ class ConnectionExecutionTests(TestCase):
         with mock.patch(
             "application.plugins.plugin_connection_specs", return_value=(spec,)
         ):
-            self.assertIn(spec, connection_specs())
+            self.assertIn(spec, integration_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_safe_state(self):
         from django.utils import timezone
@@ -431,7 +431,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
         ):
-            connection_specs()
+            integration_graph()
 
     def test_plugin_connection_names_cannot_shadow_core(self):
         duplicate = ConnectionSpec(
@@ -448,7 +448,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate connection"),
         ):
-            connection_specs()
+            integration_graph()
 
     def test_unknown_instance_abilities_fail_closed(self):
         broken = ConnectionSpec(

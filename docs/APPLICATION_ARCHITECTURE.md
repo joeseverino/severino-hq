@@ -225,23 +225,37 @@ request; it does not perform a second sweep or claim to attest the external
 router and firewall boundary that the process cannot observe.
 
 The gateway that owns an endpoint owns this declaration. Host domains attach a
-`connection_provider` to their `DomainDescriptor`; extensions attach the same
-provider to `PluginManifest`. Adding a gateway therefore consists of one local
-provider plus the capabilities/resources its abilities name, rather than edits
-to the Connections page, Command Center, API, MCP, and topology separately.
+typed connection callable to their domain integration; an extension emits its
+connections beside its capabilities and resources through one
+`PluginIntegration`. Adding a gateway therefore consists of one local
+contribution rather than edits to the Connections page, Command Center, API,
+MCP, and topology separately.
 Keyless services are connections too when they provide a real external boundary.
 A provider emits cached/configured truth even when it currently has no token
 (for example, public GitHub access), and status describes that reduced mode.
 Supplying credentials upgrades the observation; it does not create a second
 kind of integration.
 
-The web Command Center is another projection of those three registries, not a
-fourth inventory. Its resource links come from `ResourceSpec.web_route`, and a
+At composition, HQ compiles those independently emitted specs and standalone
+search projections into one frozen `IntegrationGraph`, indexed by stable name.
+The compiler owns uniqueness and every cross-spec edge; registry-local
+validation remains beside each spec type. It collects every graph violation in
+one pass, so one failed composition reports the complete repair list. The valid
+graph is memoized for the process because composition is fixed at image boot.
+The one plugin-composition reset clears both plugin identity and the derived
+graph; the test runner applies that reset between fixtures, while isolated
+composition proofs use an explicit graph override.
+There is no second public assembly path.
+
+The web Command Center is a projection of that graph, not another inventory.
+Its resource links come from `ResourceSpec.web_route`, and a
 `CapabilitySpec.subject_resource` connects each operation to the domain it acts
 on. A matching `ConnectionAbility.subject_resource` plus `governs_kinds`
 connects a searched external-system ability to the registered commands that can
 act on those kinds; `ConnectionAbility.capability` names an exact command when
-the operation is not resource-shaped. This is a registry join, not a command
+the operation is not resource-shaped. That ability is the sole authored
+connection-to-capability edge; the capability does not repeat a reciprocal list
+that could drift. This is a registry join, not a command
 invented from a credential scope: only a real typed handler can become
 executable. Every permitted command links to one generic execution surface. The host
 derives its controls from the canonical JSON Schema, rejects unknown and
@@ -255,8 +269,9 @@ infrastructure/destructive effects require explicit confirmation, and
 successful writes use POST/Redirect/GET. The same query
 filters resources, commands, and connection families while global search
 supplies live record hits. A plugin that contributes any spec appears in both
-discovery and execution without a host edit. Cross-registry references and
-reversible web routes are composition checks, not work repeated in an adapter.
+discovery and execution without a host edit. Cross-spec references are compiler
+invariants. Reversible web routes remain a Django startup check because URL
+resolution belongs to that adapter.
 
 The infrastructure Topology workspace is the relational projection of the
 same declarations and observations. `ConnectionSpec` supplies abilities,
@@ -550,6 +565,17 @@ versioned, desired-only JSON contract. A controller resolves runtime connection
 references, executes provider adapters, verifies each declared consumer, and
 reports only public status and conditions. Expired claims return to the queue;
 only one queued or claimed operation may exist for a resource/action pair.
+
+A controller provider is admitted as one immutable adapter contribution: its
+typed resource definition, inventory reader, connection probes, actions, and
+verification policy travel together. The compiler rejects a contribution whose
+implemented actions or probes disagree with its declaration, and rejects
+duplicate kinds, probes, or dispatch identities before the worker can run.
+Admission remains a closed tuple owned by HQ; this is modular composition, not
+arbitrary runtime registration. AdGuard is the first vertical extraction, and
+Caddy proves the same seam for an SSH-backed provider whose one resource
+resolves into a shared file. The remaining legacy provider maps migrate through
+that same parity seam.
 
 The homelab controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact

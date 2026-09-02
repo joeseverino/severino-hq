@@ -15,12 +15,9 @@ downstream keeps its own list of what exists.
 One thing is deliberately not unified. A ``PluginManifest`` also carries
 *distribution* facts -- wheel, admission policy, source workflow, URL mount --
 because it crosses a trust boundary. A host section crosses none and is never
-admitted. Everything else is the same contract, down to providers being
-late-bound ``module:attribute`` strings rather than callables: it keeps this
-module free of model imports, which matters because the nav resolves through it
-on every request, and it means one resolver serves both. The registry
-normalises both into one ``Domain`` view so composing surfaces cannot tell, or
-care, which is which.
+admitted. Runtime behavior is unified: host sections and extensions both carry
+one typed, lazy ``PluginIntegration``. The registry normalises both into one
+``Domain`` view so composing surfaces cannot tell, or care, which is which.
 
 This repo is public. Host descriptors therefore never name an extension: group
 labels arrive from installed manifests at runtime, and ``test_domains``
@@ -31,15 +28,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from django.utils.module_loading import import_string
 
 from .plugins import (
     NavigationItem,
+    PluginIntegration,
     gather_attention,
     gather_cards,
-    installed_plugins,
+    installed_integrations,
 )
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
@@ -66,18 +64,7 @@ class DomainDescriptor:
     id: str
     label: str
     navigation: tuple[NavigationItem, ...] = ()
-    # ``module:attribute`` returning the Insights this section believes need a
-    # decision now. Each Insight carries its own url, which is why no surface
-    # downstream needs a code-to-URL table to render the queue.
-    attention_provider: str = ""
-    # ``module:attribute`` returning this section's headline dashboard cards.
-    # A section with nothing worth reporting returns none and simply does not
-    # appear, which is how a dormant section stays out of the way.
-    cards_provider: str = ""
-    # ``module:attribute`` returning this host domain's ConnectionSpecs. The
-    # gateway that owns an endpoint owns this declaration too; downstream
-    # surfaces never keep a second connector inventory.
-    connection_provider: str = ""
+    integration: PluginIntegration = PluginIntegration()
 
 
 @dataclass(frozen=True)
@@ -93,9 +80,7 @@ class Domain:
     label: str
     origin: str
     navigation: tuple[NavigationItem, ...]
-    attention_provider: str = ""
-    cards_provider: str = ""
-    connection_provider: str = ""
+    integration: PluginIntegration = PluginIntegration()
 
     @property
     def bar_order(self) -> int:
@@ -106,6 +91,19 @@ class Domain:
         """
 
         return min((item.order for item in self.navigation), default=HOST_ORDER_MACHINERY)
+
+
+def _provider(reference: str) -> Callable[[], Any]:
+    """Keep host declarations import-lazy while storing typed callables."""
+
+    module, separator, attribute = reference.partition(":")
+    if not separator:
+        raise ValueError(f"Provider {reference!r} must use module:attribute.")
+
+    def provide() -> Any:
+        return import_string(f"{module}.{attribute}")()
+
+    return provide
 
 
 # ----- Host sections ---------------------------------------------------------
@@ -123,7 +121,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # The one inline entry: no group, so it renders as a bare link at the
         # head of the bar rather than a dropdown of one.
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
-        connection_provider="application.glance:connection_specs",
+        integration=PluginIntegration(
+            connections=_provider("application.glance:connection_specs")
+        ),
     ),
     DomainDescriptor(
         id="hq.projects",
@@ -136,8 +136,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # nothing clears it except months of work, so it sat at the top of the
         # queue as its largest entry and never moved. The number still shows,
         # on the projects card, as "N need output".
-        cards_provider="application.sections:projects",
-        connection_provider="projects.github:connection_specs",
+        integration=PluginIntegration(
+            dashboard=_provider("application.sections:projects"),
+            connections=_provider("projects.github:connection_specs"),
+        ),
     ),
     DomainDescriptor(
         id="hq.docs",
@@ -145,8 +147,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Build"),
         ),
-        attention_provider="application.attention:documentation",
-        cards_provider="application.sections:documentation",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:documentation"),
+            dashboard=_provider("application.sections:documentation"),
+        ),
     ),
     DomainDescriptor(
         # The id stays `hq.content` though the label does not. It is the
@@ -162,8 +166,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),
         ),
-        attention_provider="application.attention:content",
-        cards_provider="application.sections:content",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:content"),
+            dashboard=_provider("application.sections:content"),
+        ),
     ),
     DomainDescriptor(
         id="hq.pages",
@@ -180,8 +186,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Contacts", "contacts:list", "contacts", 112, "Web"),
         ),
-        attention_provider="application.attention:contacts",
-        connection_provider="contacts.d1:connection_specs",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:contacts"),
+            connections=_provider("contacts.d1:connection_specs"),
+        ),
     ),
     DomainDescriptor(
         id="hq.zones",
@@ -210,8 +218,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Expenses", "expenses:list", "expenses", 120, "Business"),
         ),
-        attention_provider="application.attention:expenses",
-        cards_provider="application.sections:expenses",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:expenses"),
+            dashboard=_provider("application.sections:expenses"),
+        ),
     ),
     DomainDescriptor(
         id="hq.receipts",
@@ -219,7 +229,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),
         ),
-        attention_provider="application.attention:receipts",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:receipts")
+        ),
     ),
     DomainDescriptor(
         id="hq.assets",
@@ -227,7 +239,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(
             NavigationItem("Assets", "assets:list", "assets", 122, "Business"),
         ),
-        attention_provider="application.attention:assets",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:assets")
+        ),
     ),
     DomainDescriptor(
         id="hq.reports",
@@ -271,8 +285,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        attention_provider="application.attention:services",
-        cards_provider="application.sections:services",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:services"),
+            dashboard=_provider("application.sections:services"),
+        ),
     ),
     DomainDescriptor(
         id="hq.infrastructure",
@@ -283,7 +299,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        attention_provider="application.attention:infrastructure",
+        integration=PluginIntegration(
+            attention=_provider("application.attention:infrastructure")
+        ),
     ),
     DomainDescriptor(
         id="hq.tools",
@@ -299,7 +317,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        connection_provider="control_plane.dns_lookup:connection_specs",
+        integration=PluginIntegration(
+            connections=_provider("control_plane.dns_lookup:connection_specs")
+        ),
     ),
     DomainDescriptor(
         id="hq.machines",
@@ -368,9 +388,7 @@ def host_domains() -> tuple[Domain, ...]:
             label=descriptor.label,
             origin="host",
             navigation=descriptor.navigation,
-            attention_provider=descriptor.attention_provider,
-            cards_provider=descriptor.cards_provider,
-            connection_provider=descriptor.connection_provider,
+            integration=descriptor.integration,
         )
         for descriptor in HOST_DOMAINS
     )
@@ -389,11 +407,9 @@ def extension_domains() -> tuple[Domain, ...]:
             label=plugin.name,
             origin="extension",
             navigation=plugin.navigation,
-            attention_provider=plugin.attention_provider,
-            cards_provider=plugin.dashboard_provider,
-            connection_provider=plugin.connection_provider,
+            integration=integration,
         )
-        for plugin in installed_plugins()
+        for plugin, integration in installed_integrations()
     )
 
 
@@ -418,17 +434,12 @@ def host_connection_specs() -> tuple[Any, ...]:
     into the Connections workspace, Command Center, API, MCP, and topology.
     """
 
-    emitted: list[Any] = []
-    for domain in host_domains():
-        if not domain.connection_provider:
-            continue
-        module, separator, attribute = domain.connection_provider.partition(":")
-        if not separator:
-            raise ValueError(
-                f"Connection provider {domain.connection_provider!r} must use module:attribute."
-            )
-        emitted.extend(import_string(f"{module}.{attribute}")())
-    return tuple(emitted)
+    return tuple(
+        spec
+        for domain in host_domains()
+        if domain.integration.connections is not None
+        for spec in domain.integration.connections()
+    )
 
 
 def domain_navigation() -> tuple[NavigationItem, ...]:
@@ -465,7 +476,7 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
     """
 
     return gather_attention(
-        (domain.id, domain.label, domain.attention_provider)
+        (domain.id, domain.label, domain.integration.attention)
         for domain in all_domains()
     )
 
@@ -485,6 +496,6 @@ def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     """
 
     return gather_cards(
-        (domain.id, domain.cards_provider)
+        (domain.id, domain.integration.dashboard)
         for domain in sorted(all_domains(), key=lambda domain: domain.bar_order)
     )
