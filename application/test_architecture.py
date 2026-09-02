@@ -242,6 +242,15 @@ class StyleContractTests(SimpleTestCase):
 
         self.assertEqual(sorted(set(offences)), [])
 
+    def test_connection_content_cannot_choose_the_table_geometry(self):
+        """A provider endpoint may be arbitrarily long but never owns layout."""
+
+        css = self._stylesheet()
+        self.assertIn(".connection-table { table-layout: fixed; }", css)
+        endpoint_rule = css.split(".connection-endpoint {", 1)[1].split("}", 1)[0]
+        self.assertIn("text-overflow: ellipsis;", endpoint_rule)
+        self.assertIn("white-space: nowrap;", endpoint_rule)
+
     def test_every_referenced_custom_property_is_defined(self):
         import re
 

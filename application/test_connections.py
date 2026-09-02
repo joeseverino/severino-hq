@@ -229,6 +229,16 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "a-cloud-host")
         self.assertContains(response, "Container stack")
 
+    def test_connections_render_as_bounded_rows_not_content_sized_chips(self):
+        sweep(A_PORTAINER)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, 'class="connection-endpoint"')
+        self.assertContains(response, 'class="connection-ability-list"')
+        self.assertContains(response, 'class="connection-state connection-state-good"')
+        self.assertNotContains(response, "connection-ability-chip")
+
     def test_the_page_never_carries_a_secret(self):
         """It cannot, because nothing here has one -- and this is the assertion
         that keeps it that way if a field is ever added to the report."""

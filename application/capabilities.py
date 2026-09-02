@@ -744,14 +744,11 @@ def execute_capability(
     except DjangoValidationError as exc:
         details = getattr(exc, "message_dict", None) or exc.messages
         return _error("invalid_input", "Domain validation failed.", details)
-    except TypeError:
-        # A handler called wrongly is HQ's bug, not the caller's business: a
-        # TypeError names arguments and signatures, so it never leaves here.
+    except (TypeError, ValueError):
+        # Neither handler nor dependency exception text crosses an adapter.
+        # It can contain argument names, provider responses, paths, or values
+        # from the request. The capability name is registry-owned and safe.
         return _error("operation_failed", f"{name} could not be executed.")
-    except ValueError as exc:
-        # ValueError is the deliberate refusal channel: handlers raise it with
-        # a message written for the caller.
-        return _error("operation_failed", str(exc))
 
 
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:

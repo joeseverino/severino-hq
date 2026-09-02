@@ -524,7 +524,8 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
    contract, not restating the colours. */
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
-.pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet {
+.pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
+.connection-state-reachable, .connection-state-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-tint: var(--tone-positive-tint);
@@ -533,7 +534,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 }
 .pill-paused, .pill-editing, .pill-drafting, .pill-researching,
 .pill-internal, .pill-attention, .msg-warning, .conn-decision-step-unknown,
-.conn-kind-declined {
+.conn-kind-declined, .connection-state-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-tint: var(--tone-caution-tint);
@@ -543,6 +544,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-spam,
 .pill-unreachable, .msg-error, .conn-decision-step-does-not,
+.connection-state-unreachable,
 .conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
@@ -561,7 +563,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
   --tone-ink: var(--tone-notable-ink);
   --tone-line: var(--tone-notable-line);
 }
-.pill-sensitive, .pill-restricted, .pill-serious {
+.pill-sensitive, .pill-restricted, .pill-serious, .connection-state-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
@@ -575,7 +577,8 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
    They are still named: a status with no rule and a status deliberately
    neutral look identical and are not the same claim, and the class has to
    exist for the template check to find it. */
-.pill-read, .pill-unprobed, .pill-neutral {
+.pill-read, .pill-unprobed, .pill-neutral, .connection-state-unprobed,
+.connection-state-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);
@@ -3006,23 +3009,63 @@ a.discovery-link:hover strong { color: var(--accent); }
    a td drops it out of table layout and stacks the row into one column. */
 .connection-table .muted,
 .connection-table code { font-size: var(--text-2xs); }
+.connection-table { table-layout: fixed; }
+.connection-col-identity { width: 29%; }
+.connection-col-abilities { width: 20%; }
+.connection-col-dependencies { width: 21%; }
+.connection-col-state { width: 12%; }
+.connection-col-next { width: 18%; }
+.connection-endpoint {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
 .connection-row-kind {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: var(--text-3xs);
 }
-.connection-ability-chip {
-  display: inline-block;
-  background: var(--bg-tint);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 1px var(--space-3);
-  margin: 0 var(--space-2) var(--space-2) 0;
-  font-size: var(--text-3xs);
+.connection-ability-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.connection-ability-list li {
+  display: grid;
+  grid-template-columns: 5px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-2xs);
+  line-height: 1.35;
 }
-.connection-ability-chip.is-unavailable { color: var(--muted); border-style: dashed; }
-.connection-ability-more { font-size: var(--text-3xs); color: var(--muted); }
+.connection-ability-list li::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.connection-ability-list li.is-unavailable { color: var(--muted); }
+.connection-ability-list li.is-unavailable::before { background: var(--muted-2); }
+.connection-ability-list small { grid-column: 2; color: var(--danger); font-size: var(--text-3xs); font-weight: 650; }
+.connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
+.connection-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--tone-ink, var(--muted));
+  font-size: var(--text-2xs);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.connection-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
 /* Each destination is its own target, so two commands on one row cannot read
    as one link. */
 /* Spacing only. Setting `display` here would be (0,1,1) and would silently
@@ -3072,7 +3115,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
 .connection-more[open] summary { margin-bottom: var(--space-2); }
 .connection-scope-summary { display: block; margin-top: var(--space-4); }
-.connection-next { min-width: 180px; }
+.connection-next { min-width: 0; }
 .connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
 .connection-actions { margin-top: var(--space-3); }
 .connection-actions > summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }

@@ -53,6 +53,13 @@ they stay visible and stay in the same table.
 <section class="card connection-all">
   <div class="table-scroll">
     <table class="data-table stacks connection-table">
+      <colgroup>
+        <col class="connection-col-identity">
+        <col class="connection-col-abilities">
+        <col class="connection-col-dependencies">
+        <col class="connection-col-state">
+        <col class="connection-col-next">
+      </colgroup>
       <thead>
         <tr>
           <th>Connection</th>
@@ -68,7 +75,7 @@ they stay visible and stay in the same table.
           <tr>
             <td data-label="Connection">
               <strong>{{ connection.instance.label }}</strong>
-              {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
               <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
               {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
             </td>
@@ -83,8 +90,17 @@ they stay visible and stay in the same table.
               a dozen chips made one row four hundred pixels tall. The count
               carries the rest; the connection's own page carries the detail.
               {% endcomment %}
-              {% for state in connection.abilities|slice:":3" %}<span class="connection-ability-chip{% if state.missing_scopes %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{{ state.ability.label }}{% if state.missing_scopes %} <span class="connection-ability-state">Needs scope</span>{% endif %}</span>{% empty %}<span class="muted">—</span>{% endfor %}
-              {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }}</span>{% endif %}
+              {% if connection.abilities %}
+                <ul class="connection-ability-list">
+                  {% for state in connection.abilities|slice:":3" %}
+                    <li{% if state.missing_scopes %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
+                      <span>{{ state.ability.label }}</span>
+                      {% if state.missing_scopes %}<small>Needs scope</small>{% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+                {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }} more</span>{% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
             </td>
             {% comment %}
             Inline and wrapping rather than one line per link: four stacked
@@ -100,7 +116,7 @@ they stay visible and stay in the same table.
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
             </td>
             <td class="tight-col" data-label="State">
-              <span class="pill pill-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
+              <span class="connection-state connection-state-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
               {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
             </td>
             <td class="connection-next" data-label="Next">

@@ -292,6 +292,10 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "operation_failed")
+        self.assertEqual(
+            result["error"]["message"], "project.delete could not be executed."
+        )
+        self.assertNotIn("wrong-target", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
     def test_delete_honors_optimistic_concurrency_and_audits_success(self):
