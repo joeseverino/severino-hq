@@ -267,3 +267,84 @@ class CommandViewTests(TestCase):
 
         self.assertNotContains(hidden, "Committed once")
         self.assertContains(shown, "Committed once")
+
+
+class CommandResultProjectionTests(TestCase):
+    """A result is shown as what it says before it is shown as JSON."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_superuser(
+            username="result-operator",
+            email="results@example.test",
+            password="strongtestpass-1234",
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def _run(self, name, payload, form_data):
+        key = self.client.get(f"/commands/{name}/").context["form"].initial[
+            "__execution_key"
+        ]
+        with mock.patch(
+            "core.command_views.execute_capability", return_value=payload
+        ) as execute:
+            response = self.client.post(
+                f"/commands/{name}/",
+                {**form_data, "__execution_key": key},
+                follow=True,
+            )
+        execute.assert_called_once()
+        return response
+
+    def test_facts_and_one_flat_list_become_a_grid_and_a_table(self):
+        payload = {
+            "ok": True,
+            "name": "example.test",
+            "resolver": "Example",
+            "resolves": True,
+            "answers": [
+                {"name": "example.test", "type": "A", "value": "192.0.2.1"},
+                {"name": "example.test", "type": "TXT", "value": "v=spf1 -all", "ttl": None},
+            ],
+        }
+
+        response = self._run("lookup.name", payload, {"name": "example.test"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            dict(response.context["result_facts"]),
+            {"name": "example.test", "resolver": "Example", "resolves": "yes"},
+        )
+        table = response.context["result_table"]
+        self.assertEqual(table["label"], "answers")
+        self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
+        self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", "—"))
+        self.assertContains(response, "<th>type</th>")
+        self.assertContains(response, "answers · 2")
+        self.assertContains(response, "Ran once")
+        # The JSON is still there for anyone checking HQ against another tool,
+        # closed because the answer is already on the page.
+        self.assertContains(response, '<details class="command-result-json">')
+        self.assertContains(response, "&quot;resolver&quot;: &quot;Example&quot;")
+
+    def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
+        payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}
+
+        response = self._run("lookup.name", payload, {"name": "example.test"})
+
+        self.assertEqual(response.context["result_facts"], ())
+        self.assertIsNone(response.context["result_table"])
+        self.assertContains(response, '<details class="command-result-json" open>')
+
+    def test_the_projection_is_pure_and_keeps_column_order(self):
+        from core.command_views import _result_projection
+
+        facts, table = _result_projection(
+            {"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]}
+        )
+
+        self.assertEqual(facts, (("count", "2"), ("note", "—")))
+        self.assertEqual(table["columns"], ("b", "a", "c"))
+        self.assertEqual(table["rows"], (("1", "2", "—"), ("—", "—", "3")))

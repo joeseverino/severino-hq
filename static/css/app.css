@@ -2852,6 +2852,23 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-result { margin-bottom: var(--layout-gap); border-left: 3px solid var(--ok); }
 .command-result .section-head { align-items: flex-start; }
 .command-result .section-head h2 { margin-bottom: 0; }
+/* The projected result: facts as a small grid, the list as a plain data table
+   with its count in the caption, and the JSON behind a disclosure below both. */
+.command-result-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: var(--space-4);
+  margin: var(--space-6) 0 0;
+}
+.command-result-facts dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.command-result-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
+.command-result .table-scroll { margin-top: var(--space-6); }
+.command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
+.command-result-table td { overflow-wrap: anywhere; }
+.command-result-json { margin-top: var(--space-6); }
+.command-result-json summary { cursor: pointer; }
+.command-result-json summary .muted { display: block; margin-top: var(--space-1); }
+.command-result-json pre { margin-top: var(--space-4); }
 .scope-read { border-color: var(--line); }
 .scope-remote_write { border-color: var(--accent); color: var(--accent); }
 .scope-infrastructure_change { border-color: var(--warn); color: var(--warn); }
@@ -4014,6 +4031,10 @@ kbd {
 .mail-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-7) var(--space-8); box-shadow: var(--shadow-sm); margin: 0 0 var(--stack-gap); }
 .mail-editor h3 { margin: 0 0 var(--space-6); font-size: var(--text-lg); }
 .mail-editor .form { max-width: 620px; }
+/* A number with its unit beside it, so a percentage never reads as a count. */
+.input-suffix { display: flex; align-items: center; gap: var(--space-2); max-width: 9rem; }
+.input-suffix input { flex: 1 1 auto; min-width: 0; }
+.input-suffix span { color: var(--muted); font-weight: 600; }
 
 /* A record shown inside help text is one long unbreakable token; on a phone it
    ran past the content column, which clips rather than scrolls, so the end of

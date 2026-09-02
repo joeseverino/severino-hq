@@ -114,6 +114,13 @@ four would turn a typo in a DKIM selector into a mail outage.
                 </label>
               {% endfor %}
             </div>
+          {% elif tag.kind == "percent" %}
+            <div class="input-suffix">
+              <input type="text" name="{{ tag.id }}" inputmode="numeric"
+                     value="{{ mail.dmarc_tags|dictkey:tag.id|default:tag.default }}"
+                     spellcheck="false" autocapitalize="off">
+              <span aria-hidden="true">%</span>
+            </div>
           {% else %}
             {% comment %}
             A tag the record leaves out is still in force at its default, so the

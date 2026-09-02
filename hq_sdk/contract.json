@@ -1,0 +1,1475 @@
+{
+  "api_version": 2,
+  "modules": {
+    "audit": {
+      "AuditAction": {
+        "kind": "enum",
+        "members": [
+          "CREATED",
+          "UPDATED",
+          "DELETED",
+          "LOGIN",
+          "LOGOUT",
+          "LOGIN_FAILED",
+          "UPLOADED",
+          "EXPORTED",
+          "IMPORTED",
+          "FAILED",
+          "SETTINGS_CHANGED",
+          "VIEWED"
+        ]
+      },
+      "Counts": {
+        "bases": [
+          "Facet"
+        ],
+        "constructor": [
+          "seen=",
+          "created=",
+          "updated=",
+          "deleted=",
+          "skipped="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "touched": {
+            "kind": "property"
+          }
+        }
+      },
+      "Failure": {
+        "bases": [
+          "Facet"
+        ],
+        "constructor": [
+          "message=",
+          "kind="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Source": {
+        "bases": [
+          "Facet"
+        ],
+        "constructor": [
+          "name=",
+          "bytes=",
+          "sha256="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Steps": {
+        "bases": [
+          "Facet"
+        ],
+        "constructor": [
+          "done="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "as_metadata": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
+      "Timing": {
+        "bases": [
+          "Facet"
+        ],
+        "constructor": [
+          "duration_ms=",
+          "queued_ms="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "seconds": {
+            "kind": "property"
+          }
+        }
+      },
+      "audit_events": {
+        "kind": "function",
+        "parameters": []
+      },
+      "audit_operation": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "operation",
+          "principal=",
+          "operation_id="
+        ]
+      },
+      "operation_context": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "interface",
+          "actor",
+          "operation",
+          "operation_id="
+        ]
+      },
+      "record_event": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "action",
+          "obj=",
+          "type_label=",
+          "message=",
+          "metadata=",
+          "facets=",
+          "user=",
+          "required="
+        ]
+      },
+      "record_operation": {
+        "kind": "function",
+        "parameters": [
+          "operation",
+          "message",
+          "*",
+          "action=",
+          "metadata=",
+          "facets=",
+          "required="
+        ]
+      },
+      "register_audit": {
+        "kind": "function",
+        "parameters": [
+          "model",
+          "type_label",
+          "*",
+          "redact=",
+          "observation="
+        ]
+      }
+    },
+    "capabilities": {
+      "AuthorizationError": {
+        "bases": [
+          "PermissionError"
+        ],
+        "constructor": [
+          "reason=",
+          "*args"
+        ],
+        "kind": "class",
+        "members": {}
+      },
+      "Capability": {
+        "kind": "enum",
+        "members": [
+          "READ",
+          "READ_AUDIT_LOG",
+          "LOOK_UP_PUBLIC_RECORDS",
+          "WRITE_PROJECTS",
+          "WRITE_ASSETS",
+          "WRITE_CONTENT",
+          "WRITE_EXPENSES",
+          "WRITE_RECEIPTS",
+          "MANAGE_CONTACTS",
+          "SYNC_DOCUMENTATION",
+          "WRITE_DOCUMENTATION",
+          "PRUNE_DOCUMENTATION",
+          "DELETE_PROJECTS",
+          "DELETE_ASSETS",
+          "DELETE_CONTENT",
+          "DELETE_EXPENSES",
+          "DELETE_DOCUMENTATION",
+          "DELETE_RECEIPTS",
+          "MANAGE_INFRASTRUCTURE",
+          "REQUEST_CERTIFICATE_RENEWAL"
+        ]
+      },
+      "CapabilitySpec": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "summary",
+          "effect",
+          "required_capability",
+          "command_type",
+          "handler",
+          "target_kind=",
+          "subject_resource=",
+          "target_label=",
+          "target_help=",
+          "target_query=",
+          "execution_notes=",
+          "target_initial_fields="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "required_capabilities": {
+            "kind": "property"
+          }
+        }
+      },
+      "Principal": {
+        "bases": [],
+        "constructor": [
+          "actor",
+          "interface",
+          "capabilities"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "permits": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "*capabilities"
+            ]
+          },
+          "require": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "capability"
+            ]
+          }
+        }
+      },
+      "StrictCommand": {
+        "bases": [
+          "BaseModel"
+        ],
+        "constructor": [],
+        "fields": {},
+        "kind": "model",
+        "members": {}
+      },
+      "capability_registry": {
+        "kind": "function",
+        "parameters": []
+      },
+      "cli_principal": {
+        "kind": "function",
+        "parameters": []
+      },
+      "describe_capabilities": {
+        "kind": "function",
+        "parameters": []
+      },
+      "execute_capability": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "payload",
+          "*",
+          "principal",
+          "target=",
+          "expected_updated_at="
+        ]
+      },
+      "mcp_principal": {
+        "kind": "function",
+        "parameters": []
+      },
+      "web_principal": {
+        "kind": "function",
+        "parameters": [
+          "user"
+        ]
+      }
+    },
+    "connections": {
+      "ConnectionAbility": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "summary",
+          "effect=",
+          "required_scopes=",
+          "capability=",
+          "governs_kinds=",
+          "subject_resource="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ConnectionFact": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ConnectionInstance": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "label",
+          "kind",
+          "status",
+          "status_label",
+          "detail=",
+          "endpoint=",
+          "observed_at=",
+          "granted_scopes=",
+          "scopes_known=",
+          "ability_names=",
+          "targets=",
+          "dependencies=",
+          "facts=",
+          "controller_id="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ConnectionLink": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "url=",
+          "resource_key="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ConnectionSpec": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "summary",
+          "required_capability",
+          "instance_provider",
+          "abilities=",
+          "web_route=",
+          "management_route=",
+          "setup_route=",
+          "documentation_url=",
+          "secret_store=",
+          "empty_message="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "required_capabilities": {
+            "kind": "property"
+          }
+        }
+      },
+      "describe_connections": {
+        "kind": "function",
+        "parameters": []
+      },
+      "list_connections": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "principal"
+        ]
+      }
+    },
+    "demo": {
+      "amount": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "*",
+          "key"
+        ]
+      },
+      "day": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "*",
+          "key="
+        ]
+      },
+      "label": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "*",
+          "key"
+        ]
+      },
+      "showing_demo": {
+        "kind": "function",
+        "parameters": []
+      }
+    },
+    "forms": {
+      "MultipleFileField": {
+        "bases": [
+          "FileField"
+        ],
+        "constructor": [
+          "*",
+          "max_length=",
+          "allow_empty_file=",
+          "**kwargs"
+        ],
+        "kind": "class",
+        "members": {
+          "clean": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "data",
+              "initial="
+            ]
+          }
+        }
+      },
+      "MultipleFileInput": {
+        "bases": [
+          "FileInput"
+        ],
+        "constructor": [
+          "attrs="
+        ],
+        "kind": "class",
+        "members": {
+          "media": {
+            "kind": "property"
+          }
+        }
+      }
+    },
+    "jobs": {
+      "Job": {
+        "bases": [
+          "Model"
+        ],
+        "constructor": [
+          "*args",
+          "**kwargs"
+        ],
+        "kind": "class",
+        "members": {
+          "duration_seconds": {
+            "kind": "property"
+          },
+          "is_live": {
+            "kind": "property"
+          },
+          "is_stale": {
+            "kind": "property"
+          }
+        }
+      },
+      "JobConflict": {
+        "bases": [
+          "RuntimeError"
+        ],
+        "constructor": null,
+        "kind": "class",
+        "members": {}
+      },
+      "Progress": {
+        "bases": [],
+        "constructor": [
+          "job"
+        ],
+        "kind": "class",
+        "members": {}
+      },
+      "reap": {
+        "kind": "function",
+        "parameters": [
+          "kind="
+        ]
+      },
+      "start": {
+        "kind": "function",
+        "parameters": [
+          "kind",
+          "label",
+          "work",
+          "*",
+          "actor=",
+          "requested_by=",
+          "request="
+        ]
+      }
+    },
+    "money": {
+      "CENTS": {
+        "kind": "value",
+        "type": "Decimal"
+      },
+      "quantize_money": {
+        "kind": "function",
+        "parameters": [
+          "value"
+        ]
+      },
+      "to_money": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "default="
+        ]
+      }
+    },
+    "plugin": {
+      "NavigationItem": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "route",
+          "namespace",
+          "order=",
+          "group="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PLUGIN_API_VERSION": {
+        "kind": "value",
+        "type": "int"
+      },
+      "PluginIntegration": {
+        "bases": [],
+        "constructor": [
+          "capabilities=",
+          "resources=",
+          "connections=",
+          "dashboard=",
+          "overview=",
+          "attention=",
+          "search=",
+          "health="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PluginManifest": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "name",
+          "version",
+          "distribution",
+          "source_repository",
+          "source_workflow",
+          "api_version",
+          "integration_provider",
+          "django_apps=",
+          "url_prefix=",
+          "urlconf=",
+          "navigation=",
+          "token_authenticated_routes=",
+          "operator_capabilities=",
+          "mcp_read_capabilities=",
+          "mcp_write_capabilities="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "installed_plugins": {
+        "kind": "function",
+        "parameters": []
+      },
+      "plugin_attention_items": {
+        "kind": "function",
+        "parameters": []
+      },
+      "plugin_dashboard_sections": {
+        "kind": "function",
+        "parameters": []
+      },
+      "plugin_overviews": {
+        "kind": "function",
+        "parameters": []
+      },
+      "plugin_resource_specs": {
+        "kind": "function",
+        "parameters": []
+      }
+    },
+    "resources": {
+      "ResourceQuery": {
+        "bases": [
+          "BaseModel"
+        ],
+        "constructor": [],
+        "fields": {},
+        "kind": "model",
+        "members": {}
+      },
+      "ResourceSpec": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "summary",
+          "required_capability",
+          "list_handler=",
+          "list_query_type=",
+          "detail_handler=",
+          "identifier=",
+          "identifier_type=",
+          "not_found_errors=",
+          "search=",
+          "web_route="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "required_capabilities": {
+            "kind": "property"
+          }
+        }
+      },
+      "describe_resources": {
+        "kind": "function",
+        "parameters": []
+      },
+      "get_resource": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "identifier",
+          "*",
+          "principal",
+          "strict="
+        ]
+      },
+      "list_resource": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "query=",
+          "*",
+          "principal",
+          "strict="
+        ]
+      }
+    },
+    "search": {
+      "SearchDefinition": {
+        "bases": [],
+        "constructor": [
+          "scope",
+          "model",
+          "identifier_field",
+          "fields",
+          "label=",
+          "title_field=",
+          "badge_field=",
+          "timestamp_field="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "badge": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          },
+          "body": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          },
+          "object_id": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          },
+          "timestamp": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          },
+          "title": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          }
+        }
+      }
+    },
+    "tables": {
+      "TableFilter": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "lookup",
+          "choices"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "TableListMixin": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "apply_table_query": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "queryset"
+            ]
+          },
+          "get_context_data": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "**kwargs"
+            ]
+          },
+          "get_table_filters": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_table_sorts": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "resolved_table_filters": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "table_context": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "table_totals_for": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "queryset"
+            ]
+          },
+          "table_values": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "name"
+            ]
+          }
+        }
+      },
+      "TableSort": {
+        "bases": [],
+        "constructor": [
+          "value",
+          "label",
+          "ordering"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "TableToggle": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "TableTotal": {
+        "bases": [],
+        "constructor": [
+          "column",
+          "label="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      }
+    },
+    "testing": {
+      "ComposedPluginTestCase": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "setUp": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
+      "audit_writer": {
+        "kind": "function",
+        "parameters": []
+      },
+      "demo_scope": {
+        "kind": "function",
+        "parameters": [
+          "showing"
+        ]
+      },
+      "sibling": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "identifier=",
+          "name=",
+          "cards=",
+          "attention=",
+          "overview=",
+          "**manifest_fields"
+        ]
+      },
+      "undefined_style_classes": {
+        "kind": "function",
+        "parameters": [
+          "template_root"
+        ]
+      },
+      "unsupported_hq_imports": {
+        "kind": "function",
+        "parameters": [
+          "source_root"
+        ]
+      }
+    },
+    "ui": {
+      "ActivityCalendar": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "description",
+          "weeks",
+          "series=",
+          "period_label=",
+          "previous_url=",
+          "next_url=",
+          "current_url="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "done": {
+            "kind": "property"
+          },
+          "kept": {
+            "kind": "property"
+          },
+          "missed": {
+            "kind": "property"
+          }
+        }
+      },
+      "Cadence": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "description",
+          "weeks"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "hits": {
+            "kind": "property"
+          },
+          "streak": {
+            "kind": "property"
+          }
+        }
+      },
+      "CadenceMatrix": {
+        "bases": [],
+        "constructor": [
+          "periods",
+          "rows"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CadenceRow": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "weeks",
+          "url=",
+          "detail="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "hits": {
+            "kind": "property"
+          },
+          "streak": {
+            "kind": "property"
+          }
+        }
+      },
+      "CadenceWeek": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "hit",
+          "count=",
+          "detail="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CalendarDay": {
+        "bases": [],
+        "constructor": [
+          "when",
+          "state=",
+          "slots=",
+          "detail=",
+          "planned=",
+          "filler="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ChartCategory": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ChartSeries": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "values",
+          "slot"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "DomainOverview": {
+        "bases": [],
+        "constructor": [
+          "description",
+          "url",
+          "kpis",
+          "charts=",
+          "calendars=",
+          "timeline="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Insight": {
+        "bases": [],
+        "constructor": [
+          "status",
+          "eyebrow",
+          "title",
+          "value",
+          "body",
+          "action=",
+          "url=",
+          "magnitude=",
+          "workflow="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Kpi": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value",
+          "detail=",
+          "url=",
+          "is_zero="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "LinePoint": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "y",
+          "value",
+          "label",
+          "tooltip="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "ListRow": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "detail=",
+          "meta=",
+          "url=",
+          "external=",
+          "status=",
+          "badge="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PageNavigation": {
+        "bases": [],
+        "constructor": [
+          "items",
+          "label="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PageSection": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "url": {
+            "kind": "property"
+          }
+        }
+      },
+      "PlanNote": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PlannedDay": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "full_label",
+          "slots=",
+          "note=",
+          "detail="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "planned": {
+            "kind": "property"
+          }
+        }
+      },
+      "StackedBarChart": {
+        "bases": [
+          "Chart"
+        ],
+        "constructor": [
+          "*",
+          "title",
+          "description",
+          "unit",
+          "ticks",
+          "categories",
+          "rows",
+          "empty",
+          "width=",
+          "height=",
+          "plot_left=",
+          "plot_right=",
+          "plot_top=",
+          "plot_bottom=",
+          "series",
+          "bars"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "Timeline": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "description",
+          "items"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "TimelineItem": {
+        "bases": [],
+        "constructor": [
+          "when",
+          "title",
+          "detail=",
+          "url=",
+          "status=",
+          "badge="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "WeekPlan": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "days",
+          "notes=",
+          "url="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "line_chart": {
+        "kind": "function",
+        "parameters": [
+          "title",
+          "description",
+          "series",
+          "*",
+          "unit",
+          "marks=",
+          "trend=",
+          "minimum=",
+          "maximum="
+        ]
+      },
+      "stacked_bar_chart": {
+        "kind": "function",
+        "parameters": [
+          "title",
+          "description",
+          "labels",
+          "series",
+          "*",
+          "unit",
+          "maximum="
+        ]
+      }
+    },
+    "validation": {
+      "main": {
+        "kind": "function",
+        "parameters": []
+      },
+      "unsupported_hq_imports": {
+        "kind": "function",
+        "parameters": [
+          "source_root"
+        ]
+      }
+    },
+    "web": {
+      "CapabilityRequiredMixin": {
+        "bases": [
+          "LoginRequiredMixin"
+        ],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "dispatch": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "request",
+              "*args",
+              "**kwargs"
+            ]
+          },
+          "get_required_capability": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
+      "capability_required": {
+        "kind": "function",
+        "parameters": [
+          "capability"
+        ]
+      },
+      "safe_next": {
+        "kind": "function",
+        "parameters": [
+          "request",
+          "*",
+          "fallback=",
+          "scope="
+        ]
+      }
+    },
+    "workflows": {
+      "ActionLink": {
+        "bases": [],
+        "constructor": [
+          "name",
+          "label",
+          "effect",
+          "url",
+          "method=",
+          "capability=",
+          "target=",
+          "reason=",
+          "recommended="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "WorkflowOutcome": {
+        "bases": [],
+        "constructor": [
+          "kind",
+          "claim_id",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "WorkflowPlan": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "label",
+          "steps",
+          "outcome"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "WorkflowStep": {
+        "bases": [],
+        "constructor": [
+          "phase",
+          "label",
+          "summary",
+          "state",
+          "actions="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "claim_identity": {
+        "kind": "function",
+        "parameters": [
+          "namespace",
+          "rule",
+          "subject",
+          "scope="
+        ]
+      },
+      "claim_resolution_plan": {
+        "kind": "function",
+        "parameters": [
+          "*",
+          "namespace",
+          "rule",
+          "subject",
+          "scope",
+          "investigations",
+          "offers",
+          "remedies",
+          "verification"
+        ]
+      },
+      "serialize_workflow": {
+        "kind": "function",
+        "parameters": [
+          "plan"
+        ]
+      }
+    },
+    "writes": {
+      "CommandFormMixin": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "build_command": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          },
+          "form_valid": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          },
+          "get_success_message": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "result"
+            ]
+          },
+          "get_success_url": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "run": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "command"
+            ]
+          }
+        }
+      },
+      "ServiceCreateMixin": {
+        "bases": [
+          "ServiceWriteMixin"
+        ],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "form_valid": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          }
+        }
+      },
+      "ServiceDeleteMixin": {
+        "bases": [
+          "ServiceWriteMixin"
+        ],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "form_valid": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          }
+        }
+      },
+      "ServiceUpdateMixin": {
+        "bases": [
+          "ServiceWriteMixin"
+        ],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "form_valid": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          }
+        }
+      },
+      "ServiceWriteMixin": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "announce": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "template",
+              "target"
+            ]
+          },
+          "current_identity": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "reload": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "result"
+            ]
+          },
+          "write_principal": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "sdk_version": 1
+}

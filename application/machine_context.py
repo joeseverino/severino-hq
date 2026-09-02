@@ -143,10 +143,19 @@ def _names(machine) -> ServiceSection | None:
             host,
         ),
     )
+    # Traffic rides along once at least one name carries a reading, because
+    # that is when the comparison means something. A machine nothing measures
+    # keeps its names and loses the column: nine cells all saying "unmeasured"
+    # say one thing nine times, and the reachable-but-unmeasured finding is
+    # where that absence is raised as a fact about HQ.
+    any_measured = any(measured.get(normalize_host(host)) for host in hostnames)
+    label = "Names it answers"
+    if any_measured:
+        label = f"{label} · traffic over {HOST_TRAFFIC_DAYS} days"
     return ServiceSection(
         id="names",
-        label=f"Names it answers · traffic over {HOST_TRAFFIC_DAYS} days",
-        columns=("Name", *facets, "Pageviews"),
+        label=label,
+        columns=("Name", *facets, *(("Pageviews",) if any_measured else ())),
         records=tuple(
             (
                 Cell(
@@ -154,7 +163,7 @@ def _names(machine) -> ServiceSection | None:
                     reverse("control_plane:service", kwargs={"hostname": hostname}),
                 ),
                 *(supplied(catalog.get(hostname), label) for label in facets),
-                traffic(hostname),
+                *((traffic(hostname),) if any_measured else ()),
             )
             for hostname in ordered
         ),

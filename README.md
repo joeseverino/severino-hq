@@ -54,7 +54,7 @@ implements is [`docs/PLUGINS.md`](docs/PLUGINS.md).
 ## Stack
 
 - Django 6.1 + SQLite (PostgreSQL is a future option)
-- Django templates (HTMX hook left in `base.html` for future use)
+- Django templates, server-rendered; JavaScript progressively enhances
 - Plain CSS (no build step, no CDN runtime dependencies)
 - Django auth, Django admin, Django ORM and migrations
 - Environment variables for secrets

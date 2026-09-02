@@ -69,6 +69,15 @@ Imports from `application`, `core`, or another host application are unsupported:
 they couple a private plugin to public implementation details. Run
 `python -m hq_sdk.validation src` locally to enforce the boundary.
 
+The shape of that surface is committed as `hq_sdk/contract.json`: every
+export's parameters, fields, enum members and public methods, without
+annotations so it is identical across the interpreter matrix. A test fails when
+the exports drift from the file, because an extension's binding to a renamed
+field or a new required parameter is a change this repository cannot otherwise
+see. Regenerate it with `python manage.py sdk_contract`, read the diff as the
+review, and decide there whether `PLUGIN_API_VERSION` moves;
+`python manage.py sdk_contract --check` is the CI form.
+
 Capability input models should inherit `StrictCommand`; unknown JSON keys then
 fail at the boundary instead of being silently discarded. Class-based views
 inherit `CapabilityRequiredMixin` and declare `required_capability`; function

@@ -44,7 +44,32 @@
       Running this form again returns this same result rather than {% if command.effect == "read" %}asking again{% else %}running a second time{% endif %}.
     {% endif %}
   </p>
-  <pre><code>{{ result_json }}</code></pre>
+  {% comment %}
+  The answer first, in the shape a person reads: the facts the result states
+  and the one list it carries. The JSON is the same result as API and MCP see
+  it, kept for checking HQ against another tool, and opens only when there is
+  nothing else to show.
+  {% endcomment %}
+  {% if result_facts %}
+    <dl class="command-result-facts">
+      {% for label, value in result_facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+    </dl>
+  {% endif %}
+  {% if result_table %}
+    <div class="table-scroll">
+      <table class="data-table command-result-table">
+        <caption>{{ result_table.label }} · {{ result_table.rows|length }}</caption>
+        <thead><tr>{% for column in result_table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in result_table.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
+    <summary><strong>Exact result</strong> <span class="muted">The same JSON the API and MCP return for this call</span></summary>
+    <pre><code>{{ result_json }}</code></pre>
+  </details>
   {% if return_url %}<a class="btn" href="{{ return_url }}">Return to previous workflow</a>{% endif %}
 </section>
 {% endif %}
