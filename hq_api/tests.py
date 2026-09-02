@@ -182,7 +182,7 @@ class CompositionCheckTests(SimpleTestCase):
             compile_integration_graph,
             override_integration_graph,
         )
-        from application.resources import ResourceSpec
+        from application.resources import EmptyQuery, ResourceSpec
         from .checks import capability_contract_check
 
         resource = ResourceSpec(
@@ -190,6 +190,8 @@ class CompositionCheckTests(SimpleTestCase):
             "Records",
             "Synthetic records.",
             "read",
+            list_handler=lambda: {"items": [], "count": 0},
+            list_query_type=EmptyQuery,
             web_route="missing:list",
         )
         graph = compile_integration_graph(

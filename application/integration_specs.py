@@ -4,12 +4,39 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from .search_contracts import SearchDefinition
 from .security import Capability
+
+
+@dataclass(frozen=True, slots=True)
+class TargetKind:
+    """How a declared target binds to and is coerced for a capability."""
+
+    keyword: str
+    coerce: Callable[[Any], Any]
+
+
+# One declaration drives spec validation, handler binding and request coercion.
+TARGET_KINDS: dict[str, TargetKind] = {
+    "slug": TargetKind("current_slug", str),
+    "doc_id": TargetKind("current_doc_id", str),
+    "integer": TargetKind("current_id", int),
+    "key": TargetKind("current_key", str),
+}
+
+
+@cache
+def command_schema(command_type: type) -> dict[str, Any]:
+    """Build an immutable command type's closed JSON Schema once."""
+
+    schema = TypeAdapter(command_type).json_schema()
+    schema.setdefault("additionalProperties", False)
+    return schema
 
 
 @dataclass(frozen=True)

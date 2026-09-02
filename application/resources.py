@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import Any
 
-from django.core.exceptions import ImproperlyConfigured
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -33,14 +31,12 @@ from . import (
     read_models,
     services,
 )
-from .contracts import DJANGO_ROUTE, DOTTED_NAME
+from .contracts import DOTTED_NAME
 from .integration_specs import ResourceSpec
 from .integrations import integration_graph
-from .plugins import plugin_resource_specs
+from .integration_validation import required_capability_names
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
-
-RESOURCE_NAME = DOTTED_NAME
 
 
 class ResourceQuery(BaseModel):
@@ -330,119 +326,6 @@ class ResourceNotFound(ResourceError):
     pass
 
 
-def _capability_names(spec: ResourceSpec) -> tuple[str, ...]:
-    return tuple(
-        item.value if isinstance(item, Capability) else item
-        for item in spec.required_capabilities
-    )
-
-
-def _validate_resource_identity(spec: ResourceSpec) -> None:
-    if not isinstance(spec, ResourceSpec):
-        raise ImproperlyConfigured(
-            "A resource provider returned something other than ResourceSpec."
-        )
-    if not RESOURCE_NAME.fullmatch(spec.name):
-        raise ImproperlyConfigured(f"Invalid resource name {spec.name!r}.")
-    if not spec.label.strip() or not spec.summary.strip():
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} must declare a label and summary."
-        )
-    required = _capability_names(spec)
-    if (
-        not required
-        or len(required) != len(set(required))
-        or any(not RESOURCE_NAME.fullmatch(item) for item in required)
-    ):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} must declare unique valid capabilities."
-        )
-
-
-def _validate_list_contract(spec: ResourceSpec) -> None:
-    if bool(spec.list_handler) != bool(spec.list_query_type):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} must declare its list handler and query together."
-        )
-    if spec.list_query_type and not (
-        inspect.isclass(spec.list_query_type)
-        and issubclass(spec.list_query_type, BaseModel)
-        and callable(spec.list_handler)
-    ):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} has an invalid list contract."
-        )
-    if spec.list_handler and spec.list_query_type:
-        try:
-            values = spec.list_query_type().model_dump()
-            inspect.signature(spec.list_handler).bind(**values)
-        except (TypeError, ValidationError) as exc:
-            raise ImproperlyConfigured(
-                f"Resource {spec.name!r} list handler does not implement its query contract."
-            ) from exc
-
-
-def _validate_detail_contract(spec: ResourceSpec) -> None:
-    if bool(spec.detail_handler) != bool(spec.identifier):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} must declare its detail handler and identifier together."
-        )
-    if spec.detail_handler:
-        try:
-            inspect.signature(spec.detail_handler).bind(None)
-        except TypeError as exc:
-            raise ImproperlyConfigured(
-                f"Resource {spec.name!r} detail handler does not accept one identifier."
-            ) from exc
-        if not isinstance(spec.identifier_type, type):
-            raise ImproperlyConfigured(
-                f"Resource {spec.name!r} has an invalid identifier type."
-            )
-        if any(
-            not isinstance(error, type) or not issubclass(error, Exception)
-            for error in spec.not_found_errors
-        ):
-            raise ImproperlyConfigured(
-                f"Resource {spec.name!r} has invalid not-found errors."
-            )
-
-
-def _validate_search_contract(spec: ResourceSpec) -> None:
-    if not any((spec.list_handler, spec.detail_handler, spec.search)):
-        raise ImproperlyConfigured(f"Resource {spec.name!r} exposes no operations.")
-    if spec.search and not isinstance(spec.search, SearchDefinition):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} has an invalid search definition."
-        )
-    if spec.search and spec.search.scope != spec.name:
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} search scope must use the same name."
-        )
-    if spec.web_route and not DJANGO_ROUTE.fullmatch(spec.web_route):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} has invalid web route {spec.web_route!r}."
-        )
-
-
-def _validate_resource_spec(spec: ResourceSpec) -> None:
-    _validate_resource_identity(spec)
-    _validate_list_contract(spec)
-    _validate_detail_contract(spec)
-    _validate_search_contract(spec)
-
-
-def _collect_resources() -> tuple[ResourceSpec, ...]:
-    specs = (*CORE_RESOURCE_SPECS, *plugin_resource_specs())
-    for spec in specs:
-        _validate_resource_spec(spec)
-    names = [spec.name for spec in specs]
-    if len(names) != len(set(names)):
-        raise ImproperlyConfigured(
-            "Duplicate resource name across HQ core and plugins."
-        )
-    return specs
-
-
 def resource_registry() -> dict[str, ResourceSpec]:
     return dict(integration_graph().resources)
 
@@ -469,7 +352,7 @@ def describe_resources() -> dict[str, Any]:
                 "label": spec.label,
                 "summary": spec.summary,
                 "web_route": spec.web_route or None,
-                "required_capabilities": list(_capability_names(spec)),
+                "required_capabilities": list(required_capability_names(spec)),
                 "operations": {
                     "list": (
                         {

@@ -163,13 +163,12 @@ the rows and exclude test paths by eye.
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **7**) |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **4**) |
 | Did a function get away from me? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.cognitive >= 22 AND NOT f.file_path CONTAINS "test" RETURN f.qualified_name, f.cognitive` — note the caveat above; verify by eye | no new entries (currently 7, plus one migration) |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | 4 in production, all confirmed bounded or pre-existing |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | 3, all confirmed false positives |
 
-The seven standing `SIMILAR_TO` pairs are the asset/project serialize and
-upsert twins, `capability_specs`/`resource_specs`, `pins.ordered`/`pinned`,
+The four standing `SIMILAR_TO` pairs are the asset/project serializers,
 `sections.projects`/`services`, `seed_demo._seed_content`/`_seed_docs`, and
 `exports.documentation_csv`/`projects_csv`.
 

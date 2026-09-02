@@ -238,14 +238,17 @@ kind of integration.
 
 At composition, HQ compiles those independently emitted specs and standalone
 search projections into one frozen `IntegrationGraph`, indexed by stable name.
-The compiler owns uniqueness and every cross-spec edge; registry-local
-validation remains beside each spec type. It collects every graph violation in
-one pass, so one failed composition reports the complete repair list. The valid
-graph is memoized for the process because composition is fixed at image boot.
+The compiler owns intrinsic contract validation, uniqueness, and every
+cross-spec edge; emitters only emit typed records. Direct compiler callers
+therefore receive the same guarantees as the runtime composition rather than a
+weaker registry assembled around the checks. It collects violations across all
+contributions in one pass, so one failed composition reports the complete
+repair list. The valid graph is memoized for the process because composition is
+fixed at image boot.
 The one plugin-composition reset clears both plugin identity and the derived
 graph; the test runner applies that reset between fixtures, while isolated
 composition proofs use an explicit graph override.
-There is no second public assembly path.
+There is no second public assembly or validation path.
 
 The web Command Center is a projection of that graph, not another inventory.
 Its resource links come from `ResourceSpec.web_route`, and a

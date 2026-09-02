@@ -360,6 +360,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(
+            connections=_provider("application.connections:connection_specs")
+        ),
     ),
     DomainDescriptor(
         id="hq.jobs",

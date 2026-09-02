@@ -18,16 +18,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-import inspect
 
 from django.core.exceptions import ImproperlyConfigured
 from control_plane.models import ProviderConnection
 from control_plane.providers import PROVIDERS, observer_abilities
 
 from .contracts import (
-    DJANGO_ROUTE,
-    DOTTED_NAME,
-    EFFECTS,
     SCOPE_NAME,
     endpoint_has_private_parts,
 )
@@ -42,6 +38,7 @@ from .connection_contracts import (
     ConnectionSpec,
 )
 from .integrations import integration_graph
+from .integration_validation import required_capability_names, safe_connection_url
 from .action_links import (
     ActionLink,
     capability_action_link,
@@ -50,6 +47,11 @@ from .action_links import (
     recommend_connection_action,
 )
 from .security import AuthorizationError, Capability, Principal
+
+# The family the controller observes on HQ's behalf. It leads every inventory
+# because it is the one the page is about; the gateways beside it are the
+# exceptions that reach out on their own.
+CONTROLLER_CONNECTIONS = "infrastructure.controllers"
 
 
 @dataclass(frozen=True)
@@ -318,7 +320,7 @@ def _controller_instances(
 def _controller_connection_spec() -> ConnectionSpec:
     abilities, ability_names = _controller_contract()
     return ConnectionSpec(
-        name="infrastructure.controllers",
+        name=CONTROLLER_CONNECTIONS,
         label="Infrastructure connections",
         summary="Credentials rendered to controllers and the systems they can reach.",
         required_capability=Capability.READ,
@@ -334,111 +336,10 @@ def _controller_connection_spec() -> ConnectionSpec:
     )
 
 
-def _capability_names(spec: ConnectionSpec) -> tuple[str, ...]:
-    return tuple(
-        item.value if isinstance(item, Capability) else item
-        for item in spec.required_capabilities
-    )
+def connection_specs() -> tuple[ConnectionSpec, ...]:
+    """The controller-observed family emitted by the Connections domain."""
 
-
-def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
-    if not isinstance(ability, ConnectionAbility):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} returned a non-ConnectionAbility."
-        )
-    if not DOTTED_NAME.fullmatch(ability.name):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} has invalid ability {ability.name!r}."
-        )
-    if not ability.label.strip() or not ability.summary.strip():
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} needs a label and summary."
-        )
-    if ability.effect not in EFFECTS:
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} has invalid effect {ability.effect!r}."
-        )
-    if len(ability.required_scopes) != len(set(ability.required_scopes)) or any(
-        not SCOPE_NAME.fullmatch(scope) for scope in ability.required_scopes
-    ):
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} has invalid required scopes."
-        )
-    if ability.capability and not DOTTED_NAME.fullmatch(ability.capability):
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} has invalid capability."
-        )
-    if len(ability.governs_kinds) != len(set(ability.governs_kinds)) or any(
-        not DOTTED_NAME.fullmatch(kind) for kind in ability.governs_kinds
-    ):
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} has invalid governed kinds."
-        )
-    if ability.subject_resource and not DOTTED_NAME.fullmatch(ability.subject_resource):
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} has an invalid subject resource."
-        )
-
-
-def _validate_connection_spec(spec: ConnectionSpec) -> None:
-    if not isinstance(spec, ConnectionSpec):
-        raise ImproperlyConfigured(
-            "A connection provider returned something other than ConnectionSpec."
-        )
-    if not DOTTED_NAME.fullmatch(spec.name):
-        raise ImproperlyConfigured(f"Invalid connection name {spec.name!r}.")
-    if not spec.label.strip() or not spec.summary.strip():
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} needs a label and summary."
-        )
-    required = _capability_names(spec)
-    if (
-        not required
-        or len(required) != len(set(required))
-        or any(not DOTTED_NAME.fullmatch(item) for item in required)
-    ):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} must declare unique valid capabilities."
-        )
-    try:
-        inspect.signature(spec.instance_provider).bind()
-    except (TypeError, ValueError) as exc:
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} instance provider must take no arguments."
-        ) from exc
-    for route in (spec.web_route, spec.management_route, spec.setup_route):
-        if route and not DJANGO_ROUTE.fullmatch(route):
-            raise ImproperlyConfigured(
-                f"Connection {spec.name!r} has invalid route {route!r}."
-            )
-    if spec.documentation_url and not _safe_link_url(spec.documentation_url):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} has an invalid documentation URL."
-        )
-    for ability in spec.abilities:
-        _validate_ability(spec, ability)
-    names = [ability.name for ability in spec.abilities]
-    if len(names) != len(set(names)):
-        raise ImproperlyConfigured(f"Connection {spec.name!r} repeats an ability name.")
-
-
-def _collect_connections() -> tuple[ConnectionSpec, ...]:
-    from .domains import host_connection_specs
-    from .plugins import plugin_connection_specs
-
-    specs = (
-        _controller_connection_spec(),
-        *host_connection_specs(),
-        *plugin_connection_specs(),
-    )
-    for spec in specs:
-        _validate_connection_spec(spec)
-    names = [spec.name for spec in specs]
-    if len(names) != len(set(names)):
-        raise ImproperlyConfigured(
-            "Duplicate connection name across HQ core and plugins."
-        )
-    return specs
+    return (_controller_connection_spec(),)
 
 
 def _permitted(spec: ConnectionSpec, principal: Principal) -> bool:
@@ -505,7 +406,7 @@ def _validate_instance(
         if any(
             not isinstance(link, ConnectionLink)
             or not link.label.strip()
-            or (link.url and not _safe_link_url(link.url))
+            or (link.url and not safe_connection_url(link.url))
             or not isinstance(link.resource_key, str)
             or (link.resource_key and link.resource_key != link.resource_key.strip())
             for link in collection
@@ -521,14 +422,6 @@ def _validate_instance(
     ):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
     return instance
-
-
-def _safe_link_url(url: str) -> bool:
-    """Allow explicit web URLs and local paths, never executable schemes."""
-
-    return url.startswith(("http://", "https://")) or (
-        url.startswith("/") and not url.startswith("//")
-    )
 
 
 def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
@@ -549,6 +442,10 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
                 ),
             )
         )
+    # Composition order is domain order, which puts the Connections domain
+    # last. The inventory keeps the controller-observed family first and the
+    # rest in the order they were composed.
+    groups.sort(key=lambda group: group.spec.name != CONTROLLER_CONNECTIONS)
     return tuple(groups)
 
 
@@ -640,7 +537,7 @@ def describe_connections() -> dict:
                 "name": spec.name,
                 "label": spec.label,
                 "summary": spec.summary,
-                "required_capabilities": list(_capability_names(spec)),
+                "required_capabilities": list(required_capability_names(spec)),
                 "web_route": spec.web_route or None,
                 "management_route": spec.management_route or None,
                 "setup_route": spec.setup_route or None,

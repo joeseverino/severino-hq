@@ -72,7 +72,7 @@ class ResourceExecutionTests(TestCase):
         )
         installed = plugin_resource_specs()
         with mock.patch(
-            "application.resources.plugin_resource_specs",
+            "application.plugins.plugin_resource_specs",
             return_value=(*installed, plugin),
         ):
             outcome = command_center("example.records", principal=OPERATOR)
@@ -137,7 +137,7 @@ class ResourceRegistrationTests(SimpleTestCase):
         )
         with (
             mock.patch(
-                "application.resources.plugin_resource_specs",
+                "application.plugins.plugin_resource_specs",
                 return_value=(duplicate,),
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate resource name"),
@@ -154,7 +154,7 @@ class ResourceRegistrationTests(SimpleTestCase):
         )
         with (
             mock.patch(
-                "application.resources.plugin_resource_specs", return_value=(invalid,)
+                "application.plugins.plugin_resource_specs", return_value=(invalid,)
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "handler and query together"),
         ):
@@ -172,7 +172,7 @@ class ResourceRegistrationTests(SimpleTestCase):
         )
         installed = plugin_resource_specs()
         with mock.patch(
-            "application.resources.plugin_resource_specs",
+            "application.plugins.plugin_resource_specs",
             return_value=(*installed, nested),
         ):
             self.assertIn(nested, integration_graph().resources.values())
