@@ -2,12 +2,18 @@
 
 from .adguard import build_adapter as build_adguard_adapter
 from .caddy import build_adapter as build_caddy_adapter
+from .npm import build_adapter as build_npm_adapter
 
 
 def build_controller_provider_adapters(
     *, provider_model, provider_spec, applies, normalized_hostname
 ):
     return (
+        build_npm_adapter(
+            provider_model=provider_model,
+            provider_spec=provider_spec,
+            applies=applies,
+        ),
         build_caddy_adapter(
             provider_model=provider_model,
             provider_spec=provider_spec,

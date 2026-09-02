@@ -41,6 +41,7 @@ from control_plane.provider_adapters.contracts import (
     ProviderResult,
     compile_controller_adapters,
 )
+from control_plane.provider_adapters import npm
 
 
 logger = logging.getLogger("severino.controller")
@@ -183,37 +184,15 @@ def _required(prefix: str, name: str) -> str:
 
 
 def _npm_url(connection_ref: str = "") -> str:
-    return _npm_api_url(_required(connection_prefix("npm", connection_ref), "URL"))
+    return npm.url(_RUNTIME, connection_ref)
 
 
 def _npm_token(base_url: str, connection_ref: str = "") -> str:
-    prefix = connection_prefix("npm", connection_ref)
-
-    def exchange() -> str:
-        result = _request(
-            f"{base_url}/tokens",
-            method="POST",
-            payload={
-                "identity": _required(prefix, "USERNAME"),
-                "secret": _required(prefix, "PASSWORD"),
-            },
-        )
-        token = result.get("token", "") if isinstance(result, dict) else ""
-        if not token:
-            raise ProviderError("NPM authentication did not return a token.")
-        return token
-
-    return _snapshot_value(("npm-token", base_url, prefix), exchange)
+    return npm.token(_RUNTIME, base_url, connection_ref)
 
 
 def _npm_api_url(configured_url: str) -> str:
-    parsed = urllib.parse.urlsplit(configured_url.rstrip("/"))
-    path = parsed.path.rstrip("/")
-    if not path.endswith("/api"):
-        path = f"{path}/api"
-    return urllib.parse.urlunsplit(
-        (parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)
-    )
+    return npm.api_url(configured_url)
 
 
 def reconcile_npm(
@@ -222,99 +201,7 @@ def reconcile_npm(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url = _npm_url()
-    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
-    domains = sorted(spec["domain_names"])
-    matches = [
-        host for host in hosts if sorted(host.get("domain_names", [])) == domains
-    ]
-    if not matches:
-        # A renamed proxy host: the one that exists still answers to the names
-        # HQ last saw, and NPM updates it in place by id.
-        previous = sorted((observed or {}).get("domain_names") or ())
-        if previous and previous != domains:
-            matches = [
-                host
-                for host in hosts
-                if sorted(host.get("domain_names", [])) == previous
-            ]
-    if len(matches) > 1:
-        raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
-
-    desired = {
-        "domain_names": domains,
-        "forward_scheme": spec["forward_scheme"],
-        "forward_host": spec["forward_host"],
-        "forward_port": spec["forward_port"],
-        "caching_enabled": spec["caching_enabled"],
-        "block_exploits": spec["block_exploits"],
-        "allow_websocket_upgrade": spec["websocket"],
-        "access_list_id": spec["access_list_id"],
-        "certificate_id": spec.get("certificate_id") or 0,
-        "ssl_forced": spec["force_ssl"],
-        "http2_support": spec["http2"],
-        # Read from the spec, not asserted. This payload replaces the whole
-        # object, so a constant here is not "leave it alone" -- it is "set it to
-        # this", every pass, whatever the operator did in NPM.
-        "hsts_enabled": spec["hsts_enabled"],
-        "hsts_subdomains": spec["hsts_subdomains"],
-        "trust_forwarded_proto": spec["trust_forwarded_proto"],
-        "advanced_config": spec["advanced_config"],
-        "locations": [],
-        "enabled": spec["serving"],
-        "meta": {},
-    }
-    if matches:
-        current = matches[0]
-        if spec["force_ssl"] and not current.get("certificate_id"):
-            raise ProviderError(
-                "NPM host requires TLS but has no certificate; attach the managed "
-                "certificate before reconciliation."
-            )
-        if not desired["certificate_id"]:
-            desired["certificate_id"] = current.get("certificate_id", 0)
-        desired["locations"] = current.get("locations", [])
-        desired["meta"] = current.get("meta", {})
-        comparable = {key: current.get(key) for key in desired}
-        if comparable == desired:
-            changed = False
-        else:
-            if apply:
-                _request(
-                    f"{base_url}/nginx/proxy-hosts/{current['id']}",
-                    method="PUT",
-                    headers=headers,
-                    payload=desired,
-                )
-            changed = True
-    else:
-        if spec["force_ssl"] and not desired["certificate_id"]:
-            raise ProviderError(
-                "Creating an HTTPS NPM host requires a resolved certificate ID."
-            )
-        if apply:
-            _request(
-                f"{base_url}/nginx/proxy-hosts",
-                method="POST",
-                headers=headers,
-                payload=desired,
-            )
-        changed = True
-    return ProviderResult(
-        changed=changed,
-        status={
-            "domain_names": domains,
-            "forward": (
-                f"{spec['forward_scheme']}://{spec['forward_host']}:"
-                f"{spec['forward_port']}"
-            ),
-        },
-        conditions=[
-            _condition("Ready", True, "Reconciled", "NPM proxy host is current.")
-        ],
-        message="NPM proxy host updated." if changed else "NPM proxy host unchanged.",
-    )
+    return npm.reconcile(_RUNTIME, spec, apply=apply, observed=observed)
 
 
 def _observe_tls_domain(
@@ -1365,152 +1252,11 @@ def delete_npm(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    """Remove the proxy host matching this exact domain set."""
-
-    base_url = _npm_url()
-    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    hosts = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
-    domains = sorted(spec["domain_names"])
-    matches = [
-        host for host in hosts if sorted(host.get("domain_names", [])) == domains
-    ]
-    if len(matches) > 1:
-        raise ProviderError("NPM contains duplicate proxy hosts for the domain set.")
-    if not matches:
-        return ProviderResult(
-            changed=False,
-            status={"domain_names": domains, "removed": True},
-            conditions=[
-                _condition("Ready", True, "Absent", "No such proxy host in NPM.")
-            ],
-            message="NPM proxy host was already absent.",
-        )
-    if apply:
-        _request(
-            f"{base_url}/nginx/proxy-hosts/{matches[0]['id']}",
-            method="DELETE",
-            headers=headers,
-        )
-    return ProviderResult(
-        changed=True,
-        status={"domain_names": domains, "removed": True},
-        conditions=[
-            _condition("Ready", True, "Removed", "NPM proxy host was removed.")
-        ],
-        message="NPM proxy host removed.",
-    )
+    return npm.delete(_RUNTIME, spec, apply=apply, observed=observed)
 
 
 def list_npm() -> list[dict[str, Any]]:
-    base_url = _npm_url()
-    headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    records = _request(f"{base_url}/nginx/proxy-hosts", headers=headers)
-    access_policies = _npm_access_policies(base_url, headers)
-    # Only the fields HQ can express, plus the identity. The rest is NPM's
-    # business, and copying a whole provider object into HQ would make this an
-    # inventory of NPM rather than a list of what HQ could manage.
-    fields = (
-        "domain_names",
-        "forward_scheme",
-        "forward_host",
-        "forward_port",
-        "ssl_forced",
-        "http2_support",
-        "allow_websocket_upgrade",
-        "caching_enabled",
-        "block_exploits",
-        "access_list_id",
-        "advanced_config",
-        "hsts_enabled",
-        "hsts_subdomains",
-        "trust_forwarded_proto",
-        "enabled",
-    )
-    # Which certificate each host actually serves. A name behind a proxy is
-    # served over TLS or it is not, and until now HQ could only see the ones it
-    # had been told about -- so an internal certificate, installed and working,
-    # read as "no certificate covers this" on every name it served. The proxy
-    # already knows; it just was not asked.
-    served_by = _npm_certificates(base_url, headers)
-    return [
-        {
-            **{field: record.get(field) for field in fields},
-            "certificate": served_by.get(record.get("certificate_id"), {}),
-            "access_policy": access_policies.get(record.get("access_list_id")),
-        }
-        for record in records
-        if record.get("domain_names")
-    ]
-
-
-def _npm_access_policies(
-    base_url: str, headers: dict[str, str]
-) -> dict[Any, dict[str, Any]]:
-    """Safe ingress rules, stripped of every authorization identity."""
-
-    try:
-        records = _request(
-            f"{base_url}/nginx/access-lists?expand=items,clients", headers=headers
-        )
-    except (ProviderError, OSError, ValueError, KeyError):
-        # A policy endpoint unavailable on an older NPM must not erase every
-        # proxy host. The missing evidence stays unknown until the next sweep.
-        return {}
-    found = {}
-    for record in records:
-        if not isinstance(record, dict) or not isinstance(record.get("id"), int):
-            continue
-        clients = [
-            {
-                "directive": str(client.get("directive", "")),
-                "address": str(client.get("address", "")),
-            }
-            for client in record.get("clients") or ()
-            if client.get("directive") and client.get("address")
-        ]
-        found[record["id"]] = {
-            "name": str(record.get("name", "")),
-            "satisfy_any": bool(record.get("satisfy_any", False)),
-            "pass_auth": bool(record.get("pass_auth", False)),
-            # Counts prove that NPM is not adding a second login without
-            # carrying usernames, password hints, or any other auth material
-            # into HQ's safe observation cache.
-            "authorization_count": len(record.get("items") or ()),
-            "clients": clients,
-            # NPM generates a final ``deny all`` for every non-empty client
-            # rule set but does not return that generated rule through the API.
-            "implicit_deny": bool(clients),
-        }
-    return found
-
-
-def _npm_certificates(
-    base_url: str, headers: dict[str, str]
-) -> dict[Any, dict[str, Any]]:
-    """Every certificate the proxy holds, by the id a host refers to it with.
-
-    Reported as an attribute of the host that serves it rather than as an
-    inventory of its own. HQ does not hold the material for these -- the CA
-    that signs them is deliberately air-gapped -- so a declaration it could
-    never fulfil would be worse than the gap it closes. What it needs is to be
-    able to see that the name is served over TLS, which is an observation.
-    """
-
-    try:
-        certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
-    except (ProviderError, OSError, ValueError, KeyError):
-        # One reading missing must not lose the proxy hosts themselves.
-        return {}
-    return {
-        item.get("id"): {
-            "name": str(item.get("nice_name", "")),
-            "domains": [str(name) for name in item.get("domain_names") or ()],
-            "expires_on": str(item.get("expires_on", "")),
-            "provider": str(item.get("provider", "")),
-        }
-        for item in certificates or ()
-        if item.get("id")
-    }
+    return npm.inventory(_RUNTIME)
 
 
 # ----- Cloudflare ------------------------------------------------------------
@@ -3452,6 +3198,9 @@ class _ProviderRuntime:
     def connection_prefix(self, provider: str, connection_ref: str = "") -> str:
         return connection_prefix(provider, connection_ref)
 
+    def snapshot_value(self, key, load):
+        return _snapshot_value(key, load)
+
     def condition(
         self, condition_type: str, status: bool, reason: str, message: str
     ) -> dict[str, Any]:
@@ -3466,13 +3215,11 @@ class _ProviderRuntime:
         return _ssh(connection_ref, operation, payload)
 
 
-_ADAPTER_REGISTRY = compile_controller_adapters(
-    CONTROLLER_PROVIDER_ADAPTERS, _ProviderRuntime()
-)
+_RUNTIME = _ProviderRuntime()
+_ADAPTER_REGISTRY = compile_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS, _RUNTIME)
 
 
 PROVIDER_INVENTORY = {
-    "npm.proxy_host": list_npm,
     "cloudflare.zone": list_cloudflare_zones,
     "cloudflare.dns_record": list_cloudflare_records,
     "portainer.container": list_portainer_containers,
@@ -3499,8 +3246,7 @@ PROVIDER_INVENTORY = {
 
 
 def _probe_npm(connection_ref: str) -> dict[str, Any]:
-    _npm_token(_npm_url(connection_ref), connection_ref)
-    return {"detail": "Authenticated.", "reaches": []}
+    return npm.probe(_RUNTIME, connection_ref)
 
 
 def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
@@ -4280,7 +4026,6 @@ def _probe_ssh(connection_ref: str) -> dict[str, Any]:
 
 
 _CONNECTION_PROBES = {
-    "npm": _probe_npm,
     "cloudflare_dns": _probe_cloudflare_dns,
     "cloudflare_api": _probe_cloudflare_api,
     "portainer": _probe_portainer,
@@ -4416,8 +4161,6 @@ PROVIDER_ACTIONS = {
     ("portainer.container", "stop"): stop_portainer_container,
     ("tls.uploaded_certificate", "reconcile"): reconcile_uploaded_certificate,
     ("tls.uploaded_certificate", "delete"): delete_uploaded_certificate,
-    ("npm.proxy_host", "reconcile"): reconcile_npm,
-    ("npm.proxy_host", "delete"): delete_npm,
     ("cloudflare.dns_record", "reconcile"): reconcile_cloudflare_record,
     ("cloudflare.dns_record", "delete"): delete_cloudflare_record,
     ("tls.certificate", "reconcile"): _tls_reconcile,

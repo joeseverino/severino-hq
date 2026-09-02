@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import Field
 
 from .contracts import (
-    ControllerProviderAdapter,
+    ControllerIntegrationAdapter,
     ProviderError,
     ProviderResult,
     ProviderRuntime,
@@ -139,9 +139,7 @@ def delete(
         changed=True,
         status={"domain": spec["domain"], "removed": True},
         conditions=[
-            runtime.condition(
-                "Ready", True, "Removed", "AdGuard rewrite was removed."
-            )
+            runtime.condition("Ready", True, "Removed", "AdGuard rewrite was removed.")
         ],
         message="AdGuard rewrite removed.",
     )
@@ -218,29 +216,33 @@ def build_adapter(*, provider_model, provider_spec, applies):
             description="The address this hostname resolves to, usually an IP.",
         )
 
-    return ControllerProviderAdapter(
-        definition=provider_spec(
-            "adguard.rewrite",
-            "Makes a hostname resolve to an IP on your network. Created in AdGuard "
-            "if it is not there yet.",
-            AdGuardRewriteSpec,
-            actions={"reconcile": applies(automatic=True), "delete": applies()},
-            label="Internal DNS record",
-            connection_providers=("adguard",),
-            removal_note=lambda spec: (
-                f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
-                "anything reached by that name goes dark inside the network."
-            ),
-            facet="dns",
-            hostnames=_hostnames,
-            seed=_seed,
-            answers=_answers,
-            origin=_origin,
-            from_record=_from_record,
-            sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
-            readout=_readout,
+    definition = provider_spec(
+        "adguard.rewrite",
+        "Makes a hostname resolve to an IP on your network. Created in AdGuard "
+        "if it is not there yet.",
+        AdGuardRewriteSpec,
+        actions={"reconcile": applies(automatic=True), "delete": applies()},
+        label="Internal DNS record",
+        connection_providers=("adguard",),
+        removal_note=lambda spec: (
+            f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
+            "anything reached by that name goes dark inside the network."
         ),
-        inventory=inventory,
+        facet="dns",
+        hostnames=_hostnames,
+        seed=_seed,
+        answers=_answers,
+        origin=_origin,
+        from_record=_from_record,
+        sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
+        readout=_readout,
+    )
+    return ControllerIntegrationAdapter(
+        definitions=(definition,),
+        inventory={definition.kind: inventory},
         connection_probes={"adguard": probe},
-        actions={"reconcile": reconcile, "delete": delete},
+        actions={
+            (definition.kind, "reconcile"): reconcile,
+            (definition.kind, "delete"): delete,
+        },
     )

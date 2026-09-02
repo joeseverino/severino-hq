@@ -392,9 +392,7 @@ class ProviderAdapterTests(TestCase):
         """
         request.return_value = []
 
-        result = self.adguard(
-            "delete", {"domain": "gone.example", "answer": "x"}
-        )
+        result = self.adguard("delete", {"domain": "gone.example", "answer": "x"})
 
         self.assertFalse(result.changed)
         self.assertEqual(result.conditions[0]["type"], "Ready")
@@ -1052,7 +1050,7 @@ class ProviderAdapterTests(TestCase):
         )
 
     @mock.patch("controller_runtime.providers._request")
-    @mock.patch("controller_runtime.providers._npm_token", return_value="token")
+    @mock.patch("control_plane.provider_adapters.npm.token", return_value="token")
     @mock.patch.dict("os.environ", {"NPM_URL": "https://npm.example.test"}, clear=True)
     def test_npm_inventory_emits_safe_ingress_policy_evidence(self, _token, request):
         request.side_effect = [

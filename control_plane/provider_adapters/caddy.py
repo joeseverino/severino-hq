@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import Field
 
 from .contracts import (
-    ControllerProviderAdapter,
+    ControllerIntegrationAdapter,
     ProviderError,
     ProviderResult,
     ProviderRuntime,
@@ -57,9 +57,7 @@ def routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
                     {
                         "connection_ref": connection_ref,
                         "domain": host,
-                        "upstream": (
-                            destinations[0] if len(destinations) == 1 else ""
-                        ),
+                        "upstream": (destinations[0] if len(destinations) == 1 else ""),
                     },
                 )
     return list(found.values())
@@ -93,9 +91,7 @@ def _route_block(spec: dict[str, Any], certificate_directory: str) -> str:
     return "\n".join(lines)
 
 
-def render_routes(
-    specs: list[dict[str, Any]], certificate_directory: str = ""
-) -> str:
+def render_routes(specs: list[dict[str, Any]], certificate_directory: str = "") -> str:
     """Render every declared route for one edge as the complete HQ-owned file."""
 
     ordered = sorted(
@@ -109,9 +105,7 @@ def render_routes(
     return (
         header
         + "\n"
-        + "\n\n".join(
-            _route_block(spec, certificate_directory) for spec in ordered
-        )
+        + "\n\n".join(_route_block(spec, certificate_directory) for spec in ordered)
         + "\n"
     )
 
@@ -168,8 +162,7 @@ def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
                 "upstream": route.get("upstream", ""),
             }
             for route in (context.caddy_routes() if context.caddy_routes else ())
-            if route.get("connection_ref") == connection_ref
-            and route.get("upstream")
+            if route.get("connection_ref") == connection_ref and route.get("upstream")
         ],
     }
 
@@ -213,53 +206,53 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
             normalized_hostname(str(spec.get("domain", "") or "")),
         )
 
-    return ControllerProviderAdapter(
-        definition=provider_spec(
-            "caddy.route",
-            "A name an edge Caddy serves, and where it hands the request on.",
-            CaddyRouteSpec,
-            ResolvedCaddyRouteSpec,
-            _resolve,
-            actions={"reconcile": applies(automatic=True)},
-            label="Caddy route",
-            connection_providers=("ssh",),
-            facet="proxy",
-            hostnames=lambda spec: (spec["domain"],),
-            origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
-            identity=identity,
-            from_record=lambda record: {
-                "connection_ref": str(record.get("connection_ref", "") or ""),
-                "domain": str(record.get("domain", "") or ""),
-                "upstream": str(record.get("upstream", "") or ""),
-            },
-            key_hint=lambda spec: (
-                f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
+    definition = provider_spec(
+        "caddy.route",
+        "A name an edge Caddy serves, and where it hands the request on.",
+        CaddyRouteSpec,
+        ResolvedCaddyRouteSpec,
+        _resolve,
+        actions={"reconcile": applies(automatic=True)},
+        label="Caddy route",
+        connection_providers=("ssh",),
+        facet="proxy",
+        hostnames=lambda spec: (spec["domain"],),
+        origin=lambda spec: str(spec.get("upstream", "") or "").strip(),
+        identity=identity,
+        from_record=lambda record: {
+            "connection_ref": str(record.get("connection_ref", "") or ""),
+            "domain": str(record.get("domain", "") or ""),
+            "upstream": str(record.get("upstream", "") or ""),
+        },
+        key_hint=lambda spec: (
+            f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
+        ),
+        readout=lambda spec, status: (
+            (
+                "Served by",
+                "",
+                f"caddy on {spec.get('connection_ref', '') or 'the edge'}",
             ),
-            readout=lambda spec, status: (
-                (
-                    "Served by",
-                    "",
-                    f"caddy on {spec.get('connection_ref', '') or 'the edge'}",
-                ),
-                (
-                    "Hands off to",
-                    "",
-                    str(spec.get("upstream", "") or "")
-                    or "Caddy answers this itself",
-                ),
-            ),
-            sample_record={
-                "connection_ref": "an-edge",
-                "domain": "app.example.com",
-                "upstream": "app:8080",
-            },
-            removal_gap=(
-                "Removing the declaration must take the route with it -- forgetting "
-                "it would leave the edge serving a route nothing points at. The "
-                "controller has no delete for this yet."
+            (
+                "Hands off to",
+                "",
+                str(spec.get("upstream", "") or "") or "Caddy answers this itself",
             ),
         ),
-        inventory=inventory,
+        sample_record={
+            "connection_ref": "an-edge",
+            "domain": "app.example.com",
+            "upstream": "app:8080",
+        },
+        removal_gap=(
+            "Removing the declaration must take the route with it -- forgetting "
+            "it would leave the edge serving a route nothing points at. The "
+            "controller has no delete for this yet."
+        ),
+    )
+    return ControllerIntegrationAdapter(
+        definitions=(definition,),
+        inventory={definition.kind: inventory},
         connection_probes={},
-        actions={"reconcile": reconcile},
+        actions={(definition.kind, "reconcile"): reconcile},
     )

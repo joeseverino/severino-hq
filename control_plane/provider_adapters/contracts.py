@@ -6,7 +6,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
+
+
+T = TypeVar("T")
 
 
 class ProviderError(RuntimeError):
@@ -41,6 +44,8 @@ class ProviderRuntime(Protocol):
 
     def connection_prefix(self, provider: str, connection_ref: str = "") -> str: ...
 
+    def snapshot_value(self, key: tuple[str, ...], load: Callable[[], T]) -> T: ...
+
     def condition(
         self, condition_type: str, status: bool, reason: str, message: str
     ) -> dict[str, Any]: ...
@@ -69,51 +74,71 @@ ConnectionProbe = Callable[[ProviderRuntime, str], dict[str, Any]]
 
 
 @dataclass(frozen=True)
-class ControllerProviderAdapter:
-    """One statically admitted provider's complete controller contribution."""
+class ControllerIntegrationAdapter:
+    """One integration's complete, statically admitted controller contribution."""
 
-    definition: ControllerProviderDefinition
-    inventory: ProviderInventory | None
+    definitions: tuple[ControllerProviderDefinition, ...]
+    inventory: Mapping[str, ProviderInventory]
     connection_probes: Mapping[str, ConnectionProbe]
-    actions: Mapping[str, ProviderAction]
+    actions: Mapping[tuple[str, str], ProviderAction]
 
     def __post_init__(self) -> None:
+        definitions = tuple(self.definitions)
+        inventory = MappingProxyType(dict(self.inventory))
         probes = MappingProxyType(dict(self.connection_probes))
         actions = MappingProxyType(dict(self.actions))
+        object.__setattr__(self, "definitions", definitions)
+        object.__setattr__(self, "inventory", inventory)
         object.__setattr__(self, "connection_probes", probes)
         object.__setattr__(self, "actions", actions)
 
-        kind = self.definition.kind
+        kinds = [definition.kind for definition in definitions]
+        if not kinds:
+            raise ValueError("Controller integration must define a resource kind.")
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("Controller integration contains duplicate definitions.")
         declared_actions = {
-            name
-            for name, policy in self.definition.actions.items()
+            (definition.kind, name)
+            for definition in definitions
+            for name, policy in definition.actions.items()
             if policy.mode == "apply"
         }
         if set(actions) != declared_actions:
             raise ValueError(
-                f"Controller adapter {kind!r} actions do not match its declaration: "
+                "Controller integration actions do not match its declarations: "
                 f"expected {sorted(declared_actions)}, got {sorted(actions)}."
             )
 
         declared_probes = {
             provider
-            for provider in self.definition.connection_providers
+            for definition in definitions
+            for provider in definition.connection_providers
             if provider != "ssh"
         }
         if set(probes) != declared_probes:
             raise ValueError(
-                f"Controller adapter {kind!r} probes do not match its connections: "
+                "Controller integration probes do not match its connections: "
                 f"expected {sorted(declared_probes)}, got {sorted(probes)}."
             )
 
-        if self.inventory is None and not self.definition.unobserved_reason:
+        unknown_inventory = set(inventory) - set(kinds)
+        if unknown_inventory:
             raise ValueError(
-                f"Controller adapter {kind!r} has no inventory reader and says no reason."
+                "Controller integration inventories unknown kinds: "
+                f"{sorted(unknown_inventory)}."
             )
-        if self.inventory is not None and self.definition.unobserved_reason:
-            raise ValueError(
-                f"Controller adapter {kind!r} both emits inventory and claims it is unobserved."
-            )
+        for definition in definitions:
+            observed = definition.kind in inventory
+            if not observed and not definition.unobserved_reason:
+                raise ValueError(
+                    f"Controller integration resource {definition.kind!r} has no inventory "
+                    "reader and says no reason."
+                )
+            if observed and definition.unobserved_reason:
+                raise ValueError(
+                    f"Controller integration resource {definition.kind!r} both emits inventory "
+                    "and claims it is unobserved."
+                )
 
 
 @dataclass(frozen=True)
@@ -125,21 +150,22 @@ class ControllerAdapterRegistry:
 
 
 def admit_controller_adapters(
-    adapters: tuple[ControllerProviderAdapter, ...],
+    adapters: tuple[ControllerIntegrationAdapter, ...],
 ) -> Mapping[str, ControllerProviderDefinition]:
     """Validate the closed adapter set before any consumer derives from it."""
 
     definitions: dict[str, ControllerProviderDefinition] = {}
     for adapter in adapters:
-        kind = adapter.definition.kind
-        if kind in definitions:
-            raise ValueError(f"Duplicate controller adapter for {kind!r}.")
-        definitions[kind] = adapter.definition
+        for definition in adapter.definitions:
+            kind = definition.kind
+            if kind in definitions:
+                raise ValueError(f"Duplicate controller adapter for {kind!r}.")
+            definitions[kind] = definition
     return MappingProxyType(definitions)
 
 
 def compile_controller_adapters(
-    adapters: tuple[ControllerProviderAdapter, ...], runtime: ProviderRuntime
+    adapters: tuple[ControllerIntegrationAdapter, ...], runtime: ProviderRuntime
 ) -> ControllerAdapterRegistry:
     """Admit a static adapter set or fail before the controller can run."""
 
@@ -148,17 +174,17 @@ def compile_controller_adapters(
     probes: dict[str, Callable[[str], dict[str, Any]]] = {}
     actions: dict[tuple[str, str], Callable[..., ProviderResult]] = {}
     for adapter in adapters:
-        kind = adapter.definition.kind
-        if adapter.inventory is not None:
-            inventory[kind] = partial(adapter.inventory, runtime)
+        for kind, reader in adapter.inventory.items():
+            inventory[kind] = partial(reader, runtime)
         for provider, probe in adapter.connection_probes.items():
             if provider in probes:
                 raise ValueError(f"Duplicate connection probe for {provider!r}.")
             probes[provider] = partial(probe, runtime)
-        for action, handler in adapter.actions.items():
-            identity = (kind, action)
+        for identity, handler in adapter.actions.items():
             if identity in actions:
-                raise ValueError(f"Duplicate controller action for {kind!r}/{action!r}.")
+                raise ValueError(
+                    f"Duplicate controller action for {identity[0]!r}/{identity[1]!r}."
+                )
             actions[identity] = partial(handler, runtime)
     return ControllerAdapterRegistry(
         definitions=definitions,

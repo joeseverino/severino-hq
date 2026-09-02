@@ -2,7 +2,7 @@ from dataclasses import replace
 from unittest import TestCase, mock
 
 from control_plane.providers import CONTROLLER_PROVIDER_ADAPTERS
-from .contracts import compile_controller_adapters
+from .contracts import ControllerIntegrationAdapter, compile_controller_adapters
 
 
 class ControllerProviderAdapterContractTests(TestCase):
@@ -12,18 +12,22 @@ class ControllerProviderAdapterContractTests(TestCase):
         )
 
         self.assertEqual(
-            set(registry.definitions), {"adguard.rewrite", "caddy.route"}
+            set(registry.definitions),
+            {"adguard.rewrite", "caddy.route", "npm.proxy_host"},
         )
         self.assertEqual(
-            set(registry.inventory), {"adguard.rewrite", "caddy.route"}
+            set(registry.inventory),
+            {"adguard.rewrite", "caddy.route", "npm.proxy_host"},
         )
-        self.assertEqual(set(registry.connection_probes), {"adguard"})
+        self.assertEqual(set(registry.connection_probes), {"adguard", "npm"})
         self.assertEqual(
             set(registry.actions),
             {
                 ("adguard.rewrite", "reconcile"),
                 ("adguard.rewrite", "delete"),
                 ("caddy.route", "reconcile"),
+                ("npm.proxy_host", "reconcile"),
+                ("npm.proxy_host", "delete"),
             },
         )
 
@@ -35,10 +39,32 @@ class ControllerProviderAdapterContractTests(TestCase):
         adapter = next(
             adapter
             for adapter in CONTROLLER_PROVIDER_ADAPTERS
-            if adapter.definition.kind == "adguard.rewrite"
+            if any(
+                definition.kind == "adguard.rewrite"
+                for definition in adapter.definitions
+            )
         )
         with self.assertRaisesRegex(ValueError, "probes do not match"):
             replace(adapter, connection_probes={})
+
+    def test_one_integration_can_emit_multiple_resource_kinds(self):
+        first, second = CONTROLLER_PROVIDER_ADAPTERS[:2]
+        integration = ControllerIntegrationAdapter(
+            definitions=first.definitions + second.definitions,
+            inventory={**first.inventory, **second.inventory},
+            connection_probes={
+                **first.connection_probes,
+                **second.connection_probes,
+            },
+            actions={**first.actions, **second.actions},
+        )
+
+        registry = compile_controller_adapters((integration,), mock.Mock())
+
+        self.assertEqual(
+            set(registry.definitions),
+            {definition.kind for definition in first.definitions + second.definitions},
+        )
 
     def test_admission_rejects_two_adapters_for_one_kind(self):
         adapter = CONTROLLER_PROVIDER_ADAPTERS[0]
