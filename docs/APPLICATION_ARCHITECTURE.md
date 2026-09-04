@@ -219,7 +219,15 @@ search keystroke can never trigger provider I/O. Runtime instances deliberately
 have no secret field and relationship links are restricted to local or HTTP(S)
 destinations. Endpoint metadata is display-only: URL userinfo, query strings,
 and fragments are rejected both when controller inventory enters HQ and when a
-plugin instance leaves its provider. The Connections security posture is a
+plugin instance leaves its provider. Permission is an evidence-backed
+relationship rather than a label: an ability declares how its authority is
+proven (scoped, whole-account or keyless), an instance reports what kind of
+credential was observed, and HQ derives per-ability evidence and a per-connection
+lifecycle from the two, failing closed on a missing or rejected grant and naming
+an undeclared one instead of counting it as authorized. The controller's
+connection providers carry their credential model in one declaration beside the
+providers themselves, so reach reported by a sweep is never mistaken for
+permission. The Connections security posture is a
 query-free projection over that already-authorized catalog and the current
 request; it does not perform a second sweep or claim to attest the external
 router and firewall boundary that the process cannot observe.

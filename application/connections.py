@@ -17,11 +17,12 @@ Portainer rather than of editing anything here.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.core.exceptions import ImproperlyConfigured
+from django.utils import timezone
 from control_plane.models import ProviderConnection
-from control_plane.providers import PROVIDERS, observer_abilities
+from control_plane.providers import PROVIDERS, connection_credential, observer_abilities
 
 from .contracts import (
     SCOPE_NAME,
@@ -31,6 +32,7 @@ from .contracts import (
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
+    CREDENTIAL_MODELS,
     ConnectionAbility,
     ConnectionFact,
     ConnectionInstance,
@@ -89,12 +91,141 @@ class ConnectionGroup:
     connections: tuple["ConnectionView", ...]
 
 
+# What proves a connection may perform an ability. Each is a different claim,
+# and the page says which one it is making rather than folding them into one
+# "available".
+EVIDENCE_LABELS = {
+    "verified": "Scopes verified",
+    "coarse": "Whole-account credential",
+    "not_applicable": "Keyless",
+    "unverified": "Scoped credential, requirement undeclared",
+    "undeclared": "Proof undeclared",
+    "unknown": "Grants not reported",
+    "missing": "Scope missing",
+    "revoked": "Credential rejected",
+}
+# Evidence that settles the question: the ability may be performed and HQ can
+# say why. The rest either cannot be performed or has not been shown.
+PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
+
+# Where a connection is in its life, from the last observation of it.
+LIFECYCLE_LABELS = {
+    "configured": "Configured",
+    "unreachable": "Unreachable",
+    "reachable": "Reachable",
+    "ready": "Ready",
+    "unauthorized": "Access missing",
+    "stale": "Stale",
+    "revoked": "Revoked",
+}
+# The one-word answer to "may HQ do what this connection is held for".
+AUTHORITY_LABELS = {
+    "proven": "Authority proven",
+    "undeclared": "Proof undeclared",
+    "unknown": "Grants unknown",
+    "missing": "Access missing",
+    "none": "No abilities",
+}
+
+
+def grant_evidence(
+    ability: ConnectionAbility, instance: ConnectionInstance
+) -> tuple[str, tuple[str, ...]]:
+    """What proves this connection may perform this ability, and what is absent.
+
+    Two declarations meet here: the ability's grant model, which says what proof
+    it needs, and the instance's credential model, which says what kind of
+    credential was observed. A rejected credential proves nothing for anything.
+    A keyless ability or credential has nothing to prove. A whole-account
+    credential satisfies any ability and is worth naming as such, because it is
+    the opposite of least privilege. Only a scoped requirement is checked scope
+    by scope, and only when the provider reported grants. Anything left is a
+    requirement nobody declared -- said as "unverified" when the provider could
+    have been asked, and "undeclared" when nothing is known either way.
+    """
+
+    if instance.credential_model == "rejected":
+        return "revoked", ()
+    if ability.grant == "none" or instance.credential_model == "none":
+        return "not_applicable", ()
+    if ability.grant == "coarse" or instance.credential_model == "coarse":
+        return "coarse", ()
+    if ability.required_scopes:
+        if not instance.scopes_known:
+            return "unknown", ()
+        missing = tuple(
+            scope
+            for scope in ability.required_scopes
+            if scope not in instance.granted_scopes
+        )
+        return ("missing", missing) if missing else ("verified", ())
+    if instance.credential_model == "scoped":
+        return "unverified", ()
+    return "undeclared", ()
+
+
+def connection_authority(states: tuple["ConnectionAbilityState", ...]) -> str:
+    evidence = {state.evidence for state in states}
+    if not evidence:
+        return "none"
+    if evidence & {"missing", "revoked"}:
+        return "missing"
+    if "unknown" in evidence:
+        return "unknown"
+    if evidence & {"undeclared", "unverified"}:
+        return "undeclared"
+    return "proven"
+
+
+def connection_lifecycle(
+    instance: ConnectionInstance,
+    authority: str,
+    *,
+    stale_after_hours: int,
+    now: datetime,
+) -> str:
+    """One state from the observation, its age, reachability and authority.
+
+    Ordered by what matters most: a rejected credential is revoked whatever
+    else is true; nothing observed is merely configured; an old observation is
+    stale before it is anything else, because every later claim rests on it;
+    missing access fails closed ahead of reachability; and only a reached
+    connection with proven authority is ready.
+    """
+
+    if instance.credential_model == "rejected":
+        return "revoked"
+    observed = instance.observed_at
+    if observed is None:
+        return "configured"
+    if timezone.is_naive(observed):
+        observed = timezone.make_aware(observed)
+    if now - observed > timedelta(hours=stale_after_hours):
+        return "stale"
+    if authority == "missing":
+        return "unauthorized"
+    if instance.status == "serious":
+        return "unreachable"
+    if instance.status == "neutral":
+        return "configured"
+    return "ready" if authority == "proven" else "reachable"
+
+
 @dataclass(frozen=True)
 class ConnectionAbilityState:
     ability: ConnectionAbility
     available: bool | None
     missing_scopes: tuple[str, ...] = ()
     action: ActionLink | None = None
+    evidence: str = "undeclared"
+
+    @property
+    def evidence_label(self) -> str:
+        return EVIDENCE_LABELS[self.evidence]
+
+    @property
+    def proven(self) -> bool:
+        return self.evidence in PROVEN_EVIDENCE
 
 
 # Actions derived from the family's spec rather than from one connection.
@@ -106,6 +237,16 @@ class ConnectionView:
     instance: ConnectionInstance
     abilities: tuple[ConnectionAbilityState, ...]
     actions: tuple[ActionLink, ...] = ()
+    lifecycle: str = "configured"
+    authority: str = "none"
+
+    @property
+    def lifecycle_label(self) -> str:
+        return LIFECYCLE_LABELS[self.lifecycle]
+
+    @property
+    def authority_label(self) -> str:
+        return AUTHORITY_LABELS[self.authority]
 
     @property
     def recommended_action(self) -> ActionLink | None:
@@ -312,6 +453,10 @@ def _controller_instances(
                     if fact is not None
                 ),
                 controller_id=reading.controller_id,
+                # The controller reports reach, not permission. What kind of
+                # credential this is comes from the provider's own model,
+                # declared once beside the providers.
+                credential_model=connection_credential(reading.provider),
             )
         )
     return tuple(instances)
@@ -395,6 +540,17 @@ def _validate_instance(
         raise ImproperlyConfigured(
             f"Connection {instance.id!r} has invalid granted scopes."
         )
+    if instance.credential_model not in ("", *CREDENTIAL_MODELS):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} has invalid credential model "
+            f"{instance.credential_model!r}."
+        )
+    if instance.credential_model == "none" and (
+        instance.granted_scopes or instance.scopes_known
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} is keyless but reports grants."
+        )
     known = {ability.name for ability in spec.abilities}
     unknown = sorted(set(instance.ability_names) - known)
     if unknown:
@@ -468,14 +624,12 @@ def _ability_state(
     # connections. Same reason action_links defers it.
     from .capabilities import capability_label
 
-    if ability.required_scopes and not instance.scopes_known:
-        return ConnectionAbilityState(ability, None)
-    missing = tuple(
-        scope
-        for scope in ability.required_scopes
-        if scope not in instance.granted_scopes
-    )
-    available = not missing
+    evidence, missing = grant_evidence(ability, instance)
+    # Unknown stays undecided; only absent or rejected proof closes the door.
+    # Undeclared proof leaves the ability usable under HQ's own authorization,
+    # and the evidence says so beside it rather than the page pretending
+    # otherwise.
+    available = None if evidence == "unknown" else evidence not in ("missing", "revoked")
     return ConnectionAbilityState(
         ability,
         available,
@@ -491,6 +645,7 @@ def _ability_state(
         )
         if available
         else None,
+        evidence,
     )
 
 
@@ -516,15 +671,24 @@ def _connection_view(
         if state.action is not None and state.action.url not in seen:
             seen.add(state.action.url)
             actions = (*actions, state.action)
+    authority = connection_authority(states)
+    lifecycle = connection_lifecycle(
+        instance,
+        authority,
+        stale_after_hours=spec.stale_after_hours,
+        now=timezone.now(),
+    )
     return ConnectionView(
         instance,
         states,
         recommend_connection_action(
             actions,
-            unhealthy=instance.status != "good",
+            unhealthy=instance.status != "good" or lifecycle in ("stale", "revoked"),
             missing_scope_count=sum(len(state.missing_scopes) for state in states),
             unknown_scope_count=sum(state.available is None for state in states),
         ),
+        lifecycle,
+        authority,
     )
 
 
@@ -550,6 +714,7 @@ def describe_connections() -> dict:
                         "summary": ability.summary,
                         "effect": ability.effect,
                         "required_scopes": list(ability.required_scopes),
+                        "grant": ability.grant or None,
                         "capability": ability.capability or None,
                         "governs_kinds": list(ability.governs_kinds),
                         "subject_resource": ability.subject_resource or None,
@@ -599,12 +764,17 @@ def _serialize_instance(connection: ConnectionView) -> dict:
         ),
         "scopes_known": instance.scopes_known,
         "granted_scopes": list(instance.granted_scopes),
+        "credential_model": instance.credential_model or None,
+        "lifecycle": connection.lifecycle,
+        "authority": connection.authority,
         "abilities": [
             {
                 "name": state.ability.name,
                 "label": state.ability.label,
                 "effect": state.ability.effect,
                 "required_scopes": list(state.ability.required_scopes),
+                "grant": state.ability.grant or None,
+                "evidence": state.evidence,
                 "available": state.available,
                 "missing_scopes": list(state.missing_scopes),
                 "capability": state.ability.capability or None,

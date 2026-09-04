@@ -60,6 +60,16 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
                             ability,
                             ability_available,
                             () if ability_available is not False else ("example:read",),
+                            None,
+                            (
+                                "unknown"
+                                if ability_available is None
+                                else "missing"
+                                if ability_available is False
+                                else "verified"
+                                if required_scopes
+                                else "undeclared"
+                            ),
                         ),
                     ),
                 ),
@@ -108,20 +118,32 @@ class ConnectionSecurityPostureTests(TestCase):
         )
 
         scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertEqual(scope.state, "neutral")
+        self.assertEqual(scope.state, "attention")
         self.assertIn("1 unknown", scope.evidence)
         self.assertEqual(posture.state, "neutral")
 
-    def test_scope_free_abilities_are_capability_only_not_unknown(self):
+    def test_an_ability_that_declared_no_proof_is_reported_as_undeclared(self):
+        # Not "capability-only", which sounded like a kind of authorization. An
+        # ability with no grant model and no credential model has told HQ
+        # nothing, and the posture carries that as a visible debt.
         posture = connection_security_posture(
             _groups(ability_available=True, required_scopes=()), request=self.request()
         )
 
         scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertIn("1 capability-only", scope.evidence)
-        self.assertIn("0 unknown", scope.evidence)
-        self.assertEqual(posture.scope_capability_only_count, 1)
+        self.assertEqual(scope.state, "attention")
+        self.assertIn("1 undeclared", scope.evidence)
+        self.assertNotIn("unknown", scope.evidence)
+        self.assertEqual(posture.scope_undeclared_count, 1)
         self.assertEqual(posture.scope_unknown_count, 0)
+        self.assertEqual(posture.state, "neutral")
+
+    def test_verified_and_keyless_evidence_alone_is_a_proven_control(self):
+        posture = connection_security_posture(_groups(), request=self.request())
+
+        scope = next(control for control in posture.controls if control.id == "scope")
+        self.assertEqual(scope.state, "good")
+        self.assertEqual(scope.evidence, "1 verified · 0 whole-account · 0 keyless")
 
     def test_missing_scope_or_untrusted_ingress_never_gets_a_green_summary(self):
         missing = connection_security_posture(

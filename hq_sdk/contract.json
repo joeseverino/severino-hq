@@ -297,6 +297,7 @@
           "summary",
           "effect=",
           "required_scopes=",
+          "grant=",
           "capability=",
           "governs_kinds=",
           "subject_resource="
@@ -328,6 +329,7 @@
           "observed_at=",
           "granted_scopes=",
           "scopes_known=",
+          "credential_model=",
           "ability_names=",
           "targets=",
           "dependencies=",
@@ -363,6 +365,7 @@
           "setup_route=",
           "documentation_url=",
           "secret_store=",
+          "stale_after_hours=",
           "empty_message="
         ],
         "fields": [],

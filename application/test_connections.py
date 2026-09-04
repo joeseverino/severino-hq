@@ -251,7 +251,10 @@ class ConnectionPageTests(TestCase):
 
         self.assertContains(response, 'class="connection-endpoint"')
         self.assertContains(response, 'class="connection-ability-list"')
-        self.assertContains(response, 'class="connection-state connection-state-good"')
+        # A probed Portainer holds a whole-account credential: reached, proven,
+        # and so ready -- the lifecycle rather than the raw probe result.
+        self.assertContains(response, 'class="connection-state connection-state-ready"')
+        self.assertContains(response, "Authority proven")
         self.assertNotContains(response, "connection-ability-chip")
 
     def test_the_page_never_carries_a_secret(self):

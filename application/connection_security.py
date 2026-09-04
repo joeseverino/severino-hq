@@ -7,6 +7,7 @@ provider, opens a vault, or invents an external firewall guarantee.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -49,9 +50,14 @@ class ConnectionSecurityPosture:
     oldest_observed_at: datetime | None
     ability_count: int
     scope_verified_count: int
-    scope_capability_only_count: int
+    scope_coarse_count: int
+    scope_keyless_count: int
+    scope_undeclared_count: int
     scope_missing_count: int
     scope_unknown_count: int
+    ready_count: int
+    stale_count: int
+    revoked_count: int
     external_custody_count: int
     dependency_count: int
 
@@ -262,16 +268,14 @@ def connection_security_posture(
         for connection in connections
     )
     unverified = len(connections) - healthy - attention
-    scope_verified = sum(
-        state.available is True and bool(state.ability.required_scopes)
-        for state in states
-    )
-    scope_capability_only = sum(
-        state.available is True and not state.ability.required_scopes
-        for state in states
-    )
-    scope_missing = sum(state.available is False for state in states)
-    scope_unknown = sum(state.available is None for state in states)
+    evidence = Counter(state.evidence for state in states)
+    scope_verified = evidence["verified"]
+    scope_coarse = evidence["coarse"]
+    scope_keyless = evidence["not_applicable"]
+    scope_undeclared = evidence["undeclared"] + evidence["unverified"]
+    scope_missing = evidence["missing"] + evidence["revoked"]
+    scope_unknown = evidence["unknown"]
+    lifecycle = Counter(connection.lifecycle for connection in connections)
     external_custody = sum(
         len(group.connections) for group in groups if group.spec.secret_store
     )
@@ -354,20 +358,30 @@ def connection_security_posture(
         SecurityControl(
             "scope",
             "Least-privilege evidence",
-            "attention"
+            "serious"
             if scope_missing
+            else "attention"
+            if scope_undeclared or scope_unknown
             else "neutral"
-            if scope_unknown or scope_capability_only
+            if scope_coarse
             else "good",
-            (
-                f"{scope_verified} provider-scoped · "
-                f"{scope_capability_only} capability-only · "
-                f"{scope_missing} missing · {scope_unknown} unknown"
+            " · ".join(
+                part
+                for part in (
+                    f"{scope_verified} verified",
+                    f"{scope_coarse} whole-account",
+                    f"{scope_keyless} keyless",
+                    f"{scope_undeclared} undeclared" if scope_undeclared else "",
+                    f"{scope_unknown} unknown" if scope_unknown else "",
+                    f"{scope_missing} missing" if scope_missing else "",
+                )
+                if part
             ),
-            "Provider-scoped abilities are checked against reported grants. "
-            "Capability-only means the provider contract exposes no granular "
-            "scope for that ability; HQ authorization still applies. Unknown "
-            "and missing scope evidence never become permission."
+            "Verified means the provider reported the grants the ability needs. "
+            "Whole-account means the provider's credential model offers nothing "
+            "narrower, so the evidence is the credential kind itself. Keyless "
+            "abilities have no grant to prove. Undeclared and unknown evidence "
+            "never become permission, and a missing grant fails closed."
             if states
             else "No connection abilities have been declared yet.",
         ),
@@ -404,7 +418,7 @@ def connection_security_posture(
         or tailnet_policy_control.state == "serious"
         or edge_control.state == "serious"
         else "neutral"
-        if unverified or scope_unknown or scope_capability_only
+        if unverified or scope_unknown or scope_undeclared or scope_coarse
         else "good"
     )
     return ConnectionSecurityPosture(
@@ -427,9 +441,14 @@ def connection_security_posture(
         oldest_observed_at=min(observed, default=None),
         ability_count=len(states),
         scope_verified_count=scope_verified,
-        scope_capability_only_count=scope_capability_only,
+        scope_coarse_count=scope_coarse,
+        scope_keyless_count=scope_keyless,
+        scope_undeclared_count=scope_undeclared,
         scope_missing_count=scope_missing,
         scope_unknown_count=scope_unknown,
+        ready_count=lifecycle["ready"],
+        stale_count=lifecycle["stale"],
+        revoked_count=lifecycle["revoked"],
         external_custody_count=external_custody,
         dependency_count=dependencies,
     )

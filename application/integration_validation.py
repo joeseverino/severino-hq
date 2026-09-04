@@ -13,7 +13,7 @@ from typing import Any
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, ValidationError
 
-from .connection_contracts import ConnectionAbility, ConnectionSpec
+from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
     TARGET_KINDS,
@@ -239,6 +239,21 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
         raise ImproperlyConfigured(
             f"Connection ability {ability.name!r} has invalid required scopes."
         )
+    if ability.grant not in ("", *GRANT_MODELS):
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} has invalid grant model "
+            f"{ability.grant!r}."
+        )
+    if ability.grant == "scoped" and not ability.required_scopes:
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} declares scoped proof but "
+            "requires no scopes."
+        )
+    if ability.grant in ("coarse", "none") and ability.required_scopes:
+        raise ImproperlyConfigured(
+            f"Connection ability {ability.name!r} declares {ability.grant} proof "
+            "but lists required scopes."
+        )
     if ability.capability and not DOTTED_NAME.fullmatch(ability.capability):
         raise ImproperlyConfigured(
             f"Connection ability {ability.name!r} has invalid capability."
@@ -285,6 +300,14 @@ def validate_connection_spec(spec: ConnectionSpec) -> None:
     if spec.documentation_url and not safe_connection_url(spec.documentation_url):
         raise ImproperlyConfigured(
             f"Connection {spec.name!r} has an invalid documentation URL."
+        )
+    if (
+        isinstance(spec.stale_after_hours, bool)
+        or not isinstance(spec.stale_after_hours, int)
+        or spec.stale_after_hours <= 0
+    ):
+        raise ImproperlyConfigured(
+            f"Connection {spec.name!r} must declare a positive staleness window."
         )
     for ability in spec.abilities:
         _validate_ability(spec, ability)

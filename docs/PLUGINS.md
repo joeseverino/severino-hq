@@ -283,6 +283,21 @@ and topology without host-specific registration work. Emit a truthful reduced
 mode when the gateway still works anonymously; do not hide a usable integration
 solely because a token is absent.
 
+Say how authority is proven, not only what it permits. Each ability declares a
+`grant` model: `scoped` when the provider issues narrow permissions and the
+ability lists the ones it needs in `required_scopes`; `coarse` when the
+credential is the whole account and the provider offers nothing narrower;
+`none` when the call is keyless. Each instance reports its `credential_model`
+from the same vocabulary, plus `rejected` for a credential the provider
+refused. HQ derives one evidence state per ability and instance: verified,
+whole-account, keyless, unverified, undeclared, unknown, missing or revoked.
+Only missing and revoked close the ability; unknown leaves it undecided;
+undeclared leaves it usable under HQ's own authorization and says so. The same
+derivation yields each connection's lifecycle (configured, reachable, ready,
+unauthorized, stale, revoked) against the family's `stale_after_hours`. An
+ability that declares nothing is reported as undeclared proof rather than
+counted as authorized, so the debt is visible where it is owed.
+
 An ability may set `subject_resource` to the `ResourceSpec` it governs and list
 its provider kinds in `governs_kinds`. Command Center then discovers registered
 commands against that resource whose target filters include one of those kinds.

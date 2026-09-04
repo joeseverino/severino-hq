@@ -105,7 +105,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/resources/` | Every read resource, its operations and filter schema |
 | `GET` | `/api/v2/resources/<name>/` | List a resource using validated query parameters |
 | `GET` | `/api/v2/resources/<name>/<identifier>/` | Get one addressable record |
-| `GET` | `/api/v2/connections/` | Connection families, abilities, scope coverage, and safe cached state |
+| `GET` | `/api/v2/connections/` | Connection families, abilities, grant evidence, lifecycle, and safe cached state |
 | `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
 | `GET` | `/api/v2/findings/` | Evidence-backed claims with stable IDs, causal rollups, authorized remedies, and derived understand → act → verify workflows |
 

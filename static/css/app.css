@@ -525,7 +525,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
 .pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
-.connection-state-reachable, .connection-state-good {
+.connection-state-reachable, .connection-state-ready, .connection-state-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-tint: var(--tone-positive-tint);
@@ -534,7 +534,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 }
 .pill-paused, .pill-editing, .pill-drafting, .pill-researching,
 .pill-internal, .pill-attention, .msg-warning, .conn-decision-step-unknown,
-.conn-kind-declined, .connection-state-attention {
+.conn-kind-declined, .connection-state-attention, .connection-state-stale {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-tint: var(--tone-caution-tint);
@@ -544,7 +544,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-spam,
 .pill-unreachable, .msg-error, .conn-decision-step-does-not,
-.connection-state-unreachable,
+.connection-state-unreachable, .connection-state-revoked, .connection-state-unauthorized,
 .conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
@@ -578,7 +578,7 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
    neutral look identical and are not the same claim, and the class has to
    exist for the template check to find it. */
 .pill-read, .pill-unprobed, .pill-neutral, .connection-state-unprobed,
-.connection-state-neutral {
+.connection-state-neutral, .connection-state-configured {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);
@@ -3065,6 +3065,12 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-list li.is-unavailable { color: var(--muted); }
 .connection-ability-list li.is-unavailable::before { background: var(--muted-2); }
 .connection-ability-list small { grid-column: 2; color: var(--danger); font-size: var(--text-3xs); font-weight: 650; }
+/* Short of proof is not the same as refused: an undeclared or unverified
+   requirement is a debt, said quietly; a missing or rejected grant is a stop. */
+.connection-evidence-undeclared, .connection-evidence-unverified, .connection-evidence-unknown { color: var(--muted); font-weight: 600; }
+.connection-authority { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.connection-authority-proven { color: var(--ok); }
+.connection-authority-missing { color: var(--danger); }
 .connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
 .connection-state {
   display: inline-flex;

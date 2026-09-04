@@ -26,7 +26,7 @@
     <div>
       <strong>{{ connection_posture.ability_count }}</strong>
       <span>assigned abilities</span>
-      <small>{{ connection_posture.scope_verified_count }} provider-scoped · {{ connection_posture.scope_capability_only_count }} capability-only{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}</small>
+      <small>{{ connection_posture.scope_verified_count }} verified · {{ connection_posture.scope_coarse_count }} whole-account · {{ connection_posture.scope_keyless_count }} keyless{% if connection_posture.scope_undeclared_count %} · {{ connection_posture.scope_undeclared_count }} undeclared{% endif %}{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}{% if connection_posture.scope_missing_count %} · {{ connection_posture.scope_missing_count }} missing{% endif %}</small>
     </div>
     <div>
       <strong>{{ connection_posture.dependency_count }}</strong>
@@ -92,10 +92,16 @@ they stay visible and stay in the same table.
               {% endcomment %}
               {% if connection.abilities %}
                 <ul class="connection-ability-list">
+                  {% comment %}
+                  Proven evidence is silent: a whole-account credential or a
+                  keyless call is the normal case and saying so on every line
+                  would drown the one that is not. Anything short of proof is
+                  named, in the words of the claim HQ can actually make.
+                  {% endcomment %}
                   {% for state in connection.abilities|slice:":3" %}
-                    <li{% if state.missing_scopes %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
+                    <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
                       <span>{{ state.ability.label }}</span>
-                      {% if state.missing_scopes %}<small>Needs scope</small>{% endif %}
+                      {% if not state.proven %}<small class="connection-evidence connection-evidence-{{ state.evidence }}">{{ state.evidence_label }}</small>{% endif %}
                     </li>
                   {% endfor %}
                 </ul>
@@ -115,9 +121,16 @@ they stay visible and stay in the same table.
               {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
             </td>
+            {% comment %}
+            Two answers, not one: where the connection is in its life, and
+            whether HQ may do what it is held for. A reachable credential with
+            missing scopes and a stale one with proven authority are different
+            situations that a single status folded together.
+            {% endcomment %}
             <td class="tight-col" data-label="State">
-              <span class="connection-state connection-state-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
-              {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
+              <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
+              <br><span class="connection-authority connection-authority-{{ connection.authority }}">{{ connection.authority_label }}</span>
+              <br><span class="muted">{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {{ connection.instance.observed_at|timesince }} ago{% endif %}</span>
             </td>
             <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}
@@ -207,7 +220,7 @@ they stay visible and stay in the same table.
       <li class="{% if not connection_posture.network_gate_enforced %}is-attention{% endif %}"><span>PEP</span><strong>Pre-auth network gate</strong></li>
       <li><span>Principal</span><strong>Authenticated session</strong></li>
       <li><span>Authorization</span><strong>HQ capability</strong></li>
-      <li class="{% if connection_posture.scope_missing_count %}is-attention{% elif connection_posture.scope_unknown_count %}is-unknown{% endif %}"><span>Least privilege</span><strong>Provider scope</strong></li>
+      <li class="{% if connection_posture.scope_missing_count %}is-attention{% elif connection_posture.scope_unknown_count or connection_posture.scope_undeclared_count %}is-unknown{% endif %}"><span>Least privilege</span><strong>Grant evidence</strong></li>
       <li><span>Resource</span><strong>Declared target</strong></li>
     </ol>
   </section>
