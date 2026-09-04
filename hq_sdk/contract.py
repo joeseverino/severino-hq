@@ -72,9 +72,10 @@ def _parameters(target) -> list[str] | None:
         signature = inspect.signature(target)
     except (TypeError, ValueError):
         return None
+    parameters = list(signature.parameters.values())
     rendered: list[str] = []
     keyword_only_started = False
-    for parameter in signature.parameters.values():
+    for index, parameter in enumerate(parameters):
         kind = parameter.kind
         if kind is inspect.Parameter.KEYWORD_ONLY and not keyword_only_started:
             rendered.append("*")
@@ -88,11 +89,11 @@ def _parameters(target) -> list[str] | None:
             continue
         optional = parameter.default is not inspect.Parameter.empty
         rendered.append(f"{parameter.name}=" if optional else parameter.name)
-        if kind is inspect.Parameter.POSITIONAL_ONLY:
-            following = list(signature.parameters.values())
-            index = following.index(parameter)
-            if index + 1 == len(following) or following[index + 1].kind is not kind:
-                rendered.append("/")
+        following = parameters[index + 1] if index + 1 < len(parameters) else None
+        if kind is inspect.Parameter.POSITIONAL_ONLY and (
+            following is None or following.kind is not kind
+        ):
+            rendered.append("/")
     return rendered
 
 
