@@ -98,11 +98,22 @@ EVIDENCE_LABELS = {
     "verified": "Scopes verified",
     "coarse": "Whole-account credential",
     "not_applicable": "Keyless",
-    "unverified": "Scoped credential, requirement undeclared",
+    "unverified": "Not verified",
     "undeclared": "Proof undeclared",
     "unknown": "Grants not reported",
     "missing": "Scope missing",
     "revoked": "Credential rejected",
+}
+# The sentence behind each label, for the place that has room for one.
+EVIDENCE_DETAILS = {
+    "verified": "The provider reported every grant this ability needs.",
+    "coarse": "The credential is the whole account; the provider offers nothing narrower.",
+    "not_applicable": "No credential is involved, so there is no grant to prove.",
+    "unverified": "The provider issues scoped credentials, but HQ has not declared which grants this ability needs.",
+    "undeclared": "Neither the ability nor the credential has declared how authority is proven.",
+    "unknown": "This ability needs specific grants and the provider has not reported which it holds.",
+    "missing": "The provider reported its grants and one this ability needs is absent.",
+    "revoked": "The provider rejected this credential.",
 }
 # Evidence that settles the question: the ability may be performed and HQ can
 # say why. The rest either cannot be performed or has not been shown.
@@ -224,6 +235,10 @@ class ConnectionAbilityState:
         return EVIDENCE_LABELS[self.evidence]
 
     @property
+    def evidence_detail(self) -> str:
+        return EVIDENCE_DETAILS[self.evidence]
+
+    @property
     def proven(self) -> bool:
         return self.evidence in PROVEN_EVIDENCE
 
@@ -247,6 +262,16 @@ class ConnectionView:
     @property
     def authority_label(self) -> str:
         return AUTHORITY_LABELS[self.authority]
+
+    @property
+    def mixed_evidence(self) -> bool:
+        """Whether the abilities differ in what proves them.
+
+        When they agree, the connection's authority line already says it once,
+        and repeating it under every ability said one thing four times.
+        """
+
+        return len({state.evidence for state in self.abilities}) > 1
 
     @property
     def recommended_action(self) -> ActionLink | None:

@@ -95,13 +95,15 @@ they stay visible and stay in the same table.
                   {% comment %}
                   Proven evidence is silent: a whole-account credential or a
                   keyless call is the normal case and saying so on every line
-                  would drown the one that is not. Anything short of proof is
-                  named, in the words of the claim HQ can actually make.
+                  would drown the one that is not. Short of proof, the
+                  connection's authority line already says so once; an ability
+                  is named here only when it differs from its neighbours or is
+                  closed outright.
                   {% endcomment %}
                   {% for state in connection.abilities|slice:":3" %}
                     <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
                       <span>{{ state.ability.label }}</span>
-                      {% if not state.proven %}<small class="connection-evidence connection-evidence-{{ state.evidence }}">{{ state.evidence_label }}</small>{% endif %}
+                      {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label }}</small>{% endif %}
                     </li>
                   {% endfor %}
                 </ul>
@@ -129,8 +131,8 @@ they stay visible and stay in the same table.
             {% endcomment %}
             <td class="tight-col" data-label="State">
               <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
-              <br><span class="connection-authority connection-authority-{{ connection.authority }}">{{ connection.authority_label }}</span>
-              <br><span class="muted">{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {{ connection.instance.observed_at|timesince }} ago{% endif %}</span>
+              <br><span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
+              {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<br><span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}{{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
             </td>
             <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}

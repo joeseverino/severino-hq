@@ -3067,7 +3067,9 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-list small { grid-column: 2; color: var(--danger); font-size: var(--text-3xs); font-weight: 650; }
 /* Short of proof is not the same as refused: an undeclared or unverified
    requirement is a debt, said quietly; a missing or rejected grant is a stop. */
-.connection-evidence-undeclared, .connection-evidence-unverified, .connection-evidence-unknown { color: var(--muted); font-weight: 600; }
+.connection-ability-list small.connection-evidence-undeclared,
+.connection-ability-list small.connection-evidence-unverified,
+.connection-ability-list small.connection-evidence-unknown { color: var(--muted); font-weight: 600; }
 .connection-authority { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .connection-authority-proven { color: var(--ok); }
 .connection-authority-missing { color: var(--danger); }
