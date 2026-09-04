@@ -3070,6 +3070,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-list small.connection-evidence-undeclared,
 .connection-ability-list small.connection-evidence-unverified,
 .connection-ability-list small.connection-evidence-unknown { color: var(--muted); font-weight: 600; }
+/* Lifecycle, authority and the reading's age, one under the other, in the
+   table and in the stacked card alike. */
+.connection-standing { display: inline-grid; gap: var(--space-1); justify-items: start; min-width: 0; }
+.connection-standing .muted { font-size: var(--text-2xs); }
 .connection-authority { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .connection-authority-proven { color: var(--ok); }
 .connection-authority-missing { color: var(--danger); }
@@ -3599,6 +3603,8 @@ kbd {
   .data-table.stacks td:first-child { display: block; text-align: left; font-weight: 650; font-size: var(--text-md); padding-bottom: var(--space-3); }
   .data-table.stacks td:first-child::before { display: none; }
   .data-table.stacks td[data-label]:empty { display: none; }
+  .data-table.stacks .connection-standing { justify-items: end; }
+  .data-table.stacks .connection-depends { min-width: 0; text-align: right; }
   .table-scroll:has(.data-table.stacks) { overflow-x: visible; }
 
   /* The cadence matrix drops its oldest periods rather than scrolling. A

@@ -116,12 +116,19 @@ they stay visible and stay in the same table.
             hid a machine the connection genuinely reaches.
             {% endcomment %}
             <td class="optional-col" data-label="Depends">
+              {% comment %}
+              One wrapper, for the same reason as the state cell: in the
+              stacked card each link and chip was its own flex item, and a
+              machine's name broke at every hyphen to fit beside the others.
+              {% endcomment %}
+              <span class="connection-depends">
               {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
               {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
               {% for link in connection.instance.dependencies|slice:":3" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
+              </span>
             </td>
             {% comment %}
             Two answers, not one: where the connection is in its life, and
@@ -130,9 +137,16 @@ they stay visible and stay in the same table.
             situations that a single status folded together.
             {% endcomment %}
             <td class="tight-col" data-label="State">
-              <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
-              <br><span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
-              {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<br><span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}{{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
+              {% comment %}
+              A block of its own rather than lines broken with <br>: the stacked
+              layout lays a cell out as a flex row, where a line break is
+              nothing and three phrases ran together off the edge of the phone.
+              {% endcomment %}
+              <span class="connection-standing">
+                <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
+                <span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
+                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}{{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
+              </span>
             </td>
             <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}
