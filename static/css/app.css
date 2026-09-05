@@ -3073,7 +3073,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Lifecycle, authority and the reading's age, one under the other, in the
    table and in the stacked card alike. */
 .connection-standing { display: inline-grid; gap: var(--space-1); justify-items: start; min-width: 0; }
-.connection-standing .muted { font-size: var(--text-2xs); }
+/* The cell is a tight column and therefore nowrap; the reading's age is the
+   one line in it that may wrap, or it runs under whatever the next column
+   holds. */
+.connection-standing .muted { font-size: var(--text-2xs); white-space: normal; }
 .connection-authority { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .connection-authority-proven { color: var(--ok); }
 .connection-authority-missing { color: var(--danger); }
