@@ -153,3 +153,70 @@ class AuditSdkTests(TestCase):
         with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("db")):
             event = record_operation("example.refresh", "Refreshed.")
         self.assertIsNone(event)
+
+
+class SdkShapeTests(SimpleTestCase):
+    """The committed contract is the surface extensions were built against."""
+
+    def test_the_exports_still_have_the_committed_shape(self):
+        from hq_sdk.contract import describe, drift, load_committed
+
+        differences = drift(load_committed(), describe())
+
+        self.assertEqual(
+            differences,
+            [],
+            "\n".join(
+                [
+                    "hq_sdk changed shape. Every extension binds to it, and no test "
+                    "or graph here can see them. Run `manage.py sdk_contract`, "
+                    "review the diff, and decide whether PLUGIN_API_VERSION moves:",
+                    *differences,
+                ]
+            ),
+        )
+
+    def test_every_sdk_module_and_export_is_described(self):
+        import importlib
+
+        from hq_sdk.contract import describe, exports, module_names
+
+        contract = describe()
+
+        self.assertEqual(tuple(sorted(contract["modules"])), module_names())
+        for name in module_names():
+            module = importlib.import_module(f"hq_sdk.{name}")
+            self.assertEqual(
+                tuple(sorted(contract["modules"][name])), tuple(sorted(exports(module)))
+            )
+
+    def test_a_shape_change_is_named_precisely(self):
+        import copy
+
+        from hq_sdk.contract import describe, drift
+
+        committed = describe()
+        current = copy.deepcopy(committed)
+        current["modules"]["capabilities"]["execute_capability"]["parameters"].append(
+            "surprise"
+        )
+        del current["modules"]["web"]["safe_next"]
+        current["modules"]["ui"]["Brand"] = {"kind": "value", "type": "str"}
+
+        differences = drift(committed, current)
+
+        self.assertEqual(len(differences), 3)
+        self.assertTrue(differences[0].startswith("~ hq_sdk.capabilities.execute_capability: parameters:"))
+        self.assertEqual(differences[1], "+ hq_sdk.ui.Brand")
+        self.assertEqual(differences[2], "- hq_sdk.web.safe_next")
+
+    def test_parameters_are_recorded_without_annotations(self):
+        """Annotations render differently across interpreters; names and defaults do not."""
+
+        from hq_sdk.contract import describe
+
+        recorded = describe()["modules"]["capabilities"]["execute_capability"]
+
+        self.assertEqual(recorded["kind"], "function")
+        self.assertIn("name", recorded["parameters"])
+        self.assertTrue(all(":" not in item for item in recorded["parameters"]))

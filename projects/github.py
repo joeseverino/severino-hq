@@ -43,6 +43,9 @@ def connection_specs():
                     else "Registered public repositories use GitHub's anonymous API limits."
                 ),
                 endpoint="https://api.github.com",
+                # A personal token is whatever its owner made it, and HQ does
+                # not read its permissions; what HQ asks of it needs none.
+                credential_model="coarse" if token_configured else "none",
                 ability_names=("github.repository_metadata",),
                 targets=(ConnectionLink("Registered projects", reverse("projects:list")),),
             ),
@@ -61,6 +64,9 @@ def connection_specs():
                     label="Refresh repository metadata",
                     summary="Read the latest push metadata for a registered project.",
                     effect="remote_write",
+                    # Public repository metadata needs no grant; a token only
+                    # lifts the anonymous rate limit.
+                    grant="none",
                     capability="project.refresh",
                     subject_resource="projects",
                 ),

@@ -9,6 +9,7 @@ from collections.abc import Mapping, Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Annotated, Any, Callable, Literal, get_args
 
 from pydantic import (
@@ -2644,6 +2645,48 @@ _OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
 
 def observer_abilities() -> tuple[ObserverAbility, ...]:
     return _OBSERVER_ABILITIES
+
+
+# How each connection provider's credential can be held, declared once beside
+# the providers that name them. The controller reports that a credential reached
+# its endpoint, never what it is allowed to do, so the only honest statement
+# about least privilege is the one the provider's credential model permits: a
+# scoped provider issues narrow tokens whose grants HQ could verify; a coarse
+# one issues a login or an admin token that is the whole account.
+CONNECTION_CREDENTIALS: Mapping[str, str] = MappingProxyType(
+    {
+        "cloudflare_api": "scoped",
+        "cloudflare_dns": "scoped",
+        "tailscale": "scoped",
+        "adguard": "coarse",
+        "npm": "coarse",
+        "portainer": "coarse",
+        "ssh": "coarse",
+    }
+)
+
+
+def connection_credential(provider: str) -> str:
+    """The credential model of one connection provider; blank when unnamed."""
+
+    return CONNECTION_CREDENTIALS.get(provider, "")
+
+
+# A provider a resource can be reconciled through, or an observer can read
+# through, without a credential model would be reported as "proof undeclared"
+# forever. Refused here, beside the declarations, rather than found on the page.
+_unmodelled = sorted(
+    (
+        {provider for spec in _PROVIDERS for provider in spec.connection_providers}
+        | {ability.provider for ability in _OBSERVER_ABILITIES}
+    )
+    - set(CONNECTION_CREDENTIALS)
+)
+if _unmodelled:
+    raise ValueError(
+        "Connection providers without a credential model: "
+        f"{', '.join(_unmodelled)}."
+    )
 
 
 # The kinds other modules name directly. Spelled once here, beside the registry

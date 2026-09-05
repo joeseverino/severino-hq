@@ -17,7 +17,13 @@ from django.urls import reverse
 from control_plane.models import ProviderConnection
 from control_plane.providers import PROVIDERS
 
-from .connections import connection_readings, connections_for, reachable_through
+from .connections import (
+    CONTROLLER_CONNECTIONS,
+    connection_catalog,
+    connection_readings,
+    connections_for,
+    reachable_through,
+)
 from .inventory import record_connections
 from control_plane.providers import NameContext
 
@@ -228,6 +234,28 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "a-portainer")
         self.assertContains(response, "a-cloud-host")
         self.assertContains(response, "Container stack")
+
+    def test_the_controller_observed_family_leads_the_inventory(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+
+        groups = connection_catalog(principal=cli_principal())
+
+        self.assertGreater(len(groups), 1)
+        self.assertEqual(groups[0].spec.name, CONTROLLER_CONNECTIONS)
+        self.assertTrue(groups[0].connections)
+
+    def test_connections_render_as_bounded_rows_not_content_sized_chips(self):
+        sweep(A_PORTAINER)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertContains(response, 'class="connection-endpoint"')
+        self.assertContains(response, 'class="connection-ability-list"')
+        # A probed Portainer holds a whole-account credential: reached, proven,
+        # and so ready -- the lifecycle rather than the raw probe result.
+        self.assertContains(response, 'class="connection-state connection-state-ready"')
+        self.assertContains(response, "Authority proven")
+        self.assertNotContains(response, "connection-ability-chip")
 
     def test_the_page_never_carries_a_secret(self):
         """It cannot, because nothing here has one -- and this is the assertion

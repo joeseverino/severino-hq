@@ -21,6 +21,7 @@ from projects.models import PROJECT_CATEGORY_CHOICES, Project
 from projects.github import GitHubMetadataError, fetch_last_push
 from content.content_sync import ContentSyncError, sync_content_index
 from .security import Capability, Principal
+from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 
 SAFE_SENSITIVITIES = (
@@ -249,7 +250,6 @@ def save_project(
     }
 
 
-@transaction.atomic
 def upsert_project(
     command: ProjectCommand,
     *,
@@ -258,15 +258,11 @@ def upsert_project(
 ) -> dict[str, Any]:
     """Idempotently create or update a project by its command slug."""
 
-    current_slug = (
-        command.slug
-        if Project.objects.select_for_update().filter(slug=command.slug).exists()
-        else None
-    )
-    return save_project(
+    return upsert_by_slug(
+        Project,
         command,
+        save_project,
         principal=principal,
-        current_slug=current_slug,
         expected_updated_at=expected_updated_at,
     )
 

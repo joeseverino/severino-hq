@@ -115,7 +115,27 @@ class NamesTests(TestCase):
     def test_another_machines_traffic_is_not_borrowed(self):
         measure("elsewhere.test", pageviews=9999)
 
-        self.assertEqual(row_for(a_machine("mine.test"), "mine.test")[-1].text, "unmeasured")
+        section = by_id(a_machine("mine.test"))["names"]
+
+        self.assertNotIn("Pageviews", section.columns)
+        self.assertEqual(len(section.records[0]), len(section.columns))
+
+    def test_a_machine_nothing_measures_keeps_its_names_and_loses_the_column(self):
+        """One "unmeasured" per row says one thing nine times; the finding says it once."""
+
+        section = by_id(a_machine("dark.test", "darker.test"))["names"]
+
+        self.assertEqual(section.label, "Names it answers")
+        self.assertEqual(section.columns, ("Name", "Runtime", "DNS", "Ingress", "Certificate"))
+        self.assertTrue(all(len(row) == 5 for row in section.records))
+
+    def test_the_column_returns_with_the_first_reading(self):
+        measure("busy.test", pageviews=1)
+
+        section = by_id(a_machine("busy.test", "dark.test"))["names"]
+
+        self.assertIn("traffic over", section.label)
+        self.assertEqual(section.columns[-1], "Pageviews")
 
 
 class IdentityTests(TestCase):

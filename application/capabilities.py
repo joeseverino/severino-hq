@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import cache
-import inspect
-from typing import Any, Callable
+from typing import Any
 
-from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
@@ -22,7 +18,6 @@ from .contact_submissions import (
     execute_contact_review,
 )
 from .cadence import ControllerSweepCommand, request_controller_sweep
-from .contracts import DOTTED_NAME, EFFECTS
 from .deletion import (
     DeleteCommand,
     delete_asset,
@@ -49,7 +44,7 @@ from .infrastructure import (
     request_removal,
     save_managed_resource,
 )
-from .integration_specs import CapabilitySpec
+from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
 from .lookup import (
     AddressCommand,
     NameCommand,
@@ -67,40 +62,13 @@ from .receipts import ReceiptMetadataCommand, update_receipt
 from .integrations import integration_graph
 from .security import AuthorizationError, Capability, Principal
 from .sync import HQSyncCommand, execute_hq_sync
-from .plugins import plugin_capability_specs
-
-CAPABILITY_NAME = DOTTED_NAME
-CAPABILITY_EFFECTS = EFFECTS
-
-
-@dataclass(frozen=True)
-class TargetKind:
-    """How one kind of target reaches the handler that acts on it.
-
-    ``keyword`` is the parameter the host binds it to; ``coerce`` turns the
-    transport's value into what that parameter expects.
-    """
-
-    keyword: str
-    coerce: Callable[[Any], Any]
-
-
-# One declaration, read three ways: the set of valid kinds (spec validation at
-# startup), the keyword each binds to (the handler signature check), and the
-# coercion applied when a call arrives. Adding a kind here is the whole change.
-TARGET_KINDS: dict[str, TargetKind] = {
-    "slug": TargetKind("current_slug", str),
-    "doc_id": TargetKind("current_doc_id", str),
-    "integer": TargetKind("current_id", int),
-    "key": TargetKind("current_key", str),
-}
 
 
 class _UnusableTarget(Exception):
     """The target arrived, but not as the kind the capability declared."""
 
 
-_SPECS = (
+CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "hq.sync",
         "Atomically synchronize the vault manifest into HQ.",
@@ -527,121 +495,6 @@ _SPECS = (
 )
 
 
-def _collect_capabilities() -> tuple[CapabilitySpec, ...]:
-    specs = (*_SPECS, *plugin_capability_specs())
-    for spec in specs:
-        _validate_capability_spec(spec)
-    names = [spec.name for spec in specs]
-    if len(names) != len(set(names)):
-        raise ImproperlyConfigured(
-            "Duplicate capability name across HQ core and plugins."
-        )
-    return specs
-
-
-def _validate_capability_spec(spec: CapabilitySpec) -> None:
-    """Fail at registry construction, not on the first production request."""
-
-    if not isinstance(spec, CapabilitySpec):
-        raise ImproperlyConfigured(
-            "A capability provider returned something other than CapabilitySpec."
-        )
-    if not CAPABILITY_NAME.fullmatch(spec.name):
-        raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
-    if not spec.summary.strip():
-        raise ImproperlyConfigured(f"Capability {spec.name!r} has no summary.")
-    if spec.effect not in CAPABILITY_EFFECTS:
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has invalid effect {spec.effect!r}."
-        )
-    if spec.target_kind is not None and spec.target_kind not in TARGET_KINDS:
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has invalid target {spec.target_kind!r}."
-        )
-    if not isinstance(spec.target_label, str) or not isinstance(spec.target_help, str):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has invalid target presentation metadata."
-        )
-    if spec.target_query and (not spec.target_kind or not spec.subject_resource):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has a target query without a target resource."
-        )
-    if any(
-        not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str)
-        for item in spec.target_query
-    ):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has an invalid target query."
-        )
-    if any(
-        not isinstance(note, str) or not note.strip() for note in spec.execution_notes
-    ):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has an invalid execution note."
-        )
-    try:
-        schema = command_schema(spec.command_type)
-    except Exception as exc:
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} command type cannot emit JSON Schema."
-        ) from exc
-    command_fields = set(schema.get("properties", {}))
-    if (
-        len(spec.target_initial_fields) != len(set(spec.target_initial_fields))
-        or any(field not in command_fields for field in spec.target_initial_fields)
-        or (spec.target_initial_fields and not spec.target_kind)
-    ):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has invalid target initial fields."
-        )
-    if spec.subject_resource is not None and not CAPABILITY_NAME.fullmatch(
-        spec.subject_resource
-    ):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} has invalid resource {spec.subject_resource!r}."
-        )
-    required = [
-        item.value if isinstance(item, Capability) else item
-        for item in spec.required_capabilities
-    ]
-    if not required or any(
-        not isinstance(item, str) or not CAPABILITY_NAME.fullmatch(item)
-        for item in required
-    ):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} must declare valid required capabilities."
-        )
-    if len(required) != len(set(required)):
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} repeats a required capability."
-        )
-    if not callable(spec.handler):
-        raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
-
-    kwargs: dict[str, Any] = {"principal": None, "expected_updated_at": None}
-    kind = TARGET_KINDS.get(spec.target_kind) if spec.target_kind else None
-    if kind:
-        kwargs[kind.keyword] = None
-    try:
-        inspect.signature(spec.handler).bind(None, **kwargs)
-    except TypeError as exc:
-        raise ImproperlyConfigured(
-            f"Capability {spec.name!r} handler does not implement the host call contract."
-        ) from exc
-
-
-@cache
-def command_schema(command_type: type) -> dict[str, Any]:
-    """Build an immutable command type's schema once per process."""
-
-    schema = TypeAdapter(command_type).json_schema()
-    # Every adapter rejects unknown input through ``_refuse_unknown_fields``.
-    # Publish that same closed-world rule so generated forms and machine
-    # clients do not have to discover it only after submission.
-    schema.setdefault("additionalProperties", False)
-    return schema
-
-
 def capability_label(name: str) -> str:
     """Human label for a stable dotted capability name."""
 
@@ -744,14 +597,11 @@ def execute_capability(
     except DjangoValidationError as exc:
         details = getattr(exc, "message_dict", None) or exc.messages
         return _error("invalid_input", "Domain validation failed.", details)
-    except TypeError:
-        # A handler called wrongly is HQ's bug, not the caller's business: a
-        # TypeError names arguments and signatures, so it never leaves here.
+    except (TypeError, ValueError):
+        # Neither handler nor dependency exception text crosses an adapter.
+        # It can contain argument names, provider responses, paths, or values
+        # from the request. The capability name is registry-owned and safe.
         return _error("operation_failed", f"{name} could not be executed.")
-    except ValueError as exc:
-        # ValueError is the deliberate refusal channel: handlers raise it with
-        # a message written for the caller.
-        return _error("operation_failed", str(exc))
 
 
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:

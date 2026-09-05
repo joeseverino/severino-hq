@@ -21,19 +21,6 @@ SERVICE = "service"
 DASHBOARD_LINK = "dashboard_link"
 
 
-def pinned(user, target_kind: str) -> frozenset[str]:
-    """Keys this operator has pinned, lowercased for comparison."""
-
-    if not getattr(user, "is_authenticated", False):
-        return frozenset()
-    return frozenset(
-        key.lower()
-        for key in Pin.objects.filter(user=user, target_kind=target_kind).values_list(
-            "target_key", flat=True
-        )
-    )
-
-
 def ordered(user, target_kind: str) -> tuple[str, ...]:
     """Pinned keys in the order the operator put them, lowercased.
 
@@ -49,6 +36,12 @@ def ordered(user, target_kind: str) -> tuple[str, ...]:
             "target_key", flat=True
         )
     )
+
+
+def pinned(user, target_kind: str) -> frozenset[str]:
+    """Keys this operator has pinned, derived from the canonical ordered read."""
+
+    return frozenset(ordered(user, target_kind))
 
 
 def toggle(user, target_kind: str, target_key: str) -> bool:

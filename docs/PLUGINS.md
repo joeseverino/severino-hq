@@ -69,6 +69,15 @@ Imports from `application`, `core`, or another host application are unsupported:
 they couple a private plugin to public implementation details. Run
 `python -m hq_sdk.validation src` locally to enforce the boundary.
 
+The shape of that surface is committed as `hq_sdk/contract.json`: every
+export's parameters, fields, enum members and public methods, without
+annotations so it is identical across the interpreter matrix. A test fails when
+the exports drift from the file, because an extension's binding to a renamed
+field or a new required parameter is a change this repository cannot otherwise
+see. Regenerate it with `python manage.py sdk_contract`, read the diff as the
+review, and decide there whether `PLUGIN_API_VERSION` moves;
+`python manage.py sdk_contract --check` is the CI form.
+
 Capability input models should inherit `StrictCommand`; unknown JSON keys then
 fail at the boundary instead of being silently discarded. Class-based views
 inherit `CapabilityRequiredMixin` and declare `required_capability`; function
@@ -273,6 +282,21 @@ relationships and processes immediately available to Command Center, API, MCP,
 and topology without host-specific registration work. Emit a truthful reduced
 mode when the gateway still works anonymously; do not hide a usable integration
 solely because a token is absent.
+
+Say how authority is proven, not only what it permits. Each ability declares a
+`grant` model: `scoped` when the provider issues narrow permissions and the
+ability lists the ones it needs in `required_scopes`; `coarse` when the
+credential is the whole account and the provider offers nothing narrower;
+`none` when the call is keyless. Each instance reports its `credential_model`
+from the same vocabulary, plus `rejected` for a credential the provider
+refused. HQ derives one evidence state per ability and instance: verified,
+whole-account, keyless, unverified, undeclared, unknown, missing or revoked.
+Only missing and revoked close the ability; unknown leaves it undecided;
+undeclared leaves it usable under HQ's own authorization and says so. The same
+derivation yields each connection's lifecycle (configured, reachable, ready,
+unauthorized, stale, revoked) against the family's `stale_after_hours`. An
+ability that declares nothing is reported as undeclared proof rather than
+counted as authorized, so the debt is visible where it is owed.
 
 An ability may set `subject_resource` to the `ResourceSpec` it governs and list
 its provider kinds in `governs_kinds`. Command Center then discovers registered

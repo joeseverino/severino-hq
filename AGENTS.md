@@ -119,6 +119,10 @@ domain until a genuine shared contract appears.
   capability names must fail at startup when invalid or conflicting.
 - Plugin code imports `hq_sdk`, never `application`, `core`, or another host
   app. `python -m hq_sdk.validation src` enforces this.
+- The shape of `hq_sdk` is committed in `hq_sdk/contract.json` and a test holds
+  the exports to it. A change there is a fleet change: regenerate with
+  `manage.py sdk_contract`, review the diff, and decide whether
+  `PLUGIN_API_VERSION` moves.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - Public tests compose synthetic siblings. The assembled private image runs
@@ -163,13 +167,18 @@ the rows and exclude test paths by eye.
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **7**) |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **4**) |
 | Did a function get away from me? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.cognitive >= 22 AND NOT f.file_path CONTAINS "test" RETURN f.qualified_name, f.cognitive` — note the caveat above; verify by eye | no new entries (currently 7, plus one migration) |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | 4 in production, all confirmed bounded or pre-existing |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | 3, all confirmed false positives |
+| Is one file becoming the system? | `git ls-files '*.py' \| grep -v test \| xargs wc -l \| sort -n \| tail -4` | the three largest do not grow (currently `controller_runtime/providers.py`, `control_plane/providers.py`, `application/connection.py`) |
 
-The seven standing `SIMILAR_TO` pairs are the asset/project serialize and
-upsert twins, `capability_specs`/`resource_specs`, `pins.ordered`/`pinned`,
+The last row is a shell question rather than a graph one, because the
+per-function bars above stay green while a module quietly absorbs a domain: each
+function is bounded, and the file is four thousand lines. Split by provider
+before adding one.
+
+The four standing `SIMILAR_TO` pairs are the asset/project serializers,
 `sections.projects`/`services`, `seed_demo._seed_content`/`_seed_docs`, and
 `exports.documentation_csv`/`projects_csv`.
 

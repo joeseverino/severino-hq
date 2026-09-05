@@ -57,6 +57,11 @@ def connection_specs():
                         f"https://api.cloudflare.com/client/v4/accounts/{account}"
                         f"/d1/database/{database}"
                     ),
+                    # An API token is Cloudflare's scoped kind. HQ does not yet
+                    # read its permissions, so its abilities report a scoped
+                    # credential with the requirement unverified rather than a
+                    # proof nobody has checked.
+                    credential_model="scoped",
                     ability_names=(
                         "cloudflare.d1_submissions_read",
                         "cloudflare.d1_submission_review",

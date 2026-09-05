@@ -180,6 +180,10 @@ class ConnectionExecutionTests(TestCase):
 
         self.assertTrue(state.available)
         self.assertEqual(state.missing_scopes, ())
+        # Usable under HQ's own authorization, and honest about why: the
+        # ability declared no proof and the instance reported no credential kind.
+        self.assertEqual(state.evidence, "undeclared")
+        self.assertFalse(state.proven)
 
     def test_missing_scope_derives_one_real_management_next_step(self):
         with mock.patch(
@@ -587,7 +591,7 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Financial institutions")
         self.assertContains(response, "Capital One")
         self.assertContains(response, "Sync transactions")
-        self.assertContains(response, "Needs scope")
+        self.assertContains(response, "Scope missing")
         self.assertContains(response, "Secrets in Example Vault")
         self.assertContains(response, "Security posture")
         self.assertContains(response, "Security controls and proof")
@@ -606,3 +610,198 @@ class ConnectionWorkspaceTests(TestCase):
             response = self.client.get(reverse("control_plane:connections"))
 
         self.assertNotContains(response, "Not yet classified")
+
+
+class GrantEvidenceTests(TestCase):
+    """Permission is an evidence-backed relationship, derived from two declarations."""
+
+    def ability(self, **overrides):
+        base = dict(
+            name="example.read", label="Read", summary="Read one example."
+        )
+        return ConnectionAbility(**{**base, **overrides})
+
+    def instance(self, **overrides):
+        base = dict(id="one", label="One", kind="example", status="good", status_label="ok")
+        return ConnectionInstance(**{**base, **overrides})
+
+    def evidence(self, ability, instance):
+        from application.connections import grant_evidence
+
+        return grant_evidence(ability, instance)
+
+    def test_every_pair_of_declarations_has_one_answer(self):
+        scoped = self.ability(required_scopes=("a:read",), grant="scoped")
+        cases = {
+            # A rejected credential proves nothing, whatever the ability asked.
+            (scoped, self.instance(credential_model="rejected", scopes_known=True, granted_scopes=("a:read",))): "revoked",
+            # Keyless on either side: nothing to prove.
+            (self.ability(grant="none"), self.instance(credential_model="coarse")): "not_applicable",
+            (self.ability(), self.instance(credential_model="none")): "not_applicable",
+            # Whole-account on either side satisfies anything, and says so.
+            (self.ability(grant="coarse"), self.instance()): "coarse",
+            (scoped, self.instance(credential_model="coarse")): "coarse",
+            # A scoped requirement is checked scope by scope, when it can be.
+            (scoped, self.instance(credential_model="scoped", scopes_known=True, granted_scopes=("a:read",))): "verified",
+            (scoped, self.instance(credential_model="scoped", scopes_known=True, granted_scopes=())): "missing",
+            (scoped, self.instance(credential_model="scoped")): "unknown",
+            # Nothing required: the provider could have been asked, or nothing is known.
+            (self.ability(), self.instance(credential_model="scoped")): "unverified",
+            (self.ability(), self.instance()): "undeclared",
+        }
+        for (ability, instance), expected in cases.items():
+            with self.subTest(expected=expected):
+                self.assertEqual(self.evidence(ability, instance)[0], expected)
+
+    def test_only_missing_names_what_is_missing(self):
+        scoped = self.ability(required_scopes=("a:read", "b:write"), grant="scoped")
+        state, missing = self.evidence(
+            scoped, self.instance(scopes_known=True, granted_scopes=("a:read",))
+        )
+        self.assertEqual((state, missing), ("missing", ("b:write",)))
+
+    def test_authority_and_lifecycle_follow_the_evidence(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from application.connections import (
+            ConnectionAbilityState,
+            connection_authority,
+            connection_lifecycle,
+        )
+
+        def states(*evidence):
+            return tuple(
+                ConnectionAbilityState(self.ability(), True, (), None, item)
+                for item in evidence
+            )
+
+        self.assertEqual(connection_authority(()), "none")
+        self.assertEqual(connection_authority(states("verified", "coarse")), "proven")
+        self.assertEqual(connection_authority(states("verified", "undeclared")), "undeclared")
+        self.assertEqual(connection_authority(states("unverified", "unknown")), "unknown")
+        self.assertEqual(connection_authority(states("verified", "missing")), "missing")
+
+        now = timezone.now()
+        fresh = self.instance(observed_at=now - timedelta(minutes=5))
+        old = self.instance(observed_at=now - timedelta(hours=30))
+        life = lambda instance, authority, hours=24: connection_lifecycle(  # noqa: E731
+            instance, authority, stale_after_hours=hours, now=now
+        )
+        self.assertEqual(life(self.instance(credential_model="rejected"), "proven"), "revoked")
+        self.assertEqual(life(self.instance(), "proven"), "configured")
+        self.assertEqual(life(old, "proven"), "stale")
+        self.assertEqual(life(old, "proven", hours=48), "ready")
+        self.assertEqual(life(fresh, "missing"), "unauthorized")
+        self.assertEqual(life(self.instance(status="serious", observed_at=now), "proven"), "unreachable")
+        self.assertEqual(life(self.instance(status="neutral", observed_at=now), "proven"), "configured")
+        self.assertEqual(life(fresh, "proven"), "ready")
+        self.assertEqual(life(fresh, "undeclared"), "reachable")
+
+    def test_a_grant_model_must_agree_with_its_scopes(self):
+        from application.integration_validation import validate_connection_spec
+
+        def spec(ability):
+            return ConnectionSpec(
+                "example.grants", "Grants", "Grant contract.", Capability.READ,
+                lambda: (), (ability,),
+            )
+
+        with self.assertRaisesRegex(ImproperlyConfigured, "invalid grant model"):
+            validate_connection_spec(spec(self.ability(grant="admin")))
+        with self.assertRaisesRegex(ImproperlyConfigured, "requires no scopes"):
+            validate_connection_spec(spec(self.ability(grant="scoped")))
+        with self.assertRaisesRegex(ImproperlyConfigured, "lists required scopes"):
+            validate_connection_spec(
+                spec(self.ability(grant="none", required_scopes=("a:read",)))
+            )
+        with self.assertRaisesRegex(ImproperlyConfigured, "staleness window"):
+            validate_connection_spec(
+                replace(spec(self.ability(grant="none")), stale_after_hours=0)
+            )
+        validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
+
+    def test_a_credential_model_is_validated_when_the_instance_is_read(self):
+        def catalog(instance):
+            spec = ConnectionSpec(
+                "example.credentials", "Credentials", "Credential contract.",
+                Capability.READ, lambda: (instance,), (self.ability(),),
+            )
+            with mock.patch(
+                "application.plugins.plugin_connection_specs", return_value=(spec,)
+            ):
+                return connection_catalog(principal=READ)
+
+        with self.assertRaisesRegex(ImproperlyConfigured, "invalid credential model"):
+            catalog(self.instance(credential_model="password", ability_names=("example.read",)))
+
+    def test_a_keyless_instance_cannot_also_report_grants(self):
+        spec = ConnectionSpec(
+            "example.credentials", "Credentials", "Credential contract.",
+            Capability.READ,
+            lambda: (self.instance(credential_model="none", scopes_known=True, ability_names=("example.read",)),),
+            (self.ability(),),
+        )
+        with (
+            mock.patch("application.plugins.plugin_connection_specs", return_value=(spec,)),
+            self.assertRaisesRegex(ImproperlyConfigured, "keyless but reports grants"),
+        ):
+            connection_catalog(principal=READ)
+
+    def test_controller_connections_carry_their_providers_credential_model(self):
+        from django.utils import timezone
+
+        for provider, expected in (("ssh", "coarse"), ("cloudflare_dns", "scoped")):
+            ProviderConnection.objects.create(
+                connection_ref=f"a-{provider}",
+                controller_id="controller",
+                provider=provider,
+                reaches=["example.test"],
+                reachable=True,
+                probed=True,
+                observed_at=timezone.now(),
+            )
+
+        outcome = list_connections(principal=READ)
+        core = next(g for g in outcome["groups"] if g["name"] == "infrastructure.controllers")
+        by_ref = {item["label"]: item for item in core["instances"]}
+
+        # A login key is the whole machine: proven, and ready.
+        self.assertEqual(by_ref["a-ssh"]["credential_model"], "coarse")
+        self.assertEqual(by_ref["a-ssh"]["authority"], "proven")
+        self.assertEqual(by_ref["a-ssh"]["lifecycle"], "ready")
+        self.assertTrue(all(a["evidence"] == "coarse" for a in by_ref["a-ssh"]["abilities"]))
+        # A scoped token nobody has asked about: reachable, with the debt named.
+        self.assertEqual(by_ref["a-cloudflare_dns"]["credential_model"], "scoped")
+        self.assertEqual(by_ref["a-cloudflare_dns"]["authority"], "undeclared")
+        self.assertEqual(by_ref["a-cloudflare_dns"]["lifecycle"], "reachable")
+        self.assertTrue(all(a["evidence"] == "unverified" for a in by_ref["a-cloudflare_dns"]["abilities"]))
+        self.assertNotIn("token", by_ref["a-ssh"])
+
+    def test_every_connection_provider_declares_a_credential_model(self):
+        from control_plane.providers import (
+            CONNECTION_CREDENTIALS,
+            PROVIDERS,
+            observer_abilities,
+        )
+
+        named = {p for spec in PROVIDERS.values() for p in spec.connection_providers}
+        named |= {ability.provider for ability in observer_abilities()}
+        self.assertTrue(named)
+        self.assertEqual(sorted(named - set(CONNECTION_CREDENTIALS)), [])
+        self.assertLessEqual(set(CONNECTION_CREDENTIALS.values()), {"scoped", "coarse", "none"})
+
+    def test_keyless_gateways_prove_themselves_without_a_credential(self):
+        lookup = Principal(
+            "lookup", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS})
+        )
+        outcome = list_connections(principal=lookup)
+        registries = next(
+            g for g in outcome["groups"] if g["name"] == "hq.public_registries"
+        )
+        for instance in registries["instances"]:
+            self.assertEqual(instance["credential_model"], "none")
+            self.assertEqual(instance["authority"], "proven")
+            self.assertTrue(all(a["evidence"] == "not_applicable" for a in instance["abilities"]))
+            self.assertTrue(all(a["grant"] == "none" for a in instance["abilities"]))

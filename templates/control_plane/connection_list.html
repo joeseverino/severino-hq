@@ -26,7 +26,7 @@
     <div>
       <strong>{{ connection_posture.ability_count }}</strong>
       <span>assigned abilities</span>
-      <small>{{ connection_posture.scope_verified_count }} provider-scoped · {{ connection_posture.scope_capability_only_count }} capability-only{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}</small>
+      <small>{{ connection_posture.scope_verified_count }} verified · {{ connection_posture.scope_coarse_count }} whole-account · {{ connection_posture.scope_keyless_count }} keyless{% if connection_posture.scope_undeclared_count %} · {{ connection_posture.scope_undeclared_count }} undeclared{% endif %}{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}{% if connection_posture.scope_missing_count %} · {{ connection_posture.scope_missing_count }} missing{% endif %}</small>
     </div>
     <div>
       <strong>{{ connection_posture.dependency_count }}</strong>
@@ -53,6 +53,13 @@ they stay visible and stay in the same table.
 <section class="card connection-all">
   <div class="table-scroll">
     <table class="data-table stacks connection-table">
+      <colgroup>
+        <col class="connection-col-identity">
+        <col class="connection-col-abilities">
+        <col class="connection-col-dependencies">
+        <col class="connection-col-state">
+        <col class="connection-col-next">
+      </colgroup>
       <thead>
         <tr>
           <th>Connection</th>
@@ -68,7 +75,7 @@ they stay visible and stay in the same table.
           <tr>
             <td data-label="Connection">
               <strong>{{ connection.instance.label }}</strong>
-              {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
               <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
               {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
             </td>
@@ -83,8 +90,25 @@ they stay visible and stay in the same table.
               a dozen chips made one row four hundred pixels tall. The count
               carries the rest; the connection's own page carries the detail.
               {% endcomment %}
-              {% for state in connection.abilities|slice:":3" %}<span class="connection-ability-chip{% if state.missing_scopes %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{{ state.ability.label }}{% if state.missing_scopes %} <span class="connection-ability-state">Needs scope</span>{% endif %}</span>{% empty %}<span class="muted">—</span>{% endfor %}
-              {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }}</span>{% endif %}
+              {% if connection.abilities %}
+                <ul class="connection-ability-list">
+                  {% comment %}
+                  Proven evidence is silent: a whole-account credential or a
+                  keyless call is the normal case and saying so on every line
+                  would drown the one that is not. Short of proof, the
+                  connection's authority line already says so once; an ability
+                  is named here only when it differs from its neighbours or is
+                  closed outright.
+                  {% endcomment %}
+                  {% for state in connection.abilities|slice:":3" %}
+                    <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
+                      <span>{{ state.ability.label }}</span>
+                      {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label }}</small>{% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+                {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }} more</span>{% endif %}
+              {% else %}<span class="muted">—</span>{% endif %}
             </td>
             {% comment %}
             Inline and wrapping rather than one line per link: four stacked
@@ -92,16 +116,37 @@ they stay visible and stay in the same table.
             hid a machine the connection genuinely reaches.
             {% endcomment %}
             <td class="optional-col" data-label="Depends">
+              {% comment %}
+              One wrapper, for the same reason as the state cell: in the
+              stacked card each link and chip was its own flex item, and a
+              machine's name broke at every hyphen to fit beside the others.
+              {% endcomment %}
+              <span class="connection-depends">
               {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
               {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
               {% for link in connection.instance.dependencies|slice:":3" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
               {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
+              </span>
             </td>
+            {% comment %}
+            Two answers, not one: where the connection is in its life, and
+            whether HQ may do what it is held for. A reachable credential with
+            missing scopes and a stale one with proven authority are different
+            situations that a single status folded together.
+            {% endcomment %}
             <td class="tight-col" data-label="State">
-              <span class="pill pill-{{ connection.instance.status }}">{{ connection.instance.status_label }}</span>
-              {% if connection.instance.observed_at %}<br><span class="muted">{{ connection.instance.observed_at|timesince }} ago</span>{% endif %}
+              {% comment %}
+              A block of its own rather than lines broken with <br>: the stacked
+              layout lays a cell out as a flex row, where a line break is
+              nothing and three phrases ran together off the edge of the phone.
+              {% endcomment %}
+              <span class="connection-standing">
+                <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
+                <span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
+                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}{{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
+              </span>
             </td>
             <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}
@@ -191,7 +236,7 @@ they stay visible and stay in the same table.
       <li class="{% if not connection_posture.network_gate_enforced %}is-attention{% endif %}"><span>PEP</span><strong>Pre-auth network gate</strong></li>
       <li><span>Principal</span><strong>Authenticated session</strong></li>
       <li><span>Authorization</span><strong>HQ capability</strong></li>
-      <li class="{% if connection_posture.scope_missing_count %}is-attention{% elif connection_posture.scope_unknown_count %}is-unknown{% endif %}"><span>Least privilege</span><strong>Provider scope</strong></li>
+      <li class="{% if connection_posture.scope_missing_count %}is-attention{% elif connection_posture.scope_unknown_count or connection_posture.scope_undeclared_count %}is-unknown{% endif %}"><span>Least privilege</span><strong>Grant evidence</strong></li>
       <li><span>Resource</span><strong>Declared target</strong></li>
     </ol>
   </section>

@@ -14,6 +14,7 @@ from core.audit import operation_context
 from docs_index.models import DocumentationRecord
 from projects.models import Project
 from .security import Capability, Principal
+from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
 
 SAFE_SENSITIVITIES = (
@@ -157,7 +158,6 @@ def save_asset(
     }
 
 
-@transaction.atomic
 def upsert_asset(
     command: AssetCommand,
     *,
@@ -166,15 +166,11 @@ def upsert_asset(
 ) -> dict[str, Any]:
     """Idempotently create or update an asset by its command slug."""
 
-    current_slug = (
-        command.slug
-        if Asset.objects.select_for_update().filter(slug=command.slug).exists()
-        else None
-    )
-    return save_asset(
+    return upsert_by_slug(
+        Asset,
         command,
+        save_asset,
         principal=principal,
-        current_slug=current_slug,
         expected_updated_at=expected_updated_at,
     )
 

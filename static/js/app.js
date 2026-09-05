@@ -414,7 +414,28 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
       const next = hqParseDocument(await response.text()).querySelector(
         "[data-command-center-results]",
       );
-      if (!next) return;
+      if (!next) {
+        // Not a results fragment. Almost always the sign-in page after the
+        // session ended underneath an open tab; the palette sat on
+        // "Loading" and looked broken instead of saying what happened.
+        results.replaceChildren();
+        const message = document.createElement("p");
+        message.className = "notice notice-attention";
+        const signIn =
+          response.redirected &&
+          new URL(response.url).pathname.startsWith("/accounts/login/");
+        if (signIn) {
+          message.textContent = "Your session has ended. ";
+          const link = document.createElement("a");
+          link.href = response.url;
+          link.textContent = "Sign in again";
+          message.append(link);
+        } else {
+          message.textContent = "Could not load results. Press Enter to search.";
+        }
+        results.append(message);
+        return;
+      }
       results.replaceWith(next);
       results = next;
       bindResults();

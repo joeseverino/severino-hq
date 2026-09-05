@@ -31,6 +31,12 @@ def execute_synthetic(command, *, principal, expected_updated_at):  # noqa: ARG0
     return {"ok": True}
 
 
+def execute_targeted(
+    command, *, principal, current_slug, expected_updated_at  # noqa: ARG001
+):
+    return {"ok": True}
+
+
 class IntegrationGraphTests(TestCase):
     def tearDown(self):
         clear_integration_graph_cache()
@@ -85,7 +91,7 @@ class IntegrationGraphTests(TestCase):
                 "remote_write",
                 Capability.READ,
                 SyntheticCommand,
-                execute_synthetic,
+                execute_targeted,
                 subject_resource=resource.name,
                 target_kind="slug",
                 target_query=(("unknown", "value"),),
@@ -126,6 +132,71 @@ class IntegrationGraphTests(TestCase):
         )
         self.assertIn("example.missing", str(raised.exception))
         self.assertIn("example.unknown", str(raised.exception))
+
+    def test_compilation_reports_intrinsic_and_duplicate_violations_together(self):
+        valid = CapabilitySpec(
+            "example.read",
+            "Read examples.",
+            "read",
+            Capability.READ,
+            SyntheticCommand,
+            execute_synthetic,
+        )
+        malformed_capability = CapabilitySpec(
+            "example.bad",
+            "Bad effect.",
+            "maybe_writes",
+            Capability.READ,
+            SyntheticCommand,
+            execute_synthetic,
+        )
+        malformed_resource = ResourceSpec(
+            "example.empty", "Empty", "Exposes nothing.", Capability.READ
+        )
+        malformed_connection = ConnectionSpec(
+            "example.gateway",
+            "Gateway",
+            "Synthetic gateway.",
+            Capability.READ,
+            lambda: (),
+            documentation_url="javascript:alert(1)",
+        )
+
+        with self.assertRaises(IntegrationGraphError) as raised:
+            compile_integration_graph(
+                capabilities=(valid, valid, malformed_capability),
+                resources=(malformed_resource,),
+                connections=(malformed_connection,),
+            )
+
+        self.assertEqual(
+            [violation.code for violation in raised.exception.violations],
+            [
+                "invalid.capability",
+                "duplicate.capability",
+                "invalid.resource",
+                "invalid.connection",
+            ],
+        )
+        self.assertIn("invalid effect", str(raised.exception))
+        self.assertIn("exposes no operations", str(raised.exception))
+        self.assertIn("invalid documentation URL", str(raised.exception))
+
+    def test_non_spec_contributions_are_named_without_aborting_compilation(self):
+        with self.assertRaises(IntegrationGraphError) as raised:
+            compile_integration_graph(
+                capabilities=(object(),),
+                resources=("not a resource",),
+                connections=(None,),
+            )
+
+        self.assertEqual(
+            [violation.code for violation in raised.exception.violations],
+            ["invalid.capability", "invalid.resource", "invalid.connection"],
+        )
+        self.assertIn("returned object, expected CapabilitySpec", str(raised.exception))
+        self.assertIn("returned str, expected ResourceSpec", str(raised.exception))
+        self.assertIn("returned NoneType, expected ConnectionSpec", str(raised.exception))
 
     def test_standalone_search_is_part_of_the_compiled_graph(self):
         definition = SearchDefinition(
@@ -181,11 +252,13 @@ class IntegrationGraphTests(TestCase):
             )
 
         self.assertEqual(
-            raised.exception.violations[0].subjects,
-            (
-                "resource 'example.records' returned str",
-                "standalone contribution 0 returned object",
-            ),
+            [violation.code for violation in raised.exception.violations],
+            ["invalid.resource", "search.invalid_definition"],
+        )
+        self.assertIn("invalid search definition", str(raised.exception))
+        self.assertEqual(
+            raised.exception.violations[1].subjects,
+            ("standalone contribution 0 returned object",),
         )
 
     def test_a_connection_emits_its_capability_edge_once(self):

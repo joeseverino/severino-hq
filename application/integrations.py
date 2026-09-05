@@ -8,7 +8,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cache
 from types import MappingProxyType
-from typing import Any, Iterable, Iterator, Mapping, TypeVar
+from typing import Any, Callable, Iterable, Iterator, Mapping, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import ValidationError
@@ -16,6 +16,11 @@ from pydantic import ValidationError
 from .connection_contracts import ConnectionSpec
 from .contracts import DOTTED_NAME
 from .integration_specs import CapabilitySpec, ResourceSpec
+from .integration_validation import (
+    validate_capability_spec,
+    validate_connection_spec,
+    validate_resource_spec,
+)
 from .search_contracts import SearchDefinition
 
 
@@ -78,6 +83,38 @@ def _index(
             )
         )
     return indexed
+
+
+def _validated_index(
+    label: str,
+    specs: Iterable[Any],
+    expected_type: type[Spec],
+    validate: Callable[[Spec], None],
+    violations: list[IntegrationViolation],
+) -> Mapping[str, Spec]:
+    valid: list[Spec] = []
+    for position, candidate in enumerate(specs):
+        if not isinstance(candidate, expected_type):
+            violations.append(
+                IntegrationViolation(
+                    f"invalid.{label}",
+                    f"{label.title()} contribution {position} returned "
+                    f"{type(candidate).__name__}, expected {expected_type.__name__}.",
+                    (f"{label} contribution {position}",),
+                )
+            )
+            continue
+        try:
+            validate(candidate)
+        except ImproperlyConfigured as exc:
+            violations.append(
+                IntegrationViolation(
+                    f"invalid.{label}", str(exc), (candidate.name,)
+                )
+            )
+            continue
+        valid.append(candidate)
+    return _index(label, valid, violations)
 
 
 def _validate_capability_resources(
@@ -255,9 +292,23 @@ def compile_integration_graph(
     search: Iterable[SearchDefinition] = (),
 ) -> IntegrationGraph:
     violations: list[IntegrationViolation] = []
-    capability_index = _index("capability", capabilities, violations)
-    resource_index = _index("resource", resources, violations)
-    connection_index = _index("connection", connections, violations)
+    capability_index = _validated_index(
+        "capability",
+        capabilities,
+        CapabilitySpec,
+        validate_capability_spec,
+        violations,
+    )
+    resource_index = _validated_index(
+        "resource", resources, ResourceSpec, validate_resource_spec, violations
+    )
+    connection_index = _validated_index(
+        "connection",
+        connections,
+        ConnectionSpec,
+        validate_connection_spec,
+        violations,
+    )
     search_index = _index_search(resource_index, search, violations)
     _validate_capability_resources(capability_index, resource_index, violations)
     _validate_connection_edges(
@@ -272,15 +323,23 @@ def compile_integration_graph(
 
 @cache
 def _compiled_integration_graph() -> IntegrationGraph:
-    from .capabilities import _collect_capabilities
-    from .connections import _collect_connections
-    from .plugins import plugin_search_definitions
-    from .resources import _collect_resources
+    from .capabilities import CORE_CAPABILITY_SPECS
+    from .domains import host_connection_specs
+    from .plugins import (
+        plugin_capability_specs,
+        plugin_connection_specs,
+        plugin_resource_specs,
+        plugin_search_definitions,
+    )
+    from .resources import CORE_RESOURCE_SPECS
 
     return compile_integration_graph(
-        capabilities=_collect_capabilities(),
-        resources=_collect_resources(),
-        connections=_collect_connections(),
+        capabilities=(*CORE_CAPABILITY_SPECS, *plugin_capability_specs()),
+        resources=(
+            *CORE_RESOURCE_SPECS,
+            *plugin_resource_specs(),
+        ),
+        connections=(*host_connection_specs(), *plugin_connection_specs()),
         search=plugin_search_definitions(),
     )
 

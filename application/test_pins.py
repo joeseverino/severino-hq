@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+
 class ServiceFavoriteTests(TestCase):
 
     def setUp(self):
@@ -85,3 +86,20 @@ class ServiceFavoriteTests(TestCase):
         from application.pins import SERVICE, ordered
 
         self.assertEqual(ordered(AnonymousUser(), SERVICE), ())
+
+    def test_membership_is_derived_from_the_ordered_read(self):
+        from core.models import Pin
+
+        from application.pins import SERVICE, pinned
+
+        Pin.objects.create(
+            user=self.user,
+            target_kind=SERVICE,
+            target_key="Mixed.Example.Test",
+            position=0,
+        )
+
+        with self.assertNumQueries(1):
+            result = pinned(self.user, SERVICE)
+
+        self.assertEqual(result, frozenset({"mixed.example.test"}))

@@ -32,7 +32,6 @@ from .capabilities import (
     describe_capabilities,
     execute_capability,
 )
-from .integrations import integration_graph
 from .expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from .projects import ConflictError, ProjectCommand, refresh_project, save_project
 from .security import (
@@ -79,64 +78,6 @@ class CapabilityTests(TestCase):
         self.assertEqual(project["effect"], "remote_write")
         self.assertEqual(project["resource"], "projects")
         self.assertIn("name", project["input_schema"]["properties"])
-
-    def test_plugin_capabilities_fail_fast_on_an_unknown_effect(self):
-        malformed = CapabilitySpec(
-            "example.bad",
-            "Bad effect",
-            "maybe_writes",
-            "example.write",
-            ProjectCommand,
-            save_project,
-        )
-        with (
-            mock.patch(
-                "application.capabilities.plugin_capability_specs",
-                return_value=(malformed,),
-            ),
-            self.assertRaisesRegex(ImproperlyConfigured, "invalid effect"),
-        ):
-            integration_graph()
-
-    def test_plugin_capabilities_fail_fast_on_a_wrong_handler_contract(self):
-        def wrong_handler(command):
-            return command
-
-        malformed = CapabilitySpec(
-            "example.bad",
-            "Bad handler",
-            "remote_write",
-            "example.write",
-            ProjectCommand,
-            wrong_handler,
-        )
-        with (
-            mock.patch(
-                "application.capabilities.plugin_capability_specs",
-                return_value=(malformed,),
-            ),
-            self.assertRaisesRegex(ImproperlyConfigured, "host call contract"),
-        ):
-            integration_graph()
-
-    def test_plugin_capabilities_must_name_a_valid_resource(self):
-        malformed = CapabilitySpec(
-            "example.bad",
-            "Invalid subject",
-            "remote_write",
-            "example.write",
-            ProjectCommand,
-            save_project,
-            subject_resource="Not a resource",
-        )
-        with (
-            mock.patch(
-                "application.capabilities.plugin_capability_specs",
-                return_value=(malformed,),
-            ),
-            self.assertRaisesRegex(ImproperlyConfigured, "invalid resource"),
-        ):
-            integration_graph()
 
     def test_mcp_writes_fail_closed_by_default(self):
         with self.assertRaisesRegex(AuthorizationError, "write_projects"):
@@ -292,6 +233,10 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "operation_failed")
+        self.assertEqual(
+            result["error"]["message"], "project.delete could not be executed."
+        )
+        self.assertNotIn("wrong-target", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
     def test_delete_honors_optimistic_concurrency_and_audits_success(self):

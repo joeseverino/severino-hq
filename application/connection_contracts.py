@@ -16,6 +16,25 @@ if TYPE_CHECKING:
     from .security import Capability
 
 
+# How authority for an ability is proven, declared once per ability.
+#
+#   scoped  the provider grants narrow permissions; the ability lists the ones
+#           it needs in ``required_scopes`` and HQ checks them against what the
+#           instance reports
+#   coarse  the credential is the whole account and the provider offers nothing
+#           narrower -- a login key, an admin token; evidence exists, least
+#           privilege does not
+#   none    keyless; there is no credential, so there is no grant to prove
+#
+# Left blank, the ability has declared nothing, and HQ says so rather than
+# calling it authorized because nobody asked.
+GRANT_MODELS = ("scoped", "coarse", "none")
+
+# How an instance's credential was observed, from the same vocabulary, plus
+# ``rejected`` for one the provider refused. Blank means not observed.
+CREDENTIAL_MODELS = (*GRANT_MODELS, "rejected")
+
+
 @dataclass(frozen=True)
 class ConnectionAbility:
     """One thing a connection permits HQ to do, without credential material."""
@@ -25,6 +44,9 @@ class ConnectionAbility:
     summary: str
     effect: str = "read"
     required_scopes: tuple[str, ...] = ()
+    # One of GRANT_MODELS, or blank. Required scopes imply ``scoped``; the other
+    # two are how an ability says, truthfully, that no scope check can exist.
+    grant: str = ""
     capability: str = ""
     # Resource kinds this ability governs. The relation is explicit because an
     # ability name describes what a connection can do; it is not inherently a
@@ -69,6 +91,10 @@ class ConnectionInstance:
     observed_at: datetime | None = None
     granted_scopes: tuple[str, ...] = ()
     scopes_known: bool = False
+    # One of CREDENTIAL_MODELS, or blank. What kind of credential this is, as
+    # distinct from which grants it carries: a scoped provider's token whose
+    # grants were never enumerated is still a scoped credential.
+    credential_model: str = ""
     ability_names: tuple[str, ...] = ()
     targets: tuple[ConnectionLink, ...] = ()
     dependencies: tuple[ConnectionLink, ...] = ()
@@ -95,6 +121,10 @@ class ConnectionSpec:
     setup_route: str = ""
     documentation_url: str = ""
     secret_store: str = ""
+    # How old an observation may be before this family's connections are
+    # reported stale rather than ready. A sweep-fed family refreshes in minutes;
+    # one read on request can be honest for far longer.
+    stale_after_hours: int = 24
     # What this family's emptiness means, in its own words. The default suits a
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.

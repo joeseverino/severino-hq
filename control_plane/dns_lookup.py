@@ -50,6 +50,7 @@ def connection_specs():
             status_label="configured",
             detail="Keyless public API; reachability is checked only when a lookup runs.",
             endpoint=f"https://{parsed.netloc}",
+            credential_model="none",
             ability_names=abilities,
         )
 
@@ -84,18 +85,21 @@ def connection_specs():
                     "lookup.public_dns",
                     "Public DNS lookup",
                     "Resolve a hostname from outside HQ's internal DNS rewrites.",
+                    grant="none",
                     capability="lookup.name",
                 ),
                 ConnectionAbility(
                     "lookup.reverse_dns",
                     "Reverse DNS lookup",
                     "Read the public name an address publishes for itself.",
+                    grant="none",
                     capability="lookup.address",
                 ),
                 ConnectionAbility(
                     "lookup.address_registry",
                     "Address ownership lookup",
                     "Read the public allocation and registrant for an address.",
+                    grant="none",
                     capability="lookup.address",
                 ),
             ),

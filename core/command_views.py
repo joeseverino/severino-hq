@@ -48,6 +48,58 @@ def _status(result: dict) -> int:
     return 200 if result.get("ok", False) else 400
 
 
+_SCALAR = (str, int, float, bool, type(None))
+
+
+def _cell(value) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return str(value)
+
+
+def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
+    """The facts a result states, and the one list it carries, if any.
+
+    A result is a machine contract, and the page showed it as one: a JSON block
+    a person had to read. Most results are a handful of scalar facts and at most
+    one list of flat records -- resolver answers, matched rows -- so those become
+    a definition list and a table, and the JSON stays behind a disclosure for
+    whoever is checking HQ against another tool.
+
+    Generic on purpose. A handler describes its result by what it returns, not
+    through presentation metadata, so nothing here knows what a key means. A
+    shape these rules do not fit falls back to the JSON alone.
+    """
+
+    facts = tuple(
+        (key.replace("_", " "), _cell(value))
+        for key, value in payload.items()
+        if key != "ok" and isinstance(value, _SCALAR)
+    )
+    for key, value in payload.items():
+        if not isinstance(value, list) or not value:
+            continue
+        flat = all(
+            isinstance(item, dict)
+            and item
+            and all(isinstance(field, _SCALAR) for field in item.values())
+            for item in value
+        )
+        if not flat:
+            continue
+        columns = tuple(dict.fromkeys(column for item in value for column in item))
+        return facts, {
+            "label": key.replace("_", " "),
+            "columns": tuple(column.replace("_", " ") for column in columns),
+            "rows": tuple(
+                tuple(_cell(item.get(column)) for column in columns) for item in value
+            ),
+        }
+    return facts, None
+
+
 def _new_key() -> str:
     return validate_key(f"web:{secrets.token_urlsafe(24)}")
 
@@ -115,12 +167,15 @@ class CommandView(LoginRequiredMixin, View):
             item.value if hasattr(item, "value") else str(item)
             for item in self.spec.required_capabilities
         )
+        facts, table = _result_projection(result["payload"]) if result else ((), None)
         return {
             "command": self.spec,
             "command_label": capability_label(self.spec.name),
             "effect_label": self.spec.effect.replace("_", " "),
             "form": form,
             "result": result,
+            "result_facts": facts,
+            "result_table": table,
             "result_json": (
                 json.dumps(result["payload"], indent=2, sort_keys=True)
                 if result

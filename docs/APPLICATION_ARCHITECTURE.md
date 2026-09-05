@@ -219,7 +219,15 @@ search keystroke can never trigger provider I/O. Runtime instances deliberately
 have no secret field and relationship links are restricted to local or HTTP(S)
 destinations. Endpoint metadata is display-only: URL userinfo, query strings,
 and fragments are rejected both when controller inventory enters HQ and when a
-plugin instance leaves its provider. The Connections security posture is a
+plugin instance leaves its provider. Permission is an evidence-backed
+relationship rather than a label: an ability declares how its authority is
+proven (scoped, whole-account or keyless), an instance reports what kind of
+credential was observed, and HQ derives per-ability evidence and a per-connection
+lifecycle from the two, failing closed on a missing or rejected grant and naming
+an undeclared one instead of counting it as authorized. The controller's
+connection providers carry their credential model in one declaration beside the
+providers themselves, so reach reported by a sweep is never mistaken for
+permission. The Connections security posture is a
 query-free projection over that already-authorized catalog and the current
 request; it does not perform a second sweep or claim to attest the external
 router and firewall boundary that the process cannot observe.
@@ -238,14 +246,17 @@ kind of integration.
 
 At composition, HQ compiles those independently emitted specs and standalone
 search projections into one frozen `IntegrationGraph`, indexed by stable name.
-The compiler owns uniqueness and every cross-spec edge; registry-local
-validation remains beside each spec type. It collects every graph violation in
-one pass, so one failed composition reports the complete repair list. The valid
-graph is memoized for the process because composition is fixed at image boot.
+The compiler owns intrinsic contract validation, uniqueness, and every
+cross-spec edge; emitters only emit typed records. Direct compiler callers
+therefore receive the same guarantees as the runtime composition rather than a
+weaker registry assembled around the checks. It collects violations across all
+contributions in one pass, so one failed composition reports the complete
+repair list. The valid graph is memoized for the process because composition is
+fixed at image boot.
 The one plugin-composition reset clears both plugin identity and the derived
 graph; the test runner applies that reset between fixtures, while isolated
 composition proofs use an explicit graph override.
-There is no second public assembly path.
+There is no second public assembly or validation path.
 
 The web Command Center is a projection of that graph, not another inventory.
 Its resource links come from `ResourceSpec.web_route`, and a
