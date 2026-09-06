@@ -19,8 +19,14 @@ set -eu
 
 readonly version="v3.1.3"
 readonly sha256="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
-readonly lib_dir="${SEVERINO_HQ_LIB_DIR:-/usr/local/lib/severino-hq}"
-readonly target="${lib_dir}/bin/cosign"
+# Deliberately beside /usr/local/lib/severino-hq rather than inside it.
+# severino-hq-sync-scripts replaces that whole tree in one swap, with content
+# taken from the image -- so a verifier living there would be deleted and
+# restored by the very thing it exists to check. It also means a standalone
+# sync leaves no verifier behind, and the next deploy refuses until something
+# puts one back. Outside the swap, it simply persists.
+readonly verifier_dir="${SEVERINO_HQ_VERIFIER_DIR:-/usr/local/lib/severino-hq-verifier}"
+readonly target="${verifier_dir}/cosign"
 readonly url="https://github.com/sigstore/cosign/releases/download/${version}/cosign-linux-amd64"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -36,8 +42,8 @@ if [ -x "${target}" ] && [ "$(digest_of "${target}")" = "${sha256}" ]; then
     exit 0
 fi
 
-install -d -o root -g root -m 0755 "${lib_dir}/bin"
-staged="$(mktemp "${lib_dir}/bin/.cosign.XXXXXX")"
+install -d -o root -g root -m 0755 "${verifier_dir}"
+staged="$(mktemp "${verifier_dir}/.cosign.XXXXXX")"
 trap 'rm -f "${staged}"' EXIT HUP INT TERM
 curl -fsSL --retry 3 --max-time 180 "${url}" -o "${staged}"
 
