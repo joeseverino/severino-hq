@@ -218,6 +218,16 @@ only the projection a surface needs. A plugin manifest carries static install,
 routing, navigation, and authority metadata plus exactly one executable entry
 point; an extension never registers runtime surfaces independently.
 
+Dashboard cards and their destination pages must describe the same reporting
+window. Include the actual window or data cutoff in the card's existing `detail`
+when it differs from today or coverage is incomplete; a render timestamp does
+not establish data freshness. The domain owns that meaning, so the host never
+infers dates from a card label or recalculates an extension's totals.
+Attention providers should emit `serious` or `attention` only for a decision
+that needs the operator. Use `neutral` or `good` for observations, and supply
+`Insight.action` and, when available, `Insight.workflow` to carry the next step
+and its verification into the shared queue.
+
 Capabilities fail closed too. HQ validates every contributed
 `CapabilitySpec` before describing or invoking the registry: names, effects,
 required permissions, target kinds and labels, command JSON Schema, duplicate

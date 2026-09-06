@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.db import connection
+from django.template.loader import render_to_string
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -15,6 +19,7 @@ from control_plane.models import (
 )
 
 from .glance import (
+    _glance_reading,
     dashboard_panels,
     dashboard_refresh_plan,
     record_dashboard_observations,
@@ -26,6 +31,46 @@ from .security import cli_principal
 
 
 class DashboardGlanceTests(TestCase):
+    def test_compact_meters_require_a_finite_bounded_percentage(self):
+        for value, expected in (
+            ("0%", 0),
+            ("12.5%", 12.5),
+            ("100%", 100),
+            ("101%", None),
+            ("-1%", None),
+            ("NaN%", None),
+            ("inf%", None),
+            ("unknown%", None),
+            ("579 MB", None),
+        ):
+            with self.subTest(value=value):
+                metric = {"label": "Container CPU", "value": value, "detail": "Scope"}
+                reading = _glance_reading(metric)
+                self.assertEqual(reading["percent"], expected)
+                self.assertEqual(reading["display_label"], "CPU")
+                self.assertEqual(reading["detail"], "Scope")
+                self.assertNotIn("percent", metric)
+
+    def test_compact_summary_preserves_full_readings_in_native_details(self):
+        self.machine.status = {
+            "telemetry": {
+                "metrics": [
+                    {"label": "CPU", "value": "12%"},
+                    {"label": "Memory", "value": "579 MB"},
+                    {"label": "Storage", "value": "3 GB"},
+                ],
+            }
+        }
+        self.machine.save()
+        html = render_to_string(
+            "core/_dashboard_glance.html", {"dashboard_panels": dashboard_panels()}
+        )
+        self.assertIn('<details class="glance-panel', html)
+        self.assertIn('<meter min="0" max="100" value="12.0" aria-label="CPU">', html)
+        self.assertIn("Storage</dt>", html)
+        self.assertIn("3 GB</dd>", html)
+        self.assertNotIn('<meter min="0" max="100" value="579', html)
+
     def setUp(self):
         self.machine = ManagedResource.objects.create(
             key="app-server",
@@ -159,6 +204,56 @@ class DashboardGlanceTests(TestCase):
             dashboard_panels()
 
         self.assertEqual(len(expanded), len(baseline))
+
+    def test_snapshot_age_is_explicit_at_the_freshness_boundary(self):
+        now = timezone.now()
+        for age, stale in ((59, False), (60, True), (61, True)):
+            with self.subTest(age=age):
+                WeatherObservation.objects.update_or_create(
+                    point="41.0000,-87.0000",
+                    defaults={
+                        "payload": {
+                            "status": "good",
+                            "metrics": [{"label": "Now", "value": "Clear"}],
+                        },
+                        "observed_at": now - timedelta(minutes=age),
+                    },
+                )
+                with patch("application.glance.timezone.now", return_value=now):
+                    panels = dashboard_panels()
+                weather = next(panel for panel in panels if panel["id"] == "weather")
+                self.assertEqual(weather["stale"], stale)
+                self.assertEqual(weather["payload"]["status"], "good")
+                html = render_to_string(
+                    "core/_dashboard_glance.html", {"dashboard_panels": [weather]}
+                )
+                self.assertEqual("Out of date" in html, stale)
+                self.assertIn('datetime="', html)
+                self.assertIn("Conditions</dt>", html)
+                self.assertNotIn("Now</dt>", html)
+
+    def test_refresh_preserves_old_readings_and_explains_pending_state(self):
+        self.machine.status = {
+            "telemetry": {"metrics": [{"label": "CPU", "value": "4%"}]}
+        }
+        self.machine.last_observed_at = timezone.now() - timedelta(days=5)
+        self.machine.save()
+        DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
+
+        panels = dashboard_panels()
+        html = render_to_string(
+            "core/_dashboard_glance.html", {"dashboard_panels": panels}
+        )
+
+        self.assertIn("Out of date", html)
+        self.assertIn("Refreshing…", html)
+        self.assertIn("4%", html)
+        self.assertTrue(panels[0]["stale"])
+
+    def test_never_observed_panels_are_not_reported_as_stale_readings(self):
+        panels = dashboard_panels()
+        self.assertTrue(all(not panel["stale"] for panel in panels))
+        self.assertTrue(all(panel["observed_at"] is None for panel in panels))
 
     def test_unknown_machine_is_rejected_and_not_created(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)

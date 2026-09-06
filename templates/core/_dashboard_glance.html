@@ -32,17 +32,31 @@
   </div>
   <div class="glance-panels">
     {% for panel in dashboard_panels %}
-      <article class="glance-panel status-{{ panel.payload.status|default:'neutral' }}"{% if panel.refreshing %} data-refreshing{% endif %}>
-        <div class="glance-panel-head">
-          <h2>{{ panel.label }}</h2>
-          {% if panel.payload.metrics and panel.payload.summary %}<span class="glance-summary">{{ panel.payload.summary }}</span>{% endif %}
-          {% if panel.observed_at %}<time title="{{ panel.observed_at }}">{{ panel.observed_at|naturaltime }}</time>{% endif %}
-        </div>
+      <details class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.stale %} is-stale{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
+        <summary class="glance-panel-head">
+          <span class="glance-symbol">{% if panel.id == "weather" %}{% include "partials/_icon.html" with name="weather" %}{% else %}{% include "partials/_icon.html" with name="server" %}{% endif %}</span>
+          <span class="glance-name">{{ panel.label }}</span>
+          <span class="glance-readings">
+            {% for metric in panel.readings|slice:":2" %}
+              <span class="glance-reading" title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">
+                {% if panel.id != "weather" %}<span class="glance-reading-label">{{ metric.display_label }}</span>{% else %}<span class="visually-hidden">{{ metric.display_label }}</span>{% endif %}
+                <strong>{{ metric.value }}</strong>
+                {% if metric.percent != None %}<meter min="0" max="100" value="{{ metric.percent }}" aria-label="{{ metric.label }}">{{ metric.value }}</meter>{% endif %}
+              </span>
+            {% endfor %}
+            {% if panel.id == "weather" %}{% for metric in panel.readings %}{% if metric.label == "Alerts" %}<span class="glance-alert">{{ metric.value }} alert{{ metric.value|pluralize }}</span>{% endif %}{% endfor %}{% endif %}
+          </span>
+          <span class="glance-freshness"><i class="glance-dot" aria-hidden="true"></i>{% if panel.observed_at %}{% if panel.stale %}Out of date · {% endif %}<time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">{{ panel.observed_at|naturaltime }}</time>{% else %}No observation{% endif %}{% if panel.refreshing %} · Refreshing…{% endif %}</span>
+          <span class="glance-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="glance-expanded">
+        {% if panel.payload.summary %}<p class="glance-summary">{{ panel.payload.summary }}</p>{% endif %}
+        {% if not panel.observed_at and panel.payload.metrics %}<p class="glance-freshness">Observation time unavailable{% if panel.refreshing %} · Refreshing…{% endif %}</p>{% endif %}
         {% if panel.payload.metrics %}
           <dl class="glance-metrics">
             {% for metric in panel.payload.metrics %}
               <div title="{{ metric.detail }}">
-                <dt>{{ metric.label }}</dt>
+                <dt>{% if panel.id == "weather" and metric.label == "Now" %}Conditions{% else %}{{ metric.label }}{% endif %}</dt>
                 <dd>{{ metric.value }}</dd>
               </div>
             {% endfor %}
@@ -50,7 +64,8 @@
         {% else %}
           <p>{% if panel.refreshing %}Refreshing…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
         {% endif %}
-      </article>
+        </div>
+      </details>
     {% endfor %}
   </div>
   <span class="glance-status visually-hidden" data-dashboard-glance-status role="status"></span>

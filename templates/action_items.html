@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Action items</h1>
-    <p class="page-lede">Every decision HQ and its installed extensions believe needs you, in one queue.</p>
+    <p class="page-lede">What needs you, why it matters, and the next step. Most urgent first.</p>
   </div>
 </div>
 
@@ -29,19 +29,6 @@
 </div>
 
 <section class="card action-items-card">
-  <ul class="attention-list">
-    {% for item in action_items %}
-      <li class="attention-row">
-        <span class="pill pill-{{ item.status }}">{{ item.source }}</span>
-        <div class="attention-body">
-          {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
-          {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-        </div>
-        <span class="attention-value">{{ item.count }}</span>
-      </li>
-    {% empty %}
-      <li class="attention-row"><p class="attention-clear">Nothing matches this view.</p></li>
-    {% endfor %}
-  </ul>
+  {% include "partials/_work_queue.html" with items=action_items empty="Nothing matches this view." %}
 </section>
 {% endblock %}

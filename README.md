@@ -7,6 +7,10 @@
 The internal operating system behind Severino Labs. A host that composes
 private extensions, and names none of them.
 
+The extensions hold the domain knowledge. This repository holds the contracts
+they meet at — context, decisions, and authorized workflows — which is also the
+reason it can be public while they are not.
+
 ![Severino HQ dashboard — priority work, KPI snapshot, machine telemetry, and live external links](docs/images/dashboard.png)
 
 Severino HQ connects projects/labs, content ideas, documentation index records,
@@ -18,6 +22,24 @@ and the year-end summary it rolls up into.
 This app is **not** the public website, a SaaS product, a CRM, or an
 accounting system. It runs on the homelab / a small Linux VPS, accessible only
 over Tailscale.
+
+## From knowing to doing
+
+A reading is not finished when it is correct. It is finished when it says what
+it means, how old its evidence is, what to do next, and whether that worked. The
+same context and capabilities serve the browser and an AI assistant, so a
+workflow can move between them without acquiring different rules.
+
+A service, for example, ties its hostname to DNS, ingress, certificate, and
+machine. A finding leads from that dependency evidence to an authorized remedy,
+then to verification from fresh facts. HQ derives those connections from the
+operational records it already keeps, rather than asking the operator to
+maintain another diagram.
+
+For a code review, start with the [application boundary](docs/APPLICATION_ARCHITECTURE.md),
+the [extension contract](docs/PLUGINS.md), and the
+[local verification gate](scripts/check.sh). The public tests compose synthetic
+extensions so the design can be inspected without access to the private installation.
 
 ## The host does not know its extensions
 
@@ -148,6 +170,14 @@ available in the header.
   compact preview; host domains and installed extensions emit the same Insight
   contract, and derived infrastructure findings link through to their evidence
   and safe existing remedies.
+- Headline metrics lead the dashboard, grouped by their runtime contributor,
+  with a compact attention preview in the utility rail. Contributors with several readings
+  get a compact overview; their existing typed summary supplies its reporting
+  window and optional chart and calendar, visible without expanding a panel. Single readings stay in
+  the shared metric strip. No installed domain names are encoded in the layout.
+  The full queue retains each entry's severity, recommended next step, and any
+  supplied resolution workflow. Snapshot ages remain visible on mobile, and
+  readings at least an hour old are marked out of date.
 - Dashboard at-a-glance readings are explicitly refreshed, timestamped, and
   owned by their source records. Host telemetry belongs to the selected machine
   declaration; weather belongs to the configured NWS point. The page does not
@@ -232,6 +262,28 @@ are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.examp
 and fill it in. Without it both commands still run, but quietly cover less:
 `check.sh` skips the composed pass, which is the one that catches what public
 CI cannot, because the host and its extensions first meet there.
+
+Browser layout regressions are an optional development gate, separate from
+production dependencies:
+
+```bash
+.venv/bin/python -m pip install -r requirements-browser.txt
+.venv/bin/python -m playwright install chromium
+DJANGO_DEBUG=true .venv/bin/python manage.py test core.browser_tests --parallel=1
+# Or include browser checks in the full gate:
+CHECK_BROWSER=1 ./scripts/check.sh
+```
+
+The suite renders the real dashboard templates and stylesheet with synthetic
+`example.*` contributors, without database access or integration requests.
+It checks paired-card alignment, sidebar independence, 320/390/768px layouts,
+and the host without overview contributors. JavaScript is disabled to protect
+the server-rendered baseline. Failures save synthetic viewport screenshots to
+an OS temporary directory, never private-account snapshots or tracked baselines.
+Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
+the same assertions there. An existing Edge installation can be selected with
+`HQ_BROWSER_CHANNEL=msedge` instead of downloading Chromium. See the
+[Playwright browser documentation](https://playwright.dev/python/docs/browsers).
 
 ```bash
 # 1. Clone & enter

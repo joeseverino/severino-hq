@@ -632,7 +632,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             response = self.client.get("/")
 
         self.assertNotContains(response, "Recent contacts")
-        self.assertContains(response, "Priority queue")
+        self.assertContains(response, "Needs attention")
 
     def test_recent_activity_links_to_the_event_in_plain_language(self):
         event = AuditLog.objects.create(
@@ -687,12 +687,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Open items")
-        self.assertContains(response, "Priority queue")
+        self.assertContains(response, "Needs attention")
         self.assertContains(response, "Active projects")
         self.assertContains(response, "1 need output")
         self.assertNotContains(response, "Active projects need output")
         self.assertNotContains(response, "/projects/?needs_output=1")
-        self.assertNotContains(response, "Needs attention")
         self.assertNotContains(response, "Project opportunities")
         self.assertNotContains(response, "Relationship health")
         self.assertNotContains(response, "Docs by system")

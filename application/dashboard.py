@@ -15,9 +15,35 @@ from django.utils import timezone
 
 from . import sections
 from .attention import CONTACTS_STATE_KEY, contacts_state
-from .domains import domain_attention_items, domain_dashboard_cards
+from .domains import (
+    all_domains,
+    domain_attention_items,
+    domain_dashboard_cards,
+    domain_dashboard_sections,
+)
 from .projection import projection_scope
 from .read_models import recent_activity
+from .workflows import serialize_workflow
+
+
+def dashboard_highlights() -> dict[str, Any]:
+    """Group headline readings and optional visuals from existing contracts."""
+    from django.core.exceptions import ImproperlyConfigured
+
+    from .ui import DomainOverview
+
+    domains = {domain.id: domain for domain in all_domains()}
+    highlights, compact = [], []
+    for section in domain_dashboard_sections():
+        if len(section["cards"]) == 1:
+            compact.extend(section["cards"])
+            continue
+        provider = domains[section["id"]].integration.overview
+        overview = provider() if provider else None
+        if overview is not None and not isinstance(overview, DomainOverview):
+            raise ImproperlyConfigured("Domain overview must return DomainOverview.")
+        highlights.append({**section, "overview": overview})
+    return {"highlights": highlights, "compact": compact}
 
 
 def work_queue() -> list[dict[str, Any]]:
@@ -38,14 +64,14 @@ def work_queue() -> list[dict[str, Any]]:
             "count": entry["item"].magnitude or 1,
             "status": entry["item"].status,
             "url": entry["item"].url,
+            "action": entry["item"].action,
+            "workflow": serialize_workflow(entry["item"].workflow),
         }
         for entry in domain_attention_items()
     ]
 
 
-def operating_snapshot(
-    *, contacts: tuple[int, str] | None = None
-) -> dict[str, Any]:
+def operating_snapshot(*, contacts: tuple[int, str] | None = None) -> dict[str, Any]:
     """Return the one canonical KPI, work-queue, and activity projection."""
     seed = {CONTACTS_STATE_KEY: contacts} if contacts is not None else None
     with projection_scope(seed):

@@ -39,6 +39,7 @@ from .plugins import (
     gather_cards,
     installed_integrations,
 )
+from .projection import read_once
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
 # domains, so an installed extension leads the bar ahead of the host's own
@@ -498,7 +499,25 @@ def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     operator reads every day.
     """
 
-    return gather_cards(
-        (domain.id, domain.integration.dashboard)
-        for domain in sorted(all_domains(), key=lambda domain: domain.bar_order)
+    return tuple(
+        card for section in domain_dashboard_sections() for card in section["cards"]
     )
+
+
+def domain_dashboard_sections() -> tuple[dict[str, Any], ...]:
+    """Keep each contributor's metrics together without naming its domain."""
+
+    return read_once("domains.dashboard_sections", _dashboard_sections)
+
+
+def _dashboard_sections() -> tuple[dict[str, Any], ...]:
+    sections = []
+    for domain in sorted(all_domains(), key=lambda domain: domain.bar_order):
+        if domain.integration.dashboard is None:
+            continue
+        cards = tuple(domain.integration.dashboard())
+        if cards:
+            sections.append({"id": domain.id, "label": domain.label, "cards": cards})
+    # One validation still catches collisions across contributors.
+    gather_cards((section["id"], lambda section=section: section["cards"]) for section in sections)
+    return tuple(sections)

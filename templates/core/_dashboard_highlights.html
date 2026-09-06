@@ -1,0 +1,18 @@
+{% comment %}Runtime contributors own names, figures, windows, and visuals.{% endcomment %}
+{% if dashboard_highlights %}
+<section class="dashboard-highlights" aria-label="Your overview">
+  {% for section in dashboard_highlights %}
+    <article class="highlight-card card">
+      <div class="section-head">
+        <h2>{{ section.label }}</h2>
+        <a class="section-action" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">Explore &rarr;</a>
+      </div>
+      {% if section.overview.kpis %}
+        {% include "partials/_kpi_grid.html" with items=section.overview.kpis label=section.label %}
+      {% else %}
+        {% include "partials/_kpi_grid.html" with items=section.cards label=section.label %}
+      {% endif %}
+    </article>
+  {% endfor %}
+</section>
+{% endif %}
