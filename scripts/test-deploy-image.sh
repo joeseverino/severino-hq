@@ -14,7 +14,8 @@ readonly bin_dir="${work_dir}/bin"
 readonly app_dir="${work_dir}/app"
 readonly lib_dir="${work_dir}/lib"
 readonly log_file="${work_dir}/calls.log"
-mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts"
+readonly run_dir="${work_dir}/run"
+mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts" "${run_dir}"
 
 # A digest-pinned reference under a test prefix. The script accepts only its own
 # composition by default, so the prefix is overridden rather than the guard
@@ -36,13 +37,13 @@ if [ "$1" = "inspect" ]; then
     exit 0
 fi
 if [ "$1" = "compose" ]; then
-    echo "docker $* image=${SEVERINO_IMAGE:-}" >>"${TEST_LOG}"
+    echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
     if [ "$2" = "pull" ] && [ "${TEST_PULL_FAIL:-0}" -eq 1 ]; then
         exit 1
     fi
     exit 0
 fi
-echo "docker $*" >>"${TEST_LOG}"
+echo "docker $* DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
 exit 0
 EOF
 
@@ -65,6 +66,17 @@ cat >"${bin_dir}/install" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
+
+# Root's own verifier, at the absolute path the script insists on. Stubbed so
+# both answers are reachable: a test that can only ever observe "verified" would
+# prove nothing about the refusal.
+mkdir -p "${lib_dir}/bin"
+cat >"${lib_dir}/bin/cosign" <<'EOF'
+#!/bin/sh
+echo "cosign $*" >>"${TEST_LOG}"
+exit "${TEST_VERIFY_FAIL:-0}"
+EOF
+chmod +x "${lib_dir}/bin/cosign"
 
 cat >"${bin_dir}/df" <<'EOF'
 #!/bin/sh
@@ -98,7 +110,9 @@ deploy() {
         TEST_PULL_FAIL="${1}" \
         SEVERINO_HQ_APP_DIR="${app_dir}" \
         SEVERINO_HQ_LIB_DIR="${lib_dir}" \
+        SEVERINO_HQ_RUN_DIR="${run_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
+        TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         "${repo_dir}/scripts/deploy-image.sh" "${2:-${good_image}}" </dev/null
 }
 
@@ -140,9 +154,74 @@ refuses "${test_prefix}zzzz456789abcdef0123456789abcdef0123456789abcdef012345678
 
 # Root is not optional: the script acts on root-owned paths and expects to be
 # the one holding the privilege, not to acquire it partway through.
+#
+# Set and reset around the call rather than written as a `TEST_UID=1000 deploy`
+# prefix: an assignment before a *function* persists after it returns, so the
+# prefix form silently runs every later case as an unprivileged user, where they
+# stop at this guard and prove nothing.
 : >"${log_file}"
-if TEST_UID=1000 deploy 0; then
+TEST_UID=1000
+if deploy 0; then
     echo "Expected a non-root run to be refused." >&2
+    exit 1
+fi
+TEST_UID=0
+
+# The signature is what separates this repository's composition from anything
+# else a stolen registry token could push under the same name, and root checks
+# it for itself rather than inheriting the runner's word for it.
+: >"${log_file}"
+TEST_VERIFY_FAIL=1
+export TEST_VERIFY_FAIL
+if deploy 0 >/dev/null 2>&1; then
+    echo "Expected an unsigned image to be refused." >&2
+    exit 1
+fi
+TEST_VERIFY_FAIL=0
+grep -q "cosign verify" "${log_file}"
+if grep -q "docker compose pull" "${log_file}"; then
+    echo "An unverified image was pulled anyway." >&2
+    exit 1
+fi
+
+# An absent verifier is a refusal, not a silent downgrade to the shape guard.
+mv "${lib_dir}/bin/cosign" "${lib_dir}/bin/cosign.hidden"
+: >"${log_file}"
+if deploy 0 2>/dev/null; then
+    echo "Expected a missing verifier to be refused." >&2
+    exit 1
+fi
+if [ -s "${log_file}" ]; then
+    echo "A deploy without a verifier still reached docker." >&2
+    exit 1
+fi
+mv "${lib_dir}/bin/cosign.hidden" "${lib_dir}/bin/cosign"
+
+# A registry credential is written to a private config directory for the length
+# of the run, never handed to `docker login`. Login stores it in root's own
+# ~/.docker/config.json, where it outlives the deploy and every later root docker
+# call reads it -- and where Docker warns, every single deploy, that it is
+# sitting there in plaintext.
+: >"${log_file}"
+printf 'x-access-token\nsecret-token-value\n' | PATH="${bin_dir}:${PATH}" \
+    TEST_LOG="${log_file}" \
+    TEST_UID=0 \
+    TEST_PULL_FAIL=1 \
+    SEVERINO_HQ_APP_DIR="${app_dir}" \
+    SEVERINO_HQ_LIB_DIR="${lib_dir}" \
+    SEVERINO_HQ_RUN_DIR="${run_dir}" \
+    SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
+    "${repo_dir}/scripts/deploy-image.sh" "${good_image}" >/dev/null 2>&1 || true
+if grep -q "docker login" "${log_file}"; then
+    echo "The deploy still logs in, which writes the token to root's home." >&2
+    exit 1
+fi
+if ! grep -q "DOCKER_CONFIG=${run_dir}/" "${log_file}"; then
+    echo "The pull did not read the ephemeral credential." >&2
+    exit 1
+fi
+if grep -rl "secret-token-value" "${run_dir}" 2>/dev/null | grep -q .; then
+    echo "The credential outlived the deploy." >&2
     exit 1
 fi
 
