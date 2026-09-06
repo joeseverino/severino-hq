@@ -2236,6 +2236,13 @@ TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
 # perfectly well, and a daemon too old to know it should cost the sweep
 # nothing.
 TAILNET_LOCK = os.environ.get("SEVERINO_TAILNET_LOCK", "")
+# Whether the host firewall requires HQ's port to be reached over the tailnet
+# interface. Handed over on the same terms as the two above: root reads the
+# ruleset and mounts one distilled answer, because the ruleset itself is a map
+# of every way into the machine and this process holds every provider
+# credential. Absent on a host that does not run this firewall, which is a
+# reading nothing observed rather than a firewall reported open.
+HOST_FIREWALL = os.environ.get("SEVERINO_HOST_FIREWALL", "")
 
 
 def _tailnet_lock() -> dict[str, Any]:
@@ -2931,6 +2938,31 @@ def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
+def list_host_firewall() -> list[dict[str, Any]]:
+    """Whether the packet had to arrive on the tailnet, or merely to claim it.
+
+    The address a request comes from is a field the sender writes. The interface
+    it arrived on is not, so a firewall that accepts HQ's port only from the
+    tailnet interface is making a stronger statement than one that reads the
+    source address -- and it is the statement the request inspector's "the
+    address is on the tailnet" line rests on.
+
+    Read by root and handed over as one distilled answer; see HOST_FIREWALL.
+    """
+
+    # Not caught, for the reason given on list_tailnet_policy: a raising
+    # collector is recorded as unreachable and carries its reason, where an
+    # empty list is indistinguishable from a host whose firewall says nothing.
+    # The absent-reading case is the one exception, because "no firewall of this
+    # shape here" is a true answer on a machine that does not run one.
+    if not HOST_FIREWALL:
+        raise ProviderError(
+            "No host firewall reading was mounted; this host does not report one."
+        )
+    reading = json.loads(Path(HOST_FIREWALL).read_text(encoding="utf-8"))
+    return [reading]
+
+
 def list_tailnet_policy() -> list[dict[str, Any]]:
     """The policy itself: who is grouped, what is tagged, and what it grants.
 
@@ -3225,6 +3257,7 @@ PROVIDER_INVENTORY = {
     "portainer.container": list_portainer_containers,
     "tailscale.device": list_tailnet_devices,
     "tailscale.policy": list_tailnet_policy,
+    "host.firewall": list_host_firewall,
     **_ADAPTER_REGISTRY.inventory,
 }
 

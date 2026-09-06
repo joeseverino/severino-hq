@@ -546,7 +546,7 @@ class Connection:
         return self.caller_device.observed_at if self.caller_device else None
 
 
-def connection(request, *, edge=None) -> Connection:
+def connection(request, *, edge=None, firewall=None) -> Connection:
     """Everything HQ can say about the request in front of it."""
 
     address = client_ip(request)
@@ -616,6 +616,7 @@ def connection(request, *, edge=None) -> Connection:
             serving=serving,
             observer=observer,
             edge=edge,
+            firewall=firewall,
         ),
     )
 
@@ -735,6 +736,7 @@ def _layers(
     serving: ServingDeviceResolution,
     observer: tailnet.Device | None,
     edge,
+    firewall=None,
 ) -> tuple[Layer, ...]:
     """The independent things that each had to hold, outermost first.
 
@@ -747,8 +749,16 @@ def _layers(
         _name_layer(request),
         _observed_control_layer(edge),
         _channel_layer(address, channel),
+        # Placed against the address claim above, because that is what it
+        # qualifies: the previous line says the address is on the tailnet,
+        # and this says whether the packet had to arrive there to be let in.
+        _arrival_layer(firewall),
         *_policy_layers(device, forwarder, serves, request, known, forwarded),
         _device_layer(device),
+        # Under the device claim, because it is what that claim rests on: the
+        # line above says the tailnet knows this node, and this says whether the
+        # tailnet had to be shown a signature to believe it.
+        _lock_layer(device),
         _identity_agreement_layer(identity),
         _forwarder_layer(
             forwarder,
@@ -814,6 +824,35 @@ def _name_layer(request) -> Layer:
         evidence=host if not answers else f"{host} → {', '.join(answers)}",
         boundary="Exposure",
         mechanism="Authoritative DNS",
+    )
+
+
+def _arrival_layer(firewall) -> Layer | None:
+    """Whether the address above was required, or only presented.
+
+    The channel layer reads an address, and an address is a field the sender
+    writes. This reads the host firewall's own rule for HQ's port: accepted only
+    from packets that arrived on the tailnet interface, which is not a field and
+    cannot be set from somewhere else.
+
+    Absent when nothing observed it -- on a machine that does not run this
+    firewall there is no reading to project, and inventing a verdict from that
+    silence is the failure this page is built to avoid.
+    """
+
+    if firewall is None:
+        return None
+    return Layer(
+        "arrival",
+        "The packet arrived on the tailnet, not just claimed to",
+        firewall.state == "good",
+        firewall.detail,
+        evidence=firewall.evidence,
+        boundary="Network",
+        mechanism="Interface-bound firewall rule",
+        # "neutral" is the reading that never came, and that is neither a pass
+        # nor a denial -- an unobserved firewall must not read as an open one.
+        conclusive=firewall.state != "neutral",
     )
 
 
@@ -1022,6 +1061,66 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
         evidence=device.dns_name or device.name,
         boundary="Device identity",
         mechanism="WireGuard node key",
+    )
+
+
+def _lock_layer(device: tailnet.Device | None) -> Layer | None:
+    """Whether this node's key was signed, or merely handed out.
+
+    Every layer above this one ultimately trusts that the coordination server
+    distributed the right public key for this node. Tailnet lock is the only
+    thing that removes that trust: with it on, a node key is filtered by every
+    peer unless a signing key vouches for it, and the coordination server does
+    not hold the signing keys. So this is not another check on the device -- it
+    is the check on the thing the device check was believing.
+    """
+
+    if device is None:
+        # The layer above already said no node answers at this address. A
+        # second line about that node's signature would be describing a device
+        # that does not exist.
+        return None
+    lock = tailnet.policy().lock
+    if not lock:
+        # No reading at all, which is not the same as lock being off. A tailnet
+        # nothing has swept should say nothing here rather than render a line
+        # about a setting HQ has not looked at.
+        return None
+    keys = lock.get("trusted_keys") or 0
+    if not lock.get("enabled"):
+        return Layer(
+            "tailnet-lock",
+            "The node key was signed, not just issued",
+            False,
+            "Tailnet lock is off, so this node is admitted on the coordination "
+            "server's word alone. Every layer above rests on that word being "
+            "true; with lock on, it would rest on a signature instead.",
+            evidence="Lock off",
+            boundary="Device identity",
+            mechanism="Tailnet lock status",
+            conclusive=False,
+        )
+    if device.lock_error:
+        return Layer(
+            "tailnet-lock",
+            "The node key was signed, not just issued",
+            False,
+            f"{device.label} carries no valid signature under tailnet lock, so "
+            f"every other node filters it out. {device.lock_error}",
+            evidence="Unsigned",
+            boundary="Device identity",
+            mechanism="Tailnet lock signature",
+        )
+    return Layer(
+        "tailnet-lock",
+        "The node key was signed, not just issued",
+        True,
+        f"Tailnet lock is on, and {device.label}'s node key carries a valid "
+        "signature. A key the coordination server invented for this name would "
+        "carry none, and every peer would drop it unread.",
+        evidence=f"Signed · {keys} signing key{'' if keys == 1 else 's'}",
+        boundary="Device identity",
+        mechanism="Tailnet lock signature",
     )
 
 
