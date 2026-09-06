@@ -12,7 +12,10 @@ UMask=0077
 EnvironmentFile=-/etc/severino-hq/backup.env
 Environment=SEVERINO_BACKUP_REQUIRE_ENCRYPTION=1
 Environment=SEVERINO_BACKUP_RETENTION_DAYS=30
-ExecStart=/opt/apps/severino-hq/scripts/backup.sh
+# Root-owned copy, refreshed from the signed image on every deploy. See the
+# comment in severino-hq-controller.service for why root does not execute
+# out of the deploy checkout.
+ExecStart=/usr/local/lib/severino-hq/scripts/backup.sh
 
 NoNewPrivileges=yes
 PrivateDevices=yes
