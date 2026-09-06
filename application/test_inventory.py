@@ -1062,3 +1062,51 @@ class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
                     allowed or provider.declaration_only,
                     f"{kind} can be removed now and should stop saying it cannot",
                 )
+
+
+class ObservationKindTests(TestCase):
+    """Readings a controller reports that are not resources HQ can declare.
+
+    The ingest drops any kind this HQ does not know, so that a controller
+    running ahead of it cannot take the whole sweep down. A reading with no
+    provider spec looks exactly like that case, and was discarded every sweep
+    while the collector that produced it ran perfectly.
+    """
+
+    def test_a_reading_survives_the_sweep_without_being_a_resource(self):
+        reading = {
+            "record": "interface-binding",
+            "interface": "tailscale0",
+            "accept_requires_interface": True,
+            "foreign_interface_dropped": True,
+        }
+
+        record_inventory(
+            a_sweep(**{"host.firewall": [reading]}),
+            principal=cli_principal(),
+        )
+
+        stored = ProviderInventory.objects.get(kind="host.firewall")
+        self.assertTrue(stored.reachable)
+        self.assertEqual(stored.records, [reading])
+
+    def test_it_is_still_not_something_to_declare(self):
+        # Storing the reading must not put a resource on the board. Nothing can
+        # create, reconcile or delete a host firewall, so an entry offering to
+        # would be an action that cannot be taken.
+        record_inventory(
+            a_sweep(**{"host.firewall": [{"record": "interface-binding"}]}),
+            principal=cli_principal(),
+        )
+
+        self.assertNotIn("host.firewall", {item.kind for item in unmanaged()})
+
+    def test_a_kind_this_hq_has_never_heard_of_is_still_dropped(self):
+        record_inventory(
+            a_sweep(**{"host.something-newer": [{"record": "x"}]}),
+            principal=cli_principal(),
+        )
+
+        self.assertFalse(
+            ProviderInventory.objects.filter(kind="host.something-newer").exists()
+        )

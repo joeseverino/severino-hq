@@ -32,7 +32,7 @@ from control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
-from control_plane.providers import PROVIDERS, service_facets
+from control_plane.providers import OBSERVATION_KINDS, PROVIDERS, service_facets
 
 from .contracts import endpoint_has_private_parts
 
@@ -137,7 +137,7 @@ def record_inventory(
     observed_at = timezone.now()
     stored = []
     for kind, report in sorted(payload.items()):
-        if kind not in PROVIDERS:
+        if kind not in PROVIDERS and kind not in OBSERVATION_KINDS:
             # A controller ahead of this HQ. Ignored rather than rejected: the
             # rest of the sweep is still true, and refusing it would make a
             # controller upgrade take the whole inventory down.
