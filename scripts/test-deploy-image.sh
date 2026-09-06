@@ -70,13 +70,14 @@ EOF
 # Root's own verifier, at the absolute path the script insists on. Stubbed so
 # both answers are reachable: a test that can only ever observe "verified" would
 # prove nothing about the refusal.
-mkdir -p "${lib_dir}/bin"
-cat >"${lib_dir}/bin/cosign" <<'EOF'
+readonly verifier_dir="${work_dir}/verifier"
+mkdir -p "${verifier_dir}"
+cat >"${verifier_dir}/cosign" <<'EOF'
 #!/bin/sh
 echo "cosign $*" >>"${TEST_LOG}"
 exit "${TEST_VERIFY_FAIL:-0}"
 EOF
-chmod +x "${lib_dir}/bin/cosign"
+chmod +x "${verifier_dir}/cosign"
 
 cat >"${bin_dir}/df" <<'EOF'
 #!/bin/sh
@@ -111,6 +112,7 @@ deploy() {
         SEVERINO_HQ_APP_DIR="${app_dir}" \
         SEVERINO_HQ_LIB_DIR="${lib_dir}" \
         SEVERINO_HQ_RUN_DIR="${run_dir}" \
+        SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         "${repo_dir}/scripts/deploy-image.sh" "${2:-${good_image}}" </dev/null
@@ -185,7 +187,7 @@ if grep -q "docker compose pull" "${log_file}"; then
 fi
 
 # An absent verifier is a refusal, not a silent downgrade to the shape guard.
-mv "${lib_dir}/bin/cosign" "${lib_dir}/bin/cosign.hidden"
+mv "${verifier_dir}/cosign" "${verifier_dir}/cosign.hidden"
 : >"${log_file}"
 if deploy 0 2>/dev/null; then
     echo "Expected a missing verifier to be refused." >&2
@@ -195,7 +197,7 @@ if [ -s "${log_file}" ]; then
     echo "A deploy without a verifier still reached docker." >&2
     exit 1
 fi
-mv "${lib_dir}/bin/cosign.hidden" "${lib_dir}/bin/cosign"
+mv "${verifier_dir}/cosign.hidden" "${verifier_dir}/cosign"
 
 # A registry credential is written to a private config directory for the length
 # of the run, never handed to `docker login`. Login stores it in root's own
@@ -210,6 +212,7 @@ printf 'x-access-token\nsecret-token-value\n' | PATH="${bin_dir}:${PATH}" \
     SEVERINO_HQ_APP_DIR="${app_dir}" \
     SEVERINO_HQ_LIB_DIR="${lib_dir}" \
     SEVERINO_HQ_RUN_DIR="${run_dir}" \
+    SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
     SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
     "${repo_dir}/scripts/deploy-image.sh" "${good_image}" >/dev/null 2>&1 || true
 if grep -q "docker login" "${log_file}"; then

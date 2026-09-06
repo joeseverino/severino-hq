@@ -2605,6 +2605,17 @@ _PROVIDERS = (
 
 PROVIDERS = {provider.kind: provider for provider in _PROVIDERS}
 
+# Kinds a controller reports as readings rather than as resources.
+#
+# A provider spec says what HQ can declare, create, reconcile and delete. A
+# host firewall is none of those: HQ can only be told what it currently is, and
+# giving it a spec would put a resource on the board that nothing can act on.
+#
+# Named here so the sweep ingest can tell a reading this HQ understands from a
+# controller running ahead of it -- which is the only thing that guard exists to
+# catch, and which silently discarded this kind until it was listed.
+OBSERVATION_KINDS = frozenset({"host.firewall"})
+
 
 @dataclass(frozen=True)
 class ObserverAbility:

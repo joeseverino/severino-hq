@@ -83,11 +83,14 @@ fi
 # names this repository's composition, which is exactly what a stolen registry
 # token would also be able to push. Only the signature proves who composed it.
 #
-# The verifier is root's own copy, at an absolute path under the root-owned
-# tree, because the runner installs its cosign into a directory the runner
-# owns. No PATH lookup, and no fallback: an absent verifier fails the deploy
-# rather than quietly reducing it to the shape guard.
-readonly cosign="${lib_dir}/bin/cosign"
+# The verifier is root's own copy, at an absolute path, because the runner
+# installs its cosign into a directory the runner owns. Beside the synced tree
+# rather than in it: that tree is replaced wholesale, from the image, by the
+# sync this deploy is about to trigger, so a verifier inside it would be
+# supplied by the thing it exists to check. No PATH lookup, and no fallback:
+# an absent verifier fails the deploy rather than quietly reducing it to the
+# shape guard.
+readonly cosign="${SEVERINO_HQ_VERIFIER_DIR:-/usr/local/lib/severino-hq-verifier}/cosign"
 if [ ! -x "${cosign}" ]; then
     echo "No verifier at ${cosign}; run install-cosign.sh. Refusing to deploy." >&2
     exit 1
