@@ -24,7 +24,7 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 
 from application.connections import link_choices, outward_links
 from application.command_center import command_center
-from application.dashboard import operating_snapshot, work_queue
+from application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from application.glance import (
     dashboard_configuration,
     dashboard_panels,
@@ -208,7 +208,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         except D1Error:
             recent_contacts = []
             contacts = (0, "unavailable")
-        snapshot = operating_snapshot(contacts=contacts)
+        with projection_scope():
+            snapshot = operating_snapshot(contacts=contacts)
+            highlights = dashboard_highlights()
         for project in snapshot["active_projects"]:
             project["updated_at"] = datetime.fromisoformat(project["updated_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
@@ -308,7 +310,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             profile_action_count=snapshot["priority_count"],
             show_action_count=True,
             this_year=snapshot["year"],
-            dashboard_cards=snapshot["cards"],
+            dashboard_cards=highlights["compact"],
+            dashboard_highlights=highlights["highlights"],
             dashboard_panels=glance_panels,
             dashboard_can_refresh=any(panel["refreshable"] for panel in glance_panels),
             dashboard_glance_settings=glance_settings,
@@ -384,7 +387,7 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
             and (
                 not query
                 or query
-                in " ".join((item["source"], item["label"], item["detail"])).casefold()
+                in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold()
             )
         ]
         sources = tuple(

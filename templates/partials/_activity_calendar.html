@@ -7,7 +7,7 @@ Activity calendar — one month of plan vs. execution.
 per ChartSeries slot), missed, planned, empty. Paging is plain links so a month
 can be linked to directly and works without JavaScript.
 {% endcomment %}
-<figure class="chart-card card calendar-card" id="training-calendar">
+<figure class="chart-card card calendar-card" id="{{ calendar_id|default:'training-calendar' }}">
   <figcaption class="calendar-head">
     <div class="calendar-head-copy">
       <h2>{{ calendar.title }}</h2>

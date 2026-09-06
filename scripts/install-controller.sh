@@ -15,6 +15,19 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# The units below run as root out of /usr/local/lib/severino-hq rather than out
+# of this checkout: what root runs should not be writable by what deploys.
+# Refresh that tree from the image now running, before anything starts, so a
+# deploy shipping new scripts does not leave root executing the previous ones.
+#
+# Hard failure rather than a fallback: the units name that path, so a host
+# without the tree would fail to start them anyway, and failing here says why.
+if [ ! -x /usr/local/sbin/severino-hq-sync-scripts ]; then
+    echo "severino-hq-sync-scripts is missing — run fix-root-ownership.sh --apply on this host first." >&2
+    exit 1
+fi
+/usr/local/sbin/severino-hq-sync-scripts
+
 systemctl start severino-hq-secrets.service
 "${app_dir}/scripts/provision-controller-ssh.sh"
 if [ ! -s "${env_file}" ]; then

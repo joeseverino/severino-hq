@@ -1,0 +1,38 @@
+{% comment %}
+The canonical work_queue projection, shared by the dashboard and full queue.
+Workflow actions retain their owner's method, route, and authorization boundary.
+{% endcomment %}
+{% if compact %}
+<ul class="dashboard-attention-list">
+  {% for item in items %}
+    <li>
+      <a href="{% if item.url %}{{ item.url }}{% else %}{% url 'action_items' %}{% endif %}">
+        <span class="attention-source">{{ item.source }} · {{ item.count }} · {{ item.status|capfirst }}</span>
+        <strong>{{ item.label }}</strong>
+        {% if item.detail %}<span class="attention-detail">{{ item.detail }}</span>{% endif %}
+        <span class="action-arrow" aria-hidden="true">&rarr;</span>
+      </a>
+    </li>
+  {% empty %}
+    <li><p class="attention-clear">Nothing is waiting on you.</p></li>
+  {% endfor %}
+</ul>
+{% else %}
+<ul class="attention-list">
+  {% for item in items %}
+    <li class="attention-row">
+      <span class="pill pill-{{ item.status }}">{{ item.status|capfirst }}</span>
+      <div class="attention-body">
+        <small class="muted">{{ item.source }}</small>
+        {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+        {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+        {% if item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+        {% if item.workflow %}<details class="attention-workflow"><summary>Resolution workflow</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
+      </div>
+      <span class="attention-value">{{ item.count }}</span>
+    </li>
+  {% empty %}
+    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing is waiting on you." }}</p></li>
+  {% endfor %}
+</ul>
+{% endif %}

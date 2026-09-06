@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
@@ -22,6 +23,10 @@ from control_plane.models import (
 from .cadence import ring_doorbell
 from .machines import machine_catalog
 from .security import Capability, Principal
+
+
+# Explicit snapshots are useful context, but should not look current indefinitely.
+GLANCE_STALE_AFTER = timedelta(hours=1)
 
 
 def connection_specs():
@@ -292,7 +297,41 @@ def dashboard_panels(
                 "refreshable": bool(machine_resources),
             }
         )
-    return tuple(panels)
+    cutoff = timezone.now() - GLANCE_STALE_AFTER
+    return tuple(
+        {
+            **panel,
+            "stale": bool(panel["observed_at"] and panel["observed_at"] <= cutoff),
+            "readings": tuple(
+                _glance_reading(metric)
+                for metric in panel["payload"].get("metrics", [])
+            ),
+        }
+        for panel in panels
+    )
+
+
+def _glance_reading(metric: dict[str, str]) -> dict[str, Any]:
+    """Compact labels and bounded meters without altering the stored observation."""
+
+    label = metric.get("label", "")
+    display_label = {
+        "Container CPU": "CPU",
+        "Container memory": "Memory",
+        "Docker storage": "Storage",
+        "Now": "Conditions",
+    }.get(label, label)
+    value = str(metric.get("value", ""))
+    percent = None
+    if value.endswith("%"):
+        try:
+            parsed = float(value[:-1])
+        except ValueError:
+            pass
+        else:
+            if 0 <= parsed <= 100:
+                percent = parsed
+    return {**metric, "display_label": display_label, "percent": percent}
 
 
 @transaction.atomic

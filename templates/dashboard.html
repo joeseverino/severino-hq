@@ -9,19 +9,12 @@
   {% include "core/_dashboard_glance.html" %}
 </div>
 
+{% include "core/_dashboard_highlights.html" %}
+
 {% comment %}
-One row. Every card comes from a domain in application.domains -- the host's own
-sections and installed extensions alike -- so adding a section never means
-editing this markup, and a section with nothing to report contributes no tile
-rather than a zero. The queue total leads, because it is the only figure here
-that summarises every domain at once.
+Runtime contributions keep this summary independent of the installed domains.
 {% endcomment %}
-<section class="kpi-grid">
-  <a class="kpi {% if not action_queue_count %}is-zero{% endif %}" href="{% url 'action_items' %}">
-    <span class="label">Open items</span>
-    <span class="value">{{ action_queue_count }}</span>
-    <span class="muted">{{ action_queue_group_count }} area{{ action_queue_group_count|pluralize }}</span>
-  </a>
+{% if dashboard_cards %}<section class="dashboard-counts" aria-label="Across HQ">
   {% for card in dashboard_cards %}
     <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
       <span class="label">{{ card.label }}</span>
@@ -29,36 +22,78 @@ that summarises every domain at once.
       {% if card.detail %}<span class="muted">{{ card.detail }}</span>{% endif %}
     </a>
   {% endfor %}
-</section>
+</section>{% endif %}
+
+{% for section in dashboard_highlights %}
+  {% if section.overview.charts or section.overview.calendars %}
+    <section class="dashboard-patterns" aria-label="{{ section.label }} trends and activity">
+      {% for chart in section.overview.charts|slice:":1" %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
+      {% for calendar in section.overview.calendars|slice:":1" %}{% include "partials/_activity_calendar.html" with calendar=calendar calendar_id="dashboard-calendar-"|add:section.id %}{% endfor %}
+    </section>
+  {% endif %}
+{% endfor %}
 
 <div class="dashboard-board">
-<section class="dashboard-command">
-  <div class="command-main">
-    <section class="card priority-card">
-      <div class="section-head">
-        <h2>Priority queue</h2>
-        <a class="count" href="{% url 'action_items' %}">{% if action_queue_count %}{{ action_queue_count }} item{{ action_queue_count|pluralize }}{% else %}Open{% endif %} &rarr;</a>
+<div class="dashboard-main">
+<section class="snapshot-grid">
+  {% if active_projects %}<section class="card">
+    <div class="section-head">
+      <h2>Active projects</h2>
+      <span class="count">{{ active_project_count }}</span>
+    </div>
+    {% if active_projects %}
+      <ul class="list-rows">
+        {% for p in active_projects %}
+          <li>
+            <span class="row-main">
+              <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
+              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
+              <a href="{% url 'projects:detail' p.slug %}"><strong>{{ p.name }}</strong></a>
+              {% if p.repository_url %}<a class="subtle-link" href="{{ p.repository_url }}" target="_blank" rel="noopener">code</a>{% endif %}
+              {% if p.public_url %}<a class="subtle-link" href="{{ p.public_url }}" target="_blank" rel="noopener">live</a>{% endif %}
+            </span>
+            <span class="row-meta">{{ p.updated_at|date:"M j" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
+    {% else %}
+      <div class="empty dashboard-empty-row">
+        <p>No active projects yet.</p>
+        <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
       </div>
-      {% if action_queue_count %}
-        <ul class="dashboard-attention-list">
-          {% for item in action_queue|slice:":4" %}
-            {% if item.count %}
-              <li>
-                <a href="{{ item.url }}">
-                  <span class="attention-source">{{ item.source }} · {{ item.count }}</span>
-                  <strong>{{ item.label }}</strong>
-                  {% if item.detail %}<span class="attention-detail">{{ item.detail }}</span>{% endif %}
-                  <span class="action-arrow" aria-hidden="true">&rarr;</span>
-                </a>
-              </li>
-            {% endif %}
-          {% endfor %}
-        </ul>
-        {% if action_queue_group_count > 5 %}<p class="section-foot"><a href="{% url 'action_items' %}">All {{ action_queue_group_count }} areas &rarr;</a></p>{% endif %}
-      {% else %}
-        <div class="empty compact"><p>No cleanup items right now.</p></div>
-      {% endif %}
-    </section>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if content_rows or published_rows %}<section class="card">
+    <div class="section-head">
+      <h2>Publishing</h2>
+      {% if draft_content_count %}<span class="count">{{ draft_content_count }} draft</span>{% endif %}
+    </div>
+    {% if content_rows %}
+      {% include "partials/_record_list.html" with rows=content_rows %}
+      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Draft queue &rarr;</a></p>
+    {% elif published_rows %}
+      {% include "partials/_record_list.html" with rows=published_rows %}
+      <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
+    {% endif %}
+  </section>{% endif %}
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Docs review</h2>
+      {% if docs_needing_review_count %}<span class="count">{{ docs_needing_review_count }}</span>{% endif %}
+    </div>
+    {% if docs_rows %}
+      {% include "partials/_record_list.html" with rows=docs_rows %}
+      <p class="section-foot"><a href="{% url 'docs_index:list' %}?needs_review=1">Review queue &rarr;</a></p>
+    {% else %}
+      <div class="empty dashboard-empty-row"><p>All active docs reviewed recently.</p></div>
+    {% endif %}
+  </section>
+
+</section>
 
     {% if recent_contacts %}
       <section class="card">
@@ -71,9 +106,40 @@ that summarises every domain at once.
       </section>
     {% endif %}
 
+<section class="card activity-tail">
+  <div class="section-head">
+    <h2>Recent activity</h2>
+    {% if recent_audit %}<a class="section-action" href="{% url 'core:audit_list' %}">Full log &rarr;</a>{% endif %}
   </div>
-
+  {% if recent_audit %}
+    <ul class="audit-list compact-audit">
+      {% for ev in recent_audit|slice:":6" %}
+        <li>
+          <a class="activity-event" href="{{ ev.url }}">
+            <span class="activity-copy">
+              <strong>{% if ev.object_repr %}{{ ev.object_repr|truncatechars:70 }}{% elif ev.object_type %}{{ ev.object_type }}{% else %}HQ{% endif %}</strong>
+              <span class="muted">{{ ev.action_label|lower }} by {{ ev.actor }}</span>
+            </span>
+            <time class="ts" datetime="{{ ev.created_at|date:'c' }}" title="{{ ev.created_at }}">{{ ev.created_at|naturaltime }}</time>
+            <span class="activity-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty"><p>No activity yet.</p></div>
+  {% endif %}
+</section>
+</div>
   <aside class="command-side">
+    <section class="card priority-card">
+      <div class="section-head">
+        <h2>Needs attention</h2>
+        <a class="count" href="{% url 'action_items' %}">Open items{% if action_queue_count %} · {{ action_queue_count }}{% endif %} &rarr;</a>
+      </div>
+      {% include "partials/_work_queue.html" with items=action_queue|slice:":3" compact=True %}
+      {% if action_queue_group_count > 3 %}<p class="section-foot"><a href="{% url 'action_items' %}">All {{ action_queue_group_count }} areas &rarr;</a></p>{% endif %}
+    </section>
     <section class="ops-panel">
       <div class="section-head">
         <h2>Live &amp; external</h2>
@@ -126,90 +192,5 @@ that summarises every domain at once.
       </ul>
     </section>
   </aside>
-</section>
-
-<section class="snapshot-grid">
-  {% if content_rows or published_rows %}<section class="card">
-    <div class="section-head">
-      <h2>Active projects</h2>
-      <span class="count">{{ active_project_count }}</span>
-    </div>
-    {% if active_projects %}
-      <ul class="list-rows">
-        {% for p in active_projects %}
-          <li>
-            <span class="row-main">
-              <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
-              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
-              <a href="{% url 'projects:detail' p.slug %}"><strong>{{ p.name }}</strong></a>
-              {% if p.repository_url %}<a class="subtle-link" href="{{ p.repository_url }}" target="_blank" rel="noopener">code</a>{% endif %}
-              {% if p.public_url %}<a class="subtle-link" href="{{ p.public_url }}" target="_blank" rel="noopener">live</a>{% endif %}
-            </span>
-            <span class="row-meta">{{ p.updated_at|date:"M j" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
-    {% else %}
-      <div class="empty dashboard-empty-row">
-        <p>No active projects yet.</p>
-        <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
-      </div>
-    {% endif %}
-  </section>
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Publishing</h2>
-      {% if draft_content_count %}<span class="count">{{ draft_content_count }} draft</span>{% endif %}
-    </div>
-    {% if content_rows %}
-      {% include "partials/_record_list.html" with rows=content_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Draft queue &rarr;</a></p>
-    {% elif published_rows %}
-      {% include "partials/_record_list.html" with rows=published_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
-    {% endif %}
-  </section>{% endif %}
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Docs review</h2>
-      {% if docs_needing_review_count %}<span class="count">{{ docs_needing_review_count }}</span>{% endif %}
-    </div>
-    {% if docs_rows %}
-      {% include "partials/_record_list.html" with rows=docs_rows %}
-      <p class="section-foot"><a href="{% url 'docs_index:list' %}?needs_review=1">Review queue &rarr;</a></p>
-    {% else %}
-      <div class="empty dashboard-empty-row"><p>All active docs reviewed recently.</p></div>
-    {% endif %}
-  </section>
-
-</section>
-
-<section class="card activity-tail">
-  <div class="section-head">
-    <h2>Recent activity</h2>
-    {% if recent_audit %}<a class="section-action" href="{% url 'core:audit_list' %}">Full log &rarr;</a>{% endif %}
-  </div>
-  {% if recent_audit %}
-    <ul class="audit-list compact-audit">
-      {% for ev in recent_audit|slice:":6" %}
-        <li>
-          <a class="activity-event" href="{{ ev.url }}">
-            <span class="activity-copy">
-              <strong>{% if ev.object_repr %}{{ ev.object_repr|truncatechars:70 }}{% elif ev.object_type %}{{ ev.object_type }}{% else %}HQ{% endif %}</strong>
-              <span class="muted">{{ ev.action_label|lower }} by {{ ev.actor }}</span>
-            </span>
-            <time class="ts" datetime="{{ ev.created_at|date:'c' }}" title="{{ ev.created_at }}">{{ ev.created_at|naturaltime }}</time>
-            <span class="activity-arrow" aria-hidden="true">&rarr;</span>
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <div class="empty"><p>No activity yet.</p></div>
-  {% endif %}
-</section>
 </div>
 {% endblock %}

@@ -88,6 +88,28 @@ topology findings enter through the infrastructure provider and drill into an
 evidence/remedy surface, where remedies remain references to registered
 capabilities rather than a second mutation path.
 
+The flattened queue preserves each insight's `action` and JSON-safe `workflow`
+(or `null`) alongside its existing label, evidence, severity, count, and URL.
+The dashboard and full queue share the same row partial and resolution renderer;
+workflow forms retain their canonical action URLs, HTTP methods, and CSRF
+protection. Rendering a workflow does not execute it or grant authority.
+Neutral and good insights remain outside this queue; the contributing domain
+owns whether a reading requires a decision.
+
+Dashboard machine and weather readings are explicitly labeled snapshots. Their
+observation time remains visible at every viewport size, and a reading at least
+one hour old is marked out of date. This is presentation freshness, separate
+from the provider's reported health; refreshing keeps the previous observation
+visible until a new one arrives.
+
+The browser groups dashboard cards by their contributing domain. Card providers
+are evaluated once per projection scope and still undergo cross-domain collision
+validation. A contributor with multiple metrics may supply its existing typed
+`DomainOverview` for the displayed metrics and optional directly visible visuals;
+single-card contributions remain compact. The host never infers domain identity
+from a card ID or invents the contributor's reporting window. The machine
+snapshot retains its existing flat cards; the richer grouping is presentation.
+
 Higher-order findings preserve the same rule. Exact resource and kind facts
 remain addressable, while the default projection follows topology edges to
 group downstream symptoms under a proven shared controller. The frontend then

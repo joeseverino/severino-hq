@@ -7,8 +7,12 @@ Requires=docker.service
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=/opt/apps/severino-hq
-ExecStart=/opt/apps/severino-hq/scripts/run-controller.sh --apply
+# Root executes only root-owned code. /usr/local/lib/severino-hq belongs to root
+# and is refreshed from the signed image by install-controller.sh on each deploy.
+# The deploy checkout is not a suitable source for it: deployment has to be able
+# to write there, and what root runs should not be writable by what deploys.
+WorkingDirectory=/usr/local/lib/severino-hq
+ExecStart=/usr/local/lib/severino-hq/scripts/run-controller.sh --apply
 
 NoNewPrivileges=yes
 PrivateTmp=yes

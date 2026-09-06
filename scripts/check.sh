@@ -128,6 +128,13 @@ else
     echo "[check] Composed suite skipped (no SEVERINO_HQ_PLUGINS supplied)"
 fi
 
+if [ "${CHECK_BROWSER:-0}" = "1" ]; then
+    echo "[check] Browser layout regressions (synthetic host fixtures)"
+    env -u SEVERINO_HQ_PLUGINS "$python" manage.py test core.browser_tests --noinput --parallel 1
+else
+    echo "[check] Browser layout checks skipped (set CHECK_BROWSER=1 to enable)"
+fi
+
 echo "[check] Patch integrity"
 git diff --check
 
