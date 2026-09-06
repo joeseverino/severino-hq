@@ -22,5 +22,8 @@ docs/
 .vscode/
 README.md
 Dockerfile
-docker-compose.yml
+# docker-compose.yml is deliberately NOT excluded. The deploy runs it as
+# root, so it must come from the same cosign-verified artifact as the code
+# rather than from the deploy checkout, which deployment has to be able to
+# write to. severino-hq-sync-scripts copies it out of the running image.
 .dockerignore
