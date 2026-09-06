@@ -145,11 +145,31 @@ else
     echo "[check] actionlint unavailable; CI will run workflow validation"
 fi
 
+# The same two lists CI's lint job uses, from the same file, so this gate covers
+# what that job covers. It previously linted a glob and stopped there, which let
+# a change pass here and fail there -- the one thing a local gate must not do.
+. ./scripts/toolchain.env
+
+echo "[check] Shell syntax"
+# shellcheck disable=SC2086  # both lists are meant to split
+set -- $SHELL_SOURCES
+for shell_source; do
+    case "$shell_source" in
+        *backup.sh | *ci-local.sh) bash -n "$shell_source" ;;
+        *) sh -n "$shell_source" ;;
+    esac
+done
+
 if command -v shellcheck >/dev/null 2>&1; then
     echo "[check] Shell scripts"
-    shellcheck -x scripts/*.sh entrypoint.sh
+    # shellcheck disable=SC2086
+    shellcheck -x $SHELL_SOURCES
 else
     echo "[check] shellcheck unavailable; CI will run shell validation"
 fi
+
+echo "[check] Shell suites"
+# shellcheck disable=SC2086
+for shell_suite in $SHELL_SUITES; do "$shell_suite"; done
 
 echo "[check] all checks passed"
