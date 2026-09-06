@@ -57,11 +57,48 @@ if [ ! -t 0 ]; then
     IFS= read -r registry_token || true
 fi
 if [ -n "${registry_token}" ]; then
-    printf '%s' "${registry_token}" \
-        | docker login ghcr.io -u "${registry_user:-x-access-token}" --password-stdin >/dev/null
-    # Whatever happens next, the credential does not outlive this deploy. The
-    # host is a machine in the house, not a container thrown away afterwards.
-    trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT INT TERM
+    # Written, not logged in. `docker login` stores the token in root's own
+    # ~/.docker/config.json -- and says so, in a warning, every deploy. That
+    # store outlives the command that made it and is read by every later root
+    # docker call, so a logout is the only thing standing between one deploy's
+    # credential and the next. An ephemeral config directory removes the
+    # question: the credential exists in a private tmpfs file for the length of
+    # this script, is pointed at by DOCKER_CONFIG rather than by root's home,
+    # and the trap that already had to fire deletes it outright.
+    docker_config="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-deploy-docker.XXXXXX")"
+    trap 'rm -rf "${docker_config}"' EXIT INT TERM
+    chmod 0700 "${docker_config}"
+    umask 077
+    printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' \
+        "$(printf '%s:%s' "${registry_user:-x-access-token}" "${registry_token}" \
+            | base64 | tr -d '\n')" \
+        > "${docker_config}/config.json"
+    export DOCKER_CONFIG="${docker_config}"
+fi
+
+# Verified here, by root, and not only by the workflow step that verified it
+# already. The sudoers rule exists because the runner is the party this script
+# does not trust; a check that runs on the runner's side of that boundary is a
+# check the runner can decline to run. The shape guard above proves the argument
+# names this repository's composition, which is exactly what a stolen registry
+# token would also be able to push. Only the signature proves who composed it.
+#
+# The verifier is root's own copy, at an absolute path under the root-owned
+# tree, because the runner installs its cosign into a directory the runner
+# owns. No PATH lookup, and no fallback: an absent verifier fails the deploy
+# rather than quietly reducing it to the shape guard.
+readonly cosign="${lib_dir}/bin/cosign"
+if [ ! -x "${cosign}" ]; then
+    echo "No verifier at ${cosign}; run install-cosign.sh. Refusing to deploy." >&2
+    exit 1
+fi
+if ! "${cosign}" verify \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp \
+        "^https://github\.com/${SEVERINO_HQ_REPOSITORY:-joeseverino/severino-hq}/\.github/workflows/compose\.yml@refs/" \
+    "${image}" >/dev/null 2>&1; then
+    echo "Refusing to deploy ${image}: not signed by this repository's compose workflow." >&2
+    exit 1
 fi
 
 # The compose file root acts on. Falls back to the checkout only when the

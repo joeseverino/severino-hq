@@ -33,7 +33,8 @@ runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
 runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
 runtime_tailnet="$(mktemp /run/severino-hq-controller-tailnet.XXXXXX)"
 runtime_tailnet_lock="$(mktemp /run/severino-hq-controller-tka.XXXXXX)"
-trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}" "${runtime_tailnet_lock}"; rm -rf "${runtime_ssh_dir}"' \
+runtime_firewall="$(mktemp /run/severino-hq-controller-firewall.XXXXXX)"
+trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}" "${runtime_tailnet_lock}" "${runtime_firewall}"; rm -rf "${runtime_ssh_dir}"' \
     EXIT HUP INT TERM
 install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 chown 10001:10001 "${runtime_app_env}"
@@ -113,6 +114,42 @@ if [ -S /var/run/tailscale/tailscaled.sock ] \
             --mount "type=bind,source=${runtime_tailnet_lock},target=/run/severino-hq/tailnet-lock.json,readonly" \
             --env SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json
     fi
+fi
+
+# Whether the firewall requires this machine's port to be reached over the
+# tailnet interface, rather than merely from an address that claims to be on it.
+# A source address is a field in a packet; an interface is where the packet
+# actually arrived, and only the second is something a sender cannot assert.
+#
+# Distilled here rather than mounted: the answer is one boolean and the rule
+# behind it, where the full ruleset is a map of every way into this machine, and
+# the container asking the question holds every provider credential. Same terms
+# as the tailnet socket above -- root reads, the container receives a reading.
+#
+# Absent when nft is missing or the table is not there, which is a controller
+# that reports the binding as unobserved. That is the honest answer on a host
+# that does not run this firewall, and it is not the same as reporting it open.
+if command -v nft >/dev/null 2>&1 \
+    && firewall_chain="$(nft list chain inet host_filter input 2>/dev/null)"; then
+    bound=false
+    guarded=false
+    case "${firewall_chain}" in
+        *'iifname "tailscale0"'*'dport'*'accept'*) bound=true ;;
+    esac
+    case "${firewall_chain}" in
+        *'iifname != "tailscale0"'*'drop'*) guarded=true ;;
+    esac
+    printf '{"record":"interface-binding","interface":"tailscale0",' \
+        > "${runtime_firewall}"
+    printf '"accept_requires_interface":%s,"foreign_interface_dropped":%s,' \
+        "${bound}" "${guarded}" >> "${runtime_firewall}"
+    printf '"read_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        >> "${runtime_firewall}"
+    chown 10001:10001 "${runtime_firewall}"
+    chmod 0400 "${runtime_firewall}"
+    set -- "$@" \
+        --mount "type=bind,source=${runtime_firewall},target=/run/severino-hq/firewall.json,readonly" \
+        --env SEVERINO_HOST_FIREWALL=/run/severino-hq/firewall.json
 fi
 
 # Forward what the renderer produced, rather than recomputing the same names

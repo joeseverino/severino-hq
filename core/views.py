@@ -661,14 +661,14 @@ class ConnectionView(LoginRequiredMixin, TemplateView):
             headers_of,
             hops_of,
         )
-        from application.connection_security import observed_ingress_control
+        from application.connection_security import observed_request_controls
 
         context = super().get_context_data(**kwargs)
         # Provider observations are cached facts. The request explanation may
         # derive from them, but opening the panel never probes NPM or handles a
         # credential.
-        edge = observed_ingress_control(self.request.get_host())
-        found = describe(self.request, edge=edge)
+        edge, firewall = observed_request_controls(self.request.get_host())
+        found = describe(self.request, edge=edge, firewall=firewall)
         context["connection"] = found
         context["addresses"] = addresses_of(found)
         context["hq_addresses"] = addresses_of_hq(found)

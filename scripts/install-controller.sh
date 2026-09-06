@@ -28,6 +28,12 @@ if [ ! -x /usr/local/sbin/severino-hq-sync-scripts ]; then
 fi
 /usr/local/sbin/severino-hq-sync-scripts
 
+# The verifier the *next* deploy will check this repository's signature with,
+# refreshed by the same mechanism and from the same tree as the script that uses
+# it. Pinned by digest inside, and a no-op when it is already correct, so this
+# costs nothing on a host that is already right.
+/usr/local/lib/severino-hq/scripts/install-cosign.sh
+
 systemctl start severino-hq-secrets.service
 "${app_dir}/scripts/provision-controller-ssh.sh"
 if [ ! -s "${env_file}" ]; then

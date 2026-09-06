@@ -8,6 +8,7 @@ from control_plane.models import ProviderInventory
 from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
+    observed_firewall_control,
     observed_ingress_control,
 )
 from .connections import (
@@ -283,3 +284,60 @@ class ConnectionSecurityPostureTests(TestCase):
 
         self.assertEqual(tailnet_policy.state, "good")
         self.assertEqual(tailnet_policy.evidence, "Observed · 1 grant · 1 test")
+
+
+class ArrivalInterfaceTests(TestCase):
+    """The strongest claim on the page must not be the least evidenced one.
+
+    "The address is on the tailnet" reads a field the sender writes. This
+    control says whether the kernel also required the packet to arrive there,
+    so its absence has to read as unknown rather than as either answer.
+    """
+
+    def _reading(self, **overrides):
+        record = {
+            "record": "interface-binding",
+            "interface": "tailscale0",
+            "accept_requires_interface": True,
+            "foreign_interface_dropped": True,
+        }
+        record.update(overrides)
+        ProviderInventory.objects.create(
+            kind="host.firewall",
+            observed_at=timezone.now(),
+            records=[record],
+            reachable=True,
+        )
+
+    def test_a_reading_nothing_took_is_not_a_verdict(self):
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "neutral")
+        self.assertIn("cannot say", control.detail)
+
+    def test_an_unreachable_reading_is_not_a_verdict_either(self):
+        ProviderInventory.objects.create(
+            kind="host.firewall",
+            observed_at=timezone.now(),
+            records=[{"record": "interface-binding"}],
+            reachable=False,
+        )
+        self.assertEqual(observed_firewall_control().state, "neutral")
+
+    def test_the_interface_being_required_is_what_makes_it_good(self):
+        self._reading()
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "good")
+        self.assertIn("tailscale0", control.evidence)
+        self.assertIn("sender's word", control.detail)
+
+    def test_admitting_on_the_address_alone_is_reported_as_such(self):
+        self._reading(accept_requires_interface=False, foreign_interface_dropped=False)
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "bad")
+        self.assertIn("address alone", control.detail)
+
+    def test_accepting_without_dropping_says_what_is_uncounted(self):
+        self._reading(foreign_interface_dropped=False)
+        control = observed_firewall_control()
+        self.assertEqual(control.state, "good")
+        self.assertIn("no rule that drops", control.detail)

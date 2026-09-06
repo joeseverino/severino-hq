@@ -73,6 +73,17 @@ def _unattested_edge() -> SecurityControl:
     )
 
 
+def _unattested_firewall() -> SecurityControl:
+    return SecurityControl(
+        "host-firewall",
+        "Arrival interface",
+        "neutral",
+        "Not observed",
+        "No host firewall reading is available, so HQ cannot say whether the "
+        "packet had to arrive on the tailnet or merely to claim it did.",
+    )
+
+
 def _unattested_tailnet_policy() -> SecurityControl:
     return SecurityControl(
         "tailnet-policy",
@@ -220,6 +231,95 @@ def observed_ingress_control(hostname: str) -> SecurityControl:
 
     return _ingress_control(
         hostname, ProviderInventory.objects.filter(kind="npm.proxy_host").first()
+    )
+
+
+def _host_firewall_control(snapshot) -> SecurityControl:
+    """Whether the firewall required the interface, not just the address.
+
+    The line above this one on the page says the address is on the tailnet, and
+    an address is a field the sender writes. This says whether the kernel also
+    required the packet to arrive on the tailnet interface, which the sender
+    cannot fake from somewhere else.
+    """
+
+    if snapshot is None or not snapshot.reachable:
+        return _unattested_firewall()
+    record = next(
+        (
+            item
+            for item in snapshot.records
+            if isinstance(item, dict) and item.get("record") == "interface-binding"
+        ),
+        None,
+    )
+    if record is None:
+        return _unattested_firewall()
+
+    interface = str(record.get("interface") or "the tailnet interface")
+    accepts = bool(record.get("accept_requires_interface"))
+    drops = bool(record.get("foreign_interface_dropped"))
+    if accepts and drops:
+        return SecurityControl(
+            "host-firewall",
+            "Arrival interface",
+            "good",
+            f"Required on {interface}",
+            "The firewall accepts this port only from packets that arrived on "
+            f"{interface}, and drops a tailnet source that reached the machine "
+            "any other way. The address in the verdict above was not taken on "
+            "the sender's word.",
+        )
+    if accepts:
+        return SecurityControl(
+            "host-firewall",
+            "Arrival interface",
+            "good",
+            f"Required on {interface}",
+            "The firewall accepts this port only from packets that arrived on "
+            f"{interface}. It carries no rule that drops a tailnet source "
+            "arriving elsewhere, so nothing counts what such a packet would do.",
+        )
+    return SecurityControl(
+        "host-firewall",
+        "Arrival interface",
+        "bad",
+        "Address only",
+        "The firewall admits this port on the source address alone, so an "
+        f"address claiming to be on {interface} is admitted without having "
+        "arrived there.",
+    )
+
+
+def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityControl]:
+    """The two cached readings the request panel projects, in one query.
+
+    One query rather than one per kind: the panel's cost is asserted, and it is
+    asserted because the failure it guards against is a page that reads an
+    inventory once per device, per address, per layer or per header.
+    """
+
+    from control_plane.models import ProviderInventory
+
+    snapshots = {
+        row.kind: row
+        for row in ProviderInventory.objects.filter(
+            kind__in=("npm.proxy_host", "host.firewall")
+        )
+    }
+    return (
+        _ingress_control(hostname, snapshots.get("npm.proxy_host")),
+        _host_firewall_control(snapshots.get("host.firewall")),
+    )
+
+
+def observed_firewall_control() -> SecurityControl:
+    """The host firewall reading on its own, for callers that need only it."""
+
+    from control_plane.models import ProviderInventory
+
+    return _host_firewall_control(
+        ProviderInventory.objects.filter(kind="host.firewall").first()
     )
 
 

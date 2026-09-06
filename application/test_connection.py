@@ -32,6 +32,18 @@ A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
 
 
+def a_tailnet_policy(**lock):
+    """A swept policy carrying one tailnet-lock reading."""
+
+    ProviderInventory.objects.update_or_create(
+        kind="tailscale.policy",
+        defaults={
+            "records": [{"lock": lock}],
+            "observed_at": timezone.now(),
+        },
+    )
+
+
 def a_tailnet(*devices):
     ProviderInventory.objects.update_or_create(
         kind="tailscale.device",
@@ -1088,3 +1100,79 @@ class LocalProxyPolicyTests(TestCase):
 
     def test_it_does_not_invent_a_second_hop_for_a_loopback_socket(self):
         self.assertEqual(len(self.policy_layers()), 1)
+
+
+@override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+class TailnetLockTests(TestCase):
+    """The layer under the device layer: signed, or taken on trust.
+
+    Everything above this one believes the coordination server handed out the
+    right public key for this node. Only lock removes that belief, so the tests
+    that matter are the ones where it is absent, off, or unsigned -- a line that
+    can only ever read "signed" is decoration.
+    """
+
+    def setUp(self):
+        self.own_addresses = mock.patch(
+            "application.connection._own_addresses",
+            return_value=frozenset({"100.64.0.9"}),
+        )
+        self.own_addresses.start()
+        self.addCleanup(self.own_addresses.stop)
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+    def layer(self, found):
+        return next(
+            (item for item in found.layers if item.id == "tailnet-lock"), None
+        )
+
+    def test_an_unswept_tailnet_says_nothing_rather_than_off(self):
+        # No reading is not a reading of "off". Rendering one would be HQ
+        # reporting a setting it has never looked at.
+        self.assertIsNone(self.layer(connection(a_request())))
+
+    def test_lock_off_is_shown_and_never_counts_as_proof(self):
+        a_tailnet_policy(enabled=False, trusted_keys=0)
+        found = self.layer(connection(a_request()))
+        self.assertFalse(found.holds)
+        self.assertFalse(found.conclusive)
+        self.assertIn("coordination server's word alone", found.detail)
+
+    def test_an_unsigned_node_fails_the_layer(self):
+        a_tailnet_policy(enabled=True, trusted_keys=2)
+        a_tailnet(
+            a_device(
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                user="someone@example.test",
+                lock_error="No signature chains to a trusted key.",
+            ),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        found = self.layer(connection(a_request()))
+        self.assertFalse(found.holds)
+        self.assertTrue(found.conclusive)
+        self.assertIn("No signature chains", found.detail)
+
+    def test_a_signed_node_under_lock_holds_and_counts_its_signers(self):
+        a_tailnet_policy(enabled=True, trusted_keys=2)
+        found = self.layer(connection(a_request()))
+        self.assertTrue(found.holds)
+        self.assertTrue(found.conclusive)
+        self.assertEqual(found.evidence, "Signed · 2 signing keys")
+
+    def test_one_signing_key_is_not_pluralised(self):
+        a_tailnet_policy(enabled=True, trusted_keys=1)
+        self.assertEqual(
+            self.layer(connection(a_request())).evidence, "Signed · 1 signing key"
+        )
+
+    def test_no_device_means_no_signature_line(self):
+        # The device layer above has already said no node answers here. A line
+        # about that node's signature would be describing nothing.
+        a_tailnet_policy(enabled=True, trusted_keys=2)
+        self.assertIsNone(self.layer(connection(a_request(A_LAN_ADDRESS))))
+
