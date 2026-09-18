@@ -18,10 +18,13 @@ RUN pip install --require-hashes --prefix=/install -r requirements.txt
 FROM python:${PYTHON_VERSION} AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
+# `apt-get upgrade` applies Debian security fixes published after the base
+# image was last rebuilt; the image scan fails on any fixed HIGH/CRITICAL.
 RUN groupadd --system --gid 10001 severino \
     && useradd  --system --uid 10001 --gid severino \
                 --home /app --shell /usr/sbin/nologin severino \
-    && apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
         sqlite3 ca-certificates openssh-client openssl \
         certbot python3-certbot-dns-cloudflare \
     && rm -rf /var/lib/apt/lists/*
