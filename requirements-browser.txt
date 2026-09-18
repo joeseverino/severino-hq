@@ -1,2 +1,2 @@
 # Optional development tooling; deliberately excluded from the host image.
-playwright==1.62.0
+playwright==1.63.0
