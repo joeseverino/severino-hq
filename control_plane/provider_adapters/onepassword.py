@@ -5,10 +5,16 @@ and when does it run out". For every other credential the answer is already
 there; for a certificate it was only ever in HQ, so the two had to be read side
 by side. This writes HQ's answer onto the item, so one look answers it.
 
-It delivers no certificate. The material reaches the machines that serve it over
-the paths that already carry it, and nothing here reads or writes a file, an
-attachment, or a private key. What travels through here is five short strings
-about a certificate, all of which are public the moment it is served.
+It delivers the certificate too. An item carrying the facts beside material a
+person had placed by hand would be the worst of both: the facts refreshed on
+renewal, the files frozen at whatever was last uploaded, and the whole thing
+confident and wrong. So the same reconcile writes both, or the item is not
+maintained at all.
+
+That the controller handles the key here is not a widening. Installing this
+certificate on the machines that serve it is already its job, so it holds the
+key on every pass by definition. What this removes is the hand step, and the
+hand step is the part that rots.
 
 That is what makes the write-capable credential defensible, and the shape of
 this module is the argument: the declaration says *where*, and the code says
@@ -18,7 +24,11 @@ this module is the argument: the declaration says *where*, and the code says
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+import os
+import shutil
+import tempfile
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -51,6 +61,11 @@ PUBLISHED_FIELDS: Mapping[str, str] = MappingProxyType(
 )
 PUBLISHED_LABELS = tuple(PUBLISHED_FIELDS)
 
+# The one published field that is also an identity rather than a description: it
+# names the certificate's content, so it decides whether what is attached is this
+# certificate or an older one.
+FINGERPRINT_LABEL = "Fingerprint (SHA-256)"
+
 # What `op` calls each of those when it reads the item back. The assignment
 # keyword and the stored type are not the same word -- `[text]` is stored as
 # `STRING` -- so a comparison that assumed they were would find every text field
@@ -67,6 +82,19 @@ _STORED_AS: Mapping[str, str] = MappingProxyType({"text": "STRING", "date": "DAT
 # them; a tag is one word, and the useful reading here is a plain claim of
 # ownership rather than a role within it.
 MANAGED_TAG = "hq-managed"
+
+# The two files the item carries, and the only two it will ever be given. Single
+# words on purpose: `op` reads a dot in an attachment label as a section
+# separator, so `fullchain.pem` would be stored as a file named `pem` inside a
+# section named `fullchain`, and the reference an operator or a reader needs
+# would become `op://<vault>/<item>/fullchain/pem` instead of
+# `op://<vault>/<item>/fullchain`.
+ATTACHMENT_LABELS = ("fullchain", "privkey")
+
+# A reader for the certificate and its key, called only when they are actually
+# going to be uploaded. Lazy rather than eager so the ordinary pass -- nothing
+# changed, nothing to write -- never reads a private key off disk at all.
+Material = Callable[[], tuple[bytes, bytes]]
 
 
 def _fingerprint(status: dict[str, Any]) -> str:
@@ -130,8 +158,8 @@ def _token(runtime: ProviderRuntime, connection_ref: str) -> str:
 
 def _current(
     runtime: ProviderRuntime, publication: dict[str, Any], token: str
-) -> tuple[dict[str, tuple[str, str]], tuple[str, ...]]:
-    """What the item already says, and every tag it already carries.
+) -> tuple[dict[str, tuple[str, str]], tuple[str, ...], frozenset[str]]:
+    """What the item already says, every tag it carries, and which files it holds.
 
     Read before writing so an unchanged certificate costs no write at all. Every
     other field on the item is read past and left alone -- the item exists for
@@ -147,6 +175,10 @@ def _current(
     ``op item edit --tags`` replaces the list instead of adding to it, so writing
     only this adapter's tag would silently drop every tag a person had put on the
     item.
+
+    Files come back as names only, never content. Whether the material is current
+    is answered by the fingerprint this adapter already publishes, so there is
+    never a reason to download a private key to find out.
     """
 
     raw = runtime.run(
@@ -177,14 +209,22 @@ def _current(
         for field in document.get("fields") or ()
         if str(field.get("label", "")) in PUBLISHED_FIELDS
     }
-    tags = tuple(
-        str(tag) for tag in document.get("tags") or () if str(tag).strip()
+    tags = tuple(str(tag) for tag in document.get("tags") or () if str(tag).strip())
+    # A label without a dot is stored as the file's own name and no section, so
+    # this is what an `op://<vault>/<item>/<label>` reference resolves against.
+    files = frozenset(
+        str(entry.get("name", ""))
+        for entry in document.get("files") or ()
+        if str(entry.get("name", ""))
     )
-    return fields, tags
+    return fields, tags, files
 
 
 def publish(
-    runtime: ProviderRuntime, publication: dict[str, Any], desired: dict[str, str]
+    runtime: ProviderRuntime,
+    publication: dict[str, Any],
+    desired: dict[str, str],
+    material: Material | None = None,
 ) -> dict[str, Any]:
     """Write HQ's facts onto one item, and only if they have changed.
 
@@ -200,13 +240,23 @@ def publish(
     is safe to hand to this path: the worst a wrong declaration can do is write
     five true facts onto the wrong item.
 
-    Three things it does not do, each deliberate:
+    The certificate itself is written too, as the two attachments named in
+    ``ATTACHMENT_LABELS``. Facts without material would be the worse of the two
+    halves: on renewal the expiry and fingerprint here would move while the files
+    stayed at whatever was last put there by hand, and the item would state a
+    date above material that contradicts it. Either this owns the whole item or
+    it should not own part of one.
 
-    * No attachments, read or written. The certificate and its key travel to the
-      machines that serve them over the paths that already carry them; this is
-      metadata, and a file here would make it a second copy of a secret.
-    * No deletes. Not a field, not the item. It writes the labels above and
-      leaves every other field, and the item itself, exactly as it found them.
+    Whether the material is current is answered by the fingerprint, which is the
+    certificate's own content identity and is already being published. So the
+    key is never read back out of 1Password to compare, and on the ordinary pass
+    it is not read off disk either -- ``material`` is called only once something
+    has actually changed.
+
+    Two things it does not do, each deliberate:
+
+    * No deletes. Not a field, not the item, not a file. It writes the labels
+      above and leaves every other field, and the item itself, as it found them.
     * No note. The note is where a person writes things, and an automated writer
       that owns it will eventually overwrite something that was not its to
       touch.
@@ -223,49 +273,77 @@ def publish(
     """
 
     token = _token(runtime, publication["connection_ref"])
-    current, tags = _current(runtime, publication, token)
+    current, tags, files = _current(runtime, publication, token)
     changed = sorted(
         label
         for label, kind in PUBLISHED_FIELDS.items()
         if current.get(label) != (_STORED_AS[kind], desired[label])
     )
     tagged = MANAGED_TAG in tags
-    if not changed and tagged:
+    # The published fingerprint is the leaf's content identity. If the item
+    # already carries this one and both files are there, what is attached is this
+    # certificate, and uploading it again would write the same bytes.
+    fingerprint_moved = FINGERPRINT_LABEL in changed
+    missing = [label for label in ATTACHMENT_LABELS if label not in files]
+    send_material = material is not None and (fingerprint_moved or missing)
+
+    if not changed and tagged and not send_material:
         return {
             "target": publication["name"],
             "written": False,
             "fields": [],
             "tagged": True,
+            "material": "current",
         }
-    runtime.run(
-        [
-            "op",
-            "item",
-            "edit",
-            publication["item"],
-            "--vault",
-            publication["vault"],
-            # The union, never just this adapter's tag: `--tags` sets the whole
-            # list, so writing less than this drops whatever the owner added.
-            "--tags",
-            ",".join(sorted({*tags, MANAGED_TAG})),
-            # Assignments only, one per label this adapter owns, each carrying
-            # the type it is stored as. `op` treats an assignment as an upsert of
-            # that one field, so nothing else on the item is named and nothing
-            # can be removed by what is left out.
-            *(
-                f"{label}[{PUBLISHED_FIELDS[label]}]={desired[label]}"
-                for label in changed
-            ),
-        ],
-        env={"OP_SERVICE_ACCOUNT_TOKEN": token},
-        step=f"1Password write for {publication['name']}",
-    )
+
+    assignments = [
+        # Assignments only, one per label this adapter owns, each carrying the
+        # type it is stored as. `op` treats an assignment as an upsert of that
+        # one field, so nothing else on the item is named and nothing can be
+        # removed by what is left out.
+        f"{label}[{PUBLISHED_FIELDS[label]}]={desired[label]}"
+        for label in changed
+    ]
+    staged = tempfile.mkdtemp(prefix="hq-tls-") if send_material else None
+    try:
+        if staged is not None and material is not None:
+            os.chmod(staged, 0o700)
+            for label, content in zip(ATTACHMENT_LABELS, material(), strict=True):
+                path = Path(staged) / label
+                # Opened rather than written, so the mode is set by the syscall
+                # that creates the file instead of a moment afterwards.
+                descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(content)
+                assignments.append(f"{label}[file]={path}")
+        runtime.run(
+            [
+                "op",
+                "item",
+                "edit",
+                publication["item"],
+                "--vault",
+                publication["vault"],
+                # The union, never just this adapter's tag: `--tags` sets the
+                # whole list, so writing less than this drops whatever the owner
+                # added.
+                "--tags",
+                ",".join(sorted({*tags, MANAGED_TAG})),
+                *assignments,
+            ],
+            env={"OP_SERVICE_ACCOUNT_TOKEN": token},
+            step=f"1Password write for {publication['name']}",
+        )
+    finally:
+        if staged is not None:
+            shutil.rmtree(staged, ignore_errors=True)
     return {
         "target": publication["name"],
         "written": True,
         "fields": changed,
         "tagged": True,
+        # A word, never the labels or anything shaped like a path to a key.
+        "material": "written" if send_material else "current",
     }
 
 

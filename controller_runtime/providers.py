@@ -1110,6 +1110,32 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
+def _lineage_material(spec: dict[str, Any]) -> Callable[[], tuple[bytes, bytes]]:
+    """Read this certificate's own material, when and only when it is wanted.
+
+    Returned rather than read, so the ordinary pass -- everything already where
+    it should be -- never opens a private key at all. The publisher calls it only
+    once it has established that what is filed is a different certificate.
+
+    The lineage on disk is the same one the deploy path installs from, so what is
+    filed is what is served rather than a second rendering of it.
+    """
+
+    def read() -> tuple[bytes, bytes]:
+        lineage = (
+            Path(_required("HQ", "ACME_DIR"))
+            / "config"
+            / "live"
+            / spec["certificate_name"]
+        )
+        return (
+            lineage.joinpath("fullchain.pem").read_bytes(),
+            lineage.joinpath("privkey.pem").read_bytes(),
+        )
+
+    return read
+
+
 def _publish_tls_facts(
     spec: dict[str, Any], result: ProviderResult, *, apply: bool
 ) -> ProviderResult:
@@ -1149,7 +1175,11 @@ def _publish_tls_facts(
             )
             continue
         try:
-            published.append(onepassword.publish(_RUNTIME, publication, desired))
+            published.append(
+                onepassword.publish(
+                    _RUNTIME, publication, desired, _lineage_material(spec)
+                )
+            )
         except (ProviderError, OSError, ValueError) as exc:
             # The message, not the exception type: `ProviderError` is written to
             # carry no credential material, and an item name is HQ's own.
