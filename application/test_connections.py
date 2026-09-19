@@ -151,7 +151,15 @@ class DerivationTests(TestCase):
 
         self.assertEqual(
             named
-            - {"adguard", "npm", "cloudflare_dns", "portainer", "ssh", "tailscale"},
+            - {
+                "adguard",
+                "npm",
+                "cloudflare_dns",
+                "onepassword",
+                "portainer",
+                "ssh",
+                "tailscale",
+            },
             set(),
         )
 

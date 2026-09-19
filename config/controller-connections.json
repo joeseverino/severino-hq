@@ -77,6 +77,20 @@
         "optional": true
       }
     },
+    "service_account": {
+      "API_TOKEN": {
+        "source": "field",
+        "id": "credential"
+      },
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      }
+    },
     "ssh_transport": {
       "CONNECTION_REF": {
         "source": "connection_ref"

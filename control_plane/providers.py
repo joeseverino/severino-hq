@@ -126,6 +126,22 @@ TLSConsumer = Annotated[
 ]
 
 
+class OnePasswordPublication(ProviderModel):
+    """Where one certificate's facts get written, and nothing about what.
+
+    The item and the vault are the whole of it. Which facts are published is
+    decided by the adapter that publishes them and cannot be stated here: a
+    declaration that could name a field could name a field worth stealing, and
+    this is the one target reached with a credential that can write.
+    """
+
+    kind: Literal["onepassword"]
+    name: str = Field(min_length=1, max_length=160)
+    connection_ref: str = Field(min_length=1, max_length=160)
+    vault: str = Field(min_length=1, max_length=160)
+    item: str = Field(min_length=1, max_length=160)
+
+
 class TLSDeliveryTargetSpec(ProviderModel):
     """One place a certificate can be installed, and how it arrives there.
 
@@ -135,11 +151,17 @@ class TLSDeliveryTargetSpec(ProviderModel):
     once here instead of on each certificate that installs there.
 
     Flat rather than a union per kind, because the form an operator fills is
-    generated from this model's fields: a union has none, and the three shapes
-    differ by one field each.
+    generated from this model's fields: a union has none, and the four shapes
+    differ by one or two fields each.
+
+    One kind receives no certificate at all. A password manager is where an
+    operator already looks up what a credential is and when it runs out, and a
+    certificate is both of those -- so it is a place a certificate can be
+    *recorded*, reached the same way, declared the same way, and listed in the
+    same menu. It carries no material; see ``OnePasswordPublication``.
     """
 
-    kind: Literal["npm", "caddy", "cpanel"] = Field(
+    kind: Literal["npm", "caddy", "cpanel", "onepassword"] = Field(
         title="What it runs",
         description="Decides how the certificate is delivered and verified.",
     )
@@ -201,6 +223,21 @@ class TLSDeliveryTargetSpec(ProviderModel):
             "certificate covers."
         ),
     )
+    vault: str = Field(
+        default="",
+        max_length=160,
+        title="Vault",
+        description="1Password only. Which vault holds the item below.",
+    )
+    item: str = Field(
+        default="",
+        max_length=160,
+        title="Item to write on",
+        description=(
+            "1Password only. The item HQ records the certificate's facts on. It "
+            "has to exist already; HQ writes fields on it and creates nothing."
+        ),
+    )
 
     @model_validator(mode="after")
     def kind_decides_which_settings_apply(self):
@@ -210,6 +247,8 @@ class TLSDeliveryTargetSpec(ProviderModel):
             ("certificate_directory", "caddy"),
             ("discover_covered_hosts", "npm"),
             ("install_domains", "cpanel"),
+            ("vault", "onepassword"),
+            ("item", "onepassword"),
         ):
             if getattr(self, field_name) and self.kind != kind:
                 raise ValueError(
@@ -218,6 +257,18 @@ class TLSDeliveryTargetSpec(ProviderModel):
                 )
         if self.kind == "caddy" and not self.certificate_directory:
             raise ValueError("A Caddy target needs the directory to write to.")
+        if self.kind == "onepassword" and not (self.vault and self.item):
+            raise ValueError(
+                "A 1Password target needs the vault and the item to write on."
+            )
+        # Nothing is served here, so there is nothing to connect to and check.
+        # Refused rather than ignored, for the same reason as the rest: a name
+        # typed here would read as verified and never be probed.
+        if self.kind == "onepassword" and self.verify_domains:
+            raise ValueError(
+                "A 1Password target serves nothing, so there is no name to "
+                "check it at."
+            )
         return self
 
 
@@ -292,6 +343,12 @@ class ResolvedTLSCertificateSpec(ProviderModel):
     certificate_name: str = Field(min_length=1, max_length=160)
     domains: list[str] = Field(min_length=1)
     consumers: list[TLSConsumer] = Field(min_length=1)
+    # Separate from the consumers, because a consumer is something that serves
+    # the certificate and is checked by being connected to. These are places the
+    # certificate is written *about*. Folded into the same list they would be
+    # probed for a TLS handshake against a password manager, and a target that
+    # cannot answer one would read as a target that failed to.
+    publish_to: list[OnePasswordPublication] = Field(default_factory=list)
     renewal_window_days: int = Field(default=30, ge=1, le=60)
 
     @field_validator("domains")
@@ -1432,22 +1489,61 @@ def _consumer_at(
     return consumer
 
 
+def _publication_at(
+    target: dict[str, Any], *, certificate_name: str
+) -> dict[str, Any]:
+    """Where one certificate's facts are written at one 1Password target.
+
+    The vault and the item are the target's, and that is deliberately all of it.
+    Nothing here describes the content: which facts get published is the
+    adapter's fixed decision, so there is no field on this shape for a
+    declaration to fill in and nothing for one to redirect.
+    """
+
+    return {
+        "kind": "onepassword",
+        "name": f"{certificate_name}-onepassword",
+        "connection_ref": target["connection_ref"],
+        "vault": target["vault"],
+        "item": target["item"],
+    }
+
+
 def _resolve_tls(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
     domains = list(authored["domains"])
+    targets = [
+        _delivery_target(connection_ref, context)
+        for connection_ref in authored["install_on"]
+    ]
+    consumers = [target for target in targets if target["kind"] != "onepassword"]
+    if not consumers:
+        # Said here rather than left to the resolved model, which would report
+        # an empty list and not why it is empty. Recording a certificate is not
+        # installing one, so a certificate whose only target records it has
+        # nowhere to go -- and nothing HQ could observe to confirm it arrived.
+        raise ValueError(
+            f"{authored['certificate_name']} is only recorded, never installed. "
+            "Give it somewhere that serves it as well."
+        )
     return {
         "certificate_name": authored["certificate_name"],
         "domains": domains,
         "consumers": [
             _consumer_at(
-                _delivery_target(connection_ref, context),
+                target,
                 certificate_key=context.resource_key,
                 certificate_name=authored["certificate_name"],
                 domains=domains,
                 names_at=context.names_at,
             )
-            for connection_ref in authored["install_on"]
+            for target in consumers
+        ],
+        "publish_to": [
+            _publication_at(target, certificate_name=authored["certificate_name"])
+            for target in targets
+            if target["kind"] == "onepassword"
         ],
         "renewal_window_days": authored["renewal_window_days"],
     }
@@ -1463,6 +1559,15 @@ def _resolve_uploaded(
             raise ValueError(
                 "A certificate HQ did not issue cannot be installed on shared "
                 "hosting: cPanel will not accept one signed by a private CA."
+            )
+        if target["kind"] == "onepassword":
+            # Publishing reads the facts a reconcile observed -- issuer, expiry,
+            # the fingerprint that was verified at each consumer. An uploaded
+            # certificate is not reconciled that way, so there would be nothing
+            # to publish but the declaration, which HQ already holds.
+            raise ValueError(
+                "A certificate HQ did not issue has no observed facts to "
+                "record, so it cannot be published to a password manager."
             )
         consumer = _consumer_at(
             target,
@@ -1944,6 +2049,14 @@ def _delivery_target_readout(
             "Yes" if spec.get("discover_covered_hosts") else "No",
         ),
         "cpanel": ("Installs", ", ".join(spec.get("install_domains", ()))),
+        "onepassword": (
+            "Records it on",
+            " in ".join(
+                part
+                for part in (spec.get("item", ""), spec.get("vault", ""))
+                if part
+            ),
+        ),
     }.get(str(spec.get("kind", "")))
     # Named first because the list beside this shows only the first row, and
     # the name a certificate goes by at the target is the thing an operator
@@ -2338,7 +2451,16 @@ _PROVIDERS = (
         # echo it back asks for the one answer this provider is unable to give.
         # Declared, so the gap is a known one rather than seven records
         # reporting an unconfirmed assertion nothing could ever confirm.
-        unobservable_fields=("serves_ports",),
+        #
+        # ``hidden`` is here for a different reason and the same outcome. It is
+        # not a fact about the container at all: it decides whether HQ folds the
+        # row away on the machine's page, which is HQ's own bookkeeping in the
+        # same sense as a device's ``connection_ref``. Portainer has never been
+        # told it and Docker has nowhere to keep it, so the sweep cannot report
+        # it and no reconcile could make it agree. Left undeclared, the two
+        # containers that set it asserted a control nothing had checked -- which
+        # is true, permanently, and not a gap anybody can close.
+        unobservable_fields=("serves_ports", "hidden"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
@@ -2538,7 +2660,7 @@ _PROVIDERS = (
             ),
         },
         label="Certificate target",
-        connection_providers=("npm", "ssh"),
+        connection_providers=("npm", "ssh", "onepassword"),
         # Nothing to reconcile: this states how a target takes a certificate,
         # and the certificates that install there are what act on it.
         declaration_only=True,
@@ -2688,6 +2810,11 @@ CONNECTION_CREDENTIALS: Mapping[str, str] = MappingProxyType(
     {
         "cloudflare_api": "scoped",
         "cloudflare_dns": "scoped",
+        # A service account token is issued per vault and per permission, so the
+        # one HQ carries can be write access to a single item's vault and
+        # nothing else. That is the property the publishing adapter is built to
+        # deserve rather than to rely on.
+        "onepassword": "scoped",
         "tailscale": "scoped",
         "adguard": "coarse",
         "npm": "coarse",

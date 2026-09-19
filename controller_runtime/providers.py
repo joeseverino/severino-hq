@@ -41,7 +41,7 @@ from control_plane.provider_adapters.contracts import (
     ProviderResult,
     compile_controller_adapters,
 )
-from control_plane.provider_adapters import npm
+from control_plane.provider_adapters import npm, onepassword
 
 
 logger = logging.getLogger("severino.controller")
@@ -505,7 +505,11 @@ def controller_config_dir() -> Path:
 
 
 def _run(
-    command: list[str], *, input_bytes: bytes | None = None, step: str = "command"
+    command: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    step: str = "command",
+    env: dict[str, str] | None = None,
 ) -> bytes:
     """Run a subprocess, saying which step failed rather than which module ran it.
 
@@ -518,6 +522,13 @@ def _run(
     The subprocess's own output is logged, never returned: it carries paths and
     remote messages that belong in an operator's log rather than in a provider
     result that reaches an API client.
+
+    ``env`` is added to this process's environment for the one call, for a tool
+    that takes its credential that way. It is not an argument, because an
+    argument list is readable by anything else on the machine, and its values are
+    struck out of the stderr logged below -- a tool that echoed back what it was
+    given would otherwise put the credential in the journal, and this function is
+    the only place that knows the value to look for.
     """
 
     try:
@@ -527,10 +538,15 @@ def _run(
             capture_output=True,
             check=False,
             timeout=180,
+            env={**os.environ, **env} if env else None,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
+        stderr = result.stderr.decode("utf-8", "replace")
+        for value in (env or {}).values():
+            if value:
+                stderr = stderr.replace(value, "[redacted]")
         # The step goes in the message, not only in `extra`. The controller logs
         # through a plain formatter that prints the message and drops the rest,
         # so for weeks the journal said "controller step failed" thirty times an
@@ -545,7 +561,7 @@ def _run(
                 "event": "controller.step.failed",
                 "step": step,
                 "exit_code": result.returncode,
-                "stderr": result.stderr.decode("utf-8", "replace")[:2000],
+                "stderr": stderr[:2000],
             },
         )
         raise ProviderError(f"{step} failed.")
@@ -1094,13 +1110,103 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     )
 
 
+def _lineage_material(spec: dict[str, Any]) -> Callable[[], tuple[bytes, bytes]]:
+    """Read this certificate's own material, when and only when it is wanted.
+
+    Returned rather than read, so the ordinary pass -- everything already where
+    it should be -- never opens a private key at all. The publisher calls it only
+    once it has established that what is filed is a different certificate.
+
+    The lineage on disk is the same one the deploy path installs from, so what is
+    filed is what is served rather than a second rendering of it.
+    """
+
+    def read() -> tuple[bytes, bytes]:
+        lineage = (
+            Path(_required("HQ", "ACME_DIR"))
+            / "config"
+            / "live"
+            / spec["certificate_name"]
+        )
+        return (
+            lineage.joinpath("fullchain.pem").read_bytes(),
+            lineage.joinpath("privkey.pem").read_bytes(),
+        )
+
+    return read
+
+
+def _publish_tls_facts(
+    spec: dict[str, Any], result: ProviderResult, *, apply: bool
+) -> ProviderResult:
+    """Record what was just observed wherever the certificate says to record it.
+
+    Runs after the certificate's own work and can only add to its report. A
+    failure here is reported and then let go: publishing facts is a convenience
+    for whoever opens the item next, and the certificate being installed and
+    serving is the job. Raising would turn a password manager being unreachable
+    into a certificate that failed to reconcile, and then into an automatic
+    retry of a deployment that had nothing wrong with it.
+
+    No condition is raised either, for the same reason: a `Degraded` on the
+    certificate says the certificate is degraded, and this says a note about it
+    was not filed. It goes in the status and in the message, where an operator
+    reading the operation sees it.
+
+    Nothing is written on a dry run. Being asked what a reconcile *would* do is
+    not permission to change something outside HQ.
+    """
+
+    publications = spec.get("publish_to") or ()
+    if not apply or not publications:
+        return result
+    desired = onepassword.facts(spec, result.status)
+    published: list[dict[str, Any]] = []
+    for publication in publications:
+        if not desired:
+            published.append(
+                {
+                    "target": publication["name"],
+                    "written": False,
+                    "detail": (
+                        "HQ has no single fingerprint for this certificate yet."
+                    ),
+                }
+            )
+            continue
+        try:
+            published.append(
+                onepassword.publish(
+                    _RUNTIME, publication, desired, _lineage_material(spec)
+                )
+            )
+        except (ProviderError, OSError, ValueError) as exc:
+            # The message, not the exception type: `ProviderError` is written to
+            # carry no credential material, and an item name is HQ's own.
+            published.append(
+                {"target": publication["name"], "written": False, "detail": str(exc)}
+            )
+    unfiled = [item["target"] for item in published if not item["written"]]
+    return ProviderResult(
+        changed=result.changed,
+        status={**result.status, "published_facts": published},
+        conditions=result.conditions,
+        message=(
+            f"{result.message} Facts were not recorded on: {', '.join(unfiled)}."
+            if unfiled
+            else result.message
+        ),
+    )
+
+
 def _tls_reconcile(
     spec: dict[str, Any],
     *,
     apply: bool,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    return apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
+    result = apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
+    return _publish_tls_facts(spec, result, apply=apply)
 
 
 def _tls_renew(
@@ -1110,7 +1216,9 @@ def _tls_renew(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     if apply:
-        return renew_tls(spec)
+        # A renewal is the moment the facts actually change -- a new expiry and a
+        # new fingerprint -- so it is the one an item most needs to hear about.
+        return _publish_tls_facts(spec, renew_tls(spec), apply=True)
     return ProviderResult(
         changed=True,
         status={},
@@ -3254,6 +3362,15 @@ class _ProviderRuntime:
     ) -> bytes:
         return _ssh(connection_ref, operation, payload)
 
+    def run(
+        self,
+        command: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        step: str = "command",
+    ) -> bytes:
+        return _run(command, step=step, env=env)
+
 
 _RUNTIME = _ProviderRuntime()
 _ADAPTER_REGISTRY = compile_controller_adapters(CONTROLLER_PROVIDER_ADAPTERS, _RUNTIME)
@@ -4057,6 +4174,10 @@ def _probe_tailscale(connection_ref: str) -> dict[str, Any]:
     return {"detail": "OAuth credential accepted.", "reaches": []}
 
 
+def _probe_onepassword(connection_ref: str) -> dict[str, Any]:
+    return onepassword.probe(_RUNTIME, connection_ref)
+
+
 def _probe_ssh(connection_ref: str) -> dict[str, Any]:
     _ssh(connection_ref, "preflight")
     transport = _transport(connection_ref)
@@ -4069,6 +4190,7 @@ def _probe_ssh(connection_ref: str) -> dict[str, Any]:
 _CONNECTION_PROBES = {
     "cloudflare_dns": _probe_cloudflare_dns,
     "cloudflare_api": _probe_cloudflare_api,
+    "onepassword": _probe_onepassword,
     "portainer": _probe_portainer,
     "tailscale": _probe_tailscale,
     **_ADAPTER_REGISTRY.connection_probes,

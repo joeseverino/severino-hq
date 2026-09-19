@@ -760,20 +760,31 @@ class UnobservableFieldTests(TestCase):
 
         Asked behaviourally instead: set the field, sweep the record it was
         built from, and nothing should be left unconfirmed.
+
+        Booleans are covered as well as strings, and that omission is why this
+        guard was green while a container's ``hidden`` raised a finding on every
+        record that set it. A flag is exactly the kind of field HQ keeps for
+        itself -- fold this row away, keep this device on the tailnet -- so
+        skipping the type was skipping the likeliest case.
         """
 
         from .topology import _unconfirmed
 
+        # What to set the field to, per type, so that it asserts something. A
+        # `False` would assert nothing and be excluded from the comparison, and
+        # the guard would pass by not having tried.
+        assertions = {str: "held-by-hq", bool: True}
         for kind, provider in _adoptable():
             declared = set(provider.unobservable_fields or ())
             absent = set(provider.spec_type.model_fields) - set(provider.sample_record)
             for field in sorted(absent - declared):
                 # Typed from the model, not the built spec: `from_record`
                 # never emits these, so the result has no type to read.
-                if provider.spec_type.model_fields[field].annotation is not str:
+                annotation = provider.spec_type.model_fields[field].annotation
+                if annotation not in assertions:
                     continue
                 spec = provider.from_record(provider.sample_record)
-                spec[field] = "held-by-hq"
+                spec[field] = assertions[annotation]
                 with self.subTest(kind=kind, field=field):
                     resource = ManagedResource.objects.create(
                         key=f"unconfirmed-{kind.replace('.', '-')}-{field}",

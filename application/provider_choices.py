@@ -123,7 +123,11 @@ def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     """Which credential reaches the target, and which certificate names it."""
 
     return {
-        "connection_ref": _connection_choices("npm") + _connection_choices("ssh"),
+        "connection_ref": (
+            _connection_choices("npm")
+            + _connection_choices("ssh")
+            + _connection_choices("onepassword")
+        ),
         "certificate_resource": (
             ("", "Nothing yet"),
             *sorted(
@@ -145,7 +149,10 @@ def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[
     it would put an answer in the menu that fails only after being chosen.
     """
 
-    return {"install_on": tuple(_install_targets(exclude={"cpanel"}))}
+    # 1Password is out for a second reason. Publishing records what a reconcile
+    # observed about a certificate HQ issued; an uploaded one is not observed
+    # that way, so resolution refuses it and the menu must not offer it.
+    return {"install_on": tuple(_install_targets(exclude={"cpanel", "onepassword"}))}
 
 
 def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import datetime
 import json
 import os
+import re
+import stat
+import tempfile
 from pathlib import Path
 from unittest import TestCase, mock
 
-from control_plane.provider_adapters import caddy
+from control_plane.provider_adapters import caddy, onepassword
 
 from . import providers, worker
 
@@ -3164,3 +3168,775 @@ class CollectorFailureIsReportedTests(TestCase):
             "reads as having no policy at all",
         )
         self.assertIn("policy_file", entry["error"])
+
+
+A_RECORDED_CERTIFICATE = {
+    "certificate_name": "an-example-certificate",
+    "domains": ["shop.example.test", "*.shop.example.test"],
+    "renewal_window_days": 30,
+    "consumers": [
+        {
+            "kind": "npm",
+            "name": "an-example-certificate-npm",
+            "connection_ref": "a-proxy",
+            "verify_domains": ["shop.example.test"],
+        }
+    ],
+    "publish_to": [
+        {
+            "kind": "onepassword",
+            "name": "an-example-certificate-onepassword",
+            "connection_ref": "a-password-manager",
+            "vault": "An Example Vault",
+            "item": "An Example Certificate Item",
+        }
+    ],
+}
+
+AN_OBSERVATION = {
+    "issuer": "An Example Authority",
+    "not_after": "2027-01-14T09:30:00+00:00",
+    "expected_fingerprint_sha256": "aa:bb:cc",
+    "consumers": [
+        {
+            "consumer": "an-example-certificate-npm",
+            "domain": "shop.example.test",
+            "fingerprint_sha256": "aa:bb:cc",
+        }
+    ],
+}
+
+A_SERVICE_ACCOUNT_TOKEN = "ops_an-example-service-account-token"
+
+A_PASSWORD_MANAGER_CONNECTION = {
+    "A_PASSWORD_MANAGER_CONNECTION_REF": "a-password-manager",
+    "A_PASSWORD_MANAGER_PROVIDER": "onepassword",
+    "A_PASSWORD_MANAGER_API_TOKEN": A_SERVICE_ACCOUNT_TOKEN,
+}
+
+
+AN_OWNERS_OWN_TAG = "an-operators-own-tag"
+
+# The two files the item carries, named as the adapter names them.
+ATTACHMENT_LABELS = onepassword.ATTACHMENT_LABELS
+
+# Stand-ins for the certificate and its key. Not real material, and not shaped
+# like any: what the tests assert is where these bytes travel and what is left
+# behind, never that they parse.
+A_CHAIN = b"-----BEGIN CERTIFICATE-----\nan example chain\n-----END CERTIFICATE-----\n"
+A_PRIVATE_KEY = (
+    b"-----BEGIN PRIVATE KEY-----\nan example key\n-----END PRIVATE KEY-----\n"
+)
+
+
+def _an_item(fields=None, tags=(AN_OWNERS_OWN_TAG,), files=ATTACHMENT_LABELS) -> bytes:
+    """One item as `op` prints it, with whatever fields and tags are asked for.
+
+    A field is given as its value, stored as the type this adapter publishes it
+    as, or as an explicit ``(type, value)`` pair for the case that matters most:
+    an item written before the expiry was typed, whose value reads identically
+    and is not a date.
+
+    A date given as ``2026-10-23`` comes back the way `op` prints one: the epoch
+    seconds of midnight on that day.
+    """
+
+    stored = []
+    for label, value in (fields or {}).items():
+        if isinstance(value, tuple):
+            field_type, value = value
+        else:
+            field_type = onepassword._STORED_AS[onepassword.PUBLISHED_FIELDS[label]]
+            if field_type == "DATE":
+                midnight = datetime.datetime.combine(
+                    datetime.date.fromisoformat(value), datetime.time()
+                )
+                value = str(int(midnight.timestamp()))
+        stored.append({"id": label, "type": field_type, "label": label, "value": value})
+    return json.dumps(
+        {
+            "id": "an-example-item-id",
+            "title": "An Example Certificate Item",
+            "tags": list(tags),
+            "fields": [
+                {
+                    "id": "notesPlain",
+                    "label": "notesPlain",
+                    "type": "STRING",
+                    "value": "an operator's own note",
+                },
+                *stored,
+            ],
+            # A label without a dot is stored as the file's own name, which is
+            # what an `op://<vault>/<item>/<label>` reference resolves against.
+            "files": [{"id": f"{label}-id", "name": label} for label in files],
+        }
+    ).encode()
+
+
+class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
+    """What a certificate publishes is fixed here; only its address is declared.
+
+    This is the whole reason the path is safe to give a credential that can
+    write. A delivery target is operator input held in HQ's database, so if it
+    could name a field, a label or a value, an edited declaration would decide
+    what a write-capable token wrote -- and "publish the facts about a
+    certificate" would quietly become "write whatever this row says".
+    """
+
+    def _publish(
+        self,
+        current,
+        *,
+        spec=None,
+        status=None,
+        tags=(AN_OWNERS_OWN_TAG,),
+        files=ATTACHMENT_LABELS,
+        lineage=True,
+    ):
+        """Publish once against an item already holding `current` and `tags`.
+
+        Returns the argument lists `op` was invoked with, which is where the
+        claim actually lands: the fields written are the assignments in argv.
+
+        A lineage is laid down on disk unless asked not to, because the material
+        the publisher uploads is read from the same place the deploy path
+        installs from. The paths it stages are captured as they are given to
+        `op`, so a test can assert both that they existed then and that nothing
+        was left behind afterwards.
+        """
+
+        calls = []
+        staged = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            calls.append(command)
+            # Recorded as `op` sees them: the file has to exist at this moment,
+            # and its mode is only meaningful while it does.
+            for argument in command:
+                if "[file]=" not in argument:
+                    continue
+                label, path = argument.split("[file]=", 1)
+                staged.append(
+                    {
+                        "label": label,
+                        "path": Path(path),
+                        "content": Path(path).read_bytes(),
+                        "mode": stat.S_IMODE(Path(path).stat().st_mode),
+                        "directory_mode": stat.S_IMODE(
+                            Path(path).parent.stat().st_mode
+                        ),
+                    }
+                )
+            return _an_item(current, tags, files) if command[2] == "get" else b""
+
+        environment = dict(A_PASSWORD_MANAGER_CONNECTION)
+        if lineage:
+            acme = Path(self.enterContext(tempfile.TemporaryDirectory()))
+            live = acme / "config" / "live" / A_RECORDED_CERTIFICATE["certificate_name"]
+            live.mkdir(parents=True)
+            live.joinpath("fullchain.pem").write_bytes(A_CHAIN)
+            live.joinpath("privkey.pem").write_bytes(A_PRIVATE_KEY)
+            environment["HQ_ACME_DIR"] = str(acme)
+        self.staged = staged
+
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.dict("os.environ", environment, clear=True),
+        ):
+            result = providers._publish_tls_facts(
+                spec or A_RECORDED_CERTIFICATE,
+                providers.ProviderResult(
+                    changed=False,
+                    status=dict(status or AN_OBSERVATION),
+                    conditions=[
+                        providers._condition("Ready", True, "Verified", "Current.")
+                    ],
+                    message="TLS consumers observed.",
+                ),
+                apply=True,
+            )
+        return calls, result
+
+    _ASSIGNMENT = re.compile(
+        r"^(?P<label>[^\[]+)\[(?P<type>\w+)\]=(?P<value>.*)$", re.S
+    )
+
+    def _assignments(self, calls):
+        """Every `Label[type]=value` argument `op item edit` was given."""
+
+        return [
+            match
+            for command in calls
+            if command[2] == "edit"
+            for argument in command
+            if (match := self._ASSIGNMENT.match(argument))
+        ]
+
+    def _written(self, calls):
+        """The fields written, which is not every assignment in argv.
+
+        An attachment is an assignment too (`label[file]=path`), so counting
+        those as fields would have this claim drift the moment the adapter
+        started carrying the certificate as well as its description.
+        """
+
+        return {
+            m["label"]: m["value"]
+            for m in self._assignments(calls)
+            if m["type"] != "file"
+        }
+
+    def _types(self, calls):
+        return {
+            m["label"]: m["type"]
+            for m in self._assignments(calls)
+            if m["type"] != "file"
+        }
+
+    def _tags(self, calls):
+        edit = next(command for command in calls if command[2] == "edit")
+        return sorted(edit[edit.index("--tags") + 1].split(","))
+
+    def test_the_fields_written_are_the_ones_this_adapter_names(self):
+        written = self._written(self._publish({})[0])
+
+        self.assertEqual(
+            sorted(written),
+            sorted(onepassword.PUBLISHED_LABELS),
+        )
+        self.assertEqual(written["Issued by"], "An Example Authority")
+        self.assertEqual(written["Expires"], "2027-01-14")
+        self.assertEqual(written["Fingerprint (SHA-256)"], "aa:bb:cc")
+        self.assertEqual(written["Installed on"], "an-example-certificate-npm")
+        self.assertEqual(written["Covers"], "shop.example.test, *.shop.example.test")
+
+    def test_a_declaration_carrying_extra_keys_writes_no_extra_field(self):
+        """Refused at the boundary, and ignored here as well.
+
+        The resolved shape forbids an unknown key, so this cannot arrive through
+        HQ. It is asserted at the adapter too, because the guarantee that makes
+        the credential safe should not rest on one validator being in the path.
+        """
+
+        spec = {
+            **A_RECORDED_CERTIFICATE,
+            "publish_to": [
+                {
+                    **A_RECORDED_CERTIFICATE["publish_to"][0],
+                    "fields": {"Recovery Phrase": "take this too"},
+                    "note": "and overwrite this",
+                }
+            ],
+        }
+
+        written = self._written(self._publish({}, spec=spec)[0])
+
+        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_LABELS))
+        self.assertNotIn("Recovery Phrase", written)
+
+    def test_nothing_on_the_item_is_deleted_and_the_note_is_left_alone(self):
+        """Assignments only: `op` upserts each named field and touches no other."""
+
+        calls, _ = self._publish({})
+        edit = next(command for command in calls if command[2] == "edit")
+
+        self.assertNotIn("notesPlain", " ".join(edit))
+        for absent in ("--dry-run", "delete", "--generate-password"):
+            self.assertNotIn(absent, edit)
+
+    def test_writing_the_same_facts_twice_writes_nothing_the_second_time(self):
+        """Observe, compare, write only if different.
+
+        A certificate is observed on every controller pass and changes twice a
+        year, so a publisher that wrote unconditionally would spend a write per
+        pass and put a version in the item's history for every one of them.
+        """
+
+        first_calls, _ = self._publish({})
+        already = self._written(first_calls)
+        settled = self._tags(first_calls)
+
+        second_calls, result = self._publish(already, tags=settled)
+
+        self.assertEqual(
+            [command[2] for command in second_calls],
+            ["get"],
+            "the item already said this, so nothing should have been written",
+        )
+        self.assertEqual(result.status["published_facts"][0]["written"], False)
+        self.assertEqual(result.status["published_facts"][0]["fields"], [])
+        self.assertTrue(result.status["published_facts"][0]["tagged"])
+
+    def test_only_the_facts_that_moved_are_written(self):
+        first_calls, _ = self._publish({})
+        renewed = {**self._written(first_calls), "Expires": "2026-11-02"}
+
+        written = self._written(self._publish(renewed, tags=self._tags(first_calls))[0])
+
+        self.assertEqual(sorted(written), ["Expires"])
+
+    def test_the_expiry_is_published_as_a_date_and_not_as_text(self):
+        """So the credential store itself knows when this goes stale.
+
+        A date 1Password can render, sort and be asked about is a warning that
+        does not depend on HQ sweeping.
+        """
+
+        types = self._types(self._publish({})[0])
+
+        self.assertEqual(types["Expires"], "date")
+        self.assertEqual(
+            {label for label, kind in types.items() if kind == "text"},
+            set(onepassword.PUBLISHED_LABELS) - {"Expires"},
+        )
+
+    def test_the_expiry_1password_stores_is_read_back_as_the_date_it_was_given(self):
+        """`op` takes `2026-10-23`, stores epoch seconds, and prints those back.
+
+        Read as printed, the expiry never equals the value that produced it, and
+        an unchanged certificate would rewrite it on every sweep.
+        """
+
+        published = self._written(self._publish({})[0])
+        expiry = published["Expires"]
+        stored = json.loads(_an_item(published))["fields"]
+        printed = next(f["value"] for f in stored if f["label"] == "Expires")
+
+        self.assertNotEqual(printed, expiry, "op prints epoch seconds, not the date")
+        self.assertEqual(
+            onepassword._as_written({"type": "DATE", "value": printed}),
+            ("DATE", expiry),
+        )
+
+    def test_a_field_whose_type_is_wrong_is_rewritten_though_it_reads_the_same(self):
+        """An item written before the expiry was typed holds the same characters.
+
+        Compared on the value alone it would agree forever, and the date would
+        stay a string that merely looks like one.
+        """
+
+        as_text = {
+            **self._written(self._publish({})[0]),
+            "Expires": ("STRING", "2027-01-14"),
+        }
+
+        written = self._written(
+            self._publish(as_text, tags=(onepassword.MANAGED_TAG,))[0]
+        )
+
+        self.assertEqual(sorted(written), ["Expires"])
+
+    def test_the_certificate_itself_is_written_when_the_fingerprint_moves(self):
+        """Facts without material would be the worse half of this.
+
+        On renewal the expiry and fingerprint here would move while the files
+        stayed at whatever was last put there by hand, and the item would state
+        a date above material contradicting it.
+        """
+
+        self._publish({})
+
+        self.assertEqual(
+            [item["label"] for item in self.staged], list(ATTACHMENT_LABELS)
+        )
+        self.assertEqual(
+            [item["content"] for item in self.staged], [A_CHAIN, A_PRIVATE_KEY]
+        )
+
+    def test_nothing_is_uploaded_when_the_item_already_holds_this_certificate(self):
+        """The published fingerprint is the leaf's own content identity.
+
+        So "is what is attached this certificate" is answered by a field already
+        being written, and the key is never downloaded to compare, nor read off
+        disk on a pass that changes nothing.
+        """
+
+        first_calls, _ = self._publish({})
+        self.staged.clear()
+
+        calls, result = self._publish(
+            self._written(first_calls), tags=self._tags(first_calls)
+        )
+
+        self.assertEqual([command[2] for command in calls], ["get"])
+        self.assertEqual(self.staged, [])
+        self.assertEqual(result.status["published_facts"][0]["material"], "current")
+
+    def test_a_missing_attachment_is_replaced_though_every_fact_agrees(self):
+        """An item can carry the right facts and not the files they describe.
+
+        Someone deleted one, or a write landed half way. Comparing only the
+        facts would call that current forever.
+        """
+
+        first_calls, _ = self._publish({})
+        self.staged.clear()
+
+        self._publish(
+            self._written(first_calls),
+            tags=self._tags(first_calls),
+            files=("fullchain",),
+        )
+
+        self.assertEqual(
+            [item["label"] for item in self.staged], list(ATTACHMENT_LABELS)
+        )
+
+    def test_the_key_is_staged_privately_and_nothing_is_left_behind(self):
+        """It exists as a file for exactly as long as `op` needs to read one."""
+
+        self._publish({})
+
+        for item in self.staged:
+            self.assertEqual(item["mode"], 0o600)
+            self.assertEqual(item["directory_mode"], 0o700)
+            self.assertFalse(
+                item["path"].exists(),
+                "the staging directory should be gone once the write returns",
+            )
+
+    def test_the_staging_directory_is_removed_even_when_the_write_fails(self):
+        """A private key must not outlive a failure."""
+
+        staged = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            if command[2] == "get":
+                return _an_item({}, (AN_OWNERS_OWN_TAG,), ())
+            staged.extend(
+                Path(argument.split("[file]=", 1)[1])
+                for argument in command
+                if "[file]=" in argument
+            )
+            raise providers.ProviderError("1Password refused the write.")
+
+        acme = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        live = acme / "config" / "live" / A_RECORDED_CERTIFICATE["certificate_name"]
+        live.mkdir(parents=True)
+        live.joinpath("fullchain.pem").write_bytes(A_CHAIN)
+        live.joinpath("privkey.pem").write_bytes(A_PRIVATE_KEY)
+
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.dict(
+                "os.environ",
+                {**A_PASSWORD_MANAGER_CONNECTION, "HQ_ACME_DIR": str(acme)},
+                clear=True,
+            ),
+        ):
+            result = providers._publish_tls_facts(
+                A_RECORDED_CERTIFICATE,
+                providers.ProviderResult(
+                    changed=False,
+                    status=dict(AN_OBSERVATION),
+                    conditions=[
+                        providers._condition("Ready", True, "Verified", "Current.")
+                    ],
+                    message="TLS consumers observed.",
+                ),
+                apply=True,
+            )
+
+        self.assertTrue(staged, "the write should have been reached")
+        for path in staged:
+            self.assertFalse(path.exists())
+            self.assertFalse(path.parent.exists())
+        self.assertTrue(
+            result.conditions[0]["status"], "the certificate is still Ready"
+        )
+
+    def test_no_key_material_reaches_the_status_or_the_step(self):
+        """What is reported is a word, never a path or anything read from one."""
+
+        calls, result = self._publish({})
+        published = result.status["published_facts"][0]
+
+        self.assertEqual(published["material"], "written")
+        reported = json.dumps(published) + result.message
+        for secret in (A_PRIVATE_KEY, A_CHAIN):
+            self.assertNotIn(secret.decode(), reported)
+        for command in calls:
+            self.assertNotIn(A_PRIVATE_KEY.decode(), " ".join(command))
+
+    def test_the_item_is_tagged_as_hqs(self):
+        """The query worth having is the inverse: untagged here means unmaintained."""
+
+        self.assertIn(onepassword.MANAGED_TAG, self._tags(self._publish({})[0]))
+
+    def test_a_tag_the_owner_added_by_hand_is_never_dropped(self):
+        """`--tags` replaces the whole list rather than adding to it.
+
+        So the union has to be written. Anything less and an automated pass
+        quietly strips whatever a person had put on the item.
+        """
+
+        tags = self._tags(self._publish({}, tags=(AN_OWNERS_OWN_TAG, "and-another"))[0])
+
+        self.assertEqual(
+            tags, sorted([AN_OWNERS_OWN_TAG, "and-another", onepassword.MANAGED_TAG])
+        )
+
+    def test_an_untagged_item_is_written_even_when_every_fact_agrees(self):
+        """The tag is part of the fixed set, so it settles like the rest."""
+
+        first_calls, _ = self._publish({})
+        already = self._written(first_calls)
+
+        calls, result = self._publish(already, tags=())
+
+        self.assertEqual([command[2] for command in calls], ["get", "edit"])
+        self.assertEqual(self._written(calls), {})
+        self.assertEqual(self._tags(calls), [onepassword.MANAGED_TAG])
+        self.assertTrue(result.status["published_facts"][0]["tagged"])
+
+    def test_a_dry_run_records_nothing(self):
+        """Being asked what a reconcile would do is not permission to write."""
+
+        calls = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            calls.append(command)
+            return b""
+
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(providers, "reconcile_tls") as observe,
+        ):
+            observe.return_value = providers.ProviderResult(
+                changed=False, status=dict(AN_OBSERVATION), conditions=[], message=""
+            )
+            providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
+
+        self.assertEqual(calls, [])
+
+    def test_a_certificate_with_no_agreed_fingerprint_publishes_nothing(self):
+        """Four true facts beside a stale fifth is the record that misleads.
+
+        Consumers serving different certificates is what a drift condition is
+        for. There is no single fingerprint to publish, so none of it is
+        published and the item keeps saying what it last knew.
+        """
+
+        disputed = {
+            "issuer": "An Example Authority",
+            "not_after": "2027-01-14T09:30:00+00:00",
+            "consumers": [
+                {"consumer": "one", "fingerprint_sha256": "aa:bb:cc"},
+                {"consumer": "two", "fingerprint_sha256": "dd:ee:ff"},
+            ],
+        }
+
+        calls, result = self._publish({}, status=disputed)
+
+        self.assertEqual(calls, [])
+        self.assertIn(
+            "no single fingerprint", result.status["published_facts"][0]["detail"]
+        )
+
+
+class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
+    """A password manager being unreachable is not a certificate being wrong.
+
+    Raising here would fail the reconcile, which marks the resource degraded and
+    queues an automatic retry of a deployment that had nothing wrong with it --
+    over a note that did not get filed.
+    """
+
+    def _reconcile_with_a_failing_publisher(self, failure):
+        observed = providers.ProviderResult(
+            changed=False,
+            status=dict(AN_OBSERVATION),
+            conditions=[providers._condition("Ready", True, "Verified", "Current.")],
+            message="TLS consumers observed.",
+        )
+        with (
+            mock.patch.object(providers, "apply_tls_reconcile", return_value=observed),
+            mock.patch.object(onepassword, "publish", side_effect=failure),
+        ):
+            return providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=True)
+
+    def test_a_failed_publication_leaves_the_reconcile_successful(self):
+        result = self._reconcile_with_a_failing_publisher(
+            providers.ProviderError("1Password write for a certificate failed.")
+        )
+
+        self.assertEqual(
+            [condition["type"] for condition in result.conditions], ["Ready"]
+        )
+        self.assertTrue(result.conditions[0]["status"])
+
+    def test_a_failed_publication_is_reported_rather_than_passed_over(self):
+        result = self._reconcile_with_a_failing_publisher(
+            providers.ProviderError("1Password write for a certificate failed.")
+        )
+        published = result.status["published_facts"][0]
+
+        self.assertFalse(published["written"])
+        self.assertEqual(published["target"], "an-example-certificate-onepassword")
+        self.assertIn("Facts were not recorded on", result.message)
+
+    def test_a_tool_that_is_not_installed_degrades_the_same_way(self):
+        """`op` absent raises through the subprocess boundary, not the provider's."""
+
+        result = self._reconcile_with_a_failing_publisher(OSError("no such file"))
+
+        self.assertEqual(
+            [condition["type"] for condition in result.conditions], ["Ready"]
+        )
+        self.assertFalse(result.status["published_facts"][0]["written"])
+
+    def test_a_certificate_recording_nowhere_reports_no_publication_at_all(self):
+        """Every certificate that names no vault must be untouched by this."""
+
+        observed = providers.ProviderResult(
+            changed=False,
+            status={"issuer": "An Example Authority"},
+            conditions=[],
+            message=".",
+        )
+        spec = {**A_RECORDED_CERTIFICATE, "publish_to": []}
+        with mock.patch.object(providers, "apply_tls_reconcile", return_value=observed):
+            result = providers._tls_reconcile(spec, apply=True)
+
+        self.assertNotIn("published_facts", result.status)
+
+
+class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
+    """The one credential here can write, so where it can appear is the point.
+
+    Not in an argument list, which every process on the machine can read; not in
+    the status HQ stores, which is served to API clients; not in a log line, and
+    not in the message an operator is shown when it fails.
+    """
+
+    def _publish_against(self, run):
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            return providers._publish_tls_facts(
+                A_RECORDED_CERTIFICATE,
+                providers.ProviderResult(
+                    changed=False,
+                    status=dict(AN_OBSERVATION),
+                    conditions=[],
+                    message="TLS consumers observed.",
+                ),
+                apply=True,
+            )
+
+    def test_the_token_is_passed_in_the_environment_and_not_in_argv(self):
+        seen = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            seen.append((command, env, step))
+            return _an_item() if command[2] == "get" else b""
+
+        self._publish_against(run)
+
+        for command, env, step in seen:
+            self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, " ".join(command))
+            self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, step)
+            self.assertEqual(env, {"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN})
+
+    def test_the_token_never_reaches_the_status_hq_stores(self):
+        result = self._publish_against(
+            lambda command, input_bytes=None, step="command", env=None: (
+                _an_item() if command[2] == "get" else b""
+            )
+        )
+
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, json.dumps(result.status))
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, result.message)
+
+    def test_a_failure_reports_the_step_and_not_the_credential(self):
+        def run(command, *, input_bytes=None, step="command", env=None):
+            raise providers.ProviderError(f"{step} failed.")
+
+        result = self._publish_against(run)
+
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, json.dumps(result.status))
+        self.assertIn("1Password read", result.status["published_facts"][0]["detail"])
+
+    def test_a_tool_that_echoes_its_own_credential_is_struck_from_the_log(self):
+        """The only place that knows the value is the one that passed it in.
+
+        A failing command's stderr is logged for the operator, and `op` is not
+        expected to print its token -- but "not expected to" is not a control,
+        and this is the last point at which the value is still known.
+        """
+
+        with (
+            mock.patch.object(providers.subprocess, "run") as run,
+            self.assertLogs("severino.controller", level="WARNING") as logged,
+        ):
+            run.return_value = mock.Mock(
+                returncode=1,
+                stdout=b"",
+                stderr=f"could not use {A_SERVICE_ACCOUNT_TOKEN}".encode(),
+            )
+            with self.assertRaises(providers.ProviderError):
+                providers._run(
+                    ["op", "item", "get", "an-item"],
+                    step="1Password read for a certificate",
+                    env={"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN},
+                )
+
+        recorded = json.dumps(
+            [record.__dict__ for record in logged.records], default=str
+        )
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, recorded)
+        self.assertIn("[redacted]", recorded)
+
+    def test_the_command_runs_with_the_controllers_own_environment_too(self):
+        """Replacing it outright would leave `op` without a PATH or a HOME."""
+
+        with (
+            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.dict("os.environ", {"PATH": "/an/example/path"}, clear=True),
+        ):
+            run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+            providers._run(["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"})
+
+        passed = run.call_args.kwargs["env"]
+        self.assertEqual(passed["PATH"], "/an/example/path")
+        self.assertEqual(passed["OP_SERVICE_ACCOUNT_TOKEN"], "t")
+
+    def test_the_connection_probe_proves_the_credential_without_naming_a_vault(self):
+        """A vault is not a machine, and `reaches` everywhere else means one."""
+
+        with (
+            mock.patch.object(providers, "_run") as run,
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            run.return_value = json.dumps(
+                [{"id": "an-example-vault-id", "name": "An Example Vault"}]
+            ).encode()
+            probed = providers._probe_onepassword("a-password-manager")
+
+        self.assertEqual(probed["reaches"], [])
+        self.assertIn("1 vaults", probed["detail"])
+        self.assertNotIn("An Example Vault", json.dumps(probed))
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, " ".join(run.call_args.args[0]))
+
+    def test_a_vault_list_that_cannot_be_read_is_a_failed_probe(self):
+        with (
+            mock.patch.object(providers, "_run", return_value=b"not json"),
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
+                providers._probe_onepassword("a-password-manager")
+
+    def test_an_item_that_cannot_be_read_is_a_failed_publication(self):
+        """Reported, not treated as an item holding nothing.
+
+        Read as empty, every field would look changed and be rewritten on every
+        pass -- the unreadable case turning into the noisiest one.
+        """
+
+        result = self._publish_against(
+            lambda command, input_bytes=None, step="command", env=None: b"not json"
+        )
+
+        self.assertIn("could not read", result.status["published_facts"][0]["detail"])
