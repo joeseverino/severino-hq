@@ -447,7 +447,33 @@ def infrastructure() -> tuple[Insight, ...]:
                 url=reverse("control_plane:detail", kwargs={"key": resource.key}),
             )
         )
-    return tuple(items) + tailnet()
+    return waiting_for_approval() + tuple(items) + tailnet()
+
+
+def waiting_for_approval() -> tuple[Insight, ...]:
+    """Changes a credential asked for that only a person can allow.
+
+    First in the infrastructure queue, ahead of every derived claim, because it
+    is the only entry here that is somebody waiting on the operator rather than
+    the operator waiting on the estate. Nothing else moves until it is answered:
+    a held request has written nothing and queued nothing.
+    """
+
+    from .approvals import pending
+
+    held = pending()
+    return _backlog(
+        count=len(held),
+        eyebrow="Approval",
+        title="Changes waiting for your approval",
+        body=(
+            "Asked for by a credential rather than a person, and holding until "
+            "one agrees. Nothing has been written and nothing is queued."
+        ),
+        action="Review and decide",
+        url=reverse("control_plane:approvals"),
+        status="serious",
+    )
 
 
 def services() -> tuple[Insight, ...]:
