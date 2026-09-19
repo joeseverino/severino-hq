@@ -63,6 +63,23 @@ class ProviderRuntime(Protocol):
     ) -> bytes:
         raise NotImplementedError
 
+    def run(
+        self,
+        command: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        step: str = "command",
+    ) -> bytes:
+        """Run a local command line tool, for an integration that only has one.
+
+        ``env`` is added to the controller's own environment for that one call
+        and is the only way to pass a credential: an argument list is visible to
+        every process on the machine, and the host scrubs these values out of
+        anything it logs.
+        """
+
+        raise NotImplementedError
+
 
 class ControllerActionDefinition(Protocol):
     mode: str

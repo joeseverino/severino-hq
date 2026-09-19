@@ -1492,3 +1492,169 @@ class ReadoutsSayNothingBlankTests(TestCase):
     # knowing its shape. The sound version of this check needs the real estate,
     # so it is an audit run against it rather than a test that would cry wolf
     # on every future provider that reads a collection.
+
+
+class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
+    """A certificate can name somewhere that records it rather than serves it.
+
+    The security property this pins is where the two halves of the decision
+    live. A declaration is operator input -- it sits in HQ's database and is
+    edited through a form -- so it says only which connection, which vault and
+    which item. What gets written is fixed in the adapter. So the resolved shape
+    has to carry addressing and nothing else: no field for a value, no field for
+    a label, no field for a sixth fact.
+    """
+
+    A_PROXY_TARGET = {
+        "kind": "npm",
+        "connection_ref": "a-proxy",
+        "name": "a-proxy-certificate",
+        "certificate_resource": "",
+        "verify_domains": ["shop.example.test"],
+        "certificate_directory": "",
+        "discover_covered_hosts": False,
+        "install_domains": [],
+        "vault": "",
+        "item": "",
+    }
+    A_VAULT_TARGET = {
+        "kind": "onepassword",
+        "connection_ref": "a-password-manager",
+        "name": "where-certificates-are-noted",
+        "certificate_resource": "",
+        "verify_domains": [],
+        "certificate_directory": "",
+        "discover_covered_hosts": False,
+        "install_domains": [],
+        "vault": "An Example Vault",
+        "item": "An Example Certificate Item",
+    }
+
+    def _resolve(self, *targets, install_on=None):
+        from .providers import ProviderResolutionContext, resolve_provider_spec
+
+        return resolve_provider_spec(
+            "tls.certificate",
+            {
+                "certificate_name": "an-example-certificate",
+                "domains": ["shop.example.test", "*.shop.example.test"],
+                "install_on": install_on
+                or [target["connection_ref"] for target in targets],
+                "renewal_window_days": 30,
+            },
+            context=ProviderResolutionContext(delivery_targets=targets),
+        )
+
+    def test_a_recording_target_is_not_resolved_as_a_consumer(self):
+        """A consumer is something HQ connects to and asks what it is serving.
+
+        Folded into that list, a password manager would be probed for a TLS
+        handshake it cannot answer, and the certificate would report a consumer
+        failing to serve it.
+        """
+
+        resolved = self._resolve(self.A_PROXY_TARGET, self.A_VAULT_TARGET)
+
+        self.assertEqual(
+            [consumer["kind"] for consumer in resolved["consumers"]], ["npm"]
+        )
+        self.assertEqual(
+            [publication["kind"] for publication in resolved["publish_to"]],
+            ["onepassword"],
+        )
+
+    def test_a_publication_carries_addressing_and_nothing_else(self):
+        """The declaration's whole vocabulary, so the code owns the content."""
+
+        publication = self._resolve(self.A_PROXY_TARGET, self.A_VAULT_TARGET)[
+            "publish_to"
+        ][0]
+
+        self.assertEqual(
+            set(publication),
+            {"kind", "name", "connection_ref", "vault", "item"},
+        )
+
+    def test_a_declaration_cannot_add_a_field_to_a_publication(self):
+        """`extra="forbid"` is the mechanism; this is the intent it protects.
+
+        Anything a form could grow that named a field, a label or a value would
+        be refused at the boundary rather than carried to the adapter and
+        quietly written to a password manager.
+        """
+
+        from pydantic import ValidationError
+
+        from .providers import OnePasswordPublication
+
+        with self.assertRaises(ValidationError):
+            OnePasswordPublication(
+                kind="onepassword",
+                name="a-publication",
+                connection_ref="a-password-manager",
+                vault="An Example Vault",
+                item="An Example Certificate Item",
+                fields={"Recovery Phrase": "take this too"},
+            )
+
+    def test_a_certificate_that_is_only_recorded_is_refused(self):
+        """Noting a certificate down is not installing it anywhere."""
+
+        with self.assertRaisesRegex(ValueError, "only recorded, never installed"):
+            self._resolve(self.A_VAULT_TARGET)
+
+    def test_a_recording_target_declares_no_name_to_check_it_at(self):
+        """Nothing is served there, so a name typed here would never be probed."""
+
+        from .providers import TLSDeliveryTargetSpec
+
+        with self.assertRaisesRegex(ValueError, "serves nothing"):
+            TLSDeliveryTargetSpec(
+                kind="onepassword",
+                connection_ref="a-password-manager",
+                name="where-certificates-are-noted",
+                vault="An Example Vault",
+                item="An Example Certificate Item",
+                verify_domains=["shop.example.test"],
+            )
+
+    def test_a_recording_target_needs_both_the_vault_and_the_item(self):
+        from .providers import TLSDeliveryTargetSpec
+
+        with self.assertRaisesRegex(ValueError, "vault and the item"):
+            TLSDeliveryTargetSpec(
+                kind="onepassword",
+                connection_ref="a-password-manager",
+                name="where-certificates-are-noted",
+                vault="An Example Vault",
+            )
+
+    def test_a_vault_named_against_another_kind_of_target_is_refused(self):
+        """Ignored, it would sit there looking configured and be read by nothing."""
+
+        from .providers import TLSDeliveryTargetSpec
+
+        with self.assertRaisesRegex(ValueError, "applies to onepassword targets"):
+            TLSDeliveryTargetSpec(
+                kind="npm",
+                connection_ref="a-proxy",
+                name="a-proxy-certificate",
+                vault="An Example Vault",
+            )
+
+    def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
+        """There are no observed facts to publish, only the declaration."""
+
+        from .providers import ProviderResolutionContext, resolve_provider_spec
+
+        with self.assertRaisesRegex(ValueError, "no observed facts"):
+            resolve_provider_spec(
+                "tls.uploaded_certificate",
+                {
+                    "certificate_name": "an-example-private-certificate",
+                    "install_on": ["a-password-manager"],
+                },
+                context=ProviderResolutionContext(
+                    delivery_targets=(self.A_VAULT_TARGET,)
+                ),
+            )

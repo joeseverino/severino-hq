@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from unittest import TestCase, mock
 
-from control_plane.provider_adapters import caddy
+from control_plane.provider_adapters import caddy, onepassword
 
 from . import providers, worker
 
@@ -3164,3 +3164,440 @@ class CollectorFailureIsReportedTests(TestCase):
             "reads as having no policy at all",
         )
         self.assertIn("policy_file", entry["error"])
+
+
+A_RECORDED_CERTIFICATE = {
+    "certificate_name": "an-example-certificate",
+    "domains": ["shop.example.test", "*.shop.example.test"],
+    "renewal_window_days": 30,
+    "consumers": [
+        {
+            "kind": "npm",
+            "name": "an-example-certificate-npm",
+            "connection_ref": "a-proxy",
+            "verify_domains": ["shop.example.test"],
+        }
+    ],
+    "publish_to": [
+        {
+            "kind": "onepassword",
+            "name": "an-example-certificate-onepassword",
+            "connection_ref": "a-password-manager",
+            "vault": "An Example Vault",
+            "item": "An Example Certificate Item",
+        }
+    ],
+}
+
+AN_OBSERVATION = {
+    "issuer": "An Example Authority",
+    "not_after": "2027-01-14T09:30:00+00:00",
+    "expected_fingerprint_sha256": "aa:bb:cc",
+    "consumers": [
+        {
+            "consumer": "an-example-certificate-npm",
+            "domain": "shop.example.test",
+            "fingerprint_sha256": "aa:bb:cc",
+        }
+    ],
+}
+
+A_SERVICE_ACCOUNT_TOKEN = "ops_an-example-service-account-token"
+
+A_PASSWORD_MANAGER_CONNECTION = {
+    "A_PASSWORD_MANAGER_CONNECTION_REF": "a-password-manager",
+    "A_PASSWORD_MANAGER_PROVIDER": "onepassword",
+    "A_PASSWORD_MANAGER_API_TOKEN": A_SERVICE_ACCOUNT_TOKEN,
+}
+
+
+def _an_item(**fields) -> bytes:
+    """One item as `op` prints it, carrying whatever fields are asked for."""
+
+    return json.dumps(
+        {
+            "id": "an-example-item-id",
+            "title": "An Example Certificate Item",
+            "fields": [
+                {"id": "notesPlain", "label": "notesPlain", "value": "an operator's own note"},
+                *(
+                    {"id": label, "type": "STRING", "label": label, "value": value}
+                    for label, value in fields.items()
+                ),
+            ],
+        }
+    ).encode()
+
+
+class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
+    """What a certificate publishes is fixed here; only its address is declared.
+
+    This is the whole reason the path is safe to give a credential that can
+    write. A delivery target is operator input held in HQ's database, so if it
+    could name a field, a label or a value, an edited declaration would decide
+    what a write-capable token wrote -- and "publish the facts about a
+    certificate" would quietly become "write whatever this row says".
+    """
+
+    def _publish(self, current, *, spec=None, status=None):
+        """Publish once against an item already holding `current`.
+
+        Returns the argument lists `op` was invoked with, which is where the
+        claim actually lands: the fields written are the assignments in argv.
+        """
+
+        calls = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            calls.append(command)
+            return _an_item(**current) if command[2] == "get" else b""
+
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            result = providers._publish_tls_facts(
+                spec or A_RECORDED_CERTIFICATE,
+                providers.ProviderResult(
+                    changed=False,
+                    status=dict(status or AN_OBSERVATION),
+                    conditions=[
+                        providers._condition("Ready", True, "Verified", "Current.")
+                    ],
+                    message="TLS consumers observed.",
+                ),
+                apply=True,
+            )
+        return calls, result
+
+    def _written(self, calls):
+        edits = [command for command in calls if command[2] == "edit"]
+        return {
+            assignment.split("[text]=", 1)[0]: assignment.split("[text]=", 1)[1]
+            for command in edits
+            for assignment in command
+            if "[text]=" in assignment
+        }
+
+    def test_the_fields_written_are_the_ones_this_adapter_names(self):
+        written = self._written(self._publish({})[0])
+
+        self.assertEqual(
+            sorted(written),
+            sorted(onepassword.PUBLISHED_LABELS),
+        )
+        self.assertEqual(written["Issued by"], "An Example Authority")
+        self.assertEqual(written["Expires"], "2027-01-14")
+        self.assertEqual(written["Fingerprint (SHA-256)"], "aa:bb:cc")
+        self.assertEqual(written["Installed on"], "an-example-certificate-npm")
+        self.assertEqual(
+            written["Covers"], "shop.example.test, *.shop.example.test"
+        )
+
+    def test_a_declaration_carrying_extra_keys_writes_no_extra_field(self):
+        """Refused at the boundary, and ignored here as well.
+
+        The resolved shape forbids an unknown key, so this cannot arrive through
+        HQ. It is asserted at the adapter too, because the guarantee that makes
+        the credential safe should not rest on one validator being in the path.
+        """
+
+        spec = {
+            **A_RECORDED_CERTIFICATE,
+            "publish_to": [
+                {
+                    **A_RECORDED_CERTIFICATE["publish_to"][0],
+                    "fields": {"Recovery Phrase": "take this too"},
+                    "note": "and overwrite this",
+                }
+            ],
+        }
+
+        written = self._written(self._publish({}, spec=spec)[0])
+
+        self.assertEqual(sorted(written), sorted(onepassword.PUBLISHED_LABELS))
+        self.assertNotIn("Recovery Phrase", written)
+
+    def test_nothing_on_the_item_is_deleted_and_the_note_is_left_alone(self):
+        """Assignments only: `op` upserts each named field and touches no other."""
+
+        calls, _ = self._publish({})
+        edit = next(command for command in calls if command[2] == "edit")
+
+        self.assertNotIn("notesPlain", " ".join(edit))
+        for absent in ("--dry-run", "delete", "--generate-password"):
+            self.assertNotIn(absent, edit)
+
+    def test_writing_the_same_facts_twice_writes_nothing_the_second_time(self):
+        """Observe, compare, write only if different.
+
+        A certificate is observed on every controller pass and changes twice a
+        year, so a publisher that wrote unconditionally would spend a write per
+        pass and put a version in the item's history for every one of them.
+        """
+
+        first_calls, _ = self._publish({})
+        already = self._written(first_calls)
+
+        second_calls, result = self._publish(already)
+
+        self.assertEqual(
+            [command[2] for command in second_calls],
+            ["get"],
+            "the item already said this, so nothing should have been written",
+        )
+        self.assertEqual(result.status["published_facts"][0]["written"], False)
+        self.assertEqual(result.status["published_facts"][0]["fields"], [])
+
+    def test_only_the_facts_that_moved_are_written(self):
+        renewed = {**self._written(self._publish({})[0]), "Expires": "2026-11-02"}
+
+        written = self._written(self._publish(renewed)[0])
+
+        self.assertEqual(sorted(written), ["Expires"])
+
+    def test_a_dry_run_records_nothing(self):
+        """Being asked what a reconcile would do is not permission to write."""
+
+        calls = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            calls.append(command)
+            return b""
+
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.object(providers, "reconcile_tls") as observe,
+        ):
+            observe.return_value = providers.ProviderResult(
+                changed=False, status=dict(AN_OBSERVATION), conditions=[], message=""
+            )
+            providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=False)
+
+        self.assertEqual(calls, [])
+
+    def test_a_certificate_with_no_agreed_fingerprint_publishes_nothing(self):
+        """Four true facts beside a stale fifth is the record that misleads.
+
+        Consumers serving different certificates is what a drift condition is
+        for. There is no single fingerprint to publish, so none of it is
+        published and the item keeps saying what it last knew.
+        """
+
+        disputed = {
+            "issuer": "An Example Authority",
+            "not_after": "2027-01-14T09:30:00+00:00",
+            "consumers": [
+                {"consumer": "one", "fingerprint_sha256": "aa:bb:cc"},
+                {"consumer": "two", "fingerprint_sha256": "dd:ee:ff"},
+            ],
+        }
+
+        calls, result = self._publish({}, status=disputed)
+
+        self.assertEqual(calls, [])
+        self.assertIn(
+            "no single fingerprint", result.status["published_facts"][0]["detail"]
+        )
+
+
+class RecordingTheFactsIsNeverTheCertificatesJobTests(TestCase):
+    """A password manager being unreachable is not a certificate being wrong.
+
+    Raising here would fail the reconcile, which marks the resource degraded and
+    queues an automatic retry of a deployment that had nothing wrong with it --
+    over a note that did not get filed.
+    """
+
+    def _reconcile_with_a_failing_publisher(self, failure):
+        observed = providers.ProviderResult(
+            changed=False,
+            status=dict(AN_OBSERVATION),
+            conditions=[providers._condition("Ready", True, "Verified", "Current.")],
+            message="TLS consumers observed.",
+        )
+        with (
+            mock.patch.object(providers, "apply_tls_reconcile", return_value=observed),
+            mock.patch.object(onepassword, "publish", side_effect=failure),
+        ):
+            return providers._tls_reconcile(A_RECORDED_CERTIFICATE, apply=True)
+
+    def test_a_failed_publication_leaves_the_reconcile_successful(self):
+        result = self._reconcile_with_a_failing_publisher(
+            providers.ProviderError("1Password write for a certificate failed.")
+        )
+
+        self.assertEqual(
+            [condition["type"] for condition in result.conditions], ["Ready"]
+        )
+        self.assertTrue(result.conditions[0]["status"])
+
+    def test_a_failed_publication_is_reported_rather_than_passed_over(self):
+        result = self._reconcile_with_a_failing_publisher(
+            providers.ProviderError("1Password write for a certificate failed.")
+        )
+        published = result.status["published_facts"][0]
+
+        self.assertFalse(published["written"])
+        self.assertEqual(published["target"], "an-example-certificate-onepassword")
+        self.assertIn("Facts were not recorded on", result.message)
+
+    def test_a_tool_that_is_not_installed_degrades_the_same_way(self):
+        """`op` absent raises through the subprocess boundary, not the provider's."""
+
+        result = self._reconcile_with_a_failing_publisher(OSError("no such file"))
+
+        self.assertEqual(
+            [condition["type"] for condition in result.conditions], ["Ready"]
+        )
+        self.assertFalse(result.status["published_facts"][0]["written"])
+
+    def test_a_certificate_recording_nowhere_reports_no_publication_at_all(self):
+        """Every certificate that names no vault must be untouched by this."""
+
+        observed = providers.ProviderResult(
+            changed=False, status={"issuer": "An Example Authority"}, conditions=[], message="."
+        )
+        spec = {**A_RECORDED_CERTIFICATE, "publish_to": []}
+        with mock.patch.object(providers, "apply_tls_reconcile", return_value=observed):
+            result = providers._tls_reconcile(spec, apply=True)
+
+        self.assertNotIn("published_facts", result.status)
+
+
+class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
+    """The one credential here can write, so where it can appear is the point.
+
+    Not in an argument list, which every process on the machine can read; not in
+    the status HQ stores, which is served to API clients; not in a log line, and
+    not in the message an operator is shown when it fails.
+    """
+
+    def _publish_against(self, run):
+        with (
+            mock.patch.object(providers, "_run", side_effect=run),
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            return providers._publish_tls_facts(
+                A_RECORDED_CERTIFICATE,
+                providers.ProviderResult(
+                    changed=False,
+                    status=dict(AN_OBSERVATION),
+                    conditions=[],
+                    message="TLS consumers observed.",
+                ),
+                apply=True,
+            )
+
+    def test_the_token_is_passed_in_the_environment_and_not_in_argv(self):
+        seen = []
+
+        def run(command, *, input_bytes=None, step="command", env=None):
+            seen.append((command, env, step))
+            return _an_item() if command[2] == "get" else b""
+
+        self._publish_against(run)
+
+        for command, env, step in seen:
+            self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, " ".join(command))
+            self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, step)
+            self.assertEqual(env, {"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN})
+
+    def test_the_token_never_reaches_the_status_hq_stores(self):
+        result = self._publish_against(
+            lambda command, input_bytes=None, step="command", env=None: (
+                _an_item() if command[2] == "get" else b""
+            )
+        )
+
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, json.dumps(result.status))
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, result.message)
+
+    def test_a_failure_reports_the_step_and_not_the_credential(self):
+        def run(command, *, input_bytes=None, step="command", env=None):
+            raise providers.ProviderError(f"{step} failed.")
+
+        result = self._publish_against(run)
+
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, json.dumps(result.status))
+        self.assertIn("1Password read", result.status["published_facts"][0]["detail"])
+
+    def test_a_tool_that_echoes_its_own_credential_is_struck_from_the_log(self):
+        """The only place that knows the value is the one that passed it in.
+
+        A failing command's stderr is logged for the operator, and `op` is not
+        expected to print its token -- but "not expected to" is not a control,
+        and this is the last point at which the value is still known.
+        """
+
+        with (
+            mock.patch.object(providers.subprocess, "run") as run,
+            self.assertLogs("severino.controller", level="WARNING") as logged,
+        ):
+            run.return_value = mock.Mock(
+                returncode=1,
+                stdout=b"",
+                stderr=f"could not use {A_SERVICE_ACCOUNT_TOKEN}".encode(),
+            )
+            with self.assertRaises(providers.ProviderError):
+                providers._run(
+                    ["op", "item", "get", "an-item"],
+                    step="1Password read for a certificate",
+                    env={"OP_SERVICE_ACCOUNT_TOKEN": A_SERVICE_ACCOUNT_TOKEN},
+                )
+
+        recorded = json.dumps([record.__dict__ for record in logged.records], default=str)
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, recorded)
+        self.assertIn("[redacted]", recorded)
+
+    def test_the_command_runs_with_the_controllers_own_environment_too(self):
+        """Replacing it outright would leave `op` without a PATH or a HOME."""
+
+        with (
+            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.dict("os.environ", {"PATH": "/an/example/path"}, clear=True),
+        ):
+            run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+            providers._run(["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"})
+
+        passed = run.call_args.kwargs["env"]
+        self.assertEqual(passed["PATH"], "/an/example/path")
+        self.assertEqual(passed["OP_SERVICE_ACCOUNT_TOKEN"], "t")
+
+    def test_the_connection_probe_proves_the_credential_without_naming_a_vault(self):
+        """A vault is not a machine, and `reaches` everywhere else means one."""
+
+        with (
+            mock.patch.object(providers, "_run") as run,
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            run.return_value = json.dumps(
+                [{"id": "an-example-vault-id", "name": "An Example Vault"}]
+            ).encode()
+            probed = providers._probe_onepassword("a-password-manager")
+
+        self.assertEqual(probed["reaches"], [])
+        self.assertIn("1 vaults", probed["detail"])
+        self.assertNotIn("An Example Vault", json.dumps(probed))
+        self.assertNotIn(A_SERVICE_ACCOUNT_TOKEN, " ".join(run.call_args.args[0]))
+
+    def test_a_vault_list_that_cannot_be_read_is_a_failed_probe(self):
+        with (
+            mock.patch.object(providers, "_run", return_value=b"not json"),
+            mock.patch.dict("os.environ", A_PASSWORD_MANAGER_CONNECTION, clear=True),
+        ):
+            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
+                providers._probe_onepassword("a-password-manager")
+
+    def test_an_item_that_cannot_be_read_is_a_failed_publication(self):
+        """Reported, not treated as an item holding nothing.
+
+        Read as empty, every field would look changed and be rewritten on every
+        pass -- the unreadable case turning into the noisiest one.
+        """
+
+        result = self._publish_against(
+            lambda command, input_bytes=None, step="command", env=None: b"not json"
+        )
+
+        self.assertIn("could not read", result.status["published_facts"][0]["detail"])
