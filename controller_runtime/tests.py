@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from unittest import TestCase, mock
 
@@ -3211,19 +3212,40 @@ A_PASSWORD_MANAGER_CONNECTION = {
 }
 
 
-def _an_item(**fields) -> bytes:
-    """One item as `op` prints it, carrying whatever fields are asked for."""
+AN_OWNERS_OWN_TAG = "an-operators-own-tag"
 
+
+def _an_item(fields=None, tags=(AN_OWNERS_OWN_TAG,)) -> bytes:
+    """One item as `op` prints it, with whatever fields and tags are asked for.
+
+    A field is given as its value, stored as the type this adapter publishes it
+    as, or as an explicit ``(type, value)`` pair for the case that matters most:
+    an item written before the expiry was typed, whose value reads identically
+    and is not a date.
+    """
+
+    stored = []
+    for label, value in (fields or {}).items():
+        if isinstance(value, tuple):
+            field_type, value = value
+        else:
+            field_type = onepassword._STORED_AS[onepassword.PUBLISHED_FIELDS[label]]
+        stored.append(
+            {"id": label, "type": field_type, "label": label, "value": value}
+        )
     return json.dumps(
         {
             "id": "an-example-item-id",
             "title": "An Example Certificate Item",
+            "tags": list(tags),
             "fields": [
-                {"id": "notesPlain", "label": "notesPlain", "value": "an operator's own note"},
-                *(
-                    {"id": label, "type": "STRING", "label": label, "value": value}
-                    for label, value in fields.items()
-                ),
+                {
+                    "id": "notesPlain",
+                    "label": "notesPlain",
+                    "type": "STRING",
+                    "value": "an operator's own note",
+                },
+                *stored,
             ],
         }
     ).encode()
@@ -3239,8 +3261,8 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
     certificate" would quietly become "write whatever this row says".
     """
 
-    def _publish(self, current, *, spec=None, status=None):
-        """Publish once against an item already holding `current`.
+    def _publish(self, current, *, spec=None, status=None, tags=(AN_OWNERS_OWN_TAG,)):
+        """Publish once against an item already holding `current` and `tags`.
 
         Returns the argument lists `op` was invoked with, which is where the
         claim actually lands: the fields written are the assignments in argv.
@@ -3250,7 +3272,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         def run(command, *, input_bytes=None, step="command", env=None):
             calls.append(command)
-            return _an_item(**current) if command[2] == "get" else b""
+            return _an_item(current, tags) if command[2] == "get" else b""
 
         with (
             mock.patch.object(providers, "_run", side_effect=run),
@@ -3270,14 +3292,28 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
             )
         return calls, result
 
+    _ASSIGNMENT = re.compile(r"^(?P<label>[^\[]+)\[(?P<type>\w+)\]=(?P<value>.*)$", re.S)
+
+    def _assignments(self, calls):
+        """Every `Label[type]=value` argument `op item edit` was given."""
+
+        return [
+            match
+            for command in calls
+            if command[2] == "edit"
+            for argument in command
+            if (match := self._ASSIGNMENT.match(argument))
+        ]
+
     def _written(self, calls):
-        edits = [command for command in calls if command[2] == "edit"]
-        return {
-            assignment.split("[text]=", 1)[0]: assignment.split("[text]=", 1)[1]
-            for command in edits
-            for assignment in command
-            if "[text]=" in assignment
-        }
+        return {m["label"]: m["value"] for m in self._assignments(calls)}
+
+    def _types(self, calls):
+        return {m["label"]: m["type"] for m in self._assignments(calls)}
+
+    def _tags(self, calls):
+        edit = next(command for command in calls if command[2] == "edit")
+        return sorted(edit[edit.index("--tags") + 1].split(","))
 
     def test_the_fields_written_are_the_ones_this_adapter_names(self):
         written = self._written(self._publish({})[0])
@@ -3338,8 +3374,9 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
 
         first_calls, _ = self._publish({})
         already = self._written(first_calls)
+        settled = self._tags(first_calls)
 
-        second_calls, result = self._publish(already)
+        second_calls, result = self._publish(already, tags=settled)
 
         self.assertEqual(
             [command[2] for command in second_calls],
@@ -3348,13 +3385,81 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         )
         self.assertEqual(result.status["published_facts"][0]["written"], False)
         self.assertEqual(result.status["published_facts"][0]["fields"], [])
+        self.assertTrue(result.status["published_facts"][0]["tagged"])
 
     def test_only_the_facts_that_moved_are_written(self):
-        renewed = {**self._written(self._publish({})[0]), "Expires": "2026-11-02"}
+        first_calls, _ = self._publish({})
+        renewed = {**self._written(first_calls), "Expires": "2026-11-02"}
 
-        written = self._written(self._publish(renewed)[0])
+        written = self._written(
+            self._publish(renewed, tags=self._tags(first_calls))[0]
+        )
 
         self.assertEqual(sorted(written), ["Expires"])
+
+    def test_the_expiry_is_published_as_a_date_and_not_as_text(self):
+        """So the credential store itself knows when this goes stale.
+
+        A date 1Password can render, sort and be asked about is a warning that
+        survives HQ being down, misconfigured, or quietly not sweeping -- which
+        is the failure that put an expired copy of a certificate here for two
+        months, with the only thing that knew the date being the renewal path.
+        """
+
+        types = self._types(self._publish({})[0])
+
+        self.assertEqual(types["Expires"], "date")
+        self.assertEqual(
+            {label for label, kind in types.items() if kind == "text"},
+            set(onepassword.PUBLISHED_LABELS) - {"Expires"},
+        )
+
+    def test_a_field_whose_type_is_wrong_is_rewritten_though_it_reads_the_same(self):
+        """An item written before the expiry was typed holds the same characters.
+
+        Compared on the value alone it would agree forever, and the date would
+        stay a string that merely looks like one.
+        """
+
+        as_text = {
+            **self._written(self._publish({})[0]),
+            "Expires": ("STRING", "2027-01-14"),
+        }
+
+        written = self._written(self._publish(as_text, tags=(onepassword.MANAGED_TAG,))[0])
+
+        self.assertEqual(sorted(written), ["Expires"])
+
+    def test_the_item_is_tagged_as_hqs(self):
+        """The query worth having is the inverse: untagged here means unmaintained."""
+
+        self.assertIn(onepassword.MANAGED_TAG, self._tags(self._publish({})[0]))
+
+    def test_a_tag_the_owner_added_by_hand_is_never_dropped(self):
+        """`--tags` replaces the whole list rather than adding to it.
+
+        So the union has to be written. Anything less and an automated pass
+        quietly strips whatever a person had put on the item.
+        """
+
+        tags = self._tags(self._publish({}, tags=(AN_OWNERS_OWN_TAG, "and-another"))[0])
+
+        self.assertEqual(
+            tags, sorted([AN_OWNERS_OWN_TAG, "and-another", onepassword.MANAGED_TAG])
+        )
+
+    def test_an_untagged_item_is_written_even_when_every_fact_agrees(self):
+        """The tag is part of the fixed set, so it settles like the rest."""
+
+        first_calls, _ = self._publish({})
+        already = self._written(first_calls)
+
+        calls, result = self._publish(already, tags=())
+
+        self.assertEqual([command[2] for command in calls], ["get", "edit"])
+        self.assertEqual(self._written(calls), {})
+        self.assertEqual(self._tags(calls), [onepassword.MANAGED_TAG])
+        self.assertTrue(result.status["published_facts"][0]["tagged"])
 
     def test_a_dry_run_records_nothing(self):
         """Being asked what a reconcile would do is not permission to write."""

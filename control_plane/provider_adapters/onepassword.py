@@ -18,25 +18,55 @@ this module is the argument: the declaration says *where*, and the code says
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
 
 from .contracts import ProviderError, ProviderRuntime
 
 
-# The complete set of labels this adapter will ever write, in the order an
-# operator reads them. A label is a question about the certificate; the value is
-# HQ's own answer, taken from what it observed. Anything not on this tuple is not
-# written, and nothing outside this module contributes to it.
+# The complete set of fields this adapter will ever write, in the order an
+# operator reads them, each with the type `op` should store it as. A label is a
+# question about the certificate; the value is HQ's own answer, taken from what
+# it observed. Nothing outside this module contributes to either.
 #
 # Human words rather than field names, because the audience is a person reading a
 # 1Password item and not a program parsing one.
-PUBLISHED_LABELS = (
-    "Covers",
-    "Issued by",
-    "Expires",
-    "Fingerprint (SHA-256)",
-    "Installed on",
+#
+# The expiry is a real date rather than a string that looks like one, and that is
+# the point of it. Typed, the credential store itself knows when the certificate
+# goes stale -- it renders and sorts it as a date, and can be asked -- so the
+# warning survives HQ being down, misconfigured, or quietly not sweeping. That is
+# not hypothetical: a copy of a certificate here sat two months expired because
+# the only thing that knew the date was the renewal path, and nobody was reading
+# it.
+PUBLISHED_FIELDS: Mapping[str, str] = MappingProxyType(
+    {
+        "Covers": "text",
+        "Issued by": "text",
+        "Expires": "date",
+        "Fingerprint (SHA-256)": "text",
+        "Installed on": "text",
+    }
 )
+PUBLISHED_LABELS = tuple(PUBLISHED_FIELDS)
+
+# What `op` calls each of those when it reads the item back. The assignment
+# keyword and the stored type are not the same word -- `[text]` is stored as
+# `STRING` -- so a comparison that assumed they were would find every text field
+# different on every pass and rewrite all of them forever.
+_STORED_AS: Mapping[str, str] = MappingProxyType({"text": "STRING", "date": "DATE"})
+
+# Stamped on every item this adapter writes, so the item says who maintains it.
+# The query worth having is the inverse: an item in these vaults *without* this
+# tag is one a person put there and nothing keeps up to date, which is how the
+# next silently expired copy gets found before it matters.
+#
+# A flat adjective rather than the `severino-hq.role=controller` namespace the
+# containers use. That convention is a key and a value on a system that has
+# them; a tag is one word, and the useful reading here is a plain claim of
+# ownership rather than a role within it.
+MANAGED_TAG = "hq-managed"
 
 
 def _fingerprint(status: dict[str, Any]) -> str:
@@ -100,12 +130,23 @@ def _token(runtime: ProviderRuntime, connection_ref: str) -> str:
 
 def _current(
     runtime: ProviderRuntime, publication: dict[str, Any], token: str
-) -> dict[str, str]:
-    """What the item already says, restricted to the labels this adapter owns.
+) -> tuple[dict[str, tuple[str, str]], tuple[str, ...]]:
+    """What the item already says, and every tag it already carries.
 
     Read before writing so an unchanged certificate costs no write at all. Every
     other field on the item is read past and left alone -- the item exists for
     the operator's own reasons and this adapter is a guest on it.
+
+    Each owned field comes back as its stored *type* beside its value, because a
+    field whose value is right and whose type is wrong is still wrong: the expiry
+    written as text before this adapter typed it reads identically and is not a
+    date to anything that asks. Compared on the value alone it would never be
+    corrected.
+
+    The tags come back whole rather than filtered, and that is load-bearing.
+    ``op item edit --tags`` replaces the list instead of adding to it, so writing
+    only this adapter's tag would silently drop every tag a person had put on the
+    item.
     """
 
     raw = runtime.run(
@@ -128,11 +169,18 @@ def _current(
         raise ProviderError("1Password returned an item HQ could not read.") from exc
     if not isinstance(document, dict):
         raise ProviderError("1Password returned an item HQ could not read.")
-    return {
-        str(field.get("label", "")): str(field.get("value", "") or "")
+    fields = {
+        str(field.get("label", "")): (
+            str(field.get("type", "") or ""),
+            str(field.get("value", "") or ""),
+        )
         for field in document.get("fields") or ()
-        if str(field.get("label", "")) in PUBLISHED_LABELS
+        if str(field.get("label", "")) in PUBLISHED_FIELDS
     }
+    tags = tuple(
+        str(tag) for tag in document.get("tags") or () if str(tag).strip()
+    )
+    return fields, tags
 
 
 def publish(
@@ -163,19 +211,32 @@ def publish(
       that owns it will eventually overwrite something that was not its to
       touch.
 
-    Idempotent by comparison rather than by hope: unchanged facts produce no
-    subprocess and no write, so the ordinary case -- a certificate observed
-    every pass and renewed every couple of months -- touches 1Password twice a
-    year.
+    The item is tagged as HQ's, and the tag list is written as the union of what
+    was already there with this adapter's own. ``--tags`` replaces rather than
+    appends, so anything less than the union would quietly drop a tag the owner
+    had added by hand.
+
+    Idempotent by comparison rather than by hope: unchanged facts and a tag
+    already present produce no write at all, so the ordinary case -- a
+    certificate observed every pass and renewed every couple of months --
+    touches 1Password twice a year.
     """
 
     token = _token(runtime, publication["connection_ref"])
-    current = _current(runtime, publication, token)
+    current, tags = _current(runtime, publication, token)
     changed = sorted(
-        label for label in PUBLISHED_LABELS if current.get(label, "") != desired[label]
+        label
+        for label, kind in PUBLISHED_FIELDS.items()
+        if current.get(label) != (_STORED_AS[kind], desired[label])
     )
-    if not changed:
-        return {"target": publication["name"], "written": False, "fields": []}
+    tagged = MANAGED_TAG in tags
+    if not changed and tagged:
+        return {
+            "target": publication["name"],
+            "written": False,
+            "fields": [],
+            "tagged": True,
+        }
     runtime.run(
         [
             "op",
@@ -184,15 +245,28 @@ def publish(
             publication["item"],
             "--vault",
             publication["vault"],
-            # Assignments only, one per label this adapter owns. `op` treats an
-            # assignment as an upsert of that one field, so nothing else on the
-            # item is named and nothing can be removed by what is left out.
-            *(f"{label}[text]={desired[label]}" for label in changed),
+            # The union, never just this adapter's tag: `--tags` sets the whole
+            # list, so writing less than this drops whatever the owner added.
+            "--tags",
+            ",".join(sorted({*tags, MANAGED_TAG})),
+            # Assignments only, one per label this adapter owns, each carrying
+            # the type it is stored as. `op` treats an assignment as an upsert of
+            # that one field, so nothing else on the item is named and nothing
+            # can be removed by what is left out.
+            *(
+                f"{label}[{PUBLISHED_FIELDS[label]}]={desired[label]}"
+                for label in changed
+            ),
         ],
         env={"OP_SERVICE_ACCOUNT_TOKEN": token},
         step=f"1Password write for {publication['name']}",
     )
-    return {"target": publication["name"], "written": True, "fields": changed}
+    return {
+        "target": publication["name"],
+        "written": True,
+        "fields": changed,
+        "tagged": True,
+    }
 
 
 def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
