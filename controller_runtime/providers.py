@@ -531,8 +531,16 @@ def _run(
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
+        # The step goes in the message, not only in `extra`. The controller logs
+        # through a plain formatter that prints the message and drops the rest,
+        # so for weeks the journal said "controller step failed" thirty times an
+        # hour and never which step. Finding out took an audit rule on the
+        # controller's uid. `extra` stays for a structured handler; stderr stays
+        # there alone, since it can carry remote paths and messages.
         logger.warning(
-            "controller step failed",
+            "controller step failed: %s (exit %s)",
+            step,
+            result.returncode,
             extra={
                 "event": "controller.step.failed",
                 "step": step,

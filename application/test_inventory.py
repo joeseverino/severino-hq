@@ -952,6 +952,46 @@ class LineEndingsAreNotDriftTests(TestCase):
 
         self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
 
+    def test_minified_and_pretty_printed_are_the_same_declaration(self):
+        """HQ stores the policy it applied on one line; Tailscale returns it
+        across hundreds. Production sat "Drifted", and then "unobserved for 12
+        days", on nothing but that."""
+
+        import json
+
+        from .inventory import _differences
+
+        minified = json.dumps(json.loads(self.DOCUMENT), separators=(",", ":"))
+        declared = {"document": minified}
+        found = {"document": self.DOCUMENT}
+
+        self.assertNotEqual(minified, self.DOCUMENT)
+        self.assertEqual(_differences("tailscale.policy", declared, found), ())
+
+    def test_key_order_is_layout_but_list_order_is_not(self):
+        """Object keys carry no order in JSON. A list does, and in a policy the
+        order of grants is the policy, so reordering one is still drift."""
+
+        from .inventory import _differences
+
+        declared = {"document": '{"groups":{},"grants":[{"a":1},{"b":2}]}'}
+        rekeyed = {"document": '{"grants":[{"a":1},{"b":2}],"groups":{}}'}
+        reordered = {"document": '{"groups":{},"grants":[{"b":2},{"a":1}]}'}
+
+        self.assertEqual(_differences("tailscale.policy", declared, rekeyed), ())
+        self.assertNotEqual(_differences("tailscale.policy", declared, reordered), ())
+
+    def test_a_document_that_is_not_json_is_still_compared_as_text(self):
+        """A policy kept as HuJSON, with comments, does not parse. It falls back
+        to the text comparison, which errs towards reporting a difference."""
+
+        from .inventory import _differences
+
+        declared = {"document": '{\n  // admins\n  "grants": []\n}'}
+        found = {"document": '{"grants":[]}'}
+
+        self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
+
     def test_a_spec_saved_with_crlf_is_stored_with_one_newline(self):
         """Fixed on the way in as well, so the stored value is comparable to
         anything, not only to what this one comparison normalises."""

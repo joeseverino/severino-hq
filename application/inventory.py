@@ -21,6 +21,7 @@ bug that made HSTS switch itself off.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -294,7 +295,34 @@ def _text(value: Any) -> str:
     """
 
     text = str(value)
-    return text.replace("\r\n", "\n").replace("\r", "\n") if "\r" in text else text
+    text = text.replace("\r\n", "\n").replace("\r", "\n") if "\r" in text else text
+    return _canonical_document(text)
+
+
+def _canonical_document(text: str) -> str:
+    """A JSON document reduced to what it says, so layout is not a difference.
+
+    Line endings were only half of it. HQ stores the tailnet policy it applied
+    minified, on one line, and Tailscale hands the same policy back
+    pretty-printed across three hundred. Compared as text they never match, so
+    the policy read "Drifted" from the moment it was applied, and because a
+    drifted record is never stamped as observed, the kind then aged into "nothing
+    has observed this for 12 days". Two alarms, both false, and a real change to
+    the ACL would have looked exactly the same as either.
+
+    Only a value that parses as a JSON object or array is touched; anything else,
+    including a policy written as HuJSON with comments, is compared as the text
+    it is, which is the old behaviour and errs towards reporting a difference.
+    """
+
+    stripped = text.strip()
+    if not stripped or stripped[0] not in "{[":
+        return text
+    try:
+        parsed = json.loads(stripped)
+    except ValueError:
+        return text
+    return json.dumps(parsed, sort_keys=True, separators=(",", ":"))
 
 
 def _record_drift(
