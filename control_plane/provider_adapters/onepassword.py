@@ -28,6 +28,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import Callable, Mapping
+from datetime import date
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -46,10 +47,7 @@ from .contracts import ProviderError, ProviderRuntime
 # The expiry is a real date rather than a string that looks like one, and that is
 # the point of it. Typed, the credential store itself knows when the certificate
 # goes stale -- it renders and sorts it as a date, and can be asked -- so the
-# warning survives HQ being down, misconfigured, or quietly not sweeping. That is
-# not hypothetical: a copy of a certificate here sat two months expired because
-# the only thing that knew the date was the renewal path, and nobody was reading
-# it.
+# warning does not depend on HQ being up, configured, or sweeping.
 PUBLISHED_FIELDS: Mapping[str, str] = MappingProxyType(
     {
         "Covers": "text",
@@ -74,8 +72,7 @@ _STORED_AS: Mapping[str, str] = MappingProxyType({"text": "STRING", "date": "DAT
 
 # Stamped on every item this adapter writes, so the item says who maintains it.
 # The query worth having is the inverse: an item in these vaults *without* this
-# tag is one a person put there and nothing keeps up to date, which is how the
-# next silently expired copy gets found before it matters.
+# tag is one a person put there and nothing keeps up to date.
 #
 # A flat adjective rather than the `severino-hq.role=controller` namespace the
 # containers use. That convention is a key and a value on a system that has
@@ -151,6 +148,27 @@ def facts(spec: dict[str, Any], status: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _as_written(field: Mapping[str, Any]) -> tuple[str, str]:
+    """One field's stored type beside its value, in the form it was written in.
+
+    `op` takes a date as `2026-10-23` and stores epoch seconds, so the item reads
+    back as `1792731600`, which cannot compare equal to the value that produced
+    it. The epoch is midnight on that date in the writing machine's timezone, so
+    rendering it in local time is the inverse of the parse. An unparseable value
+    is left as it came: that reads as a difference and corrects on the next
+    write, rather than raising over a field about to be overwritten anyway.
+    """
+
+    kind = str(field.get("type", "") or "")
+    value = str(field.get("value", "") or "")
+    if kind == "DATE" and value:
+        try:
+            value = date.fromtimestamp(int(value)).isoformat()
+        except (OSError, OverflowError, ValueError):
+            pass
+    return kind, value
+
+
 def _token(runtime: ProviderRuntime, connection_ref: str) -> str:
     prefix = runtime.connection_prefix("onepassword", connection_ref)
     return runtime.required(prefix, "API_TOKEN")
@@ -202,10 +220,7 @@ def _current(
     if not isinstance(document, dict):
         raise ProviderError("1Password returned an item HQ could not read.")
     fields = {
-        str(field.get("label", "")): (
-            str(field.get("type", "") or ""),
-            str(field.get("value", "") or ""),
-        )
+        str(field.get("label", "")): _as_written(field)
         for field in document.get("fields") or ()
         if str(field.get("label", "")) in PUBLISHED_FIELDS
     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -3235,6 +3236,9 @@ def _an_item(fields=None, tags=(AN_OWNERS_OWN_TAG,), files=ATTACHMENT_LABELS) ->
     as, or as an explicit ``(type, value)`` pair for the case that matters most:
     an item written before the expiry was typed, whose value reads identically
     and is not a date.
+
+    A date given as ``2026-10-23`` comes back the way `op` prints one: the epoch
+    seconds of midnight on that day.
     """
 
     stored = []
@@ -3243,6 +3247,11 @@ def _an_item(fields=None, tags=(AN_OWNERS_OWN_TAG,), files=ATTACHMENT_LABELS) ->
             field_type, value = value
         else:
             field_type = onepassword._STORED_AS[onepassword.PUBLISHED_FIELDS[label]]
+            if field_type == "DATE":
+                midnight = datetime.datetime.combine(
+                    datetime.date.fromisoformat(value), datetime.time()
+                )
+                value = str(int(midnight.timestamp()))
         stored.append({"id": label, "type": field_type, "label": label, "value": value})
     return json.dumps(
         {
@@ -3471,9 +3480,7 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         """So the credential store itself knows when this goes stale.
 
         A date 1Password can render, sort and be asked about is a warning that
-        survives HQ being down, misconfigured, or quietly not sweeping -- which
-        is the failure that put an expired copy of a certificate here for two
-        months, with the only thing that knew the date being the renewal path.
+        does not depend on HQ sweeping.
         """
 
         types = self._types(self._publish({})[0])
@@ -3482,6 +3489,24 @@ class TheDeclarationSaysWhereAndTheCodeSaysWhatTests(TestCase):
         self.assertEqual(
             {label for label, kind in types.items() if kind == "text"},
             set(onepassword.PUBLISHED_LABELS) - {"Expires"},
+        )
+
+    def test_the_expiry_1password_stores_is_read_back_as_the_date_it_was_given(self):
+        """`op` takes `2026-10-23`, stores epoch seconds, and prints those back.
+
+        Read as printed, the expiry never equals the value that produced it, and
+        an unchanged certificate would rewrite it on every sweep.
+        """
+
+        published = self._written(self._publish({})[0])
+        expiry = published["Expires"]
+        stored = json.loads(_an_item(published))["fields"]
+        printed = next(f["value"] for f in stored if f["label"] == "Expires")
+
+        self.assertNotEqual(printed, expiry, "op prints epoch seconds, not the date")
+        self.assertEqual(
+            onepassword._as_written({"type": "DATE", "value": printed}),
+            ("DATE", expiry),
         )
 
     def test_a_field_whose_type_is_wrong_is_rewritten_though_it_reads_the_same(self):
