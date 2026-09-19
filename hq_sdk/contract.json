@@ -224,7 +224,8 @@
         "constructor": [
           "actor",
           "interface",
-          "capabilities"
+          "capabilities",
+          "approved_by="
         ],
         "fields": [],
         "kind": "dataclass",

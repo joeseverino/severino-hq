@@ -1242,6 +1242,21 @@ class ProviderSpec:
     # recomputed -- otherwise a certificate reports itself in sync against a
     # target that moved underneath it.
     resolution_input: bool = False
+    # Whether changing this kind needs a person to agree, and not merely a
+    # caller that holds the capability.
+    #
+    # Declared per kind rather than per capability effect. Effect says how
+    # forceful an act is; it cannot say how much is standing behind the thing
+    # being acted on. Reconciling a rewrite and rewriting the estate's access
+    # policy are the same effect and not remotely the same event, and a rule
+    # written on the effect would either wave the second one through or put a
+    # decision in front of a person for every container restart -- at which
+    # point the decision stops being read.
+    #
+    # A kind flagged here holds changes asked for over any interface that is
+    # not a person at a browser. Nothing about how an operator works changes;
+    # what changes is that a credential on its own is no longer enough.
+    requires_approval: bool = False
     # The addresses a record makes a name resolve to, where it resolves to an
     # address at all. Declared by the provider because only it knows which of
     # its fields is the answer -- and read by anything asking who can reach a
@@ -2409,6 +2424,11 @@ _PROVIDERS = (
         # One policy per tailnet, which HQ did not create and cannot delete.
         # Removal means HQ stops keeping it, as for a device.
         declaration_only=True,
+        # The most valuable single control in the estate: it decides who can
+        # reach what, everywhere, and a mistake in it is not confined to one
+        # service. A credential that can change this can open the network, so
+        # changing it asks a person first.
+        requires_approval=True,
         change_effects=(
             (
                 "document",
@@ -2817,6 +2837,11 @@ def describe_providers() -> dict[str, Any]:
                 "summary": provider.summary,
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,
+                # Said out loud in the contract, so a caller can know before it
+                # calls that this kind waits for a person -- rather than
+                # discovering it from the answer to a change it has already
+                # asked for.
+                "requires_approval": provider.requires_approval,
                 # Part of the contract, not a detail of one page: anything that
                 # offers "add a resource" has to know which kinds stand on their
                 # own and which only make sense inside something else.

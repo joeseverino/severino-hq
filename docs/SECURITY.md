@@ -107,6 +107,20 @@
   Forwarded client-address headers are never trusted. The container uses host
   networking so the ASGI server receives the real peer address instead of a
   Docker bridge address.
+- A provider kind may declare `requires_approval`, and then a change to it asked
+  for by anything that is not a person at the web interface is held rather than
+  applied. The held request writes no declaration and queues no operation, so
+  there is nothing for the privileged controller to claim; an operator approves
+  or rejects it at `/infrastructure/approvals/`, having read a field-by-field
+  diff of what would change. The approval covers that diff: it is fingerprinted
+  against the declaration as it stood, so content that moves in the meantime
+  supersedes the request instead of being applied under an earlier decision.
+  Requests lapse after `SEVERINO_APPROVAL_WINDOW_HOURS` (24 by default), one
+  actor may hold ten at a time, and approving is gated on the interface rather
+  than on a capability -- so no grant, however wide, lets a token approve its own
+  request. `tailscale.policy` is the kind that carries the flag today.
+  Read-only capabilities, every other kind, and the controller's own automatic
+  convergence are untouched.
 
 ## Production checklist
 

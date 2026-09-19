@@ -266,6 +266,97 @@ class OperationRequest(TimestampedModel):
         return f"{self.resource.key}: {self.action} ({self.state})"
 
 
+class ApprovalRequest(TimestampedModel):
+    """A change something other than a person asked for, held until one agrees.
+
+    Written after a single service token, held on a laptop, changed the whole
+    estate's access policy twice inside a minute: once to amend the declaration
+    and once to push it, with nothing in between that a human had to see. Both
+    calls were authorized. Authority was never the missing thing -- consent was.
+
+    So this is not a second permission system. The caller already held the
+    capability; what it did not hold was a person's agreement, and that is the
+    only thing stored here. The requested call is kept verbatim, in
+    ``capability``, ``target`` and ``payload``, and is replayed unchanged when
+    somebody approves it. Nothing about the estate moves in the meantime: no
+    declaration is written, no operation is queued, so there is nothing for a
+    controller to find and apply. An unapproved request is inert by
+    construction rather than by a filter somebody has to remember to write.
+
+    ``content_fingerprint`` is what makes an approval an approval *of
+    something*. It covers the requested call and the state it was measured
+    against, so a declaration that moves between the request and the decision
+    invalidates the approval instead of quietly widening it. A person approves
+    the diff they were shown, and only that diff.
+
+    ``expires_at`` exists because a request nobody ever answers is not a
+    pending decision, it is litter -- and litter that still applies a change if
+    it is clicked six weeks later.
+    """
+
+    class State(models.TextChoices):
+        PENDING = "pending", "Waiting for a person"
+        APPROVED = "approved", "Approved and applied"
+        REJECTED = "rejected", "Rejected"
+        EXPIRED = "expired", "Lapsed unanswered"
+        # Decided by nobody: the thing it described changed underneath it, so
+        # the approval that was asked for no longer covers what would happen.
+        STALE = "stale", "Superseded by a later change"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    capability = models.CharField(max_length=64)
+    target = models.CharField(max_length=200, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    # The kind is why this was held at all, and the key is what it is about.
+    # Stored rather than re-derived: the declaration may be gone by the time a
+    # person reads the queue, and "which resource was this" still has an answer.
+    resource_kind = models.CharField(max_length=64, blank=True)
+    resource_key = models.CharField(max_length=180, blank=True)
+    # What the requested change was measured against, as it stood when asked.
+    # The diff a person is shown is rendered from this, so the page cannot show
+    # one comparison and the fingerprint cover another.
+    baseline = models.JSONField(default=dict, blank=True)
+    content_fingerprint = models.CharField(max_length=64)
+    requested_actor = models.CharField(max_length=160)
+    requested_interface = models.CharField(max_length=32)
+    reason = models.CharField(max_length=300, blank=True)
+    state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
+    expires_at = models.DateTimeField()
+    # The decider is a name and an interface, not a user row. A foreign key
+    # would be the obvious thing and would answer a question nobody asks: what
+    # matters is that a person on the web surface agreed, and both of those
+    # facts are here. ``OperationRequest.requested_by`` is the counter-example
+    # sitting next door -- a user column no writer has ever filled in.
+    decided_actor = models.CharField(max_length=160, blank=True)
+    decided_interface = models.CharField(max_length=32, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    # What the replayed call answered, so the queue can say what approving it
+    # actually did without the reader having to go and find the operation.
+    result = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("state", "expires_at")),
+            models.Index(fields=("resource_key", "state")),
+        ]
+        constraints = [
+            # One row per identical outstanding request. A caller that asks the
+            # same thing fifty times is told about the one request fifty times;
+            # it does not fill a person's queue with fifty decisions that are
+            # all the same decision.
+            models.UniqueConstraint(
+                fields=("capability", "target", "content_fingerprint"),
+                condition=models.Q(state="pending"),
+                name="one_pending_approval_per_requested_change",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.capability} on {self.target or self.resource_key} ({self.state})"
+
+
 class AddressReading(models.Model):
     """What the public registries last said about one address.
 

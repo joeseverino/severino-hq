@@ -44,6 +44,7 @@ from .infrastructure import (
     request_removal,
     save_managed_resource,
 )
+from .approvals import TooManyPendingApprovals, hold_for_approval
 from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
 from .lookup import (
     AddressCommand,
@@ -582,14 +583,28 @@ def execute_capability(
         authorize_capability(spec, principal)
         _refuse_unknown_fields(spec, payload)
         command = TypeAdapter(spec.command_type).validate_python(payload)
-        kwargs: dict[str, Any] = {
-            "principal": principal,
-            "expected_updated_at": expected_updated_at,
-            **_target_keyword(spec, target),
-        }
-        return spec.handler(command, **kwargs)
+        # Then consent, last of the four, because the other three decide whether
+        # there is anything worth a person's attention. A request that is
+        # unauthorized or malformed is answered here rather than becoming a
+        # decision somebody has to read before finding out it was never valid.
+        held = hold_for_approval(spec, payload, target, principal=principal)
+        if held is not None:
+            return held
+        return _run(
+            spec,
+            command,
+            principal=principal,
+            target=target,
+            expected_updated_at=expected_updated_at,
+        )
     except _UnusableTarget:
         return _error("invalid_input", f"{name} requires a {spec.target_kind} target.")
+    except TooManyPendingApprovals as exc:
+        # Said in full, unlike the generic failure below. This is the one refusal
+        # whose remedy is neither a retry nor a fix to the request: somebody has
+        # to answer what is already waiting, and a caller cannot work that out
+        # from "could not be executed".
+        return _error("too_many_pending_approvals", str(exc))
     except AuthorizationError as exc:
         return _error(exc.code, exc.reason)
     except PydanticValidationError as exc:
@@ -602,6 +617,50 @@ def execute_capability(
         # It can contain argument names, provider responses, paths, or values
         # from the request. The capability name is registry-owned and safe.
         return _error("operation_failed", f"{name} could not be executed.")
+
+
+def _run(
+    spec: CapabilitySpec,
+    command: Any,
+    *,
+    principal: Principal,
+    target: str | int | None,
+    expected_updated_at: str | None,
+) -> dict[str, Any]:
+    """Bind the target and run the handler. One line, and one place."""
+
+    return spec.handler(
+        command,
+        principal=principal,
+        expected_updated_at=expected_updated_at,
+        **_target_keyword(spec, target),
+    )
+
+
+def execute_approved(
+    spec: CapabilitySpec,
+    payload: dict[str, Any],
+    target: str | int | None,
+    *,
+    principal: Principal,
+) -> dict[str, Any]:
+    """Run a capability a person has just agreed to, held payload and all.
+
+    The gate is deliberately not consulted again. It has already been satisfied,
+    by the decision that called this, and asking it a second time would hold the
+    approval for an approval. Reachable only from that decision, which is why it
+    takes a spec rather than a name: nothing can route to it by sending a string.
+
+    Errors are raised rather than projected into an adapter's error shape. The
+    caller here is the page a person is standing on, and it reports what went
+    wrong on that page while leaving the request as it was -- which is what the
+    surrounding transaction guarantees.
+    """
+
+    command = TypeAdapter(spec.command_type).validate_python(payload)
+    return _run(
+        spec, command, principal=principal, target=target, expected_updated_at=None
+    )
 
 
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:

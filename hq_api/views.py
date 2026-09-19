@@ -61,6 +61,10 @@ CAPABILITY_STATUS = {
     "unknown_capability": 404,
     "forbidden": 403,
     "operation_failed": 409,
+    # Nothing is wrong with the request. This client is holding more decisions
+    # than a person has answered, so the honest status is the one that says
+    # "later", not the one that says "malformed".
+    "too_many_pending_approvals": 429,
 }
 
 

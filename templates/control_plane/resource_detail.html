@@ -81,6 +81,20 @@
   </div>
 </div>
 
+{% comment %}
+Said here as well as on the queue. This is the page somebody opens when a
+declaration has not moved and they want to know why, and "a credential asked for
+this and nobody has answered" is the answer -- invisible otherwise, because a
+held request writes nothing and queues nothing by design.
+{% endcomment %}
+{% if awaiting_approval %}
+  <div class="notice notice-attention">
+    <strong>{{ awaiting_approval|length }} change{{ awaiting_approval|length|pluralize }} waiting for your approval</strong>
+    <p>Asked for by {% for held in awaiting_approval %}<code>{{ held.requested_actor }}</code> over <code>{{ held.requested_interface }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}. Nothing has been written and nothing is queued.</p>
+    <p><a class="btn compact primary" href="{% url 'control_plane:approvals' %}">Review and decide</a></p>
+  </div>
+{% endif %}
+
 <div class="control-summary">
   <div class="control-metric">
     <span class="control-label">Configuration</span>

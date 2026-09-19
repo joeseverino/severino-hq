@@ -76,7 +76,7 @@ from application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
-from application.security import safe_next, web_principal
+from application.security import AuthorizationError, safe_next, web_principal
 from application.machine_context import sections_for as machine_sections
 from application.service_context import sections_for
 from application.ui import PageNavigation, PageSection
@@ -1369,6 +1369,76 @@ class FindingsView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class ApprovalListView(LoginRequiredMixin, TemplateView):
+    """Every change a credential asked for and a person has not answered.
+
+    The page exists because the held request is otherwise invisible. A token
+    asking for the estate's access policy to change writes nothing and queues
+    nothing, which is the property that makes the hold safe and also the property
+    that would let the request sit unread forever.
+
+    Each entry leads with the comparison rather than the request. Who asked and
+    why are context; what would actually change is the decision, and a decision
+    taken on two three-kilobyte documents printed side by side is not a decision.
+    """
+
+    template_name = "control_plane/approvals.html"
+
+    def get_context_data(self, **kwargs):
+        from application import approvals
+
+        context = super().get_context_data(**kwargs)
+        context["approvals"] = tuple(
+            {
+                "held": held,
+                "preview": approvals.preview(held),
+                "resource_url": (
+                    reverse("control_plane:detail", kwargs={"key": held.resource_key})
+                    if ManagedResource.objects.filter(key=held.resource_key).exists()
+                    else ""
+                ),
+            }
+            for held in approvals.pending()
+        )
+        return context
+
+
+class ApprovalDecisionView(LoginRequiredMixin, View):
+    """Agree to a held change, or refuse it. Nothing else can.
+
+    A POST from a signed-in operator, which is the entire mechanism: the
+    interface is the check, and ``application.approvals`` makes it rather than
+    this view, so a second surface cannot forget to.
+    """
+
+    def post(self, request, approval_id):
+        from application import approvals
+
+        decision = request.POST.get("decision", "")
+        try:
+            if decision == "approve":
+                approvals.approve(str(approval_id), principal=web_principal(request.user))
+                messages.success(request, "Approved, and applied as it was requested.")
+            elif decision == "reject":
+                approvals.reject(
+                    str(approval_id),
+                    principal=web_principal(request.user),
+                    note=request.POST.get("note", ""),
+                )
+                messages.success(request, "Rejected. Nothing was applied.")
+            else:
+                messages.error(request, "Choose whether to approve or reject.")
+        except (AuthorizationError, ValueError) as exc:
+            # One handler for both, because a person reading this page is owed
+            # the same treatment either way: an approval that cannot be applied
+            # says why, on the page, with the request left as it was.
+            messages.error(request, str(exc) or "That decision could not be taken.")
+        return redirect(
+            safe_next(request, scope="/infrastructure/")
+            or reverse("control_plane:approvals")
+        )
+
+
 class InfrastructureListView(LoginRequiredMixin, ListView):
     model = ManagedResource
     template_name = "control_plane/resource_list.html"
@@ -1474,6 +1544,16 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         # and nothing else. So it could only repeat what the panel had just said
         # better -- "State: running, up 3 months" followed by "State: --", and
         # the container's own name under a page titled after it.
+        # A change to this resource that a credential asked for and nobody has
+        # answered. Said on the resource's own page as well as on the queue,
+        # because this is the page an operator opens when they wonder why a
+        # declaration has not moved -- and "something is waiting for you" is the
+        # answer, rather than a resource that merely looks idle.
+        from application.approvals import pending as pending_approvals
+
+        context["awaiting_approval"] = tuple(
+            held for held in pending_approvals() if held.resource_key == self.object.key
+        )
         context["readout_rows"] = (
             () if self.object.kind == CONTAINER_KIND else _readout_rows(self.object)
         )

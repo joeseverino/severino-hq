@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Waiting for approval · Infrastructure{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Waiting for approval</h1>
+    <p class="page-lede">Changes asked for by a credential rather than a person. Nothing here has been written or queued; approving is what applies it.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'control_plane:list' %}">Resources</a>
+  </div>
+</div>
+
+<div class="topology-summary" role="status">
+  <span><strong>{{ approvals|length }}</strong> waiting</span>
+</div>
+
+{% for entry in approvals %}
+  <article class="card finding-card is-serious">
+    <div class="section-head">
+      <div>
+        <span class="pill pill-serious">{{ entry.held.capability }}</span>
+        <h2>{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.held.resource_key }}</a>{% else %}{{ entry.held.resource_key }}{% endif %}</h2>
+      </div>
+    </div>
+
+    <dl class="finding-evidence">
+      <div><dt>Asked by</dt><dd><code>{{ entry.held.requested_actor }}</code> over <code>{{ entry.held.requested_interface }}</code></dd></div>
+      <div><dt>Kind</dt><dd><code>{{ entry.held.resource_kind }}</code></dd></div>
+      <div><dt>Stated reason</dt><dd>{% if entry.held.reason %}{{ entry.held.reason }}{% else %}<span class="muted">None given</span>{% endif %}</dd></div>
+      <div><dt>Asked at</dt><dd>{{ entry.held.created_at }}</dd></div>
+      <div><dt>Lapses</dt><dd>{{ entry.held.expires_at }}</dd></div>
+    </dl>
+
+    {% comment %}
+    The comparison, and it leads. A decision taken on "a token would like to
+    change the access policy" is not a decision; a decision taken on the three
+    paths that move is. Rows where the document parses, a unified diff where it
+    does not, and a plain statement when there is genuinely nothing to compare.
+    {% endcomment %}
+    <h3>{{ entry.preview.label }}</h3>
+    {% if entry.preview.rows %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Field</th><th>Now</th><th>Requested</th></tr></thead>
+          <tbody>
+            {% for row in entry.preview.rows %}
+              <tr>
+                <td><code>{{ row.path }}</code> <span class="muted">{{ row.change }}</span></td>
+                <td>{% if row.before %}{{ row.before }}{% else %}<span class="muted">absent</span>{% endif %}</td>
+                <td>{% if row.after %}{{ row.after }}{% else %}<span class="muted">absent</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    {% if entry.preview.lines %}
+      <pre><code>{% for line in entry.preview.lines %}{{ line }}
+{% endfor %}</code></pre>
+    {% endif %}
+    {% if entry.preview.empty %}
+      <p class="muted">Nothing in the declaration would move. Approving applies what is already declared to the live record.</p>
+    {% endif %}
+
+    <div class="finding-offers">
+      <strong>Your decision</strong>
+      <div class="finding-actions">
+        <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="approve">
+          <button type="submit" class="btn compact primary">Approve and apply</button>
+        </form>
+        <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="reject">
+          <button type="submit" class="btn compact">Reject</button>
+        </form>
+      </div>
+    </div>
+  </article>
+{% empty %}
+  <div class="card">
+    <p>Nothing is waiting. Changes to a kind that needs a person are held here when anything other than this interface asks for them.</p>
+  </div>
+{% endfor %}
+{% endblock %}

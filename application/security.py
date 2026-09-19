@@ -41,6 +41,24 @@ class Capability(StrEnum):
     REQUEST_CERTIFICATE_RENEWAL = "request_certificate_renewal"
 
 
+# The interfaces where a request is a person, established as one and present at
+# the time. The web surface is behind an identity provider and a passkey, so a
+# click there is somebody; a token call is a credential, and a credential is
+# whatever currently holds it.
+#
+# An allowlist rather than a list of the machine interfaces, so an interface
+# added later is treated as a credential until somebody decides otherwise. The
+# other order fails open: a new adapter would inherit a person's standing by
+# not having been thought about.
+INTERACTIVE_INTERFACES = frozenset({"web"})
+
+
+def is_interactive(principal: "Principal") -> bool:
+    """Whether this act is a person's, rather than a credential's."""
+
+    return principal.interface in INTERACTIVE_INTERFACES
+
+
 class AuthorizationError(PermissionError):
     """Refused for want of a capability. Its message is written for the caller."""
 
@@ -61,6 +79,13 @@ class Principal:
     actor: str
     interface: str
     capabilities: frozenset[Capability | str]
+    # The person who agreed to this act, where one had to. Empty for everything
+    # else, which is almost everything: an operator clicking a button is their
+    # own consent. It is carried on the principal rather than passed alongside
+    # it so a replayed request keeps naming whoever asked for it, and the
+    # record of who allowed it travels with the act instead of being looked up
+    # afterwards from two rows that nothing joins.
+    approved_by: str = ""
 
     def permits(self, *capabilities: Capability | str) -> bool:
         """Whether this principal holds every capability named.
