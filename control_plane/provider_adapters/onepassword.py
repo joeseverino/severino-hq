@@ -165,6 +165,9 @@ def _as_written(field: Mapping[str, Any]) -> tuple[str, str]:
         try:
             value = date.fromtimestamp(int(value)).isoformat()
         except (OSError, OverflowError, ValueError):
+            # Not a number of seconds, so not something this wrote. Left as it
+            # came: that reads as a difference and the next write corrects it,
+            # which is the right answer for a field about to be overwritten.
             pass
     return kind, value
 
