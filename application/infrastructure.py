@@ -25,6 +25,7 @@ from control_plane.providers import (
 from control_plane.desired_state import advance_dependents, desired_fingerprint
 from core.audit import operation_context
 
+from .approvals import consent_gap
 from .projection import page_size
 from .cadence import ring_doorbell
 from .security import Capability, Principal
@@ -371,6 +372,9 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
         "automatic": operation.requested_interface == "controller",
         "requested_actor": operation.requested_actor,
         "requested_interface": operation.requested_interface,
+        # Blank for almost everything, and the point when it is not: this is the
+        # person who agreed to a change a credential asked for.
+        "approved_by": (operation.input or {}).get("approved_by", ""),
         "created_at": operation.created_at.isoformat(),
         "completed_at": (
             operation.completed_at.isoformat() if operation.completed_at else None
@@ -465,6 +469,16 @@ def save_managed_resource(
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     validated_spec = validate_spec(command.kind, command.spec)
+    # A kind that needs a person's agreement does not get written by a caller
+    # that has not got one. The capability boundary has already held such a
+    # request and answered the caller properly; this is the floor under that, so
+    # a path added later cannot write one of these by not going through it.
+    # Exempted for an adopted spec for the same reason the public-DNS switch
+    # below is: it asserts exactly what the provider already holds, so nothing
+    # anybody would have to agree to has changed.
+    gap = "" if copied_from_live else consent_gap(command.kind, principal=principal)
+    if gap:
+        raise PolicyError(gap)
     provider = PROVIDERS[command.kind]
     if (
         command.enabled
@@ -565,6 +579,14 @@ def _queue_operation(
 ) -> dict[str, Any]:
     if require_enabled and not resource.enabled:
         raise PolicyError(f"Managed resource {resource.key!r} is disabled.")
+    # Nothing enters the queue for a gated kind without a person behind it. The
+    # controller's own automatic work does not pass through here -- it writes its
+    # rows directly, as itself, converging toward a declaration somebody has
+    # already agreed to -- so this refuses exactly the case it is about: a
+    # credential asking for the world to be changed.
+    gap = consent_gap(resource.kind, principal=principal)
+    if gap:
+        raise PolicyError(gap)
     allowed, explanation = controller_action_policy(resource.kind, action)
     if not allowed:
         raise PolicyError(explanation)
@@ -593,7 +615,15 @@ def _queue_operation(
         requested_interface=principal.interface,
         reason=command.reason,
         idempotency_key=command.idempotency_key,
-        input={"generation": resource.generation},
+        # Who asked stays who asked. Where a person had to agree before this
+        # could be queued, that is recorded beside the request rather than in
+        # place of it: an operation applied on somebody's say-so and one a
+        # credential queued alone must not read the same afterwards.
+        input=(
+            {"generation": resource.generation, "approved_by": principal.approved_by}
+            if principal.approved_by
+            else {"generation": resource.generation}
+        ),
     )
     # Every operation of every kind is created here, so this is the one place
     # that has to ring. The controller still pulls the work; this only says

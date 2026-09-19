@@ -601,6 +601,10 @@ SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool(
 # Requesting a certificate is an outward action with a real-world effect, so
 # it is gated on its own rather than riding along with declaring topology.
 SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", False)
+# How long a change held for a person's approval stands before it lapses. A day:
+# the person it waits for sleeps, and a request still clickable a month later is
+# a change nobody is looking at any more being applied on an old decision.
+SEVERINO_APPROVAL_WINDOW_HOURS = env_int("SEVERINO_APPROVAL_WINDOW_HOURS", 24)
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
     "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
 )

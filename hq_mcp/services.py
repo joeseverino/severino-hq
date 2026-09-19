@@ -51,7 +51,14 @@ def execute_capability(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Execute one allowlisted capability from a schema-validated JSON payload."""
+    """Execute one allowlisted capability from a schema-validated JSON payload.
+
+    Some changes are held for a person. A result carrying
+    `status: "awaiting_approval"` is not a failure and not something to retry:
+    the request is recorded, nothing has been written, and an operator has to
+    approve it in HQ's web interface, which this interface cannot do. Report the
+    approval id from `approval.id` to whoever asked, and stop.
+    """
 
     return execute_application_capability(
         name,

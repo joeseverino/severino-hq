@@ -9,7 +9,7 @@ class ControlPlaneConfig(AppConfig):
     def ready(self):
         from core.audit import register_audit
 
-        from .models import ManagedResource, OperationRequest
+        from .models import ApprovalRequest, ManagedResource, OperationRequest
 
         register_audit(
             ManagedResource,
@@ -19,3 +19,7 @@ class ControlPlaneConfig(AppConfig):
             observation=("last_observed_at",),
         )
         register_audit(OperationRequest, "Infrastructure operation")
+        # Audited like everything else, and for the reason the whole feature
+        # exists: who asked for a held change, who agreed to it and when are
+        # exactly the facts an incident review has to be able to read back.
+        register_audit(ApprovalRequest, "Infrastructure approval")
