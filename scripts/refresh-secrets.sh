@@ -30,7 +30,12 @@ case "${SEVERINO_SECRETS_BACKEND:-service-account}" in
     connect)
         unset OP_SERVICE_ACCOUNT_TOKEN
         : "${OP_CONNECT_HOST:?Connect endpoint is required}"
-        OP_CONNECT_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:?}/op_connect_token")"
+        # Named for the consumer that holds it, not for the protocol. Each
+        # consumer gets its own read-only Connect token scoped to the vaults it
+        # actually needs, so one of them being compromised does not hand over
+        # the others -- and this host already runs more than one renderer, where
+        # a shared credential name silently clobbers.
+        OP_CONNECT_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:?}/${SEVERINO_CONNECT_CREDENTIAL:-op_connect_hq_renderer}")"
         export OP_CONNECT_TOKEN
         # Validate endpoint/authentication before op can send any credentials.
         sh "${script_dir}/list-secret-items.sh" "${vault}" >/dev/null

@@ -59,8 +59,12 @@ per consumer and an emergency local shutdown procedure.
 
 `scripts/refresh-secrets.sh` selects `SEVERINO_SECRETS_BACKEND` explicitly.
 `service-account` remains the compatibility default until host cutover;
-`connect` loads `op_connect_token` from systemd and clears service-account
-authentication. There is no automatic cloud fallback. The Connect endpoint must
+`connect` loads the credential named by `SEVERINO_CONNECT_CREDENTIAL` from
+systemd and clears service-account authentication. That name identifies the
+consumer holding the token, not the protocol: each consumer is issued its own
+read-only Connect token scoped to the vaults it needs, so compromising one does
+not hand over the others, and a host running several renderers cannot have one
+credential name silently clobber another. There is no automatic cloud fallback. The Connect endpoint must
 be `http://127.0.0.1:PORT`.
 
 Connect's CLI supports reads but not `op item list`.
