@@ -5,6 +5,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest import TestCase, mock
@@ -944,6 +945,100 @@ class ProviderAdapterTests(TestCase):
 
         with self.assertRaisesRegex(providers.ProviderError, "nothing to converge"):
             providers.execute({"kind": "cloudflare.zone", "spec": {}}, "reconcile")
+
+    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch.dict(
+        "os.environ",
+        {
+            "NPM_URL": "https://npm-origin.example",
+            "EXAMPLE_EDGE_CONNECTION_REF": "example-edge",
+            "EXAMPLE_EDGE_HOST": "192.0.2.20",
+            "EXAMPLE_EDGE_PORT": "22",
+            "EXAMPLE_EDGE_USER": "controller",
+            "EXAMPLE_EDGE_HOST_KEY": "ssh-ed25519 AAAA",
+        },
+        clear=True,
+    )
+    def test_one_unreachable_consumer_leaves_the_others_observed(self, observe):
+        """A consumer that cannot be reached is reported, not propagated.
+
+        What the other consumers are serving is still a reading, and a
+        certificate whose facts are published still publishes them. Reported
+        against the consumer it belongs to, so the resource says which part of
+        itself this observation covers.
+        """
+
+        observe.side_effect = [
+            providers.ProviderError(
+                "TLS observation failed for health.example: TimeoutError."
+            ),
+            {
+                "domain": "hq.example",
+                "not_after": "2026-10-07T00:00:00+00:00",
+                "fingerprint_sha256": "current",
+                "issuer": "Example CA",
+                "sans": ["*.example"],
+                "certificate_pem": "-----BEGIN CERTIFICATE-----\ncurrent\n",
+            },
+        ]
+
+        result = providers.reconcile_tls(
+            {
+                "renewal_window_days": 30,
+                "consumers": [
+                    {
+                        "kind": "caddy",
+                        "name": "caddy",
+                        "connection_ref": "example-edge",
+                        "verify_domains": ["health.example"],
+                    },
+                    {"kind": "npm", "name": "npm", "verify_domains": ["hq.example"]},
+                ],
+            }
+        )
+
+        self.assertEqual(result.status["verified_domains"], ["hq.example"])
+        self.assertEqual(
+            result.status["unreachable_consumers"],
+            [
+                {
+                    "consumer": "caddy",
+                    "domain": "health.example",
+                    # What was tried, which is resolved from a connection only
+                    # the controller holds and is the part that says what to do.
+                    "endpoint": "192.0.2.20",
+                    "port": "443",
+                    "reason": (
+                        "TLS observation failed for health.example: TimeoutError."
+                    ),
+                }
+            ],
+        )
+        self.assertTrue(
+            any(item["reason"] == "ConsumerUnreachable" for item in result.conditions)
+        )
+        self.assertFalse(any(item["type"] == "Ready" for item in result.conditions))
+
+    @mock.patch("controller_runtime.providers._observe_tls_domain")
+    @mock.patch.dict("os.environ", {"NPM_URL": "https://npm-origin.example"}, clear=True)
+    def test_every_consumer_unreachable_is_still_a_failure(self, observe):
+        """Nothing was read, so there is no expiry and nothing to compare."""
+
+        observe.side_effect = providers.ProviderError(
+            "TLS observation failed for hq.example: TimeoutError."
+        )
+
+        with self.assertRaises(providers.ProviderError) as caught:
+            providers.reconcile_tls(
+                {
+                    "renewal_window_days": 30,
+                    "consumers": [
+                        {"kind": "npm", "name": "npm", "verify_domains": ["hq.example"]}
+                    ],
+                }
+            )
+
+        self.assertIn("No TLS consumer could be reached", str(caught.exception))
 
     @mock.patch("controller_runtime.providers._observe_tls_domain")
     @mock.patch.dict(
@@ -2203,6 +2298,61 @@ class ControllerStepReportingTests(TestCase):
                 _run(["/bin/false"], step="SSH preflight for somewhere")
         self.assertIn("SSH preflight for somewhere", str(caught.exception))
         self.assertNotIn("Certificate", str(caught.exception))
+
+    def test_a_step_whose_tool_is_missing_says_so_in_the_log(self):
+        """A tool that is not on the machine raises before there is an exit code.
+
+        The provider result says only that the step could not complete, so the
+        log is the only place the cause can be read. The exception's type is
+        that cause, and it belongs in the message: the controller's formatter
+        prints the message and drops everything else.
+        """
+
+        from controller_runtime.providers import ProviderError, _run
+
+        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+            run.side_effect = FileNotFoundError(2, "No such file or directory", "op")
+            with self.assertLogs("severino.controller", level="WARNING") as logged:
+                with self.assertRaises(ProviderError) as caught:
+                    _run(["op", "item", "get"], step="1Password read for a target")
+
+        self.assertIn("1Password read for a target", logged.output[0])
+        self.assertIn("FileNotFoundError", logged.output[0])
+        self.assertIn("1Password read for a target", str(caught.exception))
+
+    def test_a_step_that_never_returned_says_so_in_the_log(self):
+        from controller_runtime.providers import ProviderError, _run
+
+        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+            run.side_effect = subprocess.TimeoutExpired(cmd=["op"], timeout=180)
+            with self.assertLogs("severino.controller", level="WARNING") as logged:
+                with self.assertRaises(ProviderError):
+                    _run(["op", "item", "get"], step="1Password read for a target")
+
+        self.assertIn("TimeoutExpired", logged.output[0])
+
+    def test_a_credential_is_struck_out_of_the_silent_branch_too(self):
+        """A tool that names its credential while failing to start."""
+
+        from controller_runtime.providers import ProviderError, _run
+
+        with mock.patch("controller_runtime.providers.subprocess.run") as run:
+            run.side_effect = OSError("cannot run with token ops_secret_value")
+            with self.assertLogs("severino.controller", level="WARNING") as logged:
+                with self.assertRaises(ProviderError):
+                    _run(
+                        ["op"],
+                        step="a step",
+                        env={"OP_SERVICE_ACCOUNT_TOKEN": "ops_secret_value"},
+                    )
+
+        # The detail rides in `extra`, which the formatted output drops, so the
+        # record itself is what has to be checked: asserting on the rendered
+        # line would pass for a value that was never redacted at all.
+        detail = logged.records[0].detail
+        self.assertIn("[redacted]", detail)
+        self.assertNotIn("ops_secret_value", detail)
+        self.assertNotIn("ops_secret_value", "".join(logged.output))
 
     def test_subprocess_output_never_reaches_the_result(self):
         """Remote paths and messages belong in the log, not in a provider result."""

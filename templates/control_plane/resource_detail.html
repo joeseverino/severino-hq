@@ -175,8 +175,56 @@ held request writes nothing and queues nothing by design.
           {% endfor %}
         </tbody>
       </table>
+      {% comment %}
+      Named beside the consumers that answered. A reading that covers six of
+      seven is still a reading, and this is the part it does not cover.
+      {% endcomment %}
+      {% if resource.status.unreachable_consumers %}
+        <details class="operation-evidence" open>
+          <summary>{{ resource.status.unreachable_consumers|length }} not read</summary>
+          <ul>
+            {% for item in resource.status.unreachable_consumers %}
+              <li><strong>{{ item.consumer }}</strong>{% if item.domain %} &middot; {{ item.domain }}{% endif %} &mdash; {{ item.reason }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
     </section>
   </div>
+  {% comment %}
+  Where this certificate's facts are recorded, and whether the last reconcile
+  managed it. A publication that failed is a fact about the certificate, and
+  without this the only record of it is the raw status below.
+  {% endcomment %}
+  {% if resource.status.published_facts %}
+    <section class="control-card">
+      <h2>Recorded in</h2>
+      <table class="data-table compact-table">
+        <thead><tr><th>Target</th><th>Last reconcile</th></tr></thead>
+        <tbody>
+          {% for publication in resource.status.published_facts %}
+            <tr>
+              <td><strong>{{ publication.target }}</strong></td>
+              <td>
+                {% if publication.detail %}
+                  <span class="pill pill-serious">Not recorded</span>
+                  <br><span class="muted">{{ publication.detail }}</span>
+                {% elif publication.written %}
+                  <span class="pill pill-good">Written</span>
+                  {% if publication.fields %}
+                    <br><span class="muted">{% for field in publication.fields %}{{ field }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                  {% endif %}
+                  {% if publication.material == "written" %}<br><span class="muted">certificate and key updated</span>{% endif %}
+                {% else %}
+                  <span class="pill pill-good">Already current</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
 {% else %}
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
