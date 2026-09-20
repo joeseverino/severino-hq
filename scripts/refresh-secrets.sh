@@ -8,72 +8,42 @@
 
 set -eu
 
-readonly vault="${SEVERINO_SECRETS_VAULT:-Severino HQ Production}"
-readonly mcp_ref="${SEVERINO_MCP_SECRET_REF:-op://Severino HQ Production/Severino HQ MCP/credential}"
-readonly env_item="${SEVERINO_ENV_ITEM:-severino-hq env}"
+# Supplied by the host, because it differs per machine. Required rather than
+# defaulted: a default is a wrong value waiting to be used silently on a host
+# that was never configured.
+readonly vault="${SEVERINO_SECRETS_VAULT:?vault is required}"
+readonly mcp_ref="${SEVERINO_MCP_SECRET_REF:?MCP secret reference is required}"
+readonly env_item="${SEVERINO_ENV_ITEM:?environment item is required}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly script_dir
 readonly secret_dir="${SEVERINO_HQ_SECRET_DIR:-/opt/apps/severino-hq/secrets}"
 readonly mcp_target="${secret_dir}/severino_mcp_token"
 readonly env_target="${secret_dir}/severino_hq_env"
-readonly controller_target="${secret_dir}/severino_controller_env"
+# Rendered into tmpfs, not onto the disk. This file carries every provider
+# credential the controller uses, and a copy under /opt/apps would sit in every
+# disk image and backup of this host for as long as the host exists. /run is
+# cleared on boot, and the renderer puts it back before the controller starts.
+#
+# Overridable so a host that has not migrated yet keeps working.
+readonly controller_target="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
+
+# shellcheck source=scripts/lib/secrets.sh
+. "${script_dir}/lib/secrets.sh"
 
 umask 077
 install -d -m 700 -o root -g root "${secret_dir}"
-exec 9>"${secret_dir}/.refresh.lock"
-flock -n 9 || { echo "Secret refresh is already running." >&2; exit 1; }
-staging="$(mktemp -d "${secret_dir}/.refresh.XXXXXX")"
-trap 'rm -rf "${staging}"' EXIT
-trap 'exit 1' HUP INT TERM
+# /run is empty after a boot, so the directory has to exist before the render.
+install -d -m 700 -o root -g root "$(dirname "${controller_target}")"
+secrets_lock "${secret_dir}"
+secrets_stage "${secret_dir}"
 
-case "${SEVERINO_SECRETS_BACKEND:-service-account}" in
-    connect)
-        unset OP_SERVICE_ACCOUNT_TOKEN
-        : "${OP_CONNECT_HOST:?Connect endpoint is required}"
-        # Named for the consumer that holds it, not for the protocol. Each
-        # consumer gets its own read-only Connect token scoped to the vaults it
-        # actually needs, so one of them being compromised does not hand over
-        # the others -- and this host already runs more than one renderer, where
-        # a shared credential name silently clobbers.
-        OP_CONNECT_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:?}/${SEVERINO_CONNECT_CREDENTIAL:-op_connect_hq_renderer}")"
-        export OP_CONNECT_TOKEN
-        # Validate endpoint/authentication before op can send any credentials.
-        sh "${script_dir}/list-secret-items.sh" "${vault}" >/dev/null
-        ;;
-    service-account)
-        unset OP_CONNECT_HOST OP_CONNECT_TOKEN
-        OP_SERVICE_ACCOUNT_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:?}/op_service_account_token")"
-        [ -n "${OP_SERVICE_ACCOUNT_TOKEN}" ] || { echo "Empty reader credential." >&2; exit 1; }
-        export OP_SERVICE_ACCOUNT_TOKEN
-        ;;
-    *) echo "Unknown secrets backend." >&2; exit 1 ;;
-esac
+secrets_backend_select "${vault}" "${script_dir}"
 
 any_changed=0
 web_changed=0
 installed_change=0
 
-# install_if_changed <tmp> <target> <uid> <gid> — atomic-ish install that
-# preserves a bind-mounted inode when the web container is already running.
-install_if_changed() {
-    installed_change=0
-    chown "$3:$4" "$1"
-    chmod 400 "$1"
-    if [ -f "$2" ] && cmp -s "$1" "$2"; then
-        rm -f "$1"
-        return 0
-    fi
-    if [ -f "$2" ]; then
-        cat "$1" >"$2"
-        chown "$3:$4" "$2"
-        chmod 400 "$2"
-        rm -f "$1"
-    else
-        mv "$1" "$2"
-    fi
-    installed_change=1
-    any_changed=1
-}
+install_if_changed() { secrets_install_if_changed "$@"; }
 
 # MCP validator token
 temporary="${staging}/mcp"

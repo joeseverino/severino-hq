@@ -7,7 +7,13 @@ set -eu
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly registry="${app_dir}/config/controller-connections.json"
 readonly ssh_dir="${app_dir}/secrets/ssh"
-readonly env_file="${app_dir}/secrets/severino_controller_env"
+# Rendered into tmpfs, not onto the disk. This file carries every provider
+# credential the controller uses, and a copy under /opt/apps would sit in every
+# disk image and backup of this host for as long as the host exists. /run is
+# cleared on boot, and the renderer puts it back before the controller starts.
+#
+# Overridable so a host that has not migrated yet keeps working.
+readonly env_file="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "provision-controller-ssh.sh must run as root." >&2

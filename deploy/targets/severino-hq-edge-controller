@@ -2,12 +2,20 @@
 set -eu
 
 readonly operation="${1:-}"
+
+# Bumped whenever an operation is added. The controller asks for this, so a
+# target older than the controller says so plainly instead of refusing an
+# operation it has simply never heard of.
+readonly target_version=2
 readonly cert_dir="${SEVERINO_HQ_CADDY_CERT_DIR:-/opt/apps/caddy/certs}"
 readonly routes_file="${SEVERINO_HQ_CADDY_ROUTES:-/opt/apps/caddy/config/hq-routes.caddy}"
 readonly cert_owner="${SEVERINO_HQ_CERT_OWNER:-root}"
 readonly cert_group="${SEVERINO_HQ_CERT_GROUP:-root}"
 
 case "${operation}" in
+    version)
+        echo "${target_version}"
+        ;;
     preflight)
         test -s "${cert_dir}/fullchain.pem"
         test -s "${cert_dir}/privkey.pem"
@@ -121,7 +129,12 @@ privkey.pem"
         fi
         ;;
     *)
-        echo "Severino HQ edge operation denied." >&2
+        # Name the operation and the version. This refusal is indistinguishable
+        # from a stale target otherwise, and a target that has not been
+        # reinstalled for weeks fails every deploy while reporting only a
+        # number -- which is how one sat three versions behind unnoticed.
+        echo "Severino HQ edge target v${target_version} does not implement '${operation}'." >&2
+        echo "If the controller expects it, this target is older than the controller." >&2
         exit 126
         ;;
 esac

@@ -7,7 +7,13 @@ readonly connection_ref="${1:?usage: controller-ssh.sh CONNECTION_REF OPERATION}
 readonly operation="${2:?usage: controller-ssh.sh CONNECTION_REF OPERATION}"
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly ssh_dir="${app_dir}/secrets/ssh"
-readonly env_file="${app_dir}/secrets/severino_controller_env"
+# Rendered into tmpfs, not onto the disk. This file carries every provider
+# credential the controller uses, and a copy under /opt/apps would sit in every
+# disk image and backup of this host for as long as the host exists. /run is
+# cleared on boot, and the renderer puts it back before the controller starts.
+#
+# Overridable so a host that has not migrated yet keeps working.
+readonly env_file="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "controller-ssh.sh must run as root." >&2
