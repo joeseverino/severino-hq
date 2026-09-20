@@ -12,6 +12,7 @@ Production guidance:
 from __future__ import annotations
 
 import os
+import secrets
 import shlex
 import tempfile
 from pathlib import Path
@@ -92,7 +93,12 @@ SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
-        SECRET_KEY = "dev-insecure-key-do-not-use-in-prod"  # noqa: S105
+        # Generated per process rather than written down: a constant here
+        # would be a signing key in source, and development servers hold real
+        # sessions. Sessions do not survive a restart, which is the honest
+        # behaviour for a key nobody chose; `scripts/dev.sh` supplies a real
+        # one, so this is the floor rather than the usual path.
+        SECRET_KEY = secrets.token_urlsafe(64)
     else:
         raise RuntimeError(
             "DJANGO_SECRET_KEY must be set in the environment for production."
