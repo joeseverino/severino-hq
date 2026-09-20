@@ -29,6 +29,7 @@ from application.glance import (
     dashboard_configuration,
     dashboard_panels,
     request_dashboard_refresh,
+    request_stale_panel_refresh,
     save_dashboard_settings,
 )
 from application.projection import projection_scope
@@ -325,6 +326,13 @@ class DashboardGlanceView(LoginRequiredMixin, View):
     def get(self, request):
         configuration = dashboard_configuration()
         panels = dashboard_panels(configuration)
+        # A card that knows it is out of date asks to be brought up to date,
+        # so the next controller pass answers it. Opening this page is the
+        # request; nothing else was making one.
+        if request_stale_panel_refresh(
+            panels, principal=web_principal(request.user)
+        ):
+            panels = dashboard_panels(configuration)
         return render(
             request,
             self.template_name,
