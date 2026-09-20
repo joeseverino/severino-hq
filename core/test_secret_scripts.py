@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -10,7 +11,23 @@ import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# These scripts run on the host, not in the application container: the image
+# carries them so a deploy can sync them out to /usr/local/lib, and they are
+# executed there by systemd units. The runtime image therefore does not ship
+# jq or curl, and should not -- a hardened container has no use for curl, which
+# is the first thing an intruder reaches for.
+#
+# So the tests run wherever those tools exist, which is every environment these
+# scripts actually run in, and skip in the composed-image job rather than
+# forcing the image to grow tools for a test's benefit.
+REQUIRED_TOOLS = ("jq", "curl")
+MISSING_TOOLS = [tool for tool in REQUIRED_TOOLS if shutil.which(tool) is None]
 
+
+@unittest.skipIf(
+    MISSING_TOOLS,
+    f"host tooling not present here: {', '.join(MISSING_TOOLS)}",
+)
 class SecretScriptTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
