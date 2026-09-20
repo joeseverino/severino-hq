@@ -4154,3 +4154,72 @@ class CaddyDiscoveryByRoleTests(TestCase):
         caddy.inventory(runtime)
 
         self.assertEqual([ref for ref, _ in runtime.asked], ["edge", "other"])
+
+
+class HostPerimeterTests(TestCase):
+    """What an edge relies on to stay shut, and whether it is."""
+
+    def _reading(self, *, answers=(), containers=None, unit="active"):
+        payload = json.dumps(
+            {
+                "record": "perimeter",
+                "firewall_unit": unit,
+                "public_addresses": "203.0.113.5",
+                "read_at": "2026-09-20T00:00:00Z",
+            }
+        ).encode()
+        with (
+            mock.patch.object(
+                providers, "connection_refs_for_role", return_value=("an-edge",)
+            ),
+            mock.patch.object(providers, "_ssh", return_value=payload),
+            mock.patch.object(
+                providers,
+                "list_portainer_containers",
+                return_value=containers
+                if containers is not None
+                else [{"host": "an-edge", "ports": [80, 443, 9001]}],
+            ),
+            mock.patch.object(
+                providers,
+                "_answers_from_here",
+                side_effect=lambda address, port, **_: port in answers,
+            ),
+        ):
+            (reading,) = providers.list_host_perimeter()
+        return reading
+
+    def test_a_shut_perimeter_reports_nothing_answering(self):
+        reading = self._reading()
+
+        self.assertEqual(reading["answered_publicly"], [])
+        self.assertEqual(reading["ports_checked"], [80, 443, 9001])
+        self.assertEqual(reading["firewall_unit"], "active")
+
+    def test_a_port_that_answers_publicly_is_named(self):
+        """The invariant failing, which has no symptom anywhere else."""
+
+        reading = self._reading(answers=(9001,))
+
+        self.assertEqual(reading["answered_publicly"], [9001])
+
+    def test_which_ports_are_checked_is_never_written_down(self):
+        """Derived from the containers, so a new one is covered by existing."""
+
+        reading = self._reading(
+            containers=[{"host": "an-edge", "ports": [25565]}],
+        )
+
+        self.assertEqual(reading["ports_checked"], [25565])
+
+    def test_containers_on_another_machine_are_not_checked_here(self):
+        reading = self._reading(
+            containers=[{"host": "somewhere-else", "ports": [80]}],
+        )
+
+        self.assertEqual(reading["ports_checked"], [])
+
+    def test_a_dead_unit_is_reported_rather_than_assumed(self):
+        """Enabled and dead is the case with no symptom until it matters."""
+
+        self.assertEqual(self._reading(unit="inactive")["firewall_unit"], "inactive")

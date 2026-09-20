@@ -32,13 +32,21 @@ const hqParseDocument = (() => {
 // Every enhanced request crosses the session boundary the same way. When an
 // OIDC session needs renewal, the server returns the provider URL instead of
 // letting fetch follow a cross-origin redirect that CSP correctly blocks.
+// `renewSession` decides whether a request is allowed to take the page away.
+// A request the operator made can: they asked for something, and renewing is
+// the way to get it. A background one must not. The provider returns to the
+// address that triggered the renewal, so a fetch the operator never asked for
+// sent them through sign-in and landed them on the JSON that fetch wanted --
+// from opening a menu. It went unexplained because it needs a session that
+// happens to be expiring, which is rare and looks random.
 const hqFetch = async (input, options = {}) => {
-  const headers = new Headers(options.headers);
+  const { renewSession = true, ...rest } = options;
+  const headers = new Headers(rest.headers);
   headers.set("X-Requested-With", "XMLHttpRequest");
-  const response = await window.fetch(input, { ...options, headers });
+  const response = await window.fetch(input, { ...rest, headers });
   const refreshUrl =
     response.status === 403 ? response.headers.get("refresh_url") : "";
-  if (refreshUrl) {
+  if (refreshUrl && renewSession) {
     window.location.assign(refreshUrl);
     return new Promise(() => {});
   }
@@ -137,8 +145,11 @@ document.querySelectorAll("details[data-action-count-url]").forEach((menu) => {
     }
     menu.dataset.actionCountLoaded = "loading";
     try {
+      // Opening a menu is not a request for anything but the menu. A count
+      // that cannot be read leaves the badge as it was.
       const response = await hqFetch(menu.dataset.actionCountUrl, {
         headers: { Accept: "application/json" },
+        renewSession: false,
       });
       if (!response.ok) throw new Error(`Action count returned ${response.status}`);
       const payload = await response.json();
@@ -551,7 +562,12 @@ const hqBindDashboardGlance = (root) => {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
         current = await replace(
           current,
-          await hqFetch(current.dataset.source, { credentials: "same-origin" }),
+          // Polling, once a second, for something the operator is already
+          // watching. A tick is not a request to leave the page.
+          await hqFetch(current.dataset.source, {
+            credentials: "same-origin",
+            renewSession: false,
+          }),
         );
         current.classList.add("is-loading");
         current.setAttribute("aria-busy", "true");

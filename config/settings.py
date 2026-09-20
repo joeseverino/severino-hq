@@ -12,6 +12,7 @@ Production guidance:
 from __future__ import annotations
 
 import os
+import secrets
 import shlex
 import tempfile
 from pathlib import Path
@@ -92,7 +93,12 @@ SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
-        SECRET_KEY = "dev-insecure-key-do-not-use-in-prod"  # noqa: S105
+        # Generated per process rather than written down: a constant here
+        # would be a signing key in source, and development servers hold real
+        # sessions. Sessions do not survive a restart, which is the honest
+        # behaviour for a key nobody chose; `scripts/dev.sh` supplies a real
+        # one, so this is the floor rather than the usual path.
+        SECRET_KEY = secrets.token_urlsafe(64)
     else:
         raise RuntimeError(
             "DJANGO_SECRET_KEY must be set in the environment for production."
@@ -362,12 +368,33 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+# Whether a rendered template is reused rather than re-read from disk. Django
+# infers this from DEBUG when the loaders are left implicit, which ties the cost
+# of iterating to the switch that also governs tracebacks, cookie flags and host
+# checking. They are unrelated concerns: caching a template is a speed decision,
+# DEBUG is an exposure one. Separating them lets a deployment that must not leak
+# a traceback still be one where editing a template shows up on reload.
+TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
+
+_TEMPLATE_LOADERS = [
+    "django.template.loaders.filesystem.Loader",
+    "django.template.loaders.app_directories.Loader",
+]
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
-        "APP_DIRS": True,
+        # Loaders are listed explicitly, so APP_DIRS must be off: Django refuses
+        # a configuration that sets both, since app_directories.Loader above is
+        # what APP_DIRS is shorthand for.
+        "APP_DIRS": False,
         "OPTIONS": {
+            "loaders": (
+                [("django.template.loaders.cached.Loader", _TEMPLATE_LOADERS)]
+                if TEMPLATE_CACHE
+                else _TEMPLATE_LOADERS
+            ),
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.template.context_processors.csp",
@@ -671,6 +698,13 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+# Whether WhiteNoise re-reads STATIC_ROOT per request instead of scanning it once
+# at startup. Like TEMPLATE_CACHE above, this is a speed decision that WhiteNoise
+# otherwise infers from DEBUG -- so a deployment with DEBUG off cannot pick up an
+# edited stylesheet without a restart, whatever its reason for having DEBUG off.
+# Off by default; a served request should not stat the filesystem.
+WHITENOISE_AUTOREFRESH = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.

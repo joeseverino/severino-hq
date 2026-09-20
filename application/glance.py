@@ -22,7 +22,7 @@ from control_plane.models import (
 
 from .cadence import ring_doorbell
 from .machines import machine_catalog
-from .security import Capability, Principal
+from .security import AuthorizationError, Capability, Principal
 
 
 # Explicit snapshots are useful context, but should not look current indefinitely.
@@ -358,6 +358,53 @@ def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
     if ids:
         transaction.on_commit(ring_doorbell)
     return {"ok": True, "requested": ids, "requested_at": now.isoformat()}
+
+
+def request_stale_panel_refresh(
+    panels: list[dict[str, Any]], *, principal: Principal
+) -> tuple[str, ...]:
+    """Ask for the panels that already know they are out of date.
+
+    These readings are expensive -- each one reaches a machine -- so they are
+    taken on request rather than on a schedule. Nothing was making the request:
+    a card went stale, said so in small type, and waited for somebody to
+    notice and press a button. The dashboard is the page you open to find out
+    how things are, so opening it is the request.
+
+    Only panels that are already stale, that can be refreshed, and that are not
+    waiting on one: a view is not a reason to re-ask a question that is still
+    outstanding, and repeat views of the same stale card ask once.
+
+    Silent for a principal who cannot ask. Reading a dashboard is not an
+    infrastructure change, and refusing the page because of what it noticed
+    would be a strange way to say so.
+    """
+
+    wanted = tuple(
+        str(panel["id"])
+        for panel in panels
+        if panel.get("stale") and panel.get("refreshable") and not panel.get("refreshing")
+    )
+    if not wanted:
+        return ()
+    try:
+        principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    except AuthorizationError:
+        return ()
+
+    now = timezone.now()
+    with operation_context(
+        interface=principal.interface,
+        actor=principal.actor,
+        operation="dashboard.refresh.stale",
+    ):
+        for panel_id in wanted:
+            DashboardRefreshRequest.objects.update_or_create(
+                panel_id=panel_id,
+                defaults={"requested_at": now, "completed_at": None},
+            )
+    transaction.on_commit(ring_doorbell)
+    return wanted
 
 
 def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:

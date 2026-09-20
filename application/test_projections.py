@@ -359,7 +359,11 @@ class ChartAxisSpanTests(TestCase):
 # domain: a single fixed budget is wrong by construction the moment an extension
 # is installed, and it failed exactly that way in the composed image while
 # passing everywhere else.
-HOST_QUERY_BUDGET = 31
+# 32 rather than 31 since the topology began reading the perimeter: one read
+# of the provider inventory, shared with the zone registrations that used to
+# buy it alone. Raised deliberately and once, because the number is the whole
+# guard -- a budget nudged up whenever something exceeds it measures nothing.
+HOST_QUERY_BUDGET = 32
 PER_EXTENSION_QUERY_BUDGET = 10
 
 
