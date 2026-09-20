@@ -73,6 +73,30 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
     --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
     --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
+
+# The 1Password CLI, lent to the controller for the one run. A certificate that
+# records its facts in a password manager reaches it through `op`, a binary
+# rather than the HTTP call every other provider here makes.
+#
+# Lent rather than built into the image, because the image is shared with the
+# web container: baking `op` in would hand a vault-reading tool to the one
+# process that faces the internet, to serve a provider that runs nowhere near
+# it. It also keeps a third-party binary out of a public image.
+#
+# The host's own copy is already trusted to render this machine's secrets, so
+# it carries no provenance this machine had not already accepted. Statically
+# linked, so the container's libc is not part of the bargain; read-only; and
+# beside `--cap-drop ALL` and `no-new-privileges`, which leave its setgid bit
+# inert.
+#
+# Missing, the mount is simply absent. Every other provider is unaffected and
+# the 1Password one reports a publication it could not write, which is what a
+# machine without the tool should say.
+if op_binary="$(command -v op 2>/dev/null)"; then
+    set -- "$@" \
+        --mount "type=bind,source=${op_binary},target=/usr/bin/op,readonly"
+fi
+
 # The tailnet, read from the daemon this machine is already a peer of rather
 # than from Tailscale's API -- so there is no credential for the controller to
 # hold.
