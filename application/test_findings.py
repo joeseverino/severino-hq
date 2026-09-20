@@ -1139,3 +1139,58 @@ class StalenessNeedsSomethingDeclaredTests(TestCase):
 
     def test_the_same_kind_with_a_declaration_still_does(self):
         self.assertEqual(self._raised(declared=True), ("adguard.rewrite",))
+
+
+class UnreachableConsumerTests(TestCase):
+    """A name the estate serves that the last reading could not reach.
+
+    The other consumers answered and agree, so nothing here says the
+    certificate is wrong. It says one path is shut, and a consumer nobody can
+    read keeps whatever it was last given without anything noticing.
+    """
+
+    def _findings(self, *names):
+        from application.findings import _estate, _unreachable_consumer
+        from application.topology import Topology, TopologyNode
+
+        node = TopologyNode(
+            id="resource:a-certificate",
+            kind="resource",
+            label="a-certificate",
+            subtitle="TLS certificate",
+            kind_key="tls.certificate",
+            facts=tuple(("unreachable", name) for name in names),
+        )
+        return _unreachable_consumer(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_a_consumer_that_answered_nothing_is_named(self):
+        (finding,) = self._findings("health.example")
+
+        self.assertEqual(finding.rule, "unreachable-consumer")
+        self.assertEqual(finding.severity, "serious")
+        self.assertIn("health.example", finding.title)
+        self.assertEqual(finding.evidence, (("Not read", "health.example"),))
+        self.assertTrue(finding.remedies, "nothing could ever clear this")
+
+    def test_every_unread_name_is_evidence(self):
+        """The facts share one key, so a dictionary of them would report one.
+
+        A certificate with three unreadable consumers and a finding naming a
+        single one is worse than no finding: it reads as the other two being
+        fine.
+        """
+
+        (finding,) = self._findings("one.example", "two.example", "three.example")
+
+        self.assertEqual(
+            finding.evidence,
+            (
+                ("Not read", "one.example"),
+                ("Not read", "two.example"),
+                ("Not read", "three.example"),
+            ),
+        )
+        self.assertIn("3", finding.title)
+
+    def test_a_certificate_that_was_read_raises_nothing(self):
+        self.assertEqual(self._findings(), ())

@@ -778,7 +778,61 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
+    """A name this estate serves that the last reading could not reach.
+
+    Not a claim that the certificate is wrong: the other consumers were read
+    and agree. It is a claim about one path, from the machine that verifies to
+    the machine that serves, and a path is the kind of thing a network policy
+    decides rather than a certificate. Left unread, a consumer keeps whatever
+    it was last given and nothing here would ever notice it going stale, which
+    is the failure this rule exists to make loud.
+
+    Read from the node's facts rather than a dictionary of them: every entry
+    here shares one key, and collapsing them would report one unreachable name
+    however many there were.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        names = tuple(
+            value for key, value in node.facts if key == "unreachable" and value
+        )
+        if not names:
+            continue
+        found.append(
+            Finding(
+                rule="unreachable-consumer",
+                subject=node.id,
+                title=(
+                    f"{node.label} could not read {names[0]}"
+                    if len(names) == 1
+                    else f"{node.label} could not read {len(names)} of its consumers"
+                ),
+                severity="serious",
+                explanation=(
+                    "The last reading reached every other consumer and they "
+                    "agree. This one answered nothing, so what it is serving "
+                    "now is unknown -- including whether it is still the "
+                    "certificate this resource thinks it installed."
+                ),
+                evidence=tuple(("Not read", name) for name in names),
+                remedies=_reconcile(node),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "unreachable-consumer",
+        "A consumer could not be read",
+        "serious",
+        _unreachable_consumer,
+        # Says the same thing with the name of the consumer in it. The generic
+        # rule would otherwise put this in front of an operator twice.
+        subsumes=("reporting-a-fault",),
+    ),
     FindingRule(
         "registration-lapsing",
         "A domain registration is running out",

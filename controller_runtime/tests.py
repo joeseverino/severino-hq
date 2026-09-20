@@ -999,8 +999,20 @@ class ProviderAdapterTests(TestCase):
 
         self.assertEqual(result.status["verified_domains"], ["hq.example"])
         self.assertEqual(
-            [item["domain"] for item in result.status["unreachable_consumers"]],
-            ["health.example"],
+            result.status["unreachable_consumers"],
+            [
+                {
+                    "consumer": "caddy",
+                    "domain": "health.example",
+                    # What was tried, which is resolved from a connection only
+                    # the controller holds and is the part that says what to do.
+                    "endpoint": "192.0.2.20",
+                    "port": "443",
+                    "reason": (
+                        "TLS observation failed for health.example: TimeoutError."
+                    ),
+                }
+            ],
         )
         self.assertTrue(
             any(item["reason"] == "ConsumerUnreachable" for item in result.conditions)

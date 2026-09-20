@@ -521,17 +521,38 @@ def _observed_facts(
 ) -> dict[str, tuple[tuple[str, str], ...]]:
     """The observed facts a rule needs, keyed by the node they belong to.
 
-    Only a domain's registration today. It lives in the zone sweep rather than
-    in any declaration -- nobody writes down when a domain expires, the
-    registrar is asked -- so a rule reasoning about it has no other way to see
-    it, and rules may not query.
+    A domain's registration, which lives in the zone sweep rather than in any
+    declaration -- nobody writes down when a domain expires, the registrar is
+    asked -- and the consumers a reading could not reach, which a sweep records
+    and no declaration mentions. A rule reasoning about either has no other way
+    to see it, and rules may not query.
     """
 
     from control_plane.models import ProviderInventory
 
     from .zones import ZONE_KIND
 
-    # Nothing at all when the estate holds no zone, the way `_measure` pays
+    found: dict[str, tuple[tuple[str, str], ...]] = {}
+
+    # Already in hand, so this costs nothing: the sweep wrote it into the
+    # status this function was handed.
+    for resource in resources:
+        unreachable = (resource.status or {}).get("unreachable_consumers") or []
+        if not isinstance(unreachable, list):
+            continue
+        entries = tuple(
+            (
+                "unreachable",
+                str(item.get("domain") or item.get("consumer") or "").strip(),
+            )
+            for item in unreachable
+            if isinstance(item, dict)
+            and str(item.get("domain") or item.get("consumer") or "").strip()
+        )
+        if entries:
+            found[f"resource:{resource.key}"] = entries
+
+    # Nothing further when the estate holds no zone, the way `_measure` pays
     # nothing when nothing is named like a host. This runs inside the shared
     # projection that the dashboard budget measures, so a deployment with no
     # domains must not buy a query to learn it has none.
@@ -539,7 +560,7 @@ def _observed_facts(
         resource for resource in resources if resource.kind == ZONE_KIND
     )
     if not zones:
-        return {}
+        return found
 
     registrations: dict[str, dict[str, Any]] = {}
     for snapshot in ProviderInventory.objects.filter(kind=ZONE_KIND):
@@ -549,7 +570,7 @@ def _observed_facts(
             if name and registration:
                 registrations[name] = registration
     if not registrations:
-        return {}
+        return found
 
     found: dict[str, tuple[tuple[str, str], ...]] = {}
     for resource in zones:
@@ -557,7 +578,12 @@ def _observed_facts(
         registration = registrations.get(name)
         if not registration:
             continue
-        found[f"resource:{resource.key}"] = (
+        # Added to, never over. Two kinds cannot be the same resource today, so
+        # this is a guard rather than a case -- but a second contributor here
+        # silently dropping the first is not a failure anything would catch.
+        found[f"resource:{resource.key}"] = found.get(
+            f"resource:{resource.key}", ()
+        ) + (
             ("domain", name),
             ("expires_at", str(registration.get("expires_at", ""))),
             ("auto_renew", "yes" if registration.get("auto_renew") else "no"),

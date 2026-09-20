@@ -204,13 +204,18 @@ def reconcile_npm(
     return npm.reconcile(_RUNTIME, spec, apply=apply, observed=observed)
 
 
+# The port every TLS reading is taken on. Named because what was tried is
+# reported when a reading fails, and a bare 443 in two places drifts.
+TLS_PORT = 443
+
+
 def _observe_tls_domain(
     domain: str, *, connect_host: str | None = None
 ) -> dict[str, Any]:
     try:
         tls_context = _tls_context()
         with socket.create_connection(
-            (connect_host or domain, 443), timeout=15
+            (connect_host or domain, TLS_PORT), timeout=15
         ) as raw_socket:
             with tls_context.wrap_socket(
                 raw_socket, server_hostname=domain
@@ -288,8 +293,11 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
     consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
-    # (consumer, domain, reason) for each one that could not be read.
-    unreachable: list[tuple[str, str, str]] = []
+    # Each consumer that could not be read, with the address and port the
+    # reading was attempted against. What was tried is the part that decides
+    # what to do about it, and it is known here and nowhere else: the endpoint
+    # is resolved from a connection only the controller holds.
+    unreachable: list[dict[str, str]] = []
     for consumer in spec["consumers"]:
         domains = list(consumer.get("verify_domains", []))
         if consumer["kind"] == "npm" and consumer.get("discover_covered_hosts"):
@@ -314,13 +322,29 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
         try:
             connect_host = _consumer_tls_endpoint(consumer)
         except ProviderError as exc:
-            unreachable.append((consumer["name"], "", str(exc)))
+            unreachable.append(
+                {
+                    "consumer": consumer["name"],
+                    "domain": "",
+                    "endpoint": "",
+                    "port": str(TLS_PORT),
+                    "reason": str(exc),
+                }
+            )
             continue
         for domain in domains:
             try:
                 observed = _observe_tls_domain(domain, connect_host=connect_host)
             except ProviderError as exc:
-                unreachable.append((consumer["name"], domain, str(exc)))
+                unreachable.append(
+                    {
+                        "consumer": consumer["name"],
+                        "domain": domain,
+                        "endpoint": connect_host or domain,
+                        "port": str(TLS_PORT),
+                        "reason": str(exc),
+                    }
+                )
                 continue
             observed["consumer"] = consumer["name"]
             observed["consumer_kind"] = consumer["kind"]
@@ -333,7 +357,7 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
         if unreachable:
             raise ProviderError(
                 "No TLS consumer could be reached: "
-                + "; ".join(reason for _, _, reason in unreachable)
+                + "; ".join(item["reason"] for item in unreachable)
             )
         raise ProviderError("No TLS verification domains were declared.")
     expiries = [datetime.fromisoformat(item["not_after"]) for item in observations]
@@ -377,7 +401,7 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
                 "ConsumerUnreachable",
                 "Could not be read: "
                 + ", ".join(
-                    domain or consumer for consumer, domain, _ in unreachable
+                    item["domain"] or item["consumer"] for item in unreachable
                 ),
             )
         )
@@ -400,10 +424,7 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
             "consumers": public_observations,
             # Named beside the ones that answered, so the page can say which
             # consumers this reading covers and which it does not.
-            "unreachable_consumers": [
-                {"consumer": consumer, "domain": domain, "reason": reason}
-                for consumer, domain, reason in unreachable
-            ],
+            "unreachable_consumers": unreachable,
         },
         conditions=conditions,
         message="TLS consumers observed.",
