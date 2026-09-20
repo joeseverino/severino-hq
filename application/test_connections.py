@@ -730,3 +730,73 @@ class OutwardLinkChoiceTests(TestCase):
             [item["href"] for item in link_choices(self.user)],
             [item["href"] for item in offered],
         )
+
+
+class StepFailureRecordingTests(TestCase):
+    """What a pass could not finish, from the controller to the reading."""
+
+    def _connection(self, **overrides):
+        sweep({**A_PORTAINER, **overrides}, controller_id="a-host")
+
+    def test_failures_land_on_the_connection_that_carried_them(self):
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+
+        record_step_failures(
+            [
+                {
+                    "subject": A_PORTAINER["connection_ref"],
+                    "step": "SSH routes for a-portainer",
+                    "reason": "exit 126",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        (reading,) = connection_readings()
+        self.assertEqual(
+            reading.failing_steps, (("SSH routes for a-portainer", "exit 126"),)
+        )
+        # The probe still says the credential works, which is the point: these
+        # two facts disagree, and that disagreement is the finding.
+        self.assertTrue(reading.reachable)
+
+    def test_a_pass_that_finished_everything_clears_the_last_one(self):
+        """Only writing failures would leave the last one standing forever."""
+
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+        record_step_failures(
+            [
+                {
+                    "subject": A_PORTAINER["connection_ref"],
+                    "step": "SSH routes for a-portainer",
+                    "reason": "exit 126",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        record_step_failures([], principal=cli_principal(), controller_id="a-host")
+
+        self.assertEqual(connection_readings()[0].failing_steps, ())
+
+    def test_a_failure_for_something_this_controller_does_not_carry_is_dropped(self):
+        from application.connections import connection_readings
+        from application.inventory import record_step_failures
+
+        self._connection()
+
+        record_step_failures(
+            [{"subject": "not-a-connection", "step": "a step", "reason": "exit 1"}],
+            principal=cli_principal(),
+            controller_id="a-host",
+        )
+
+        self.assertEqual(connection_readings()[0].failing_steps, ())

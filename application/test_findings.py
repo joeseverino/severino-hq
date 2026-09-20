@@ -1255,3 +1255,47 @@ class PathRefusedByTheTailnetTests(TestCase):
 
         self.assertEqual(remedy.target, "a-certificate")
         self.assertEqual(remedy.effect, "infrastructure_change")
+
+
+class WorkThatKeepsFailingTests(TestCase):
+    """A connection that answers every probe and finishes none of its work."""
+
+    def _findings(self, *facts):
+        from application.findings import _estate, _work_that_keeps_failing
+        from application.topology import Topology, TopologyNode
+
+        node = TopologyNode(
+            id="connection:infrastructure.controllers:a-host:shared-hosting",
+            kind="connection",
+            label="shared-hosting",
+            subtitle="SSH",
+            facts=tuple(facts),
+        )
+        return _work_that_keeps_failing(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_unfinished_work_is_claimed_against_its_connection(self):
+        (finding,) = self._findings(
+            ("Controller", "a-host"),
+            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
+        )
+
+        self.assertEqual(finding.rule, "work-that-keeps-failing")
+        self.assertIn("shared-hosting", finding.title)
+        self.assertEqual(
+            finding.evidence,
+            (("Could not finish", "SSH routes for shared-hosting (exit 126)"),),
+        )
+
+    def test_a_connection_whose_work_finishes_raises_nothing(self):
+        """Reachable and useful is the ordinary case and says nothing."""
+
+        self.assertEqual(self._findings(("Controller", "a-host")), ())
+
+    def test_each_unfinished_step_is_its_own_evidence(self):
+        (finding,) = self._findings(
+            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
+            ("Could not finish", "SSH deploy for shared-hosting (exit 1)"),
+        )
+
+        self.assertEqual(len(finding.evidence), 2)
+        self.assertIn("2 things", finding.title)

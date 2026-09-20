@@ -368,6 +368,43 @@ def _record_drift(
 
 
 @transaction.atomic
+def record_step_failures(
+    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
+) -> dict[str, Any]:
+    """Store the work one pass could not finish, against the connection it used.
+
+    Reported at the end of a pass and written onto the rows the sweep wrote at
+    the start of it, so a failure that happened after the sweep still lands on
+    the right connection. Every connection this controller carries is written,
+    including the ones with nothing to report: a pass that cleared a failure
+    has to be able to say so, and only writing failures would leave the last
+    one standing forever.
+    """
+
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    by_ref: dict[str, list[dict[str, str]]] = {}
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        subject = str(item.get("subject", "")).strip()
+        step = str(item.get("step", "")).strip()
+        if not subject or not step:
+            continue
+        by_ref.setdefault(subject, []).append(
+            {"step": step[:200], "reason": str(item.get("reason", ""))[:120]}
+        )
+    updated = 0
+    for connection in ProviderConnection.objects.filter(controller_id=controller_id):
+        failing = by_ref.get(connection.connection_ref, [])
+        if connection.failing_steps == failing:
+            continue
+        connection.failing_steps = failing
+        connection.save(update_fields=["failing_steps"])
+        updated += 1
+    return {"ok": True, "updated": updated}
+
+
+@transaction.atomic
 def record_connections(
     payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
 ) -> dict[str, Any]:

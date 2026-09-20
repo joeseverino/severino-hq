@@ -594,6 +594,29 @@ def controller_config_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config"
 
 
+# Work this pass could not finish, in the order it failed.
+#
+# A step is not an operation. An operation that fails is reported to HQ and
+# waits there to be looked at; a step inside a sweep fails, is logged on the
+# machine that ran it, and leaves no mark anywhere HQ can see. A step failing
+# on every pass and a step that never runs look the same from HQ, and one of
+# them is a fault.
+#
+# In memory for the life of one pass, which is one short-lived container, and
+# reported once at the end of it.
+_STEP_FAILURES: list[dict[str, str]] = []
+
+
+def step_failures() -> tuple[dict[str, str], ...]:
+    """What this pass could not finish, for the report at the end of it."""
+
+    return tuple(_STEP_FAILURES)
+
+
+def _record_step_failure(step: str, subject: str, reason: str) -> None:
+    _STEP_FAILURES.append({"step": step, "subject": subject, "reason": reason})
+
+
 def _redacted(text: str, env: dict[str, str] | None) -> str:
     """Whatever a failing tool said, with the credential it was given struck out.
 
@@ -613,6 +636,7 @@ def _run(
     input_bytes: bytes | None = None,
     step: str = "command",
     env: dict[str, str] | None = None,
+    subject: str = "",
 ) -> bytes:
     """Run a subprocess, saying which step failed rather than which module ran it.
 
@@ -661,6 +685,7 @@ def _run(
                 "detail": _redacted(str(exc), env)[:2000],
             },
         )
+        _record_step_failure(step, subject, type(exc).__name__)
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
         stderr = _redacted(result.stderr.decode("utf-8", "replace"), env)
@@ -681,6 +706,7 @@ def _run(
                 "stderr": stderr[:2000],
             },
         )
+        _record_step_failure(step, subject, f"exit {result.returncode}")
         raise ProviderError(f"{step} failed.")
     return result.stdout
 
@@ -712,7 +738,10 @@ def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> b
         operation,
     ]
     return _run(
-        command, input_bytes=payload, step=f"SSH {operation} for {connection_ref}"
+        command,
+        input_bytes=payload,
+        step=f"SSH {operation} for {connection_ref}",
+        subject=connection_ref,
     )
 
 

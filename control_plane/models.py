@@ -109,6 +109,16 @@ class ProviderConnection(TimestampedModel):
     # look like an outage every time the page loaded.
     probed = models.BooleanField(default=True)
     detail = models.CharField(max_length=500, blank=True)
+    # Work that went through this connection and could not finish, as the last
+    # pass found it. A probe asks whether the credential still opens the door;
+    # this is what happened to the things that walked through it, and the two
+    # disagree exactly when something is wrong in a way a probe cannot see. A
+    # connection can answer every probe and refuse every operation.
+    #
+    # Written by its own report at the end of a pass rather than with the probe
+    # at the start, because most work happens after the sweep and a failure
+    # recorded before it ran would describe the pass before.
+    failing_steps = models.JSONField(default=list, blank=True)
     observed_at = models.DateTimeField()
 
     class Meta:

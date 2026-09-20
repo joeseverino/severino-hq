@@ -16,6 +16,7 @@ from .providers import (
     analytics,
     analytics_sites,
     connections,
+    step_failures,
     dashboard_glance,
     execute,
     inventory,
@@ -352,6 +353,14 @@ def main() -> int:
     except (BridgeError, ProviderError) as exc:
         print(json.dumps({"ok": False, "message": str(exc)}))
         return 1
+    finally:
+        # At the end of the pass, whichever way it ended. A pass that failed is
+        # the one whose unfinished work is most worth reporting, and most of
+        # that work happens after the sweep -- so this cannot ride along with
+        # it. Plan mode reports nothing: it writes nothing anywhere else
+        # either, and a preflight is not an observation of the estate.
+        if options.apply:
+            _post("steps", options.controller_id, list(step_failures()))
 
 
 if __name__ == "__main__":

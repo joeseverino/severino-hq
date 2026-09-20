@@ -798,6 +798,51 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
+    """A connection HQ can open and cannot use.
+
+    A probe asks whether the credential still works. It is answered by the
+    door, not by the room: a connection can pass every probe while every piece
+    of work sent through it refuses, and the page will say "reachable" the
+    whole time.
+
+    The failures are caught by the code that sends the work, so they never
+    become an operation anybody sees. They repeat on the next pass, at whatever
+    interval the controller runs, for as long as nobody looks at a log.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        unfinished = tuple(
+            value for key, value in node.facts if key == "Could not finish" and value
+        )
+        if not unfinished:
+            continue
+        found.append(
+            Finding(
+                rule="work-that-keeps-failing",
+                subject=node.id,
+                title=(
+                    f"{node.label} answers, and {len(unfinished)} "
+                    f"thing{'' if len(unfinished) == 1 else 's'} sent through "
+                    "it did not finish"
+                ),
+                severity="attention",
+                explanation=(
+                    "The credential opens this and the last pass could not "
+                    "finish work that went through it. Nothing else reports "
+                    "this: the failures are caught where the work is sent, so "
+                    "they never become an operation, and they will repeat on "
+                    "every pass until the cause is removed."
+                ),
+                evidence=tuple(("Could not finish", item) for item in unfinished),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
     """A name this estate serves that the last reading could not reach.
 
@@ -860,6 +905,12 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
 
 
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "work-that-keeps-failing",
+        "A connection answers and its work does not finish",
+        "attention",
+        _work_that_keeps_failing,
+    ),
     FindingRule(
         "unreachable-consumer",
         "A consumer could not be read",
