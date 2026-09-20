@@ -112,6 +112,11 @@
         "label": "provider",
         "optional": true
       },
+      "ROLE": {
+        "source": "field",
+        "label": "role",
+        "optional": true
+      },
       "USER": {
         "source": "field",
         "label": "user"

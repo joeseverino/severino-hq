@@ -879,6 +879,93 @@ def request_route_approval(
         )
 
 
+def request_reach_allow(
+    command: OperationCommand,
+    *,
+    principal: Principal,
+    current_key: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Open the path a reading proved is shut, where the tailnet is what shut it.
+
+    Given a resource, never a policy. Which path to open is re-derived here
+    from what the controller observed -- the address and port it could not
+    reach -- so a caller cannot name one. The only change this can ever produce
+    is the one an observation already justified.
+
+    The amendment is written to the policy declaration through the ordinary
+    write, which is what puts it in front of a person: the tailnet policy is a
+    gated kind, so this proposes and somebody else consents.
+    """
+
+    del expected_updated_at
+    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    resource = _resource_for_operation(current_key)
+
+    from .tailnet import (
+        POLICY_KIND,
+        device_at,
+        devices,
+        may_reach,
+        observer,
+        policy_allowing,
+    )
+
+    known = devices()
+    watcher = observer(known)
+    if watcher is None:
+        raise PolicyError(
+            "No device in the last sweep reports being the one HQ observes "
+            "from, so there is no source to write a grant for."
+        )
+
+    shut: list[tuple[str, int]] = []
+    for item in (resource.status or {}).get("unreachable_consumers") or []:
+        if not isinstance(item, dict):
+            continue
+        target = device_at(str(item.get("endpoint", "")), known)
+        try:
+            port = int(str(item.get("port", "")) or 0)
+        except ValueError:
+            continue
+        if target is None or not port:
+            continue
+        verdict = may_reach(watcher.name, target.name, port, known)
+        if verdict.known and not verdict.allowed:
+            shut.append((target.name, port))
+    if not shut:
+        raise PolicyError(
+            "Nothing this resource could not reach is refused by the tailnet "
+            "policy, so opening a path would not be the fix."
+        )
+
+    policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
+    if policy is None:
+        raise PolicyError("HQ holds no tailnet policy to amend.")
+
+    document = str(policy.spec.get("document", ""))
+    moved: list[str] = []
+    for target_name, port in sorted(set(shut)):
+        amended, summary = policy_allowing(
+            document, source=watcher.name, target=target_name, port=port
+        )
+        if amended:
+            document, _ = amended, moved.append(summary)
+    if not moved:
+        raise PolicyError("The tailnet policy already admits every path needed.")
+
+    return save_managed_resource(
+        ManagedResourceCommand(
+            key=policy.key,
+            kind=policy.kind,
+            spec={**policy.spec, "document": document},
+            enabled=policy.enabled,
+        ),
+        principal=principal,
+        current_key=policy.key,
+    )
+
+
 def request_certificate_renewal(
     command: OperationCommand,
     *,

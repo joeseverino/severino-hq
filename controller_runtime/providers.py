@@ -518,6 +518,35 @@ def provider_connection_refs(provider: str) -> tuple[str, ...]:
     return (conventional,) if conventional else ()
 
 
+def connection_role(connection_ref: str) -> str:
+    """What a connection is used for, where the item says so.
+
+    Separate from ``connection_provider`` on purpose. A provider says what kind
+    of system answers, and the connections page keys a machine's abilities off
+    it; a role says what HQ reaches this one *for*. An SSH host that serves
+    Caddy and one that is shared hosting are the same kind of system and the
+    same kind of credential, and only the role tells them apart.
+    """
+
+    prefix = connection_prefixes().get(connection_ref, "")
+    if not prefix:
+        return ""
+    return os.environ.get(f"{prefix}_ROLE", "").strip()
+
+
+def connection_refs_for_role(role: str) -> tuple[str, ...]:
+    """Every SSH connection declared for ``role``.
+
+    Empty when nothing declares one, which callers read as "nobody has said",
+    not as "none of them". A discovery that asked only declared hosts before
+    any host was declared would find nothing and report it as an empty estate.
+    """
+
+    return tuple(
+        ref for ref in ssh_connection_refs() if connection_role(ref) == role
+    )
+
+
 def ssh_connection_refs() -> tuple[str, ...]:
     """Connections rendered through the ssh_transport projection.
 
@@ -565,6 +594,29 @@ def controller_config_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config"
 
 
+# Work this pass could not finish, in the order it failed.
+#
+# A step is not an operation. An operation that fails is reported to HQ and
+# waits there to be looked at; a step inside a sweep fails, is logged on the
+# machine that ran it, and leaves no mark anywhere HQ can see. A step failing
+# on every pass and a step that never runs look the same from HQ, and one of
+# them is a fault.
+#
+# In memory for the life of one pass, which is one short-lived container, and
+# reported once at the end of it.
+_STEP_FAILURES: list[dict[str, str]] = []
+
+
+def step_failures() -> tuple[dict[str, str], ...]:
+    """What this pass could not finish, for the report at the end of it."""
+
+    return tuple(_STEP_FAILURES)
+
+
+def _record_step_failure(step: str, subject: str, reason: str) -> None:
+    _STEP_FAILURES.append({"step": step, "subject": subject, "reason": reason})
+
+
 def _redacted(text: str, env: dict[str, str] | None) -> str:
     """Whatever a failing tool said, with the credential it was given struck out.
 
@@ -584,6 +636,7 @@ def _run(
     input_bytes: bytes | None = None,
     step: str = "command",
     env: dict[str, str] | None = None,
+    subject: str = "",
 ) -> bytes:
     """Run a subprocess, saying which step failed rather than which module ran it.
 
@@ -632,6 +685,7 @@ def _run(
                 "detail": _redacted(str(exc), env)[:2000],
             },
         )
+        _record_step_failure(step, subject, type(exc).__name__)
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
         stderr = _redacted(result.stderr.decode("utf-8", "replace"), env)
@@ -652,6 +706,7 @@ def _run(
                 "stderr": stderr[:2000],
             },
         )
+        _record_step_failure(step, subject, f"exit {result.returncode}")
         raise ProviderError(f"{step} failed.")
     return result.stdout
 
@@ -683,7 +738,10 @@ def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> b
         operation,
     ]
     return _run(
-        command, input_bytes=payload, step=f"SSH {operation} for {connection_ref}"
+        command,
+        input_bytes=payload,
+        step=f"SSH {operation} for {connection_ref}",
+        subject=connection_ref,
     )
 
 
@@ -3189,6 +3247,14 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             # The document itself, so a declaration can hold it and be compared
             # against reality without a second read.
             "document": json.dumps(policy, indent=2, sort_keys=True),
+            # The aliases the policy gives addresses. A grant may name a device
+            # by one, and then the alias is the name that admits it -- as real
+            # a principal as a user or a tag, and the only one HQ could not see
+            # from a device reading alone.
+            "hosts": {
+                str(name): str(address)
+                for name, address in (policy.get("hosts") or {}).items()
+            },
             "settings": _tailnet_get(token, "settings"),
             "dns": {
                 **_tailnet_get(token, "dns/preferences"),
@@ -3444,6 +3510,9 @@ class _ProviderRuntime:
 
     def ssh_connection_refs(self) -> tuple[str, ...]:
         return ssh_connection_refs()
+
+    def connection_refs_for_role(self, role: str) -> tuple[str, ...]:
+        return connection_refs_for_role(role)
 
     def ssh(
         self, connection_ref: str, operation: str, payload: bytes | None = None

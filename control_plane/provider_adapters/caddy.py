@@ -64,10 +64,22 @@ def routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
 
 
 def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-    """Read every SSH connection that identifies itself as a Caddy edge."""
+    """Read the SSH connections that serve Caddy.
 
+    Declared where anything declares it. Asking every SSH connection and
+    keeping whichever answered means identifying a Caddy host by trying to use
+    it as one, and a connection that is not a Caddy host is asked again on
+    every sweep -- forever, since nothing about the answer changes. Against a
+    machine somebody else operates that is a failed login every couple of
+    minutes, which is a cost paid at their end.
+
+    Falls back to asking everything only while nothing carries a role at all,
+    so a fleet that has never declared one still discovers its edges.
+    """
+
+    declared = runtime.connection_refs_for_role("caddy")
     found: list[dict[str, Any]] = []
-    for connection_ref in runtime.ssh_connection_refs():
+    for connection_ref in declared or runtime.ssh_connection_refs():
         try:
             payload = runtime.ssh(connection_ref, "routes")
         except (ProviderError, OSError, ValueError):

@@ -251,6 +251,26 @@ def _ago(delta: timedelta) -> str:
     return f"{seconds // 86400}d"
 
 
+def _open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
+    """Amend the policy, and look again once it is amended.
+
+    The capability is handed the resource, not a path: which one to open is
+    re-derived from what was observed, so a remedy can never carry an access
+    rule of its own. The amendment lands on a gated kind, so a person still
+    consents before the tailnet changes.
+    """
+
+    return (
+        Remedy(
+            capability="tailnet.reach.allow",
+            target=node.label,
+            label="Open the path",
+            effect="infrastructure_change",
+        ),
+        *_reconcile(node),
+    )
+
+
 def _reconcile(node: TopologyNode) -> tuple[Remedy, ...]:
     """The one capability that answers "go and look again"."""
 
@@ -778,6 +798,51 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
+    """A connection HQ can open and cannot use.
+
+    A probe asks whether the credential still works. It is answered by the
+    door, not by the room: a connection can pass every probe while every piece
+    of work sent through it refuses, and the page will say "reachable" the
+    whole time.
+
+    The failures are caught by the code that sends the work, so they never
+    become an operation anybody sees. They repeat on the next pass, at whatever
+    interval the controller runs, for as long as nobody looks at a log.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        unfinished = tuple(
+            value for key, value in node.facts if key == "Could not finish" and value
+        )
+        if not unfinished:
+            continue
+        found.append(
+            Finding(
+                rule="work-that-keeps-failing",
+                subject=node.id,
+                title=(
+                    f"{node.label} answers, and {len(unfinished)} "
+                    f"thing{'' if len(unfinished) == 1 else 's'} sent through "
+                    "it did not finish"
+                ),
+                severity="attention",
+                explanation=(
+                    "The credential opens this and the last pass could not "
+                    "finish work that went through it. Nothing else reports "
+                    "this: the failures are caught where the work is sent, so "
+                    "they never become an operation, and they will repeat on "
+                    "every pass until the cause is removed."
+                ),
+                evidence=tuple(("Could not finish", item) for item in unfinished),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
     """A name this estate serves that the last reading could not reach.
 
@@ -800,6 +865,13 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
         )
         if not names:
             continue
+        # The tailnet refusing the path is a different claim from the consumer
+        # being down, and only one of them has a fix worth offering. Present,
+        # the policy was asked and said no; absent, it said yes or was never
+        # swept, and neither is a reason to send anybody at an access policy.
+        refused = tuple(
+            value for key, value in node.facts if key == "path-denied" and value
+        )
         found.append(
             Finding(
                 rule="unreachable-consumer",
@@ -815,15 +887,30 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
                     "agree. This one answered nothing, so what it is serving "
                     "now is unknown -- including whether it is still the "
                     "certificate this resource thinks it installed."
+                    + (
+                        " The tailnet policy refuses the path, so looking "
+                        "again will not help until a grant admits it."
+                        if refused
+                        else ""
+                    )
                 ),
-                evidence=tuple(("Not read", name) for name in names),
-                remedies=_reconcile(node),
+                evidence=(
+                    *(("Not read", name) for name in names),
+                    *(("Refused by the tailnet", path) for path in refused),
+                ),
+                remedies=_open_the_path(node) if refused else _reconcile(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "work-that-keeps-failing",
+        "A connection answers and its work does not finish",
+        "attention",
+        _work_that_keeps_failing,
+    ),
     FindingRule(
         "unreachable-consumer",
         "A consumer could not be read",

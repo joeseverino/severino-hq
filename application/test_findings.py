@@ -1194,3 +1194,108 @@ class UnreachableConsumerTests(TestCase):
 
     def test_a_certificate_that_was_read_raises_nothing(self):
         self.assertEqual(self._findings(), ())
+
+
+class PathRefusedByTheTailnetTests(TestCase):
+    """The claim that says which of two problems this is.
+
+    A consumer that is merely down and one the policy refuses look identical
+    from a failed reading. Only the second has a change worth offering, and
+    offering it for the first would send an operator to widen an access policy
+    that was never the problem.
+    """
+
+    def _finding(self, *, refused):
+        from application.findings import _estate, _unreachable_consumer
+        from application.topology import Topology, TopologyNode
+
+        facts = [("unreachable", "health.example")]
+        if refused:
+            facts.append(("path-denied", "a-controller to an-edge on 443"))
+        node = TopologyNode(
+            id="resource:a-certificate",
+            kind="resource",
+            label="a-certificate",
+            subtitle="TLS certificate",
+            kind_key="tls.certificate",
+            facts=tuple(facts),
+        )
+        (finding,) = _unreachable_consumer(
+            _estate(Topology(nodes=(node,), edges=()))
+        )
+        return finding
+
+    def test_a_refused_path_offers_the_amendment(self):
+        finding = self._finding(refused=True)
+
+        offered = {remedy.capability for remedy in finding.remedies}
+        self.assertIn("tailnet.reach.allow", offered)
+        self.assertIn(
+            ("Refused by the tailnet", "a-controller to an-edge on 443"),
+            finding.evidence,
+        )
+        self.assertIn("will not help until a grant admits it", finding.explanation)
+
+    def test_a_consumer_merely_down_is_not_sent_at_the_policy(self):
+        finding = self._finding(refused=False)
+
+        offered = {remedy.capability for remedy in finding.remedies}
+        self.assertNotIn("tailnet.reach.allow", offered)
+        self.assertIn("infrastructure.reconcile", offered)
+        self.assertNotIn("tailnet", finding.explanation)
+
+    def test_the_amendment_carries_no_path_of_its_own(self):
+        """A remedy names a capability and a target, never a rule to write."""
+
+        (remedy,) = [
+            item
+            for item in self._finding(refused=True).remedies
+            if item.capability == "tailnet.reach.allow"
+        ]
+
+        self.assertEqual(remedy.target, "a-certificate")
+        self.assertEqual(remedy.effect, "infrastructure_change")
+
+
+class WorkThatKeepsFailingTests(TestCase):
+    """A connection that answers every probe and finishes none of its work."""
+
+    def _findings(self, *facts):
+        from application.findings import _estate, _work_that_keeps_failing
+        from application.topology import Topology, TopologyNode
+
+        node = TopologyNode(
+            id="connection:infrastructure.controllers:a-host:shared-hosting",
+            kind="connection",
+            label="shared-hosting",
+            subtitle="SSH",
+            facts=tuple(facts),
+        )
+        return _work_that_keeps_failing(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_unfinished_work_is_claimed_against_its_connection(self):
+        (finding,) = self._findings(
+            ("Controller", "a-host"),
+            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
+        )
+
+        self.assertEqual(finding.rule, "work-that-keeps-failing")
+        self.assertIn("shared-hosting", finding.title)
+        self.assertEqual(
+            finding.evidence,
+            (("Could not finish", "SSH routes for shared-hosting (exit 126)"),),
+        )
+
+    def test_a_connection_whose_work_finishes_raises_nothing(self):
+        """Reachable and useful is the ordinary case and says nothing."""
+
+        self.assertEqual(self._findings(("Controller", "a-host")), ())
+
+    def test_each_unfinished_step_is_its_own_evidence(self):
+        (finding,) = self._findings(
+            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
+            ("Could not finish", "SSH deploy for shared-hosting (exit 1)"),
+        )
+
+        self.assertEqual(len(finding.evidence), 2)
+        self.assertIn("2 things", finding.title)

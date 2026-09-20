@@ -139,3 +139,66 @@ class CannotSayTests(TestCase):
 
     def test_nothing_is_proposed_for_a_question_that_has_no_answer(self):
         self.assertEqual(proposed_grant("a-ghost", "a-server", 443), {})
+
+
+class AliasPrincipalTests(TestCase):
+    """A policy may admit a device by an alias it gives that device's address.
+
+    Naming a machine rather than whoever is signed in on it is the stricter
+    thing to say, and it is how this tailnet's admin reach is written. Counted
+    as only a user and some tags, every such grant reads as no grant at all.
+    """
+
+    def _device(self, **overrides):
+        from application.tailnet import Device
+
+        return Device(
+            **{
+                "name": "a-laptop",
+                "user": "someone@example",
+                "addresses": ("100.64.0.9",),
+                **overrides,
+            }
+        )
+
+    def test_an_alias_is_a_name_a_rule_can_admit_by(self):
+        self.assertEqual(
+            self._device(aliases=("laptop", "laptop-v6")).principals,
+            frozenset({"someone@example", "laptop", "laptop-v6"}),
+        )
+
+    def test_a_device_the_policy_names_is_admitted_by_that_name(self):
+        from application.tailnet import Verdict, may_reach
+
+        known = {
+            "a-laptop": self._device(aliases=("laptop",)),
+            "a-server": self._device(
+                name="a-server",
+                user="",
+                addresses=("100.64.0.10",),
+                reach={443: ("laptop",)},
+            ),
+        }
+
+        verdict = may_reach("a-laptop", "a-server", 443, known)
+
+        self.assertIsInstance(verdict, Verdict)
+        self.assertTrue(verdict.allowed, verdict.detail)
+        self.assertEqual(verdict.via, ("laptop",))
+
+    def test_without_the_alias_the_same_grant_reads_as_a_refusal(self):
+        """What the panel reported before the aliases were joined on."""
+
+        from application.tailnet import may_reach
+
+        known = {
+            "a-laptop": self._device(),
+            "a-server": self._device(
+                name="a-server",
+                user="",
+                addresses=("100.64.0.10",),
+                reach={443: ("laptop",)},
+            ),
+        }
+
+        self.assertFalse(may_reach("a-laptop", "a-server", 443, known).allowed)

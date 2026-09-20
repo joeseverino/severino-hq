@@ -75,6 +75,10 @@ class ConnectionReading:
     # Declarations that name this connection, as (key, url). The reverse of the
     # ref every spec already carries.
     resources: tuple[tuple[str, str], ...] = ()
+    # Work that went through this and could not finish, as the last pass found
+    # it. A connection can answer every probe and refuse every operation, and
+    # `reachable` only ever describes the probe.
+    failing_steps: tuple[tuple[str, str], ...] = ()
 
     @property
     def status(self) -> str:
@@ -386,6 +390,11 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             observed_at=row.observed_at,
             machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
+            failing_steps=tuple(
+                (str(item.get("step", "")), str(item.get("reason", "")))
+                for item in (row.failing_steps or ())
+                if isinstance(item, dict) and item.get("step")
+            ),
         )
         for row in ProviderConnection.objects.all()
     )
@@ -474,6 +483,10 @@ def _controller_instances(
                         ConnectionFact("Controller", reading.controller_id)
                         if name_controller and reading.controller_id
                         else None,
+                        *(
+                            ConnectionFact("Could not finish", f"{step} ({reason})")
+                            for step, reason in reading.failing_steps
+                        ),
                     )
                     if fact is not None
                 ),
