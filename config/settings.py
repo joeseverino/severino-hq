@@ -368,12 +368,33 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+# Whether a rendered template is reused rather than re-read from disk. Django
+# infers this from DEBUG when the loaders are left implicit, which ties the cost
+# of iterating to the switch that also governs tracebacks, cookie flags and host
+# checking. They are unrelated concerns: caching a template is a speed decision,
+# DEBUG is an exposure one. Separating them lets a deployment that must not leak
+# a traceback still be one where editing a template shows up on reload.
+TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
+
+_TEMPLATE_LOADERS = [
+    "django.template.loaders.filesystem.Loader",
+    "django.template.loaders.app_directories.Loader",
+]
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
-        "APP_DIRS": True,
+        # Loaders are listed explicitly, so APP_DIRS must be off: Django refuses
+        # a configuration that sets both, since app_directories.Loader above is
+        # what APP_DIRS is shorthand for.
+        "APP_DIRS": False,
         "OPTIONS": {
+            "loaders": (
+                [("django.template.loaders.cached.Loader", _TEMPLATE_LOADERS)]
+                if TEMPLATE_CACHE
+                else _TEMPLATE_LOADERS
+            ),
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.template.context_processors.csp",
@@ -677,6 +698,13 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+# Whether WhiteNoise re-reads STATIC_ROOT per request instead of scanning it once
+# at startup. Like TEMPLATE_CACHE above, this is a speed decision that WhiteNoise
+# otherwise infers from DEBUG -- so a deployment with DEBUG off cannot pick up an
+# edited stylesheet without a restart, whatever its reason for having DEBUG off.
+# Off by default; a served request should not stat the filesystem.
+WHITENOISE_AUTOREFRESH = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
