@@ -288,6 +288,8 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
     observations: list[dict[str, Any]] = []
     consumer_fingerprints: set[str] = set()
     unverified_consumers: list[str] = []
+    # (consumer, domain, reason) for each one that could not be read.
+    unreachable: list[tuple[str, str, str]] = []
     for consumer in spec["consumers"]:
         domains = list(consumer.get("verify_domains", []))
         if consumer["kind"] == "npm" and consumer.get("discover_covered_hosts"):
@@ -304,15 +306,35 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
         if not domains:
             unverified_consumers.append(consumer["name"])
             continue
-        connect_host = _consumer_tls_endpoint(consumer)
+        # One consumer that cannot be reached is a fact about that consumer.
+        # Reported against it and the sweep carries on, so the certificate
+        # still says what every other consumer is serving and the facts it
+        # publishes are still written. A single unreachable host otherwise
+        # decides what is known about all of them.
+        try:
+            connect_host = _consumer_tls_endpoint(consumer)
+        except ProviderError as exc:
+            unreachable.append((consumer["name"], "", str(exc)))
+            continue
         for domain in domains:
-            observed = _observe_tls_domain(domain, connect_host=connect_host)
+            try:
+                observed = _observe_tls_domain(domain, connect_host=connect_host)
+            except ProviderError as exc:
+                unreachable.append((consumer["name"], domain, str(exc)))
+                continue
             observed["consumer"] = consumer["name"]
             observed["consumer_kind"] = consumer["kind"]
             observations.append(observed)
             consumer_fingerprints.add(observed["fingerprint_sha256"])
 
     if not observations:
+        # Nothing was read, so there is no expiry, no fingerprint and nothing to
+        # compare. Which of the two it is decides what an operator does next.
+        if unreachable:
+            raise ProviderError(
+                "No TLS consumer could be reached: "
+                + "; ".join(reason for _, _, reason in unreachable)
+            )
         raise ProviderError("No TLS verification domains were declared.")
     expiries = [datetime.fromisoformat(item["not_after"]) for item in observations]
     soonest = min(expiries)
@@ -347,6 +369,18 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
                 + ", ".join(unverified_consumers),
             )
         )
+    if unreachable:
+        conditions.append(
+            _condition(
+                "Degraded",
+                True,
+                "ConsumerUnreachable",
+                "Could not be read: "
+                + ", ".join(
+                    domain or consumer for consumer, domain, _ in unreachable
+                ),
+            )
+        )
     if not conditions:
         conditions.append(
             _condition("Ready", True, "Verified", "All TLS consumers are current.")
@@ -364,6 +398,12 @@ def reconcile_tls(spec: dict[str, Any]) -> ProviderResult:
             "certificate_pem": newest["certificate_pem"],
             "verified_domains": sorted(item["domain"] for item in observations),
             "consumers": public_observations,
+            # Named beside the ones that answered, so the page can say which
+            # consumers this reading covers and which it does not.
+            "unreachable_consumers": [
+                {"consumer": consumer, "domain": domain, "reason": reason}
+                for consumer, domain, reason in unreachable
+            ],
         },
         conditions=conditions,
         message="TLS consumers observed.",
@@ -504,6 +544,19 @@ def controller_config_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config"
 
 
+def _redacted(text: str, env: dict[str, str] | None) -> str:
+    """Whatever a failing tool said, with the credential it was given struck out.
+
+    A tool that echoes back what it was handed would otherwise put the value in
+    the journal, and this module is the only place that knows what to look for.
+    """
+
+    for value in (env or {}).values():
+        if value:
+            text = text.replace(value, "[redacted]")
+    return text
+
+
 def _run(
     command: list[str],
     *,
@@ -541,12 +594,26 @@ def _run(
             env={**os.environ, **env} if env else None,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
+        # The tool was not there, or never returned. There is no exit code to
+        # report, so the exception's type is what names the cause -- a missing
+        # binary is a FileNotFoundError -- and it goes in the message, which is
+        # the part the controller's plain formatter prints.
+        logger.warning(
+            "controller step failed: %s (%s)",
+            step,
+            type(exc).__name__,
+            extra={
+                "event": "controller.step.failed",
+                "step": step,
+                "exception": type(exc).__name__,
+                # Held back from the message on the same terms as stderr below:
+                # it names the executable and can carry a path.
+                "detail": _redacted(str(exc), env)[:2000],
+            },
+        )
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
-        stderr = result.stderr.decode("utf-8", "replace")
-        for value in (env or {}).values():
-            if value:
-                stderr = stderr.replace(value, "[redacted]")
+        stderr = _redacted(result.stderr.decode("utf-8", "replace"), env)
         # The step goes in the message, not only in `extra`. The controller logs
         # through a plain formatter that prints the message and drops the rest,
         # so for weeks the journal said "controller step failed" thirty times an
