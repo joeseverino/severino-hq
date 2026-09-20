@@ -42,7 +42,7 @@ from control_plane.provider_adapters.contracts import (
     compile_controller_adapters,
 )
 from control_plane.provider_adapters import npm, onepassword
-
+from controller_runtime.command_env import command_environment
 
 logger = logging.getLogger("severino.controller")
 
@@ -665,7 +665,7 @@ def _run(
             capture_output=True,
             check=False,
             timeout=180,
-            env={**os.environ, **env} if env else None,
+            env=command_environment(env),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         # The tool was not there, or never returned. There is no exit code to

@@ -168,8 +168,8 @@
 - [ ] If SSO is enabled, Pocket ID has an `admins` group and the HQ OIDC
       client callback is `https://hq.jseverino.com/oidc/callback/`.
 - [ ] If SSO is enabled, `SEVERINO_OIDC_ALLOWED_GROUPS=admins` and
-      `SEVERINO_OIDC_CLIENT_SECRET` is stored only in
-      `/opt/apps/severino-hq/.env`.
+      `SEVERINO_OIDC_CLIENT_SECRET` is delivered through the rendered app
+      environment file, not the compose interpolation `.env`.
 - [ ] The Pocket ID HQ client has PKCE enabled; HQ uses S256 in addition to
       confidential-client authentication.
 - [ ] Documentation index records carrying secrets are flagged
@@ -200,8 +200,10 @@
       unencrypted virtual disk, so offline disk/root compromise remains a
       documented residual risk until vTPM-backed disk protection is enabled.
 - [ ] `severino-hq-secrets.timer` is enabled and its last service run
-      succeeded. Rotation refreshes the validator atomically and restarts HQ
-      only when the value changes.
+      succeeded. Refresh validates every output before installation and restarts
+      HQ when web secrets change. Existing bind mounts use in-place writes;
+      rotation is not a multi-file transaction. See [secret delivery](SECRETS.md)
+      for the migration gates and remaining delivery risks.
 - [ ] `SEVERINO_MCP_ALLOWED_HOSTS` contains only the direct Tailscale IP and/or
       MagicDNS hostname used by the MCP client.
 - [ ] The MCP client connects directly to `http://<tailscale-host>:8000/mcp/`;

@@ -44,6 +44,10 @@ SEVERINO_MCP_TOKEN_FILE_HOST=<root-only validator token file provisioned from 1P
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 
+For Connect bootstrap, isolation, and cutover requirements, see
+[Secret delivery and Connect migration](SECRETS.md). Connect is opt-in during
+migration; production authentication does not change merely by updating code.
+
 Production refreshes the validator token AND the full app environment from
 the dedicated 1Password vault with `severino-hq-secrets.service`
 (`scripts/refresh-secrets.sh`). The app env renders from the `severino-hq env`
@@ -61,9 +65,10 @@ same vault declare a stable `connection_ref`; `scripts/render-controller-env.sh`
 discovers them through that field and renders
 `secrets/severino_controller_env`. The controller service reads that root-owned
 file directly. `scripts/run-controller.sh` forwards the derived variables only
-to a short-lived `docker exec` process running from the exact deployed HQ image.
-The file is never mounted into the HQ web container, provider variables do not
-enter the long-running web process or container configuration, and provider
+to a short-lived controller container running from the exact deployed HQ image.
+The file is never mounted into the HQ web container. Provider variables enter
+the controller container configuration and are visible to Docker administrators;
+they do not enter the long-running web process. Provider
 passwords are never copied into the `severino-hq env` item.
 
 ### `SEVERINO_SECRET_STORE_KEY`
