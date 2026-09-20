@@ -39,6 +39,7 @@ from .infrastructure import (
     ManagedResourceCommand,
     OperationCommand,
     request_certificate_renewal,
+    request_reach_allow,
     request_route_approval,
     request_reconcile,
     request_removal,
@@ -439,6 +440,29 @@ CORE_CAPABILITY_SPECS = (
             "Read what the device currently advertises and what is already approved.",
             "Queue one approval for the controller; the API call runs outside this request.",
             "Approve exactly the advertised set, so no route this was not about is withdrawn.",
+        ),
+    ),
+    CapabilitySpec(
+        "tailnet.reach.allow",
+        "Open a path the tailnet refuses that an observation says is needed.",
+        "infrastructure_change",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        request_reach_allow,
+        "key",
+        "infrastructure.resources",
+        target_label="Resource key",
+        target_help="The resource with a consumer the controller could not reach.",
+        # Scoped to what it acts on, not to what it changes. The amendment
+        # lands on the tailnet policy, but the thing an operator selects is the
+        # certificate whose consumer went unread -- the same split that keeps
+        # `certificate.renew` off the tailnet ability.
+        target_query=(("kind", CERTIFICATE_KIND),),
+        execution_notes=(
+            "Read the addresses and ports the last reading could not reach.",
+            "Ask the policy whether it refuses each one, and keep only those it does.",
+            "Amend the tailnet policy, which is a gated kind: a person consents "
+            "before anything reaches the tailnet.",
         ),
     ),
     CapabilitySpec(

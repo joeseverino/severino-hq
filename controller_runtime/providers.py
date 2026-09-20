@@ -518,6 +518,35 @@ def provider_connection_refs(provider: str) -> tuple[str, ...]:
     return (conventional,) if conventional else ()
 
 
+def connection_role(connection_ref: str) -> str:
+    """What a connection is used for, where the item says so.
+
+    Separate from ``connection_provider`` on purpose. A provider says what kind
+    of system answers, and the connections page keys a machine's abilities off
+    it; a role says what HQ reaches this one *for*. An SSH host that serves
+    Caddy and one that is shared hosting are the same kind of system and the
+    same kind of credential, and only the role tells them apart.
+    """
+
+    prefix = connection_prefixes().get(connection_ref, "")
+    if not prefix:
+        return ""
+    return os.environ.get(f"{prefix}_ROLE", "").strip()
+
+
+def connection_refs_for_role(role: str) -> tuple[str, ...]:
+    """Every SSH connection declared for ``role``.
+
+    Empty when nothing declares one, which callers read as "nobody has said",
+    not as "none of them". A discovery that asked only declared hosts before
+    any host was declared would find nothing and report it as an empty estate.
+    """
+
+    return tuple(
+        ref for ref in ssh_connection_refs() if connection_role(ref) == role
+    )
+
+
 def ssh_connection_refs() -> tuple[str, ...]:
     """Connections rendered through the ssh_transport projection.
 
@@ -3444,6 +3473,9 @@ class _ProviderRuntime:
 
     def ssh_connection_refs(self) -> tuple[str, ...]:
         return ssh_connection_refs()
+
+    def connection_refs_for_role(self, role: str) -> tuple[str, ...]:
+        return connection_refs_for_role(role)
 
     def ssh(
         self, connection_ref: str, operation: str, payload: bytes | None = None

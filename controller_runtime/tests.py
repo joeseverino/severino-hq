@@ -4090,3 +4090,67 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         )
 
         self.assertIn("could not read", result.status["published_facts"][0]["detail"])
+
+
+class CaddyDiscoveryByRoleTests(TestCase):
+    """Which SSH connections get asked for Caddy routes, and which never do."""
+
+    class _Runtime:
+        def __init__(self, refs, roles):
+            self._refs = refs
+            self._roles = roles
+            self.asked = []
+
+        def ssh_connection_refs(self):
+            return self._refs
+
+        def connection_refs_for_role(self, role):
+            return tuple(r for r in self._refs if self._roles.get(r) == role)
+
+        def ssh(self, connection_ref, operation, payload=None):
+            self.asked.append((connection_ref, operation))
+            return b'{"apps":{}}'
+
+    def test_every_declared_caddy_host_is_asked(self):
+        """A set, not a host. A second edge is a field, not a code change."""
+
+        from control_plane.provider_adapters import caddy
+
+        runtime = self._Runtime(
+            ("edge", "edge-two", "shared-hosting"),
+            {"edge": "caddy", "edge-two": "caddy", "shared-hosting": "cpanel"},
+        )
+
+        caddy.inventory(runtime)
+
+        self.assertEqual(
+            [ref for ref, _ in runtime.asked], ["edge", "edge-two"]
+        )
+
+    def test_a_connection_declared_for_something_else_is_never_asked(self):
+        """The failure this removes: shared hosting has no Caddy and no routes.
+
+        Asked anyway it refuses, every sweep, forever -- a cost paid on a
+        machine somebody else runs.
+        """
+
+        from control_plane.provider_adapters import caddy
+
+        runtime = self._Runtime(
+            ("edge", "shared-hosting"), {"edge": "caddy", "shared-hosting": "cpanel"}
+        )
+
+        caddy.inventory(runtime)
+
+        self.assertNotIn("shared-hosting", [ref for ref, _ in runtime.asked])
+
+    def test_nothing_declared_still_discovers(self):
+        """Absence of a role is nobody having said, not nobody qualifying."""
+
+        from control_plane.provider_adapters import caddy
+
+        runtime = self._Runtime(("edge", "other"), {})
+
+        caddy.inventory(runtime)
+
+        self.assertEqual([ref for ref, _ in runtime.asked], ["edge", "other"])

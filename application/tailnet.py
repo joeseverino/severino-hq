@@ -14,6 +14,7 @@ guessing.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -419,3 +420,71 @@ def policy() -> Policy:
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
             )
     return Policy()
+
+
+def policy_allowing(
+    document: str, *, source: str, target: str, port: int
+) -> tuple[str, str]:
+    """The same policy with one path opened, and a sentence saying what moved.
+
+    Returns ``("", "")`` when the policy already admits the path, so a caller
+    proposes nothing rather than an empty change.
+
+    Two edits, and the second is what makes the first survive contact with
+    Tailscale. A policy carries its own tests, and a test asserting that this
+    source may *not* reach this target on this port contradicts the grant being
+    added: Tailscale runs those tests before accepting a policy and refuses the
+    whole document when one fails. Adding the grant alone would be rejected in
+    full, so the assertion moves with it.
+
+    The port is appended rather than inserted. A reviewer reads the diff of the
+    single most dangerous document in the estate, and an insertion renumbers
+    every element after it -- one added port rendering as four changed lines is
+    a diff that hides what it is.
+    """
+
+    parsed = json.loads(document)
+    grants = list(parsed.get("grants") or [])
+    wanted = f"tcp:{port}"
+    changed: list[str] = []
+
+    existing = next(
+        (
+            grant
+            for grant in grants
+            if source in (grant.get("src") or ())
+            and target in (grant.get("dst") or ())
+        ),
+        None,
+    )
+    if existing is not None:
+        ports = list(existing.get("ip") or ())
+        if wanted in ports:
+            return "", ""
+        existing["ip"] = [*ports, wanted]
+        changed.append(f"{wanted} added to the grant from {source} to {target}")
+    else:
+        grants.append({"src": [source], "dst": [target], "ip": [wanted]})
+        changed.append(f"a grant from {source} to {target} on {wanted}")
+    parsed["grants"] = grants
+
+    asserted = f"{target}:{port}"
+    tests = [dict(test) for test in (parsed.get("tests") or ())]
+    for test in tests:
+        if test.get("src") != source or test.get("proto", "tcp") != "tcp":
+            continue
+        denied = list(test.get("deny") or ())
+        if asserted not in denied:
+            continue
+        denied.remove(asserted)
+        if denied:
+            test["deny"] = denied
+        else:
+            test.pop("deny", None)
+        accepted = list(test.get("accept") or ())
+        if asserted not in accepted:
+            test["accept"] = [*accepted, asserted]
+        changed.append(f"{asserted} moved from denied to accepted for {source}")
+    parsed["tests"] = tests
+
+    return json.dumps(parsed), "; ".join(changed)

@@ -251,6 +251,26 @@ def _ago(delta: timedelta) -> str:
     return f"{seconds // 86400}d"
 
 
+def _open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
+    """Amend the policy, and look again once it is amended.
+
+    The capability is handed the resource, not a path: which one to open is
+    re-derived from what was observed, so a remedy can never carry an access
+    rule of its own. The amendment lands on a gated kind, so a person still
+    consents before the tailnet changes.
+    """
+
+    return (
+        Remedy(
+            capability="tailnet.reach.allow",
+            target=node.label,
+            label="Open the path",
+            effect="infrastructure_change",
+        ),
+        *_reconcile(node),
+    )
+
+
 def _reconcile(node: TopologyNode) -> tuple[Remedy, ...]:
     """The one capability that answers "go and look again"."""
 
@@ -800,6 +820,13 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
         )
         if not names:
             continue
+        # The tailnet refusing the path is a different claim from the consumer
+        # being down, and only one of them has a fix worth offering. Present,
+        # the policy was asked and said no; absent, it said yes or was never
+        # swept, and neither is a reason to send anybody at an access policy.
+        refused = tuple(
+            value for key, value in node.facts if key == "path-denied" and value
+        )
         found.append(
             Finding(
                 rule="unreachable-consumer",
@@ -815,9 +842,18 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
                     "agree. This one answered nothing, so what it is serving "
                     "now is unknown -- including whether it is still the "
                     "certificate this resource thinks it installed."
+                    + (
+                        " The tailnet policy refuses the path, so looking "
+                        "again will not help until a grant admits it."
+                        if refused
+                        else ""
+                    )
                 ),
-                evidence=tuple(("Not read", name) for name in names),
-                remedies=_reconcile(node),
+                evidence=(
+                    *(("Not read", name) for name in names),
+                    *(("Refused by the tailnet", path) for path in refused),
+                ),
+                remedies=_open_the_path(node) if refused else _reconcile(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))

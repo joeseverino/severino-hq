@@ -516,6 +516,45 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
             )
 
 
+def _policy_verdicts(
+    found: dict[str, tuple[tuple[str, str], ...]],
+    blocked: list[tuple[str, dict[str, str]]],
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Add, for each unreachable address, whether the tailnet is what refused.
+
+    Three answers are possible and only one of them is this fact. A policy that
+    admits the path leaves nothing here -- the consumer is down, or the service
+    is not listening, and saying "the tailnet allows this" would be noise. A
+    tailnet HQ has not swept leaves nothing either: not knowing is not the same
+    as knowing it is shut, and a rule that confused them would send an operator
+    to change an access policy that was never the problem.
+    """
+
+    from .tailnet import devices, device_at, may_reach, observer
+
+    known = devices()
+    watcher = observer(known)
+    if watcher is None:
+        return found
+    for node_id, item in blocked:
+        target = device_at(str(item.get("endpoint", "")), known)
+        if target is None:
+            continue
+        try:
+            port = int(str(item.get("port", "")) or 0)
+        except ValueError:
+            continue
+        if not port:
+            continue
+        verdict = may_reach(watcher.name, target.name, port, known)
+        if verdict.allowed or not verdict.known:
+            continue
+        found[node_id] = found.get(node_id, ()) + (
+            ("path-denied", f"{watcher.name} to {target.name} on {port}"),
+        )
+    return found
+
+
 def _observed_facts(
     resources: tuple[Any, ...],
 ) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -536,6 +575,7 @@ def _observed_facts(
 
     # Already in hand, so this costs nothing: the sweep wrote it into the
     # status this function was handed.
+    blocked: list[tuple[str, dict[str, str]]] = []
     for resource in resources:
         unreachable = (resource.status or {}).get("unreachable_consumers") or []
         if not isinstance(unreachable, list):
@@ -551,6 +591,23 @@ def _observed_facts(
         )
         if entries:
             found[f"resource:{resource.key}"] = entries
+            blocked.extend(
+                (f"resource:{resource.key}", item)
+                for item in unreachable
+                if isinstance(item, dict) and str(item.get("endpoint", "")).strip()
+            )
+
+    # Why it could not be reached, where the tailnet policy is the answer.
+    #
+    # HQ can already decide whether one machine may reach another on a port,
+    # and until now a person had to think to go and ask it. The reading knows
+    # what it tried; this asks the question on their behalf, so the answer
+    # arrives with the failure instead of waiting to be looked up.
+    #
+    # Paid for only when something is actually unreachable, the way the zone
+    # facts below refuse to buy a query to learn there are no domains.
+    if blocked:
+        found = _policy_verdicts(found, blocked)
 
     # Nothing further when the estate holds no zone, the way `_measure` pays
     # nothing when nothing is named like a host. This runs inside the shared

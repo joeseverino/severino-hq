@@ -58,6 +58,9 @@ class ProviderRuntime(Protocol):
     def ssh_connection_refs(self) -> tuple[str, ...]:
         raise NotImplementedError
 
+    def connection_refs_for_role(self, role: str) -> tuple[str, ...]:
+        raise NotImplementedError
+
     def ssh(
         self, connection_ref: str, operation: str, payload: bytes | None = None
     ) -> bytes:
