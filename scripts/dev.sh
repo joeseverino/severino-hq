@@ -61,6 +61,18 @@ if [ "${host}" = "tailnet" ]; then
 fi
 port=${HQ_DEV_PORT:-8000}
 
+# Refuse rather than race. This binds loopback by default while the personal
+# `hq-dev serve` command serves the proxied development host, and the two use
+# different databases -- so a second server started here is not a second view
+# of the same state, it is a different estate answering on a nearby port. The
+# symptom is data that appears and disappears depending on which one answered.
+if command -v lsof >/dev/null 2>&1 \
+    && lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Something already serves port ${port}. If that is \`hq-dev serve\`, leave it." >&2
+    echo "Otherwise stop it, or pass HQ_DEV_PORT to use another port." >&2
+    exit 3
+fi
+
 "$python" manage.py collectstatic --noinput --verbosity 0
 exec "$python" -m uvicorn config.asgi:application \
     --host "$host" \
