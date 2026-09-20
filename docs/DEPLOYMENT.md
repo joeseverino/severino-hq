@@ -50,7 +50,7 @@ migration; production authentication does not change merely by updating code.
 
 Production refreshes the validator token AND the full app environment from
 the dedicated 1Password vault with `severino-hq-secrets.service`
-(`scripts/refresh-secrets.sh`). The app env renders from the `severino-hq env`
+(`scripts/refresh-secrets.sh`). The app env renders from the app-environment
 item into a root-owned file the entrypoint sources — compose has no
 `env_file`, and the on-host `.env` holds only the two non-secret
 `*_FILE_HOST` interpolation paths. The service-account token is a host-bound
@@ -69,11 +69,11 @@ to a short-lived controller container running from the exact deployed HQ image.
 The file is never mounted into the HQ web container. Provider variables enter
 the controller container configuration and are visible to Docker administrators;
 they do not enter the long-running web process. Provider
-passwords are never copied into the `severino-hq env` item.
+passwords are never copied into the app-environment item.
 
 ### `SEVERINO_SECRET_STORE_KEY`
 
-One field on the `severino-hq env` item, and the only secret HQ holds rather
+One field on the app-environment item, and the only secret HQ holds rather
 than reads. It seals a certificate the operator generated against the offline CA
 and asked HQ to install — the leaf and its key, the same pair that would
 otherwise be pasted into a provider's web form by hand. Provider credentials are
@@ -143,7 +143,7 @@ container never receives the provider environment.
 The same activation gate performs an authenticated pull of the live
 `jseverino.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the
-existing `severino-hq env` item through the normal app-environment projection;
+existing the app-environment item item through the normal app-environment projection;
 there is no second credential registry. A restart cannot lose the schedule:
 systemd owns it, catches up missed runs, and the deployment revalidates the
 pull before declaring the release healthy.

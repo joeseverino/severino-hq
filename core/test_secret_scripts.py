@@ -41,6 +41,12 @@ class SecretScriptTests(unittest.TestCase):
             "OP_CONNECT_HOST": "",
             "OP_CONNECT_TOKEN": "",
             "FIXTURES": str(self.root),
+            # The scripts require estate naming rather than defaulting to any,
+            # so the tests supply their own -- which is also what proves the
+            # scripts carry no estate's names of their own.
+            "SEVERINO_SECRETS_VAULT": "Example Vault",
+            "SEVERINO_ENV_ITEM": "example env",
+            "SEVERINO_MCP_SECRET_REF": "op://Example Vault/Example MCP/credential",
         }
         self.item = {"fields": [
             {"label": "connection_ref", "value": "example"},
@@ -55,7 +61,7 @@ case "$1 $2" in
         [ "${FAIL_LIST:-0}" = 0 ] || exit 1
         printf '[{"id":"example-item"}]' ;;
     "item get")
-        if [ "$3" = "severino-hq env" ]; then
+        if [ "$3" = "example env" ]; then
             cat "$FIXTURES/app.json"
         else
             cat "$FIXTURES/item.json"
