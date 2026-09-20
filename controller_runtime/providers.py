@@ -3247,6 +3247,14 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             # The document itself, so a declaration can hold it and be compared
             # against reality without a second read.
             "document": json.dumps(policy, indent=2, sort_keys=True),
+            # The aliases the policy gives addresses. A grant may name a device
+            # by one, and then the alias is the name that admits it -- as real
+            # a principal as a user or a tag, and the only one HQ could not see
+            # from a device reading alone.
+            "hosts": {
+                str(name): str(address)
+                for name, address in (policy.get("hosts") or {}).items()
+            },
             "settings": _tailnet_get(token, "settings"),
             "dns": {
                 **_tailnet_get(token, "dns/preferences"),

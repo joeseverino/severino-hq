@@ -35,6 +35,10 @@ class Device:
     reach: dict[int, tuple[str, ...]] = field(default_factory=dict)
     rules: dict[int, tuple[dict, ...]] = field(default_factory=dict)
     addresses: tuple[str, ...] = ()
+    # Names the policy gives this device's addresses. Not a property of the
+    # device at all -- the policy decides it -- so it is attached when the two
+    # readings are joined rather than read from the device.
+    aliases: tuple[str, ...] = ()
     dns_name: str = ""
     os: str = ""
     online: bool = False
@@ -91,9 +95,17 @@ class Device:
 
     @property
     def principals(self) -> frozenset[str]:
-        """Every name a rule could admit this device by."""
+        """Every name a rule could admit this device by.
 
-        return frozenset({self.user, *self.tags} - {""})
+        Three kinds, not two. A policy may name a device by its owner, by a
+        tag, or by an alias it gives one of the device's addresses -- and a
+        policy written the third way is admitting the machine rather than
+        whoever is signed in on it, which is a stricter thing to say and the
+        reason to write it. Counting only the first two reports a device the
+        policy plainly admits as refused.
+        """
+
+        return frozenset({self.user, *self.tags, *self.aliases} - {""})
 
     @property
     def ports(self) -> tuple[int, ...]:
@@ -128,8 +140,21 @@ class Verdict:
 def devices() -> dict[str, Device]:
     """Every device the last sweep described, by the name the tailnet uses."""
 
+    # Both readings, from the one query that already fetches them together.
+    # The policy names addresses and the device reading names devices; only
+    # joined do they say which aliases admit which machine. Read through
+    # `policy()` instead, this would be a second identical query on every
+    # surface that is not inside a projection scope.
+    both = snapshots()
+    aliases_at: dict[str, list[str]] = {}
+    for snapshot in both[POLICY_KIND]:
+        for record in snapshot.records:
+            for alias, address in (record.get("hosts") or {}).items():
+                if alias and address:
+                    aliases_at.setdefault(str(address), []).append(str(alias))
+
     found: dict[str, Device] = {}
-    for snapshot in snapshots()[TAILNET_KIND]:
+    for snapshot in both[TAILNET_KIND]:
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:
@@ -150,6 +175,15 @@ def devices() -> dict[str, Device]:
                 },
                 addresses=tuple(
                     str(address) for address in record.get("addresses") or ()
+                ),
+                aliases=tuple(
+                    sorted(
+                        {
+                            alias
+                            for address in record.get("addresses") or ()
+                            for alias in aliases_at.get(str(address), ())
+                        }
+                    )
                 ),
                 dns_name=str(record.get("dns_name", "")),
                 os=str(record.get("os", "")),
@@ -277,6 +311,8 @@ class Policy:
     grants: tuple[dict, ...] = ()
     tests: tuple[dict, ...] = ()
     settings: dict = field(default_factory=dict)
+    # Alias -> address, as the policy defines them.
+    hosts: dict = field(default_factory=dict)
     dns: dict = field(default_factory=dict)
     lock: dict = field(default_factory=dict)
     services: tuple[dict, ...] = ()
@@ -413,6 +449,7 @@ def policy() -> Policy:
                 grants=tuple(record.get("grants") or ()),
                 tests=tuple(record.get("tests") or ()),
                 settings=record.get("settings") or {},
+                hosts=record.get("hosts") or {},
                 dns=record.get("dns") or {},
                 lock=record.get("lock") or {},
                 services=tuple(record.get("services") or ()),
