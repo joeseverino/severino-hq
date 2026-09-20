@@ -1299,3 +1299,56 @@ class WorkThatKeepsFailingTests(TestCase):
 
         self.assertEqual(len(finding.evidence), 2)
         self.assertIn("2 things", finding.title)
+
+
+class PerimeterClaimTests(TestCase):
+    """The two things an edge relies on to stay shut, claimed separately."""
+
+    def _findings(self, detect, *facts):
+        from application.findings import _estate
+        from application.topology import Topology, TopologyNode
+
+        node = TopologyNode(
+            id="connection:infrastructure.controllers:a-host:an-edge",
+            kind="connection",
+            label="an-edge",
+            subtitle="ssh",
+            facts=tuple(facts),
+        )
+        return detect(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_a_port_answering_publicly_is_serious(self):
+        from application.findings import _perimeter_open
+
+        (finding,) = self._findings(
+            _perimeter_open,
+            ("answers-publicly", "9001"),
+            ("answers-publicly", "443"),
+        )
+
+        self.assertEqual(finding.severity, "serious")
+        self.assertIn("9001", finding.title)
+        self.assertEqual(len(finding.evidence), 2)
+
+    def test_a_shut_perimeter_claims_nothing(self):
+        from application.findings import _perimeter_open
+
+        self.assertEqual(self._findings(_perimeter_open, ("Controller", "a-host")), ())
+
+    def test_a_stopped_firewall_is_claimed_on_its_own(self):
+        """Separate from the ports: a control that stopped, not a breach."""
+
+        from application.findings import _firewall_stopped
+
+        (finding,) = self._findings(_firewall_stopped, ("firewall-unit", "inactive"))
+
+        self.assertEqual(finding.severity, "serious")
+        self.assertIn("inactive", finding.explanation)
+        self.assertEqual(finding.evidence, (("Firewall unit", "inactive"),))
+
+    def test_a_running_firewall_claims_nothing(self):
+        """Only a state worth acting on reaches the topology at all."""
+
+        from application.findings import _firewall_stopped
+
+        self.assertEqual(self._findings(_firewall_stopped), ())

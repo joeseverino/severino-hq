@@ -3225,6 +3225,92 @@ def list_host_firewall() -> list[dict[str, Any]]:
     return [reading]
 
 
+def _answers_from_here(address: str, port: int, timeout: float = 3.0) -> bool:
+    """Whether a TCP connection to this address and port is accepted.
+
+    Asked from the machine the controller runs on, which reaches a public
+    address the way anybody else would. That is the whole point: a firewall is
+    a claim about what happens to a packet, and the only way to know is to send
+    one.
+    """
+
+    try:
+        with socket.create_connection((address, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def list_host_perimeter() -> list[dict[str, Any]]:
+    """What each edge relies on to stay shut, and whether it actually is.
+
+    Two halves, because one of them cannot be read without privileges this
+    controller deliberately does not have. The machine reports the state of its
+    firewall unit -- a unit can be enabled and dead, and the difference has no
+    symptom until something arrives -- and reports its own public addresses.
+    What is behind that firewall is then answered from here, by connecting to
+    those addresses on the ports that machine's own containers publish.
+
+    Nothing about which ports to try is written down. They come from the
+    container inventory, so a machine that starts publishing something new is
+    checked on it without anybody remembering to say so.
+    """
+
+    found: list[dict[str, Any]] = []
+    for connection_ref in connection_refs_for_role("caddy"):
+        reading = json.loads(_ssh(connection_ref, "perimeter") or b"{}")
+        addresses = [
+            address.strip()
+            for address in str(reading.get("public_addresses", "")).split(",")
+            if address.strip()
+        ]
+        ports = sorted(_published_ports_at(connection_ref))
+        answered = sorted(
+            {
+                port
+                for address in addresses
+                for port in ports
+                if _answers_from_here(address, port)
+            }
+        )
+        found.append(
+            {
+                "record": "perimeter",
+                "connection_ref": connection_ref,
+                "firewall_unit": str(reading.get("firewall_unit", "unknown")),
+                "public_addresses": addresses,
+                "ports_checked": ports,
+                "answered_publicly": answered,
+                "read_at": str(reading.get("read_at", "")),
+            }
+        )
+    return found
+
+
+def _published_ports_at(connection_ref: str) -> set[int]:
+    """Ports the containers on one machine publish, as the sweep found them.
+
+    Empty where the machine is not described, which reads as nothing to check
+    rather than as nothing published -- the same distinction the container
+    reading draws about host networking.
+    """
+
+    ports: set[int] = set()
+    try:
+        containers = list_portainer_containers()
+    except (ProviderError, OSError, ValueError, KeyError):
+        return ports
+    for container in containers:
+        if str(container.get("host", "")) != connection_ref:
+            continue
+        ports.update(
+            int(port)
+            for port in container.get("ports") or ()
+            if str(port).isdigit() and 0 < int(port) < 65536
+        )
+    return ports
+
+
 def list_tailnet_policy() -> list[dict[str, Any]]:
     """The policy itself: who is grouped, what is tagged, and what it grants.
 
@@ -3540,6 +3626,7 @@ PROVIDER_INVENTORY = {
     "tailscale.device": list_tailnet_devices,
     "tailscale.policy": list_tailnet_policy,
     "host.firewall": list_host_firewall,
+    "host.perimeter": list_host_perimeter,
     **_ADAPTER_REGISTRY.inventory,
 }
 

@@ -516,6 +516,50 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
             )
 
 
+# The kinds this module reads out of the provider inventory, fetched together.
+# Two filters against one table are two queries, and this runs inside the
+# projection whose query count the dashboard measures.
+_READ_KINDS = ("host.perimeter", "cloudflare.zone")
+
+
+def _inventory_of(kind: str) -> tuple[Any, ...]:
+    """Snapshots of one kind, from a single read of every kind used here."""
+
+    from control_plane.models import ProviderInventory
+
+    from .projection import read_once
+
+    def load() -> dict[str, tuple[Any, ...]]:
+        grouped: dict[str, list[Any]] = {name: [] for name in _READ_KINDS}
+        for snapshot in ProviderInventory.objects.filter(kind__in=_READ_KINDS):
+            grouped.setdefault(snapshot.kind, []).append(snapshot)
+        return {name: tuple(rows) for name, rows in grouped.items()}
+
+    return read_once("topology.inventory", load).get(kind, ())
+
+
+def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
+    """Each machine's perimeter reading, keyed by the connection that took it."""
+
+    found: dict[str, tuple[tuple[str, str], ...]] = {}
+    for snapshot in _inventory_of("host.perimeter"):
+        for record in snapshot.records:
+            connection_ref = str(record.get("connection_ref", "")).strip()
+            if not connection_ref:
+                continue
+            entries: list[tuple[str, str]] = []
+            unit = str(record.get("firewall_unit", "")).strip()
+            if unit and unit != "active":
+                entries.append(("firewall-unit", unit))
+            entries.extend(
+                ("answers-publicly", str(port))
+                for port in record.get("answered_publicly") or ()
+            )
+            if entries:
+                found[connection_ref] = tuple(entries)
+    return found
+
+
 def _policy_verdicts(
     found: dict[str, tuple[tuple[str, str], ...]],
     blocked: list[tuple[str, dict[str, str]]],
@@ -567,7 +611,6 @@ def _observed_facts(
     to see it, and rules may not query.
     """
 
-    from control_plane.models import ProviderInventory
 
     from .zones import ZONE_KIND
 
@@ -620,7 +663,7 @@ def _observed_facts(
         return found
 
     registrations: dict[str, dict[str, Any]] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=ZONE_KIND):
+    for snapshot in _inventory_of(ZONE_KIND):
         for record in snapshot.records:
             name = str(record.get("zone", "")).strip().lower().rstrip(".")
             registration = record.get("registration") or {}
@@ -691,6 +734,21 @@ def derive_topology(*, principal: Principal) -> Topology:
 
     groups = connection_catalog(principal=principal)
     _connection_nodes(groups, nodes, edges, principal)
+
+    # What each edge relies on to stay shut, from its own reading. Two claims
+    # come out of this and they differ in kind: a firewall unit that is not
+    # running is a control that stopped, and a port answering publicly is the
+    # thing that control exists to prevent, already happening.
+    #
+    # Joined on the ref a connection is labelled with. The node id composes a
+    # group name and a controller as well, and rebuilding it here would be a
+    # second copy of a format only the line above should know.
+    perimeter = _perimeter_facts()
+    if perimeter:
+        for node_id, node in list(nodes.items()):
+            entries = perimeter.get(node.label) if node.kind == "connection" else None
+            if entries:
+                nodes[node_id] = replace(node, facts=node.facts + entries)
 
     resources_by_kind: dict[str, list[str]] = {}
     for resource in resources:

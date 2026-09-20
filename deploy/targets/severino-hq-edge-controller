@@ -16,6 +16,32 @@ case "${operation}" in
     snapshot)
         exec tar -C "${cert_dir}" -cf - fullchain.pem privkey.pem
         ;;
+    perimeter)
+        # What this machine is relying on to stay shut, as it is right now.
+        #
+        # Reported rather than asserted, and each part says whether it could be
+        # read at all: a control this cannot see is unknown, which is a
+        # different thing from one it has seen to be off. Claiming the second
+        # when it means the first is how a report becomes worse than none.
+        #
+        # Unprivileged on purpose. Reading the container chain needs root and
+        # this account does not have it, so that half is answered by whether
+        # the ports actually answer, from somewhere outside -- a question about
+        # the property rather than about the configuration behind it.
+        nftables="$(systemctl is-active nftables 2>/dev/null || true)"
+        # Its own public face, so the half that needs root is answered from
+        # outside instead. Every address on an interface that is neither
+        # private nor tailnet: derived, so a machine that is renumbered or
+        # given a second address is still described correctly.
+        public="$(
+            ip -4 -o addr show scope global 2>/dev/null \
+                | awk '{split($4, a, "/"); print a[1]}' \
+                | grep -vE '^(10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)' \
+                | paste -sd, - || true
+        )"
+        printf '{"record":"perimeter","firewall_unit":"%s","public_addresses":"%s","read_at":"%s"}\n' \
+            "${nftables:-unknown}" "${public}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        ;;
     routes)
         # What this edge actually serves, so HQ stops having to be told. The
         # names here answer over TLS from a box HQ sweeps, holds a credential

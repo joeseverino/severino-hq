@@ -798,6 +798,81 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _perimeter_open(estate: _Estate) -> tuple[Finding, ...]:
+    """A port answering from the public internet that nothing means to publish.
+
+    Not a disagreement about configuration. The port was dialled from outside
+    and it answered, so this is the invariant already broken rather than a
+    prediction that it might be.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        ports = tuple(
+            value for key, value in node.facts if key == "answers-publicly" and value
+        )
+        if not ports:
+            continue
+        found.append(
+            Finding(
+                rule="perimeter-open",
+                subject=node.id,
+                title=(
+                    f"{node.label} answers on "
+                    f"{', '.join(ports)} from the public internet"
+                ),
+                severity="serious",
+                explanation=(
+                    "These were dialled from outside the tailnet and they "
+                    "answered. Everything behind them is published to anyone "
+                    "who scans for it, and nothing else here would say so: "
+                    "the machine is reachable over the tailnet either way, so "
+                    "every other reading looks exactly as it should."
+                ),
+                evidence=tuple(("Answers publicly", port) for port in ports),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _firewall_stopped(estate: _Estate) -> tuple[Finding, ...]:
+    """A firewall that is installed, configured, and not running.
+
+    Enabled and dead is the state with no symptom: the rules are on disk, the
+    unit is listed, and nothing is filtering. It survives a reboot as silence,
+    which is the one time it is most likely to happen.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        state = next(
+            (value for key, value in node.facts if key == "firewall-unit" and value),
+            "",
+        )
+        if not state:
+            continue
+        found.append(
+            Finding(
+                rule="firewall-stopped",
+                subject=node.id,
+                title=f"{node.label} is not running its firewall",
+                severity="serious",
+                explanation=(
+                    "The machine reports its firewall unit as "
+                    f"{state}. Whatever those rules say, nothing is applying "
+                    "them, and the machine will keep answering every request "
+                    "it receives until somebody starts it."
+                ),
+                evidence=(("Firewall unit", state),),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
     """A connection HQ can open and cannot use.
 
@@ -905,6 +980,18 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
 
 
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "perimeter-open",
+        "Something answers from the public internet",
+        "serious",
+        _perimeter_open,
+    ),
+    FindingRule(
+        "firewall-stopped",
+        "A firewall is configured and not running",
+        "serious",
+        _firewall_stopped,
+    ),
     FindingRule(
         "work-that-keeps-failing",
         "A connection answers and its work does not finish",
