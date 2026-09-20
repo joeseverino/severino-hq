@@ -83,7 +83,7 @@ write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"d","label":"website","value":"https://api.example.test"}
 ]}'
 check "item declares its own connection" "${fixture_dir}/projections-only.json" 0 \
-    'EXAMPLE_API_TOKEN="test-token"'
+    "EXAMPLE_API_TOKEN='test-token'"
 
 # 3. An item that declares no projection: a loud failure, not a silent omission.
 #    The registry names no connections, so nothing can answer for it.
@@ -125,7 +125,7 @@ write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"d","label":"website","value":"https://api.example.test"}
 ]}'
 check "an optional field is rendered when present" "${fixture_dir}/projections-only.json" 0 \
-    'EXAMPLE_PROVIDER="portainer"'
+    "EXAMPLE_PROVIDER='portainer'"
 
 # 7. The same item without it renders the rest rather than failing. This is what
 #    lets a connection be classified one item at a time instead of all at once.
@@ -137,7 +137,7 @@ write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"d","label":"website","value":"https://api.example.test"}
 ]}'
 check "an absent optional field is not fatal" "${fixture_dir}/projections-only.json" 0 \
-    'EXAMPLE_API_TOKEN="test-token"'
+    "EXAMPLE_API_TOKEN='test-token'"
 
 # 8. Items that are not provider connections are ignored, not fatal.
 write_op '[{"id":"item-1"}]' '{"fields":[

@@ -46,17 +46,37 @@ jq -e '
 # One field off an item, by label, or empty.
 item_field() {
     printf %s "$1" | jq -r --arg label "$2" \
-        '[.fields[] | select(.label == $label)][0].value // ""'
+        '[.fields[] | select(.label == $label)]
+         | if length > 1 then error("Duplicate connection metadata")
+           else .[0].value // "" end'
 }
 
 emitted_refs=""
+emitted_prefixes=""
 rendered=""
 
-for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id'); do
+items="$(sh "${script_dir}/list-secret-items.sh" "${vault}")"
+item_ids="$(printf '%s' "${items}" | jq -er '
+    if type == "array" and all(.[]; (.id | type == "string")
+        and (.id | test("^[A-Za-z0-9_-]+$")))
+    then map(.id) | sort | join(" ") else error("Invalid item listing") end
+')"
+for item_id in ${item_ids}; do
     item="$(op item get "${item_id}" --vault "${vault}" --format json)"
+    # The launcher forwards one variable name per physical line. Reject control
+    # characters rather than allowing a value to introduce another assignment.
+    printf '%s' "${item}" | jq -e '
+        all(.fields[]; .value == null or
+            (.value | type == "string" and (test("[\u0000\r\n]") | not)))
+        and all(.urls[]?; .href | type == "string" and (test("[\u0000\r\n]") | not))
+    ' >/dev/null || { echo "Invalid controller field value." >&2; exit 1; }
     connection_ref="$(item_field "${item}" connection_ref)"
     # Items without a connection_ref are not provider connections.
     [ -n "${connection_ref}" ] || continue
+    if ! printf '%s\n' "${connection_ref}" | LC_ALL=C grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$'; then
+        echo "Connection has an invalid connection_ref." >&2
+        exit 1
+    fi
 
     case " ${emitted_refs} " in
         *" ${connection_ref} "*)
@@ -72,13 +92,16 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
         echo "Connection ${connection_ref} declares no projection or env_prefix." >&2
         exit 1
     fi
-    case "${prefix}" in
-        [A-Z]*) ;;
-        *)
-            echo "Connection ${connection_ref} has an invalid env_prefix ${prefix}." >&2
-            exit 1
-            ;;
+    if ! printf '%s\n' "${prefix}" | LC_ALL=C grep -Eq '^[A-Z][A-Z0-9_]*$'; then
+        echo "Connection has an invalid env_prefix." >&2
+        exit 1
+    fi
+    case " ${emitted_prefixes} " in
+        *" ${prefix} "*)
+            echo "More than one connection declares the same env_prefix." >&2
+            exit 1 ;;
     esac
+    emitted_prefixes="${emitted_prefixes} ${prefix}"
     if ! jq -e --arg projection "${projection}" \
         '.projections | has($projection)' "${registry}" >/dev/null; then
         echo "Connection ${connection_ref} names unknown projection ${projection}." >&2
@@ -104,7 +127,7 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
         )"
         case "${source}" in
             connection_ref)
-                value="$(printf %s "${connection_ref}" | jq -Rr '@json')"
+                value="$(printf %s "${connection_ref}" | jq -Rr '@sh')"
                 ;;
             url)
                 index="$(
@@ -114,7 +137,7 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
                 value="$(
                     printf %s "${item}" \
                         | jq -r --argjson index "${index}" \
-                            '.urls[$index].href // empty | @json'
+                            '.urls[$index].href // empty | @sh'
                 )"
                 ;;
             field)
@@ -145,7 +168,7 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
                 value="$(
                     printf %s "${item}" \
                         | jq -r --arg selector_type "${selector_type}" --arg selector "${selector}" \
-                            '[.fields[] | select(.[$selector_type] == $selector)][0].value // empty | @json'
+                            '[.fields[] | select(.[$selector_type] == $selector)][0].value // empty | @sh'
                 )"
                 ;;
             *)
@@ -165,6 +188,6 @@ for item_id in $(op item list --vault "${vault}" --format json | jq -r '.[].id')
     done
 done
 
-# Sorted so the rendered file is byte-identical when nothing has changed, which
-# is what lets the caller decide whether a restart is warranted.
-printf '%s' "${rendered}" | sort
+# Item IDs and projection keys are sorted before rendering. Sorting physical
+# output lines would corrupt quoted values containing newlines.
+printf '%s' "${rendered}"

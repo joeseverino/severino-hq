@@ -4053,6 +4053,19 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
         self.assertEqual(passed["PATH"], "/an/example/path")
         self.assertEqual(passed["OP_SERVICE_ACCOUNT_TOKEN"], "t")
 
+    def test_cloud_writer_cannot_inherit_connect_authentication(self):
+        with (
+            mock.patch.object(providers.subprocess, "run") as run,
+            mock.patch.dict("os.environ", {
+                "OP_CONNECT_HOST": "http://127.0.0.1:8080",
+                "OP_CONNECT_TOKEN": "example-connect-token",
+            }),
+        ):
+            run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+            providers._run(["op", "item", "edit"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"})
+        self.assertNotIn("OP_CONNECT_HOST", run.call_args.kwargs["env"])
+        self.assertNotIn("OP_CONNECT_TOKEN", run.call_args.kwargs["env"])
+
     def test_the_connection_probe_proves_the_credential_without_naming_a_vault(self):
         """A vault is not a machine, and `reaches` everywhere else means one."""
 
