@@ -3,18 +3,14 @@
 
 set -eu
 
-readonly app_dir="/opt/apps/severino-hq"
-readonly unit_dir="${app_dir}/deploy/systemd"
+readonly lib_dir="/usr/local/lib/severino-hq"
+readonly unit_dir="${lib_dir}/deploy/systemd"
 readonly systemd_dir="/etc/systemd/system"
-# Rendered into tmpfs, not onto the disk. This file carries every provider
-# credential the controller uses, and a copy under /opt/apps would sit in every
-# disk image and backup of this host for as long as the host exists. /run is
-# cleared on boot, and the renderer puts it back before the controller starts.
-#
-# Overridable so a host that has not migrated yet keeps working.
-readonly env_file="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=scripts/lib/controller-env.sh
+. "${script_dir}/lib/controller-env.sh"
 readonly private_log_dir="/var/log/severino-hq"
-readonly private_run="${app_dir}/scripts/run-private.sh"
+readonly private_run="${lib_dir}/scripts/run-private.sh"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "install-controller.sh must run as root." >&2
@@ -40,20 +36,45 @@ fi
 # costs nothing on a host that is already right.
 /usr/local/lib/severino-hq/scripts/install-cosign.sh
 
-systemctl start severino-hq-secrets.service
-"${app_dir}/scripts/provision-controller-ssh.sh"
-if [ ! -s "${env_file}" ]; then
-    echo "Controller environment was not rendered." >&2
-    exit 1
-fi
-
 systemd-analyze verify \
+    "${unit_dir}/severino-hq-secrets.service" \
     "${unit_dir}/severino-hq-controller.service" \
     "${unit_dir}/severino-hq-controller.timer" \
     "${unit_dir}/severino-hq-content-sync.service" \
     "${unit_dir}/severino-hq-content-sync.timer" \
     "${unit_dir}/severino-hq-backup.service" \
     "${unit_dir}/severino-hq-backup.timer"
+
+# Restore the previous renderer unit if activation or a preflight fails.
+umask 077
+unit_backup="$(mktemp -d /run/severino-hq-unit.XXXXXX)"
+readonly secrets_unit="${systemd_dir}/severino-hq-secrets.service"
+if [ -f "${secrets_unit}" ]; then
+    cp -p "${secrets_unit}" "${unit_backup}/previous"
+fi
+unit_committed=0
+finish() {
+    result=$?
+    trap - EXIT
+    if [ "${unit_committed}" -eq 0 ]; then
+        if [ -f "${unit_backup}/previous" ]; then
+            cp -p "${unit_backup}/previous" "${secrets_unit}"
+        else
+            rm -f "${secrets_unit}"
+        fi
+        systemctl daemon-reload || result=1
+    fi
+    rm -rf "${unit_backup}"
+    exit "${result}"
+}
+trap finish EXIT
+trap 'exit 1' HUP INT TERM
+install -o root -g root -m 0644 \
+    "${unit_dir}/severino-hq-secrets.service" "${secrets_unit}"
+systemctl daemon-reload
+systemctl start severino-hq-secrets.service
+"${lib_dir}/scripts/provision-controller-ssh.sh"
+controller_require_environment
 
 # These commands intentionally return rich machine JSON: locally useful,
 # inappropriate in the public Actions stream inherited by a self-hosted deploy.
@@ -63,7 +84,7 @@ install -d -o root -g root -m 0700 "${private_log_dir}"
 "${private_run}" \
     "Controller connection preflight" \
     "${private_log_dir}/controller-preflight.log" \
-    "${app_dir}/scripts/run-controller.sh"
+    "${lib_dir}/scripts/run-controller.sh"
 "${private_run}" \
     "Content index preflight" \
     "${private_log_dir}/content-index-preflight.log" \
@@ -75,25 +96,6 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.timer" \
     "${systemd_dir}/severino-hq-controller.timer"
-# Watches the doorbell, so pressing Save applies now rather than within a
-# minute. The directory has to exist before the unit starts watching it, and
-# compose creates it as the bind mount's source on first boot.
-#
-# Owned by the application's uid, because the application is what rings the
-# doorbell. Created root-owned it is readable by everyone and writable by
-# nobody that matters: the container runs unprivileged, its write fails with
-# EACCES, and `ring_doorbell` reports the failure honestly -- so pressing Save
-# waited for the timer instead of applying now, and every wake-up request
-# answered "The controller doorbell could not be reached". The watcher only
-# needs to read it; the writer is the one whose permissions decide whether the
-# feature exists at all.
-#
-# Ownership goes through chown rather than `install -o`. The uid exists only
-# inside the image, and uutils coreutils -- which this host runs -- resolves the
-# argument as a name and refuses a bare number, where GNU install accepts one.
-# chown takes numeric ids under both, which is what refresh-secrets.sh relies on.
-install -d -m 0755 /run/severino-hq
-chown 10001:10001 /run/severino-hq
 install -o root -g root -m 0644 \
     "${unit_dir}/severino-hq-controller.path" \
     "${systemd_dir}/severino-hq-controller.path"
@@ -116,4 +118,10 @@ systemctl enable --now \
     severino-hq-content-sync.timer \
     severino-hq-backup.timer
 
+# Retire the old credential only after activation succeeds. The web UID owns
+# the doorbell, never a directory containing root-sourced credentials.
+rm -f /run/severino-hq/severino_controller_env
+install -d -m 0755 /run/severino-hq
+chown 10001:10001 /run/severino-hq
+unit_committed=1
 echo "Severino HQ controllers installed, preflighted, and enabled."

@@ -1,4 +1,4 @@
-# Secret delivery and Connect migration
+# Secret delivery
 
 Connect is a local read path for secrets already intended for the host. It is
 not a new ingress for applications, a replacement for disk encryption, or a
@@ -58,14 +58,12 @@ per consumer and an emergency local shutdown procedure.
 ## Renderer behavior
 
 `scripts/refresh-secrets.sh` selects `SEVERINO_SECRETS_BACKEND` explicitly.
-`service-account` remains the compatibility default until host cutover;
+There is no default: a missing, empty or unknown backend fails closed.
+`service-account` must be explicitly configured for consumers that require it;
 `connect` loads the credential named by `SEVERINO_CONNECT_CREDENTIAL` from
-systemd and clears service-account authentication. That name identifies the
-consumer holding the token, not the protocol: each consumer is issued its own
-read-only Connect token scoped to the vaults it needs, so compromising one does
-not hand over the others, and a host running several renderers cannot have one
-credential name silently clobber another. There is no automatic cloud fallback. The Connect endpoint must
-be `http://127.0.0.1:PORT`.
+systemd and clears service-account authentication. Each consumer uses a distinct
+credential name and a read-only token scoped to its required vaults. There is no
+automatic cloud fallback. The endpoint must be `http://127.0.0.1:PORT`.
 
 Connect's CLI supports reads but not `op item list`.
 `scripts/list-secret-items.sh` uses the REST listing endpoint for discovery,
@@ -78,23 +76,69 @@ prefixes, invalid variable names, and controller values containing NUL or line
 breaks. Values are shell-quoted before the launcher sources them. The connection
 registry defines shapes; the vault remains the connection inventory.
 
-Refresh takes an exclusive lock and stages all reads and validation in a private
-directory before modifying installed files. Retrieval or validation failure
-preserves all previous files. Cleanup targets only that invocation's directory.
+Refresh takes an exclusive lock and stages all reads on private tmpfs before
+modifying installed files. Retrieval or validation failure preserves previous
+files. Cleanup targets only that invocation's staging directory.
 
-**Installation is not a multi-file transaction.** Existing single-file Docker
-bind mounts require preserving the inode, so updates are in place. Interruption
-or disk failure during installation can still leave mixed or partial files.
-Do not describe this as atomic rotation. A future generation-directory design
-must migrate mounts and coordinate all readers before it can provide that
-guarantee. The current tests prove failure before installation, not crash safety
-during it.
+Controller credentials live at
+`/run/severino-hq-secrets/severino_controller_env`: a root-owned 0400 file in a
+root-owned 0700 directory. Readers reject unsafe permissions, symlinks and
+non-tmpfs storage. Replacement uses a same-filesystem rename. The directory is
+never mounted into the web container; `/run/severino-hq` is reserved for its
+doorbell. `SEVERINO_CONTROLLER_SECRET_DIR`, if overridden, must be consistent
+across the renderer and all consumers, with matching systemd write permissions.
+
+Application and MCP files retain their inodes for existing Docker bind mounts.
+Their updates are in place, not a multi-file transaction: an interruption during
+installation can leave mixed or partial files.
 
 The controller launcher currently forwards provider credentials as container
 environment variables. Docker administrators can inspect those values. A
-read-only credential mount reduces configuration exposure but does not protect
-against Docker administrators or host root. Review this delivery boundary before
-claiming credentials are absent from container metadata.
+read-only credential mount would reduce configuration exposure but would not
+protect against Docker administrators or host root.
+
+Remove any legacy `SEVERINO_CONTROLLER_ENV` override before upgrading. The
+controller installer installs and reloads the renderer unit from the root-owned
+image copy before refreshing secrets. Failed activation restores the prior
+renderer unit; deployment rollback restores the prior scripts. After activation,
+the installer removes the old runtime credential before granting the web UID
+doorbell ownership. Retired disk copies and backups require separate cleanup
+and credential rotation.
+
+## Why it is built this way
+
+`scripts/lib/secrets.sh` is deliberately terse. These are the constraints behind
+its shape, so a later change does not remove a line that is load-bearing.
+
+**The backends are mutually exclusive by more than convention.**
+`OP_CONNECT_HOST` and `OP_CONNECT_TOKEN` take precedence over
+`OP_SERVICE_ACCOUNT_TOKEN` everywhere inside `op`. A process holding both uses
+Connect, and Connect is read-only, so a writer then fails in a way that reads
+like a permissions problem. `secrets_backend_select` clears the other side for
+that reason rather than for tidiness.
+
+**The credential is named for the consumer, not the protocol.** A host may run
+more than one renderer, and `LoadCredentialEncrypted=` with a shared name means
+two units overwrite each other's credential.
+
+**`secrets_stage` sets a variable rather than printing one.** Calling it through
+`$( )` would run it in a subshell, arming the cleanup trap in a shell that exits
+immediately and leaving the staging directory behind on every run.
+
+**The lock is not about speed.** Two renderers interleaving their installs is how
+a host ends up holding files from two different reads of the vault.
+
+**Installs preserve the inode deliberately.** Replacing it breaks single-file
+bind mounts: the running container keeps the old file indefinitely. The cost is
+that this is not an atomic swap, as stated above. A generation-directory layout
+would make it transactional and requires moving the mounts first.
+
+**The validators are not defensive padding.** Each rejects a specific way a
+render can succeed while producing something unusable: an unresolved reference,
+an empty file, or a variable with no value.
+
+**POSIX `sh`, not bash.** These run under dash, so a bashism fails on a host
+rather than in a test.
 
 ## Cutover gates
 

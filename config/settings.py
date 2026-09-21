@@ -447,9 +447,17 @@ DATABASES = {
             # `data/` is a mounted volume in production and does not exist in
             # the composed image, where the suite runs as its own admission
             # gate. Only being a file matters, not where the file is.
+            #
+            # Named for the process, because two suites on one machine would
+            # otherwise share the file: `scripts/check.sh` runs concurrently by
+            # default, and running it alongside `scripts/ci-local.sh` is the
+            # normal way to check work. A shared file makes them fail each other
+            # with a locked table -- a failure that says nothing about the change
+            # and costs a while to attribute. Django's parallel workers suffix
+            # this name per worker, so they stay distinct within a run too.
             "NAME": os.environ.get(
                 "SEVERINO_TEST_DATABASE_PATH",
-                str(Path(tempfile.gettempdir()) / "severino-test.sqlite3"),
+                str(Path(tempfile.gettempdir()) / f"severino-test-{os.getpid()}.sqlite3"),
             ),
         },
     }

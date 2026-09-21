@@ -7,35 +7,33 @@ readonly connection_ref="${1:?usage: controller-ssh.sh CONNECTION_REF OPERATION}
 readonly operation="${2:?usage: controller-ssh.sh CONNECTION_REF OPERATION}"
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly ssh_dir="${app_dir}/secrets/ssh"
-# Rendered into tmpfs, not onto the disk. This file carries every provider
-# credential the controller uses, and a copy under /opt/apps would sit in every
-# disk image and backup of this host for as long as the host exists. /run is
-# cleared on boot, and the renderer puts it back before the controller starts.
-#
-# Overridable so a host that has not migrated yet keeps working.
-readonly env_file="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=scripts/lib/controller-env.sh
+. "${script_dir}/lib/controller-env.sh"
+readonly env_file="${controller_env}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "controller-ssh.sh must run as root." >&2
     exit 1
 fi
-# Connections come from 1Password through the rendered controller environment,
-# which carries each one's reference beside its values. Nothing here has to be
-# told which connections exist.
-if [ ! -s "${env_file}" ]; then
-    echo "Controller environment is missing." >&2
-    exit 1
-fi
-prefix="$(
-    sed -n "s/^\([A-Z][A-Z0-9_]*\)_CONNECTION_REF=\"${connection_ref}\"\$/\1/p" \
-        "${env_file}" | head -1
-)"
+controller_require_environment
+# shellcheck source=/dev/null
+. "${env_file}"
+prefix=""
+reference=""
+# Only validated variable-name tokens are emitted, not arbitrary lines.
+# shellcheck disable=SC2013
+for candidate in $(sed -n 's/^\([A-Z][A-Z0-9_]*\)_CONNECTION_REF=.*/\1/p' "${env_file}"); do
+    eval "reference=\${${candidate}_CONNECTION_REF}"
+    if [ "${reference}" = "${connection_ref}" ]; then
+        prefix="${candidate}"
+        break
+    fi
+done
 if [ -z "${prefix}" ]; then
     echo "Unknown SSH connection_ref=${connection_ref}." >&2
     exit 1
 fi
-# shellcheck source=/dev/null  # rendered at deploy time, not in the repo
-. "${env_file}"
 
 host=""
 port=""

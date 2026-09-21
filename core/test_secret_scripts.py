@@ -5,21 +5,14 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# These scripts run on the host, not in the application container: the image
-# carries them so a deploy can sync them out to /usr/local/lib, and they are
-# executed there by systemd units. The runtime image therefore does not ship
-# jq or curl, and should not -- a hardened container has no use for curl, which
-# is the first thing an intruder reaches for.
-#
-# So the tests run wherever those tools exist, which is every environment these
-# scripts actually run in, and skip in the composed-image job rather than
-# forcing the image to grow tools for a test's benefit.
+# Host-script tests require host tooling, absent from the runtime image.
 REQUIRED_TOOLS = ("jq", "curl")
 MISSING_TOOLS = [tool for tool in REQUIRED_TOOLS if shutil.which(tool) is None]
 
@@ -35,19 +28,27 @@ class SecretScriptTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.runtime = self.root / "private-runtime"
+        self.runtime.mkdir(mode=0o700)
         self.env = {
             **os.environ,
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "OP_CONNECT_HOST": "",
             "OP_CONNECT_TOKEN": "",
             "FIXTURES": str(self.root),
-            # The scripts require estate naming rather than defaulting to any,
-            # so the tests supply their own -- which is also what proves the
-            # scripts carry no estate's names of their own.
+            "SEVERINO_CONTROLLER_SECRET_DIR": str(self.runtime),
             "SEVERINO_SECRETS_VAULT": "Example Vault",
             "SEVERINO_ENV_ITEM": "example env",
             "SEVERINO_MCP_SECRET_REF": "op://Example Vault/Example MCP/credential",
         }
+        self.env.pop("SEVERINO_CONTROLLER_ENV", None)
+        # Simulate Linux ownership and mount metadata; use real file modes.
+        self.stub("stat", f'''exec '{sys.executable}' -c '
+import os, sys
+print("0:" + oct(os.stat(sys.argv[-1]).st_mode & 0o777)[2:])
+' "$@"
+''')
+        self.stub("findmnt", 'printf "%s\\n" "${TEST_FILESYSTEM:-tmpfs}"\n')
         self.item = {"fields": [
             {"label": "connection_ref", "value": "example"},
             {"label": "projection", "value": "service_account"},
@@ -116,33 +117,146 @@ esac
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stdout, "")
 
-    def test_failed_refresh_preserves_every_installed_file(self):
+    def prepare_refresh(self):
         secrets = self.root / "secrets"
         credentials = self.root / "credentials"
         secrets.mkdir()
         credentials.mkdir()
         (credentials / "op_service_account_token").write_text("example-reader-token")
-        targets = [secrets / name for name in (
-            "severino_mcp_token", "severino_hq_env", "severino_controller_env",
-        )]
+        targets = [secrets / name for name in ("severino_mcp_token", "severino_hq_env")]
+        targets.append(self.runtime / "severino_controller_env")
         for target in targets:
             target.write_text("previous-value")
+            target.chmod(0o400)
         (self.root / "app.json").write_text(json.dumps({"fields": [
             {"label": f"EXAMPLE_{index}", "value": "value"} for index in range(15)
         ]}))
         self.stub("install", "exit 0\n")
         self.stub("flock", "exit 0\n")
+        self.stub("chown", "exit 0\n")
+        self.stub("docker", "exit 1\n")
         self.env.update({
             "CREDENTIALS_DIRECTORY": str(credentials),
             "SEVERINO_HQ_SECRET_DIR": str(secrets),
             "SEVERINO_SECRETS_BACKEND": "service-account",
-            "FAIL_LIST": "1",
         })
+        return targets
+
+    def test_failed_refresh_preserves_every_installed_file(self):
+        targets = self.prepare_refresh()
+        self.env["FAIL_LIST"] = "1"
         result = self.run_script("refresh-secrets.sh")
         self.assertNotEqual(result.returncode, 0)
         for target in targets:
             self.assertEqual(target.read_text(), "previous-value")
-        self.assertEqual([p for p in secrets.glob(".refresh.*") if p.is_dir()], [])
+        self.assertEqual([p for p in targets[0].parent.glob(".refresh.*") if p.is_dir()], [])
+        self.assertEqual(list(self.runtime.glob(".refresh.*")), [])
+
+    def test_backend_must_be_explicit_before_credentials_are_read(self):
+        self.stub("cat", 'touch "$FIXTURES/credential-read"; exit 1\n')
+        self.stub("op", 'touch "$FIXTURES/op-called"; exit 1\n')
+        for backend in (None, "", "unknown"):
+            with self.subTest(backend=backend):
+                self.env.pop("SEVERINO_SECRETS_BACKEND", None)
+                if backend is not None:
+                    self.env["SEVERINO_SECRETS_BACKEND"] = backend
+                result = subprocess.run(
+                    ["sh", "-eu", "-c", '. "$1"; secrets_backend_select example "$2"',
+                     "sh", str(ROOT / "scripts/lib/secrets.sh"), str(ROOT / "scripts")],
+                    env=self.env, capture_output=True, text=True, timeout=15,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("backend", result.stderr)
+                self.assertFalse((self.root / "credential-read").exists())
+                self.assertFalse((self.root / "op-called").exists())
+
+    def test_refresh_stages_on_private_runtime_and_replaces_only_controller_inode(self):
+        targets = self.prepare_refresh()
+        # Host root can update read-only app files; this test runs unprivileged.
+        for target in targets[:2]:
+            target.chmod(0o600)
+        inodes = [target.stat().st_ino for target in targets]
+        real_mktemp = shutil.which("mktemp")
+        self.stub("mktemp", f'''printf '%s\\n' "$@" >"$FIXTURES/staging-args"
+exec '{real_mktemp}' "$@"
+''')
+        result = self.run_script("refresh-secrets.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(str(self.runtime / ".refresh.XXXXXX"),
+                      (self.root / "staging-args").read_text())
+        self.assertEqual([target.stat().st_ino for target in targets[:2]], inodes[:2])
+        self.assertNotEqual(targets[2].stat().st_ino, inodes[2])
+        self.assertEqual(targets[2].stat().st_mode & 0o777, 0o400)
+        current = [target.stat().st_ino for target in targets]
+        repeated = self.run_script("refresh-secrets.sh")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertIn("secrets are current", repeated.stdout)
+        self.assertEqual([target.stat().st_ino for target in targets], current)
+        self.assertEqual(list(self.runtime.glob(".refresh.*")), [])
+
+    def controller_contract(self, command):
+        return subprocess.run(
+            ["sh", "-c", '. "$1"; ' + command, "sh",
+             str(ROOT / "scripts/lib/controller-env.sh")],
+            env=self.env, capture_output=True, text=True, timeout=15,
+        )
+
+    def test_controller_refuses_shared_directory_and_legacy_override(self):
+        for changes in (
+            {"SEVERINO_CONTROLLER_SECRET_DIR": "/run/severino-hq"},
+            {"SEVERINO_CONTROLLER_SECRET_DIR": "/run/severino-hq/credentials"},
+            {"SEVERINO_CONTROLLER_SECRET_DIR": "/run//severino-hq"},
+            {"SEVERINO_CONTROLLER_SECRET_DIR": "/run/./severino-hq"},
+            {"SEVERINO_CONTROLLER_ENV": "/run/severino-hq/severino_controller_env"},
+        ):
+            with self.subTest(changes=changes):
+                original = self.env.copy()
+                self.env.update(changes)
+                result = self.controller_contract("exit 0")
+                self.env = original
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_controller_refuses_writable_or_symlinked_credentials(self):
+        credential = self.runtime / "severino_controller_env"
+        credential.write_text("EXAMPLE='value'\n")
+        credential.chmod(0o400)
+        self.assertEqual(self.controller_contract("controller_require_environment").returncode, 0)
+        credential.chmod(0o600)
+        self.assertNotEqual(self.controller_contract("controller_require_environment").returncode, 0)
+        credential.chmod(0o400)
+        self.runtime.chmod(0o755)
+        self.assertNotEqual(self.controller_contract("controller_require_environment").returncode, 0)
+        self.runtime.chmod(0o700)
+        saved = self.runtime / "saved"
+        credential.rename(saved)
+        credential.symlink_to(saved)
+        self.assertNotEqual(self.controller_contract("controller_require_environment").returncode, 0)
+
+    def test_disk_backed_runtime_is_rejected_before_fetching_secrets(self):
+        self.env["TEST_FILESYSTEM"] = "ext4"
+        self.env["SEVERINO_HQ_SECRET_DIR"] = str(self.root / "secrets")
+        self.stub("install", "exit 0\n")
+        self.stub("op", 'touch "$FIXTURES/op-called"; exit 1\n')
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("tmpfs", result.stderr)
+        self.assertFalse((self.root / "op-called").exists())
+
+    def test_ssh_resolves_shell_quoted_reference_literally(self):
+        credential = self.runtime / "severino_controller_env"
+        credential.write_text("EXAMPLE_CONNECTION_REF='example'\n"
+                              "EXAMPLE_HOST='example.test'\n"
+                              "EXAMPLE_PORT='22'\nEXAMPLE_USER='reader'\n")
+        credential.chmod(0o400)
+        self.stub("id", "printf '0\\n'\n")
+        self.stub("ssh", 'printf "%s\\n" "$@"\n')
+        result = self.run_script("controller-ssh.sh", "example", "preflight")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("reader@example.test\npreflight\n", result.stdout)
+        for reference, operation in [(".*", "preflight"), ("example", "shell")]:
+            denied = self.run_script("controller-ssh.sh", reference, operation)
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertEqual(denied.stdout, "")
 
     def test_duplicate_metadata_is_rejected(self):
         self.item["fields"].append({"label": "env_prefix", "value": "OTHER"})
