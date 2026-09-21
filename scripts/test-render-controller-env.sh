@@ -50,6 +50,30 @@ SH
     chmod 0700 "${fixture_dir}/op"
 }
 
+check_empty() { # check_empty <name> <registry> <expected-status>
+    # `check` asserts with *"${want}"*, which any string satisfies when want is
+    # empty. A case that means "rendered nothing" has to say so directly.
+    name="$1"; registry="$2"; want_status="$3"
+    set +e
+    actual="$(PATH="${fixture_dir}:${PATH}" \
+        "${script_dir}/render-controller-env.sh" test-vault "${registry}" 2>&1)"
+    status=$?
+    set -e
+    if [ "${status}" -ne "${want_status}" ]; then
+        echo "FAIL ${name}: exit ${status}, wanted ${want_status}" >&2
+        echo "${actual}" | sed 's/^/    /' >&2
+        failures=$((failures + 1))
+        return
+    fi
+    if [ -n "${actual}" ]; then
+        echo "FAIL ${name}: expected no output, got:" >&2
+        echo "${actual}" | sed 's/^/    /' >&2
+        failures=$((failures + 1))
+        return
+    fi
+    echo "ok   ${name}"
+}
+
 check() { # check <name> <registry> <expected-status> <expected-output-or-pattern>
     name="$1"; registry="$2"; want_status="$3"; want="$4"
     set +e
@@ -143,14 +167,18 @@ check "an absent optional field is not fatal" "${fixture_dir}/projections-only.j
 write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"a","label":"username","value":"someone"}
 ]}'
-check "unrelated vault item is skipped" "${fixture_dir}/projections-only.json" 0 ""
+check_empty "unrelated vault item is skipped" "${fixture_dir}/projections-only.json" 0
 
 # 9. No script may still read a registry key the registry no longer has. The
 #    renderer is covered by the cases above; every other script that reads this
 #    file is not, and one of them recomputing from `.connections` failed at
 #    deploy time rather than here.
-for script in "${script_dir}"/*.sh; do
-    if grep -q '\.connections\[' "${script}"; then
+for script in "${script_dir}"/*.sh "${script_dir}"/lib/*.sh \
+              "${script_dir}"/../deploy/targets/*; do
+    [ -f "${script}" ] || continue
+    # Not itself: this file names the key in the pattern it searches for.
+    case "${script##*/}" in test-render-controller-env.sh) continue ;; esac
+    if grep -q '\.connections' "${script}"; then
         echo "FAIL ${script##*/} reads .connections; the vault is the inventory." >&2
         failures=$((failures + 1))
     fi

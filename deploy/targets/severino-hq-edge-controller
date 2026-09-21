@@ -113,10 +113,25 @@ privkey.pem"
         tar -C "${work}" -xf "${archive}"
         test "$(find "${work}" -type f -maxdepth 1 -exec basename {} \; | sort)" = "fullchain.pem
 privkey.pem"
-        cert_key="$(openssl x509 -in "${work}/fullchain.pem" -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256)"
-        private_key="$(openssl pkey -in "${work}/privkey.pem" -pubout -outform DER | openssl dgst -sha256)"
-        test -n "${cert_key}"
-        test "${cert_key}" = "${private_key}"
+        # One openssl stage per line so `set -e` sees each one fail. A pipeline
+        # would report only the last stage's status, and `openssl dgst` succeeds
+        # on empty input. Not `set -o pipefail`: dash rejects it (SC3040).
+        cert_public="$(openssl x509 -in "${work}/fullchain.pem" -pubkey -noout)"
+        cert_der="$(printf '%s\n' "${cert_public}" | openssl pkey -pubin -outform DER)"
+        cert_key="$(printf '%s' "${cert_der}" | openssl dgst -sha256)"
+        key_der="$(openssl pkey -in "${work}/privkey.pem" -pubout -outform DER)"
+        private_key="$(printf '%s' "${key_der}" | openssl dgst -sha256)"
+        if [ "${cert_key}" != "${private_key}" ]; then
+            echo "Refusing: the private key does not match the certificate." >&2
+            exit 1
+        fi
+        # An expired certificate parses perfectly and reloads without complaint,
+        # so nothing above would notice one. Caddy would serve it until a browser
+        # objected.
+        if ! openssl x509 -in "${work}/fullchain.pem" -checkend 0 >/dev/null; then
+            echo "Refusing: the certificate has already expired." >&2
+            exit 1
+        fi
         install -m 0600 "${cert_dir}/fullchain.pem" "${work}/previous-fullchain.pem"
         install -m 0600 "${cert_dir}/privkey.pem" "${work}/previous-privkey.pem"
         install -o "${cert_owner}" -g "${cert_group}" -m 0644 "${work}/fullchain.pem" "${cert_dir}/fullchain.pem"

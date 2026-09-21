@@ -1,0 +1,98 @@
+#!/bin/sh
+# Properties every shell file in this repository must hold.
+#
+# Each one exists because a specific defect shipped, and each is written to
+# catch the *class* rather than the instance -- a fix for one occurrence is
+# worth much less than a gate that refuses the next one.
+
+set -eu
+
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+# shellcheck source=scripts/toolchain.env
+. ./scripts/toolchain.env
+failures=0
+failure_marker="$(mktemp)"
+trap 'rm -f "${failure_marker}"' EXIT HUP INT TERM
+
+fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
+
+# 1. A function defined in the shared library must have a caller.
+#
+# An engine function with no call site is not a safety net, it is a comment that
+# looks like code -- and a validator that nothing calls reads exactly like one
+# that does.
+for lib in scripts/lib/*.sh; do
+    [ -f "${lib}" ] || continue
+    sed -n 's/^\([a-z_][a-z_0-9]*\)() *{.*/\1/p' "${lib}" | while IFS= read -r fn; do
+        # shellcheck disable=SC2086
+        callers="$(grep -l "${fn}" $SHELL_SOURCES 2>/dev/null | grep -cv "^${lib}$")"
+        if [ "${callers}" -eq 0 ]; then
+            echo "FAIL ${lib##*/}: ${fn}() has no caller in SHELL_SOURCES" >&2
+            echo x >>"${failure_marker}"
+        fi
+    done
+done
+
+# 2. Every shell file in the repository must be in SHELL_SOURCES.
+#
+# A file outside the list is neither syntax-checked nor shellchecked, and the
+# ones that drift out are the ones nobody is thinking about -- which included a
+# script executed as root on every deploy.
+#
+# Membership is decided by a file's interpreter, not by its name. Asking for
+# `*.sh` plus one directory was a list of the examples that existed the day it
+# was written: it cannot see `scripts/severino-hq-sync-scripts`, which runs as
+# root and carries no extension, and it could never have seen a file whose
+# author simply did not use one. The shebang is the thing that actually decides
+# whether a file is shell, so that is what this asks.
+# SHELL_SOURCES is newline-separated; normalise before matching.
+listed=" $(printf '%s' "${SHELL_SOURCES}" | tr '\n' ' ') "
+for f in $(git ls-files 2>/dev/null); do
+    [ -f "${f}" ] || continue
+    head -1 "${f}" 2>/dev/null \
+        | grep -qE '^#!.*(/|env )(sh|bash|dash|ksh)([[:space:]]|$)' || continue
+    case "${listed}" in
+        *" ${f} "*) ;;
+        *) fail "${f} is not in SHELL_SOURCES" ;;
+    esac
+done
+
+# 3. `set -o pipefail` may not appear in a /bin/sh script.
+#
+# dash rejects it outright, so a guard written this way fails on the host rather
+# than here, and only for the hosts that use dash.
+for f in ${SHELL_SOURCES}; do
+    [ -f "${f}" ] || continue
+    # Not itself: this file names the option in the pattern it searches for.
+    case "${f##*/}" in test-shell-contracts.sh) continue ;; esac
+    head -1 "${f}" | grep -q '^#!/bin/sh' || continue
+    # An executed line, not a comment explaining why it is absent.
+    if grep -qE '^[[:space:]]*set +-o +pipefail' "${f}"; then
+        fail "${f}: set -o pipefail under #!/bin/sh (dash rejects it)"
+    fi
+done
+
+failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
+# 4. Every external tool the gate depends on must have a pinned version.
+#
+# An unpinned linter means the local gate and the pipeline run different
+# software against the same files, and the local one is the one that gets
+# trusted. Pinning one tool when it bites is not a fix; this refuses the next
+# unpinned one.
+grep -hoE 'command -v [a-z0-9_-]+' scripts/ci-local.sh scripts/check.sh 2>/dev/null \
+    | awk '{print $3}' | sort -u | while IFS= read -r tool; do
+    # Interpreters are pinned by PYTHON_VERSIONS, not by a tool version.
+    case "${tool}" in python*|uv) continue ;; esac
+    var="$(printf '%s' "${tool}" | tr 'a-z-' 'A-Z_')_VERSION"
+    if ! grep -qE "^${var}=" scripts/toolchain.env; then
+        echo "FAIL ${tool} is used by the gate with no ${var} in toolchain.env" >&2
+        echo x >>"${failure_marker}"
+    fi
+done
+
+failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
+if [ "${failures}" -ne 0 ]; then
+    echo "Shell contracts failed (${failures})." >&2
+    exit 1
+fi
+echo "Shell contracts hold."

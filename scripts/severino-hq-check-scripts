@@ -1,0 +1,42 @@
+#!/bin/sh
+# Fails when the root-owned script tree no longer matches the image production
+# is running, or when a unit's shipped ExecStart has diverged from the drop-in.
+set -eu
+LIB=/usr/local/lib/severino-hq
+APP_DIR=/opt/apps/severino-hq
+rc=0
+
+if [ ! -f "$LIB/.source" ]; then
+    echo "drift: $LIB/.source missing -- the root tree was never synced" >&2
+    exit 1
+fi
+recorded="$(sed -n 's/^image //p' "$LIB/.source")"
+current="$(docker inspect --format '{{.Image}}' severino-hq 2>/dev/null || echo '')"
+# Not being able to read the running image is not agreement. This used to fall
+# through to "current" whenever docker was unreachable or the container was
+# absent -- the two situations in which a drift check matters most.
+if [ -z "$current" ]; then
+    echo "drift: could not read the running image; cannot confirm the root tree" >&2
+    rc=1
+elif [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
+    echo "drift: root scripts came from $recorded; production now runs $current" >&2
+    echo "drift: run 'severino-hq-sync-scripts' as root to resync" >&2
+    rc=1
+fi
+
+# A repo change to a unit's ExecStart would be masked by the drop-in. Compare
+# the shipped unit's ExecStart basename against the drop-in's.
+for u in severino-hq-backup severino-hq-secrets severino-hq-controller; do
+    shipped="$APP_DIR/deploy/systemd/$u.service"
+    dropin="/etc/systemd/system/$u.service.d/10-root-owned-exec.conf"
+    [ -f "$shipped" ] && [ -f "$dropin" ] || continue
+    a="$(sed -n 's|^ExecStart=.*/scripts/||p' "$shipped" | tail -1)"
+    b="$(sed -n 's|^ExecStart=.*/scripts/||p' "$dropin"  | tail -1)"
+    if [ -n "$a" ] && [ "$a" != "$b" ]; then
+        echo "drift: $u.service ships 'ExecStart=.../scripts/$a' but the drop-in pins '$b'" >&2
+        rc=1
+    fi
+done
+
+[ "$rc" -eq 0 ] && echo "root-owned script tree is current"
+exit "$rc"

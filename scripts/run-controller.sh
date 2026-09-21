@@ -61,6 +61,7 @@ set +a
 # containers it finds is itself. Unlabelled, Docker invents a name for it and
 # the machine grows a row called something different every minute.
 set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
+    --no-healthcheck \
     --label severino-hq.role=controller \
     --security-opt no-new-privileges:true \
     --entrypoint python \

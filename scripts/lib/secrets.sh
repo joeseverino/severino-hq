@@ -6,6 +6,7 @@
 #   secrets_lock <dir>                            refuse a concurrent run
 #   secrets_stage <dir>                           sets `staging`, auto-removed
 #   secrets_install_if_changed <src> <dst> <uid> <gid> [mode]
+#   secrets_validate_render <file>               refuse a render that resolved badly
 #
 # secrets_install_if_changed sets `installed_change` to 1 when it wrote, and
 # `any_changed` to 1 if anything has been written this run. Callers read those

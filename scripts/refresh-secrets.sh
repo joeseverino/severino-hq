@@ -50,6 +50,7 @@ printf %s "${token}" >"${temporary}"
 temporary="${staging}/app"
 op item get "${env_item}" --vault "${vault}" --format json >"${staging}/app.json"
 jq -r -f "${script_dir}/render-env.jq" "${staging}/app.json" >"${temporary}"
+secrets_validate_render "${temporary}"
 count="$(grep -c . "${temporary}" || true)"
 if [ "${count}" -lt 15 ]; then
     echo "Refusing suspiciously small app env (${count} vars) from 1Password." >&2
@@ -60,6 +61,7 @@ fi
 temporary="${staging}/controller"
 "${script_dir}/render-controller-env.sh" "${vault}" >"${temporary}"
 # The renderer validates each connection; an empty inventory is also an error.
+secrets_validate_render "${temporary}"
 connections="$(grep -c '_CONNECTION_REF=' "${temporary}" || true)"
 if [ "${connections}" -eq 0 ]; then
     echo "Refusing a controller env that resolved no connections." >&2

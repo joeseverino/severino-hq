@@ -19,7 +19,9 @@ while [ "$#" -gt 0 ]; do
         *) usage ;;
     esac
 done
-[ -n "$plugin_root" ] && [ -n "$plugin_reference" ] && [ -n "$django_app" ] || usage
+if [ -z "$plugin_root" ] || [ -z "$plugin_reference" ] || [ -z "$django_app" ]; then
+    usage
+fi
 
 hq_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 plugin_root=$(cd -- "$plugin_root" && pwd)
@@ -56,10 +58,10 @@ runtime_root=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-runtime.XXXXXX")
 trap 'rm -rf -- "$runtime_root"' EXIT HUP INT TERM
 uv build --wheel --out-dir "$runtime_root/dist"
 set -- "$runtime_root"/dist/*.whl
-[ "$#" -eq 1 ] && [ -f "$1" ] || {
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
     echo "Expected exactly one plugin wheel." >&2
     exit 2
-}
+fi
 wheel=$1
 uv venv --python "$virtualenv/bin/python" "$runtime_root/venv"
 uv pip install --python "$runtime_root/venv/bin/python" \

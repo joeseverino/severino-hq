@@ -11,7 +11,10 @@ from datetime import timedelta
 from pathlib import Path
 import tempfile
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
+from django.test import RequestFactory
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +22,7 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 
 from .cadence import (
+    sweep_interval,
     ControllerSweepCommand,
     note_activity,
     recently_used,
@@ -227,3 +231,43 @@ class ActivityTests(TestCase):
         self.client.get(reverse("control_plane:services"))
 
         self.assertEqual((self.directory / "activity").stat().st_mtime_ns, first)
+
+
+class ProbesAreNotPresenceTests(TestCase):
+    """A health probe must not count as somebody using HQ.
+
+    The container polls readiness every thirty seconds. If that refreshes the
+    activity marker the short interval never lapses, so the long one is
+    unreachable and the controller sweeps continuously for as long as the
+    container is healthy.
+    """
+
+    def setUp(self):
+        self.marker = Path(tempfile.mkdtemp()) / "hq-activity"
+
+    def _get(self, path):
+        from core.middleware import RequestContextMiddleware
+
+        request = RequestFactory().get(path)
+        RequestContextMiddleware(lambda _r: HttpResponse("ok"))(request)
+
+    def test_a_health_probe_does_not_mark_hq_as_used(self):
+        with self.settings(SEVERINO_ACTIVITY_MARKER=str(self.marker)):
+            self._get("/health/ready/")
+            self.assertFalse(self.marker.exists())
+            self.assertFalse(recently_used())
+
+    def test_an_ordinary_request_still_does(self):
+        with self.settings(SEVERINO_ACTIVITY_MARKER=str(self.marker)):
+            self._get("/")
+            self.assertTrue(self.marker.exists())
+            self.assertTrue(recently_used())
+
+    def test_repeated_probes_never_reach_the_short_interval(self):
+        with self.settings(SEVERINO_ACTIVITY_MARKER=str(self.marker)):
+            for _ in range(5):
+                self._get("/health/live/")
+            self.assertEqual(
+                sweep_interval(),
+                timedelta(seconds=settings.SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS),
+            )

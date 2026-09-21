@@ -108,6 +108,17 @@ def sweep_interval() -> timedelta:
     return timedelta(seconds=active if recently_used() else idle)
 
 
+def slowest_sweep_interval() -> timedelta:
+    """The longest gap between sweeps the policy permits, whoever is watching.
+
+    The ceiling rather than the current value, for anything that needs a stable
+    number -- a staleness threshold derived from the live interval moves with
+    the thing it is measuring.
+    """
+
+    return timedelta(seconds=_seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60))
+
+
 def sweep_due() -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 

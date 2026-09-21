@@ -61,6 +61,16 @@ class DemoModeMiddleware:
             return self.get_response(request)
 
 
+def _is_health_probe(request) -> bool:
+    """Whether this request is a probe rather than a caller.
+
+    One definition, used by both the activity marker and the access log, so the
+    two cannot disagree about what counts as traffic.
+    """
+
+    return request.path.startswith("/health/")
+
+
 class RequestContextMiddleware:
     """Attach a server-generated correlation ID and one bounded access log."""
 
@@ -72,8 +82,11 @@ class RequestContextMiddleware:
         request.request_id = request_id
         # How often the controller sweeps depends on whether anybody is here.
         # A stat on most requests and a small write on the first of each
-        # interval; see `application.cadence`.
-        note_activity()
+        # interval; see `application.cadence`. A probe is not anybody: counting
+        # it would hold the active cadence open for as long as the container is
+        # healthy.
+        if not _is_health_probe(request):
+            note_activity()
         token = request_logging.set_request_id(request_id)
         started = monotonic()
         try:
@@ -102,7 +115,7 @@ class RequestContextMiddleware:
                 "Reporting-Endpoints",
                 f'csp="{settings.SEVERINO_CSP_REPORT_PATH}"',
             )
-            if not request.path.startswith("/health/") or response.status_code >= 500:
+            if not _is_health_probe(request) or response.status_code >= 500:
                 _request_logger.info(
                     "request completed",
                     extra={

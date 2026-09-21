@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily check for stale root-owned Severino HQ scripts
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=yes
+Unit=severino-hq-script-drift.service
+
+[Install]
+WantedBy=timers.target

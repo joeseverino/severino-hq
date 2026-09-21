@@ -49,7 +49,7 @@ from control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, action_with_return, topology_investigation_links
 from .integrations import IntegrationGraph, integration_graph
-from .cadence import sweep_interval
+from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .topology import (
@@ -73,6 +73,17 @@ from .workflows import (
 # How many sweep intervals a whole kind may go unobserved before the fault is
 # the sweep rather than any one record. Three, because one missed tick is a
 # restart and two is a slow provider.
+#
+# Multiplied against the *slowest* interval HQ is willing to sweep at, not the
+# one currently in force. Reading the live value made this threshold swing with
+# the thing it watches -- minutes while somebody was on the page, half a day
+# once nobody was -- so it was by turns too tight to trust and too loose to
+# help. A fixed ceiling is at least a number that can be reasoned about.
+#
+# It is still a statement about sweeps, not about liveness: nothing here can
+# notice a controller that died between two scheduled sweeps, because the only
+# evidence it reads is when records were last confirmed. Detecting that needs
+# the controller to check in on its own clock.
 _KIND_SILENT_AFTER = 3
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
@@ -367,7 +378,7 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
     HQ itself declares, because that is the only thing left to compare against.
     """
 
-    interval = sweep_interval() * _KIND_SILENT_AFTER
+    interval = _slowest_sweep_interval() * _KIND_SILENT_AFTER
     found = []
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
         silent = estate.now - newest
