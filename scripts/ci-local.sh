@@ -138,7 +138,10 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     badge_python="${PYTHON_VERSIONS%% *}"
     if [ "$python_version" != "$badge_python" ]; then
-      ok "coverage measured ${measured}% (the README quotes Python ${badge_python})"
+      # Not ok -- nothing was compared. The badge quotes one interpreter, and
+      # reporting green for a check that did not run is how the default
+      # invocation silently stopped covering this.
+      skip "coverage badge not checked (measured on ${python_version}, badge quotes ${badge_python})"
     elif [ -n "$measured" ] && [ "$measured" != "$claimed" ]; then
       bad "README badge says ${claimed}%, this run measured ${measured}%"
     elif [ -n "$measured" ]; then

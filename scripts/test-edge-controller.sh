@@ -27,6 +27,56 @@ tar -C "${new_dir}" -cf - fullchain.pem privkey.pem | \
 test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256)" = \
     "${expected_fingerprint}"
 
+# A deploy that should be refused, and must leave the installed pair alone.
+# Only matched pairs were ever exercised here, so the guard that rejects an
+# unmatched one was never run by a test.
+refuse() { # refuse <name> <dir>
+    if tar -C "$2" -cf - fullchain.pem privkey.pem | \
+        env PATH="${bin_dir}:${PATH}" SEVERINO_HQ_CADDY_CERT_DIR="${cert_dir}" \
+        SEVERINO_HQ_CERT_OWNER="$(id -un)" SEVERINO_HQ_CERT_GROUP="$(id -gn)" \
+        deploy/targets/severino-hq-edge-controller deploy >/dev/null 2>&1
+    then
+        echo "FAIL $1: the deploy was accepted." >&2
+        exit 1
+    fi
+    if [ "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256)" \
+        != "${expected_fingerprint}" ]; then
+        echo "FAIL $1: the installed certificate was replaced." >&2
+        exit 1
+    fi
+    echo "ok   $1"
+}
+
+# A key that belongs to a different certificate.
+bad_dir="${root}/mismatched"; mkdir -p "${bad_dir}"
+cp "${new_dir}/fullchain.pem" "${bad_dir}/fullchain.pem"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=other.example.test \
+    -keyout "${bad_dir}/privkey.pem" -out "${bad_dir}/unused.pem" >/dev/null 2>&1
+rm -f "${bad_dir}/unused.pem"
+refuse "a key that does not match the certificate is refused" "${bad_dir}"
+
+# Files that are not PEM at all. Both openssl stages fail, and a pipeline would
+# have hashed empty input on each side and compared them equal.
+junk_dir="${root}/junk"; mkdir -p "${junk_dir}"
+printf 'not a certificate\n' >"${junk_dir}/fullchain.pem"
+printf 'not a key\n' >"${junk_dir}/privkey.pem"
+refuse "unparseable input is refused" "${junk_dir}"
+
+# Zero-byte files.
+empty_dir="${root}/empty"; mkdir -p "${empty_dir}"
+: >"${empty_dir}/fullchain.pem"; : >"${empty_dir}/privkey.pem"
+refuse "empty input is refused" "${empty_dir}"
+
+# An expired certificate parses and matches its key, so only the expiry check
+# stands between it and a reload.
+old_dir="${root}/expired"; mkdir -p "${old_dir}"
+openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=expired.example.test \
+    -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" \
+    -not_before 20200101000000Z -not_after 20200102000000Z >/dev/null 2>&1 \
+    || openssl req -x509 -newkey rsa:2048 -nodes -days -1 -subj /CN=expired.example.test \
+       -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" >/dev/null 2>&1
+refuse "an expired certificate is refused" "${old_dir}"
+
 # The read-only arm. Stubbed at `docker`, because what is being checked is that
 # the operation is allowlisted and passes the adapted config through untouched
 # -- not that Caddy adapts a Caddyfile, which is Caddy's own test to run.
