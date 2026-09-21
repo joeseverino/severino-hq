@@ -1,12 +1,12 @@
 #!/bin/sh
-# severino-hq-sync-scripts — populate /usr/local/lib/severino-hq, the tree that
+# severino-hq-sync-scripts -- populate /usr/local/lib/severino-hq, the tree that
 # root-run Severino HQ units execute.
 #
 #   severino-hq-sync-scripts              # from the running container's image
 #   severino-hq-sync-scripts --from-checkout   # from /opt/apps/severino-hq (UNTRUSTED)
 #
 # The image source is preferred because its content is fixed by digest and was
-# cosign-verified by the deploy. The checkout source is joe-writable — using it
+# cosign-verified by the deploy. The checkout source is joe-writable -- using it
 # reintroduces exactly the exposure this whole change exists to remove.
 set -eu
 

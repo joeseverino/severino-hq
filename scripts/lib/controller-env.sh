@@ -22,11 +22,9 @@ controller_require_directory() {
     fi
     # Every mount in the chain, not a string comparison against the whole
     # output. `findmnt --target` prints one line per mount at or above the path,
-    # so a directory given a mount OF ITS OWN prints two -- and comparing that
-    # to the literal "tmpfs" refused a path that was strictly better protected
-    # than a plain directory under /run. That is what happened when each
-    # credential directory was given a noswap tmpfs: the guard read "tmpfs
-    # tmpfs" and rejected it.
+    # so a directory given a mount of its own reads as "tmpfs tmpfs" -- and
+    # comparing that to the literal "tmpfs" refuses a path that is strictly
+    # better protected than a plain directory under /run.
     #
     # Empty output fails too. findmnt writes its errors to stderr and prints
     # nothing on stdout, so treating empty as acceptable would let a probe that

@@ -7,7 +7,7 @@ APP_DIR=/opt/apps/severino-hq
 rc=0
 
 if [ ! -f "$LIB/.source" ]; then
-    echo "drift: $LIB/.source missing — the root tree was never synced" >&2
+    echo "drift: $LIB/.source missing -- the root tree was never synced" >&2
     exit 1
 fi
 recorded="$(sed -n 's/^image //p' "$LIB/.source")"
