@@ -1,0 +1,85 @@
+#!/bin/sh
+# severino-hq-sync-scripts — populate /usr/local/lib/severino-hq, the tree that
+# root-run Severino HQ units execute.
+#
+#   severino-hq-sync-scripts              # from the running container's image
+#   severino-hq-sync-scripts --from-checkout   # from /opt/apps/severino-hq (UNTRUSTED)
+#
+# The image source is preferred because its content is fixed by digest and was
+# cosign-verified by the deploy. The checkout source is joe-writable — using it
+# reintroduces exactly the exposure this whole change exists to remove.
+set -eu
+
+LIB=/usr/local/lib/severino-hq
+CONTAINER="${HQ_CONTAINER:-severino-hq}"
+APP_DIR="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
+SOURCE=image
+[ "${1:-}" = "--from-checkout" ] && SOURCE=checkout
+
+[ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+
+stage="$(mktemp -d /usr/local/lib/.severino-hq-sync.XXXXXX)"
+cid=""
+moved=0
+cleanup() {
+    [ -n "$cid" ] && docker rm -f "$cid" >/dev/null 2>&1 || true
+    [ "$moved" -eq 0 ] && rm -rf "$stage" || true
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ "$SOURCE" = image ]; then
+    image_id="$(docker inspect --format '{{.Image}}' "$CONTAINER")"
+    [ -n "$image_id" ] || { echo "could not resolve the running image" >&2; exit 1; }
+    cid="$(docker create "$image_id" true)"
+    docker cp "$cid":/app/scripts "$stage/scripts"
+    docker cp "$cid":/app/config  "$stage/config"
+    docker cp "$cid":/app/deploy  "$stage/deploy"
+    # The compose file decides what the container is allowed to be, so root
+    # should read it from the verified image rather than from the writable
+    # checkout. Optional until an image that ships it has been deployed.
+    docker cp "$cid":/app/docker-compose.yml "$stage/docker-compose.yml" 2>/dev/null || true
+    docker rm -f "$cid" >/dev/null; cid=""
+    provenance="image $image_id"
+else
+    echo "WARNING: syncing from ${APP_DIR}, which is writable by an" >&2
+    echo "WARNING: unprivileged user. Root will execute whatever is there." >&2
+    cp -a "$APP_DIR/scripts" "$stage/scripts"
+    cp -a "$APP_DIR/config"  "$stage/config"
+    cp -a "$APP_DIR/deploy"  "$stage/deploy"
+    cp -a "$APP_DIR/docker-compose.yml" "$stage/docker-compose.yml" 2>/dev/null || true
+    provenance="checkout $(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+fi
+
+# Everything root owns; nothing group- or world-writable.
+chown -R root:root "$stage"
+find "$stage" -type d -exec chmod 0755 {} +
+find "$stage" -type f -exec chmod 0644 {} +
+find "$stage" -type f -name '*.sh' -exec chmod 0755 {} +
+
+# The exact set the root units and their transitive callers need. Verified
+# 2026-09-06: refresh-secrets.sh sources render-env.jq and render-controller-env.sh
+# from its own directory, and render-controller-env.sh reads ../config/controller-connections.json.
+for f in \
+    scripts/backup.sh \
+    scripts/refresh-secrets.sh \
+    scripts/run-controller.sh \
+    scripts/render-controller-env.sh \
+    scripts/render-env.jq \
+    scripts/run-private.sh \
+    scripts/provision-controller-ssh.sh \
+    scripts/install-controller.sh \
+    config/controller-connections.json
+do
+    [ -e "$stage/$f" ] || { echo "sync aborted: $f missing from source" >&2; exit 1; }
+done
+
+printf '%s\n' "$provenance"           > "$stage/.source"
+date -u +%Y-%m-%dT%H:%M:%SZ           > "$stage/.synced-at"
+chmod 0644 "$stage/.source" "$stage/.synced-at"
+
+# Atomic-ish swap on the same filesystem.
+old=""
+if [ -d "$LIB" ]; then old="${LIB}.old.$$"; mv "$LIB" "$old"; fi
+mv "$stage" "$LIB"; moved=1
+[ -n "$old" ] && rm -rf "$old"
+echo "synced $LIB from ${provenance}"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check that root-run Severino HQ scripts match the deployed image
+Documentation=file:///usr/local/sbin/severino-hq-check-scripts
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/severino-hq-check-scripts
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

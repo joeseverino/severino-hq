@@ -38,10 +38,19 @@ done
 # A file outside the list is neither syntax-checked nor shellchecked, and the
 # ones that drift out are the ones nobody is thinking about -- which included a
 # script executed as root on every deploy.
+#
+# Membership is decided by a file's interpreter, not by its name. Asking for
+# `*.sh` plus one directory was a list of the examples that existed the day it
+# was written: it cannot see `scripts/severino-hq-sync-scripts`, which runs as
+# root and carries no extension, and it could never have seen a file whose
+# author simply did not use one. The shebang is the thing that actually decides
+# whether a file is shell, so that is what this asks.
 # SHELL_SOURCES is newline-separated; normalise before matching.
 listed=" $(printf '%s' "${SHELL_SOURCES}" | tr '\n' ' ') "
-for f in $(git ls-files '*.sh' deploy/targets 2>/dev/null); do
+for f in $(git ls-files 2>/dev/null); do
     [ -f "${f}" ] || continue
+    head -1 "${f}" 2>/dev/null \
+        | grep -qE '^#!.*(/|env )(sh|bash|dash|ksh)([[:space:]]|$)' || continue
     case "${listed}" in
         *" ${f} "*) ;;
         *) fail "${f} is not in SHELL_SOURCES" ;;
