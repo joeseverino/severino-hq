@@ -38,9 +38,11 @@ if [ "$1" = "inspect" ]; then
 fi
 if [ "$1" = "compose" ]; then
     echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
-    if [ "$2" = "pull" ] && [ "${TEST_PULL_FAIL:-0}" -eq 1 ]; then
-        exit 1
-    fi
+    for argument do
+        if [ "${argument}" = pull ] && [ "${TEST_PULL_FAIL:-0}" -eq 1 ]; then
+            exit 1
+        fi
+    done
     exit 0
 fi
 echo "docker $* DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
@@ -93,8 +95,10 @@ EOF
 # Controller activation fails, which is what drives the rollback path.
 cat >"${lib_dir}/scripts/install-controller.sh" <<'EOF'
 #!/bin/sh
+printf 'updated scripts\n' >"${SEVERINO_HQ_LIB_DIR}/version"
 exit 1
 EOF
+printf 'previous scripts\n' >"${lib_dir}/version"
 cat >"${lib_dir}/scripts/run-private.sh" <<'EOF'
 #!/bin/sh
 exit 0
@@ -146,6 +150,11 @@ run_failure 1
 # A failed controller activation rolls back the image and restores timer state.
 run_failure 0
 grep -q "image=registry.example/hq/composition@sha256:previous" "${log_file}"
+grep -qx 'previous scripts' "${lib_dir}/version"
+if find "${run_dir}" -name 'severino-hq-scripts.*' | grep -q .; then
+    echo "Controller rollback snapshot was not cleaned up." >&2
+    exit 1
+fi
 
 # The argument decides what runs as a container, and a sudoers rule lets the
 # caller choose it, so each of these must stop before anything is pulled.

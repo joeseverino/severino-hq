@@ -163,6 +163,7 @@ restore_timers() {
     fi
 }
 
+controller_backup=""
 rollback() {
     if [ -z "${previous_image}" ]; then
         echo "No previous image is available for automatic rollback." >&2
@@ -170,6 +171,11 @@ rollback() {
     fi
     echo "Restoring previous image ${previous_image}." >&2
     SEVERINO_IMAGE="${previous_image}" compose up -d --no-build app
+    if [ -n "${controller_backup}" ]; then
+        cp -Rp "${controller_backup}/." "${lib_dir}/"
+        rm -rf "${controller_backup}"
+        controller_backup=""
+    fi
     restore_timers
     echo "Previous image and prior controller timer state restored." >&2
 }
@@ -192,7 +198,11 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
     )"
     echo "health: ${status}"
     if [ "${status}" = "healthy" ]; then
+        controller_backup="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-scripts.XXXXXX")"
+        cp -Rp "${lib_dir}/." "${controller_backup}/"
         if "${lib_dir}/scripts/install-controller.sh"; then
+            rm -rf "${controller_backup}"
+            controller_backup=""
             echo "Deployed healthy image ${image} with an active controller."
             exit 0
         fi

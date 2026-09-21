@@ -6,13 +6,10 @@
 set -eu
 
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
-# Rendered into tmpfs, not onto the disk. This file carries every provider
-# credential the controller uses, and a copy under /opt/apps would sit in every
-# disk image and backup of this host for as long as the host exists. /run is
-# cleared on boot, and the renderer puts it back before the controller starts.
-#
-# Overridable so a host that has not migrated yet keeps working.
-readonly env_file="${SEVERINO_CONTROLLER_ENV:-/run/severino-hq/severino_controller_env}"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=scripts/lib/controller-env.sh
+. "${script_dir}/lib/controller-env.sh"
+readonly env_file="${controller_env}"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
 readonly ssh_dir="${app_dir}/secrets/ssh"
@@ -24,10 +21,7 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "run-controller.sh must run as root." >&2
     exit 1
 fi
-if [ ! -s "${env_file}" ]; then
-    echo "Controller environment is missing." >&2
-    exit 1
-fi
+controller_require_environment
 if [ ! -s "${app_env}" ] || [ ! -s "${ca_file}" ]; then
     echo "Controller application environment or CA bundle is missing." >&2
     exit 1

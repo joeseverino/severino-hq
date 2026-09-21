@@ -53,8 +53,10 @@ the dedicated 1Password vault with `severino-hq-secrets.service`
 (`scripts/refresh-secrets.sh`). The app env renders from the app-environment
 item into a root-owned file the entrypoint sources — compose has no
 `env_file`, and the on-host `.env` holds only the two non-secret
-`*_FILE_HOST` interpolation paths. The service-account token is a host-bound
-encrypted systemd credential, not an environment-file value. The hourly timer
+`*_FILE_HOST` interpolation paths. The renderer's authentication token is a
+host-bound encrypted systemd credential, not an environment-file value. Select
+the backend and credential explicitly in a host-owned unit drop-in; see
+[Secret delivery](SECRETS.md). The hourly timer
 keeps rotations current and retains the last-known-good values if 1Password
 is temporarily unavailable. To change a prod env var: edit the 1Password
 item, then `systemctl start severino-hq-secrets.service` (or wait for the
@@ -63,8 +65,9 @@ timer; the container restarts only when something actually changed).
 Provider credentials are separate from the app environment. Login items in the
 same vault declare a stable `connection_ref`; `scripts/render-controller-env.sh`
 discovers them through that field and renders
-`secrets/severino_controller_env`. The controller service reads that root-owned
-file directly. `scripts/run-controller.sh` forwards the derived variables only
+`/run/severino-hq-secrets/severino_controller_env` on tmpfs. The controller service
+requires a root-owned 0700 directory and a root-owned 0400 file, separate from
+the web-writable doorbell directory. `scripts/run-controller.sh` forwards the derived variables only
 to a short-lived controller container running from the exact deployed HQ image.
 The file is never mounted into the HQ web container. Provider variables enter
 the controller container configuration and are visible to Docker administrators;
