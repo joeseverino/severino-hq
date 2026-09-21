@@ -31,6 +31,13 @@ test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256
 # Only matched pairs were ever exercised here, so the guard that rejects an
 # unmatched one was never run by a test.
 refuse() { # refuse <name> <dir>
+    # Existence, not size: one case is deliberately zero bytes. A fixture that
+    # failed to generate would otherwise tar nothing, and `set -e` would end the
+    # run with no indication of which case was even being tried.
+    if [ ! -e "$2/fullchain.pem" ] || [ ! -e "$2/privkey.pem" ]; then
+        echo "FAIL $1: the fixture was not generated." >&2
+        exit 1
+    fi
     if tar -C "$2" -cf - fullchain.pem privkey.pem | \
         env PATH="${bin_dir}:${PATH}" SEVERINO_HQ_CADDY_CERT_DIR="${cert_dir}" \
         SEVERINO_HQ_CERT_OWNER="$(id -un)" SEVERINO_HQ_CERT_GROUP="$(id -gn)" \
@@ -69,13 +76,21 @@ refuse "empty input is refused" "${empty_dir}"
 
 # An expired certificate parses and matches its key, so only the expiry check
 # stands between it and a reload.
+#
+# Backdating a certificate needs `-not_before`, which OpenSSL gained in 3.5.
+# Where that is unavailable the case is skipped out loud rather than silently:
+# the point of this suite is that a check which cannot run must not look like
+# one that passed.
 old_dir="${root}/expired"; mkdir -p "${old_dir}"
-openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=expired.example.test \
-    -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" \
-    -not_before 20200101000000Z -not_after 20200102000000Z >/dev/null 2>&1 \
-    || openssl req -x509 -newkey rsa:2048 -nodes -days -1 -subj /CN=expired.example.test \
-       -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" >/dev/null 2>&1
-refuse "an expired certificate is refused" "${old_dir}"
+if openssl req -x509 -help 2>&1 | grep -q -- '-not_before'; then
+    openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=expired.example.test \
+        -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" \
+        -not_before 20200101000000Z -not_after 20200102000000Z >/dev/null 2>&1
+    refuse "an expired certificate is refused" "${old_dir}"
+else
+    echo "skip an expired certificate is refused (openssl $(openssl version \
+        | awk '{print $2}') has no -not_before; needs 3.5+)"
+fi
 
 # The read-only arm. Stubbed at `docker`, because what is being checked is that
 # the operation is allowlisted and passes the adapted config through untouched
