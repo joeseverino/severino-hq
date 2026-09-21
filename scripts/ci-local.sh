@@ -47,6 +47,14 @@ failed=0
 skipped=()
 
 step() { printf '\n\033[1m[ci-local]\033[0m %s\n' "$1"; }
+# Warn when a pinned tool is not the pinned version. The point of this script is
+# predicting the pipeline, and it cannot do that with a different linter than the
+# pipeline runs -- which is how a clean local run preceded a red one.
+pinned() { # pinned <tool> <pinned-version> <version-extractor>
+  [ -n "$2" ] || return 0
+  have="$(eval "$3" 2>/dev/null)"
+  [ "$have" = "$2" ] || printf '  \033[33mwarn\033[0m    %s %s locally, CI pins %s\n' "$1" "${have:-unknown}" "$2"
+}
 ok()   { printf '  \033[32mok\033[0m      %s\n' "$1"; }
 bad()  { printf '  \033[31mFAILED\033[0m  %s\n' "$1"; failed=1; }
 skip() { printf '  \033[2mskip\033[0m    %s\n' "$1"; skipped+=("$1"); }
@@ -62,8 +70,7 @@ run() { # run <label> <command...>
 # ---------------------------------------------------------------- lint job
 step "lint"
 if command -v ruff >/dev/null; then
-  have="$(ruff --version | awk '{print $2}')"
-  [ "$have" = "$RUFF_VERSION" ] || printf '  \033[33mwarn\033[0m    ruff %s locally, CI pins %s\n' "$have" "$RUFF_VERSION"
+  pinned ruff "$RUFF_VERSION" "ruff --version | awk '{print \$2}'"
   run "ruff check ." ruff check .
 else
   skip "ruff is not installed"
@@ -72,6 +79,7 @@ fi
 # shellcheck disable=SC2086  # both lists are meant to split
 set -- $SHELL_SOURCES
 if command -v shellcheck >/dev/null; then
+  pinned shellcheck "$SHELLCHECK_VERSION" "shellcheck --version | awk '/^version:/{print \$2}'"
   run "shellcheck" shellcheck -x "$@"
 else
   skip "shellcheck is not installed"
@@ -163,6 +171,7 @@ run "manage.py check --deploy --fail-level WARNING" env \
   DJANGO_HSTS_SECONDS=31536000 DJANGO_HSTS_INCLUDE_SUBDOMAINS=1 DJANGO_HSTS_PRELOAD=1 \
   "$PY" manage.py check --deploy --fail-level WARNING
 if command -v pip-audit >/dev/null; then
+  pinned pip-audit "$PIP_AUDIT_VERSION" "pip-audit --version | awk '{print \$2}'"
   run "pip-audit" pip-audit -r requirements.txt
 else
   skip "pip-audit is not installed"

@@ -64,6 +64,24 @@ for f in ${SHELL_SOURCES}; do
 done
 
 failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
+# 4. Every external tool the gate depends on must have a pinned version.
+#
+# An unpinned linter means the local gate and the pipeline run different
+# software against the same files, and the local one is the one that gets
+# trusted. Pinning one tool when it bites is not a fix; this refuses the next
+# unpinned one.
+grep -hoE 'command -v [a-z0-9_-]+' scripts/ci-local.sh scripts/check.sh 2>/dev/null \
+    | awk '{print $3}' | sort -u | while IFS= read -r tool; do
+    # Interpreters are pinned by PYTHON_VERSIONS, not by a tool version.
+    case "${tool}" in python*|uv) continue ;; esac
+    var="$(printf '%s' "${tool}" | tr 'a-z-' 'A-Z_')_VERSION"
+    if ! grep -qE "^${var}=" scripts/toolchain.env; then
+        echo "FAIL ${tool} is used by the gate with no ${var} in toolchain.env" >&2
+        echo x >>"${failure_marker}"
+    fi
+done
+
+failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
 if [ "${failures}" -ne 0 ]; then
     echo "Shell contracts failed (${failures})." >&2
     exit 1
