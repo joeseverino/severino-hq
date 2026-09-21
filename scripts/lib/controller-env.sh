@@ -20,7 +20,19 @@ controller_require_directory() {
         echo "Controller secret directory must be root-owned with mode 0700." >&2
         exit 1
     fi
-    if [ "$(findmnt -n -o FSTYPE --target "${controller_runtime_dir}")" != tmpfs ]; then
+    # Every mount in the chain, not a string comparison against the whole
+    # output. `findmnt --target` prints one line per mount at or above the path,
+    # so a directory given a mount OF ITS OWN prints two -- and comparing that
+    # to the literal "tmpfs" refused a path that was strictly better protected
+    # than a plain directory under /run. That is what happened when each
+    # credential directory was given a noswap tmpfs: the guard read "tmpfs
+    # tmpfs" and rejected it.
+    #
+    # Empty output fails too. findmnt writes its errors to stderr and prints
+    # nothing on stdout, so treating empty as acceptable would let a probe that
+    # could not answer stand in for an answer of yes.
+    fstypes="$(findmnt -n -o FSTYPE --target "${controller_runtime_dir}" 2>/dev/null || true)"
+    if [ -z "${fstypes}" ] || printf '%s\n' "${fstypes}" | grep -qv '^tmpfs$'; then
         echo "Controller secret directory must be on tmpfs." >&2
         exit 1
     fi
