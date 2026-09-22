@@ -19,6 +19,7 @@ from core.audit import record_event
 from core.models import AgentIdentity, AuditLog
 
 from .approvals import READ_EFFECT, held_by_default, may_be_held_by_default
+from .labels import human_label
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
 SURFACES = ("mcp", "api")
@@ -265,7 +266,7 @@ def columns() -> tuple[Column, ...]:
 def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
     """Every capability against every column, grouped by what it acts on."""
 
-    from .capabilities import capability_label, capability_registry
+    from .capabilities import capability_registry
 
     cols = columns()
     grants = dict(AgentIdentity.objects.values_list("client_id", "granted"))
@@ -280,7 +281,7 @@ def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
         specs = sorted(
             grouped[label], key=lambda spec: (_EFFECT_ORDER.index(spec.effect), spec.name)
         )
-        actions = _actions(specs, label, capability_label)
+        actions = _actions(specs, label)
         rows = tuple(
             Row(
                 spec.name,
@@ -305,10 +306,10 @@ def _subject_label(subject: str) -> str:
     return words[:1].upper() + words[1:]
 
 
-def _actions(specs, group: str, capability_label) -> list[str]:
+def _actions(specs, group: str) -> list[str]:
     """Row labels for one group. The prefix is dropped only where that keeps them apart."""
 
-    labels = [capability_label(spec.name) for spec in specs]
+    labels = [human_label(spec.name) for spec in specs]
     short = [_action(label, group, spec.name.split(".", 1)[0]) for label, spec in zip(labels, specs, strict=True)]
     return [
         _action(label, group, "") if short.count(action) > 1 else action

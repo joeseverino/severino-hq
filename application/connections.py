@@ -660,7 +660,7 @@ def _ability_state(
 ) -> ConnectionAbilityState:
     # At call time: capabilities compose plugin specs, which may declare
     # connections. Same reason action_links defers it.
-    from .capabilities import capability_label
+    from .labels import human_label
 
     evidence, missing = grant_evidence(ability, instance)
     # Unknown stays undecided; only absent or rejected proof closes the door.
@@ -678,7 +678,7 @@ def _ability_state(
         capability_action_link(
             ability.capability,
             ability.effect,
-            capability_label(ability.capability),
+            human_label(ability.capability),
             principal=principal,
         )
         if available
@@ -877,6 +877,8 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
 
     from urllib.parse import urlsplit
 
+    from .labels import human_label
+
     found = []
     for connection in ProviderConnection.objects.all():
         endpoint = connection.endpoint.strip()
@@ -887,8 +889,7 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
             continue
         found.append(
             (
-                connection.provider.replace("_", " ").title()
-                or connection.connection_ref,
+                human_label(connection.provider) or connection.connection_ref,
                 connection.connection_ref,
                 endpoint,
             )

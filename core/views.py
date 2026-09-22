@@ -362,6 +362,10 @@ class DashboardGlanceView(LoginRequiredMixin, View):
 
 
 class DashboardGlanceSettingsView(LoginRequiredMixin, View):
+    def get(self, request):
+        # The settings are a panel on the dashboard; this address only saves them.
+        return redirect("dashboard")
+
     def post(self, request):
         try:
             save_dashboard_settings(

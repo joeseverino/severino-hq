@@ -576,9 +576,17 @@ def _folded(name: str) -> str:
 
 
 def machine(name: str) -> Machine | None:
+    """A machine by its name, or by another name it is known as -- a tailnet
+    device name that is the same machine as a declared one, for instance."""
+
     wanted = name.strip().lower()
+    catalog = machine_catalog()
     return next(
-        (item for item in machine_catalog() if item.name.lower() == wanted), None
+        (item for item in catalog if item.name.lower() == wanted),
+        next(
+            (item for item in catalog if wanted in {alias.lower() for alias in item.aliases}),
+            None,
+        ),
     )
 
 

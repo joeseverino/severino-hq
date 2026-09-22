@@ -9,6 +9,7 @@ from typing import Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
+from .labels import human_label
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
 from .contact_submissions import (
@@ -524,16 +525,6 @@ CORE_CAPABILITY_SPECS = (
 )
 
 
-_ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "ssh", "tls", "url", "vin", "vm"})
-
-
-def capability_label(name: str) -> str:
-    """Human label for a stable dotted capability name."""
-
-    words = name.replace(".", " ").replace("_", " ").split()
-    return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
-
-
 def capability_registry() -> dict[str, CapabilitySpec]:
     return dict(integration_graph().capabilities)
 
@@ -554,7 +545,7 @@ def describe_capabilities() -> dict[str, Any]:
         "capabilities": [
             {
                 "name": spec.name,
-                "label": capability_label(spec.name),
+                "label": human_label(spec.name),
                 "summary": spec.summary,
                 "effect": spec.effect,
                 "required_capabilities": [

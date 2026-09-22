@@ -1,10 +1,9 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load value_tags %}
 {% block title %}Findings{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Findings</h1>
-    <p class="page-lede">Claims derived from the live topology, with the exact evidence and safe existing actions behind each one.</p>
   </div>
   <div class="page-actions">
     <a class="btn" href="{% url 'action_items' %}">Action items</a>
@@ -42,7 +41,7 @@
       <p>{{ entry.finding.explanation }}</p>
       {% if entry.finding.evidence %}
         <dl class="finding-evidence">
-          {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+          {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value|readable }}</dd></div>{% endfor %}
         </dl>
       {% endif %}
       {% if entry.workflow %}

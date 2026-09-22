@@ -407,11 +407,8 @@ def infrastructure() -> tuple[Insight, ...]:
                 eyebrow="Finding",
                 title="Infrastructure findings",
                 value=str(len(findings)),
-                body=(
-                    f"{len(findings)} claim{'s' if len(findings) != 1 else ''} "
-                    "derived from the live topology. Open the evidence to see "
-                    "every affected subject or kind."
-                ),
+                body="; ".join(finding.title for finding in findings[:3])
+                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else ""),
                 action="Review evidence",
                 url=reverse("control_plane:findings"),
                 magnitude=len(findings),
@@ -455,7 +452,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
 
     from .action_links import ActionLink
     from .approvals import pending, preview
-    from .capabilities import capability_label
+    from .labels import human_label
 
     items = []
     for held in pending():
@@ -466,7 +463,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                 status="serious",
                 eyebrow="Approval",
                 title=(
-                    f"{held.requested_actor} wants to run {capability_label(held.capability)}"
+                    f"{held.requested_actor} wants to run {human_label(held.capability)}"
                     + (f" on {held.target}" if held.target else "")
                 ),
                 value="1",

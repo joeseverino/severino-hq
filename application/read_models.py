@@ -146,7 +146,7 @@ def recent_activity(*, limit: int = 25) -> dict[str, Any]:
             "object_id": event.object_id,
             "object_repr": event.object_repr,
             "message": event.message,
-            "actor": event.user.get_username() if event.user_id else "system",
+            "actor": event.actor_label,
             "action_label": event.get_action_display(),
             "created_at": event.created_at.isoformat(),
         }

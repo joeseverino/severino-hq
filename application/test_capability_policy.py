@@ -11,7 +11,8 @@ from core.models import AgentIdentity, AuditLog
 from projects.models import Project
 
 from .approvals import approve
-from .capabilities import capability_label, capability_registry, execute_capability
+from .capabilities import capability_registry, execute_capability
+from .labels import human_label
 from .capability_policy import Rule, Scope, decide, field_name, matrix, set_rule
 from .security import AuthorizationError, Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
@@ -299,15 +300,15 @@ class PageTests(PolicyTestCase):
         self.assertEqual(_action("Project Create", "Projects", "project"), "Create")
 
     def test_only_acronyms_are_capitalised(self):
-        self.assertEqual(capability_label("example.pace.set"), "Example Pace Set")
-        self.assertEqual(capability_label("tls.certificate"), "TLS Certificate")
+        self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
+        self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
 
     def test_two_capabilities_that_shorten_alike_keep_their_prefix(self):
         from .capability_policy import _actions
 
         specs = [spec("documentation.sync"), spec("hq.sync")]
 
-        self.assertEqual(_actions(specs, "Documentation", capability_label), ["Sync", "HQ sync"])
+        self.assertEqual(_actions(specs, "Documentation"), ["Sync", "HQ sync"])
 
     def test_the_matrix_costs_the_same_however_many_capabilities_and_agents(self):
         AgentIdentity.objects.create(client_id="second-agent", granted=["read"])
