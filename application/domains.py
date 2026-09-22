@@ -381,6 +381,13 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             ),
         ),
     ),
+    DomainDescriptor(
+        id="hq.agents",
+        label="Agents",
+        navigation=(
+            NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),
+        ),
+    ),
 )
 
 

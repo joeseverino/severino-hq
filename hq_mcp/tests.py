@@ -265,6 +265,9 @@ class MCPBoundaryTests(TestCase):
         allowed_hosts: tuple[str, ...] = ("a-docker-host",),
         verifier=None,
         app=None,
+        gate=None,
+        on_denied=None,
+        observer=None,
     ) -> tuple[int, dict]:
         headers = [(b"host", host.encode())]
         if token is not None:
@@ -300,6 +303,9 @@ class MCPBoundaryTests(TestCase):
             allowed_hosts=allowed_hosts,
             allowed_networks=("100.64.0.0/10", "fd7a:115c:a1e0::/48"),
             verifier=verifier,
+            gate=gate,
+            on_denied=on_denied,
+            observer=observer,
         )
         async_to_sync(boundary)(scope, receive, send)
         status = next(message["status"] for message in sent if "status" in message)
@@ -478,3 +484,181 @@ class AgentIdentityTests(MCPBoundaryTests):
         )
 
         self.assertEqual(current_principal().actor, "mcp-service-account")
+
+
+class AgentBrakeTests(MCPBoundaryTests):
+    A_JWT = "header.payload.signature"
+
+    @staticmethod
+    def _gate(allowed):
+        async def gate():
+            return allowed
+
+        return gate
+
+    def _agent(self):
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        return lambda bearer: agent
+
+    def test_a_paused_agent_is_refused_before_anything_is_dispatched(self):
+        reached = []
+
+        async def app(scope, receive, send):
+            reached.append(True)
+            await self._allowed_app(scope, receive, send)
+
+        status, body = self._request(
+            token=self.A_JWT, verifier=self._agent(), gate=self._gate(False), app=app
+        )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "agents_paused")
+        self.assertEqual(reached, [], "a paused agent must not reach a tool, or the tool list")
+
+    def test_the_shared_bearer_is_paused_too(self):
+        status, body = self._request(gate=self._gate(False))
+
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "agents_paused")
+
+    def test_an_unreadable_switch_refuses(self):
+        async def broken():
+            raise RuntimeError("database locked")
+
+        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=broken)
+
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "agents_paused")
+
+    def test_only_an_authenticated_caller_learns_agents_are_paused(self):
+        status, body = self._request(token="wrong", gate=self._gate(False))
+
+        self.assertEqual(status, 401)
+        self.assertEqual(body["error"], "unauthorized")
+
+    def test_allowed_agents_pass(self):
+        status, _ = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(True))
+
+        self.assertEqual(status, 204)
+
+
+class GrantCeilingTests(TestCase):
+    def _claims(self, *scopes):
+        return {"client_id": "example-agent", "scope": " ".join(scopes)}
+
+    def test_a_grant_the_deployment_withholds_is_not_held(self):
+        from django.test import override_settings
+
+        from .identity import token_principal
+
+        with override_settings(SEVERINO_MCP_ENABLE_WRITES=False):
+            agent = token_principal(self._claims("read", "write_projects"))
+
+        self.assertTrue(agent.permits(Capability.READ))
+        self.assertFalse(agent.permits(Capability.WRITE_PROJECTS))
+
+    def test_a_grant_the_deployment_allows_is_held(self):
+        from django.test import override_settings
+
+        from .identity import token_principal
+
+        with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
+            agent = token_principal(self._claims("read", "write_projects"))
+
+        self.assertTrue(agent.permits(Capability.WRITE_PROJECTS))
+
+    def test_the_ceiling_never_widens_a_grant(self):
+        from django.test import override_settings
+
+        from .identity import token_principal
+
+        with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
+            agent = token_principal(self._claims("read"))
+
+        self.assertFalse(agent.permits(Capability.WRITE_PROJECTS))
+
+
+class DoorRefusalTests(MCPBoundaryTests):
+    A_JWT = "header.payload.signature"
+
+    def _recorder(self):
+        seen = []
+
+        async def record(**fields):
+            seen.append(fields)
+
+        return record, seen
+
+    def test_a_bad_credential_is_counted_as_unauthenticated_with_its_source(self):
+        record, seen = self._recorder()
+
+        self._request(token="wrong", on_denied=record)
+
+        self.assertEqual(seen, [{"reason": "invalid_credential", "source": "100.64.0.10", "authenticated": False}])
+
+    def test_a_missing_credential_is_counted(self):
+        record, seen = self._recorder()
+
+        self._request(token=None, on_denied=record)
+
+        self.assertEqual(seen[0]["reason"], "missing_credential")
+
+    def test_a_paused_agent_is_recorded_by_name(self):
+        record, seen = self._recorder()
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+        async def paused():
+            return False
+
+        self._request(token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, on_denied=record)
+
+        self.assertEqual(seen[0]["reason"], "agents_paused")
+        self.assertEqual(seen[0]["actor"], "example-agent")
+
+    def test_a_recorder_that_fails_does_not_change_the_answer(self):
+        async def broken(**fields):
+            raise RuntimeError("audit down")
+
+        status, body = self._request(token="wrong", on_denied=broken)
+
+        self.assertEqual(status, 401)
+        self.assertEqual(body["error"], "unauthorized")
+
+    def test_an_admitted_request_records_nothing(self):
+        record, seen = self._recorder()
+
+        status, _ = self._request(on_denied=record)
+
+        self.assertEqual(status, 204)
+        self.assertEqual(seen, [])
+
+
+class ObservationTests(MCPBoundaryTests):
+    A_JWT = "header.payload.signature"
+
+    def test_an_authenticated_agent_is_observed_even_while_paused(self):
+        seen = []
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+        async def observer(principal):
+            seen.append(principal.actor)
+
+        async def paused():
+            return False
+
+        status, _ = self._request(
+            token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, observer=observer
+        )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(seen, ["example-agent"])
+
+    def test_a_rejected_credential_is_not_observed(self):
+        seen = []
+
+        async def observer(principal):
+            seen.append(principal)
+
+        self._request(token="wrong", observer=observer)
+
+        self.assertEqual(seen, [])

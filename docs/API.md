@@ -62,6 +62,18 @@ client: separate secrets rotate independently, and the token's `client_id`
 becomes the actor in HQ's audit log, so an import is traceable to the
 credential that caused it.
 
+## What policy can do to a call
+
+An operator can allow, hold, or deny each capability per client. Handle all three:
+
+| Outcome | Response | Client should |
+|---|---|---|
+| Allowed | the capability's result | carry on |
+| Held | `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
+| Refused | error code `denied_by_policy` | stop |
+
+With no rules set, only changes to gated infrastructure are held.
+
 ## Using it
 
 Get a token:

@@ -21,6 +21,9 @@ from django.core.exceptions import RequestDataTooBig
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from application.agent_registry import observe
+from application.denials import record_denial
+from core.network import client_ip
 from application.capabilities import (
     authorize_capability,
     capability_registry,
@@ -197,10 +200,17 @@ def _endpoint(methods: tuple[str, ...]):
                 return response
             try:
                 principal, claims = _principal(request)
-            except TokenError as exc:
-                return _fail(exc.reason, code=exc.code, status=401)
-            except AuthorizationError as exc:
-                return _fail(exc.reason, code=exc.code, status=403)
+            except (TokenError, AuthorizationError) as exc:
+                # No identity was established, so these are counted per source.
+                record_denial(
+                    interface="api",
+                    reason=exc.code,
+                    source=client_ip(request),
+                    authenticated=False,
+                )
+                status = 401 if isinstance(exc, TokenError) else 403
+                return _fail(exc.reason, code=exc.code, status=status)
+            observe(principal)
             request.principal = principal
             request.token_claims = claims
             response = view(request, *args, **kwargs)

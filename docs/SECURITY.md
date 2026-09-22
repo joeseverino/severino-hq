@@ -85,7 +85,10 @@
 - Uploads are content-type-filtered (`receipts/forms.py`) and size-capped
   (15 MB by default).
 - Audit log on every create / update / delete (via signals), plus login,
-  failed login, logout, upload, export, and import events.
+  failed login, logout, upload, export, and import events, and refusals. An
+  authenticated caller's refusal gets its own row; rejected credentials are
+  counted per surface, source and reason per minute. Credentials are never
+  recorded.
 - Request-user attribution uses an ASGI-safe context variable, preventing one
   concurrent request's identity from leaking into another request's audit row.
 - Server-generated request IDs connect response headers to structured JSON
@@ -102,25 +105,27 @@
   login remains available as the break-glass path.
 - The `/mcp/` Streamable HTTP endpoint is a separate security boundary:
   it accepts only a direct socket peer in Tailscale's IPv4/IPv6 ranges, checks
-  an explicit Host allowlist, rejects browser Origins unless allowlisted, and
-  requires a constant-time-checked bearer token of at least 32 characters.
+  an explicit Host allowlist, and rejects browser Origins unless allowlisted.
   Forwarded client-address headers are never trusted. The container uses host
   networking so the ASGI server receives the real peer address instead of a
   Docker bridge address.
-- A provider kind may declare `requires_approval`, and then a change to it asked
-  for by anything that is not a person at the web interface is held rather than
-  applied. The held request writes no declaration and queues no operation, so
-  there is nothing for the privileged controller to claim; an operator approves
-  or rejects it at `/infrastructure/approvals/`, having read a field-by-field
-  diff of what would change. The approval covers that diff: it is fingerprinted
-  against the declaration as it stood, so content that moves in the meantime
-  supersedes the request instead of being applied under an earlier decision.
-  Requests lapse after `SEVERINO_APPROVAL_WINDOW_HOURS` (24 by default), one
-  actor may hold ten at a time, and approving is gated on the interface rather
-  than on a capability -- so no grant, however wide, lets a token approve its own
-  request. `tailscale.policy` is the kind that carries the flag today.
-  Read-only capabilities, every other kind, and the controller's own automatic
-  convergence are untouched.
+- Agents authenticate to `/mcp/` with identity-provider access tokens, verified
+  as the machine API verifies them, so each agent is its own attributable,
+  revocable principal. It holds its grant capped by the `SEVERINO_MCP_ENABLE_*`
+  flags. The shared bearer remains as break-glass; a token that fails
+  verification is never also compared to it.
+- An operator can pause every agent from the menu. The switch is global, read
+  on every MCP request, fails closed, and covers both MCP credentials.
+- Capability policy at `/agents/` sets, per capability and per surface or
+  agent, whether a call is allowed, held for approval, or denied. Rules only
+  narrow the identity provider's grant, and the stricter of a surface and an
+  agent rule wins. With no rules, gated infrastructure changes are held as
+  before. A rule that allows a would-be-held call is recorded as its consent.
+- A held request writes and queues nothing. It is decided on its audit entry
+  (`/audit/?awaiting=1`) against a fingerprinted field-by-field diff, so a
+  record that changes meanwhile supersedes the request. Requests lapse after
+  `SEVERINO_APPROVAL_WINDOW_HOURS` (24 by default), each actor may hold ten,
+  and approval requires the web interface, so no token can approve its own.
 
 ## Production checklist
 

@@ -1,0 +1,67 @@
+{% comment %}Expects `entry` from approvals.review(). Decisions only while pending.{% endcomment %}
+<article class="card finding-card{% if entry.held.state == 'pending' %} is-serious{% endif %}">
+  <div class="section-head">
+    <div>
+      <span class="pill{% if entry.held.state == 'pending' %} pill-serious{% endif %}">{{ entry.held.capability }}</span>
+      <h2>{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.held.resource_key|default:entry.held.resource_kind }}</a>{% else %}{{ entry.held.resource_key|default:entry.held.resource_kind }}{% endif %}</h2>
+    </div>
+  </div>
+
+  <dl class="finding-evidence">
+    <div><dt>Asked by</dt><dd><code>{{ entry.held.requested_actor }}</code> over <code>{{ entry.held.requested_interface }}</code></dd></div>
+    <div><dt>About</dt><dd><code>{{ entry.held.resource_kind }}</code></dd></div>
+    <div><dt>Stated reason</dt><dd>{% if entry.held.reason %}{{ entry.held.reason }}{% else %}<span class="muted">None given</span>{% endif %}</dd></div>
+    <div><dt>Asked at</dt><dd>{{ entry.held.created_at }}</dd></div>
+    {% if entry.held.state == 'pending' %}
+      <div><dt>Lapses</dt><dd>{{ entry.held.expires_at }}</dd></div>
+    {% else %}
+      <div><dt>Outcome</dt><dd>{{ entry.held.get_state_display }}{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor }}</code>{% endif %}{% if entry.held.decided_at %}, {{ entry.held.decided_at }}{% endif %}</dd></div>
+      {% if entry.held.decision_note %}<div><dt>Note</dt><dd>{{ entry.held.decision_note }}</dd></div>{% endif %}
+    {% endif %}
+  </dl>
+
+  <h3>{{ entry.preview.label }}</h3>
+  {% if entry.preview.rows %}
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Now</th><th>Requested</th></tr></thead>
+        <tbody>
+          {% for row in entry.preview.rows %}
+            <tr>
+              <td><code>{{ row.path }}</code> <span class="muted">{{ row.change }}</span></td>
+              <td>{% if row.before %}{{ row.before }}{% else %}<span class="muted">absent</span>{% endif %}</td>
+              <td>{% if row.after %}{{ row.after }}{% else %}<span class="muted">absent</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if entry.preview.lines %}
+    <pre><code>{% for line in entry.preview.lines %}{{ line }}
+{% endfor %}</code></pre>
+  {% endif %}
+  {% if entry.preview.empty %}
+    <p class="muted">Nothing would move. Approving runs the request as it was asked, against the record as it stands.</p>
+  {% endif %}
+
+  {% if entry.held.state == 'pending' %}
+    <div class="finding-offers">
+      <strong>Your decision</strong>
+      <div class="finding-actions">
+        <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="approve">
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn compact primary">Approve and apply</button>
+        </form>
+        <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="reject">
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn compact">Reject</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+</article>

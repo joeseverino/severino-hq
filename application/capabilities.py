@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -46,6 +48,8 @@ from .infrastructure import (
     save_managed_resource,
 )
 from .approvals import TooManyPendingApprovals, hold_for_approval
+from .capability_policy import Rule, decide
+from .denials import record_denial
 from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
 from .lookup import (
     AddressCommand,
@@ -62,7 +66,7 @@ from .projects import (
 )
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .integrations import integration_graph
-from .security import AuthorizationError, Capability, Principal
+from .security import AuthorizationError, Capability, PolicyDenied, Principal
 from .sync import HQSyncCommand, execute_hq_sync
 
 
@@ -520,11 +524,14 @@ CORE_CAPABILITY_SPECS = (
 )
 
 
+_ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "ssh", "tls", "url", "vin", "vm"})
+
+
 def capability_label(name: str) -> str:
     """Human label for a stable dotted capability name."""
 
     words = name.replace(".", " ").replace("_", " ").split()
-    return " ".join(word.upper() if len(word) <= 3 else word.title() for word in words)
+    return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
@@ -611,9 +618,16 @@ def execute_capability(
         # there is anything worth a person's attention. A request that is
         # unauthorized or malformed is answered here rather than becoming a
         # decision somebody has to read before finding out it was never valid.
-        held = hold_for_approval(spec, payload, target, principal=principal)
-        if held is not None:
-            return held
+        decision = decide(spec, principal, payload, target)
+        if decision.rule == Rule.DENY:
+            raise PolicyDenied(f"{name} is refused by {decision.source}.")
+        if decision.rule == Rule.APPROVE:
+            held = hold_for_approval(spec, payload, target, principal=principal)
+            if held is not None:
+                return held
+        elif decision.overrides_a_hold:
+            # Standing policy is the consent; carried where consent travels.
+            principal = replace(principal, approved_by=decision.source)
         return _run(
             spec,
             command,
@@ -628,8 +642,21 @@ def execute_capability(
         # whose remedy is neither a retry nor a fix to the request: somebody has
         # to answer what is already waiting, and a caller cannot work that out
         # from "could not be executed".
+        record_denial(
+            interface=principal.interface,
+            actor=principal.actor,
+            capability=name,
+            reason="too_many_pending_approvals",
+        )
         return _error("too_many_pending_approvals", str(exc))
     except AuthorizationError as exc:
+        # The one refusal point for every adapter.
+        record_denial(
+            interface=principal.interface,
+            actor=principal.actor,
+            capability=name,
+            reason=exc.code,
+        )
         return _error(exc.code, exc.reason)
     except PydanticValidationError as exc:
         return _error("invalid_input", "Payload validation failed.", exc.errors())

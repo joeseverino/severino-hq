@@ -14,7 +14,7 @@ from django.contrib.auth.views import LoginView
 from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import formats
@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
+from application.agent_access import set_agents_paused
 from application.connections import link_choices, outward_links
 from application.command_center import command_center
 from application.dashboard import dashboard_highlights, operating_snapshot, work_queue
@@ -441,6 +442,61 @@ class DemoModeView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
+class AgentAccessView(LoginRequiredMixin, View):
+    """Pause or resume every agent. The form sends a state, never a toggle."""
+
+    def post(self, request):
+        requested = request.POST.get("paused")
+        if requested not in {"0", "1"}:
+            return HttpResponseBadRequest("paused must be 0 or 1")
+        set_agents_paused(
+            requested == "1",
+            principal=web_principal(request.user),
+            user=request.user,
+        )
+        return redirect(safe_next(request, fallback=reverse("dashboard")))
+
+
+class AgentPolicyView(LoginRequiredMixin, TemplateView):
+    """Capability policy. Reads from matrix(), writes through apply_changes()."""
+
+    template_name = "core/agent_policy.html"
+
+    def get_context_data(self, **kwargs):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from application import capability_policy
+        from application.approvals import awaiting_ids
+
+        context = super().get_context_data(**kwargs)
+        context["columns"], context["groups"] = capability_policy.matrix()
+        context["agents"] = [column for column in context["columns"] if column.identity]
+        context["rule_count"] = len(capability_policy.rules())
+        context["awaiting_count"] = len(awaiting_ids())
+        context["refused_count"] = AuditLog.objects.filter(
+            action=AuditLog.Action.DENIED, created_at__gte=timezone.now() - timedelta(hours=24)
+        ).count()
+        return context
+
+    def post(self, request):
+        from application import capability_policy
+
+        changed, problems = capability_policy.apply_changes(
+            request.POST, principal=web_principal(request.user), user=request.user
+        )
+        for problem in problems:
+            messages.error(request, problem)
+        if changed:
+            messages.success(
+                request, f"Saved {changed} change{'s' if changed != 1 else ''}. Each is in the audit log."
+            )
+        elif not problems:
+            messages.info(request, "Nothing changed.")
+        return redirect("agent_policy")
+
+
 class ActionItemCountView(LoginRequiredMixin, View):
     """Compute the header badge only when an operator opens its menu."""
 
@@ -592,7 +648,28 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user")
+        if self._awaiting():
+            from application.approvals import AUDIT_LABELS, awaiting_ids
+
+            qs = qs.filter(
+                action=AuditLog.Action.CREATED,
+                object_type__in=AUDIT_LABELS,
+                object_id__in=awaiting_ids(),
+            )
         return self.apply_table_query(qs)
+
+    def get_context_data(self, **kwargs):
+        from application.approvals import awaiting_ids
+
+        context = super().get_context_data(**kwargs)
+        context["awaiting"] = self._awaiting()
+        context["awaiting_count"] = len(awaiting_ids())
+        return context
+
+    def _awaiting(self) -> bool:
+        """The log narrowed to requests still waiting for a person."""
+
+        return self.request.GET.get("awaiting") == "1"
 
 
 class AuditLogDetailView(LoginRequiredMixin, DetailView):
@@ -647,7 +724,24 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
                 .exclude(pk=event.pk)
                 .select_related("user")[:20]
             )
+        from application import approvals
+
+        held = approvals.for_audit_event(event)
+        if held is not None:
+            context["approval"] = approvals.review(held)
         return context
+
+
+class ApprovalEntryView(LoginRequiredMixin, View):
+    """A stable link to a held request's audit entry."""
+
+    def get(self, request, approval_id):
+        from application.approvals import entry_event
+
+        event = entry_event(approval_id)
+        if event is None:
+            return redirect(f"{reverse('core:audit_list')}?awaiting=1")
+        return redirect("core:audit_detail", pk=event.pk)
 
 
 class ConnectionView(LoginRequiredMixin, TemplateView):

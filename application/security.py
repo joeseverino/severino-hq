@@ -69,6 +69,12 @@ class AuthorizationError(PermissionError):
         self.reason = reason
 
 
+class PolicyDenied(AuthorizationError):
+    """Refused by operator policy rather than a missing grant."""
+
+    code = "denied_by_policy"
+
+
 # Stable core contract retained for callers constructing explicit principals.
 # Runtime operator principals derive plugin grants in addition to this set.
 OPERATOR_CAPABILITIES = frozenset(Capability)
@@ -86,6 +92,9 @@ class Principal:
     # record of who allowed it travels with the act instead of being looked up
     # afterwards from two rows that nothing joins.
     approved_by: str = ""
+    # The identity provider's grant before any deployment cap; empty for
+    # principals HQ constructs itself.
+    granted: frozenset[str] = frozenset()
 
     def permits(self, *capabilities: Capability | str) -> bool:
         """Whether this principal holds every capability named.
@@ -126,6 +135,12 @@ def web_principal(user) -> Principal:
     if not getattr(user, "is_authenticated", False):
         raise AuthorizationError("An authenticated web operator is required.")
     return Principal(user.get_username(), "web", _operator_capabilities())
+
+
+def internal_principal(purpose: str) -> Principal:
+    """HQ reading its own records, never on a caller's behalf."""
+
+    return Principal(purpose, "internal", _operator_capabilities())
 
 
 def cli_principal() -> Principal:

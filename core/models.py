@@ -33,6 +33,7 @@ class AuditLog(models.Model):
         FAILED = "failed", "Failed"
         SETTINGS_CHANGED = "settings_changed", "Settings changed"
         VIEWED = "viewed", "Viewed"
+        DENIED = "denied", "Denied"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -61,8 +62,21 @@ class AuditLog(models.Model):
             models.Index(fields=("action",)),
         ]
 
+    @property
+    def actor_label(self) -> str:
+        """The operator, else the recorded machine actor, else an unauthenticated source."""
+
+        if self.user_id:
+            return self.user.get_username()
+        metadata = self.metadata or {}
+        if actor := metadata.get("actor"):
+            return str(actor)
+        if source := metadata.get("source"):
+            return f"unauthenticated · {source}"
+        return "system"
+
     def __str__(self) -> str:
-        who = self.user.username if self.user_id else "system"
+        who = self.actor_label
         target = f" {self.object_type}#{self.object_id}" if self.object_type else ""
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
 
@@ -107,3 +121,36 @@ class Pin(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}:{self.target_kind}:{self.target_key}"
+
+
+class AgentAccess(models.Model):
+    """The operator's switch pausing every agent. One row at pk=1; no row means not paused."""
+
+    paused = models.BooleanField(default=False)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    changed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return "agents paused" if self.paused else "agents allowed"
+
+
+class AgentIdentity(models.Model):
+    """An identity that has presented a verified token, and its grant as of the latest one."""
+
+    client_id = models.CharField(max_length=160, unique=True)
+    interfaces = models.JSONField(default=list)
+    granted = models.JSONField(default=list)
+    first_seen = models.DateTimeField(default=timezone.now, editable=False)
+    last_seen = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("client_id",)
+
+    def __str__(self) -> str:
+        return self.client_id
