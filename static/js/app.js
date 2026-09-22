@@ -135,32 +135,59 @@ document.addEventListener("keydown", (event) => {
 // for its count in the base context would make every page pay that cost before
 // first paint. The dashboard and queue already know it; everywhere else loads
 // it only when the operator opens the menu that displays it.
-document.querySelectorAll("details[data-action-count-url]").forEach((menu) => {
-  menu.addEventListener("toggle", async () => {
-    const badge = menu.querySelector("[data-action-count]");
-    if (!menu.open || menu.dataset.actionCountLoaded || !badge) return;
-    if (!badge.hidden) {
-      menu.dataset.actionCountLoaded = "true";
-      return;
-    }
-    menu.dataset.actionCountLoaded = "loading";
-    try {
-      // Opening a menu is not a request for anything but the menu. A count
-      // that cannot be read leaves the badge as it was.
-      const response = await hqFetch(menu.dataset.actionCountUrl, {
-        headers: { Accept: "application/json" },
-        renewSession: false,
-      });
-      if (!response.ok) throw new Error(`Action count returned ${response.status}`);
-      const payload = await response.json();
-      badge.textContent = String(payload.count);
+// The unread count, beside the profile and in its menu. Fetched after the page
+// so no page pays for it while rendering, and remembered for a minute so
+// moving between pages does not ask again. The action items page renders the
+// count itself and hands it over, which is what makes marking read show at once.
+const actionMenu = document.querySelector("details[data-action-count-url]");
+if (actionMenu) {
+  const STORE_KEY = "hq.actionCount";
+  const TTL_MS = 60_000;
+  const paint = (count) => {
+    document.querySelectorAll("[data-action-count]").forEach((badge) => {
+      badge.textContent = String(count);
       badge.hidden = false;
-      menu.dataset.actionCountLoaded = "true";
+    });
+    document.querySelectorAll("[data-action-badge]").forEach((badge) => {
+      badge.querySelector("[data-action-badge-count]").textContent = String(count);
+      badge.hidden = count === 0;
+    });
+  };
+  const remember = (count) => {
+    try {
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({ count, at: Date.now() }));
     } catch (_error) {
-      delete menu.dataset.actionCountLoaded;
+      // Storage refused: the next page asks again.
     }
-  });
-});
+  };
+  const recalled = () => {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
+      return stored && Date.now() - stored.at < TTL_MS ? stored.count : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  if (actionMenu.dataset.actionCountFresh !== undefined) {
+    remember(Number(actionMenu.dataset.actionCountFresh));
+  } else if (recalled() !== null) {
+    paint(recalled());
+  } else {
+    hqFetch(actionMenu.dataset.actionCountUrl, {
+      headers: { Accept: "application/json" },
+      renewSession: false,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload) {
+          paint(payload.count);
+          remember(payload.count);
+        }
+      })
+      .catch(() => {});
+  }
+}
 
 // Hover-to-open, for pointers only. On touch there is no hover: the first tap
 // would open a menu and the second would be needed to follow a link, so those

@@ -364,7 +364,8 @@ class ApprovalRequest(TimestampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.capability} on {self.target or self.resource_key} ({self.state})"
+        subject = self.target or self.resource_key
+        return f"{self.capability}{f' on {subject}' if subject else ''} by {self.requested_actor}"
 
 
 class AddressReading(models.Model):

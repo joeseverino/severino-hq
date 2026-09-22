@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Action items{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Action items</h1>
-    <p class="page-lede">What needs you, why it matters, and the next step. Most urgent first.</p>
-  </div>
-</div>
+<header class="page-head">
+  <div><h1>Action items</h1></div>
+  {% if action_items %}
+    <div class="page-actions">
+      <form method="post" action="{% url 'action_items_read' %}">
+        {% csrf_token %}
+        {% for item in action_items %}<input type="hidden" name="key" value="{{ item.key }}">{% endfor %}
+        <input type="hidden" name="read" value="1">
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn">Mark all read</button>
+      </form>
+    </div>
+  {% endif %}
+</header>
 
 <form class="filter-bar" method="get" role="search">
   <input type="search" name="q" value="{{ action_query }}" placeholder="Filter action items" aria-label="Filter action items">
@@ -23,12 +31,14 @@
   {% if action_query or action_status or action_source %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
 </form>
 
-<div class="topology-summary" role="status">
-  <span><strong>{{ action_item_total }}</strong> item{{ action_item_total|pluralize }}</span>
-  <span><strong>{{ action_item_group_total }}</strong> area{{ action_item_group_total|pluralize }}</span>
-</div>
-
 <section class="card action-items-card">
-  {% include "partials/_work_queue.html" with items=action_items empty="Nothing matches this view." %}
+  {% include "partials/_work_queue.html" with items=action_items markable=True empty="Nothing unread." %}
 </section>
+
+{% if read_action_items %}
+  <details class="card action-items-read">
+    <summary>Read · {{ read_action_items|length }}</summary>
+    {% include "partials/_work_queue.html" with items=read_action_items markable=True %}
+  </details>
+{% endif %}
 {% endblock %}

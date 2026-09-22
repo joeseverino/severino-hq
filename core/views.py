@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
+from application import action_items as read_state
 from application.agent_access import set_agents_paused
 from application.connections import link_choices, outward_links
 from application.command_center import command_center
@@ -387,7 +388,7 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
         status = self.request.GET.get("status", "").strip()
         source = self.request.GET.get("source", "").strip()
         with projection_scope():
-            all_items = work_queue()
+            all_items = read_state.with_read_state(work_queue(), self.request.user)
         items = [
             item
             for item in all_items
@@ -402,11 +403,12 @@ class ActionItemsView(LoginRequiredMixin, TemplateView):
         sources = tuple(
             {item["source_id"]: item["source"] for item in all_items}.items()
         )
+        unread = [item for item in items if not item["read"]]
         context.update(
-            action_items=items,
-            action_item_total=sum(item["count"] for item in items),
-            action_item_group_total=len(items),
-            profile_action_count=sum(item["count"] for item in all_items),
+            action_items=unread,
+            read_action_items=[item for item in items if item["read"]],
+            action_item_total=sum(item["count"] for item in unread),
+            profile_action_count=sum(item["count"] for item in all_items if not item["read"]),
             show_action_count=True,
             action_sources=sources,
             action_query=self.request.GET.get("q", "").strip(),
@@ -498,12 +500,31 @@ class AgentPolicyView(LoginRequiredMixin, TemplateView):
 
 
 class ActionItemCountView(LoginRequiredMixin, View):
-    """Compute the header badge only when an operator opens its menu."""
+    """The unread count for the header, fetched after the page rather than during it."""
 
     def get(self, request):
         with projection_scope():
-            count = sum(item["count"] for item in work_queue())
+            count = read_state.unread_count(work_queue(), request.user)
         return JsonResponse({"count": count})
+
+
+class ActionItemReadView(LoginRequiredMixin, View):
+    """Mark action items read or unread for the signed-in person."""
+
+    def post(self, request):
+        if request.POST.get("read") not in {"0", "1"}:
+            return HttpResponseBadRequest("read must be 0 or 1.")
+        with projection_scope():
+            current = work_queue()
+        read_state.mark(
+            request.user,
+            request.POST.getlist("key"),
+            read=request.POST["read"] == "1",
+            current=current,
+        )
+        return redirect(
+            safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items"))
+        )
 
 
 class SearchView(LoginRequiredMixin, TemplateView):

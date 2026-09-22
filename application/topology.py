@@ -67,6 +67,8 @@ class TopologyNode:
     # Whether HQ is converging this at all. A disabled declaration is not a
     # finding: nobody asked for it to be true.
     managed: bool = True
+    # Declared as usually absent, so a sweep not finding it is expected.
+    on_demand: bool = False
     # Fields this declaration asserts that the last observation did not echo
     # back, excluding the ones the provider declared it cannot report. Drift is
     # compared only across fields present in both, so a field the reading omits
@@ -722,6 +724,7 @@ def derive_topology(*, principal: Principal) -> Topology:
             observed_revision=resource.observed_generation,
             reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),
             managed=resource.enabled,
+            on_demand=bool((resource.spec or {}).get("on_demand")),
             unconfirmed_fields=_unconfirmed(resource, provider),
             actions=_resource_actions(resource, principal),
         )

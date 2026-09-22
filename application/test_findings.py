@@ -1032,7 +1032,7 @@ class EveryFindingIsActionableTests(TestCase):
         missed = [f for f in self._findings() if f.rule == "skipped-by-a-sweep"]
         self.assertTrue(missed)
         for finding in missed:
-            self.assertIn("remove the declaration", finding.explanation)
+            self.assertIn("If it is gone, remove it.", finding.explanation)
             self.assertTrue(finding.subject)
 
 
@@ -1071,6 +1071,65 @@ class DeclarationOnlyKindsTests(TestCase):
         self.assertEqual(
             self._kinds_raised("tailscale.policy"), ("tailscale.policy",)
         )
+
+    def test_it_is_never_called_unobserved_one_record_at_a_time_either(self):
+        from .findings import _Estate, _never_observed
+
+        seen = TopologyNode(
+            "resource:seen", "resource", "seen", "Target",
+            kind_key="tls.delivery_target", observed_at=timezone.now().isoformat(),
+        )
+        unseen = TopologyNode("resource:unseen", "resource", "unseen", "Target", kind_key="tls.delivery_target")
+        estate = _Estate(
+            topology=Topology(nodes=(seen, unseen), edges=()),
+            now=timezone.now(),
+            observed={seen.id: timezone.now()},
+            latest_by_kind={"tls.delivery_target": timezone.now()},
+            declared_kinds=frozenset({"tls.delivery_target"}),
+            declared_counts={"tls.delivery_target": 2},
+            governed=frozenset({unseen.id}),
+            controllers_by_kind={},
+        )
+
+        self.assertEqual(_never_observed(estate), ())
+
+
+class OnDemandContainerTests(TestCase):
+    """A container that only runs now and then is removed while it is off."""
+
+    def _missing(self, *, on_demand):
+        from .findings import _Estate, _skipped_by_a_sweep
+
+        now = timezone.now()
+        then = now - timedelta(days=2)
+        running = TopologyNode(
+            "resource:web", "resource", "web", "Container",
+            kind_key="portainer.container", observed_at=now.isoformat(),
+        )
+        off = TopologyNode(
+            "resource:tool", "resource", "tool", "Container",
+            kind_key="portainer.container", observed_at=then.isoformat(), on_demand=on_demand,
+        )
+        estate = _Estate(
+            topology=Topology(nodes=(running, off), edges=()),
+            now=now,
+            observed={running.id: now, off.id: then},
+            latest_by_kind={"portainer.container": now},
+            declared_kinds=frozenset({"portainer.container"}),
+            declared_counts={"portainer.container": 2},
+            governed=frozenset(),
+            controllers_by_kind={},
+        )
+        return _skipped_by_a_sweep(estate)
+
+    def test_missing_from_a_sweep_is_expected_when_declared_on_demand(self):
+        self.assertEqual(self._missing(on_demand=True), ())
+
+    def test_otherwise_it_is_reported_without_a_remedy_the_kind_locks(self):
+        (finding,) = self._missing(on_demand=False)
+
+        self.assertIn("mark it on demand", finding.explanation)
+        self.assertEqual(finding.remedies, ())
 
 
 class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):

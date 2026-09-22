@@ -690,6 +690,21 @@ class SurfaceTests(TestCase):
         self.assertContains(amendment, "document.grants[0].src[0]")
         self.assertContains(self._entry(reconcile), "Stated reason for the change.")
 
+    def test_a_held_record_change_shows_what_would_be_written(self):
+        from control_plane.models import CapabilityRule
+
+        CapabilityRule.objects.create(
+            scope="surface", subject="mcp", capability="project.create", rule="approve"
+        )
+        writer = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.WRITE_PROJECTS}))
+        held = execute_capability("project.create", {"name": "Held project"}, principal=writer)
+
+        entry = self._entry(ApprovalRequest.objects.get(pk=held["approval"]["id"]))
+
+        self.assertContains(entry, "Would be created")
+        self.assertContains(entry, "Held project")
+        self.assertContains(entry, "Project Create")
+
     def test_the_awaiting_view_is_the_queue(self):
         page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
 
@@ -700,12 +715,12 @@ class SurfaceTests(TestCase):
         """This card sits on a permanent record. A button on something already
         settled would invite a decision that cannot be taken."""
 
-        self.assertContains(self._entry(self.held), "Approve and apply")
+        self.assertContains(self._entry(self.held), "Approve")
 
         reject(str(self.held.id), principal=web_principal(self.user))
 
         settled = self._entry(self.held)
-        self.assertNotContains(settled, "Approve and apply")
+        self.assertNotContains(settled, "Approve")
         self.assertContains(settled, "Rejected")
 
     def test_the_old_address_still_lands_on_the_queue(self):
@@ -743,11 +758,28 @@ class SurfaceTests(TestCase):
 
         self.assertEqual(page.status_code, 302)
 
-    def test_the_dashboard_queue_leads_with_it(self):
-        from .attention import infrastructure
+    def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
+        from .domains import domain_attention_items
 
-        first = infrastructure()[0]
+        entries = [entry for entry in domain_attention_items() if entry["item"].eyebrow == "Approval"]
 
-        self.assertEqual(first.eyebrow, "Approval")
-        self.assertEqual(first.value, "2")
-        self.assertEqual(first.url, f"{reverse('core:audit_list')}?awaiting=1")
+        self.assertEqual(len(entries), 2)
+        self.assertEqual({entry["source"] for entry in entries}, {"Audit"})
+        self.assertIn(
+            reverse("core:approval_entry", kwargs={"approval_id": self.held.id}),
+            {entry["item"].url for entry in entries},
+        )
+
+    def test_it_can_be_decided_from_the_action_items_page(self):
+        page = self.client.get(reverse("action_items"))
+        approve = reverse(
+            "control_plane:approval_decide",
+            kwargs={"approval_id": self.held.id, "decision": "reject"},
+        )
+        self.assertContains(page, approve)
+
+        response = self.client.post(approve, {"next": reverse("action_items")})
+
+        self.assertRedirects(response, reverse("action_items"), fetch_redirect_response=False)
+        self.held.refresh_from_db()
+        self.assertEqual(self.held.state, ApprovalRequest.State.REJECTED)

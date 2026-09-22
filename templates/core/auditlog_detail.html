@@ -1,9 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Audit event{% endblock %}
+{% block title %}{% if approval %}Approval{% else %}Audit event{% endif %}{% endblock %}
 {% block content %}
-{% include "partials/_page_head.html" with title="Audit event" lede="One recorded action, in full: who, what moved, and what else the same operation touched." %}
-
-{% if approval %}{% include "partials/approval_card.html" with entry=approval %}{% endif %}
+{% if approval %}
+{% include "partials/_page_head.html" with title="Approval" %}
+{% include "partials/approval_card.html" with entry=approval %}
+{% else %}
+{% include "partials/_page_head.html" with title="Audit event" %}
 
 <section class="card">
   <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.object_type }}{% endif %}</h2></div>
@@ -56,7 +58,9 @@
 </section>
 {% endif %}
 
-{% if siblings %}
+{% endif %}
+
+{% if siblings and not approval %}
 <section class="card">
   <div class="section-head"><h2>Rest of this operation</h2><span class="count">{{ siblings|length }}</span></div>
   <div class="table-scroll">

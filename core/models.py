@@ -154,3 +154,14 @@ class AgentIdentity(models.Model):
 
     def __str__(self) -> str:
         return self.client_id
+
+
+class ActionItemRead(models.Model):
+    """An action item a person has seen, by fingerprint. A changed item is a new one."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    key = models.CharField(max_length=64)
+    read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("user", "key"), name="unique_action_item_read")]

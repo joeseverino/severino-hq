@@ -447,33 +447,48 @@ def infrastructure() -> tuple[Insight, ...]:
                 url=reverse("control_plane:detail", kwargs={"key": resource.key}),
             )
         )
-    return waiting_for_approval() + tuple(items) + tailnet()
+    return tuple(items) + tailnet()
 
 
 def waiting_for_approval() -> tuple[Insight, ...]:
-    """Changes a credential asked for that only a person can allow.
+    """One item per change an agent asked for. Nothing is written until a person decides."""
 
-    First in the infrastructure queue, ahead of every derived claim, because it
-    is the only entry here that is somebody waiting on the operator rather than
-    the operator waiting on the estate. Nothing else moves until it is answered:
-    a held request has written nothing and queued nothing.
-    """
+    from .action_links import ActionLink
+    from .approvals import pending, preview
+    from .capabilities import capability_label
 
-    from .approvals import pending
-
-    held = pending()
-    return _backlog(
-        count=len(held),
-        eyebrow="Approval",
-        title="Changes waiting for your approval",
-        body=(
-            "Asked for by a credential rather than a person, and holding until "
-            "one agrees. Nothing has been written and nothing is queued."
-        ),
-        action="Review and decide",
-        url=f"{reverse('core:audit_list')}?awaiting=1",
-        status="serious",
-    )
+    items = []
+    for held in pending():
+        shown = preview(held)
+        what = ", ".join(f"{row.path}: {row.after or '—'}" for row in shown.rows[:3])
+        items.append(
+            Insight(
+                status="serious",
+                eyebrow="Approval",
+                title=(
+                    f"{held.requested_actor} wants to run {capability_label(held.capability)}"
+                    + (f" on {held.target}" if held.target else "")
+                ),
+                value="1",
+                body=f"{shown.label}{f' · {what}' if what else ''}",
+                url=reverse("core:approval_entry", kwargs={"approval_id": held.id}),
+                actions=tuple(
+                    ActionLink(
+                        name=f"approval.{decision}",
+                        label=label,
+                        effect="remote_write",
+                        url=reverse(
+                            "control_plane:approval_decide",
+                            kwargs={"approval_id": held.id, "decision": decision},
+                        ),
+                        method="POST",
+                        recommended=decision == "approve",
+                    )
+                    for decision, label in (("approve", "Approve"), ("reject", "Reject"))
+                ),
+            )
+        )
+    return tuple(items)
 
 
 def services() -> tuple[Insight, ...]:

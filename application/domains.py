@@ -380,6 +380,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Audit", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"
             ),
         ),
+        integration=PluginIntegration(
+            attention=_provider("application.attention:waiting_for_approval")
+        ),
     ),
     DomainDescriptor(
         id="hq.agents",
