@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .workflow_contracts import WorkflowPlan
+from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state -- dashboard cards,
 # insight panels, extension-provided projections -- draws from this set, so a
@@ -142,6 +142,9 @@ class Insight:
     # Optional closure loop emitted by any host or plugin domain. The queue and
     # insight partials render it generically; the domain still owns every action.
     workflow: WorkflowPlan | None = None
+    # Quick actions offered on the item itself, each going through its owner's
+    # route exactly as the owner's own page would.
+    actions: tuple[ActionLink, ...] = ()
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:

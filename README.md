@@ -159,9 +159,9 @@ available in the header.
   desktop. If the viewport is narrow, the nav scrolls horizontally instead of
   wrapping into stacked links.
 - Operator utilities (Action items, Admin, Sign out) sit in a dropdown under
-  your username, keeping the domain nav compact. Dashboard and Action items
-  show the current queue count on that entry without making unrelated pages
-  assemble the queue just to render the header.
+  your username, keeping the domain nav compact. When anything is unread, its
+  count sits beside your username. It is fetched after the page renders, so no
+  page assembles the queue just to draw the header.
 - Header search and <kbd>Ctrl/⌘ K</kbd> open Command Center. It searches
   destinations, records, devices, content, connections, and authorized
   commands; Enter opens the selected result or the complete `/search/` result
@@ -169,7 +169,10 @@ available in the header.
 - `/action-items/` is the complete cross-domain queue. The dashboard is its
   compact preview; host domains and installed extensions emit the same Insight
   contract, and derived infrastructure findings link through to their evidence
-  and safe existing remedies.
+  and safe existing remedies. An Insight may carry quick actions, posted to
+  their owner's route; a held approval uses them for Approve and Reject.
+- Items can be marked read, per person. A read item is unread again once it
+  changes: its count, detail or status.
 - Headline metrics lead the dashboard, grouped by their runtime contributor,
   with a compact attention preview in the utility rail. Contributors with several readings
   get a compact overview; their existing typed summary supplies its reporting

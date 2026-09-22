@@ -122,7 +122,8 @@
   agent rule wins. With no rules, gated infrastructure changes are held as
   before. A rule that allows a would-be-held call is recorded as its consent.
 - A held request writes and queues nothing. It is decided on its audit entry
-  (`/audit/?awaiting=1`) against a fingerprinted field-by-field diff, so a
+  (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
+  field-by-field diff, so a
   record that changes meanwhile supersedes the request. Requests lapse after
   `SEVERINO_APPROVAL_WINDOW_HOURS` (24 by default), each actor may hold ten,
   and approval requires the web interface, so no token can approve its own.

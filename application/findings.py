@@ -283,8 +283,12 @@ def _open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
 
 
 def _reconcile(node: TopologyNode) -> tuple[Remedy, ...]:
-    """The one capability that answers "go and look again"."""
+    """The one capability that answers "go and look again", where the kind allows it."""
 
+    provider = PROVIDERS.get(node.kind_key)
+    policy = provider.actions.get("reconcile") if provider else None
+    if policy is not None and policy.mode == "locked":
+        return ()
     return (
         Remedy(
             capability="infrastructure.reconcile",
@@ -308,7 +312,7 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         moment = estate.observed.get(node.id)
         newest = estate.latest_by_kind.get(node.kind_key)
-        if moment is None or newest is None or not node.managed:
+        if moment is None or newest is None or not node.managed or node.on_demand:
             continue
         behind = newest - moment
         if behind <= _STALE_AFTER:
@@ -322,15 +326,18 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
             Finding(
                 rule="skipped-by-a-sweep",
                 subject=node.id,
-                title=f"{node.label} was not confirmed by the last sweep",
+                title=f"{node.label} was missing from the last sweep",
                 severity="serious",
                 explanation=(
-                    f"A sweep confirmed other {node.kind_key} records "
-                    f"{_ago(behind)} more recently than this one. It ran and "
-                    "did not match this declaration, which leaves the record "
-                    "reporting whatever it last said about itself. Reconcile if "
-                    "it drifted; if the thing is gone, open it and remove the "
-                    "declaration, which another pass cannot do for you."
+                    f"The last sweep found {siblings - 1} other {node.subtitle.lower()} "
+                    f"records but not this one, and it was last seen {_ago(behind)} "
+                    "before them. What HQ shows for it is from then. "
+                    + (
+                        "If it only runs now and then, mark it on demand. "
+                        if node.kind_key == "portainer.container"
+                        else ""
+                    )
+                    + "If it is gone, remove it."
                 ),
                 evidence=(
                     ("Last observed", node.observed_at),
@@ -618,9 +625,8 @@ def _never_observed(estate: _Estate) -> tuple[Finding, ...]:
             title=f"{node.label} has never been observed",
             severity="attention",
             explanation=(
-                "An ability governs this kind, so something is able to look, "
-                "and nothing ever has. Everything this record reports is the "
-                "declaration talking about itself."
+                "HQ can check this kind and has never checked this one, so what "
+                "it shows is only what was declared."
             ),
             evidence=(
                 ("Last observed", "never"),
@@ -633,6 +639,7 @@ def _never_observed(estate: _Estate) -> tuple[Finding, ...]:
         if node.kind == "resource"
         and node.managed
         and not node.observed_at
+        and _is_observable(node.kind_key)
         and node.id in estate.governed
         # A sibling has been observed, so the sweep can see this kind and
         # missed this one. Without that, the gap is the kind's, and saying it

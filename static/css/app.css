@@ -866,6 +866,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    layer. A POST row and a link row therefore share `.menu-item`; their HTML
    element never changes their visual hierarchy. */
 .user-menu { position: relative; flex: 0 0 auto; }
+.action-badge { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-size); padding: var(--space-2) var(--space-5); border: 1px solid color-mix(in srgb, var(--attn) 35%, var(--line)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--attn) 8%, var(--surface)); color: var(--attn); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
+.action-badge:hover { background: color-mix(in srgb, var(--attn) 14%, var(--surface)); }
+.action-badge svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .user-menu > summary {
   display: inline-flex;
   align-items: center;
@@ -1809,6 +1812,13 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-detail { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
 .attention-action { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.5; color: var(--muted); }
 .attention-value { font-size: var(--text-sm); font-weight: 650; color: var(--ink-2); white-space: nowrap; font-feature-settings: "tnum"; }
+.attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+.attention-actions form { margin: 0; }
+.attention-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); }
+.attention-end form { margin: 0; }
+.action-items-read > summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
+.action-items-read[open] > summary { margin-bottom: var(--space-6); }
+.action-items-read .attention-row { opacity: .7; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .action-items-card { padding-top: var(--space-5); }
 
@@ -4921,6 +4931,17 @@ textarea.code {
    this metric is on rather than making the reader compare two numbers. */
 .vital-rate.is-passing { color: var(--ok); }
 .vital .unit { font-size: .8em; margin-inline-start: 1px; }
+
+/* A held request: who asks, what would happen, the decision. */
+.approval-card { border-left: 3px solid var(--line); }
+.approval-card.is-pending { border-left-color: var(--warn); }
+.approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.approval-what { font-weight: 650; }
+.approval-head > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
+.approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
+.approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
+.approval-actions form { margin: 0; }
 
 /* Agent policy: one row per capability, opened to set it for everyone or one agent. */
 .policy-status dd strong { font-size: var(--text-3xl); color: var(--ink); }

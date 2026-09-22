@@ -27,6 +27,11 @@ urlpatterns = [
         views.ApprovalDecisionView.as_view(),
         name="approval_decision",
     ),
+    path(
+        "approvals/<uuid:approval_id>/<str:decision>/",
+        views.ApprovalDecisionView.as_view(),
+        name="approval_decide",
+    ),
     # Before <slug:key>, which would otherwise swallow "tools" as a resource key.
     path("tools/", views.ToolsView.as_view(), name="tools"),
     path("machines/", views.MachineListView.as_view(), name="machines"),

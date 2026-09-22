@@ -9,6 +9,7 @@ wherever the section itself counted it.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 from django.utils import timezone
@@ -66,6 +67,7 @@ def work_queue() -> list[dict[str, Any]]:
             "url": entry["item"].url,
             "action": entry["item"].action,
             "workflow": serialize_workflow(entry["item"].workflow),
+            "actions": [asdict(action) for action in entry["item"].actions],
         }
         for entry in domain_attention_items()
     ]

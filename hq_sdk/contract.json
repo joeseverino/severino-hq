@@ -1026,7 +1026,8 @@
           "action=",
           "url=",
           "magnitude=",
-          "workflow="
+          "workflow=",
+          "actions="
         ],
         "fields": [],
         "kind": "dataclass",

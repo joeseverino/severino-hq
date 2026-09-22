@@ -116,7 +116,12 @@
       forgetting it is on and filing a screenshot of fiction as fact.
       {% endcomment %}
       {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
-      <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}">
+      <a class="action-badge" href="{% url 'action_items' %}" data-action-badge{% if not show_action_count or not profile_action_count %} hidden{% endif %}>
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+        <span data-action-badge-count>{% if show_action_count %}{{ profile_action_count }}{% endif %}</span>
+        <span class="visually-hidden">unread action items</span>
+      </a>
+      <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">

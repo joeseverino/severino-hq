@@ -487,6 +487,14 @@ class PortainerContainerSpec(ProviderModel):
         title="Container",
         description="The container's name, exactly as Docker reports it.",
     )
+    on_demand: bool = Field(
+        default=False,
+        title="Runs on demand",
+        description=(
+            "Usually off, and removed when it is. Missing from a sweep is then "
+            "expected rather than a finding."
+        ),
+    )
     hidden: bool = Field(
         default=False,
         title="Keep it out of the way",
@@ -2445,7 +2453,7 @@ _PROVIDERS = (
         # Ports are behind the disclosure because the answer is usually none:
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
-        advanced_fields=("hidden", "serves_ports"),
+        advanced_fields=("hidden", "on_demand", "serves_ports"),
         # And that is exactly why a sweep can never confirm it. The field
         # exists for the case Docker publishes nothing, so asking the world to
         # echo it back asks for the one answer this provider is unable to give.
@@ -2460,7 +2468,7 @@ _PROVIDERS = (
         # it and no reconcile could make it agree. Left undeclared, the two
         # containers that set it asserted a control nothing had checked -- which
         # is true, permanently, and not a gap anybody can close.
-        unobservable_fields=("serves_ports", "hidden"),
+        unobservable_fields=("serves_ports", "hidden", "on_demand"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),

@@ -27,9 +27,31 @@ Workflow actions retain their owner's method, route, and authorization boundary.
         {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
         {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
         {% if item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
+        {% if item.actions %}
+          <div class="attention-actions">
+            {% for action in item.actions %}
+              {% if action.method == "POST" %}
+                <form action="{{ action.url }}" method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn compact{% if action.recommended %} primary{% endif %}">{{ action.label }}</button></form>
+              {% else %}
+                <a class="btn compact{% if action.recommended %} primary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
         {% if item.workflow %}<details class="attention-workflow"><summary>Resolution workflow</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
       </div>
-      <span class="attention-value">{{ item.count }}</span>
+      <div class="attention-end">
+        <span class="attention-value">{{ item.count }}</span>
+        {% if markable %}
+          <form method="post" action="{% url 'action_items_read' %}">
+            {% csrf_token %}
+            <input type="hidden" name="key" value="{{ item.key }}">
+            <input type="hidden" name="read" value="{% if item.read %}0{% else %}1{% endif %}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn compact ghost">{% if item.read %}Mark unread{% else %}Mark read{% endif %}</button>
+          </form>
+        {% endif %}
+      </div>
     </li>
   {% empty %}
     <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing is waiting on you." }}</p></li>

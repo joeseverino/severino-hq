@@ -300,7 +300,7 @@ def hold_for_approval(
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
-        operation="infrastructure.approval.request",
+        operation="approval.request",
     ):
         held = ApprovalRequest.objects.create(
             capability=spec.name,
@@ -599,6 +599,12 @@ class ChangePreview:
     def empty(self) -> bool:
         return not self.rows and not self.lines
 
+    @property
+    def compares(self) -> bool:
+        """Whether there is a before to show, or only what would be written."""
+
+        return any(row.change != "added" for row in self.rows)
+
 
 def _expand(value: Any) -> Any:
     """A string that is really a document, read as one.
@@ -701,6 +707,11 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     that answers "what happens to the network if I click this".
     """
 
+    from .capabilities import capability_registry
+
+    spec = capability_registry().get(held.capability)
+    if spec is not None and spec.subject_resource != DECLARATIONS:
+        return _record_preview(spec, held)
     declared = dict(held.baseline.get("spec") or {})
     provider = PROVIDERS.get(held.resource_kind)
     requested = held.payload.get("spec")
@@ -719,14 +730,59 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     return compare({}, declared, label="This would be applied as declared")
 
 
+# Fields that steer a request rather than being written by it.
+_CONTROL_FIELDS = frozenset({"confirm", "idempotency_key", "reason"})
+
+
+def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
+    """A record's fields, as they are and as they would be. No document diffing:
+    a project's description is a value, not a policy to parse.
+    """
+
+    fields = {
+        key: value
+        for key, value in held.payload.items()
+        if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
+    }
+    if spec.effect == "destructive":
+        return _field_rows(held.baseline, {}, label="Would be deleted")
+    if not held.target:
+        return _field_rows({}, fields, label="Would be created")
+    if fields:
+        return _field_rows(
+            {key: held.baseline.get(key) for key in fields}, fields, label="Would change"
+        )
+    return ChangePreview(label=f"Would run on {held.target}", rows=(), lines=())
+
+
+def _field_rows(before: dict[str, Any], after: dict[str, Any], *, label: str) -> ChangePreview:
+    rows = []
+    for key in sorted(set(before) | set(after)):
+        was, now = before.get(key), after.get(key)
+        if (was or "") == (now or ""):
+            continue
+        rows.append(
+            ChangeRow(
+                path=key,
+                before="" if was is None else str(was),
+                after="" if now is None else str(now),
+                change="added" if was is None else "removed" if now is None else "changed",
+            )
+        )
+    return ChangePreview(label=label, rows=tuple(rows), lines=())
+
+
 # Held requests are decided on their audit entry. State stays on ApprovalRequest.
 
 
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows."""
 
+    from .capabilities import capability_label
+
     return {
         "held": held,
+        "title": capability_label(held.capability),
         "preview": preview(held),
         "resource_url": (
             reverse("control_plane:detail", kwargs={"key": held.resource_key})

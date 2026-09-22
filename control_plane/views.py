@@ -1384,10 +1384,10 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
     this view, so a second surface cannot forget to.
     """
 
-    def post(self, request, approval_id):
+    def post(self, request, approval_id, decision=None):
         from application import approvals
 
-        decision = request.POST.get("decision", "")
+        decision = decision or request.POST.get("decision", "")
         try:
             if decision == "approve":
                 approvals.approve(str(approval_id), principal=web_principal(request.user))
@@ -1407,8 +1407,7 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
             # says why, on the page, with the request left as it was.
             messages.error(request, str(exc) or "That decision could not be taken.")
         return redirect(
-            safe_next(request, scope="/audit/")
-            or f"{reverse('core:audit_list')}?awaiting=1"
+            safe_next(request, fallback=f"{reverse('core:audit_list')}?awaiting=1")
         )
 
 
