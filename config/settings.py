@@ -404,6 +404,7 @@ TEMPLATES = [
                 "core.context_processors.nav",
                 "core.context_processors.auth_config",
                 "core.context_processors.connection",
+                "core.context_processors.agent_access",
             ],
         },
     },

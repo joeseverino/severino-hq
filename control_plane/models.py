@@ -391,3 +391,43 @@ class AddressReading(models.Model):
 
     def __str__(self) -> str:
         return f"{self.address} ({self.observed_at:%Y-%m-%d})"
+
+
+class CapabilityRule(models.Model):
+    """An operator's rule for one capability, bound to a surface or an agent.
+
+    No row means the default. Where both apply, the stricter rule wins.
+    """
+
+    class Scope(models.TextChoices):
+        SURFACE = "surface", "Surface"
+        AGENT = "agent", "Agent"
+
+    class Rule(models.TextChoices):
+        ALLOW = "allow", "Allow"
+        APPROVE = "approve", "Require approval"
+        DENY = "deny", "Deny"
+
+    scope = models.CharField(max_length=16, choices=Scope.choices)
+    subject = models.CharField(max_length=160)
+    capability = models.CharField(max_length=64)
+    rule = models.CharField(max_length=16, choices=Rule.choices)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    changed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("scope", "subject", "capability"), name="unique_capability_rule"
+            )
+        ]
+        ordering = ("scope", "subject", "capability")
+
+    def __str__(self) -> str:
+        return f"{self.scope}:{self.subject}:{self.capability}={self.rule}"

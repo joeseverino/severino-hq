@@ -16,7 +16,8 @@
           "IMPORTED",
           "FAILED",
           "SETTINGS_CHANGED",
-          "VIEWED"
+          "VIEWED",
+          "DENIED"
         ]
       },
       "Counts": {
@@ -225,7 +226,8 @@
           "actor",
           "interface",
           "capabilities",
-          "approved_by="
+          "approved_by=",
+          "granted="
         ],
         "fields": [],
         "kind": "dataclass",

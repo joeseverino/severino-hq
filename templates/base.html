@@ -159,6 +159,16 @@
               <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
             </button>
           </form>
+          {% comment %}Global, unlike Demo. Sends a state, not a toggle.{% endcomment %}
+          <form action="{% url 'agent_access' %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
+            <button type="submit" class="menu-item menu-item-split" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
+              <span>Agents</span>
+              <span class="menu-item-status" aria-hidden="true"><span class="switch-track"><span class="switch-knob"></span></span></span>
+            </button>
+          </form>
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}
             <button type="submit" class="menu-item">Sign out</button>

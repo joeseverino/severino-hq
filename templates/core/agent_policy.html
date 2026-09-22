@@ -1,0 +1,82 @@
+{% extends "base.html" %}{% load humanize %}
+{% block title %}Agents{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" with title="Agents" %}
+
+<section class="card">
+  <dl class="finding-evidence policy-status">
+    <div>
+      <dt>Access</dt>
+      <dd>
+        <form action="{% url 'agent_access' %}" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
+          {% if agents_paused %}<span class="pill pill-denied">Paused</span>{% else %}<span class="pill pill-active">Running</span>{% endif %}
+          <button type="submit" class="btn compact">{% if agents_paused %}Resume{% else %}Pause all{% endif %}</button>
+        </form>
+      </dd>
+    </div>
+    <div><dt>Rules set</dt><dd><strong>{{ rule_count }}</strong></dd></div>
+    <div><dt>Awaiting approval</dt><dd><a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong></a></dd></div>
+    <div><dt>Refused · 24h</dt><dd><a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong></a></dd></div>
+  </dl>
+  {% if agents %}
+    <ul class="policy-agents">
+      {% for agent in agents %}
+        <li>
+          <span class="policy-agent-name">{{ agent.label }}</span>
+          <span class="muted">{{ agent.detail }} · {{ agent.identity.granted|length }} granted in Pocket ID</span>
+          <span class="muted">Seen {{ agent.identity.last_seen|naturaltime }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted policy-none">No agent has connected yet. One appears here the first time it presents a token.</p>
+  {% endif %}
+</section>
+
+<form method="post" class="policy">
+  {% csrf_token %}
+  {% for group in groups %}
+    <section class="card policy-group">
+      <h2 class="policy-group-title">{{ group.label }}</h2>
+      {% for row in group.rows %}
+        <details class="policy-row">
+          <summary>
+            <span class="policy-summary">
+              <span class="policy-name">{{ row.label }}</span>
+              <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>
+              <span class="policy-state">
+                {% for cell in row.overrides %}
+                  <span class="policy-chip rule-{{ cell.rule }}">{{ cell.column }} · {{ cell.rule_label }}</span>
+                {% empty %}
+                  {% if row.default != "Allow" %}<span class="muted">{{ row.default }}</span>{% endif %}
+                {% endfor %}
+              </span>
+              <span class="policy-chevron" aria-hidden="true"></span>
+            </span>
+          </summary>
+          <div class="policy-panel">
+            <div class="policy-tier">
+              <p class="policy-tier-title">Everyone</p>
+              {% for cell in row.everyone %}
+                {% include "core/_policy_setting.html" %}
+              {% endfor %}
+            </div>
+            <div class="policy-tier">
+              <p class="policy-tier-title">Each agent <span class="muted">· can only be stricter</span></p>
+              {% for cell in row.agents %}
+                {% include "core/_policy_setting.html" %}
+              {% empty %}
+                <p class="muted policy-none">No agent has connected yet.</p>
+              {% endfor %}
+            </div>
+          </div>
+        </details>
+      {% endfor %}
+    </section>
+  {% endfor %}
+  <div class="policy-save"><button type="submit" class="btn primary">Save changes</button></div>
+</form>
+{% endblock %}

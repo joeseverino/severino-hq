@@ -752,7 +752,12 @@ class CostTests(TestCase):
 
         self.client.force_login(self.user)
 
-        with self.assertNumQueries(7):
+        # Seven for the panel, plus one for the agent brake: this is a full
+        # page, so it draws the operator's menu, and the switch there shows its
+        # state. Read once however many times the template asks, and not cached
+        # across requests -- a brake must never display a state that no longer
+        # holds.
+        with self.assertNumQueries(8):
             self.client.get(reverse("connection"))
 
 

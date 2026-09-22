@@ -674,14 +674,44 @@ class SurfaceTests(TestCase):
             target=POLICY_KEY,
         )
 
-    def test_the_queue_names_who_asked_the_reason_and_the_difference(self):
-        page = self.client.get(reverse("control_plane:approvals"))
+    def _entry(self, held):
+        """A held request's own audit entry, reached the way an agent's link is."""
 
-        self.assertContains(page, "mcp-service-account")
-        # Where the capability carries one. An amendment's command has no reason
-        # field, and the diff is the reason.
-        self.assertContains(page, "Stated reason for the change.")
-        self.assertContains(page, "document.grants[0].src[0]")
+        return self.client.get(
+            reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True
+        )
+
+    def test_the_queue_names_who_asked_the_reason_and_the_difference(self):
+        reconcile = ApprovalRequest.objects.get(capability="infrastructure.reconcile")
+
+        amendment = self._entry(self.held)
+        self.assertContains(amendment, "mcp-service-account")
+        # An amendment's command has no reason field; the diff is the reason.
+        self.assertContains(amendment, "document.grants[0].src[0]")
+        self.assertContains(self._entry(reconcile), "Stated reason for the change.")
+
+    def test_the_awaiting_view_is_the_queue(self):
+        page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
+
+        self.assertEqual(len(page.context["events"]), 2)
+        self.assertContains(page, "Awaiting approval · 2")
+
+    def test_a_decision_is_offered_only_while_the_request_waits(self):
+        """This card sits on a permanent record. A button on something already
+        settled would invite a decision that cannot be taken."""
+
+        self.assertContains(self._entry(self.held), "Approve and apply")
+
+        reject(str(self.held.id), principal=web_principal(self.user))
+
+        settled = self._entry(self.held)
+        self.assertNotContains(settled, "Approve and apply")
+        self.assertContains(settled, "Rejected")
+
+    def test_the_old_address_still_lands_on_the_queue(self):
+        response = self.client.get(reverse("control_plane:approvals"))
+
+        self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
 
     def test_the_resource_page_says_something_is_waiting(self):
         page = self.client.get(
@@ -698,7 +728,7 @@ class SurfaceTests(TestCase):
             {"decision": "approve"},
         )
 
-        self.assertRedirects(response, reverse("control_plane:approvals"))
+        self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
         self.held.refresh_from_db()
         self.assertEqual(self.held.state, ApprovalRequest.State.APPROVED)
         self.assertEqual(
@@ -709,7 +739,7 @@ class SurfaceTests(TestCase):
     def test_the_page_needs_a_signed_in_operator(self):
         self.client.logout()
 
-        page = self.client.get(reverse("control_plane:approvals"))
+        page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
 
         self.assertEqual(page.status_code, 302)
 
@@ -720,4 +750,4 @@ class SurfaceTests(TestCase):
 
         self.assertEqual(first.eyebrow, "Approval")
         self.assertEqual(first.value, "2")
-        self.assertEqual(first.url, reverse("control_plane:approvals"))
+        self.assertEqual(first.url, f"{reverse('core:audit_list')}?awaiting=1")

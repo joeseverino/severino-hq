@@ -1369,38 +1369,11 @@ class FindingsView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class ApprovalListView(LoginRequiredMixin, TemplateView):
-    """Every change a credential asked for and a person has not answered.
+class ApprovalListView(LoginRequiredMixin, View):
+    """Retired: redirects to the audit log's awaiting view."""
 
-    The page exists because the held request is otherwise invisible. A token
-    asking for the estate's access policy to change writes nothing and queues
-    nothing, which is the property that makes the hold safe and also the property
-    that would let the request sit unread forever.
-
-    Each entry leads with the comparison rather than the request. Who asked and
-    why are context; what would actually change is the decision, and a decision
-    taken on two three-kilobyte documents printed side by side is not a decision.
-    """
-
-    template_name = "control_plane/approvals.html"
-
-    def get_context_data(self, **kwargs):
-        from application import approvals
-
-        context = super().get_context_data(**kwargs)
-        context["approvals"] = tuple(
-            {
-                "held": held,
-                "preview": approvals.preview(held),
-                "resource_url": (
-                    reverse("control_plane:detail", kwargs={"key": held.resource_key})
-                    if ManagedResource.objects.filter(key=held.resource_key).exists()
-                    else ""
-                ),
-            }
-            for held in approvals.pending()
-        )
-        return context
+    def get(self, request):
+        return redirect(f"{reverse('core:audit_list')}?awaiting=1")
 
 
 class ApprovalDecisionView(LoginRequiredMixin, View):
@@ -1434,8 +1407,8 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
             # says why, on the page, with the request left as it was.
             messages.error(request, str(exc) or "That decision could not be taken.")
         return redirect(
-            safe_next(request, scope="/infrastructure/")
-            or reverse("control_plane:approvals")
+            safe_next(request, scope="/audit/")
+            or f"{reverse('core:audit_list')}?awaiting=1"
         )
 
 

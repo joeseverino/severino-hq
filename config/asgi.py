@@ -32,6 +32,11 @@ compressed_django_application = GZipMiddleware(
     minimum_size=1000,
 )
 
+from asgiref.sync import sync_to_async  # noqa: E402
+
+from application.agent_access import agents_paused  # noqa: E402
+from application.agent_registry import observe  # noqa: E402
+from application.denials import record_denial  # noqa: E402
 from hq_api import security as api_security  # noqa: E402
 from hq_mcp.identity import token_principal  # noqa: E402
 from hq_mcp.security import MCPBoundary  # noqa: E402
@@ -52,6 +57,19 @@ def verify_agent_token(bearer: str):
 # only credential rather than silently gaining a weaker one.
 mcp_verifier = verify_agent_token if api_security.is_configured() else None
 
+
+async def agents_allowed() -> bool:
+    return not await sync_to_async(agents_paused)()
+
+
+async def record_mcp_denial(**fields) -> None:
+    await sync_to_async(record_denial)(interface="mcp", **fields)
+
+
+async def observe_agent(principal) -> None:
+    await sync_to_async(observe)(principal)
+
+
 mcp_application = MCPBoundary(
     mcp.streamable_http_app(),
     token=settings.SEVERINO_MCP_TOKEN,
@@ -59,6 +77,9 @@ mcp_application = MCPBoundary(
     allowed_networks=settings.SEVERINO_MCP_ALLOWED_NETWORKS,
     allowed_origins=settings.SEVERINO_MCP_ALLOWED_ORIGINS,
     verifier=mcp_verifier,
+    gate=agents_allowed,
+    on_denied=record_mcp_denial,
+    observer=observe_agent,
 )
 
 

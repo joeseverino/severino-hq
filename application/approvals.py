@@ -53,6 +53,7 @@ import hashlib
 import json
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
 from django.db import transaction
 from django.urls import reverse
@@ -62,7 +63,7 @@ from control_plane.models import ApprovalRequest, ManagedResource
 from control_plane.providers import PROVIDERS
 from core.audit import operation_context
 
-from .security import AuthorizationError, Principal, is_interactive
+from .security import AuthorizationError, Principal, internal_principal, is_interactive
 
 # How long an unanswered request stands. A day, because the person it is waiting
 # for sleeps and a request that lapses while they do is a nuisance, whereas one
@@ -80,6 +81,11 @@ MAX_PENDING_PER_ACTOR = 10
 # effects that are gated, so an effect introduced later is considered rather
 # than exempted by omission.
 READ_EFFECT = "read"
+DECLARATIONS = "infrastructure.resources"
+
+# Rows written while approvals were infrastructure-only keep the old label.
+AUDIT_LABEL = "Approval"
+AUDIT_LABELS = (AUDIT_LABEL, "Infrastructure approval")
 
 
 class ApprovalError(ValueError):
@@ -147,36 +153,80 @@ def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
     }
 
 
-def subject_for(spec, payload: dict[str, Any], target: Any) -> ApprovalSubject | None:
-    """What this capability would act on, when it is a gated declaration.
-
-    Returns nothing for everything else, which is most of the registry: a
-    capability that does not name an infrastructure resource cannot be about a
-    gated kind, and a read is never held whatever it names.
+def approval_subject(
+    spec, payload: dict[str, Any], target: Any
+) -> ApprovalSubject | None:
+    """What a held call is about, and its baseline. Shared by hold and approve,
+    whose fingerprints must match. None for a read or a missing target.
     """
 
     if spec.effect == READ_EFFECT:
         return None
-    if spec.subject_resource != "infrastructure.resources":
-        return None
+    if spec.subject_resource == DECLARATIONS:
+        return _declaration_subject(payload, target)
+    return _record_subject(spec, target)
+
+
+def _declaration_subject(payload: dict[str, Any], target: Any) -> ApprovalSubject | None:
     if target is not None:
         resource = ManagedResource.objects.filter(key=str(target)).first()
         if resource is None:
-            # Absent, so there is nothing to be about. The handler refuses this
-            # in its own words, which is a better answer than a held request for
-            # a declaration that does not exist.
-            return None
-        if not _gated(resource.kind):
             return None
         return ApprovalSubject(resource.kind, resource.key, _baseline_of(resource))
     # No target means a declaration being brought into existence, and the kind
-    # it will have is in the payload. Gated as firmly as an amendment: a new
-    # declaration of a gated kind is a new thing for the controller to push.
-    kind = str(payload.get("kind", ""))
-    if not _gated(kind):
-        return None
-    return ApprovalSubject(kind, str(payload.get("key", "")), {})
+    # it will have is in the payload.
+    return ApprovalSubject(str(payload.get("kind", "")), str(payload.get("key", "")), {})
 
+
+def _record_subject(spec, target: Any) -> ApprovalSubject | None:
+    """A record's baseline is its canonical read, taken internally: it is shown
+    to the person deciding, never returned to the caller.
+    """
+
+    from .resources import (
+        InvalidResourceInput,
+        ResourceNotFound,
+        UnsupportedResourceOperation,
+        get_resource,
+    )
+
+    kind = spec.subject_resource or spec.name
+    if target is None or not spec.subject_resource:
+        return ApprovalSubject(kind, "" if target is None else str(target), {})
+    try:
+        baseline = get_resource(
+            spec.subject_resource,
+            target,
+            principal=internal_principal("approval-baseline"),
+            strict=False,
+        )
+    except ResourceNotFound:
+        return None
+    except (UnsupportedResourceOperation, InvalidResourceInput):
+        # No canonical read: still holdable, but staleness cannot be detected.
+        baseline = {}
+    return ApprovalSubject(kind, str(target), baseline)
+
+
+def may_be_held_by_default(spec) -> bool:
+    """The capability-level half of held_by_default, for describing a default without a target."""
+
+    return spec.effect != READ_EFFECT and spec.subject_resource == DECLARATIONS
+
+
+def held_by_default(spec, payload: dict[str, Any], target: Any) -> bool:
+    """The default before any operator rule: a change to a gated declaration waits."""
+
+    if not may_be_held_by_default(spec):
+        return False
+    if target is not None:
+        kind = (
+            ManagedResource.objects.filter(key=str(target))
+            .values_list("kind", flat=True)
+            .first()
+        )
+        return kind is not None and _gated(kind)
+    return _gated(str(payload.get("kind", "")))
 
 def _gated(kind: str) -> bool:
     provider = PROVIDERS.get(kind)
@@ -222,7 +272,7 @@ def hold_for_approval(
 
     if is_interactive(principal):
         return None
-    subject = subject_for(spec, payload, target)
+    subject = approval_subject(spec, payload, target)
     if subject is None:
         return None
     digest = fingerprint(spec.name, target, payload, subject.baseline)
@@ -309,7 +359,7 @@ def serialize_approval(held: ApprovalRequest) -> dict[str, Any]:
         "requested_at": held.created_at.isoformat(),
         "expires_at": held.expires_at.isoformat(),
         "content_fingerprint": held.content_fingerprint,
-        "review_url": reverse("control_plane:approvals"),
+        "review_url": reverse("core:approval_entry", kwargs={"approval_id": held.id}),
     }
 
 
@@ -325,7 +375,7 @@ def lapse_unanswered(ids: tuple[Any, ...]) -> int:
     )
 
 
-def pending(*, limit: int = 50) -> tuple[ApprovalRequest, ...]:
+def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
     """Every request still waiting for a person, oldest first.
 
     Expiry happens here, on the way past, rather than on a timer. The only two
@@ -442,7 +492,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     # The approver has to be allowed to do the thing themselves. Otherwise this
     # page would be a way to run a capability the clicker does not hold.
     authorize_capability(spec, principal)
-    current = subject_for(spec, held.payload, held.target or None)
+    current = approval_subject(spec, held.payload, held.target or None)
     baseline = current.baseline if current is not None else {}
     if fingerprint(held.capability, held.target or None, held.payload, baseline) != (
         held.content_fingerprint
@@ -667,3 +717,54 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         if live:
             return compare(live, declared, label="The live record would change")
     return compare({}, declared, label="This would be applied as declared")
+
+
+# Held requests are decided on their audit entry. State stays on ApprovalRequest.
+
+
+def review(held: ApprovalRequest) -> dict[str, Any]:
+    """What the decision card shows."""
+
+    return {
+        "held": held,
+        "preview": preview(held),
+        "resource_url": (
+            reverse("control_plane:detail", kwargs={"key": held.resource_key})
+            if held.resource_kind
+            and ManagedResource.objects.filter(key=held.resource_key).exists()
+            else ""
+        ),
+    }
+
+
+def for_audit_event(event) -> ApprovalRequest | None:
+    """The request an audit row is about, if it is about one."""
+
+    if event.object_type not in AUDIT_LABELS or not event.object_id:
+        return None
+    try:
+        return ApprovalRequest.objects.filter(pk=event.object_id).first()
+    except (ValueError, DjangoValidationError):
+        return None
+
+
+def entry_event(approval_id) -> Any:
+    """The audit row that records this request being made."""
+
+    from core.models import AuditLog
+
+    return (
+        AuditLog.objects.filter(
+            object_type__in=AUDIT_LABELS,
+            object_id=str(approval_id),
+            action=AuditLog.Action.CREATED,
+        )
+        .order_by("id")
+        .first()
+    )
+
+
+def awaiting_ids() -> tuple[str, ...]:
+    """pending(), as audit object ids."""
+
+    return tuple(str(held.pk) for held in pending(limit=None))

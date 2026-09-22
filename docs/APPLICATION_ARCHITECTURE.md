@@ -448,8 +448,10 @@ an in-process recovery path.
 The service boundary complements the existing network boundary:
 
 1. The MCP endpoint exists only on the tailnet.
-2. `MCPBoundary` validates the direct peer, Host, Origin, and strong bearer
-   token before tool dispatch.
+2. `MCPBoundary` validates the direct peer, Host, and Origin, then the caller:
+   an identity-provider access token naming the agent, or the shared bearer as
+   one service account. It then asks the operator's brake, all before tool
+   dispatch.
 3. Tools expose task-shaped capabilities, never generic SQL or arbitrary model
    mutation.
 4. A typed `Principal` carries explicit capabilities into the application
@@ -457,10 +459,15 @@ The service boundary complements the existing network boundary:
 5. MCP starts read-only. `SEVERINO_MCP_ENABLE_WRITES` enables ordinary mutation
    capabilities. Destructive documentation pruning additionally requires
    `SEVERINO_MCP_ENABLE_PRUNE`; record deletion additionally requires
-   `SEVERINO_MCP_ENABLE_DELETES`.
-6. Application services revalidate all data and own transactional writes.
-7. Restricted documentation is removed from AI-facing relationship results.
-8. Every successful mutation leaves an attributed audit event.
+   `SEVERINO_MCP_ENABLE_DELETES`. These flags cap an agent's token too: it holds
+   the intersection of its grant and what the deployment allows MCP.
+6. Before a capability runs, `capability_policy.decide` answers allow, hold for
+   approval, or deny, from the operator's rules for the surface and the agent.
+   Held requests are decided in the audit log.
+7. Application services revalidate all data and own transactional writes.
+8. Restricted documentation is removed from AI-facing relationship results.
+9. Every successful mutation leaves an attributed audit event, and every
+   refusal a `Denied` one.
 
 The operational boundary is observable without a hosted telemetry dependency.
 Each HTTP response carries a server-generated request ID, and the same ID is

@@ -471,7 +471,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
             "one agrees. Nothing has been written and nothing is queued."
         ),
         action="Review and decide",
-        url=reverse("control_plane:approvals"),
+        url=f"{reverse('core:audit_list')}?awaiting=1",
         status="serious",
     )
 

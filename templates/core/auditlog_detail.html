@@ -3,13 +3,15 @@
 {% block content %}
 {% include "partials/_page_head.html" with title="Audit event" lede="One recorded action, in full: who, what moved, and what else the same operation touched." %}
 
+{% if approval %}{% include "partials/approval_card.html" with entry=approval %}{% endif %}
+
 <section class="card">
   <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.object_type }}{% endif %}</h2></div>
   <div class="table-scroll">
     <table class="data-table compact-table">
       <tbody>
         <tr><th>When</th><td>{{ event.created_at|date:"M j, Y H:i:s" }}</td></tr>
-        <tr><th>Who</th><td>{{ event.user|default:"system" }}</td></tr>
+        <tr><th>Who</th><td>{{ event.actor_label }}</td></tr>
         <tr><th>Action</th><td>{{ event.get_action_display }}</td></tr>
         {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.object_type }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
         {% if event.operation_id %}<tr><th>Operation</th><td><code>{{ event.operation_id }}</code></td></tr>{% endif %}
@@ -86,7 +88,7 @@
         <tr>
           <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"M j, H:i" }}</a></td>
           <td>{{ row.get_action_display }}</td>
-          <td>{{ row.user|default:"system" }}</td>
+          <td>{{ row.actor_label }}</td>
           <td>{{ row.message|default:"—"|truncatewords:12 }}</td>
         </tr>
         {% endfor %}

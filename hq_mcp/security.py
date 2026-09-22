@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import secrets
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
@@ -59,6 +59,9 @@ class MCPBoundary:
         allowed_networks: Iterable[str],
         allowed_origins: Iterable[str] = (),
         verifier: Callable[[str], object] | None = None,
+        gate: Callable[[], Awaitable[bool]] | None = None,
+        on_denied: Callable[..., Awaitable[None]] | None = None,
+        observer: Callable[[object], Awaitable[None]] | None = None,
     ):
         self.app = app
         self.token = token
@@ -67,6 +70,10 @@ class MCPBoundary:
         # `hq_api`, and a boundary that imported it would make the network gate
         # depend on the identity provider being configured at all.
         self.verifier = verifier
+        # Injected, like the verifier, so this module stays free of Django.
+        self.gate = gate
+        self.on_denied = on_denied
+        self.observer = observer
         self.allowed_hosts = {
             normalized
             for host in allowed_hosts
@@ -110,14 +117,31 @@ class MCPBoundary:
             await self._deny(scope, receive, send, 403, "invalid_origin")
             return
 
+        source = (scope.get("client") or ("",))[0]
         scheme, separator, supplied = headers.get("authorization", "").partition(" ")
         if not (separator and scheme.lower() == "bearer" and supplied):
+            await self._note_denial(reason="missing_credential", source=source, authenticated=False)
             await self._unauthorized(scope, receive, send)
             return
 
         authenticated, principal = self._authenticate(supplied)
         if not authenticated:
+            await self._note_denial(reason="invalid_credential", source=source, authenticated=False)
             await self._unauthorized(scope, receive, send)
+            return
+
+        # Before the brake, so a paused agent is still registered.
+        await self._observe(principal)
+
+        # After authentication, so only a valid caller learns agents are
+        # paused; before dispatch, so a paused agent cannot list tools.
+        if not await self._gate_allows():
+            await self._note_denial(
+                reason="agents_paused",
+                actor=principal.actor if principal is not None else "mcp-service-account",
+                source=source,
+            )
+            await self._deny(scope, receive, send, 403, "agents_paused")
             return
 
         # Bound to this request and unbound when it ends, so a task that
@@ -127,6 +151,49 @@ class MCPBoundary:
             await self.app(scope, receive, send)
         finally:
             reset_principal(reset)
+
+    async def _observe(self, principal) -> None:
+        """Report an authenticated identity if an observer is wired. Never raises."""
+
+        if self.observer is None or principal is None:
+            return
+        try:
+            await self.observer(principal)
+        except Exception as exc:  # noqa: BLE001 - observation never blocks
+            logger.warning(
+                "An identity could not be observed: %s",
+                exc,
+                extra={"event": "mcp.identity.unobserved"},
+            )
+
+    async def _note_denial(self, **fields) -> None:
+        """Record a refusal if a recorder is wired. Never raises."""
+
+        if self.on_denied is None:
+            return
+        try:
+            await self.on_denied(**fields)
+        except Exception as exc:  # noqa: BLE001 - recording never blocks a refusal
+            logger.warning(
+                "A refusal could not be recorded: %s",
+                exc,
+                extra={"event": "mcp.denial.unrecorded"},
+            )
+
+    async def _gate_allows(self) -> bool:
+        """Whether the operator currently allows agents. Fails closed."""
+
+        if self.gate is None:
+            return True
+        try:
+            return bool(await self.gate())
+        except Exception as exc:  # noqa: BLE001 - a brake fails closed
+            logger.warning(
+                "Agent access could not be checked; refusing: %s",
+                exc,
+                extra={"event": "mcp.gate.unavailable"},
+            )
+            return False
 
     def _authenticate(self, supplied: str):
         """Authenticate one bearer.

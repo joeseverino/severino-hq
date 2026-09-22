@@ -151,3 +151,16 @@ def connection(request):
     from application.connection import channel_for_request
 
     return {"CONNECTION_CHANNEL": channel_for_request(request)}
+
+
+def agent_access(request):
+    """Whether agents are paused, read lazily so templates without the menu cost nothing."""
+
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated):
+        return {}
+    from django.utils.functional import SimpleLazyObject
+
+    from application.agent_access import agents_paused
+
+    return {"agents_paused": SimpleLazyObject(agents_paused)}

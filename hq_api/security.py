@@ -163,4 +163,9 @@ def api_principal(claims: dict[str, Any]) -> Principal:
             "This token names no client. Its `client_id`, `azp` or `sub` claim "
             "is what HQ records as the actor for everything it does."
         )
-    return Principal(str(actor).strip(), INTERFACE, frozenset(permissions))
+    return Principal(
+        str(actor).strip(),
+        INTERFACE,
+        frozenset(permissions),
+        granted=frozenset(permissions),
+    )

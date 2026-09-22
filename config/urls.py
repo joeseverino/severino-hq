@@ -14,6 +14,8 @@ from core.views import (
     DashboardGlanceView,
     DashboardGlanceSettingsView,
     ConnectionView,
+    AgentAccessView,
+    AgentPolicyView,
     DemoModeView,
     DashboardView,
     PublicAddressView,
@@ -62,6 +64,8 @@ urlpatterns = [
         "action-items/count/", ActionItemCountView.as_view(), name="action_item_count"
     ),
     path("demo/", DemoModeView.as_view(), name="demo_mode"),
+    path("agent-access/", AgentAccessView.as_view(), name="agent_access"),
+    path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
     path("connection/", ConnectionView.as_view(), name="connection"),
     path(
         "connection/address/",
