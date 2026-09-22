@@ -9,6 +9,7 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase
 
 from application import projection
+from application.security import Capability, Principal, is_interactive
 from assets.models import Asset
 from docs_index.models import DocumentationRecord
 from projects.models import Project
@@ -262,6 +263,8 @@ class MCPBoundaryTests(TestCase):
         forwarded_for: str | None = None,
         configured_token: str = TOKEN,
         allowed_hosts: tuple[str, ...] = ("a-docker-host",),
+        verifier=None,
+        app=None,
     ) -> tuple[int, dict]:
         headers = [(b"host", host.encode())]
         if token is not None:
@@ -292,10 +295,11 @@ class MCPBoundaryTests(TestCase):
             sent.append(message)
 
         boundary = MCPBoundary(
-            self._allowed_app,
+            app or self._allowed_app,
             token=configured_token,
             allowed_hosts=allowed_hosts,
             allowed_networks=("100.64.0.0/10", "fd7a:115c:a1e0::/48"),
+            verifier=verifier,
         )
         async_to_sync(boundary)(scope, receive, send)
         status = next(message["status"] for message in sent if "status" in message)
@@ -357,3 +361,120 @@ class MCPBoundaryTests(TestCase):
                 )
                 self.assertEqual(status, 404)
                 self.assertEqual(body["error"], "not_found")
+
+
+class AgentIdentityTests(MCPBoundaryTests):
+    """A Pocket ID token names the agent that presented it.
+
+    The legacy bearer names nobody, so every call it made landed in the audit
+    log as one constant actor. These pin the difference, and pin the property
+    the approval gate depends on.
+    """
+
+    A_JWT = "header.payload.signature"
+
+    def _capturing_app(self):
+        """An inner app that records who the boundary said was calling."""
+
+        seen: dict = {}
+
+        async def app(scope, receive, send):
+            from .identity import current_principal
+
+            seen["principal"] = current_principal()
+            await self._allowed_app(scope, receive, send)
+
+        return app, seen
+
+    @staticmethod
+    def _verifier_returning(principal):
+        return lambda bearer: principal
+
+    def test_a_verified_token_becomes_the_agent_that_presented_it(self):
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        app, seen = self._capturing_app()
+
+        status, _ = self._request(
+            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
+        )
+
+        self.assertEqual(status, 204)
+        self.assertEqual(seen["principal"].actor, "example-agent")
+
+    def test_an_agent_is_never_treated_as_a_person(self):
+        """The one line the approval gate hangs on.
+
+        `application.approvals` waives the hold for an interactive principal.
+        If an agent's interface ever joined `INTERACTIVE_INTERFACES`, every
+        infrastructure change it made would self-approve, silently and without
+        anything failing.
+        """
+
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        app, seen = self._capturing_app()
+
+        self._request(
+            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
+        )
+
+        self.assertFalse(is_interactive(seen["principal"]))
+
+    def test_capabilities_are_the_token_grant_and_are_never_widened(self):
+        granted = frozenset({Capability.READ, Capability.WRITE_PROJECTS})
+        agent = Principal("example-agent", "mcp", granted)
+        app, seen = self._capturing_app()
+
+        self._request(
+            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
+        )
+
+        self.assertEqual(seen["principal"].capabilities, granted)
+        self.assertFalse(seen["principal"].permits(Capability.DELETE_PROJECTS))
+
+    def test_the_shared_bearer_still_names_the_service_account(self):
+        app, seen = self._capturing_app()
+
+        status, _ = self._request(
+            verifier=self._verifier_returning(object()), app=app
+        )
+
+        self.assertEqual(status, 204)
+        self.assertEqual(seen["principal"].actor, "mcp-service-account")
+
+    def test_a_rejected_token_is_not_then_compared_to_the_shared_secret(self):
+        """A failed verification ends the request rather than falling through.
+
+        Otherwise a rejected token would still be measured against the shared
+        secret, turning the endpoint into an oracle for it.
+        """
+
+        def refuse(bearer):
+            raise ValueError("not accepted")
+
+        status, body = self._request(token=self.A_JWT, verifier=refuse)
+
+        self.assertEqual(status, 401)
+        self.assertEqual(body["error"], "unauthorized")
+
+    def test_a_verifier_alone_is_enough_to_serve(self):
+        """A deployment can retire the shared secret entirely."""
+
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+        status, _ = self._request(
+            token=self.A_JWT,
+            configured_token="",
+            verifier=self._verifier_returning(agent),
+        )
+
+        self.assertEqual(status, 204)
+
+    def test_the_caller_does_not_outlive_the_request(self):
+        from .identity import current_principal
+
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        self._request(
+            token=self.A_JWT, verifier=self._verifier_returning(agent)
+        )
+
+        self.assertEqual(current_principal().actor, "mcp-service-account")

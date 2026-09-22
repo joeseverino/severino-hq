@@ -32,8 +32,25 @@ compressed_django_application = GZipMiddleware(
     minimum_size=1000,
 )
 
+from hq_api import security as api_security  # noqa: E402
+from hq_mcp.identity import token_principal  # noqa: E402
 from hq_mcp.security import MCPBoundary  # noqa: E402
 from hq_mcp.server import mcp  # noqa: E402
+
+
+def verify_agent_token(bearer: str):
+    """Turn a Pocket ID access token into the agent that presented it."""
+
+    return token_principal(api_security.verify(bearer))
+
+
+# Wired only when the machine API is configured. `is_configured` is false when
+# `SEVERINO_API_RESOURCE` is empty, and without a resource to check `aud`
+# against, a token minted for any other API on the same Pocket ID instance
+# would verify here on signature alone. Absent means off, never "accept
+# anything" -- so an unconfigured deployment keeps the shared bearer as its
+# only credential rather than silently gaining a weaker one.
+mcp_verifier = verify_agent_token if api_security.is_configured() else None
 
 mcp_application = MCPBoundary(
     mcp.streamable_http_app(),
@@ -41,6 +58,7 @@ mcp_application = MCPBoundary(
     allowed_hosts=settings.SEVERINO_MCP_ALLOWED_HOSTS,
     allowed_networks=settings.SEVERINO_MCP_ALLOWED_NETWORKS,
     allowed_origins=settings.SEVERINO_MCP_ALLOWED_ORIGINS,
+    verifier=mcp_verifier,
 )
 
 
