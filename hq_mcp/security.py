@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import secrets
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 
+from hq_mcp.identity import reset_principal, set_principal
+
 MIN_TOKEN_LENGTH = 32
+
+logger = logging.getLogger("severino.mcp")
+
+
+def _looks_like_jwt(value: str) -> bool:
+    """Whether to try the verifier rather than the shared-secret compare.
+
+    A shape test, never a trust decision: a value that passes still has to
+    verify. It exists so that presenting the legacy bearer does not spend a
+    signature check, and so that a rejected JWT is not also compared against
+    the shared secret.
+    """
+
+    return value.count(".") == 2
 
 
 def _normalize_host(value: str) -> str:
@@ -41,9 +58,15 @@ class MCPBoundary:
         allowed_hosts: Iterable[str],
         allowed_networks: Iterable[str],
         allowed_origins: Iterable[str] = (),
+        verifier: Callable[[str], object] | None = None,
     ):
         self.app = app
         self.token = token
+        # Injected rather than imported so this module keeps knowing only about
+        # ASGI and bytes. The adapter that owns token verification lives in
+        # `hq_api`, and a boundary that imported it would make the network gate
+        # depend on the identity provider being configured at all.
+        self.verifier = verifier
         self.allowed_hosts = {
             normalized
             for host in allowed_hosts
@@ -53,8 +76,12 @@ class MCPBoundary:
             ipaddress.ip_network(network) for network in allowed_networks
         )
         self.allowed_origins = set(allowed_origins)
+        # A deployment may present either credential, so either one being
+        # usable is enough to serve. The network gates are not optional in
+        # either case: they are what makes this endpoint unreachable rather
+        # than merely unauthorized.
         self.enabled = (
-            len(token) >= MIN_TOKEN_LENGTH
+            (len(token) >= MIN_TOKEN_LENGTH or verifier is not None)
             and bool(self.allowed_hosts)
             and bool(self.allowed_networks)
         )
@@ -84,25 +111,69 @@ class MCPBoundary:
             return
 
         scheme, separator, supplied = headers.get("authorization", "").partition(" ")
-        valid_token = (
-            bool(separator)
-            and scheme.lower() == "bearer"
-            and bool(supplied)
-            and secrets.compare_digest(supplied, self.token)
-        )
-        if not valid_token:
-            response = JSONResponse(
-                {"error": "unauthorized"},
-                status_code=401,
-                headers={
-                    "WWW-Authenticate": 'Bearer realm="Severino HQ MCP"',
-                    "Cache-Control": "private, no-store",
-                },
-            )
-            await response(scope, receive, send)
+        if not (separator and scheme.lower() == "bearer" and supplied):
+            await self._unauthorized(scope, receive, send)
             return
 
-        await self.app(scope, receive, send)
+        authenticated, principal = self._authenticate(supplied)
+        if not authenticated:
+            await self._unauthorized(scope, receive, send)
+            return
+
+        # Bound to this request and unbound when it ends, so a task that
+        # outlives the response cannot keep acting as whoever last called.
+        reset = set_principal(principal)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_principal(reset)
+
+    def _authenticate(self, supplied: str):
+        """Authenticate one bearer.
+
+        Returns `(authenticated, principal)`. A `None` principal on success
+        means the shared bearer was presented: it names no one, so the caller
+        is the deployment-configured service account it has always been.
+
+        The two credentials are tried exclusively rather than in sequence. A
+        value shaped like a JWT that fails verification is rejected outright
+        instead of also being compared against the shared secret, so a rejected
+        token cannot be used to probe it.
+        """
+
+        if self.verifier is not None and _looks_like_jwt(supplied):
+            try:
+                return True, self.verifier(supplied)
+            except Exception as exc:  # noqa: BLE001 - a boundary fails closed
+                # Deliberately broad. The verifier may raise anything its
+                # library does, and any of it means "not authenticated" here.
+                # The reason is logged, never returned: a rejected token's
+                # error text tells its holder what to change about the next
+                # one.
+                logger.warning(
+                    "Rejected an MCP access token: %s",
+                    exc,
+                    extra={"event": "mcp.token.rejected"},
+                )
+                return False, None
+
+        if len(self.token) >= MIN_TOKEN_LENGTH and secrets.compare_digest(
+            supplied, self.token
+        ):
+            return True, None
+        return False, None
+
+    @staticmethod
+    async def _unauthorized(scope, receive, send):
+        response = JSONResponse(
+            {"error": "unauthorized"},
+            status_code=401,
+            headers={
+                "WWW-Authenticate": 'Bearer realm="Severino HQ MCP"',
+                "Cache-Control": "private, no-store",
+            },
+        )
+        await response(scope, receive, send)
 
     def _tailnet_peer(self, scope) -> bool:
         client = scope.get("client")

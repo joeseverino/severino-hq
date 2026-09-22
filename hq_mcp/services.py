@@ -15,7 +15,7 @@ from application.capabilities import (
 from application.capabilities import (
     execute_capability as execute_application_capability,
 )
-from application.security import mcp_principal
+from hq_mcp.identity import current_principal
 from application.findings import findings as application_findings
 from application.topology import topology as application_topology
 from application.registry import audit_registry as audit_application_registry
@@ -34,9 +34,15 @@ class NotFoundError(ValueError):
 
 
 def _write(service, command, **kwargs):
-    """Invoke one application mutation as the authenticated MCP principal."""
+    """Invoke one application mutation as the authenticated MCP caller.
 
-    return service(command, principal=mcp_principal(), **kwargs)
+    Who that is depends on which credential the boundary accepted: a named
+    agent when a Pocket ID token was presented, the shared service account when
+    the legacy bearer was. Either way it is resolved per request rather than
+    per deployment, which is what puts an agent's own name in the audit log.
+    """
+
+    return service(command, principal=current_principal(), **kwargs)
 
 
 def describe_capabilities() -> dict[str, Any]:
@@ -63,7 +69,7 @@ def execute_capability(
     return execute_application_capability(
         name,
         payload,
-        principal=mcp_principal(),
+        principal=current_principal(),
         target=target,
         expected_updated_at=expected_updated_at,
     )
@@ -84,7 +90,7 @@ def describe_connections() -> dict[str, Any]:
 def list_connections() -> dict[str, Any]:
     """List safe cached connection state available to the MCP principal."""
 
-    return list_application_connections(principal=mcp_principal())
+    return list_application_connections(principal=current_principal())
 
 
 def get_findings(rule: str = "") -> dict[str, Any]:
@@ -94,7 +100,7 @@ def get_findings(rule: str = "") -> dict[str, Any]:
     `execute_capability`. A remedy absent means this principal cannot run it.
     """
 
-    return application_findings(principal=mcp_principal(), rule=rule.strip())
+    return application_findings(principal=current_principal(), rule=rule.strip())
 
 
 def get_topology(
@@ -111,7 +117,7 @@ def get_topology(
     """
 
     return application_topology(
-        principal=mcp_principal(),
+        principal=current_principal(),
         lens=lens.strip(),
         focus=focus.strip(),
         direction=direction.strip(),
@@ -125,7 +131,7 @@ def list_resource(
     """List any registered resource with schema-validated filters."""
 
     return list_application_resource(
-        name, filters, principal=mcp_principal(), strict=True
+        name, filters, principal=current_principal(), strict=True
     )
 
 
@@ -134,7 +140,7 @@ def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
 
     try:
         return get_application_resource(
-            name, identifier, principal=mcp_principal(), strict=True
+            name, identifier, principal=current_principal(), strict=True
         )
     except ResourceNotFound as exc:
         raise NotFoundError(exc.reason) from exc
@@ -149,7 +155,7 @@ def audit_registry() -> dict[str, Any]:
 def export_year_summary(year: int, format: str = "md") -> dict[str, Any]:
     """Export one safe year summary as Markdown or JSON."""
 
-    return export_application_year_summary(year, format, principal=mcp_principal())
+    return export_application_year_summary(year, format, principal=current_principal())
 
 
 def list_projects(
