@@ -165,3 +165,11 @@ class ActionItemRead(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("user", "key"), name="unique_action_item_read")]
+
+
+class UpstreamReading(models.Model):
+    """The last value read from a service outside HQ, and when it was read."""
+
+    key = models.CharField(max_length=100, primary_key=True)
+    value = models.JSONField()
+    observed_at = models.DateTimeField()

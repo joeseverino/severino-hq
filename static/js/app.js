@@ -545,6 +545,22 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   });
 });
 
+// A panel whose content comes from somewhere slow is fetched after the page, so
+// the page never waits on it. An empty answer leaves nothing behind.
+document.querySelectorAll("[data-deferred]").forEach(async (slot) => {
+  try {
+    const response = await hqFetch(slot.dataset.deferred, {
+      credentials: "same-origin",
+      renewSession: false,
+    });
+    if (!response.ok) return;
+    const panel = hqParseDocument(await response.text()).body;
+    slot.replaceWith(...panel.childNodes);
+  } catch (_error) {
+    slot.remove();
+  }
+});
+
 // At-a-glance readings are cold until asked for. The button asks, and so does
 // opening the page while a reading is stale: the glance endpoint requests a
 // refresh for any stale panel it serves. Either way the current reading stays

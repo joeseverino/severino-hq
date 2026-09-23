@@ -10,6 +10,7 @@ from django.conf import settings
 from core.views import (
     ActionItemCountView,
     ActionItemReadView,
+    DashboardContactsView,
     ActionItemsView,
     DashboardLinkChoiceView,
     DashboardGlanceView,
@@ -65,6 +66,7 @@ urlpatterns = [
         "action-items/count/", ActionItemCountView.as_view(), name="action_item_count"
     ),
     path("action-items/read/", ActionItemReadView.as_view(), name="action_items_read"),
+    path("dashboard/contacts/", DashboardContactsView.as_view(), name="dashboard_contacts"),
     path("demo/", DemoModeView.as_view(), name="demo_mode"),
     path("agent-access/", AgentAccessView.as_view(), name="agent_access"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),

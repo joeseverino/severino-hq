@@ -15,6 +15,8 @@ import urllib.error
 import urllib.request
 
 from django.conf import settings
+
+from application import readings
 from django.urls import reverse
 
 from application.connection_contracts import (
@@ -198,6 +200,10 @@ def get_dashboard_state(limit: int = 4) -> tuple[list[dict], int]:
     )
 
 
+# The stored unread count kept by contacts.inbox; a write here makes it stale.
+UNREAD = "contacts.unread"
+
+
 def get_unread_count() -> int:
     """Return the number of unread contact submissions."""
     results = query(
@@ -245,11 +251,13 @@ def set_status(pk: int, status: str) -> None:
         "updated_at = datetime('now') WHERE id = ?",
         [status, pk],
     )
+    readings.expire(UNREAD)
 
 
 def delete_submission(pk: int) -> None:
     """Delete a submission permanently."""
     query("DELETE FROM contact_submissions WHERE id = ?", [pk])
+    readings.expire(UNREAD)
 
 
 def get_submission(pk: int) -> dict | None:
@@ -265,6 +273,7 @@ def update_submission(pk: int, status: str, assigned_to: str, admin_notes: str) 
         "admin_notes = ?, updated_at = datetime('now') WHERE id = ?",
         [status, assigned_to, admin_notes, pk],
     )
+    readings.expire(UNREAD)
 
 
 def search_submissions(q: str, limit: int = 10) -> list[dict]:

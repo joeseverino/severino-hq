@@ -363,7 +363,9 @@ class ChartAxisSpanTests(TestCase):
 # of the provider inventory, shared with the zone registrations that used to
 # buy it alone. Raised deliberately and once, because the number is the whole
 # guard -- a budget nudged up whenever something exceeds it measures nothing.
-HOST_QUERY_BUDGET = 32
+# 33 since the contact count is stored rather than read from D1 per render: one
+# local read in place of a round trip to Cloudflare.
+HOST_QUERY_BUDGET = 33
 PER_EXTENSION_QUERY_BUDGET = 10
 
 
@@ -371,7 +373,7 @@ class DashboardProjectionTests(TestCase):
     @staticmethod
     def _snapshot_queries():
         with (
-            patch("application.attention.get_unread_count", return_value=0),
+            patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(connection) as queries,
         ):
             operating_snapshot()
@@ -443,7 +445,11 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        with patch("application.attention.get_unread_count", return_value=2):
+        from application import readings
+        from contacts.d1 import UNREAD
+
+        readings.record(UNREAD, {"count": 2, "status": "ok"})
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
             snapshot = operating_snapshot()
 
         json.dumps(snapshot)
@@ -489,7 +495,7 @@ class DashboardProjectionTests(TestCase):
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
-            patch("application.attention.get_unread_count", return_value=0),
+            patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
@@ -499,7 +505,7 @@ class DashboardProjectionTests(TestCase):
         # expenses fall inside, while the future expense remains excluded.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
-            patch("application.attention.get_unread_count", return_value=0),
+            patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         ):
             snapshot = operating_snapshot()
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
