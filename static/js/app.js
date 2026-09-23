@@ -146,7 +146,7 @@ if (actionMenu) {
   const paint = (count) => {
     document.querySelectorAll("[data-action-count]").forEach((badge) => {
       badge.textContent = String(count);
-      badge.hidden = false;
+      badge.hidden = count === 0;
     });
     document.querySelectorAll("[data-action-badge]").forEach((badge) => {
       badge.querySelector("[data-action-badge-count]").textContent = String(count);
@@ -547,8 +547,11 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
 
 // At-a-glance readings are cold until asked for. The button asks, and so does
 // opening the page while a reading is stale: the glance endpoint requests a
-// refresh for any stale panel it serves. Either way this follows up briefly
-// for the controller's answer; there is no page-lifetime polling loop.
+// refresh for any stale panel it serves. Either way the current reading stays
+// up, marked as refreshing, and this follows the controller's answer in place
+// until it lands, the page is hidden, or a few minutes pass.
+const GLANCE_POLL_MS = 3000;
+const GLANCE_POLL_LIMIT_MS = 180_000;
 const hqBindDashboardGlance = (root) => {
   const form = root.querySelector("[data-dashboard-glance-refresh]");
   if (!form || form.dataset.bound === "true") return;
@@ -572,12 +575,13 @@ const hqBindDashboardGlance = (root) => {
     current.setAttribute("aria-busy", "true");
     try {
       current = await replace(current, await firstResponse());
-      for (
-        let attempt = 0;
-        attempt < 12 && current.querySelector("[data-refreshing]");
-        attempt += 1
+      const until = Date.now() + GLANCE_POLL_LIMIT_MS;
+      while (
+        current.querySelector("[data-refreshing]") &&
+        Date.now() < until &&
+        document.visibilityState === "visible"
       ) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        await new Promise((resolve) => window.setTimeout(resolve, GLANCE_POLL_MS));
         current = await replace(
           current,
           // A tick is not a request to leave the page.

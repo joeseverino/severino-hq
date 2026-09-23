@@ -79,6 +79,16 @@ class PageTests(TestCase):
         self.assertContains(page, "Read · 1")
         self.assertEqual(self.client.get(reverse("action_item_count")).json(), {"count": 1})
 
+    def test_the_dashboard_counts_and_lists_only_unread(self):
+        self.client.post(reverse("action_items_read"), {"key": fingerprint(ITEM), "read": "1"})
+
+        with mock.patch("application.dashboard.work_queue", return_value=[ITEM, OTHER]):
+            page = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(page.context["profile_action_count"], 1)
+        self.assertEqual(page.context["action_queue_count"], 1)
+        self.assertEqual([item["label"] for item in page.context["action_queue"]], [OTHER["label"]])
+
     def test_mark_all_read_empties_the_unread_list(self):
         self.client.post(
             reverse("action_items_read"),

@@ -229,7 +229,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             event["url"] = reverse("core:audit_detail", args=[event["id"]])
         # No mapping step: every queue entry already carries the link to the
         # filtered list that shows it, supplied by the domain that raised it.
-        action_queue = snapshot["priority"]
+        # Unread only, as everywhere else the count is shown.
+        action_queue = [
+            item
+            for item in read_state.with_read_state(snapshot["priority"], self.request.user)
+            if not item["read"]
+        ]
+        action_queue_count = sum(item["count"] for item in action_queue)
 
         # Consoles come from the connections a controller reported. Anything
         # else an operator wants here is a fact about their installation and is
@@ -308,9 +314,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             docs_needing_review_count=snapshot["kpis"]["docs_needing_review"],
             recent_audit=snapshot["recent_activity"],
             action_queue=action_queue,
-            action_queue_count=snapshot["priority_count"],
-            action_queue_group_count=snapshot["priority_group_count"],
-            profile_action_count=snapshot["priority_count"],
+            action_queue_count=action_queue_count,
+            action_queue_group_count=len(action_queue),
+            profile_action_count=action_queue_count,
             show_action_count=True,
             this_year=snapshot["year"],
             dashboard_cards=highlights["compact"],
