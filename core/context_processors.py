@@ -127,8 +127,12 @@ def nav(request):
         # The group is active for anywhere in the section, including pages that
         # have no nav entry of their own -- otherwise opening one makes the
         # current section vanish from the bar.
+        # An item with no namespace shares one with every root page, so it can
+        # only light its group by being the page itself.
         groups[nav_item.group]["active"] = (
-            groups[nav_item.group]["active"] or namespace == nav_item.namespace
+            groups[nav_item.group]["active"]
+            or item["active"]
+            or bool(nav_item.namespace and namespace == nav_item.namespace)
         )
 
     return {"nav_entries": entries}

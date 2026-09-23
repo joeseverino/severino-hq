@@ -778,11 +778,11 @@ def _field_rows(before: dict[str, Any], after: dict[str, Any], *, label: str) ->
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows."""
 
-    from .capabilities import capability_label
+    from .labels import human_label
 
     return {
         "held": held,
-        "title": capability_label(held.capability),
+        "title": human_label(held.capability),
         "preview": preview(held),
         "resource_url": (
             reverse("control_plane:detail", kwargs={"key": held.resource_key})

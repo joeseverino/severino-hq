@@ -146,7 +146,7 @@ if (actionMenu) {
   const paint = (count) => {
     document.querySelectorAll("[data-action-count]").forEach((badge) => {
       badge.textContent = String(count);
-      badge.hidden = false;
+      badge.hidden = count === 0;
     });
     document.querySelectorAll("[data-action-badge]").forEach((badge) => {
       badge.querySelector("[data-action-badge-count]").textContent = String(count);
@@ -545,9 +545,29 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   });
 });
 
-// At-a-glance readings are intentionally cold until requested. One click
-// rings the controller doorbell, then this performs a short bounded follow-up
-// for the reported observation; there is no page-lifetime polling loop.
+// A panel whose content comes from somewhere slow is fetched after the page, so
+// the page never waits on it. An empty answer leaves nothing behind.
+document.querySelectorAll("[data-deferred]").forEach(async (slot) => {
+  try {
+    const response = await hqFetch(slot.dataset.deferred, {
+      credentials: "same-origin",
+      renewSession: false,
+    });
+    if (!response.ok) return;
+    const panel = hqParseDocument(await response.text()).body;
+    slot.replaceWith(...panel.childNodes);
+  } catch (_error) {
+    slot.remove();
+  }
+});
+
+// At-a-glance readings are cold until asked for. The button asks, and so does
+// opening the page while a reading is stale: the glance endpoint requests a
+// refresh for any stale panel it serves. Either way the current reading stays
+// up, marked as refreshing, and this follows the controller's answer in place
+// until it lands, the page is hidden, or a few minutes pass.
+const GLANCE_POLL_MS = 3000;
+const GLANCE_POLL_LIMIT_MS = 180_000;
 const hqBindDashboardGlance = (root) => {
   const form = root.querySelector("[data-dashboard-glance-refresh]");
   if (!form || form.dataset.bound === "true") return;
@@ -565,39 +585,27 @@ const hqBindDashboardGlance = (root) => {
     return current;
   };
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  const follow = async (firstResponse) => {
     let current = root;
     current.classList.add("is-loading");
     current.setAttribute("aria-busy", "true");
     try {
-      current = await replace(
-        current,
-        await hqFetch(form.action, {
-          method: "POST",
-          body: new FormData(form),
-          credentials: "same-origin",
-        }),
-      );
-      current.classList.add("is-loading");
-      current.setAttribute("aria-busy", "true");
-      for (
-        let attempt = 0;
-        attempt < 12 && current.querySelector("[data-refreshing]");
-        attempt += 1
+      current = await replace(current, await firstResponse());
+      const until = Date.now() + GLANCE_POLL_LIMIT_MS;
+      while (
+        current.querySelector("[data-refreshing]") &&
+        Date.now() < until &&
+        document.visibilityState === "visible"
       ) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        await new Promise((resolve) => window.setTimeout(resolve, GLANCE_POLL_MS));
         current = await replace(
           current,
-          // Polling, once a second, for something the operator is already
-          // watching. A tick is not a request to leave the page.
+          // A tick is not a request to leave the page.
           await hqFetch(current.dataset.source, {
             credentials: "same-origin",
             renewSession: false,
           }),
         );
-        current.classList.add("is-loading");
-        current.setAttribute("aria-busy", "true");
       }
     } catch (_error) {
       const status = current.querySelector("[data-dashboard-glance-status]");
@@ -606,7 +614,24 @@ const hqBindDashboardGlance = (root) => {
       current.classList.remove("is-loading");
       current.removeAttribute("aria-busy");
     }
+  };
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    follow(() =>
+      hqFetch(form.action, {
+        method: "POST",
+        body: new FormData(form),
+        credentials: "same-origin",
+      }),
+    );
   });
+
+  if (root.querySelector(".glance-panel.is-stale")) {
+    follow(() =>
+      hqFetch(root.dataset.source, { credentials: "same-origin", renewSession: false }),
+    );
+  }
 };
 
 document.querySelectorAll("[data-dashboard-glance]").forEach(hqBindDashboardGlance);

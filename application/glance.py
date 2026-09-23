@@ -25,8 +25,9 @@ from .machines import machine_catalog
 from .security import AuthorizationError, Capability, Principal
 
 
-# Explicit snapshots are useful context, but should not look current indefinitely.
-GLANCE_STALE_AFTER = timedelta(hours=1)
+# Older than this, a reading is refreshed when the dashboard is opened -- and
+# only then, since it costs a trip to a machine.
+GLANCE_STALE_AFTER = timedelta(minutes=5)
 
 
 def connection_specs():

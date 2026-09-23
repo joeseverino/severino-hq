@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .capabilities import CapabilitySpec, capability_label
+from .capabilities import CapabilitySpec
+from .labels import human_label
 from .integrations import integration_graph
 from .resources import get_resource, list_resource
 from .security import Principal
@@ -30,7 +31,7 @@ def _option_label(item: dict[str, Any], value: str) -> str:
             break
     kind = item.get("kind")
     if isinstance(kind, str) and kind.strip():
-        return f"{base} · {capability_label(kind)}"
+        return f"{base} · {human_label(kind)}"
     return base
 
 

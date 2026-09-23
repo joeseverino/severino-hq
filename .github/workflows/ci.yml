@@ -187,7 +187,10 @@ jobs:
         if: matrix.python-version == needs.toolchain.outputs.oldest-python
         run: |
           set -euo pipefail
-          measured="$(coverage report --format=total)"
+          # Whole percent, rounded down. The default total is rounded, and
+          # a figure on a .5 boundary rounds differently across versions.
+          measured="$(coverage report --format=total --precision=2)"
+          measured="${measured%.*}"
           # One capture group, not two greps: the URL-encoded percent sign in
           # `coverage-86%25-brightgreen` is itself digits, and a looser match
           # reads the badge as both 86 and 25.

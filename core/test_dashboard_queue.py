@@ -80,7 +80,7 @@ class DashboardQueueTests(TestCase):
     def test_full_queue_renders_workflows_while_dashboard_stays_compact(self):
         from control_plane.models import DashboardRefreshRequest
 
-        with patch("core.views.get_dashboard_state", return_value=([], 0)):
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
             for path in ("/", "/action-items/"):
                 with self.subTest(path=path):
                     response = self.client.get(path)
@@ -108,7 +108,7 @@ class DashboardQueueTests(TestCase):
 
     def test_dashboard_places_metrics_before_compact_queue(self):
         with (
-            patch("core.views.get_dashboard_state", return_value=([], 0)),
+            patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             patch(
                 "core.views.dashboard_highlights",
                 return_value={

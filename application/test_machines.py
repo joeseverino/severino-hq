@@ -628,6 +628,23 @@ class WhoeverSweptTests(TestCase):
 
         self.assertIn("a-laptop-that-swept", machine("a-docker-host").aliases)
 
+    def test_another_name_finds_the_machine_and_its_page_redirects_there(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.assertEqual(machine("a-laptop-that-swept").name, "a-docker-host")
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+
+        response = self.client.get(
+            reverse("control_plane:machine", kwargs={"name": "a-laptop-that-swept"})
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("control_plane:machine", kwargs={"name": "a-docker-host"}),
+            fetch_redirect_response=False,
+        )
+
 
 class ReadingThisOnTheMachineTests(TestCase):
     """The page describing a machine, opened on that machine.

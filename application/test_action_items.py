@@ -79,6 +79,16 @@ class PageTests(TestCase):
         self.assertContains(page, "Read · 1")
         self.assertEqual(self.client.get(reverse("action_item_count")).json(), {"count": 1})
 
+    def test_the_dashboard_counts_and_lists_only_unread(self):
+        self.client.post(reverse("action_items_read"), {"key": fingerprint(ITEM), "read": "1"})
+
+        with mock.patch("application.dashboard.work_queue", return_value=[ITEM, OTHER]):
+            page = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(page.context["profile_action_count"], 1)
+        self.assertEqual(page.context["action_queue_count"], 1)
+        self.assertEqual([item["label"] for item in page.context["action_queue"]], [OTHER["label"]])
+
     def test_mark_all_read_empties_the_unread_list(self):
         self.client.post(
             reverse("action_items_read"),
@@ -92,3 +102,34 @@ class PageTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(ActionItemRead.objects.exists())
+
+
+class ActivityActorTests(TestCase):
+    def test_an_agent_row_names_the_agent_not_system(self):
+        from core.models import AuditLog
+
+        from .read_models import recent_activity
+
+        AuditLog.objects.create(
+            action=AuditLog.Action.CREATED, object_type="Approval", metadata={"actor": "example-agent"}
+        )
+
+        self.assertEqual(recent_activity(limit=1)["items"][0]["actor"], "example-agent")
+
+
+class GlanceSettingsLinkTests(TestCase):
+    def test_following_the_settings_link_lands_on_the_dashboard(self):
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+
+        response = self.client.get(reverse("dashboard_glance_settings"))
+
+        self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
+
+
+class ReadableValueTests(TestCase):
+    def test_a_timestamp_reads_as_a_date_and_anything_else_is_left_alone(self):
+        from core.templatetags.value_tags import readable
+
+        self.assertEqual(readable("2026-09-20T22:08:26.284763+00:00"), "Sep 20, 2026, 5:08 p.m.")
+        self.assertEqual(readable("2d"), "2d")
+        self.assertEqual(readable("Tailnet"), "Tailnet")

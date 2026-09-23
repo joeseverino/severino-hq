@@ -577,7 +577,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             title="Unfinished post", status=ContentItem.Status.DRAFT
         )
 
-        with patch("application.attention.get_unread_count", return_value=0):
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
             response = self.client.get("/action-items/")
             filtered = self.client.get(
                 "/action-items/", {"status": "serious", "q": "draft"}
@@ -593,9 +593,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
     def test_profile_count_is_lazy_off_dashboard(self):
         ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
 
-        page = self.client.get("/projects/")
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
+            page = self.client.get("/projects/")
+        # The count is fetched after the page, which is where D1 is read again.
         with (
-            patch("application.attention.get_unread_count", return_value=0),
+            patch("contacts.d1.get_unread_count", return_value=0),
             patch("application.domains.extension_domains", return_value=()),
         ):
             count = self.client.get("/action-items/count/")
@@ -603,36 +605,26 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(page, "data-action-count hidden")
         self.assertEqual(count.json()["count"], 1)
 
-    def test_dashboard_uses_one_combined_contact_read(self):
+    def test_the_dashboard_defers_recent_contacts_and_never_waits_on_d1(self):
         state = (
-            [
-                {
-                    "id": 7,
-                    "name": "One call",
-                    "status": "unread",
-                    "created_at": "2026-08-23",
-                }
-            ],
+            [{"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}],
             3,
         )
-        with (
-            patch("core.views.get_dashboard_state", return_value=state) as combined,
-            patch("application.attention.get_unread_count") as separate,
-        ):
-            response = self.client.get("/")
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
+            page = self.client.get("/")
+        with patch("contacts.d1.get_dashboard_state", return_value=state) as live:
+            panel = self.client.get(reverse("dashboard_contacts"))
 
-        self.assertEqual(response.status_code, 200)
-        combined.assert_called_once_with(limit=4)
-        separate.assert_not_called()
-        self.assertContains(response, "One call")
-        self.assertContains(response, "3")
+        self.assertContains(page, 'data-deferred="%s"' % reverse("dashboard_contacts"))
+        live.assert_called_once_with(limit=4)
+        self.assertContains(panel, "One call")
+        self.assertContains(panel, "3 unread")
 
-    def test_dashboard_does_not_spend_a_card_on_an_empty_contact_feed(self):
-        with patch("core.views.get_dashboard_state", return_value=([], 0)):
-            response = self.client.get("/")
+    def test_an_empty_contact_feed_renders_nothing(self):
+        with patch("contacts.d1.get_dashboard_state", return_value=([], 0)):
+            panel = self.client.get(reverse("dashboard_contacts"))
 
-        self.assertNotContains(response, "Recent contacts")
-        self.assertContains(response, "Needs attention")
+        self.assertNotContains(panel, "Recent contacts")
 
     def test_recent_activity_links_to_the_event_in_plain_language(self):
         event = AuditLog.objects.create(
@@ -642,7 +634,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             user=self.user,
         )
 
-        with patch("core.views.get_dashboard_state", return_value=([], 0)):
+        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
             response = self.client.get("/")
 
         self.assertContains(response, "Useful dashboard target")
@@ -1404,6 +1396,32 @@ class NavigationTests(TestCase):
         response = self.client.get(url)
         request = response.wsgi_request
         return nav(request)["nav_entries"]
+
+    def test_every_entry_lights_its_own_group_and_no_other(self):
+        """Checked for every entry the registry declares, so a new one cannot
+        claim someone else's section -- an entry with no namespace once lit
+        its group on every root page, the dashboard included."""
+
+        from django.test import RequestFactory
+        from django.urls import NoReverseMatch, resolve
+
+        from application.domains import domain_navigation
+        from core.context_processors import nav
+
+        for entry in domain_navigation():
+            try:
+                url = reverse(entry.route)
+            except NoReverseMatch:
+                continue
+            with self.subTest(route=entry.route):
+                request = RequestFactory().get(url)
+                request.resolver_match = resolve(url)
+                lit = {
+                    group["label"]
+                    for group in nav(request)["nav_entries"]
+                    if group["kind"] == "group" and group["active"]
+                }
+                self.assertEqual(lit, {entry.group} if entry.group else set())
 
     def test_only_the_current_page_is_marked_active(self):
         # Every entry in a section shares one namespace, so matching on that lit

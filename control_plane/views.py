@@ -1064,11 +1064,18 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
 
     template_name = "control_plane/machine_detail.html"
 
+    def get(self, request, *args, **kwargs):
+        self.found = machine(kwargs["name"])
+        if self.found is None:
+            raise Http404("No machine of that name has been reported.")
+        if self.found.name.lower() != kwargs["name"].strip().lower():
+            # Asked for by another of its names; the page lives at one.
+            return redirect("control_plane:machine", name=self.found.name)
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        found = machine(self.kwargs["name"])
-        if found is None:
-            raise Http404("No machine of that name has been reported.")
+        found = self.found
         context["machine"] = found
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
@@ -1361,7 +1368,14 @@ class FindingsView(LoginRequiredMixin, TemplateView):
         context.update(
             {
                 "finding_entries": tuple(entries),
-                "finding_rules": finding_rules(),
+                # Only rules that raised something, or the one being viewed. A
+                # chip for every rule HQ knows is a list of what is fine.
+                "finding_rules": tuple(
+                    rule
+                    for rule in finding_rules()
+                    if rule.name in {finding.rule for finding in raised}
+                    or (active_rule and rule.name == active_rule.name)
+                ),
                 "active_rule": active_rule,
                 "finding_counts": counts,
             }

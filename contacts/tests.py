@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from . import d1
 from .d1 import get_dashboard_state
 
 SUBMISSION = {
@@ -130,3 +131,50 @@ class ContactProjectionTests(TestCase):
         query.assert_called_once()
         self.assertEqual(unread, 9)
         self.assertNotIn("unread_count", rows[0])
+
+
+class InboxTests(TestCase):
+    """The unread count is stored; only requests made after a page read D1."""
+
+    def test_a_fresh_count_is_not_read_again(self):
+        from . import inbox
+
+        with patch("contacts.d1.get_unread_count", return_value=3):
+            inbox.refresh()
+        with patch("contacts.d1.get_unread_count", side_effect=AssertionError("read again")):
+            inbox.refresh()
+
+        self.assertEqual(inbox.unread(), (3, "ok"))
+
+    def test_a_write_makes_the_next_refresh_read_again(self):
+        from . import inbox
+
+        with patch("contacts.d1.get_unread_count", return_value=3):
+            inbox.refresh()
+        with patch("contacts.d1.query", return_value=[]):
+            d1.set_status(1, "read")
+        with patch("contacts.d1.get_unread_count", return_value=2):
+            inbox.refresh()
+
+        self.assertEqual(inbox.unread(), (2, "ok"))
+
+    def test_an_outage_keeps_the_last_count_and_says_so(self):
+        from application import readings
+
+        from . import inbox
+
+        readings.record(d1.UNREAD, {"count": 4, "status": "ok"})
+        readings.expire(d1.UNREAD)
+        with patch("contacts.d1.get_unread_count", side_effect=d1.D1Error("down")):
+            inbox.refresh()
+
+        self.assertEqual(inbox.unread(), (4, "unavailable"))
+
+    def test_the_header_count_request_is_what_refreshes_it(self):
+        from django.contrib.auth import get_user_model
+
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        with patch("contacts.d1.get_unread_count", return_value=5) as read:
+            self.client.get(reverse("action_item_count"))
+
+        read.assert_called_once()

@@ -40,9 +40,9 @@ from application.search import global_search
 from application.security import AuthorizationError, safe_next, web_principal
 from application.tables import TableFilter, TableListMixin, TableSort
 from application.ui import ListRow
+from contacts import inbox
 from contacts.d1 import (
     D1Error,
-    get_dashboard_state,
     search_submissions,
 )
 from .audit import record_event
@@ -205,14 +205,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        try:
-            recent_contacts, unread_contacts = get_dashboard_state(limit=4)
-            contacts = (unread_contacts, "ok")
-        except D1Error:
-            recent_contacts = []
-            contacts = (0, "unavailable")
         with projection_scope():
-            snapshot = operating_snapshot(contacts=contacts)
+            snapshot = operating_snapshot()
             highlights = dashboard_highlights()
         for project in snapshot["active_projects"]:
             project["updated_at"] = datetime.fromisoformat(project["updated_at"])
@@ -229,7 +223,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             event["url"] = reverse("core:audit_detail", args=[event["id"]])
         # No mapping step: every queue entry already carries the link to the
         # filtered list that shows it, supplied by the domain that raised it.
-        action_queue = snapshot["priority"]
+        # Unread only, as everywhere else the count is shown.
+        action_queue = [
+            item
+            for item in read_state.with_read_state(snapshot["priority"], self.request.user)
+            if not item["read"]
+        ]
+        action_queue_count = sum(item["count"] for item in action_queue)
 
         # Consoles come from the connections a controller reported. Anything
         # else an operator wants here is a fact about their installation and is
@@ -239,15 +239,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         external_choices = link_choices(self.request.user)
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.
-        contact_rows = [
-            ListRow(
-                title=submission["name"],
-                detail=submission["status"],
-                meta=submission["created_at"],
-                url=reverse("contacts:detail", args=[submission["id"]]),
-            )
-            for submission in recent_contacts
-        ]
         content_rows = [
             ListRow(
                 title=item["title"],
@@ -286,7 +277,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         glance_panels = dashboard_panels(glance_settings)
 
         ctx.update(
-            recent_contacts=contact_rows,
             content_rows=content_rows,
             published_rows=published_rows,
             docs_rows=docs_rows,
@@ -308,9 +298,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             docs_needing_review_count=snapshot["kpis"]["docs_needing_review"],
             recent_audit=snapshot["recent_activity"],
             action_queue=action_queue,
-            action_queue_count=snapshot["priority_count"],
-            action_queue_group_count=snapshot["priority_group_count"],
-            profile_action_count=snapshot["priority_count"],
+            action_queue_count=action_queue_count,
+            action_queue_group_count=len(action_queue),
+            profile_action_count=action_queue_count,
             show_action_count=True,
             this_year=snapshot["year"],
             dashboard_cards=highlights["compact"],
@@ -362,6 +352,10 @@ class DashboardGlanceView(LoginRequiredMixin, View):
 
 
 class DashboardGlanceSettingsView(LoginRequiredMixin, View):
+    def get(self, request):
+        # The settings are a panel on the dashboard; this address only saves them.
+        return redirect("dashboard")
+
     def post(self, request):
         try:
             save_dashboard_settings(
@@ -503,9 +497,35 @@ class ActionItemCountView(LoginRequiredMixin, View):
     """The unread count for the header, fetched after the page rather than during it."""
 
     def get(self, request):
+        # Made after the page, so reading upstream services again costs no render.
+        inbox.refresh()
         with projection_scope():
             count = read_state.unread_count(work_queue(), request.user)
         return JsonResponse({"count": count})
+
+
+class DashboardContactsView(LoginRequiredMixin, View):
+    """Recent submissions, fetched by the dashboard after it has rendered."""
+
+    def get(self, request):
+        try:
+            submissions = inbox.recent(limit=4)
+        except D1Error:
+            submissions = []
+        rows = [
+            ListRow(
+                title=submission["name"],
+                detail=submission["status"],
+                meta=submission["created_at"],
+                url=reverse("contacts:detail", args=[submission["id"]]),
+            )
+            for submission in submissions
+        ]
+        return render(
+            request,
+            "core/_dashboard_contacts.html",
+            {"recent_contacts": rows, "unread_contacts_count": inbox.unread()[0]},
+        )
 
 
 class ActionItemReadView(LoginRequiredMixin, View):

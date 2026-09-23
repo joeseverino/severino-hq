@@ -24,7 +24,7 @@ from django.db.models import Count, Q
 from django.urls import reverse
 
 from assets.models import Asset
-from contacts.d1 import D1Error, get_unread_count
+from contacts import inbox
 from content.models import ContentItem
 from control_plane.models import ManagedResource
 from expenses.models import Expense
@@ -117,26 +117,11 @@ def content() -> tuple[Insight, ...]:
     )
 
 
-def _contacts_state() -> tuple[int, str]:
-    """Unread submissions and the upstream's health, from one D1 read.
-
-    The single place HQ asks D1 how many submissions are waiting. The snapshot
-    reports the upstream's health and the queue reports the backlog; both read
-    it here, so the two can never disagree about whether contacts is reachable,
-    and a test has one thing to patch.
-
-    The public function below memoises only inside one projection scope. There
-    is no process lifetime and therefore no stale value for a later request.
-    """
-
-    try:
-        return get_unread_count(), "ok"
-    except D1Error:
-        return 0, "unavailable"
-
-
 def contacts_state() -> tuple[int, str]:
-    return read_once(CONTACTS_STATE_KEY, _contacts_state)
+    """Unread submissions and whether D1 was reachable, as last read. No network:
+    the snapshot and the queue both ask here, so they cannot disagree."""
+
+    return read_once(CONTACTS_STATE_KEY, inbox.unread)
 
 
 def contacts() -> tuple[Insight, ...]:
@@ -407,11 +392,8 @@ def infrastructure() -> tuple[Insight, ...]:
                 eyebrow="Finding",
                 title="Infrastructure findings",
                 value=str(len(findings)),
-                body=(
-                    f"{len(findings)} claim{'s' if len(findings) != 1 else ''} "
-                    "derived from the live topology. Open the evidence to see "
-                    "every affected subject or kind."
-                ),
+                body="; ".join(finding.title for finding in findings[:3])
+                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else ""),
                 action="Review evidence",
                 url=reverse("control_plane:findings"),
                 magnitude=len(findings),
@@ -455,7 +437,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
 
     from .action_links import ActionLink
     from .approvals import pending, preview
-    from .capabilities import capability_label
+    from .labels import human_label
 
     items = []
     for held in pending():
@@ -466,7 +448,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                 status="serious",
                 eyebrow="Approval",
                 title=(
-                    f"{held.requested_actor} wants to run {capability_label(held.capability)}"
+                    f"{held.requested_actor} wants to run {human_label(held.capability)}"
                     + (f" on {held.target}" if held.target else "")
                 ),
                 value="1",

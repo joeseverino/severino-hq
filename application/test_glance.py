@@ -207,7 +207,7 @@ class DashboardGlanceTests(TestCase):
 
     def test_snapshot_age_is_explicit_at_the_freshness_boundary(self):
         now = timezone.now()
-        for age, stale in ((59, False), (60, True), (61, True)):
+        for age, stale in ((4, False), (5, True), (6, True)):
             with self.subTest(age=age):
                 WeatherObservation.objects.update_or_create(
                     point="41.0000,-87.0000",
@@ -245,8 +245,9 @@ class DashboardGlanceTests(TestCase):
             "core/_dashboard_glance.html", {"dashboard_panels": panels}
         )
 
-        self.assertIn("Out of date", html)
-        self.assertIn("Refreshing…", html)
+        # The reading stays up while it is replaced, marked as refreshing.
+        self.assertIn("Refreshing · ", html)
+        self.assertNotIn("Out of date", html)
         self.assertIn("4%", html)
         self.assertTrue(panels[0]["stale"])
 

@@ -8,7 +8,8 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from .capabilities import CapabilitySpec, capability_label
+from .capabilities import CapabilitySpec
+from .labels import human_label
 from .connections import (
     ConnectionAbility,
     ConnectionSpec,
@@ -177,7 +178,7 @@ def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryI
     return DiscoveryItem(
         kind="command",
         name=spec.name,
-        label=capability_label(spec.name),
+        label=human_label(spec.name),
         summary=spec.summary,
         url=url,
         destination_label="",
