@@ -12,10 +12,18 @@
 # ExecStart names that copy instead. `severino-hq-check-scripts`, on a daily
 # timer, fails when the two drift apart.
 #
-# Idempotent: it writes the same three files every time and reloads once.
+# Idempotent: it installs the same files every time and reloads once. Those
+# files are the `10-root-owned-exec.conf` drop-ins shipped in deploy/systemd,
+# which install-controller.sh also installs on every deploy -- this is the first
+# bring-up, before any deploy has run. It used to generate its own copies, and
+# two sources for one file is one more way for the host and the repository to
+# disagree about what it says.
 #
 #   scripts/fix-root-ownership.sh            # install
-#   scripts/fix-root-ownership.sh --remove   # undo
+#   scripts/fix-root-ownership.sh --remove   # undo, until the next deploy
+#
+# The next deploy reinstalls what the repository ships, so a lasting undo is
+# deleting the drop-in from deploy/systemd.
 #
 # This script used to exist only as a comment. Each drop-in said it had been
 # installed by a file of this name, and no such file was in the repository, in
@@ -25,37 +33,46 @@
 set -eu
 
 LIB=/usr/local/lib/severino-hq
+SHIPPED="${LIB}/deploy/systemd"
 UNIT_DIR=/etc/systemd/system
 DROPIN=10-root-owned-exec.conf
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck source=scripts/lib/systemd-units.sh
+. "${script_dir}/lib/systemd-units.sh"
 
 [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+[ -d "${LIB}" ] || {
+    echo "${LIB} does not exist -- run severino-hq-sync-scripts first" >&2
+    exit 1
+}
 
-# Unit, then the ExecStart it should run, then any extra directives. Held as a
-# list rather than three near-identical blocks so adding a fourth root unit is
-# one line and cannot be half-done.
-units="severino-hq-secrets:${LIB}/scripts/refresh-secrets.sh:
-severino-hq-controller:${LIB}/scripts/run-controller.sh --apply:WorkingDirectory=${LIB}
-severino-hq-backup:${LIB}/scripts/backup.sh:"
+# The units this pins are the ones the repository ships a drop-in of this name
+# for, derived rather than listed, so pinning a fourth root unit is shipping its
+# drop-in and cannot be half-done.
+shipped="$(units_shipped "${SHIPPED}")"
+dropins=""
+for f in ${shipped}; do
+    case "${f}" in *.d/"${DROPIN}") dropins="${dropins} ${f}" ;; esac
+done
+if [ -z "${dropins}" ]; then
+    echo "${SHIPPED} ships no ${DROPIN}" >&2
+    exit 1
+fi
 
 if [ "${1:-}" = "--remove" ]; then
-    printf '%s\n' "${units}" | while IFS=: read -r unit _ _; do
-        [ -n "${unit}" ] || continue
-        rm -f "${UNIT_DIR}/${unit}.service.d/${DROPIN}"
-        rmdir "${UNIT_DIR}/${unit}.service.d" 2>/dev/null || true
-        echo "removed the override on ${unit}.service"
+    for f in ${dropins}; do
+        rm -f "${UNIT_DIR}/${f}"
+        rmdir "${UNIT_DIR}/${f%/*}" 2>/dev/null || true
+        echo "removed the override on ${f%.d/*}"
     done
     systemctl daemon-reload
     exit 0
 fi
 
 # Refuse to point units at a tree that is not there or not root's. Installing
-# an ExecStart that names a missing file leaves three units that fail on their
-# next tick, and pointing them at a tree somebody else can write would reinstate
+# an ExecStart that names a missing file leaves units that fail on their next
+# tick, and pointing them at a tree somebody else can write would reinstate
 # exactly the exposure this removes.
-[ -d "${LIB}" ] || {
-    echo "${LIB} does not exist -- run severino-hq-sync-scripts first" >&2
-    exit 1
-}
 owner="$(stat -c '%U' "${LIB}")"
 [ "${owner}" = root ] || { echo "${LIB} is owned by ${owner}, not root" >&2; exit 1; }
 if [ -n "$(find "${LIB}" \( -perm -0020 -o -perm -0002 \) -print -quit)" ]; then
@@ -63,29 +80,13 @@ if [ -n "$(find "${LIB}" \( -perm -0020 -o -perm -0002 \) -print -quit)" ]; then
     exit 1
 fi
 
-printf '%s\n' "${units}" | while IFS=: read -r unit exec_start extra; do
-    [ -n "${unit}" ] || continue
-    target="${exec_start%% *}"
-    [ -x "${target}" ] || { echo "${target} is missing or not executable" >&2; exit 1; }
-    mkdir -p "${UNIT_DIR}/${unit}.service.d"
-    {
-        echo "# Installed by scripts/fix-root-ownership.sh. Points a root unit at a"
-        echo "# root-owned copy of the script instead of the user-writable deploy"
-        echo "# checkout. Undo with: scripts/fix-root-ownership.sh --remove"
-        echo "[Service]"
-        # Cleared first: systemd appends to ExecStart for Type=oneshot, so an
-        # override without the empty assignment adds a second command rather
-        # than replacing the first, and the checkout copy still runs.
-        echo "ExecStart="
-        echo "ExecStart=${exec_start}"
-        # Not `[ -n "$extra" ] && echo ...`: an empty extra makes that list
-        # return non-zero, and under `set -e` a bare failing list ends the
-        # script -- two of these three units have no extra directive.
-        if [ -n "${extra}" ]; then echo "${extra}"; fi
-        echo "ReadOnlyPaths=${LIB}"
-    } >"${UNIT_DIR}/${unit}.service.d/${DROPIN}"
-    chmod 0644 "${UNIT_DIR}/${unit}.service.d/${DROPIN}"
-    echo "pinned ${unit}.service to ${target}"
+for f in ${dropins}; do
+    # The last assignment is the command; the empty one before it clears the
+    # unit's, since systemd appends to ExecStart for Type=oneshot.
+    target="$(sed -n 's/^ExecStart=\([^ ][^ ]*\).*/\1/p' "${SHIPPED}/${f}" | tail -1)"
+    [ -x "${target}" ] || { echo "${target:-${f}: no ExecStart} is missing or not executable" >&2; exit 1; }
+    units_install "${SHIPPED}" "${UNIT_DIR}" "${f}"
+    echo "pinned ${f%.d/*} to ${target}"
 done
 
 systemctl daemon-reload
@@ -94,11 +95,11 @@ systemctl daemon-reload
 # apply -- wrong directory, wrong unit name, a typo in the section header --
 # leaves the file on disk looking correct while the unit still runs the old
 # command, which is the one failure this cannot afford to report as success.
-printf '%s\n' "${units}" | while IFS=: read -r unit _ _; do
-    [ -n "${unit}" ] || continue
-    resolved="$(systemctl show -p ExecStart --value "${unit}.service" 2>/dev/null || true)"
+for f in ${dropins}; do
+    unit="${f%.d/*}"
+    resolved="$(systemctl show -p ExecStart --value "${unit}" 2>/dev/null || true)"
     case "${resolved}" in
-        *"${LIB}"*) echo "verified ${unit}.service runs from ${LIB}" ;;
-        *) echo "FAILED: ${unit}.service still resolves to: ${resolved}" >&2; exit 1 ;;
+        *"${LIB}"*) echo "verified ${unit} runs from ${LIB}" ;;
+        *) echo "FAILED: ${unit} still resolves to: ${resolved}" >&2; exit 1 ;;
     esac
 done
