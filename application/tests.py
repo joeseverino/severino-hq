@@ -191,6 +191,9 @@ class CapabilityTests(TestCase):
                         "title": "Atomic sync",
                         "doc_type": "runbook",
                         "status": "active",
+                        "system": "Example service",
+                        "environment": "other",
+                        "sensitivity": "internal",
                     }
                 ],
                 "topology": {"version": 3},
@@ -225,6 +228,9 @@ class CapabilityTests(TestCase):
                         "title": "Docs only",
                         "doc_type": "runbook",
                         "status": "active",
+                        "system": "Example service",
+                        "environment": "other",
+                        "sensitivity": "internal",
                     }
                 ]
             },
@@ -662,6 +668,9 @@ class DocumentationSyncTests(TestCase):
             "title": "Shared service",
             "doc_type": "runbook",
             "status": "active",
+            "system": "Example service",
+            "environment": "other",
+            "sensitivity": "internal",
         }
     ]
 
