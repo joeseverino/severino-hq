@@ -29,7 +29,6 @@ from .approvals import (
     held_by_default,
     may_be_held_by_default,
 )
-from .labels import human_label
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
 SURFACES = ("mcp", "api")
@@ -327,7 +326,7 @@ def _subject_label(subject: str) -> str:
 def _actions(specs, group: str) -> list[str]:
     """Row labels for one group. The prefix is dropped only where that keeps them apart."""
 
-    labels = [human_label(spec.name) for spec in specs]
+    labels = [spec.title for spec in specs]
     short = [_action(label, group, spec.name.split(".", 1)[0]) for label, spec in zip(labels, specs, strict=True)]
     return [
         _action(label, group, "") if short.count(action) > 1 else action
@@ -342,9 +341,10 @@ def _action(label: str, group: str, prefix: str) -> str:
         return word.lower().rstrip("s")
 
     group_stems = {stem(word) for word in group.split()} | ({stem(prefix)} if prefix else set())
-    words = label.split()
-    while len(words) > 1 and stem(words[0]) in group_stems:
-        words = words[1:]
+    # Wherever they fall: a declared label puts the verb first ("Create
+    # project"), a generated one puts it last ("Project Create").
+    kept = [word for word in label.split() if stem(word) not in group_stems]
+    words = kept or label.split()[-1:]
     words = [word if word.isupper() and len(word) > 1 else word.lower() for word in words]
     phrase = " ".join(words)
     return phrase[:1].upper() + phrase[1:]

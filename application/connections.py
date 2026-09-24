@@ -678,7 +678,7 @@ def _ability_state(
 ) -> ConnectionAbilityState:
     # At call time: capabilities compose plugin specs, which may declare
     # connections. Same reason action_links defers it.
-    from .labels import human_label
+    from .capabilities import capability_title
 
     evidence, missing = grant_evidence(ability, instance)
     # Unknown stays undecided; only absent or rejected proof closes the door.
@@ -696,7 +696,7 @@ def _ability_state(
         capability_action_link(
             ability.capability,
             ability.effect,
-            human_label(ability.capability),
+            capability_title(ability.capability),
             principal=principal,
         )
         if available

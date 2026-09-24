@@ -54,12 +54,23 @@ class CapabilitySpec:
     target_query: tuple[tuple[str, str | int | float | bool], ...] = ()
     execution_notes: tuple[str, ...] = ()
     target_initial_fields: tuple[str, ...] = ()
+    # What a person calls the command. Optional so an extension that has not
+    # named its commands still composes; those read as their dotted name.
+    label: str = ""
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
         if isinstance(self.required_capability, tuple):
             return self.required_capability
         return (self.required_capability,)
+
+    @property
+    def title(self) -> str:
+        """The command's name wherever a person reads it."""
+
+        from .labels import human_label
+
+        return self.label or human_label(self.name)
 
 
 @dataclass(frozen=True)

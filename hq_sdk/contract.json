@@ -210,12 +210,16 @@
           "target_help=",
           "target_query=",
           "execution_notes=",
-          "target_initial_fields="
+          "target_initial_fields=",
+          "label="
         ],
         "fields": [],
         "kind": "dataclass",
         "members": {
           "required_capabilities": {
+            "kind": "property"
+          },
+          "title": {
             "kind": "property"
           }
         }

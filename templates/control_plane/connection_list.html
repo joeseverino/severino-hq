@@ -21,7 +21,7 @@
     <div>
       <strong>{{ connection_posture.external_custody_count }}<span>/{{ connection_posture.connection_count }}</span></strong>
       <span>external custody</span>
-      <small>No credential field in this contract</small>
+      <small>HQ holds no secret values</small>
     </div>
     <div>
       <strong>{{ connection_posture.ability_count }}</strong>
@@ -164,7 +164,7 @@ they stay visible and stay in the same table.
                     </svg>
                   </a>
                 {% else %}
-                  <a class="connection-direct-action" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
+                  <a class="connection-direct-action{% if action.effect == 'destructive' %} is-destructive{% endif %}" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
                 {% endif %}
               {% endfor %}
               {% if not connection.recommended_action and not connection.row_actions %}<span class="muted">—</span>{% endif %}

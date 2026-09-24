@@ -48,6 +48,10 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
     if not spec.summary.strip():
         raise ImproperlyConfigured(f"Capability {spec.name!r} has no summary.")
+    if spec.label != spec.label.strip() or len(spec.label) > 60:
+        raise ImproperlyConfigured(
+            f"Capability {spec.name!r} needs a short label without padding."
+        )
     if spec.effect not in EFFECTS:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid effect {spec.effect!r}."

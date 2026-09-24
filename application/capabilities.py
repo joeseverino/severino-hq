@@ -75,6 +75,13 @@ class _UnusableTarget(Exception):
     """The target arrived, but not as the kind the capability declared."""
 
 
+def capability_title(name: str) -> str:
+    """What a person calls the command named ``name``, registered or not."""
+
+    spec = capability_registry().get(name)
+    return spec.title if spec else human_label(name)
+
+
 CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "hq.sync",
@@ -88,6 +95,7 @@ CORE_CAPABILITY_SPECS = (
         HQSyncCommand,
         execute_hq_sync,
         subject_resource="documentation",
+        label="Sync the vault",
     ),
     CapabilitySpec(
         "project.create",
@@ -97,6 +105,7 @@ CORE_CAPABILITY_SPECS = (
         ProjectCommand,
         save_project,
         subject_resource="projects",
+        label="Create project",
     ),
     CapabilitySpec(
         "project.upsert",
@@ -106,6 +115,7 @@ CORE_CAPABILITY_SPECS = (
         ProjectCommand,
         upsert_project,
         subject_resource="projects",
+        label="Create or update project",
     ),
     CapabilitySpec(
         "project.update",
@@ -118,6 +128,7 @@ CORE_CAPABILITY_SPECS = (
         "projects",
         target_label="Project slug",
         target_help="The project to update.",
+        label="Update project",
     ),
     CapabilitySpec(
         "project.refresh",
@@ -135,6 +146,7 @@ CORE_CAPABILITY_SPECS = (
             "Ask GitHub for current push metadata using the configured connection.",
             "Persist the observed timestamp and attribute the refresh to this operator.",
         ),
+        label="Refresh project metadata",
     ),
     CapabilitySpec(
         "contact.submissions.list",
@@ -149,6 +161,7 @@ CORE_CAPABILITY_SPECS = (
             "Read submissions through the configured D1 connection.",
             "Return only the requested bounded result set.",
         ),
+        label="List contact submissions",
     ),
     CapabilitySpec(
         "contact.submission.review",
@@ -166,6 +179,7 @@ CORE_CAPABILITY_SPECS = (
             "Write the review fields through the configured D1 connection.",
             "Record the attributed change in HQ's audit log.",
         ),
+        label="Review contact submission",
     ),
     CapabilitySpec(
         "contact.submission.delete",
@@ -183,6 +197,7 @@ CORE_CAPABILITY_SPECS = (
             "Delete the record through the configured D1 connection.",
             "Treat an already-absent record as a successful retry and audit the change.",
         ),
+        label="Delete contact submission",
     ),
     CapabilitySpec(
         "asset.create",
@@ -192,6 +207,7 @@ CORE_CAPABILITY_SPECS = (
         AssetCommand,
         save_asset,
         subject_resource="assets",
+        label="Create asset",
     ),
     CapabilitySpec(
         "asset.upsert",
@@ -201,6 +217,7 @@ CORE_CAPABILITY_SPECS = (
         AssetCommand,
         upsert_asset,
         subject_resource="assets",
+        label="Create or update asset",
     ),
     CapabilitySpec(
         "asset.update",
@@ -213,6 +230,7 @@ CORE_CAPABILITY_SPECS = (
         "assets",
         target_label="Asset slug",
         target_help="The asset to update.",
+        label="Update asset",
     ),
     CapabilitySpec(
         "content.create",
@@ -222,6 +240,7 @@ CORE_CAPABILITY_SPECS = (
         ContentCommand,
         save_content,
         subject_resource="content",
+        label="Create content",
     ),
     CapabilitySpec(
         "content.update",
@@ -234,6 +253,7 @@ CORE_CAPABILITY_SPECS = (
         "content",
         target_label="Content slug",
         target_help="The content item to update.",
+        label="Update content",
     ),
     CapabilitySpec(
         "expense.create",
@@ -243,6 +263,7 @@ CORE_CAPABILITY_SPECS = (
         ExpenseCommand,
         save_expense,
         subject_resource="expenses",
+        label="Record expense",
     ),
     CapabilitySpec(
         "expense.update",
@@ -255,6 +276,7 @@ CORE_CAPABILITY_SPECS = (
         "expenses",
         target_label="Expense ID",
         target_help="The expense to update.",
+        label="Update expense",
     ),
     CapabilitySpec(
         "documentation.create",
@@ -264,6 +286,7 @@ CORE_CAPABILITY_SPECS = (
         DocumentationCommand,
         save_documentation,
         subject_resource="documentation",
+        label="Create document",
     ),
     CapabilitySpec(
         "documentation.update",
@@ -276,6 +299,7 @@ CORE_CAPABILITY_SPECS = (
         "documentation",
         target_label="Document ID",
         target_help="The documentation record to update.",
+        label="Update document",
     ),
     CapabilitySpec(
         "documentation.sync",
@@ -285,6 +309,7 @@ CORE_CAPABILITY_SPECS = (
         DocumentationSyncCommand,
         execute_documentation_sync,
         subject_resource="documentation",
+        label="Sync documentation",
     ),
     CapabilitySpec(
         "receipt.update",
@@ -297,6 +322,7 @@ CORE_CAPABILITY_SPECS = (
         "receipts",
         target_label="Receipt ID",
         target_help="The receipt to update.",
+        label="Update receipt",
     ),
     CapabilitySpec(
         "project.delete",
@@ -309,6 +335,7 @@ CORE_CAPABILITY_SPECS = (
         "projects",
         target_label="Project slug",
         target_help="The project to delete.",
+        label="Delete project",
     ),
     CapabilitySpec(
         "asset.delete",
@@ -321,6 +348,7 @@ CORE_CAPABILITY_SPECS = (
         "assets",
         target_label="Asset slug",
         target_help="The asset to delete.",
+        label="Delete asset",
     ),
     CapabilitySpec(
         "content.delete",
@@ -333,6 +361,7 @@ CORE_CAPABILITY_SPECS = (
         "content",
         target_label="Content slug",
         target_help="The content item to delete.",
+        label="Delete content",
     ),
     CapabilitySpec(
         "expense.delete",
@@ -345,6 +374,7 @@ CORE_CAPABILITY_SPECS = (
         "expenses",
         target_label="Expense ID",
         target_help="The expense to delete.",
+        label="Delete expense",
     ),
     CapabilitySpec(
         "documentation.delete",
@@ -357,6 +387,7 @@ CORE_CAPABILITY_SPECS = (
         "documentation",
         target_label="Document ID",
         target_help="The documentation record to delete.",
+        label="Delete document",
     ),
     CapabilitySpec(
         "receipt.delete",
@@ -369,6 +400,7 @@ CORE_CAPABILITY_SPECS = (
         "receipts",
         target_label="Receipt ID",
         target_help="The receipt to delete.",
+        label="Delete receipt",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",
@@ -378,6 +410,7 @@ CORE_CAPABILITY_SPECS = (
         ManagedResourceCommand,
         save_managed_resource,
         subject_resource="infrastructure.resources",
+        label="Declare resource",
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
@@ -391,6 +424,7 @@ CORE_CAPABILITY_SPECS = (
         target_label="Resource key",
         target_help="The managed infrastructure resource to update.",
         target_initial_fields=("key", "kind", "spec", "enabled"),
+        label="Update resource",
     ),
     CapabilitySpec(
         "infrastructure.reconcile",
@@ -403,6 +437,7 @@ CORE_CAPABILITY_SPECS = (
         "infrastructure.resources",
         target_label="Resource key",
         target_help="The managed infrastructure resource to reconcile.",
+        label="Reconcile resource",
     ),
     CapabilitySpec(
         "infrastructure.controller.refresh",
@@ -416,6 +451,7 @@ CORE_CAPABILITY_SPECS = (
             "Ring the credential-free controller doorbell; no provider authority enters the web process.",
             "The privileged controller pulls its own contract and refreshes only what HQ says is due.",
         ),
+        label="Refresh controller readings",
     ),
     CapabilitySpec(
         "infrastructure.resource.remove",
@@ -428,6 +464,7 @@ CORE_CAPABILITY_SPECS = (
         "infrastructure.resources",
         target_label="Resource key",
         target_help="The managed infrastructure resource to remove.",
+        label="Remove resource",
     ),
     CapabilitySpec(
         "tailnet.routes.approve",
@@ -446,6 +483,7 @@ CORE_CAPABILITY_SPECS = (
             "Queue one approval for the controller; the API call runs outside this request.",
             "Approve exactly the advertised set, so no route this was not about is withdrawn.",
         ),
+        label="Approve subnet routes",
     ),
     CapabilitySpec(
         "tailnet.reach.allow",
@@ -469,6 +507,7 @@ CORE_CAPABILITY_SPECS = (
             "Amend the tailnet policy, which is a gated kind: a person consents "
             "before anything reaches the tailnet.",
         ),
+        label="Allow tailnet reach",
     ),
     CapabilitySpec(
         "certificate.renew",
@@ -487,6 +526,7 @@ CORE_CAPABILITY_SPECS = (
             "Queue one renewal request for the controller; provider work runs outside this page request.",
             "Return the queued operation and policy decision, attributed to this operator.",
         ),
+        label="Renew certificate",
     ),
     # The first two capabilities that read something HQ does not hold. Both are
     # `read`, so neither takes an idempotency key and neither writes: asking a
@@ -505,6 +545,7 @@ CORE_CAPABILITY_SPECS = (
             "Return the records as the resolver gave them, with no TTL: this "
             "provider reports a constant, which is not a measurement.",
         ),
+        label="Look up a name",
     ),
     CapabilitySpec(
         "lookup.address",
@@ -521,6 +562,7 @@ CORE_CAPABILITY_SPECS = (
             "Read the RDAP allocation, which the registry publishes and which "
             "carries the company. Either registry may fail without the other.",
         ),
+        label="Look up an address",
     ),
 )
 
@@ -545,7 +587,7 @@ def describe_capabilities() -> dict[str, Any]:
         "capabilities": [
             {
                 "name": spec.name,
-                "label": human_label(spec.name),
+                "label": spec.title,
                 "summary": spec.summary,
                 "effect": spec.effect,
                 "required_capabilities": [

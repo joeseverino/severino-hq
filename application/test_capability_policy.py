@@ -347,6 +347,7 @@ class PageTests(PolicyTestCase):
 
         self.assertEqual(_action("Example Widget Mark Ready", "Widgets", "example"), "Mark ready")
         self.assertEqual(_action("Project Create", "Projects", "project"), "Create")
+        self.assertEqual(_action("Create or update project", "Projects", "project"), "Create or update")
 
     def test_only_acronyms_are_capitalised(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
@@ -357,10 +358,62 @@ class PageTests(PolicyTestCase):
 
         specs = [spec("documentation.sync"), spec("hq.sync")]
 
-        self.assertEqual(_actions(specs, "Documentation"), ["Sync", "HQ sync"])
+        self.assertEqual(_actions(specs, "Documentation"), ["Sync", "Sync the vault"])
 
     def test_the_matrix_costs_the_same_however_many_capabilities_and_agents(self):
         AgentIdentity.objects.create(client_id="second-agent", granted=["read"])
 
         with self.assertNumQueries(3):
             matrix()
+
+
+class CommandTitleTests(TestCase):
+    """A command is called what it declares, wherever a person reads it."""
+
+    def test_a_declared_label_is_the_title(self):
+        from .capabilities import capability_title
+
+        self.assertEqual(spec("project.create").title, "Create project")
+        self.assertEqual(capability_title("contact.submission.delete"), "Delete contact submission")
+
+    def test_a_command_with_no_label_reads_as_its_name(self):
+        from .capabilities import capability_title
+
+        self.assertEqual(capability_title("example.not.registered"), "Example Not Registered")
+
+    def test_every_core_command_is_named(self):
+        from .capabilities import CORE_CAPABILITY_SPECS
+
+        self.assertEqual([item.name for item in CORE_CAPABILITY_SPECS if not item.label], [])
+
+    def test_a_padded_label_does_not_compose(self):
+        from dataclasses import replace
+
+        from django.core.exceptions import ImproperlyConfigured
+
+        from .integration_validation import validate_capability_spec
+
+        with self.assertRaises(ImproperlyConfigured):
+            validate_capability_spec(replace(spec("project.create"), label=" Create project"))
+
+    def test_a_connection_offers_the_command_by_its_title_and_marks_destruction(self):
+        from .connection_contracts import ConnectionAbility, ConnectionInstance
+        from .connections import _ability_state
+        from .security import Capability, Principal
+
+        ability = ConnectionAbility(
+            "example.remove", "Remove", "Removes one.", "destructive",
+            grant="coarse", capability="contact.submission.delete",
+        )
+        operator = Principal(
+            "operator", "web", frozenset({Capability.READ, Capability.MANAGE_CONTACTS})
+        )
+
+        state = _ability_state(
+            ability,
+            ConnectionInstance("one", "One", "example", "good", "Healthy"),
+            operator,
+        )
+
+        self.assertEqual(state.action.label, "Delete contact submission")
+        self.assertEqual(state.action.effect, "destructive")
