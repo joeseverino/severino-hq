@@ -34,6 +34,7 @@ from . import (
 from .contracts import DOTTED_NAME
 from .integration_specs import ResourceSpec
 from .integrations import integration_graph
+from .input_errors import pydantic_refusal
 from .integration_validation import required_capability_names
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
@@ -317,9 +318,10 @@ class UnsupportedResourceOperation(ResourceError):
 
 
 class InvalidResourceInput(ResourceError):
-    def __init__(self, errors: list[dict[str, Any]]):
-        super().__init__("Resource input did not match its schema.")
-        self.errors = errors
+    def __init__(self, name: str, errors: list[dict[str, Any]]):
+        refusal = pydantic_refusal(name, errors)
+        super().__init__(refusal.message)
+        self.errors = refusal.details
 
 
 class ResourceNotFound(ResourceError):
@@ -398,7 +400,7 @@ def list_resource(
     try:
         parsed = spec.list_query_type.model_validate(query or {}, strict=strict)
     except ValidationError as exc:
-        raise InvalidResourceInput(exc.errors(include_url=False)) from exc
+        raise InvalidResourceInput(name, exc.errors()) from exc
     result = spec.list_handler(**parsed.model_dump())
     if (
         not isinstance(result, dict)
@@ -424,7 +426,7 @@ def get_resource(
             identifier, strict=strict
         )
     except ValidationError as exc:
-        raise InvalidResourceInput(exc.errors(include_url=False)) from exc
+        raise InvalidResourceInput(name, exc.errors()) from exc
     try:
         result = spec.detail_handler(parsed)
     except spec.not_found_errors as exc:

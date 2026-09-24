@@ -418,6 +418,64 @@ class TransportTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_input")
 
+    def test_an_unknown_payload_field_is_named_in_a_400(self):
+        with _serving():
+            response = self._post(
+                "project.create",
+                {"payload": {"name": "Typo", "slug": "typo", "stauts": "active"}},
+                token=_token(scope="write_projects"),
+            )
+        self.assertEqual(response.status_code, 400)
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "invalid_input")
+        self.assertIn("stauts", error["message"])
+
+    def test_an_invalid_payload_names_the_field_in_a_400(self):
+        with _serving():
+            response = self._post(
+                "project.create",
+                {"payload": {"slug": "nameless"}},
+                token=_token(scope="write_projects"),
+            )
+        self.assertEqual(response.status_code, 400)
+        error = response.json()["error"]
+        self.assertEqual(error["code"], "invalid_input")
+        self.assertEqual(error["message"], "project.create: name is required.")
+        self.assertEqual(error["details"][0]["type"], "missing")
+
+    def test_a_refused_value_appears_nowhere_in_the_response(self):
+        """Neither message nor details repeat what was sent: it may be a secret."""
+
+        secret = "hunter2-not-for-logs"
+        token = _token(scope="write_projects")
+        payloads = {
+            "schema": {"name": [secret], "slug": "schema"},
+            "domain": {"name": "Domain", "slug": "domain", "status": secret},
+        }
+        for case, payload in payloads.items():
+            with self.subTest(case), _serving():
+                response = self._post(
+                    "project.create",
+                    {"payload": payload},
+                    token=token,
+                    idempotency_key=f"secret-{case}",
+                )
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["error"]["code"], "invalid_input")
+            self.assertNotIn(secret, response.content.decode())
+
+        with _serving():
+            listed = self.client.get(
+                f"/api/v2/resources/projects/?limit={secret}",
+                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
+            )
+        self.assertEqual(listed.status_code, 400)
+        self.assertEqual(
+            listed.json()["error"]["message"],
+            "projects: limit must be a valid integer.",
+        )
+        self.assertNotIn(secret, listed.content.decode())
+
     def test_payload_cannot_be_a_falsey_non_object(self):
         with _serving():
             response = self._post(
@@ -690,6 +748,9 @@ class TransportTests(TestCase):
             )
         self.assertEqual(unknown.status_code, 400)
         self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
+        self.assertEqual(
+            unknown.json()["error"]["message"], "projects: limti is not a known field."
+        )
         self.assertEqual(repeated.status_code, 400)
 
     def test_resource_read_requires_its_declared_grant(self):
