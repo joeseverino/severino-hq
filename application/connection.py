@@ -19,6 +19,8 @@ That is the property that makes the rest worth reading.
 
 from __future__ import annotations
 
+from ipaddress import ip_address
+
 from dataclasses import dataclass
 from datetime import datetime, timezone as utc
 from django.conf import settings
@@ -30,7 +32,7 @@ import socket
 from core.network import client_ip, is_trusted_proxy, split_host_port
 
 from . import tailnet
-from .reach import network_of
+from .reach import network_of, on_link_networks
 
 
 @dataclass(frozen=True)
@@ -222,6 +224,10 @@ def _peering(device: tailnet.Device | None) -> Peering:
         return PEERING_UNKNOWN
     host, _ = split_host_port(endpoint)
     where = network_of(host)
+    # A global IPv6 address in one of this host's own prefixes is the same
+    # network, whatever its type says.
+    if where == "public" and any(ip_address(host) in net for net in on_link_networks()):
+        where = "network"
     if where in {"network", "loopback"}:
         return Peering(
             "local",
@@ -961,6 +967,7 @@ def _policy_layer(
     # node's registered name, but a person reads the MagicDNS label, and two
     # phones registered as "localhost" are indistinguishable in the other one.
     verdict = tailnet.may_reach(source.name, target.name, port, known)
+    owners = tailnet.alias_owners(known)
     if not verdict.known:
         return Layer(
             layer_id,
@@ -977,14 +984,14 @@ def _policy_layer(
         label,
         verdict.allowed,
         verdict.detail,
-        evidence=", ".join(verdict.via) or f"port {port}",
+        evidence=", ".join(tailnet.as_devices(verdict.via, owners)) or f"port {port}",
         # The grant itself. "Allowed" without the rule that allowed it is a
         # verdict nobody can check, and the rule is the thing an operator would
         # go and change -- so the answer carries it rather than pointing at a
         # policy document and wishing them luck.
         rules=tuple(
-            f"{' '.join(rule.get('who') or ['?'])} → "
-            f"{' '.join(rule.get('to') or ['?'])}"
+            f"{', '.join(tailnet.as_devices(rule.get('who') or ['?'], owners))} → "
+            f"{'; '.join(tailnet.by_device(rule.get('to') or ['?'], owners))}"
             for rule in verdict.rules
         ),
         boundary="Zero trust policy",

@@ -662,8 +662,9 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/")
 
-        self.assertContains(response, "Infrastructure findings")
-        self.assertContains(response, "/infrastructure/findings/")
+        # Each finding is its own item, linked to its own rule's evidence.
+        self.assertNotContains(response, "Infrastructure findings")
+        self.assertContains(response, "/infrastructure/findings/?rule=")
 
     def test_output_a_project_lacks_is_counted_but_not_queued(self):
         """A shape of the portfolio, not a decision waiting on anyone.

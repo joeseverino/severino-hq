@@ -15,7 +15,8 @@ who is able to reach the thing on the other side.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ipaddress import ip_address, ip_network
+from ipaddress import IPv6Network, ip_address, ip_network
+from pathlib import Path
 
 # Tailscale hands out addresses from the carrier-grade NAT range and one IPv6
 # ULA prefix. Nothing else on a normal network uses either, so an address in
@@ -77,6 +78,40 @@ def reach_of(answers: tuple[str, ...]) -> Reach:
         if candidate in found:
             return candidate
     return UNKNOWN
+
+
+# Where the kernel lists this host's IPv6 addresses, one per line:
+# address, interface index, prefix length, scope, flags, interface name.
+IF_INET6 = Path("/proc/net/if_inet6")
+# Interfaces whose prefixes say nothing about the network the host sits on.
+_NOT_ON_LINK = ("lo", "tailscale", "docker", "br-", "veth")
+
+
+def on_link_networks(source: Path = IF_INET6) -> tuple[IPv6Network, ...]:
+    """The global IPv6 prefixes this host is directly attached to.
+
+    A global address is public by type, yet two machines in one house share a
+    prefix: an address inside one of these is on this host's own network. Read
+    from the kernel on each call, since router advertisements can change them.
+    Empty where the file does not exist.
+    """
+
+    try:
+        lines = source.read_text().splitlines()
+    except OSError:
+        return ()
+    found = set()
+    for line in lines:
+        fields = line.split()
+        if len(fields) != 6 or fields[3] != "00" or fields[5].startswith(_NOT_ON_LINK):
+            continue
+        hexed = fields[0]
+        address = ":".join(hexed[index : index + 4] for index in range(0, 32, 4))
+        try:
+            found.add(ip_network(f"{address}/{int(fields[2], 16)}", strict=False))
+        except ValueError:
+            continue
+    return tuple(sorted(found))
 
 
 def network_of(address: str) -> str:

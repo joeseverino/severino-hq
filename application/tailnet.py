@@ -14,6 +14,8 @@ guessing.
 
 from __future__ import annotations
 
+import re
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -242,6 +244,48 @@ def observer(known: dict[str, Device] | None = None) -> Device | None:
     )
 
 
+def alias_owners(known: dict[str, Device] | None = None) -> dict[str, str]:
+    """Each policy alias a device carries, mapped to that device's label.
+
+    A device with an IPv4 and an IPv6 address is usually named twice in the
+    policy, once per address; both become the one device a person knows.
+    """
+
+    known = devices() if known is None else known
+    return {alias: device.label for device in known.values() for alias in device.aliases}
+
+
+def as_devices(names, owners: dict[str, str]) -> tuple[str, ...]:
+    """Policy names, with host aliases replaced by their device, each once."""
+
+    return tuple(dict.fromkeys(owners.get(name, name) for name in names))
+
+
+def by_device(destinations, owners: dict[str, str]) -> tuple[str, ...]:
+    """``alias:port`` destinations, as one ``device: ports`` entry per device."""
+
+    ports_of: dict[str, set[str]] = {}
+    for destination in destinations:
+        name, _, port = str(destination).rpartition(":")
+        # Only a port after the colon makes it one: "autogroup:internet" is a name.
+        if not name or not _PORT.fullmatch(port):
+            name, port = str(destination), ""
+        ports_of.setdefault(owners.get(name, name), set()).add(port)
+    return tuple(
+        f"{device}: {', '.join(sorted((p for p in ports if p), key=_port_order))}"
+        if any(ports)
+        else device
+        for device, ports in ports_of.items()
+    )
+
+
+_PORT = re.compile(r"\*|[0-9]+(?:-[0-9]+)?")
+
+
+def _port_order(port: str) -> tuple[int, str]:
+    return (int(port), "") if port.isdigit() else (1 << 16, port)
+
+
 def ports() -> tuple[int, ...]:
     """Every port the sweep asked about, so the form offers exactly those."""
 
@@ -282,19 +326,22 @@ def may_reach(
             "answer for it either way.",
         )
     matched = tuple(sorted(who_asks.principals & set(admitted)))
+    owners = alias_owners(known)
     if matched:
         return Verdict(
             True,
             True,
-            f"The policy admits {', '.join(matched)} to {target} on {port}.",
+            f"The policy admits {', '.join(as_devices(matched, owners))} to "
+            f"{owners.get(target, target)} on {port}.",
             via=matched,
             rules=who_answers.rules.get(port, ()),
         )
     return Verdict(
         False,
         True,
-        f"No rule admits {', '.join(sorted(who_asks.principals))} to {target} "
-        f"on {port}. It is open to {', '.join(admitted)}.",
+        f"No rule admits {', '.join(as_devices(sorted(who_asks.principals), owners))} "
+        f"to {owners.get(target, target)} on {port}. It is open to "
+        f"{', '.join(as_devices(admitted, owners))}.",
         rules=who_answers.rules.get(port, ()),
     )
 

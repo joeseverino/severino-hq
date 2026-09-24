@@ -19,6 +19,10 @@ from .connections import ConnectionGroup
 from .reach import TAILNET
 
 
+# Lifecycle states that need a person: stale evidence, missing access, a
+# failed probe, a rejected credential.
+ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked")
+
 @dataclass(frozen=True)
 class SecurityControl:
     """One independently checkable part of the connection boundary."""
@@ -362,11 +366,11 @@ def connection_security_posture(
         for connection in connections
         if connection.instance.observed_at is not None
     )
-    healthy = sum(connection.instance.status == "good" for connection in connections)
-    attention = sum(
-        connection.instance.status in {"attention", "serious"}
-        for connection in connections
-    )
+    lifecycle = Counter(connection.lifecycle for connection in connections)
+    # The headline counts the same lifecycle each row shows, so the two cannot
+    # disagree about a connection.
+    healthy = lifecycle["ready"] + lifecycle["reachable"]
+    attention = sum(lifecycle[state] for state in ATTENTION_LIFECYCLES)
     unverified = len(connections) - healthy - attention
     evidence = Counter(state.evidence for state in states)
     scope_verified = evidence["verified"]
@@ -375,7 +379,6 @@ def connection_security_posture(
     scope_undeclared = evidence["undeclared"] + evidence["unverified"]
     scope_missing = evidence["missing"] + evidence["revoked"]
     scope_unknown = evidence["unknown"]
-    lifecycle = Counter(connection.lifecycle for connection in connections)
     external_custody = sum(
         len(group.connections) for group in groups if group.spec.secret_store
     )
