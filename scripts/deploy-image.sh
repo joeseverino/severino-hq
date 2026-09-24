@@ -52,6 +52,23 @@ esac
 # deploy without one.
 registry_user=""
 registry_token=""
+
+# Everything this run creates that must not outlive it: the ephemeral registry
+# credential, the compose files staged out of the image, and the container they
+# are copied from. One trap for all of them, because a second `trap ... EXIT`
+# replaces the first rather than adding to it.
+docker_config=""
+compose_stage=""
+compose_cid=""
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
+cleanup() {
+    [ -n "${compose_cid}" ] && docker rm -f "${compose_cid}" >/dev/null 2>&1
+    [ -n "${compose_stage}" ] && rm -rf "${compose_stage}"
+    [ -n "${docker_config}" ] && rm -rf "${docker_config}"
+    return 0
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 if [ ! -t 0 ]; then
     IFS= read -r registry_user || true
     IFS= read -r registry_token || true
@@ -66,7 +83,6 @@ if [ -n "${registry_token}" ]; then
     # this script, is pointed at by DOCKER_CONFIG rather than by root's home,
     # and the trap that already had to fire deletes it outright.
     docker_config="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-deploy-docker.XXXXXX")"
-    trap 'rm -rf "${docker_config}"' EXIT INT TERM
     chmod 0700 "${docker_config}"
     umask 077
     printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' \
@@ -104,14 +120,21 @@ if ! "${cosign}" verify \
     exit 1
 fi
 
-# The compose file root acts on. Falls back to the checkout only when the
-# root-owned tree has not been populated yet -- a first bring-up, before
-# severino-hq-sync-scripts has run -- and says so, because that path is the one
-# this script exists to stop using silently.
+# The compose file the *running* release was deployed with. Falls back to the
+# checkout only when the root-owned tree has not been populated yet -- a first
+# bring-up, before severino-hq-sync-scripts has run -- and says so, because that
+# path is the one this script exists to stop using silently.
+#
+# It pulls the new image and, snapshotted, puts the old one back on rollback. It
+# does not start the new release: the lib tree is refreshed from the running
+# image only after the health check, so recreating the container with it would
+# apply the previous release's compose file and every compose change would land
+# one deploy late. The new release runs under the file its own image carries,
+# staged below once that image has been pulled.
 if [ -f "${lib_dir}/docker-compose.yml" ]; then
-    readonly compose_file="${lib_dir}/docker-compose.yml"
+    compose_file="${lib_dir}/docker-compose.yml"
 else
-    readonly compose_file="${app_dir}/docker-compose.yml"
+    compose_file="${app_dir}/docker-compose.yml"
     echo "warning: ${lib_dir}/docker-compose.yml is absent; using the checkout copy." >&2
 fi
 
@@ -170,6 +193,7 @@ rollback() {
         return 1
     fi
     echo "Restoring previous image ${previous_image}." >&2
+    compose_file="${previous_compose}"
     SEVERINO_IMAGE="${previous_image}" compose up -d --no-build app
     if [ -n "${controller_backup}" ]; then
         cp -Rp "${controller_backup}/." "${lib_dir}/"
@@ -180,11 +204,34 @@ rollback() {
     echo "Previous image and prior controller timer state restored." >&2
 }
 
+# Root-owned and private: root is about to act on what lands here, so nothing
+# else may be able to write it between the copy and the `up`.
+compose_stage="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-compose.XXXXXX")"
+chmod 0700 "${compose_stage}"
+readonly previous_compose="${compose_stage}/previous.yml"
+cp -p "${compose_file}" "${previous_compose}"
+
 if ! SEVERINO_IMAGE="${image}" compose pull app; then
     echo "Image pull failed; restoring prior controller timer state." >&2
     restore_timers
     exit 1
 fi
+
+# Out of the image that was verified and pulled above, by its digest, and never
+# pulled again: `--pull never` makes a missing local copy an error rather than a
+# second fetch, so the file cannot come from anything cosign did not check. No
+# fallback to the previous file -- that is the one-deploy-late behaviour this
+# replaces, and it would be silent.
+if ! compose_cid="$(docker create --pull never "${image}" true)" \
+    || ! docker cp "${compose_cid}:/app/docker-compose.yml" "${compose_stage}/next.yml"; then
+    echo "Could not read docker-compose.yml from ${image}; restoring prior controller timer state." >&2
+    restore_timers
+    exit 1
+fi
+docker rm -f "${compose_cid}" >/dev/null
+compose_cid=""
+compose_file="${compose_stage}/next.yml"
+
 if ! SEVERINO_IMAGE="${image}" compose up -d --no-build app; then
     echo "Application replacement failed." >&2
     rollback
