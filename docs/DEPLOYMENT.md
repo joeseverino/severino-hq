@@ -142,6 +142,14 @@ declared provider in plan mode, and only then enables the apply timer. Missing
 credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
+What it installs is every unit and drop-in under `deploy/systemd`, found by
+walking the directory (`scripts/lib/systemd-units.sh`); `*.example` templates
+are copied into place by hand and never installed. Every shipped timer and path
+is enabled. Adding a unit is adding its file — there is no list to update. The
+daily `severino-hq-script-drift` check compares the same set, byte for byte,
+with `/etc/systemd/system`, and names each file that differs. A drop-in the host
+adds beside a shipped one is the host's and is not compared.
+
 The same activation gate performs an authenticated pull of the live
 `jseverino.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the

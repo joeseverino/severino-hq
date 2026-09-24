@@ -1,9 +1,10 @@
 #!/bin/sh
 # Fails when the root-owned script tree no longer matches the image production
-# is running, or when a unit's shipped ExecStart has diverged from the drop-in.
+# is running, or when an installed systemd file no longer matches the one that
+# tree ships.
 set -eu
 LIB=/usr/local/lib/severino-hq
-APP_DIR=/opt/apps/severino-hq
+SYSTEMD_DIR=/etc/systemd/system
 rc=0
 
 if [ ! -f "$LIB/.source" ]; then
@@ -24,19 +25,27 @@ elif [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
     rc=1
 fi
 
-# A repo change to a unit's ExecStart would be masked by the drop-in. Compare
-# the shipped unit's ExecStart basename against the drop-in's.
-for u in severino-hq-backup severino-hq-secrets severino-hq-controller; do
-    shipped="$APP_DIR/deploy/systemd/$u.service"
-    dropin="/etc/systemd/system/$u.service.d/10-root-owned-exec.conf"
-    [ -f "$shipped" ] && [ -f "$dropin" ] || continue
-    a="$(sed -n 's|^ExecStart=.*/scripts/||p' "$shipped" | tail -1)"
-    b="$(sed -n 's|^ExecStart=.*/scripts/||p' "$dropin"  | tail -1)"
-    if [ -n "$a" ] && [ "$a" != "$b" ]; then
-        echo "drift: $u.service ships 'ExecStart=.../scripts/$a' but the drop-in pins '$b'" >&2
-        rc=1
-    fi
-done
+# Every unit and drop-in the tree ships, byte for byte against its installed
+# copy. This compared the ExecStart basename of three units and nothing else, so
+# a unit the installer never installed, or installed once and never again, was
+# drift nobody could see: the host ran stale copies of five shipped files with
+# this check green. The set is the installer's own, from the same library, so
+# the two cannot disagree about what "shipped" means.
+#
+# Read from the root tree, which the check above has just tied to the running
+# image, rather than from the deploy checkout anyone who deploys can write.
+# shellcheck source=scripts/lib/systemd-units.sh
+. "$LIB/scripts/lib/systemd-units.sh"
+if ! drifted="$(units_drifted "$LIB/deploy/systemd" "$SYSTEMD_DIR")"; then
+    echo "drift: could not list the shipped units; cannot confirm the installed ones" >&2
+    rc=1
+elif [ -n "$drifted" ]; then
+    for f in $drifted; do
+        echo "drift: $SYSTEMD_DIR/$f does not match $LIB/deploy/systemd/$f" >&2
+    done
+    echo "drift: install-controller.sh installs the shipped set; the next deploy runs it" >&2
+    rc=1
+fi
 
-[ "$rc" -eq 0 ] && echo "root-owned script tree is current"
+[ "$rc" -eq 0 ] && echo "root-owned script tree and systemd units are current"
 exit "$rc"

@@ -68,6 +68,8 @@ for f in \
     scripts/run-private.sh \
     scripts/provision-controller-ssh.sh \
     scripts/install-controller.sh \
+    scripts/severino-hq-check-scripts \
+    scripts/lib/systemd-units.sh \
     config/controller-connections.json
 do
     [ -e "$stage/$f" ] || { echo "sync aborted: $f missing from source" >&2; exit 1; }
