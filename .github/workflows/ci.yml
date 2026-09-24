@@ -77,8 +77,11 @@ jobs:
           curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${version}/shellcheck-v${version}.linux.x86_64.tar.xz" \
             | tar -xJ --strip-components=1 -C /usr/local/bin "shellcheck-v${version}/shellcheck"
           shellcheck --version
-      - run: ruff check .
+      - name: ruff
+        id: ruff
+        run: ruff check . && echo "no findings under ruff ${{ needs.toolchain.outputs.ruff-version }}" | tee "$RUNNER_TEMP/gate-ruff"
       - name: The README badges state what is actually tested
+        id: badges
         # Static markdown cannot be generated, so it is verified: the Python
         # versions a reader sees are the versions the matrix runs.
         run: |
@@ -92,8 +95,9 @@ jobs:
             echo "::error::README python badge says '$claimed'; the matrix runs '$expected'."
             exit 1
           fi
-          echo "README python badge agrees with the matrix: $expected"
+          echo "the python badge states the matrix: ${expected//|/, }" | tee "$RUNNER_TEMP/gate-badges"
       - name: requirements.txt is what requirements.in compiles to
+        id: lockfile
         # The header names the command that produces the lockfile, and the file
         # had drifted from it. Regenerated here with the pinned uv and compared,
         # so the committed pins are always the command's output and nothing else.
@@ -113,8 +117,9 @@ jobs:
             echo "::error::requirements.txt differs from what its header command produces. Rerun: $command"
             exit 1
           fi
-          echo "requirements.txt matches: $command"
+          echo "requirements.txt is the output of its header command" | tee "$RUNNER_TEMP/gate-lockfile"
       - name: The workflows are valid
+        id: workflows
         # actionlint was pinned in toolchain.env and run only by
         # scripts/check.sh when it happened to be installed, so nothing held CI
         # to it. With shellcheck on the PATH (installed above) it also checks
@@ -125,7 +130,10 @@ jobs:
           curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz" \
             | tar -xz -C /usr/local/bin actionlint
           actionlint -color
+          set -- .github/workflows/*.yml
+          echo "$# workflows pass actionlint ${version}, run: blocks included" | tee "$RUNNER_TEMP/gate-workflows"
       - name: Every action is pinned to a commit, with its version beside it
+        id: pins
         # A tag can be moved after review; a commit cannot. The version comment
         # is what Dependabot rewrites with the commit and what a reader checks,
         # so one without the other is a pin nobody can read.
@@ -139,8 +147,9 @@ jobs:
             echo "::error::pin every action to a full commit SHA followed by '# vX.Y.Z'"
             exit 1
           fi
-          echo "every action is pinned to a commit with its version"
+          echo "every action is pinned to a commit, with its version" | tee "$RUNNER_TEMP/gate-pins"
       - name: Every job has a timeout
+        id: timeouts
         # Without one a hung job holds its runner for GitHub's six-hour default.
         # A job that calls a reusable workflow cannot take one; the workflow it
         # calls is checked instead.
@@ -155,8 +164,9 @@ jobs:
             echo "::error::every job needs timeout-minutes"
             exit 1
           fi
-          echo "every job has a timeout"
+          echo "every job has timeout-minutes" | tee "$RUNNER_TEMP/gate-timeouts"
       - name: Every hosted job runs on the declared runner image
+        id: runners
         # The same reasoning as the badge check: workflow YAML cannot read
         # toolchain.env, so it is verified against it. A job left on
         # `ubuntu-latest` would move to a new OS on GitHub's schedule.
@@ -171,8 +181,9 @@ jobs:
             echo "::error::hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)."
             exit 1
           fi
-          echo "every hosted job runs on ${RUNNER_IMAGE}"
+          echo "every hosted job runs on ${RUNNER_IMAGE}" | tee "$RUNNER_TEMP/gate-runners"
       - name: No private extension names in the tree or the commit messages
+        id: private-names
         # The extensions are private repositories; this one is public, and
         # tracked files and commit messages are both published by a push.
         # scripts/check-private-names.sh holds the rule; the pull request's
@@ -183,14 +194,16 @@ jobs:
           RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          sh scripts/check-private-names.sh tree
+          sh scripts/check-private-names.sh tree | tee "$RUNNER_TEMP/gate-private-names"
           if [ -n "${RANGE_BASE}" ] && git cat-file -e "${RANGE_BASE}^{commit}" 2>/dev/null; then
             git log --format=%B "${RANGE_BASE}..HEAD" \
               | sh scripts/check-private-names.sh text "the commit messages"
           else
             git log -1 --format=%B | sh scripts/check-private-names.sh text "the commit message"
           fi
+          echo "none in the tracked tree or the commit messages" > "$RUNNER_TEMP/gate-private-names"
       - name: Shell safety
+        id: shell
         run: |
           set -euo pipefail
           . ./scripts/toolchain.env
@@ -206,6 +219,39 @@ jobs:
           shellcheck -x $SHELL_SOURCES
           # shellcheck disable=SC2086
           for suite in $SHELL_SUITES; do "$suite"; done
+          # shellcheck disable=SC2086
+          echo "$(echo $SHELL_SOURCES | wc -w | tr -d ' ') scripts parse and pass shellcheck; $(echo $SHELL_SUITES | wc -w | tr -d ' ') suites pass" \
+            | tee "$RUNNER_TEMP/gate-shell"
+      - name: Gate summary
+        # One table on the run's summary page, built from GitHub's own record
+        # of each step's outcome, so a failed check is a failed row rather than
+        # a missing one. Each check leaves a one-line detail when it passes.
+        if: always()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          set -euo pipefail
+          rows="$(printf '%s' "$STEPS" | jq -r 'to_entries[] | "\(.key)\t\(.value.outcome)"')"
+          total="$(printf '%s\n' "$rows" | grep -c . || true)"
+          failed="$(printf '%s\n' "$rows" | grep -c $'\tfailure' || true)"
+          {
+            echo "## Gate"
+            echo
+            if [ "$failed" -eq 0 ]; then echo "All ${total} checks passed."
+            else echo "**${failed} of ${total} checks failed.**"; fi
+            echo
+            echo "| Check | Result | Detail |"
+            echo "| --- | --- | --- |"
+            printf '%s\n' "$rows" | while IFS=$'\t' read -r id outcome; do
+              detail="$(cat "$RUNNER_TEMP/gate-$id" 2>/dev/null | tail -1 || true)"
+              case "$outcome" in
+                success) result="pass" ;;
+                failure) result="**fail**"; detail="see the step log" ;;
+                *) result="$outcome"; detail="${detail:-not run}" ;;
+              esac
+              echo "| \`$id\` | $result | ${detail//|/\\|} |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
   test:
     name: test
@@ -245,13 +291,27 @@ jobs:
         # before it is judged. Each test's logs are shown only if it fails, and
         # the ten slowest tests are named so a slow one is noticed, not endured.
         run: |
-          coverage run manage.py test --parallel auto --durations 10
+          set -euo pipefail
+          log="$RUNNER_TEMP/tests.log"
+          coverage run manage.py test --parallel auto --durations 10 2>&1 | tee "$log"
           coverage combine --quiet
           coverage report --fail-under="$COVERAGE_FLOOR"
-          pct="$(coverage report --format=total 2>/dev/null || echo '')"
-          if [ "${{ matrix.python-version }}" = "${{ needs.toolchain.outputs.oldest-python }}" ] && [ -n "$pct" ]; then
-            echo "### Test coverage: ${pct}%" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          pct="$(coverage report --format=total --precision=2)"
+          ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
+          {
+            echo "### Python ${{ matrix.python-version }}: ${ran}, coverage ${pct}% (floor ${COVERAGE_FLOOR}%)"
+            if [ "${{ matrix.python-version }}" = "${{ needs.toolchain.outputs.oldest-python }}" ]; then
+              echo
+              echo "<details><summary>Slowest tests</summary>"
+              echo
+              echo "| Seconds | Test |"
+              echo "| ---: | --- |"
+              sed -n '/^Slowest test durations/,/^$/p' "$log" | grep -E '^[0-9.]+s ' \
+                | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: The README badge states the coverage actually measured
         # The badge was hand-typed and drifted -- it claimed 80% against a real
         # 86% and a gate of 70%, three numbers for one fact in a repository
