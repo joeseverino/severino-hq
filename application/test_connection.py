@@ -1004,6 +1004,24 @@ class CarriageTests(TestCase):
         self.assertTrue(found.peering.public)
         self.assertEqual(found.peering.address, self.PUBLIC)
 
+    def test_a_global_address_on_this_hosts_own_prefix_is_its_own_network(self):
+        """Global by type, but the same /64 the host sits on: nothing crossed
+        the internet, and saying it did is wrong."""
+
+        from ipaddress import ip_network
+        from unittest import mock
+
+        with mock.patch(
+            "application.connection.on_link_networks",
+            return_value=(ip_network("2001:db8:0:1::/64"),),
+        ):
+            home = self._connection(direct_endpoint="[2001:db8:0:1::99]:41641").peering
+            away = self._connection(direct_endpoint="[2001:db8:ffff::5]:41641").peering
+
+        self.assertEqual(home.id, "local")
+        self.assertFalse(home.public)
+        self.assertEqual(away.id, "internet")
+
     def test_a_relayed_session_says_it_crosses_a_machine_neither_end_owns(self):
         found = self._connection(relay="dfw")
 

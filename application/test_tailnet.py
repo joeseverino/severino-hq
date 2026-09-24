@@ -202,3 +202,38 @@ class AliasPrincipalTests(TestCase):
         }
 
         self.assertFalse(may_reach("a-laptop", "a-server", 443, known).allowed)
+
+
+class SpokenAsDevicesTests(TestCase):
+    """A person reads devices, not the policy's per-address aliases."""
+
+    def _known(self):
+        from application.tailnet import Device
+
+        return {
+            "a-laptop": Device(name="a-laptop", addresses=("100.64.0.9",),
+                               aliases=("laptop", "laptop-v6")),
+            "a-server": Device(name="a-server", addresses=("100.64.0.10",),
+                               aliases=("server", "server-v6")),
+        }
+
+    def test_both_aliases_of_a_device_are_that_device_once(self):
+        from application.tailnet import alias_owners, as_devices
+
+        owners = alias_owners(self._known())
+
+        self.assertEqual(
+            as_devices(("laptop", "laptop-v6", "group:household"), owners),
+            ("a-laptop", "group:household"),
+        )
+
+    def test_destinations_become_one_port_list_per_device(self):
+        from application.tailnet import alias_owners, by_device
+
+        owners = alias_owners(self._known())
+
+        self.assertEqual(
+            by_device(("server-v6:443", "server:53", "server-v6:53", "server:22"), owners),
+            ("a-server: 22, 53, 443",),
+        )
+        self.assertEqual(by_device(("autogroup:internet",), owners), ("autogroup:internet",))

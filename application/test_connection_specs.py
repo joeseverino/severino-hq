@@ -678,7 +678,8 @@ class GrantEvidenceTests(TestCase):
             )
 
         self.assertEqual(connection_authority(()), "none")
-        self.assertEqual(connection_authority(states("verified", "coarse")), "proven")
+        self.assertEqual(connection_authority(states("verified")), "proven")
+        self.assertEqual(connection_authority(states("verified", "coarse")), "whole_account")
         self.assertEqual(connection_authority(states("verified", "undeclared")), "undeclared")
         self.assertEqual(connection_authority(states("unverified", "unknown")), "unknown")
         self.assertEqual(connection_authority(states("verified", "missing")), "missing")
@@ -697,6 +698,7 @@ class GrantEvidenceTests(TestCase):
         self.assertEqual(life(self.instance(status="serious", observed_at=now), "proven"), "unreachable")
         self.assertEqual(life(self.instance(status="neutral", observed_at=now), "proven"), "configured")
         self.assertEqual(life(fresh, "proven"), "ready")
+        self.assertEqual(life(fresh, "whole_account"), "ready")
         self.assertEqual(life(fresh, "undeclared"), "reachable")
 
     def test_a_grant_model_must_agree_with_its_scopes(self):
@@ -767,9 +769,9 @@ class GrantEvidenceTests(TestCase):
         core = next(g for g in outcome["groups"] if g["name"] == "infrastructure.controllers")
         by_ref = {item["label"]: item for item in core["instances"]}
 
-        # A login key is the whole machine: proven, and ready.
+        # A login key is the whole machine: named as such, and ready.
         self.assertEqual(by_ref["a-ssh"]["credential_model"], "coarse")
-        self.assertEqual(by_ref["a-ssh"]["authority"], "proven")
+        self.assertEqual(by_ref["a-ssh"]["authority"], "whole_account")
         self.assertEqual(by_ref["a-ssh"]["lifecycle"], "ready")
         self.assertTrue(all(a["evidence"] == "coarse" for a in by_ref["a-ssh"]["abilities"]))
         # A scoped token nobody has asked about: reachable, with the debt named.

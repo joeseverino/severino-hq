@@ -136,6 +136,7 @@ LIFECYCLE_LABELS = {
 # The one-word answer to "may HQ do what this connection is held for".
 AUTHORITY_LABELS = {
     "proven": "Authority proven",
+    "whole_account": "Whole-account credential",
     "undeclared": "Proof undeclared",
     "unknown": "Grants unknown",
     "missing": "Access missing",
@@ -189,6 +190,10 @@ def connection_authority(states: tuple["ConnectionAbilityState", ...]) -> str:
         return "unknown"
     if evidence & {"undeclared", "unverified"}:
         return "undeclared"
+    # It works, and it is the opposite of least privilege: said as such rather
+    # than folded into "proven".
+    if "coarse" in evidence:
+        return "whole_account"
     return "proven"
 
 
@@ -223,7 +228,7 @@ def connection_lifecycle(
         return "unreachable"
     if instance.status == "neutral":
         return "configured"
-    return "ready" if authority == "proven" else "reachable"
+    return "ready" if authority in {"proven", "whole_account"} else "reachable"
 
 
 @dataclass(frozen=True)

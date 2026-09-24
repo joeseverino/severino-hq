@@ -56,7 +56,10 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
             (
                 ConnectionView(
                     instance,
-                    (
+                    lifecycle={"good": "ready", "serious": "unreachable"}.get(
+                        status, "configured"
+                    ),
+                    abilities=(
                         ConnectionAbilityState(
                             ability,
                             ability_available,
@@ -77,6 +80,61 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
             ),
         ),
     )
+
+
+class OneStateModelTests(TestCase):
+    """The headline counts the lifecycle each row shows, so they cannot disagree."""
+
+    def _posture_with(self, lifecycle):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = replace(group.connections[0], lifecycle=lifecycle)
+        request = RequestFactory().get("/", HTTP_HOST="hq.example.test", REMOTE_ADDR="100.64.0.5")
+        return connection_security_posture(
+            (replace(group, connections=(view,)),), request=request
+        )
+
+    def test_each_lifecycle_lands_in_exactly_one_headline_bucket(self):
+        for lifecycle, bucket in (
+            ("ready", "healthy_count"),
+            ("reachable", "healthy_count"),
+            ("stale", "attention_count"),
+            ("unauthorized", "attention_count"),
+            ("unreachable", "attention_count"),
+            ("revoked", "attention_count"),
+            ("configured", "unverified_count"),
+        ):
+            with self.subTest(lifecycle=lifecycle):
+                posture = self._posture_with(lifecycle)
+                counts = {
+                    name: getattr(posture, name)
+                    for name in ("healthy_count", "attention_count", "unverified_count")
+                }
+                self.assertEqual(counts[bucket], 1, counts)
+                self.assertEqual(sum(counts.values()), 1, counts)
+
+    def test_a_whole_account_credential_is_named_and_still_ready(self):
+        from dataclasses import replace
+
+        from application.connections import (
+            AUTHORITY_LABELS,
+            connection_authority,
+            connection_lifecycle,
+        )
+
+        (group,) = _groups()
+        view = group.connections[0]
+        coarse = (replace(view.abilities[0], evidence="coarse"),)
+        authority = connection_authority(coarse)
+
+        self.assertEqual(authority, "whole_account")
+        self.assertEqual(AUTHORITY_LABELS[authority], "Whole-account credential")
+        observed = replace(view.instance, observed_at=timezone.now())
+        self.assertEqual(
+            connection_lifecycle(observed, authority, stale_after_hours=24, now=timezone.now()),
+            "ready",
+        )
 
 
 @override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)

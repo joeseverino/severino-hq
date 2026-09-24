@@ -1022,7 +1022,7 @@ const hqRoundTrip = (() => {
     // Each bar relative to the slowest sample, so the shape shows variation
     // rather than an absolute scale nobody can read at this size.
     samples.replaceChildren(
-      ...runs.slice(-12).map((run) => {
+      ...runs.map((run) => {
         const bar = document.createElement("i");
         bar.style.setProperty("--at", `${Math.max(12, (run / worst) * 100)}`);
         return bar;
@@ -1030,18 +1030,25 @@ const hqRoundTrip = (() => {
     );
   };
 
+  // The figures describe the recent path, not the whole visit.
+  const WINDOW = 12;
+
   const start = (slot, endpoint) => {
     const runs = [];
-    const tick = () =>
-      sample(endpoint)
+    const tick = () => {
+      // A hidden tab has nobody reading the figure.
+      if (document.visibilityState !== "visible") return Promise.resolve();
+      return sample(endpoint)
         .then((run) => {
           runs.push(run);
+          if (runs.length > WINDOW) runs.splice(0, runs.length - WINDOW);
           render(slot, runs);
         })
         .catch(() => {
           slot.textContent = "could not measure";
           stop();
         });
+    };
     tick();
     timer = window.setInterval(tick, 3000);
   };

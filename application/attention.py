@@ -51,6 +51,7 @@ CONTACTS_STATE_KEY = "attention.contacts-state"
 
 def _backlog(
     *,
+    key: str,
     count: int,
     eyebrow: str,
     title: str,
@@ -73,6 +74,7 @@ def _backlog(
             action=action,
             url=url,
             magnitude=count,
+            key=key,
         ),
     )
 
@@ -80,6 +82,7 @@ def _backlog(
 def documentation() -> tuple[Insight, ...]:
     return _backlog(
         count=sections.documentation_reading()["needing_review"],
+        key="docs-review",
         eyebrow="Docs",
         title="Docs need review",
         body="Documentation past its review interval, so it may no longer be true.",
@@ -92,6 +95,7 @@ def content() -> tuple[Insight, ...]:
     return (
         *_backlog(
             count=sections.content_reading()["drafts"],
+            key="content-drafts",
             eyebrow="Content",
             title="Draft content",
             body="Written but not published.",
@@ -108,6 +112,7 @@ def content() -> tuple[Insight, ...]:
                 .filter(doc_count=0)
                 .count()
             ),
+            key="content-undocumented",
             eyebrow="Content",
             title="Content needs docs",
             body="Published work with no documentation record linking it back.",
@@ -136,6 +141,7 @@ def contacts() -> tuple[Insight, ...]:
     count, _ = contacts_state()
     return _backlog(
         count=count,
+        key="contacts-unread",
         eyebrow="Contacts",
         title="Unread contact submissions",
         body="Someone wrote in through jseverino.com and has not been answered.",
@@ -151,6 +157,7 @@ def expenses() -> tuple[Insight, ...]:
             .filter(receipt_count=0)
             .count()
         ),
+        key="expenses-without-receipts",
         eyebrow="Expenses",
         title="Expenses need receipts",
         body="Recorded spend with nothing filed to substantiate it.",
@@ -164,6 +171,7 @@ def receipts() -> tuple[Insight, ...]:
         count=Receipt.objects.filter(
             related_expense__isnull=True, related_asset__isnull=True
         ).count(),
+        key="receipts-unlinked",
         eyebrow="Receipts",
         title="Receipts need links",
         body="Filed receipts not yet attached to an expense or an asset.",
@@ -179,6 +187,7 @@ def assets() -> tuple[Insight, ...]:
             .filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
             .count()
         ),
+        key="assets-missing-purchase",
         eyebrow="Assets",
         title="Assets missing purchase info",
         body="Active assets with no purchase date or cost, so they cannot be "
@@ -228,6 +237,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
                 eyebrow="Tailnet",
+                key=f"tailnet-expiry:{name}",
                 title=(
                     f"{name} leaves the tailnet in {days} days"
                     if days > 0
@@ -252,6 +262,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="serious",
                 eyebrow="Tailnet",
+                key=f"tailnet-locked-out:{name}",
                 title=f"{name} is locked out of the tailnet",
                 value="1",
                 body=(
@@ -269,6 +280,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="Tailnet",
+                    key=f"tailnet-unauthorized:{name}",
                     title=f"{name} is on the tailnet without being authorised",
                     value="1",
                     body=(
@@ -284,6 +296,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="serious",
                     eyebrow="Tailnet",
+                    key=f"tailnet-lock-unsigned:{name}",
                     title=f"{name} is not signed for tailnet lock",
                     value="1",
                     body=(
@@ -300,6 +313,7 @@ def tailnet() -> tuple[Insight, ...]:
                 Insight(
                     status="attention",
                     eyebrow="Tailnet",
+                    key=f"tailnet-update:{name}",
                     title=f"{name} has a Tailscale update waiting",
                     value="1",
                     body=(
@@ -318,6 +332,7 @@ def tailnet() -> tuple[Insight, ...]:
             Insight(
                 status="attention",
                 eyebrow="Tailnet",
+                key=f"tailnet-routes:{name}",
                 title=(
                     f"{name} advertises {len(unapproved)} route"
                     f"{'s' if len(unapproved) != 1 else ''} nothing approved"
@@ -352,7 +367,8 @@ def tailnet() -> tuple[Insight, ...]:
 def infrastructure() -> tuple[Insight, ...]:
     """What infrastructure needs looking at: unsettled state, and deadlines.
 
-    One entry per resource whose reconciled state is not settled.
+    One entry per finding, and one per resource whose reconciled state is not
+    settled that no finding already speaks for.
 
     Per resource rather than a single count: each one links to its own detail
     page, and "three resources need attention" is not actionable without
@@ -381,27 +397,22 @@ def infrastructure() -> tuple[Insight, ...]:
             else not finding.scope or finding.scope in actionable_kinds
         )
     )
-    items = (
-        [
-            Insight(
-                status=(
-                    "serious"
-                    if any(finding.severity == "serious" for finding in findings)
-                    else "attention"
-                ),
-                eyebrow="Finding",
-                title="Infrastructure findings",
-                value=str(len(findings)),
-                body="; ".join(finding.title for finding in findings[:3])
-                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else ""),
-                action="Review evidence",
-                url=reverse("control_plane:findings"),
-                magnitude=len(findings),
-            )
-        ]
-        if findings
-        else []
-    )
+    # One item per finding, so each can be read, acted on and resolved on its
+    # own. Grouping is the page's job, not the queue's.
+    findings_url = reverse("control_plane:findings")
+    items = [
+        Insight(
+            status="serious" if finding.severity == "serious" else "attention",
+            eyebrow="Finding",
+            key=f"finding:{finding.rule}:{finding.subject or finding.scope}",
+            title=finding.title,
+            value="",
+            body=finding.explanation,
+            action="Review evidence",
+            url=f"{findings_url}?rule={finding.rule}",
+        )
+        for finding in findings
+    ]
     covered_resources = {
         finding.subject.removeprefix("resource:")
         for finding in findings
@@ -418,6 +429,7 @@ def infrastructure() -> tuple[Insight, ...]:
             Insight(
                 status="serious" if health["state"] == "degraded" else "attention",
                 eyebrow="Infrastructure",
+                key=f"resource:{resource.key}",
                 title=(
                     f"{resource.key}: {health['message']}"
                     if health["message"]
@@ -447,6 +459,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
             Insight(
                 status="serious",
                 eyebrow="Approval",
+                key=f"approval:{held.id}",
                 title=(
                     f"{held.requested_actor} wants to run {human_label(held.capability)}"
                     + (f" on {held.target}" if held.target else "")
@@ -490,6 +503,7 @@ def services() -> tuple[Insight, ...]:
         Insight(
             status="attention",
             eyebrow="Services",
+            key=f"service:{service.hostname}",
             title=f"{service.hostname} is incompletely wired",
             value=str(len(service.faults)),
             body=" ".join(service.faults),

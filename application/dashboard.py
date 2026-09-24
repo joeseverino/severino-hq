@@ -56,8 +56,12 @@ def work_queue() -> list[dict[str, Any]]:
     a link.
     """
 
+    from .action_items import item_key, item_revision
+
     return [
         {
+            "key": item_key(entry["source_id"], entry["item"]),
+            "revision": item_revision(entry["item"]),
             "source_id": entry["source_id"],
             "source": entry["source"],
             "label": entry["item"].title,

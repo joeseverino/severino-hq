@@ -157,10 +157,11 @@ class AgentIdentity(models.Model):
 
 
 class ActionItemRead(models.Model):
-    """An action item a person has seen, by fingerprint. A changed item is a new one."""
+    """An action item a person has seen: which item, and which revision of it."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
-    key = models.CharField(max_length=64)
+    key = models.CharField(max_length=200)
+    revision = models.CharField(max_length=16, default="")
     read_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

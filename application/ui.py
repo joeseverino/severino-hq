@@ -145,6 +145,12 @@ class Insight:
     # Quick actions offered on the item itself, each going through its owner's
     # route exactly as the owner's own page would.
     actions: tuple[ActionLink, ...] = ()
+    # What this item is about, stable for as long as it is the same matter:
+    # "finding:<rule>:<subject>", "approval:<id>". Read state follows it, so it
+    # must not carry anything that changes while the matter stays the same -- a
+    # count, a days-left figure, a message. Unique within its source. Left empty,
+    # the eyebrow and title stand in for it.
+    key: str = ""
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:
