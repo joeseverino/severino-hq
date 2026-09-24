@@ -346,10 +346,37 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
                     ("Records of this kind observed", str(siblings)),
                     ("Condition reason", node.reason or "none"),
                 ),
-                remedies=_reconcile(node),
+                remedies=_skipped_remedies(node),
             )
         )
     return tuple(found)
+
+
+def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
+    """The two answers the explanation gives, as the actions that carry them out.
+
+    A container missing from a sweep is either one that runs now and then, or
+    one that is gone. Reconciling answers neither: it asks the provider to look
+    again at something that is, correctly, not running.
+    """
+
+    remove = Remedy(
+        capability="infrastructure.resource.remove",
+        target=node.label,
+        label="Review removal",
+        effect="",
+    )
+    if node.kind_key == "portainer.container":
+        return (
+            Remedy(
+                capability="infrastructure.resource.update",
+                target=node.label,
+                label="Mark it on demand",
+                effect="",
+            ),
+            remove,
+        )
+    return (*_reconcile(node), remove)
 
 
 def _is_observable(kind_key: str) -> bool:

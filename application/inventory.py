@@ -428,6 +428,20 @@ def record_connections(
             raise ValueError(
                 f"Connection {connection_ref!r} endpoint contains private URL parts."
             )
+        if connection.get("carried"):
+            # Reported without being asked again, because HQ said its last
+            # answer was recent and good. Kept as it was -- result and the time
+            # it was taken -- so the page says when it was last really checked.
+            # A connection HQ has never seen answer cannot be carried.
+            carried = ProviderConnection.objects.filter(
+                controller_id=controller_id, connection_ref=connection_ref
+            ).update(
+                provider=str(connection.get("provider", ""))[:64],
+                endpoint=endpoint,
+            )
+            if carried:
+                stored.append(connection_ref)
+                continue
         ProviderConnection.objects.update_or_create(
             controller_id=controller_id,
             connection_ref=connection_ref,

@@ -112,15 +112,17 @@
 - Agents authenticate to `/mcp/` with identity-provider access tokens, verified
   as the machine API verifies them, so each agent is its own attributable,
   revocable principal. It holds its grant capped by the `SEVERINO_MCP_ENABLE_*`
-  flags. The shared bearer remains as break-glass; a token that fails
-  verification is never also compared to it.
+  flags. There is no second credential and no shared static bearer, and a
+  request with no verified caller reaches no tool.
 - An operator can pause every agent from the menu. The switch is global, read
-  on every MCP request, fails closed, and covers both MCP credentials.
+  on every MCP request, and fails closed.
 - Capability policy at `/agents/` sets, per capability and per surface or
   agent, whether a call is allowed, held for approval, or denied. Rules only
-  narrow the identity provider's grant, and the stricter of a surface and an
-  agent rule wins. With no rules, gated infrastructure changes are held as
-  before. A rule that allows a would-be-held call is recorded as its consent.
+  narrow the identity provider's grant. An explicit rule beats the default, and
+  between a surface and an agent rule the stricter wins. With no rules, gated
+  infrastructure changes are held as before, and anything destructive an agent
+  asks for is held too. A rule that allows a would-be-held call is recorded as
+  its consent.
 - A held request writes and queues nothing. It is decided on its audit entry
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
   field-by-field diff, so a
@@ -181,9 +183,11 @@
 - [ ] Documentation index records carrying secrets are flagged
       `sensitivity=sensitive` or `restricted` (these are excluded from
       automated retrieval).
-- [ ] The MCP token's source of truth is 1Password. Production mounts a
-      validator copy through `SEVERINO_MCP_TOKEN_FILE_HOST`; the token is never
-      placed in `.env` or the container environment.
+- [ ] MCP callers authenticate only with an access token from the identity
+      provider, one client per agent, so every call names its agent. There is no
+      shared static bearer; without the provider configured, MCP is off.
+- [ ] A destructive capability called by an agent waits for an operator's
+      approval unless a rule explicitly allows it for that agent or surface.
 - [ ] The app environment's source of truth is the 1Password the app-environment item
       item. Production mounts the rendered file through
       `SEVERINO_APP_ENV_FILE_HOST` and the entrypoint sources it; the on-host

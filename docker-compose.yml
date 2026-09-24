@@ -66,9 +66,6 @@ services:
       DJANGO_STATIC_ROOT: /static
       # Provider HTTPS keeps normal public roots and adds the homelab CA.
       HQ_CONTROLLER_CA_FILE: /run/secrets/severino_controller_ca.pem
-      # Production mounts the validator token as a file. The /dev/null default
-      # keeps MCP disabled in development without putting a token in .env.
-      SEVERINO_MCP_TOKEN_FILE: /run/secrets/severino_mcp_token
       # A file HQ replaces when it queues controller work. It carries nothing --
       # not what to do, not who asked -- so the host may watch it and start the
       # controller without HQ gaining any way to reach out.
@@ -78,10 +75,6 @@ services:
       - severino_media:/media
       - severino_exports:/exports
       - severino_static:/static
-      - type: bind
-        source: ${SEVERINO_MCP_TOKEN_FILE_HOST:-/dev/null}
-        target: /run/secrets/severino_mcp_token
-        read_only: true
       # Somewhere both sides can see. `/run` is transient by design, which is
       # right for a doorbell -- a stale one after a reboot would ring for work
       # that was claimed before it.

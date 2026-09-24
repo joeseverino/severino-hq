@@ -18,6 +18,7 @@ from .security import AuthorizationError, Capability, Principal, cli_principal, 
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 
 WRITES = frozenset({Capability.READ, Capability.WRITE_PROJECTS, Capability.MANAGE_INFRASTRUCTURE})
+DELETES = WRITES | {Capability.DELETE_PROJECTS}
 
 
 def agent(actor="example-agent", interface="mcp", capabilities=WRITES):
@@ -55,6 +56,54 @@ class DefaultTests(PolicyTestCase):
 
         self.assertTrue(result["ok"])
         self.assertTrue(Project.objects.filter(name="Runs").exists())
+
+
+class DestructiveDefaultTests(PolicyTestCase):
+    """For an agent, anything destructive waits for a person unless a rule says otherwise."""
+
+    def delete(self, principal, slug):
+        return execute_capability(
+            "project.delete", {"confirm": slug}, principal=principal, target=slug
+        )
+
+    def test_an_agents_delete_waits_and_happens_only_once_approved(self):
+        project = Project.objects.create(name="Kept")
+
+        held = self.delete(agent(capabilities=DELETES), project.slug)
+
+        self.assertEqual(held["status"], "awaiting_approval")
+        self.assertTrue(Project.objects.filter(pk=project.pk).exists())
+        approve(held["approval"]["id"], principal=self.operator)
+        self.assertFalse(Project.objects.filter(pk=project.pk).exists())
+
+    def test_an_explicit_allow_for_one_agent_lifts_it_for_that_agent_alone(self):
+        self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
+        first = Project.objects.create(name="First")
+        second = Project.objects.create(name="Second")
+
+        ran = self.delete(agent("trusted-agent", capabilities=DELETES), first.slug)
+        held = self.delete(agent("other-agent", capabilities=DELETES), second.slug)
+
+        self.assertTrue(ran["ok"])
+        self.assertFalse(Project.objects.filter(pk=first.pk).exists())
+        self.assertEqual(held["status"], "awaiting_approval")
+
+    def test_an_agent_allow_still_cannot_loosen_an_explicit_surface_rule(self):
+        self.rule(Scope.SURFACE, "mcp", "project.delete", Rule.DENY)
+        self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
+        project = Project.objects.create(name="Stays")
+
+        result = self.delete(agent("trusted-agent", capabilities=DELETES), project.slug)
+
+        self.assertEqual(result["error"]["code"], "denied_by_policy")
+
+    def test_the_operator_and_the_cli_are_not_held(self):
+        for principal in (self.operator, cli_principal()):
+            with self.subTest(principal=principal.interface):
+                self.assertEqual(
+                    decide(spec("project.delete"), principal, {}, "a-project").rule,
+                    Rule.ALLOW,
+                )
 
 
 class SurfaceRuleTests(PolicyTestCase):

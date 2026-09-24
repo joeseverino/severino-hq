@@ -117,7 +117,10 @@ class NPMTLSConsumer(TLSConsumerBase):
 class CPanelTLSConsumer(TLSConsumerBase):
     kind: Literal["cpanel"]
     connection_ref: str = Field(min_length=1, max_length=160)
-    install_domains: list[str] = Field(min_length=1)
+    # Names whose cPanel *sites* receive the certificate. Empty means every site
+    # that serves one of `verify_domains`; the controller asks the account which
+    # sites those are before anything is issued.
+    install_domains: list[str] = Field(default_factory=list)
 
 
 TLSConsumer = Annotated[
@@ -216,11 +219,11 @@ class TLSDeliveryTargetSpec(ProviderModel):
     )
     install_domains: list[str] = Field(
         default_factory=list,
-        title="Install only these names",
+        title="Install only on the sites serving these names",
         description=(
-            "Shared hosting only. cPanel takes one certificate per name and no "
-            "wildcards. Leave empty to use every non-wildcard name the "
-            "certificate covers."
+            "Shared hosting only. cPanel holds one certificate per site, and a "
+            "site's aliases serve whatever it holds. Leave empty to install on "
+            "every site that serves a name this certificate is checked at."
         ),
     )
     vault: str = Field(
@@ -1481,19 +1484,13 @@ def _consumer_at(
         consumer["discover_covered_hosts"] = bool(target.get("discover_covered_hosts"))
     elif kind == "cpanel":
         # Named here only if this certificate is the one the target lists them
-        # for; otherwise every non-wildcard name it covers, since shared hosting
-        # takes one certificate per name.
-        declared = list(target.get("install_domains") or []) if owns_the_name else []
-        consumer["install_domains"] = declared or [
-            domain
-            for domain in domains
-            if certificate_covers(domain, covered) and "*" not in domain
-        ]
-        if not consumer["install_domains"]:
-            raise ValueError(
-                "A cPanel target needs at least one non-wildcard name to "
-                "install against."
-            )
+        # for. Otherwise empty, which the controller reads as "every site that
+        # serves a verified name" once it has asked the account for its sites,
+        # so the install list is derived from the verify list and cannot
+        # disagree with it.
+        consumer["install_domains"] = (
+            list(target.get("install_domains") or []) if owns_the_name else []
+        )
     return consumer
 
 

@@ -18,6 +18,7 @@ from content.models import ContentItem
 from expenses.models import Expense
 from receipts.models import Receipt
 from core.models import AuditLog
+from hq_mcp.identity import reset_principal, set_principal
 from hq_mcp.server import mcp
 from hq_sdk.capabilities import StrictCommand
 from projects.models import Project
@@ -43,6 +44,20 @@ from .security import (
     mcp_principal,
 )
 
+
+
+def as_mcp_caller(call):
+    """Run an MCP tool call as an authenticated agent at the deployment ceiling.
+
+    A tool reached with no caller bound is refused; these tests are about the
+    shape the tool returns, so they bind the caller the door would have.
+    """
+
+    bound = set_principal(mcp_principal())
+    try:
+        return async_to_sync(call)()
+    finally:
+        reset_principal(bound)
 
 class CapabilityTests(TestCase):
     def test_plugin_strict_commands_execute_through_the_host(self):
@@ -290,20 +305,41 @@ class CapabilityTests(TestCase):
         self.assertEqual(result["error"]["code"], "forbidden")
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
-    def test_cli_describe_and_run_use_the_same_registry(self):
-        described = StringIO()
-        call_command("hq_capability", "describe", stdout=described)
-        self.assertEqual(json.loads(described.getvalue()), describe_capabilities())
+    def call_as_operator(self, request):
+        output = StringIO()
+        with mock.patch("sys.stdin", StringIO(json.dumps(request))):
+            call_command("hq_call", stdout=output)
+        return json.loads(output.getvalue())
 
-        executed = StringIO()
-        call_command(
-            "hq_capability",
-            "run",
-            "project.create",
-            payload='{"name":"CLI JSON","slug":"cli-json"}',
-            stdout=executed,
+    def test_the_operator_reaches_every_tool_the_cli_uses_without_a_token(self):
+        """The CLI's contract is the MCP tool surface, over the host shell."""
+
+        self.assertEqual(
+            self.call_as_operator({"tool": "describe_capabilities"}), describe_capabilities()
         )
-        self.assertTrue(json.loads(executed.getvalue())["ok"])
+        created = self.call_as_operator(
+            {
+                "tool": "execute_capability",
+                "arguments": {"name": "project.create", "payload": {"name": "By hand", "slug": "by-hand"}},
+            }
+        )
+        self.assertTrue(created["ok"])
+        self.assertIn("orphan_projects", self.call_as_operator({"tool": "audit_registry"}))
+        # The operator is never the MCP ceiling, and never left bound afterwards.
+        from hq_mcp.identity import current_principal
+
+        with self.assertRaises(AuthorizationError):
+            current_principal()
+
+    def test_the_operator_call_refuses_a_malformed_request(self):
+        from django.core.management.base import CommandError
+
+        for raw in ("not json", "[]", '{"tool": 3}', '{"tool": "no_such_tool"}',
+                    '{"tool": "audit_registry", "arguments": []}'):
+            with self.subTest(raw=raw):
+                with mock.patch("sys.stdin", StringIO(raw)):
+                    with self.assertRaises(CommandError):
+                        call_command("hq_call", stdout=StringIO())
 
     def test_receipt_json_capability_updates_metadata_without_file_access(self):
         receipt = Receipt.objects.create(
@@ -480,7 +516,7 @@ class AdapterParityTests(TestCase):
                 }
             )
 
-        mcp_result = async_to_sync(call_mcp)()
+        mcp_result = as_mcp_caller(call_mcp)
 
         output = StringIO()
         call_command(
@@ -585,7 +621,7 @@ class AssetApplicationServiceTests(TestCase):
                 }
             )
 
-        mcp_result = async_to_sync(call_mcp)()
+        mcp_result = as_mcp_caller(call_mcp)
 
         output = StringIO()
         call_command(
@@ -659,7 +695,7 @@ class DocumentationSyncTests(TestCase):
                 }
             )
 
-        result = async_to_sync(call_sync)()
+        result = as_mcp_caller(call_sync)
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["stats"]["created"], 1)
@@ -771,7 +807,7 @@ class ContentApplicationServiceTests(TestCase):
                 }
             )
 
-        mcp_result = async_to_sync(call_mcp)()
+        mcp_result = as_mcp_caller(call_mcp)
         output = StringIO()
         call_command(
             "create_content",
@@ -851,7 +887,7 @@ class ExpenseApplicationServiceTests(TestCase):
                 }
             )
 
-        mcp_result = async_to_sync(call_mcp)()
+        mcp_result = as_mcp_caller(call_mcp)
         output = StringIO()
         call_command(
             "create_expense",

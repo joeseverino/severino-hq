@@ -40,7 +40,6 @@ SEVERINO_DATABASE_PATH=/data/severino.sqlite3
 SEVERINO_MEDIA_ROOT=/media
 SEVERINO_EXPORTS_ROOT=/exports
 DJANGO_STATIC_ROOT=/static
-SEVERINO_MCP_TOKEN_FILE_HOST=<root-only validator token file provisioned from 1Password>
 SEVERINO_MCP_ALLOWED_HOSTS=<direct Tailscale IP>,<MagicDNS hostname>
 ```
 

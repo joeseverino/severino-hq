@@ -81,6 +81,7 @@ MAX_PENDING_PER_ACTOR = 10
 # effects that are gated, so an effect introduced later is considered rather
 # than exempted by omission.
 READ_EFFECT = "read"
+DESTRUCTIVE_EFFECT = "destructive"
 DECLARATIONS = "infrastructure.resources"
 
 # Rows written while approvals were infrastructure-only keep the old label.

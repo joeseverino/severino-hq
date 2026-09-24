@@ -53,8 +53,7 @@ def verify_agent_token(bearer: str):
 # `SEVERINO_API_RESOURCE` is empty, and without a resource to check `aud`
 # against, a token minted for any other API on the same Pocket ID instance
 # would verify here on signature alone. Absent means off, never "accept
-# anything" -- so an unconfigured deployment keeps the shared bearer as its
-# only credential rather than silently gaining a weaker one.
+# anything" -- and with no other credential, off means MCP is disabled.
 mcp_verifier = verify_agent_token if api_security.is_configured() else None
 
 
@@ -72,7 +71,6 @@ async def observe_agent(principal) -> None:
 
 mcp_application = MCPBoundary(
     mcp.streamable_http_app(),
-    token=settings.SEVERINO_MCP_TOKEN,
     allowed_hosts=settings.SEVERINO_MCP_ALLOWED_HOSTS,
     allowed_networks=settings.SEVERINO_MCP_ALLOWED_NETWORKS,
     allowed_origins=settings.SEVERINO_MCP_ALLOWED_ORIGINS,

@@ -1545,6 +1545,27 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
             context=ProviderResolutionContext(delivery_targets=targets),
         )
 
+    def test_a_shared_hosting_target_without_a_list_is_left_to_the_account(self):
+        """Empty means every site that serves a checked name, decided at run time.
+
+        Never every name the certificate covers: that would name domains the
+        account does not host.
+        """
+
+        target = {
+            **self.A_PROXY_TARGET,
+            "kind": "cpanel",
+            "connection_ref": "shared-hosting",
+            "name": "shared-hosting",
+            "verify_domains": ["www.shop.example.test"],
+        }
+
+        resolved = self._resolve(target)
+
+        (consumer,) = resolved["consumers"]
+        self.assertEqual(consumer["install_domains"], [])
+        self.assertEqual(consumer["verify_domains"], ["www.shop.example.test"])
+
     def test_a_recording_target_is_not_resolved_as_a_consumer(self):
         """A consumer is something HQ connects to and asks what it is serving.
 

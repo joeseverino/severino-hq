@@ -185,20 +185,23 @@ def _report_findings(controller_id: str) -> None:
     connection sweep that says so.
     """
 
+    carry: frozenset[str] = frozenset()
     try:
-        verdict = _manage("sweep-due")
+        verdict = _manage("sweep-due", "--controller-id", controller_id)
     except BridgeError as exc:
         # Sweeping anyway. HQ being unreachable is a reason to be careful about
         # writing, not about looking, and skipping would make one bad bridge
-        # call leave the estate unwatched until the next one succeeds.
+        # call leave the estate unwatched until the next one succeeds. Nothing
+        # is carried, either: without HQ's word, every connection is asked.
         print(f"sweep policy unavailable: {type(exc).__name__}", file=sys.stderr)
     else:
         if not verdict.get("due", True):
             return
+        carry = frozenset(str(ref) for ref in verdict.get("carry") or ())
 
     with provider_snapshot():
         try:
-            found = connections()
+            found = connections(carry=carry)
         except (ProviderError, OSError, ValueError) as exc:
             print(f"connections sweep skipped: {type(exc).__name__}", file=sys.stderr)
         else:

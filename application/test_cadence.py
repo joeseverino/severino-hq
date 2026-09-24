@@ -22,6 +22,7 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 
 from .cadence import (
+    carried_connections,
     sweep_interval,
     ControllerSweepCommand,
     note_activity,
@@ -271,3 +272,100 @@ class ProbesAreNotPresenceTests(TestCase):
                 sweep_interval(),
                 timedelta(seconds=settings.SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS),
             )
+
+
+class CarriedConnectionPolicyTests(TestCase):
+    """Which SSH connections a sweep may report without logging in again."""
+
+    def _connection(self, ref, *, controller="here", provider="ssh", age_minutes=5,
+                    reachable=True, probed=True):
+        from control_plane.models import ProviderConnection
+
+        return ProviderConnection.objects.create(
+            controller_id=controller,
+            connection_ref=ref,
+            provider=provider,
+            reachable=reachable,
+            probed=probed,
+            observed_at=timezone.now() - timedelta(minutes=age_minutes),
+        )
+
+    @override_settings(SEVERINO_SSH_PROBE_INTERVAL_SECONDS=3600)
+    def test_only_recent_good_ssh_answers_are_carried(self):
+        self._connection("fresh")
+        self._connection("old", age_minutes=61)
+        self._connection("failing", reachable=False)
+        self._connection("never-asked", probed=False)
+        self._connection("an-api", provider="cloudflare_dns")
+        self._connection("fresh", controller="elsewhere")
+
+        self.assertEqual(carried_connections("here"), ["fresh"])
+        self.assertEqual(sweep_due("here")["carry"], ["fresh"])
+
+    def test_without_a_controller_nothing_is_carried(self):
+        self._connection("fresh")
+
+        self.assertEqual(sweep_due()["carry"], [])
+
+
+class CarriedConnectionRecordTests(TestCase):
+    """A carried report keeps the last real answer, and a new one cannot be faked."""
+
+    def test_a_carried_connection_keeps_its_last_answer_and_its_time(self):
+        from control_plane.models import ProviderConnection
+
+        from .inventory import record_connections
+
+        taken = timezone.now() - timedelta(minutes=20)
+        ProviderConnection.objects.create(
+            controller_id="here",
+            connection_ref="shared-hosting",
+            provider="ssh",
+            reachable=True,
+            probed=True,
+            detail="user@host:22",
+            observed_at=taken,
+        )
+
+        record_connections(
+            [
+                {
+                    "connection_ref": "shared-hosting",
+                    "provider": "ssh",
+                    "endpoint": "192.0.2.30:22",
+                    "carried": True,
+                    "probed": False,
+                    "detail": "Not asked again this sweep.",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="here",
+        )
+
+        row = ProviderConnection.objects.get(connection_ref="shared-hosting")
+        self.assertTrue(row.probed)
+        self.assertEqual(row.detail, "user@host:22")
+        self.assertEqual(row.observed_at, taken)
+        self.assertEqual(row.endpoint, "192.0.2.30:22")
+
+    def test_a_carried_connection_hq_has_never_seen_is_recorded_as_unprobed(self):
+        from control_plane.models import ProviderConnection
+
+        from .inventory import record_connections
+
+        record_connections(
+            [
+                {
+                    "connection_ref": "new-host",
+                    "provider": "ssh",
+                    "carried": True,
+                    "probed": False,
+                    "detail": "Not asked again this sweep.",
+                }
+            ],
+            principal=cli_principal(),
+            controller_id="here",
+        )
+
+        row = ProviderConnection.objects.get(connection_ref="new-host")
+        self.assertFalse(row.probed)

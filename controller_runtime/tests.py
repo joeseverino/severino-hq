@@ -6,6 +6,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest import TestCase, mock
@@ -1330,7 +1331,7 @@ class ProviderAdapterTests(TestCase):
         result = providers.renew_tls(spec)
 
         self.assertTrue(result.changed)
-        deploy.assert_called_once_with(spec, b"new-cert", b"new-key")
+        deploy.assert_called_once_with(spec, b"new-cert", b"new-key", {})
         self.assertEqual(result.conditions[0]["reason"], "Renewed")
         self.assertEqual(result.status["expected_fingerprint_sha256"], "new")
         self.assertTrue(
@@ -1399,7 +1400,7 @@ class ProviderAdapterTests(TestCase):
         result = providers.renew_tls(spec)
 
         issue.assert_not_called()
-        deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key")
+        deploy.assert_called_once_with(spec, b"pending-cert", b"pending-key", {})
         self.assertEqual(result.status["artifact_source"], "existing_lineage")
 
     @mock.patch("controller_runtime.providers.reconcile_tls")
@@ -1428,7 +1429,7 @@ class ProviderAdapterTests(TestCase):
             providers.renew_tls(spec)
 
         self.assertEqual(deploy.call_count, 2)
-        deploy.assert_called_with(spec, b"old-cert", b"old-key")
+        deploy.assert_called_with(spec, b"old-cert", b"old-key", {})
 
 
 class WorkerTests(TestCase):
@@ -1685,7 +1686,7 @@ class WorkerTests(TestCase):
 
         self.assertEqual(worker.run_once("test", apply=True), 0)
 
-        connections.assert_called_once_with()
+        connections.assert_called_once_with(carry=frozenset())
         execute.assert_called_once()
 
 
@@ -2366,6 +2367,244 @@ class ControllerStepReportingTests(TestCase):
             with self.assertRaises(ProviderError) as caught:
                 _run(["/bin/false"], step="a step")
         self.assertNotIn("/home/someone", str(caught.exception))
+
+    def test_what_the_tool_said_is_in_the_journal_message_itself(self):
+        """The plain formatter drops `extra`, so the reason has to be in the line."""
+
+        from controller_runtime.providers import ProviderError, _run
+
+        with (
+            mock.patch("controller_runtime.providers.subprocess.run") as run,
+            self.assertLogs("severino.controller", level="WARNING") as logged,
+        ):
+            run.return_value = mock.Mock(
+                returncode=1,
+                stdout=b"",
+                stderr=b"noise\nPermissionError: Operation not permitted: 'a/key.pem'\n",
+            )
+            with self.assertRaises(ProviderError) as caught:
+                _run(["/bin/false"], step="certbot certonly")
+        self.assertIn("certbot certonly (exit 1): PermissionError", logged.output[0])
+        self.assertNotIn("noise", logged.output[0])
+        self.assertEqual(str(caught.exception), "certbot certonly failed.")
+
+
+# One account, three sites; the first carries its aliases, as shared hosting
+# serves `www.` and a parked domain from the main site.
+_ACCOUNT_SITES = {
+    "sites": {
+        "example.test": ["example.test", "www.example.test", "parked.example"],
+        "shop.example.test": ["shop.example.test", "www.shop.example.test"],
+        "lab.example.test": ["lab.example.test"],
+    }
+}
+
+
+class CPanelSitePlanTests(TestCase):
+    """Which cPanel sites a certificate goes to, decided before anything is issued.
+
+    A target must never install on one site and be checked at names another site
+    serves: the install would succeed and the check could never pass.
+    """
+
+    def _consumer(self, verify, install=()):
+        return {
+            "kind": "cpanel",
+            "name": "shared-hosting",
+            "connection_ref": "example-cpanel",
+            "verify_domains": list(verify),
+            "install_domains": list(install),
+        }
+
+    def _plan(self, consumer, answer=None):
+        with mock.patch("controller_runtime.providers._ssh") as ssh:
+            ssh.return_value = json.dumps(
+                _ACCOUNT_SITES if answer is None else answer
+            ).encode()
+            sites = providers._cpanel_sites(consumer)
+        ssh.assert_called_once_with("example-cpanel", "sites")
+        return sites
+
+    def test_without_a_list_it_installs_on_every_site_serving_a_checked_name(self):
+        consumer = self._consumer(["www.example.test", "parked.example", "shop.example.test"])
+
+        self.assertEqual(self._plan(consumer), ["example.test", "shop.example.test"])
+
+    def test_a_declared_name_installs_on_the_whole_site_that_serves_it(self):
+        consumer = self._consumer(["www.example.test"], install=["parked.example"])
+
+        self.assertEqual(self._plan(consumer), ["example.test"])
+
+    def test_a_checked_name_on_a_site_it_does_not_install_on_is_refused(self):
+        consumer = self._consumer(
+            ["example.test", "shop.example.test"], install=["shop.example.test"]
+        )
+
+        with self.assertRaisesRegex(
+            providers.ProviderError,
+            "checked at example.test but installs only on shop.example.test",
+        ):
+            self._plan(consumer)
+
+    def test_a_name_the_account_does_not_serve_is_refused(self):
+        consumer = self._consumer(["example.test", "elsewhere.example"])
+
+        with self.assertRaisesRegex(
+            providers.ProviderError, "does not serve elsewhere.example"
+        ):
+            self._plan(consumer)
+
+    def test_an_unreadable_or_empty_answer_is_refused(self):
+        consumer = self._consumer(["example.test"])
+        for answer in ({"sites": {}}, {"no": "sites"}, []):
+            with self.subTest(answer=answer):
+                with self.assertRaises(providers.ProviderError):
+                    self._plan(consumer, answer)
+        with mock.patch("controller_runtime.providers._ssh", return_value=b"not json"):
+            with self.assertRaisesRegex(providers.ProviderError, "could not read"):
+                providers._cpanel_sites(consumer)
+
+    @mock.patch("controller_runtime.providers._issue_certificate")
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_an_unsatisfiable_target_is_refused_before_the_ca_is_asked(self, ssh, issue):
+        ssh.return_value = json.dumps(_ACCOUNT_SITES).encode()
+        spec = {
+            "domains": ["example.test", "*.example.test"],
+            "consumers": [
+                {"kind": "caddy", "name": "edge", "connection_ref": "example-edge"},
+                self._consumer(
+                    ["example.test", "shop.example.test"], install=["shop.example.test"]
+                ),
+            ],
+        }
+
+        with self.assertRaisesRegex(providers.ProviderError, "installs only on"):
+            providers.renew_tls(spec)
+
+        issue.assert_not_called()
+        # Nothing was read from the rollback source either: the plan comes first.
+        ssh.assert_called_once_with("example-cpanel", "sites")
+
+    @mock.patch("controller_runtime.providers._ssh")
+    def test_one_login_installs_on_every_planned_site(self, ssh):
+        consumer = self._consumer(["example.test"])
+        fullchain = b"-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\nchain\n"
+
+        status = providers._deploy_certificate(
+            {"domains": ["example.test"], "consumers": [consumer]},
+            fullchain,
+            b"key",
+            {"shared-hosting": ["example.test", "shop.example.test"]},
+        )
+
+        ssh.assert_called_once()
+        connection_ref, operation, payload = ssh.call_args.args
+        self.assertEqual((connection_ref, operation), ("example-cpanel", "deploy"))
+        sent = json.loads(payload)
+        self.assertEqual(sent["sites"], ["example.test", "shop.example.test"])
+        self.assertIn("leaf", sent["cert"])
+        self.assertEqual(sent["cabundle"], "chain\n")
+        self.assertEqual(
+            status["cpanel_sites"], {"shared-hosting": ["example.test", "shop.example.test"]}
+        )
+
+    @mock.patch("controller_runtime.providers._tls_verification_policy", return_value=(30, 5))
+    @mock.patch("controller_runtime.providers.time.monotonic", side_effect=[0, 31])
+    @mock.patch("controller_runtime.providers.reconcile_tls")
+    def test_a_consumer_that_never_activates_is_named_with_its_names(
+        self, reconcile, _clock, _policy
+    ):
+        reconcile.return_value = providers.ProviderResult(
+            changed=False,
+            status={
+                "consumers": [
+                    {"consumer": "edge", "consumer_kind": "caddy", "domain": "a.example.test", "fingerprint_sha256": "new"},
+                    {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "www.example.test", "fingerprint_sha256": "old"},
+                    {"consumer": "shared-hosting", "consumer_kind": "cpanel", "domain": "example.test", "fingerprint_sha256": "old"},
+                ]
+            },
+            conditions=[],
+            message="observed",
+        )
+
+        with self.assertRaises(providers.ProviderError) as caught:
+            providers._verify_tls_deployment({"consumers": [{}, {}]}, "new")
+
+        self.assertEqual(
+            str(caught.exception),
+            "1 of 2 TLS consumers did not activate the certificate within 30s: "
+            "shared-hosting still serves the previous certificate at "
+            "example.test, www.example.test.",
+        )
+
+
+class CarriedConnectionTests(TestCase):
+    """An SSH probe is a real login, so HQ may say one is not needed yet."""
+
+    @mock.patch("controller_runtime.providers._probe_ssh")
+    @mock.patch("controller_runtime.providers.connection_provider", return_value="")
+    @mock.patch(
+        "controller_runtime.providers.ssh_connection_refs",
+        return_value=["shared-hosting", "edge"],
+    )
+    @mock.patch(
+        "controller_runtime.providers.connection_prefixes",
+        return_value={"shared-hosting": "SHARED_HOSTING", "edge": "EDGE"},
+    )
+    def test_a_carried_connection_is_reported_without_a_login(
+        self, _prefixes, _refs, _provider, probe
+    ):
+        probe.return_value = {"detail": "ok", "reaches": ["192.0.2.30"]}
+
+        found = {
+            item["connection_ref"]: item
+            for item in providers.connections(carry=frozenset({"shared-hosting"}))
+        }
+
+        probe.assert_called_once_with("edge")
+        self.assertTrue(found["shared-hosting"]["carried"])
+        self.assertFalse(found["shared-hosting"]["probed"])
+        self.assertNotIn("carried", found["edge"])
+        self.assertTrue(found["edge"]["probed"])
+
+
+class AcmeOwnershipTests(TestCase):
+    """Certbot copies the previous key's owner onto the new one on every renewal.
+
+    A process that is not root cannot chown to a group it is not in, so one file
+    carrying another group fails the save -- after the CA has issued. The check
+    runs first, so that costs nothing.
+    """
+
+    def test_a_tree_wholly_the_processes_own_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "config", "archive").mkdir(parents=True)
+            Path(directory, "config", "archive", "privkey1.pem").write_text("k")
+
+            self.assertEqual(providers._foreign_acme_entry(Path(directory)), "")
+
+    def test_an_entry_with_another_group_is_named(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "config").mkdir()
+            Path(directory, "config", "privkey1.pem").write_text("k")
+            real_gid = os.getgid()
+            with mock.patch("controller_runtime.providers.os.getgid", return_value=real_gid + 1):
+                found = providers._foreign_acme_entry(Path(directory))
+
+        self.assertIn("config", found)
+        self.assertIn(f"not {os.getuid()}:{real_gid + 1}", found)
+
+    @mock.patch("controller_runtime.providers._run")
+    @mock.patch("controller_runtime.providers._foreign_acme_entry", return_value="config/x is owned 1:2, not 3:4")
+    def test_issuance_stops_before_certbot_when_the_tree_is_not_its_own(self, _foreign, run):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict("os.environ", {"HQ_ACME_DIR": directory}):
+                with self.assertRaisesRegex(
+                    providers.ProviderError, "config/x is owned 1:2.*nothing was requested"
+                ):
+                    providers._issue_certificate({"domains": ["example.test"]})
+
+        run.assert_not_called()
 
 
 class WorkerEntryPointTests(TestCase):
@@ -4047,7 +4286,9 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
             mock.patch.dict("os.environ", {"PATH": "/an/example/path"}, clear=True),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"})
+            providers._run(
+                ["op", "whoami"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"}, step="a step"
+            )
 
         passed = run.call_args.kwargs["env"]
         self.assertEqual(passed["PATH"], "/an/example/path")
@@ -4062,7 +4303,11 @@ class TheServiceAccountTokenGoesNowhereButTheEnvironmentTests(TestCase):
             }),
         ):
             run.return_value = mock.Mock(returncode=0, stdout=b"", stderr=b"")
-            providers._run(["op", "item", "edit"], env={"OP_SERVICE_ACCOUNT_TOKEN": "t"})
+            providers._run(
+                ["op", "item", "edit"],
+                env={"OP_SERVICE_ACCOUNT_TOKEN": "t"},
+                step="a step",
+            )
         self.assertNotIn("OP_CONNECT_HOST", run.call_args.kwargs["env"])
         self.assertNotIn("OP_CONNECT_TOKEN", run.call_args.kwargs["env"])
 
@@ -4236,3 +4481,118 @@ class HostPerimeterTests(TestCase):
         """Enabled and dead is the case with no symptom until it matters."""
 
         self.assertEqual(self._reading(unit="inactive")["firewall_unit"], "inactive")
+
+
+class CPanelForcedCommandTests(TestCase):
+    """The script HQ's key runs on shared hosting, against a stand-in `uapi`.
+
+    It runs where HQ's own code does not -- an interpreter the host chose -- so
+    its contract is pinned here rather than discovered on a renewal.
+    """
+
+    SCRIPT = Path(__file__).resolve().parent.parent / "deploy/targets/severino-hq-cpanel-controller"
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.installs = self.directory / "installs"
+        uapi = self.directory / "uapi"
+        uapi.write_text(
+            "#!/bin/sh\n"
+            'case "$*" in\n'
+            '  *"DomainInfo domains_data"*) cat "$FIXTURES/domains.json" ;;\n'
+            '  *"SSL list_certs"*) echo \'{"result":{"status":1,"errors":null,"data":[]}}\' ;;\n'
+            '  *"SSL install_ssl"*) payload=$(cat); echo "$payload" >> "$FIXTURES/installs";\n'
+            '     case "$payload" in *broken.example.test*)\n'
+            '       echo \'{"result":{"status":0,"errors":["The certificate does not match."]}}\' ;;\n'
+            '     *) echo \'{"result":{"status":1,"errors":null}}\' ;; esac ;;\n'
+            "  *) exit 2 ;;\n"
+            "esac\n"
+        )
+        uapi.chmod(0o755)
+        (self.directory / "domains.json").write_text(json.dumps({"result": {"status": 1, "data": {
+            "main_domain": {"domain": "example.test", "servername": "example.test",
+                            "serveralias": "www.example.test parked.example"},
+            "sub_domains": [{"domain": "shop.example.test", "servername": "shop.example.test",
+                             "serveralias": "www.shop.example.test"},
+                            {"domain": "broken.example.test", "servername": "broken.example.test",
+                             "serveralias": ""}],
+            "addon_domains": [],
+        }}}))
+
+    def run_script(self, operation, payload=None):
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT)],
+            input=json.dumps(payload) if payload is not None else "",
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={
+                "PATH": f"{self.directory}:{os.environ['PATH']}",
+                "FIXTURES": str(self.directory),
+                "SSH_ORIGINAL_COMMAND": operation,
+            },
+        )
+
+    def installed_on(self):
+        if not self.installs.exists():
+            return []
+        return [json.loads(line)["domain"] for line in self.installs.read_text().splitlines()]
+
+    def test_it_parses_as_the_python_shared_hosting_ships(self):
+        import ast
+
+        ast.parse(self.SCRIPT.read_text(), feature_version=(3, 6))
+
+    def test_sites_lists_each_site_with_every_name_it_serves(self):
+        result = self.run_script("sites")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sites = json.loads(result.stdout)["sites"]
+        self.assertEqual(sites["example.test"], ["example.test", "parked.example", "www.example.test"])
+        self.assertEqual(sites["shop.example.test"], ["shop.example.test", "www.shop.example.test"])
+
+    def test_deploy_installs_on_each_named_site(self):
+        result = self.run_script(
+            "deploy", {"sites": ["example.test", "shop.example.test"], "cert": "c", "key": "k"}
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.installed_on(), ["example.test", "shop.example.test"])
+
+    def test_a_site_not_on_the_account_is_refused_before_anything_is_installed(self):
+        result = self.run_script(
+            "deploy", {"sites": ["example.test", "elsewhere.example"], "cert": "c", "key": "k"}
+        )
+
+        self.assertEqual(result.returncode, 126)
+        self.assertIn("elsewhere.example", result.stderr)
+        self.assertEqual(self.installed_on(), [])
+
+    def test_a_failed_install_fails_the_deploy_and_names_the_site(self):
+        result = self.run_script(
+            "deploy", {"sites": ["example.test", "broken.example.test"], "cert": "c", "key": "k"}
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("broken.example.test", result.stderr)
+        self.assertIn("does not match", result.stderr)
+
+    def test_bad_input_and_unknown_operations_are_refused(self):
+        for operation, payload, code in (
+            ("deploy", {"cert": "c", "key": "k"}, 1),
+            ("deploy", {"sites": [], "cert": "c", "key": "k"}, 1),
+            ("deploy", {"sites": ["example.test"]}, 1),
+            ("rm -rf ~", None, 126),
+            ("", None, 126),
+        ):
+            with self.subTest(operation=operation, payload=payload):
+                self.assertEqual(self.run_script(operation, payload).returncode, code)
+        self.assertEqual(self.installed_on(), [])
+
+    def test_the_single_site_form_still_works_for_older_controllers(self):
+        result = self.run_script("deploy:example.test", {"cert": "c", "key": "k"})
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.installed_on(), ["example.test"])

@@ -609,9 +609,9 @@ if SEVERINO_API_IDEMPOTENCY_TTL_SECONDS < 60:
 # core.secrets. Not a provider credential: those stay outside the web container.
 SEVERINO_SECRET_STORE_KEY = env_secret("SEVERINO_SECRET_STORE_KEY")
 
-# Private MCP endpoint. All three settings are enforced by the ASGI boundary;
-# empty hosts or a short/empty token disable MCP fail-closed.
-SEVERINO_MCP_TOKEN = env_secret("SEVERINO_MCP_TOKEN")
+# Private MCP endpoint, enforced by the ASGI boundary. Callers authenticate with
+# an access token from the identity provider (SEVERINO_API_RESOURCE and the
+# issuer settings); without that, or with no allowed hosts, MCP is off.
 SEVERINO_MCP_ALLOWED_HOSTS = env_list("SEVERINO_MCP_ALLOWED_HOSTS")
 SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     "SEVERINO_MCP_ALLOWED_NETWORKS",

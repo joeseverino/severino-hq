@@ -151,6 +151,72 @@ class DashboardGlanceTests(TestCase):
             ).completed_at
         )
 
+    def _weather(self, **reading):
+        DashboardRefreshRequest.objects.update_or_create(
+            panel_id="weather", defaults={"completed_at": None}
+        )
+        record_dashboard_observations(
+            [{"panel_id": "weather", "point": "41.0000,-87.0000", **reading}],
+            principal=cli_principal(),
+            controller_id="app-server",
+        )
+        return WeatherObservation.objects.get(point="41.0000,-87.0000")
+
+    GOOD = {"status": "good", "summary": "A town", "metrics": [{"label": "Now", "value": "Clear"}]}
+    FAILED = {"status": "serious", "summary": "Refresh failed (HTTPError).", "metrics": [],
+              "refresh_failed": "HTTPError"}
+
+    def test_a_failed_refresh_keeps_the_last_good_reading_and_its_time(self):
+        good = self._weather(**self.GOOD)
+
+        kept = self._weather(**self.FAILED)
+
+        self.assertEqual(kept.payload["metrics"], good.payload["metrics"])
+        self.assertEqual(kept.payload["status"], "good")
+        self.assertEqual(kept.payload["refresh_failed"], "HTTPError")
+        self.assertEqual(kept.observed_at, good.observed_at)
+
+    def test_the_next_good_refresh_clears_the_failure(self):
+        self._weather(**self.GOOD)
+        self._weather(**self.FAILED)
+
+        fresh = self._weather(**self.GOOD)
+
+        self.assertNotIn("refresh_failed", fresh.payload)
+
+    def test_with_nothing_to_keep_the_failure_is_what_is_shown(self):
+        failed = self._weather(**self.FAILED)
+
+        self.assertEqual(failed.payload["status"], "serious")
+        self.assertEqual(failed.payload["refresh_failed"], "HTTPError")
+
+    def test_a_failure_marker_carries_only_the_error_type(self):
+        failed = self._weather(**{**self.FAILED, "refresh_failed": "HTTPError: <b>/secret/path</b>"})
+
+        self.assertEqual(failed.payload["refresh_failed"], "HTTPErrorbsecretpathb")
+
+    def test_a_machine_keeps_its_last_good_telemetry_through_a_failed_refresh(self):
+        def report(reading):
+            DashboardRefreshRequest.objects.update_or_create(
+                panel_id=self.machine_request_id, defaults={"completed_at": None}
+            )
+            record_dashboard_observations(
+                [{"panel_id": "infrastructure", "machines": [{"key": "app-server", **reading}]}],
+                principal=cli_principal(),
+                controller_id="app-server",
+            )
+            self.machine.refresh_from_db()
+            return self.machine
+
+        good = report({"status": "good", "summary": "", "metrics": [{"label": "CPU", "value": "3%"}]})
+        seen_at = good.last_observed_at
+
+        kept = report(self.FAILED)
+
+        self.assertEqual(kept.status["telemetry"]["metrics"][0]["value"], "3%")
+        self.assertEqual(kept.status["telemetry"]["refresh_failed"], "HTTPError")
+        self.assertEqual(kept.last_observed_at, seen_at)
+
     def test_dashboard_projects_machine_and_weather_owners(self):
         observed = timezone.now()
         self.machine.status = {

@@ -35,7 +35,7 @@ import time
 from django.conf import settings
 from django.utils import timezone
 
-from control_plane.models import ProviderInventory
+from control_plane.models import ProviderConnection, ProviderInventory
 
 from .security import Capability, Principal
 
@@ -119,14 +119,51 @@ def slowest_sweep_interval() -> timedelta:
     return timedelta(seconds=_seconds("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60))
 
 
-def sweep_due() -> dict[str, object]:
+def ssh_probe_interval() -> timedelta:
+    """How long a working SSH connection's last answer stays good enough.
+
+    A probe of an SSH connection is a real login: a certificate minted or a key
+    offered, a session opened, a command run. That is fine twice a day and not
+    fine every minute, which is what the active sweep cadence would make it --
+    and a shared host counts those logins, and may act on them. Everything else
+    a sweep reads is cheap enough to keep on the sweep's own clock.
+    """
+
+    return timedelta(seconds=_seconds("SEVERINO_SSH_PROBE_INTERVAL_SECONDS", 60 * 60))
+
+
+def carried_connections(controller_id: str) -> list[str]:
+    """SSH connections this controller should report without probing again.
+
+    Only ones whose last probe succeeded and is younger than the interval. A
+    failing connection is asked again on every sweep, so a recovery shows up as
+    soon as it happens rather than an hour later.
+    """
+
+    fresh_since = timezone.now() - ssh_probe_interval()
+    return sorted(
+        ProviderConnection.objects.filter(
+            controller_id=controller_id,
+            provider="ssh",
+            probed=True,
+            reachable=True,
+            observed_at__gte=fresh_since,
+        ).values_list("connection_ref", flat=True)
+    )
+
+
+def sweep_due(controller_id: str = "") -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
     The oldest sweep decides. The reason rides along because a controller that
     stopped sweeping and one that was told not to look identical from outside,
     and only one of them is a fault.
+
+    `carry` names the connections the sweep should report as they last were
+    rather than probe; see `carried_connections`.
     """
 
+    carry = carried_connections(controller_id) if controller_id else []
     interval = sweep_interval()
     oldest = (
         ProviderInventory.objects.order_by("observed_at")
@@ -139,6 +176,7 @@ def sweep_due() -> dict[str, object]:
             "due": True,
             "reason": "Nothing has been swept yet.",
             "interval_seconds": int(interval.total_seconds()),
+            "carry": carry,
         }
     age = timezone.now() - oldest
     due = age >= interval
@@ -152,6 +190,7 @@ def sweep_due() -> dict[str, object]:
         ),
         "interval_seconds": int(interval.total_seconds()),
         "age_seconds": int(age.total_seconds()),
+        "carry": carry,
     }
 
 

@@ -1,4 +1,6 @@
 target-version = "py312"
+# Python without a .py name: the forced command HQ's key runs on shared hosting.
+extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 
 [lint]
 # Keep the contract explicit and stable across developer machines and CI.
