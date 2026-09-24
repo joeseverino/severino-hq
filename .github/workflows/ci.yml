@@ -23,12 +23,15 @@ jobs:
   toolchain:
     name: toolchain
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       python-versions: ${{ steps.read.outputs.python-versions }}
       oldest-python: ${{ steps.read.outputs.oldest-python }}
       ruff-version: ${{ steps.read.outputs.ruff-version }}
       shellcheck-version: ${{ steps.read.outputs.shellcheck-version }}
       coverage-floor: ${{ steps.read.outputs.coverage-floor }}
+      coverage-version: ${{ steps.read.outputs.coverage-version }}
+      uv-version: ${{ steps.read.outputs.uv-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: read
@@ -44,6 +47,8 @@ jobs:
             echo "ruff-version=$RUFF_VERSION"
             echo "shellcheck-version=$SHELLCHECK_VERSION"
             echo "coverage-floor=$COVERAGE_FLOOR"
+            echo "coverage-version=$COVERAGE_VERSION"
+            echo "uv-version=$UV_VERSION"
           } >> "$GITHUB_OUTPUT"
           echo "matrix: $versions"
 
@@ -51,6 +56,7 @@ jobs:
     name: lint
     needs: toolchain
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,6 +91,27 @@ jobs:
             exit 1
           fi
           echo "README python badge agrees with the matrix: $expected"
+      - name: requirements.txt is what requirements.in compiles to
+        # The header names the command that produces the lockfile, and the file
+        # had drifted from it. Regenerated here with the pinned uv and compared,
+        # so the committed pins are always the command's output and nothing else.
+        run: |
+          set -euo pipefail
+          pip install uv==${{ needs.toolchain.outputs.uv-version }}
+          command="$(sed -n 's/^#    uv pip compile /uv pip compile /p' requirements.txt)"
+          [ -n "$command" ] || { echo "::error::requirements.txt does not name its command"; exit 1; }
+          # Compiled on top of a copy, so uv keeps the committed pins: this asks
+          # whether the file is the command's output, not whether newer
+          # releases exist -- that is Dependabot's job, not a red build's.
+          fresh="$(mktemp)"
+          cp requirements.txt "$fresh"
+          # shellcheck disable=SC2086  # the recorded command is meant to split
+          ${command/--output-file requirements.txt/--output-file $fresh} --quiet
+          if ! diff -u <(grep -v '^#' requirements.txt) <(grep -v '^#' "$fresh"); then
+            echo "::error::requirements.txt differs from what its header command produces. Rerun: $command"
+            exit 1
+          fi
+          echo "requirements.txt matches: $command"
       - name: Every hosted job runs on the declared runner image
         # The same reasoning as the badge check: workflow YAML cannot read
         # toolchain.env, so it is verified against it. A job left on
@@ -140,6 +167,7 @@ jobs:
     name: test
     needs: toolchain
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +183,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
       - run: pip install --require-hashes -r requirements.txt
-      - run: pip install coverage
+      - run: pip install coverage==${{ needs.toolchain.outputs.coverage-version }}
       - run: python manage.py check
       - name: Public plugin contract
         env:
@@ -167,8 +195,14 @@ jobs:
       - name: Tests with coverage gate
         env:
           COVERAGE_FLOOR: ${{ needs.toolchain.outputs.coverage-floor }}
+        # Parallel across the runner's cores, as scripts/check.sh already runs it
+        # locally; core/test_runner.py is what makes workers safe on the WAL
+        # database. Coverage follows the workers (.coveragerc) and is combined
+        # before it is judged. Each test's logs are shown only if it fails, and
+        # the ten slowest tests are named so a slow one is noticed, not endured.
         run: |
-          coverage run manage.py test --verbosity 2
+          coverage run manage.py test --parallel auto --durations 10
+          coverage combine --quiet
           coverage report --fail-under="$COVERAGE_FLOOR"
           pct="$(coverage report --format=total 2>/dev/null || echo '')"
           if [ "${{ matrix.python-version }}" = "${{ needs.toolchain.outputs.oldest-python }}" ] && [ -n "$pct" ]; then
@@ -202,6 +236,7 @@ jobs:
     name: security
     needs: toolchain
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -235,6 +270,7 @@ jobs:
     needs: [lint, test, security]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build production image
@@ -298,6 +334,7 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -363,6 +400,7 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read

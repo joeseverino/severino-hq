@@ -13,10 +13,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # A newer push to the same ref makes this run's answer irrelevant.
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (python)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       security-events: write
       actions: read
