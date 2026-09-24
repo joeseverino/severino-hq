@@ -22,7 +22,7 @@ jobs:
   # scripts/ci-local.sh reads directly.
   toolchain:
     name: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       python-versions: ${{ steps.read.outputs.python-versions }}
       oldest-python: ${{ steps.read.outputs.oldest-python }}
@@ -50,7 +50,7 @@ jobs:
   lint:
     name: lint
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -82,6 +82,22 @@ jobs:
             exit 1
           fi
           echo "README python badge agrees with the matrix: $expected"
+      - name: Every hosted job runs on the declared runner image
+        # The same reasoning as the badge check: workflow YAML cannot read
+        # toolchain.env, so it is verified against it. A job left on
+        # `ubuntu-latest` would move to a new OS on GitHub's schedule.
+        run: |
+          set -euo pipefail
+          . ./scripts/toolchain.env
+          stray="$(grep -HnE '^[[:space:]]*runs-on:' .github/workflows/*.yml \
+                   | grep -v 'self-hosted' \
+                   | grep -v "runs-on: ${RUNNER_IMAGE}\$" || true)"
+          if [ -n "$stray" ]; then
+            printf '%s\n' "$stray"
+            echo "::error::hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)."
+            exit 1
+          fi
+          echo "every hosted job runs on ${RUNNER_IMAGE}"
       - name: No private extension names in the public tree
         # The extensions are private repositories; this one is public. Their
         # inventory is kept in the COMPOSITION_EXTENSIONS secret rather than
@@ -143,7 +159,7 @@ jobs:
   test:
     name: test
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -205,7 +221,7 @@ jobs:
   security:
     name: security
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -238,7 +254,7 @@ jobs:
     name: container
     needs: [lint, test, security]
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build production image
@@ -301,7 +317,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -366,7 +382,7 @@ jobs:
     name: scan
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
