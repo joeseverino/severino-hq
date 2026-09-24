@@ -145,7 +145,7 @@ they stay visible and stay in the same table.
               <span class="connection-standing">
                 <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
                 <span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
-                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}{{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
+                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}reported {{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
               </span>
             </td>
             <td class="connection-next" data-label="Next">

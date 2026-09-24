@@ -479,6 +479,98 @@ def _connection_nodes(
                 edges[relation.id] = relation
 
 
+# Derived node kinds that only stand for a machine something mentioned: a
+# controller is the machine it runs on, a target is the machine it reaches.
+_FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": "Reached as"}
+
+
+def _one_node_per_machine(
+    nodes: dict[str, TopologyNode],
+    edges: dict[str, TopologyEdge],
+    resources: tuple[ManagedResource, ...],
+) -> None:
+    """Give every declared machine exactly one node.
+
+    A controller and a reached target that resolve to a declared machine are
+    that machine, so they fold into its node: their edges move to it and what
+    they were is kept as a fact. A tailnet device stays its own node, since HQ
+    keeps decisions about it, and is linked to its machine through the address
+    they share. Resolution is the machine index every surface uses, never a
+    match on labels.
+    """
+
+    from . import tailnet
+    from .locate import machines_index
+    from .machines import declares_host
+
+    machine_nodes = {
+        str((resource.spec or {}).get("name") or resource.key): f"resource:{resource.key}"
+        for resource in resources
+        if resource.kind == "machine" and f"resource:{resource.key}" in nodes
+    }
+    if not machine_nodes:
+        return
+    index = machines_index()
+
+    folded: dict[str, str] = {}
+    for node_id, node in nodes.items():
+        if node.kind in _FOLDS_INTO_MACHINE:
+            host = machine_nodes.get(index.resolve(node.label))
+            if host:
+                folded[node_id] = host
+    for node_id, host in folded.items():
+        node, machine = nodes[node_id], nodes[host]
+        fact = (_FOLDS_INTO_MACHINE[node.kind], node.label)
+        nodes[host] = replace(
+            machine,
+            facts=machine.facts + ((fact,) if fact not in machine.facts else ()),
+            actions=machine.actions
+            + tuple(
+                action
+                for action in node.actions
+                if all(existing.url != action.url for existing in machine.actions)
+            ),
+        )
+    moved: dict[str, TopologyEdge] = {}
+    for edge in edges.values():
+        source = folded.get(edge.source, edge.source)
+        target = folded.get(edge.target, edge.target)
+        if source == target:
+            continue
+        relation = _edge(source, target, edge.kind, edge.label, edge.status)
+        moved[relation.id] = relation
+    edges.clear()
+    edges.update(moved)
+    for node_id in folded:
+        del nodes[node_id]
+
+    # Whatever declares the machine it runs on -- a container, a stack -- is
+    # linked to that machine's node.
+    for resource in resources:
+        resource_id = f"resource:{resource.key}"
+        if not declares_host(resource.kind):
+            continue
+        host = machine_nodes.get(index.resolve((resource.spec or {}).get("host")))
+        if host and host != resource_id and resource_id in nodes:
+            relation = _edge(host, resource_id, "runs", "Runs")
+            edges[relation.id] = relation
+
+    devices = tailnet.devices()
+    for resource in resources:
+        device_id = f"resource:{resource.key}"
+        if resource.kind != "tailscale.device" or device_id not in nodes:
+            continue
+        device = devices.get(str((resource.spec or {}).get("name") or ""))
+        hosts = {
+            machine_nodes[name]
+            for name in (index.at(address) for address in (device.addresses if device else ()))
+            if name in machine_nodes
+        }
+        for host in hosts:
+            relation = _edge(host, device_id, "on_tailnet", "On the tailnet as")
+            edges[relation.id] = relation
+
+
 # A label is a candidate hostname when it looks like one. Deliberately a shape
 # test rather than a list of kinds: a target is a hostname, a resource key
 # sometimes is, and an extension may emit a node kind this module has never
@@ -737,6 +829,7 @@ def derive_topology(*, principal: Principal) -> Topology:
 
     groups = connection_catalog(principal=principal)
     _connection_nodes(groups, nodes, edges, principal)
+    _one_node_per_machine(nodes, edges, resources)
 
     # What each edge relies on to stay shut, from its own reading. Two claims
     # come out of this and they differ in kind: a firewall unit that is not

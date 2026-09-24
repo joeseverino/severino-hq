@@ -1165,66 +1165,10 @@ class TopologyView(LoginRequiredMixin, TemplateView):
             depth=self.request.GET.get("depth", "2").strip(),
         )
         by_id = {node.id: node for node in topology.nodes}
-        hops = dict(trace.hops) if trace else {}
-        neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
-        # An edge is a verb with a direction. Collapsing it to an undirected
-        # neighbour set answers "is this related" and throws away "how" and
-        # "which way", which is the only part an operator is actually reading.
-        # Both ends get a row so a node can state its relationships from where
-        # it stands, without the reader re-deriving the arrow.
-        relations: dict[str, list[dict[str, Any]]] = {
-            node.id: [] for node in topology.nodes
-        }
         lens_name = active_lens.name if active_lens else ""
-        for edge in topology.edges:
-            if edge.source not in neighbors or edge.target not in neighbors:
-                continue
-            neighbors[edge.source].add(edge.target)
-            neighbors[edge.target].add(edge.source)
-            relations[edge.source].append(
-                {
-                    "direction": "out",
-                    "label": edge.label,
-                    "other": by_id[edge.target],
-                    "status": edge.status,
-                    "url": self._focus_link(edge.target, lens_name),
-                }
-            )
-            relations[edge.target].append(
-                {
-                    "direction": "in",
-                    "label": edge.label,
-                    "other": by_id[edge.source],
-                    "status": edge.status,
-                    "url": self._focus_link(edge.source, lens_name),
-                }
-            )
-        for rows in relations.values():
-            rows.sort(
-                key=lambda row: (
-                    row["direction"],
-                    row["label"],
-                    row["other"].label.casefold(),
-                )
-            )
         groups: dict[str, list[dict[str, Any]]] = {}
-        for node in topology.nodes:
-            groups.setdefault(node.kind, []).append(
-                {
-                    "node": node,
-                    "neighbors": " ".join(sorted(neighbors[node.id])),
-                    "degree": len(neighbors[node.id]),
-                    "relations": relations[node.id],
-                    "observed_age": self._observed_age(node.observed_at),
-                    "hop": hops.get(node.id),
-                    "inbound_url": self._trace_url(
-                        node.id, "inbound", active_lens.name if active_lens else ""
-                    ),
-                    "outbound_url": self._trace_url(
-                        node.id, "outbound", active_lens.name if active_lens else ""
-                    ),
-                }
-            )
+        for item in self.node_items(topology, lens_name, trace):
+            groups.setdefault(item["node"].kind, []).append(item)
         labels = {
             "controller": "Controllers",
             "connection": "Connections",
@@ -1249,6 +1193,8 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                     }
                     for kind, items in groups.items()
                 ),
+                # The ledger restates every edge the node bodies already state
+                # from both ends, so it is drawn for a bounded trace only.
                 "topology_edges": tuple(
                     {
                         "edge": edge,
@@ -1256,7 +1202,9 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                         "target": by_id[edge.target],
                     }
                     for edge in topology.edges
-                ),
+                )
+                if trace
+                else (),
                 # Passed rather than written into the template: the window is
                 # one number, and a page that restates it drifts from the query
                 # that produced the figures the moment either changes.
@@ -1305,6 +1253,88 @@ class TopologyView(LoginRequiredMixin, TemplateView):
         )
         return context
 
+    @classmethod
+    def node_items(
+        cls,
+        topology,
+        lens_name: str = "",
+        trace=None,
+        *,
+        only: str = "",
+    ) -> list[dict[str, Any]]:
+        """What the page states about each node, in projection order.
+
+        ``only`` narrows to one node: its relations still come from every edge,
+        so a node body fetched on its own says exactly what the page would.
+        """
+
+        by_id = {node.id: node for node in topology.nodes}
+        hops = dict(trace.hops) if trace else {}
+        neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
+        # An edge is a verb with a direction. Collapsing it to an undirected
+        # neighbour set answers "is this related" and throws away "how" and
+        # "which way", which is the only part an operator is actually reading.
+        # Both ends get a row so a node can state its relationships from where
+        # it stands, without the reader re-deriving the arrow.
+        relations: dict[str, list[dict[str, Any]]] = {
+            node.id: [] for node in topology.nodes
+        }
+        for edge in topology.edges:
+            if edge.source not in neighbors or edge.target not in neighbors:
+                continue
+            neighbors[edge.source].add(edge.target)
+            neighbors[edge.target].add(edge.source)
+            relations[edge.source].append(
+                {
+                    "direction": "out",
+                    "label": edge.label,
+                    "other": by_id[edge.target],
+                    "status": edge.status,
+                    "url": cls._focus_link(edge.target, lens_name),
+                }
+            )
+            relations[edge.target].append(
+                {
+                    "direction": "in",
+                    "label": edge.label,
+                    "other": by_id[edge.source],
+                    "status": edge.status,
+                    "url": cls._focus_link(edge.source, lens_name),
+                }
+            )
+        items = []
+        for node in topology.nodes:
+            if only and node.id != only:
+                continue
+            rows = sorted(
+                relations[node.id],
+                key=lambda row: (
+                    row["direction"],
+                    row["label"],
+                    row["other"].label.casefold(),
+                ),
+            )
+            items.append(
+                {
+                    "node": node,
+                    "neighbors": " ".join(sorted(neighbors[node.id])),
+                    "degree": len(neighbors[node.id]),
+                    "relations": rows,
+                    "observed_age": cls._observed_age(node.observed_at),
+                    "hop": hops.get(node.id),
+                    "focus_url": cls._focus_link(node.id, lens_name),
+                    "body_url": (
+                        f"{reverse('control_plane:topology_node')}?"
+                        + urlencode(
+                            {"node": node.id, **({"lens": lens_name} if lens_name else {})}
+                        )
+                    ),
+                    "inbound_url": cls._trace_url(node.id, "inbound", lens_name),
+                    "outbound_url": cls._trace_url(node.id, "outbound", lens_name),
+                }
+            )
+        return items
+
     @staticmethod
     def _observed_age(observed_at: str) -> datetime | None:
         """The observation instant as a datetime, so a template can age it.
@@ -1330,6 +1360,33 @@ class TopologyView(LoginRequiredMixin, TemplateView):
     @staticmethod
     def _trace_url(focus: str, direction: str, lens: str = "", depth: int = 3) -> str:
         return topology_url(focus, direction=direction, depth=depth, lens=lens)
+
+
+class TopologyNodeView(LoginRequiredMixin, TemplateView):
+    """One node's body, for the page to fetch when the node is opened.
+
+    The page draws every node's summary and leaves the bodies to this, so
+    its weight follows how many nodes there are rather than how much each
+    one says.
+    """
+
+    template_name = "control_plane/_topology_node_body.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        topology = derive_topology(principal=web_principal(self.request.user))
+        active_lens = lens_for(self.request.GET.get("lens", "").strip())
+        if active_lens is not None:
+            topology = apply_lens(topology, active_lens)
+        items = TopologyView.node_items(
+            topology,
+            active_lens.name if active_lens else "",
+            only=self.request.GET.get("node", "").strip(),
+        )
+        if not items:
+            raise Http404("No such node.")
+        context.update(item=items[0], traffic_window_days=HOST_TRAFFIC_DAYS)
+        return context
 
 
 class FindingsView(LoginRequiredMixin, TemplateView):

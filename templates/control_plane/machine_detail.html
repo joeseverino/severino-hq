@@ -72,7 +72,7 @@
     {% for ref in machine.reached_by %}
       <span class="readout"><a href="{% url 'control_plane:connections' %}"><code>{{ ref }}</code></a></span>
     {% empty %}
-      <span class="readout muted">Nothing HQ holds opens this. Its name was reported by something else.</span>
+      <span class="readout muted">Nothing HQ holds opens this.{% if not machine.declaration %} Its name was reported by something else.{% endif %}</span>
     {% endfor %}
   </div>
   <div class="control-metric">

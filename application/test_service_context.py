@@ -251,7 +251,7 @@ class OneWindowTests(TestCase):
 
         template = (
             pathlib.Path(__file__).resolve().parents[1]
-            / "templates/control_plane/topology.html"
+            / "templates/control_plane/_topology_node_body.html"
         ).read_text()
         self.assertIn("{{ traffic_window_days }}", template)
         self.assertNotIn("Traffic · 7 days", template)

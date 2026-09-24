@@ -546,8 +546,13 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
 });
 
 // A panel whose content comes from somewhere slow is fetched after the page, so
-// the page never waits on it. An empty answer leaves nothing behind.
-document.querySelectorAll("[data-deferred]").forEach(async (slot) => {
+// the page never waits on it; one inside a closed disclosure is fetched when
+// the disclosure opens, so the page never carries what nobody opened. An empty
+// answer leaves nothing behind, and a failed one leaves whatever the slot held
+// for a page without script.
+const hqLoadDeferred = async (slot) => {
+  if (slot.dataset.deferredLoading) return;
+  slot.dataset.deferredLoading = "true";
   try {
     const response = await hqFetch(slot.dataset.deferred, {
       credentials: "same-origin",
@@ -557,9 +562,23 @@ document.querySelectorAll("[data-deferred]").forEach(async (slot) => {
     const panel = hqParseDocument(await response.text()).body;
     slot.replaceWith(...panel.childNodes);
   } catch (_error) {
-    slot.remove();
+    if (!slot.childElementCount) slot.remove();
   }
+};
+document.querySelectorAll("[data-deferred]").forEach((slot) => {
+  if (!slot.closest("details:not([open])")) hqLoadDeferred(slot);
 });
+document.addEventListener(
+  "toggle",
+  (event) => {
+    const disclosure = event.target;
+    if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.open) return;
+    disclosure.querySelectorAll("[data-deferred]").forEach((slot) => {
+      if (slot.closest("details:not([open])") === null) hqLoadDeferred(slot);
+    });
+  },
+  true,
+);
 
 // At-a-glance readings are cold until asked for. The button asks, and so does
 // opening the page while a reading is stale: the glance endpoint requests a
