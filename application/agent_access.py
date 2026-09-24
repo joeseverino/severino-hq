@@ -1,4 +1,4 @@
-"""The operator's switch that pauses every agent on the MCP endpoint."""
+"""The operator's switch that pauses every agent, on /mcp/ and on the machine API."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ AUDIT_LABEL = "Agent access"
 
 
 def agents_paused() -> bool:
-    """Read on every MCP request, never cached. Fails closed."""
+    """Read on every agent request (MCP and /api/), never cached. Fails closed."""
 
     try:
         row = AgentAccess.objects.filter(pk=1).only("paused").first()

@@ -63,18 +63,79 @@ def _validate_choice(value: str, allowed, *, field: str) -> str:
     )
 
 
-def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
-    """Validate an entry's enums and build the DocumentationRecord field defaults.
+def _is_content_entry(entry: dict) -> bool:
+    """Whether an entry is site content, mirrored into ContentItem.
 
-    Pure (no DB); raises ManifestImportError on an invalid choice. Shared by the
-    importer's write path and the read-only validate path so the two can never
-    disagree about what HQ accepts. A task carries its own status lifecycle
-    (open/active/parked/done/wontfix), validated per-doc-type exactly as the MCP
-    write path does; every other doc uses the standard status set.
+    Only explicit content entries count. Some reporting docs use
+    public_article_draft as a writing state, but they are not part of the site
+    CMS unless the manifest carries content_type. The one predicate for both
+    the contract check and the ContentItem routing, so the two cannot disagree.
+    """
+    is_article = entry.get("doc_type") == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+    return is_article and bool(entry.get("content_type"))
+
+
+# The importer reads the service name from either key, so either satisfies the
+# schema's `system`.
+_FIELD_ALIASES = {"system": ("system", "system_service")}
+
+
+def _is_blank(value: Any) -> bool:
+    # The doctor's notion of absent, so a doc it passes is one HQ accepts.
+    return value is None or value == "" or value == []
+
+
+def _enforce_contract(entry: dict, doc_id: str) -> None:
+    """Hold an entry to the schema's required fields and doc_id prefixes.
+
+    The required set is per-doc-type, as the doctor and the MCP apply it: a task
+    owes the slimmer ``TASK_REQUIRED_FIELDS``, every other doc the standard
+    ``REQUIRED_FIELDS``. Every missing field is named at once, with the doc_id,
+    so one preflight run is enough to fix an entry.
+
+    ``DOC_ID_PREFIXES`` is the vault-doc id namespace, so it binds vault docs
+    only. Content entries owe the required fields but not the prefixes: their
+    ids belong to the site content, not to the vault schema.
+    """
+    label = doc_id or "(no doc_id)"
+    is_task = entry.get("doc_type") == "task"
+    required = (
+        frontmatter_schema.TASK_REQUIRED_FIELDS
+        if is_task
+        else frontmatter_schema.REQUIRED_FIELDS
+    )
+    missing = [
+        field
+        for field in required
+        if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
+    ]
+    if missing:
+        raise ManifestImportError(
+            f"{label}: missing required field(s): {', '.join(missing)}"
+        )
+    if _is_content_entry(entry):
+        return
+    prefixes = frontmatter_schema.DOC_ID_PREFIXES
+    if not doc_id.startswith(prefixes):
+        raise ManifestImportError(
+            f"{label}: doc_id must start with one of: {', '.join(prefixes)}"
+        )
+
+
+def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
+    """Validate an entry against the schema and build the record field defaults.
+
+    Pure (no DB); raises ManifestImportError on a bad doc_id prefix, a missing
+    required field, or an invalid choice. Shared by the importer's write path
+    and the read-only validate path so the two can never disagree about what HQ
+    accepts. A task carries its own status lifecycle (open/active/parked/done/
+    wontfix) and required-field set, validated per-doc-type exactly as the MCP
+    write path does; every other doc uses the standard sets.
     """
     doc_id = (entry.get("doc_id") or "").strip()
+    _enforce_contract(entry, doc_id)
     doc_type = _validate_choice(
-        entry.get("doc_type") or "runbook",
+        entry["doc_type"],
         frontmatter_schema.DOC_TYPES,
         field="doc_type",
     )
@@ -82,7 +143,6 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
     status_allowed = (
         frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
     )
-    status_default = "open" if is_task else "draft"
     defaults = {
         "title": entry.get("title") or doc_id,
         "doc_type": doc_type,
@@ -93,7 +153,7 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
             field="environment",
         ),
         "status": _validate_choice(
-            entry.get("status") or status_default,
+            entry["status"],
             status_allowed,
             field="status",
         ),
@@ -113,13 +173,13 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
 
 
 def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
-    """Read-only preflight: validate every entry's enums against the canonical
-    schema WITHOUT touching the database, so contract drift (an invalid status /
-    doc_type / environment / sensitivity — the class that wedged `hq sync`) is
-    caught locally before the deployed importer ever runs. Returns a list of
-    ``{doc_id, errors:[...]}`` for entries that fail; empty means the manifest is
-    importable. Validates the same enums the write path does, via the shared
-    ``_build_record_defaults``.
+    """Read-only preflight: validate every entry against the canonical schema
+    WITHOUT touching the database, so contract drift (a bad doc_id prefix, a
+    missing required field, or an invalid status / doc_type / environment /
+    sensitivity — the class that wedged `hq sync`) is caught locally before the
+    deployed importer ever runs. Returns a list of ``{doc_id, errors:[...]}`` for
+    entries that fail; empty means the manifest is importable. Validates exactly
+    what the write path does, via the shared ``_build_record_defaults``.
     """
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
@@ -355,13 +415,7 @@ def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dic
     else:
         stats["skipped"] += 1
 
-    # Only explicit content entries mirror into ContentItem. Some reporting
-    # docs use public_article_draft as a writing state, but they are not
-    # part of the site CMS unless the manifest carries content_type.
-    if (
-        defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
-        and entry.get("content_type")
-    ):
+    if _is_content_entry(entry):
         _upsert_content_item(record, entry, defaults, stats)
     elif defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
         _prune_legacy_content_item_for_record(record, stats)

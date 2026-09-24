@@ -944,6 +944,9 @@ class ManifestImportTests(TestCase):
                     "title": "Techless project",
                     "doc_type": DocumentationRecord.DocType.ARCHITECTURE_NOTE,
                     "status": DocumentationRecord.Status.ACTIVE,
+                    "system": "Example service",
+                    "environment": "other",
+                    "sensitivity": "internal",
                     "related_projects": [project.slug],
                     "tags": ["django", "sqlite", "tailscale"],
                 }
@@ -969,6 +972,9 @@ class ManifestImportTests(TestCase):
                     "title": "Curated project",
                     "doc_type": DocumentationRecord.DocType.ARCHITECTURE_NOTE,
                     "status": DocumentationRecord.Status.ACTIVE,
+                    "system": "Example service",
+                    "environment": "other",
+                    "sensitivity": "internal",
                     "related_projects": [project.slug],
                     "tags": ["sqlite", "tailscale"],
                 }
@@ -1035,6 +1041,9 @@ class ManifestImportTests(TestCase):
                     "title": "ok",
                     "doc_type": "runbook",
                     "status": "active",
+                    "system": "Example service",
+                    "environment": "other",
+                    "sensitivity": "internal",
                 },
                 {
                     "doc_id": "task-bad",
@@ -1050,6 +1059,92 @@ class ManifestImportTests(TestCase):
         self.assertIn("task-bad", by)
         self.assertIn("rb-bad-env", by)
         self.assertEqual(DocumentationRecord.objects.count(), 0)
+
+    # The schema's prefixes and required fields were loaded but never read, so
+    # an entry breaking either upserted cleanly. Each rejection is asserted on
+    # both paths -- the preflight and the write -- since they share one check.
+    STANDARD_DOC = {
+        "doc_id": "rb-complete",
+        "title": "Complete",
+        "doc_type": "runbook",
+        "system": "Example service",
+        "environment": "other",
+        "status": "active",
+        "sensitivity": "internal",
+    }
+    TASK_DOC = {
+        "doc_id": "task-complete",
+        "title": "Complete",
+        "doc_type": "task",
+        "status": "open",
+    }
+
+    def _assert_rejected(self, entry, *fragments):
+        problems = validate_manifest_data([entry])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertEqual(problems[0]["doc_id"], entry["doc_id"])
+        message = problems[0]["errors"][0]
+        for fragment in (entry["doc_id"], *fragments):
+            self.assertIn(fragment, message)
+        with self.assertRaisesRegex(ManifestImportError, entry["doc_id"]):
+            import_manifest_data([entry])
+        self.assertEqual(DocumentationRecord.objects.count(), 0)
+
+    def test_doc_id_outside_the_schema_prefixes_is_rejected(self):
+        self._assert_rejected(
+            {**self.STANDARD_DOC, "doc_id": "wiki-complete"}, "must start with", "rb-"
+        )
+
+    def test_standard_doc_missing_required_fields_is_rejected(self):
+        entry = {
+            k: v
+            for k, v in self.STANDARD_DOC.items()
+            if k not in {"environment", "sensitivity"}
+        }
+        self._assert_rejected(entry, "environment", "sensitivity")
+
+    def test_blank_required_field_counts_as_missing(self):
+        self._assert_rejected({**self.STANDARD_DOC, "system": ""}, "system")
+
+    def test_task_missing_a_task_required_field_is_rejected(self):
+        entry = {k: v for k, v in self.TASK_DOC.items() if k != "title"}
+        self._assert_rejected(entry, "title")
+
+    CONTENT_DOC = {
+        **STANDARD_DOC,
+        "doc_id": "writeup-complete",
+        "doc_type": "public_article_draft",
+        "content_type": "portfolio_article",
+    }
+
+    def test_vault_doc_cannot_take_a_content_id(self):
+        # The schema's prefixes bind every vault doc: a runbook cannot pass
+        # with a writeup's id.
+        self._assert_rejected(
+            {**self.STANDARD_DOC, "doc_id": "writeup-complete"}, "must start with"
+        )
+
+    def test_public_article_draft_without_content_type_is_a_vault_doc(self):
+        # Not routed to ContentItem, so held to the schema's prefixes.
+        entry = {k: v for k, v in self.CONTENT_DOC.items() if k != "content_type"}
+        self._assert_rejected(entry, "must start with")
+
+    def test_content_entry_id_is_not_held_to_the_doc_prefixes(self):
+        for doc_id in ("writeup-complete", "page-about", "anything-at-all"):
+            with self.subTest(doc_id=doc_id):
+                entry = {**self.CONTENT_DOC, "doc_id": doc_id}
+                self.assertEqual(validate_manifest_data([entry]), [])
+
+    def test_content_entry_still_owes_the_required_fields(self):
+        entry = {k: v for k, v in self.CONTENT_DOC.items() if k != "system"}
+        self._assert_rejected(entry, "system")
+
+    def test_valid_standard_doc_and_task_pass(self):
+        # A task owes only the slimmer set: no system/environment/sensitivity.
+        manifest = [self.STANDARD_DOC, self.TASK_DOC]
+        self.assertEqual(validate_manifest_data(manifest), [])
+        stats = import_manifest_data(manifest)
+        self.assertEqual(stats["created"], 2)
 
     def test_check_only_command_gates_an_invalid_manifest(self):
         bad = json.dumps(

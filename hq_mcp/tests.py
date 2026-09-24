@@ -232,6 +232,60 @@ class ServiceTests(TestCase):
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_findings"))
         self.assertNotIn("secret", json.dumps(found).lower())
 
+    def test_an_unknown_payload_field_is_named_to_the_agent(self):
+        from django.test import override_settings
+
+        from application.security import mcp_principal
+
+        from .identity import reset_principal, set_principal
+
+        with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
+            bound = set_principal(mcp_principal())
+            self.addCleanup(reset_principal, bound)
+            result = services.execute_capability(
+                "hq.sync", {"manifest": [], "manifets": []}
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertIn("manifets", result["error"]["message"])
+
+    def test_an_invalid_payload_is_named_to_the_agent(self):
+        from django.test import override_settings
+
+        from application.security import mcp_principal
+
+        from .identity import reset_principal, set_principal
+
+        with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
+            bound = set_principal(mcp_principal())
+            self.addCleanup(reset_principal, bound)
+            result = services.execute_capability(
+                "hq.sync", {"manifest": "hunter2-not-for-logs"}
+            )
+
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(
+            result["error"]["message"], "hq.sync: manifest must be a valid list."
+        )
+        # Nor anywhere else: the agent's transcript keeps whatever it is told.
+        self.assertNotIn("hunter2", json.dumps(result, default=repr))
+
+    def test_an_invalid_resource_filter_is_named_by_the_tool(self):
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        async def call():
+            tool = mcp._tool_manager.get_tool("list_resource")
+            return await tool.run(
+                {"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}}
+            )
+
+        with self.assertRaises(ToolError) as refused:
+            async_to_sync(call)()
+
+        self.assertIn("projects: limti is not a known field.", str(refused.exception))
+        self.assertNotIn("hunter2", str(refused.exception))
+
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
         from application.connections import ConnectionSpec
         from application.security import Capability
