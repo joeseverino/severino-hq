@@ -56,6 +56,15 @@ from .security import AuthorizationError, Capability, Principal
 CONTROLLER_CONNECTIONS = "infrastructure.controllers"
 
 
+# A reading's status in words. The age shown beside it is when the controller
+# reported, which is not when anything was probed.
+_READING_STATUS_LABELS = {
+    "unreachable": "Unreachable",
+    "reachable": "Reachable",
+    "unprobed": "Not probed",
+}
+
+
 @dataclass(frozen=True)
 class ConnectionReading:
     """One connection, with what HQ would use it for."""
@@ -85,6 +94,10 @@ class ConnectionReading:
         if not self.reachable:
             return "unreachable"
         return "reachable" if self.probed else "unprobed"
+
+    @property
+    def status_label(self) -> str:
+        return _READING_STATUS_LABELS[self.status]
 
 
 @dataclass(frozen=True)
@@ -472,7 +485,7 @@ def _controller_instances(
                     if reading.probed
                     else "neutral"
                 ),
-                status_label=reading.status,
+                status_label=reading.status_label,
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
@@ -665,7 +678,7 @@ def _ability_state(
 ) -> ConnectionAbilityState:
     # At call time: capabilities compose plugin specs, which may declare
     # connections. Same reason action_links defers it.
-    from .labels import human_label
+    from .capabilities import capability_title
 
     evidence, missing = grant_evidence(ability, instance)
     # Unknown stays undecided; only absent or rejected proof closes the door.
@@ -683,7 +696,7 @@ def _ability_state(
         capability_action_link(
             ability.capability,
             ability.effect,
-            human_label(ability.capability),
+            capability_title(ability.capability),
             principal=principal,
         )
         if available

@@ -22,7 +22,6 @@ from application.capabilities import (
     execute_capability,
 )
 from application.command_forms import command_form_class
-from application.labels import human_label
 from application.command_targets import (
     capability_target_initial,
     capability_target_options,
@@ -170,7 +169,7 @@ class CommandView(LoginRequiredMixin, View):
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         return {
             "command": self.spec,
-            "command_label": human_label(self.spec.name),
+            "command_label": self.spec.title,
             "effect_label": self.spec.effect.replace("_", " "),
             "form": form,
             "result": result,

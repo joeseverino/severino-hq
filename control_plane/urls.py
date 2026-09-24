@@ -9,6 +9,7 @@ urlpatterns = [
     path("", views.InfrastructureListView.as_view(), name="list"),
     path("findings/", views.FindingsView.as_view(), name="findings"),
     path("topology/", views.TopologyView.as_view(), name="topology"),
+    path("topology/node/", views.TopologyNodeView.as_view(), name="topology_node"),
     path("providers.json", views.ProviderSchemaView.as_view(), name="providers"),
     # Before <slug:key>, which would otherwise swallow "services" as a resource
     # key. The hostname converter is <str:> rather than <slug:> because a

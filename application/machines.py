@@ -577,14 +577,20 @@ def _folded(name: str) -> str:
 
 def machine(name: str) -> Machine | None:
     """A machine by its name, or by another name it is known as -- a tailnet
-    device name that is the same machine as a declared one, for instance."""
+    device name that is the same machine as a declared one, or the key it was
+    declared under, for instance."""
 
     wanted = name.strip().lower()
     catalog = machine_catalog()
     return next(
         (item for item in catalog if item.name.lower() == wanted),
         next(
-            (item for item in catalog if wanted in {alias.lower() for alias in item.aliases}),
+            (
+                item
+                for item in catalog
+                if wanted
+                in {alias.lower() for alias in (*item.aliases, item.declaration) if alias}
+            ),
             None,
         ),
     )
@@ -788,12 +794,21 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     return found
 
 
+def declares_host(kind: str) -> bool:
+    """Whether a declaration of this kind names the machine it lives on.
+
+    Read from the provider's spec rather than by looking for a ``host`` key, so
+    a provider that starts naming machines is counted by having the field.
+    """
+
+    provider = PROVIDERS.get(kind)
+    return provider is not None and "host" in provider.spec_type.model_fields
+
+
 def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
     """Declarations that name a machine, and the tailnet device keys, in one pass.
 
-    Read through the providers rather than by looking for a ``host`` key, so a
-    provider that starts naming machines joins this by having the field and not
-    by anything here learning about it.
+    Which declarations name a machine is :func:`declares_host`.
 
     The device keys ride along because the loop already reads every enabled
     resource, and a verb offered on a machine page needs the key of the
@@ -808,8 +823,7 @@ def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
             declared_name = str(resource.spec.get("name", "")).strip()
             if declared_name:
                 devices[declared_name] = resource.key
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or "host" not in provider.spec_type.model_fields:
+        if not declares_host(resource.kind):
             continue
         host = str(resource.spec.get("host", "")).strip()
         if host:

@@ -105,6 +105,7 @@ class RecordingTests(TestCase):
         sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
 
         self.assertEqual(connection_readings()[0].status, "unprobed")
+        self.assertEqual(connection_readings()[0].status_label, "Not probed")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
         sweep({"provider": "portainer"}, A_PORTAINER)

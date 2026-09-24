@@ -449,7 +449,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
 
     from .action_links import ActionLink
     from .approvals import pending, preview
-    from .labels import human_label
+    from .capabilities import capability_title
 
     items = []
     for held in pending():
@@ -461,7 +461,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                 eyebrow="Approval",
                 key=f"approval:{held.id}",
                 title=(
-                    f"{held.requested_actor} wants to run {human_label(held.capability)}"
+                    f"{held.requested_actor} wants to run {capability_title(held.capability)}"
                     + (f" on {held.target}" if held.target else "")
                 ),
                 value="1",

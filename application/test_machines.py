@@ -645,6 +645,33 @@ class WhoeverSweptTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_the_key_it_was_declared_under_finds_it_too(self):
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-laptop", kind="machine", spec={"name": "A Laptop"}
+        )
+
+        self.assertEqual(machine("a-laptop").name, "A Laptop")
+
+    def test_a_declared_machine_nothing_opens_is_not_said_to_be_hearsay(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        from control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(
+            key="a-laptop", kind="machine", spec={"name": "a-laptop"}
+        )
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+
+        response = self.client.get(
+            reverse("control_plane:machine", kwargs={"name": "a-laptop"})
+        )
+
+        self.assertContains(response, "Nothing HQ holds opens this.")
+        self.assertNotContains(response, "reported by something else")
+
 
 class ReadingThisOnTheMachineTests(TestCase):
     """The page describing a machine, opened on that machine.
