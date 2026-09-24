@@ -133,8 +133,7 @@ def _analytics_plan(options: dict) -> Any:
 
 
 def _sweep_due(options: dict) -> Any:
-    del options
-    return sweep_due()
+    return sweep_due(options["controller_id"])
 
 
 def _glance_plan(options: dict) -> Any:
@@ -180,7 +179,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("steps", ("controller_id", "payload"), _steps),
     Action("analytics", ("controller_id", "payload"), _analytics),
     Action("analytics-plan", ("payload",), _analytics_plan),
-    Action("sweep-due", (), _sweep_due),
+    Action("sweep-due", ("controller_id",), _sweep_due),
     Action("glance-plan", ("controller_id",), _glance_plan),
     Action("glance", ("controller_id", "payload"), _glance),
     Action("report", ("controller_id", "operation", "payload"), _report),

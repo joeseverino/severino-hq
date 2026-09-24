@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextvars
 import logging
 
-from application.security import Principal, mcp_principal
+from application.security import AuthorizationError, Principal, mcp_principal
 
 # Never "web": an interactive interface would waive the approval hold.
 INTERFACE = "mcp"
@@ -26,9 +26,16 @@ def reset_principal(token) -> None:
 
 
 def current_principal() -> Principal:
-    """The caller, or the shared service account when the legacy bearer was used."""
+    """The authenticated caller of this request.
 
-    return _current_principal.get() or mcp_principal()
+    There is no default: every authenticated request names its agent, and a tool
+    reached without one is refused rather than run at the deployment ceiling.
+    """
+
+    principal = _current_principal.get()
+    if principal is None:
+        raise AuthorizationError("No authenticated MCP caller for this request.")
+    return principal
 
 
 def token_principal(claims: dict) -> Principal:

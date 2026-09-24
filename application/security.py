@@ -148,6 +148,13 @@ def cli_principal() -> Principal:
 
 
 def mcp_principal() -> Principal:
+    """The most any MCP caller may do on this deployment: the ceiling.
+
+    Built from the `SEVERINO_MCP_ENABLE_*` switches and intersected with each
+    agent's own grant, so an agent never exceeds either. It is not an identity
+    anyone authenticates as.
+    """
+
     from .plugins import plugin_capabilities
 
     capabilities = {Capability.READ}

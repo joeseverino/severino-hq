@@ -28,7 +28,13 @@ if [ ! -s "${app_env}" ] || [ ! -s "${ca_file}" ]; then
 fi
 
 install -d -o root -g root -m 0700 "${acme_dir}"
-chown 10001:10001 "${acme_dir}"
+# The whole tree, every run, and not only the directory. Certbot saves a renewal
+# by copying the previous key's owner onto the new one, and the controller runs
+# as 10001 without CAP_CHOWN, so a single file left with another group fails the
+# save -- after the CA has issued. Declared here, where root owns the step, so
+# anything that re-owned the tree in between is put back before it matters.
+# -h: symlinks themselves, never what they point at.
+chown -R -h 10001:10001 "${acme_dir}"
 runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
 runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
 runtime_tailnet="$(mktemp /run/severino-hq-controller-tailnet.XXXXXX)"

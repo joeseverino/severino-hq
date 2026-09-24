@@ -1,9 +1,14 @@
 """Whether a credential's call runs, waits for approval, or is refused.
 
-Three layers, each only able to narrow the one above: the identity provider's
-grant (checked before policy), the surface rule, then the agent rule. Where the
-surface and agent rules differ, the stricter wins. Operators are never subject
-to policy.
+The identity provider's grant is checked first and can only be narrowed. Then
+the default, the surface rule and the agent rule: an explicit rule beats the
+default, and between explicit rules the stricter wins. Operators are never
+subject to policy.
+
+For an agent, anything destructive waits for a person by default: a caller that
+may have read untrusted text is the one whose deletes most deserve a second
+look. An operator lifts it for one agent, or a whole surface, with an explicit
+Allow.
 """
 
 from __future__ import annotations
@@ -18,7 +23,12 @@ from control_plane.models import CapabilityRule
 from core.audit import record_event
 from core.models import AgentIdentity, AuditLog
 
-from .approvals import READ_EFFECT, held_by_default, may_be_held_by_default
+from .approvals import (
+    DESTRUCTIVE_EFFECT,
+    READ_EFFECT,
+    held_by_default,
+    may_be_held_by_default,
+)
 from .labels import human_label
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
 
@@ -54,6 +64,8 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if principal.interface not in SURFACES:
         return Decision(default, "default", default)
+    if spec.effect == DESTRUCTIVE_EFFECT:
+        default = Rule.APPROVE
 
     rules = dict(
         CapabilityRule.objects.filter(capability=spec.name)
@@ -69,7 +81,13 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
         else Decision(default, "default", default)
     )
     agent_rule = rules.get(Scope.AGENT)
-    if agent_rule and _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]:
+    if agent_rule and (
+        # An explicit rule for this agent beats the default outright -- it is
+        # how one agent is allowed what the rest still wait for -- and against
+        # an explicit surface rule, only the stricter of the two survives.
+        decision.source == "default"
+        or _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]
+    ):
         decision = Decision(agent_rule, f"{principal.actor} policy", default)
     return decision
 
@@ -333,6 +351,8 @@ def _action(label: str, group: str, prefix: str) -> str:
 
 
 def _default_label(spec) -> str:
+    if spec.effect == DESTRUCTIVE_EFFECT:
+        return "Approval"
     return "Approval if gated" if may_be_held_by_default(spec) else "Allow"
 
 

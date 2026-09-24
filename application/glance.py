@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -491,10 +493,15 @@ def _record_machine_readings(
         if resource is None:
             continue
         matched = True
-        telemetry = _clean_panel(machine_reading)
+        telemetry, since = _settle(
+            _clean_panel(machine_reading),
+            previous=(resource.status or {}).get("telemetry"),
+            previous_at=resource.last_observed_at,
+            now=observed_at,
+        )
         telemetry["controller_id"] = controller_id
         resource.status = {**(resource.status or {}), "telemetry": telemetry}
-        resource.last_observed_at = observed_at
+        resource.last_observed_at = since
         resource.save(update_fields=("status", "last_observed_at", "updated_at"))
         DashboardRefreshRequest.objects.filter(
             panel_id=f"machine-{resource.pk}"
@@ -509,9 +516,15 @@ def _record_weather_reading(
     point = str(item.get("point", "")).strip()
     if not point or point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
+    stored = WeatherObservation.objects.filter(point=point).first()
+    payload, since = _settle(
+        _clean_panel(item),
+        previous=stored.payload if stored else None,
+        previous_at=stored.observed_at if stored else None,
+        now=observed_at,
+    )
     WeatherObservation.objects.update_or_create(
-        point=point,
-        defaults={"payload": _clean_panel(item), "observed_at": observed_at},
+        point=point, defaults={"payload": payload, "observed_at": since}
     )
     DashboardRefreshRequest.objects.filter(panel_id="weather").update(
         completed_at=observed_at
@@ -547,8 +560,30 @@ def _clean_panel(item: dict[str, Any]) -> dict[str, Any]:
     status = str(item.get("status", "neutral")).strip()
     if status not in {"good", "attention", "serious", "neutral"}:
         raise ValueError(f"Unknown dashboard status {status!r}.")
-    return {
+    cleaned = {
         "status": status,
         "summary": str(item.get("summary", "")).strip()[:200],
         "metrics": [_clean_metric(metric) for metric in item.get("metrics", [])][:6],
     }
+    # The type of error, and nothing else a controller might say about it.
+    failed = re.sub(r"[^A-Za-z0-9_]", "", str(item.get("refresh_failed") or ""))[:60]
+    if failed:
+        cleaned["refresh_failed"] = failed
+    return cleaned
+
+
+def _settle(
+    reading: dict[str, Any], *, previous: dict[str, Any] | None, previous_at: Any, now: Any
+) -> tuple[dict[str, Any], Any]:
+    """What a panel should hold after a refresh, and since when.
+
+    A failed refresh never replaces a reading that worked. The last good reading
+    keeps its own time, so the panel ages toward "Out of date" on its own, and
+    the failure is carried as a note. Only a panel with nothing to show reports
+    the failure itself.
+    """
+
+    if reading.get("refresh_failed") and previous and previous.get("metrics"):
+        kept = {key: value for key, value in previous.items() if key != "refresh_failed"}
+        return {**kept, "refresh_failed": reading["refresh_failed"]}, previous_at
+    return reading, now

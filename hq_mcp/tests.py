@@ -54,6 +54,20 @@ class SecretSettingsTests(SimpleTestCase):
 
 
 class ServiceTests(TestCase):
+    """The tools themselves, called as an authenticated agent at the ceiling.
+
+    Bound explicitly: a tool reached with no caller is refused, and these tests
+    are about the tools rather than the door.
+    """
+
+    def setUp(self):
+        from application.security import mcp_principal
+
+        from .identity import reset_principal, set_principal
+
+        bound = set_principal(mcp_principal())
+        self.addCleanup(reset_principal, bound)
+
     def test_registered_tools_are_async_safe(self):
         async def call_health():
             tool = mcp._tool_manager.get_tool("system_health")
@@ -241,6 +255,17 @@ class ServiceTests(TestCase):
         provider.assert_not_called()
 
 
+_NO_VERIFIER = object()
+
+
+def _accept_the_example_token(bearer):
+    """The identity provider, reduced to the one token these tests present."""
+
+    if bearer != TOKEN:
+        raise ValueError("not a token this provider issued")
+    return Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+
 class MCPBoundaryTests(TestCase):
     @staticmethod
     async def _allowed_app(scope, receive, send):
@@ -261,9 +286,8 @@ class MCPBoundaryTests(TestCase):
         token: str | None = TOKEN,
         origin: str | None = None,
         forwarded_for: str | None = None,
-        configured_token: str = TOKEN,
         allowed_hosts: tuple[str, ...] = ("a-docker-host",),
-        verifier=None,
+        verifier=_accept_the_example_token,
         app=None,
         gate=None,
         on_denied=None,
@@ -299,10 +323,9 @@ class MCPBoundaryTests(TestCase):
 
         boundary = MCPBoundary(
             app or self._allowed_app,
-            token=configured_token,
             allowed_hosts=allowed_hosts,
             allowed_networks=("100.64.0.0/10", "fd7a:115c:a1e0::/48"),
-            verifier=verifier,
+            verifier=None if verifier is _NO_VERIFIER else verifier,
             gate=gate,
             on_denied=on_denied,
             observer=observer,
@@ -359,12 +382,15 @@ class MCPBoundaryTests(TestCase):
                 self.assertEqual(status, 401)
                 self.assertEqual(body["error"], "unauthorized")
 
-    def test_disables_endpoint_for_weak_token_or_missing_hosts(self):
-        for token, hosts in (("short", ("a-docker-host",)), (TOKEN, ())):
-            with self.subTest(token=token, hosts=hosts):
-                status, body = self._request(
-                    configured_token=token, allowed_hosts=hosts
-                )
+    def test_disables_endpoint_without_a_verifier_or_allowed_hosts(self):
+        """No way to authenticate is off, not open to a weaker way in."""
+
+        for verifier, hosts in (
+            (_NO_VERIFIER, ("a-docker-host",)),
+            (_accept_the_example_token, ()),
+        ):
+            with self.subTest(verifier=verifier, hosts=hosts):
+                status, body = self._request(verifier=verifier, allowed_hosts=hosts)
                 self.assertEqual(status, 404)
                 self.assertEqual(body["error"], "not_found")
 
@@ -437,22 +463,20 @@ class AgentIdentityTests(MCPBoundaryTests):
         self.assertEqual(seen["principal"].capabilities, granted)
         self.assertFalse(seen["principal"].permits(Capability.DELETE_PROJECTS))
 
-    def test_the_shared_bearer_still_names_the_service_account(self):
-        app, seen = self._capturing_app()
+    def test_a_static_bearer_is_refused(self):
+        """There is no static bearer: presenting one is an unauthenticated
+        request like any other."""
 
-        status, _ = self._request(
-            verifier=self._verifier_returning(object()), app=app
-        )
+        def only_jwts(bearer):
+            raise ValueError("not a token this provider issued")
 
-        self.assertEqual(status, 204)
-        self.assertEqual(seen["principal"].actor, "mcp-service-account")
+        status, body = self._request(token="s" * 48, verifier=only_jwts)
 
-    def test_a_rejected_token_is_not_then_compared_to_the_shared_secret(self):
-        """A failed verification ends the request rather than falling through.
+        self.assertEqual(status, 401)
+        self.assertEqual(body["error"], "unauthorized")
 
-        Otherwise a rejected token would still be measured against the shared
-        secret, turning the endpoint into an oracle for it.
-        """
+    def test_a_rejected_token_ends_the_request(self):
+        """A failed verification is a refusal; there is nothing to fall back to."""
 
         def refuse(bearer):
             raise ValueError("not accepted")
@@ -469,7 +493,6 @@ class AgentIdentityTests(MCPBoundaryTests):
 
         status, _ = self._request(
             token=self.A_JWT,
-            configured_token="",
             verifier=self._verifier_returning(agent),
         )
 
@@ -483,7 +506,11 @@ class AgentIdentityTests(MCPBoundaryTests):
             token=self.A_JWT, verifier=self._verifier_returning(agent)
         )
 
-        self.assertEqual(current_principal().actor, "mcp-service-account")
+        from application.security import AuthorizationError
+
+        # Nothing is left bound, and nothing is filled in for it.
+        with self.assertRaises(AuthorizationError):
+            current_principal()
 
 
 class AgentBrakeTests(MCPBoundaryTests):
@@ -515,7 +542,7 @@ class AgentBrakeTests(MCPBoundaryTests):
         self.assertEqual(body["error"], "agents_paused")
         self.assertEqual(reached, [], "a paused agent must not reach a tool, or the tool list")
 
-    def test_the_shared_bearer_is_paused_too(self):
+    def test_the_default_agent_is_paused_too(self):
         status, body = self._request(gate=self._gate(False))
 
         self.assertEqual(status, 403)
@@ -662,3 +689,74 @@ class ObservationTests(MCPBoundaryTests):
         self._request(token="wrong", observer=observer)
 
         self.assertEqual(seen, [])
+
+
+class TheCallerReachesTheToolTests(TestCase):
+    """End to end: the identity the door verified is the one a tool acts as.
+
+    The boundary binds the caller in a context variable, and the MCP server runs
+    each stateless request on a task started from a task group that belongs to
+    the application's lifespan, then hops to a worker thread for the tool: two
+    places a context can be lost. There is no fallback identity, so a lost caller
+    would refuse every tool call.
+    """
+
+    def test_a_tool_call_runs_as_the_agent_that_presented_the_token(self):
+        import contextlib
+
+        from starlette.applications import Starlette
+        from starlette.routing import Mount
+        from starlette.testclient import TestClient
+
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        seen = {}
+
+        def capture(*, principal):
+            seen["actor"] = principal.actor
+            return {"connections": []}
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            async with mcp.session_manager.run():
+                yield
+
+        # A fresh manager for this run -- FastMCP's can be started only once --
+        # and the original put back, so nothing here leaks into another test.
+        original_manager = mcp._session_manager
+        mcp._session_manager = None
+        self.addCleanup(setattr, mcp, "_session_manager", original_manager)
+        application = Starlette(
+            routes=[
+                Mount(
+                    "/mcp",
+                    app=MCPBoundary(
+                        mcp.streamable_http_app(),
+                        allowed_hosts=("testserver",),
+                        allowed_networks=("100.64.0.0/10",),
+                        verifier=lambda bearer: agent,
+                    ),
+                )
+            ],
+            lifespan=lifespan,
+        )
+        with (
+            mock.patch("hq_mcp.services.list_application_connections", side_effect=capture),
+            TestClient(application, client=("100.64.0.10", 50000)) as client,
+        ):
+            response = client.post(
+                "/mcp/",
+                headers={
+                    "Authorization": "Bearer header.payload.signature",
+                    "Accept": "application/json, text/event-stream",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "list_connections", "arguments": {}},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn('"isError":true', response.text.replace(" ", ""))
+        self.assertEqual(seen.get("actor"), "example-agent")

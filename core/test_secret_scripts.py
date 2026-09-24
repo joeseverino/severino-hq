@@ -39,7 +39,6 @@ class SecretScriptTests(unittest.TestCase):
             "SEVERINO_CONTROLLER_SECRET_DIR": str(self.runtime),
             "SEVERINO_SECRETS_VAULT": "Example Vault",
             "SEVERINO_ENV_ITEM": "example env",
-            "SEVERINO_MCP_SECRET_REF": "op://Example Vault/Example MCP/credential",
         }
         self.env.pop("SEVERINO_CONTROLLER_ENV", None)
         # Simulate Linux ownership and mount metadata; use real file modes.
@@ -123,11 +122,14 @@ esac
         secrets.mkdir()
         credentials.mkdir()
         (credentials / "op_service_account_token").write_text("example-reader-token")
-        targets = [secrets / name for name in ("severino_mcp_token", "severino_hq_env")]
-        targets.append(self.runtime / "severino_controller_env")
+        targets = [secrets / "severino_hq_env", self.runtime / "severino_controller_env"]
         for target in targets:
             target.write_text("previous-value")
             target.chmod(0o400)
+        # A refresh removes any MCP token file: nothing accepts one.
+        self.mcp_token_file = secrets / "severino_mcp_token"
+        self.mcp_token_file.write_text("previous-value")
+        self.mcp_token_file.chmod(0o400)
         (self.root / "app.json").write_text(json.dumps({"fields": [
             {"label": f"EXAMPLE_{index}", "value": "value"} for index in range(15)
         ]}))
@@ -173,8 +175,7 @@ esac
     def test_refresh_stages_on_private_runtime_and_replaces_only_controller_inode(self):
         targets = self.prepare_refresh()
         # Host root can update read-only app files; this test runs unprivileged.
-        for target in targets[:2]:
-            target.chmod(0o600)
+        targets[0].chmod(0o600)
         inodes = [target.stat().st_ino for target in targets]
         real_mktemp = shutil.which("mktemp")
         self.stub("mktemp", f'''printf '%s\\n' "$@" >"$FIXTURES/staging-args"
@@ -184,9 +185,10 @@ exec '{real_mktemp}' "$@"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(str(self.runtime / ".refresh.XXXXXX"),
                       (self.root / "staging-args").read_text())
-        self.assertEqual([target.stat().st_ino for target in targets[:2]], inodes[:2])
-        self.assertNotEqual(targets[2].stat().st_ino, inodes[2])
-        self.assertEqual(targets[2].stat().st_mode & 0o777, 0o400)
+        self.assertEqual(targets[0].stat().st_ino, inodes[0])
+        self.assertNotEqual(targets[1].stat().st_ino, inodes[1])
+        self.assertEqual(targets[1].stat().st_mode & 0o777, 0o400)
+        self.assertFalse(self.mcp_token_file.exists())
         current = [target.stat().st_ino for target in targets]
         repeated = self.run_script("refresh-secrets.sh")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)

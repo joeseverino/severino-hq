@@ -115,6 +115,36 @@ class FindingsTests(TestCase):
         # Effect is copied from the capability registry, never restated here.
         self.assertTrue(remedy.effect)
 
+    def test_a_skipped_container_is_offered_on_demand_or_removal_not_reconcile(self):
+        """A stopped container answers neither "look again" nor anything else a
+        reconcile can do; the two real answers are the two remedies."""
+
+        def container(key):
+            return ManagedResource.objects.create(
+                key=key,
+                kind="portainer.container",
+                spec={
+                    "connection_ref": "example-portainer",
+                    "host": "example-host",
+                    "name": key,
+                    "on_demand": False,
+                    "hidden": False,
+                    "serves_ports": [],
+                },
+            )
+
+        skipped = container("occasional")
+        observed(container("always-on"), self.now)
+        observed(skipped, self.now - timedelta(days=3))
+
+        found = next(f for f in self.raised() if f.rule == "skipped-by-a-sweep")
+
+        offered = [(remedy.capability, remedy.label) for remedy in found.remedies]
+        # Removal is offered only to a principal allowed to remove; the edit
+        # that marks it on demand is the one every manager gets.
+        self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it on demand"))
+        self.assertNotIn("infrastructure.reconcile", [capability for capability, _ in offered])
+
     def test_a_healthy_estate_says_nothing(self):
         """A rule that cannot be quiet is a lens, not a finding."""
 
@@ -1125,11 +1155,14 @@ class OnDemandContainerTests(TestCase):
     def test_missing_from_a_sweep_is_expected_when_declared_on_demand(self):
         self.assertEqual(self._missing(on_demand=True), ())
 
-    def test_otherwise_it_is_reported_without_a_remedy_the_kind_locks(self):
+    def test_otherwise_it_offers_the_two_real_answers_and_not_the_locked_reconcile(self):
         (finding,) = self._missing(on_demand=False)
 
         self.assertIn("mark it on demand", finding.explanation)
-        self.assertEqual(finding.remedies, ())
+        self.assertEqual(
+            [remedy.capability for remedy in finding.remedies],
+            ["infrastructure.resource.update", "infrastructure.resource.remove"],
+        )
 
 
 class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):

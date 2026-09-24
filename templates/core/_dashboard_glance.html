@@ -51,6 +51,7 @@
         </summary>
         <div class="glance-expanded">
         {% if panel.payload.summary %}<p class="glance-summary">{{ panel.payload.summary }}</p>{% endif %}
+        {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-freshness">The last refresh failed ({{ panel.payload.refresh_failed }}); this is the reading from {% if panel.observed_at %}{{ panel.observed_at|naturaltime }}{% else %}before it{% endif %}.</p>{% endif %}
         {% if not panel.observed_at and panel.payload.metrics %}<p class="glance-freshness">Observation time unavailable{% if panel.refreshing %} · Refreshing…{% endif %}</p>{% endif %}
         {% if panel.payload.metrics %}
           <dl class="glance-metrics">

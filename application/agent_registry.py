@@ -26,7 +26,7 @@ TOUCH_INTERVAL = timedelta(minutes=10)
 
 
 def observe(principal: Principal | None) -> None:
-    # Only token principals carry a grant; the operator, CLI and shared bearer do not.
+    # Only token principals carry a grant; the operator and the CLI do not.
     if principal is None or not principal.granted:
         return
     try:

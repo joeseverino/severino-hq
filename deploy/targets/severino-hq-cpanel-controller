@@ -1,33 +1,160 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env python3
+"""The only command Severino HQ's key may run on a cPanel account.
 
-readonly operation="${SSH_ORIGINAL_COMMAND:-}"
-unset SSH_ORIGINAL_COMMAND
+Installed as the forced command on that key, so SSH_ORIGINAL_COMMAND is the
+operation HQ asked for and nothing else runs.
 
-case "${operation}" in
-    preflight)
-        command -v uapi >/dev/null
-        command -v python3 >/dev/null
-        uapi --output=json SSL list_certs | python3 -c '
+    preflight          uapi answers and the SSL module is usable
+    sites              every site on this account, and every name it serves
+    deploy             install one certificate on several sites (JSON on stdin)
+    deploy:<site>      the same for one site; kept for controllers that
+                       predate `deploy`
+
+Why sites and not names. cPanel installs a certificate on a *site* (a virtual
+host), and every alias of that site -- `www.`, `mail.`, a parked domain --
+serves whatever that site holds. Installing against one name and verifying
+another is how a renewal can install successfully and still fail: the name that
+was checked belongs to a site nobody installed on. `sites` lets the controller
+see that before it asks a CA for anything.
+
+Which sites may be written is decided here, from the account's own list, rather
+than by a list in this file: an operation naming a site this account does not
+have is refused. Nothing account-specific lives in the script, so the same file
+serves any account.
+
+Written for the interpreter shared hosting tends to ship (3.6): no
+`capture_output`, no `text=`, no walrus.
+"""
+
 import json
+import os
+import subprocess
 import sys
 
-result = json.load(sys.stdin).get("result", {})
-sys.exit(0 if result.get("status") == 1 and not result.get("errors") else 1)
-'
-        ;;
-    deploy:quiz.jseverino.net)
-        result="$(uapi --input=json --output=json SSL install_ssl)"
-        printf '%s' "${result}" | python3 -c '
-import json
-import sys
+DENIED = 126
 
-result = json.load(sys.stdin).get("result", {})
-sys.exit(0 if result.get("status") == 1 and not result.get("errors") else 1)
-'
-        ;;
-    *)
-        echo "Severino HQ cPanel operation denied." >&2
-        exit 126
-        ;;
-esac
+
+def uapi(module, function, payload=None):
+    """Run one UAPI call and return its `result`, or raise with cPanel's words."""
+
+    command = ["uapi", "--output=json"]
+    if payload is not None:
+        command.append("--input=json")
+    command.extend((module, function))
+    completed = subprocess.run(
+        command,
+        input=json.dumps(payload) if payload is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+    )
+    try:
+        result = json.loads(completed.stdout).get("result", {})
+    except ValueError:
+        raise RuntimeError(
+            "{}::{} returned no JSON (exit {})".format(
+                module, function, completed.returncode
+            )
+        )
+    errors = result.get("errors") or []
+    if result.get("status") != 1 or errors:
+        raise RuntimeError(
+            "{}::{} failed: {}".format(
+                module, function, "; ".join(str(error) for error in errors) or "no reason given"
+            )
+        )
+    return result.get("data")
+
+
+def account_sites():
+    """{site: [names it serves]} for every site on this account."""
+
+    data = uapi("DomainInfo", "domains_data") or {}
+    records = [data.get("main_domain") or {}]
+    for kind in ("addon_domains", "sub_domains"):
+        records.extend(item for item in data.get(kind) or [] if isinstance(item, dict))
+    sites = {}
+    for record in records:
+        site = record.get("servername") or record.get("domain")
+        if not site:
+            continue
+        aliases = (record.get("serveralias") or "").split()
+        sites[site] = sorted({site, *aliases})
+    return sites
+
+
+def install(sites, certificate):
+    """Install on every named site, reporting each; fail if any failed."""
+
+    known = account_sites()
+    unknown = sorted(site for site in sites if site not in known)
+    if unknown:
+        # Refused before anything is installed, so a bad request never leaves
+        # half the sites on a new certificate.
+        print("Not a site on this account: " + ", ".join(unknown), file=sys.stderr)
+        return DENIED
+    results = []
+    failed = False
+    for site in sites:
+        try:
+            uapi(
+                "SSL",
+                "install_ssl",
+                {
+                    "domain": site,
+                    "cert": certificate["cert"],
+                    "key": certificate["key"],
+                    "cabundle": certificate.get("cabundle", ""),
+                },
+            )
+            results.append({"site": site, "installed": True})
+        except RuntimeError as exc:
+            failed = True
+            results.append({"site": site, "installed": False, "error": str(exc)})
+    print(json.dumps({"results": results}))
+    if failed:
+        for item in results:
+            if not item["installed"]:
+                print("{}: {}".format(item["site"], item["error"]), file=sys.stderr)
+        return 1
+    return 0
+
+
+def read_certificate():
+    try:
+        payload = json.load(sys.stdin)
+    except ValueError:
+        raise RuntimeError("deploy expects a JSON object on stdin")
+    if not isinstance(payload, dict) or not payload.get("cert") or not payload.get("key"):
+        raise RuntimeError("deploy needs `cert` and `key`")
+    return payload
+
+
+def main():
+    operation = os.environ.pop("SSH_ORIGINAL_COMMAND", "")
+    try:
+        if operation == "preflight":
+            uapi("SSL", "list_certs")
+            return 0
+        if operation == "sites":
+            print(json.dumps({"sites": account_sites()}))
+            return 0
+        if operation == "deploy":
+            certificate = read_certificate()
+            sites = certificate.get("sites")
+            if not isinstance(sites, list) or not sites or not all(
+                isinstance(site, str) and site for site in sites
+            ):
+                raise RuntimeError("deploy needs a non-empty `sites` list")
+            return install(sites, certificate)
+        if operation.startswith("deploy:") and len(operation) > len("deploy:"):
+            return install([operation[len("deploy:"):]], read_certificate())
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print("Severino HQ cPanel operation denied.", file=sys.stderr)
+    return DENIED
+
+
+if __name__ == "__main__":
+    sys.exit(main())

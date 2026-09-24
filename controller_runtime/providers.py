@@ -634,7 +634,8 @@ def _run(
     command: list[str],
     *,
     input_bytes: bytes | None = None,
-    step: str = "command",
+    # Required, so every failure names what failed.
+    step: str,
     env: dict[str, str] | None = None,
     subject: str = "",
 ) -> bytes:
@@ -646,9 +647,15 @@ def _run(
     certificate reported a certificate error, and the search started in the
     wrong place. `step` names the thing that actually failed.
 
-    The subprocess's own output is logged, never returned: it carries paths and
+    The subprocess's own output never reaches the result: it carries paths and
     remote messages that belong in an operator's log rather than in a provider
-    result that reaches an API client.
+    result that reaches an API client. What HQ is told is the step that failed;
+    why, when HQ needs to know, comes from a check written for it (the ACME
+    ownership check, the cPanel site plan), which says only what it means to.
+
+    The log does get what the tool said: its last line of stderr, credentials
+    struck out, in the message itself, because the controller's plain formatter
+    drops `extra`. The full stderr stays in `extra` for a structured handler.
 
     ``env`` is added to this process's environment for the one call, for a tool
     that takes its credential that way. It is not an argument, because an
@@ -689,16 +696,14 @@ def _run(
         raise ProviderError(f"{step} could not complete.") from exc
     if result.returncode:
         stderr = _redacted(result.stderr.decode("utf-8", "replace"), env)
-        # The step goes in the message, not only in `extra`. The controller logs
-        # through a plain formatter that prints the message and drops the rest,
-        # so for weeks the journal said "controller step failed" thirty times an
-        # hour and never which step. Finding out took an audit rule on the
-        # controller's uid. `extra` stays for a structured handler; stderr stays
-        # there alone, since it can carry remote paths and messages.
+        said = _last_line(stderr)
+        # The step and what the tool said both go in the message: the
+        # controller's plain formatter prints the message and drops the rest.
         logger.warning(
-            "controller step failed: %s (exit %s)",
+            "controller step failed: %s (exit %s)%s",
             step,
             result.returncode,
+            f": {said}" if said else "",
             extra={
                 "event": "controller.step.failed",
                 "step": step,
@@ -709,6 +714,20 @@ def _run(
         _record_step_failure(step, subject, f"exit {result.returncode}")
         raise ProviderError(f"{step} failed.")
     return result.stdout
+
+
+# Long enough for a path and an errno; short enough to sit in a status line.
+_SAID_LIMIT = 240
+
+
+def _last_line(stderr: str) -> str:
+    """The line a tool's failure is usually explained by: its last one."""
+
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    line = lines[-1]
+    return line if len(line) <= _SAID_LIMIT else line[: _SAID_LIMIT - 1] + "…"
 
 
 def _ssh(connection_ref: str, operation: str, payload: bytes | None = None) -> bytes:
@@ -799,7 +818,8 @@ def _validate_certificate(
                     "-noout",
                     "-fingerprint",
                     "-sha256",
-                ]
+                ],
+                step="reading the certificate fingerprint",
             )
             .decode()
             .strip()
@@ -816,7 +836,8 @@ def _validate_certificate(
                 "-noout",
                 "-ext",
                 "subjectAltName",
-            ]
+            ],
+            step="reading the certificate names",
         ).decode()
         sans = {
             chunk.split(",", 1)[0].strip()
@@ -836,10 +857,42 @@ def _validate_certificate(
 ACME_PROPAGATION_SECONDS = os.environ.get("ACME_PROPAGATION_SECONDS", "30")
 
 
+def _foreign_acme_entry(acme_dir: Path) -> str:
+    """The first entry in the ACME state this process could not take ownership of.
+
+    Certbot saves a renewal by copying the previous key's owner and group onto
+    the new one. A process that is not root can only chown to itself, so one
+    file carrying another group is enough to fail the save -- after the CA has
+    already issued, which spends a certificate against its rate limit and leaves
+    an orphaned key behind. Checked before asking the CA for anything.
+    """
+
+    uid, gid = os.getuid(), os.getgid()
+    for root, directories, files in os.walk(acme_dir):
+        for name in (*directories, *files):
+            path = Path(root, name)
+            try:
+                stat = path.lstat()
+            except OSError:
+                continue
+            if stat.st_uid != uid or stat.st_gid != gid:
+                return (
+                    f"{path.relative_to(acme_dir)} is owned "
+                    f"{stat.st_uid}:{stat.st_gid}, not {uid}:{gid}"
+                )
+    return ""
+
+
 def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     acme_dir = Path(_required("HQ", "ACME_DIR"))
     if not acme_dir.is_dir() or not os.access(acme_dir, os.W_OK):
         raise ProviderError("ACME state directory is not writable.")
+    foreign = _foreign_acme_entry(acme_dir)
+    if foreign:
+        raise ProviderError(
+            f"ACME state is not wholly the controller's: {foreign}. Certbot "
+            "would be issued a certificate it cannot save, so nothing was requested."
+        )
     _run(["certbot", "--version"], step="certbot preflight")
     credentials = acme_dir / "cloudflare.ini"
     credentials.write_text("dns_cloudflare_api_token = " + _cloudflare_token() + "\n")
@@ -871,7 +924,7 @@ def _issue_certificate(spec: dict[str, Any]) -> tuple[bytes, bytes]:
     for domain in spec["domains"]:
         command.extend(("-d", domain))
     try:
-        _run(command)
+        _run(command, step="certbot certonly")
     finally:
         credentials.unlink(missing_ok=True)
     lineage = acme_dir / "config" / "live" / spec["certificate_name"]
@@ -903,7 +956,10 @@ def _resumable_lineage(
         cert_path = Path(directory) / "fullchain.pem"
         cert_path.write_bytes(fullchain)
         raw_expiry = (
-            _run(["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"])
+            _run(
+                ["openssl", "x509", "-in", str(cert_path), "-noout", "-enddate"],
+                step="openssl read lineage expiry",
+            )
             .decode()
             .strip()
         )
@@ -1010,8 +1066,82 @@ def _npm_managed_certificate(
     return certificate_id, {"nice_name": nice_name}
 
 
+def _cpanel_sites(consumer: dict[str, Any]) -> list[str]:
+    """The cPanel sites this consumer installs on, decided before anything is issued.
+
+    cPanel holds one certificate per *site*, and every alias of a site serves
+    whatever that site holds. So the question is never "which names", it is
+    "which sites serve the names HQ will check". The account is asked for its
+    sites and their names, and the answer has to cover every verified name:
+
+    - with `install_domains` declared, the sites serving those names;
+    - without, every site that serves a verified name.
+
+    A verified name no chosen site serves is refused here, by name, before any
+    certificate is requested. So is a name the account does not serve at all.
+    """
+
+    try:
+        answer = json.loads(_ssh(consumer["connection_ref"], "sites") or b"{}")
+    except ValueError as exc:
+        raise ProviderError(
+            f"{consumer['name']} returned a site list HQ could not read."
+        ) from exc
+    sites = answer.get("sites") if isinstance(answer, dict) else None
+    if not isinstance(sites, dict) or not sites:
+        raise ProviderError(f"{consumer['name']} reported no sites.")
+    site_of = {
+        name.lower(): site
+        for site, names in sites.items()
+        for name in (site, *(names or ()))
+    }
+    verify = sorted({name.lower() for name in consumer.get("verify_domains", ())})
+    declared = sorted({name.lower() for name in consumer.get("install_domains", ())})
+
+    not_hosted = sorted(name for name in (*verify, *declared) if name not in site_of)
+    if not_hosted:
+        raise ProviderError(
+            f"{consumer['name']} does not serve "
+            + ", ".join(not_hosted)
+            + ". Remove the name from the target, or add it to the hosting account."
+        )
+    chosen = sorted({site_of[name] for name in (declared or verify)})
+    served = {name.lower() for site in chosen for name in (site, *sites[site])}
+    unserved = [name for name in verify if name not in served]
+    if unserved:
+        raise ProviderError(
+            f"{consumer['name']} would be checked at "
+            + ", ".join(unserved)
+            + " but installs only on "
+            + ", ".join(chosen)
+            + ". Add those names to the target's install list, or leave the list "
+            "empty to install on every site that serves a checked name."
+        )
+    if not chosen:
+        raise ProviderError(f"{consumer['name']} has no site to install on.")
+    return chosen
+
+
+def _plan_deployment(spec: dict[str, Any]) -> dict[str, list[str]]:
+    """Everything a deploy needs to know from the consumers, asked up front.
+
+    Runs before a certificate is requested and before any consumer is touched, so
+    a target that cannot be satisfied costs nothing: no issuance against the CA's
+    rate limit, no half-deployed estate, no rollback.
+    """
+
+    return {
+        consumer["name"]: _cpanel_sites(consumer)
+        for consumer in spec["consumers"]
+        if consumer["kind"] == "cpanel"
+    }
+
+
 def _deploy_certificate(
-    spec: dict[str, Any], fullchain: bytes, private_key: bytes
+    spec: dict[str, Any],
+    fullchain: bytes,
+    private_key: bytes,
+    plan: dict[str, list[str]],
 ) -> dict[str, Any]:
     deployment_status: dict[str, Any] = {}
     bundle = _certificate_bundle(fullchain, private_key)
@@ -1034,17 +1164,21 @@ def _deploy_certificate(
             elif consumer["kind"] == "caddy":
                 _ssh(consumer["connection_ref"], "deploy", bundle)
             elif consumer["kind"] == "cpanel":
-                for domain in consumer["install_domains"]:
-                    payload = json.dumps(
-                        {
-                            "domain": domain,
-                            "cert": leaf.decode(),
-                            "key": private_key.decode(),
-                            "cabundle": chain.decode(),
-                        },
-                        separators=(",", ":"),
-                    ).encode()
-                    _ssh(consumer["connection_ref"], f"deploy:{domain}", payload)
+                # One login for every site, and the account reports each one.
+                sites = plan[consumer["name"]]
+                payload = json.dumps(
+                    {
+                        "sites": sites,
+                        "cert": leaf.decode(),
+                        "key": private_key.decode(),
+                        "cabundle": chain.decode(),
+                    },
+                    separators=(",", ":"),
+                ).encode()
+                _ssh(consumer["connection_ref"], "deploy", payload)
+                deployment_status.setdefault("cpanel_sites", {})[
+                    consumer["name"]
+                ] = sites
         except ProviderError as exc:
             raise ProviderError(
                 f"TLS deployment failed for {consumer['name']} "
@@ -1098,12 +1232,19 @@ def _verify_tls_deployment(
                 }
                 for item in result.status["consumers"]
             ]
-            failed = {
-                item["consumer"] for item in evidence if not item["matches_expected"]
-            }
+            stale: dict[str, list[str]] = {}
+            for item in evidence:
+                if not item["matches_expected"]:
+                    stale.setdefault(item["consumer"], []).append(item["domain"])
+            # Which consumer and which names, in the message itself.
+            detail = "; ".join(
+                f"{consumer} still serves the previous certificate at "
+                + ", ".join(sorted(names))
+                for consumer, names in sorted(stale.items())
+            )
             raise ProviderError(
-                f"{len(failed)} of {len(spec['consumers'])} TLS consumers "
-                "did not activate the certificate in time.",
+                f"{len(stale)} of {len(spec['consumers'])} TLS consumers "
+                f"did not activate the certificate within {timeout}s: {detail}.",
                 status={
                     "expected_fingerprint_sha256": expected_fingerprint,
                     "consumers": evidence,
@@ -1138,6 +1279,7 @@ def _deploy_tls_transaction(
     previous_fullchain: bytes,
     previous_key: bytes,
     *,
+    plan: dict[str, list[str]],
     artifact_source: str,
     reason: str,
     message: str,
@@ -1146,11 +1288,11 @@ def _deploy_tls_transaction(
         fullchain, private_key, spec["domains"]
     )
     try:
-        deployment_status = _deploy_certificate(spec, fullchain, private_key)
+        deployment_status = _deploy_certificate(spec, fullchain, private_key, plan)
         observed = _verify_tls_deployment(spec, expected_fingerprint)
     except ProviderError as exc:
         try:
-            _deploy_certificate(spec, previous_fullchain, previous_key)
+            _deploy_certificate(spec, previous_fullchain, previous_key, plan)
         except ProviderError as rollback_exc:
             raise ProviderError(
                 f"Certificate deployment failed ({exc}); rollback also failed "
@@ -1212,6 +1354,7 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
     caddy = next((item for item in spec["consumers"] if item["kind"] == "caddy"), None)
     if caddy is None:
         raise ProviderError("Certificate reconciliation requires a rollback source.")
+    plan = _plan_deployment(spec)
     previous_fullchain, previous_key = _read_bundle(
         _ssh(caddy["connection_ref"], "snapshot")
     )
@@ -1221,6 +1364,7 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
         private_key,
         previous_fullchain,
         previous_key,
+        plan=plan,
         artifact_source="existing_lineage",
         reason="Reconciled",
         message="Certificate redistributed and verified without issuance.",
@@ -1231,6 +1375,9 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
     caddy = next((item for item in spec["consumers"] if item["kind"] == "caddy"), None)
     if caddy is None:
         raise ProviderError("Certificate renewal requires a rollback source.")
+    # Before the CA is asked for anything: a target that cannot be satisfied
+    # should cost nothing.
+    plan = _plan_deployment(spec)
     previous_fullchain, previous_key = _read_bundle(
         _ssh(caddy["connection_ref"], "snapshot")
     )
@@ -1250,6 +1397,7 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
         private_key,
         previous_fullchain,
         previous_key,
+        plan=plan,
         artifact_source=artifact_source,
         reason="Renewed",
         message="Certificate renewed, deployed, and verified.",
@@ -1402,14 +1550,13 @@ def reconcile_uploaded_certificate(
             ],
             message="Would install the stored certificate.",
         )
+    target = {
+        "certificate_name": spec["certificate_name"],
+        "domains": domains,
+        "consumers": spec["consumers"],
+    }
     deployment = _deploy_certificate(
-        {
-            "certificate_name": spec["certificate_name"],
-            "domains": domains,
-            "consumers": spec["consumers"],
-        },
-        fullchain.encode(),
-        private_key.encode(),
+        target, fullchain.encode(), private_key.encode(), _plan_deployment(target)
     )
     observed = {
         key: value
@@ -4391,10 +4538,20 @@ def dashboard_glance(plan: dict[str, Any]) -> list[dict[str, Any]]:
                     _nws_glance(str((targets.get("weather") or {}).get("point", "")))
                 )
         except (ProviderError, OSError, ValueError, KeyError) as exc:
+            # Logged here; HQ keeps the last good reading and shows this as a note.
+            logger.warning(
+                "dashboard glance failed: %s (%s): %s",
+                panel_id,
+                type(exc).__name__,
+                str(exc)[:200],
+                extra={"event": "controller.glance.failed", "panel": panel_id},
+            )
+            # Marked, so HQ keeps the last good reading instead of this one.
             failure = {
                 "status": "serious",
                 "summary": f"Refresh failed ({type(exc).__name__}).",
                 "metrics": [],
+                "refresh_failed": type(exc).__name__,
             }
             readings.append(
                 {
@@ -4462,13 +4619,19 @@ def _endpoint(prefix: str, provider: str) -> str:
     return _DEFAULT_CONNECTION_ENDPOINTS.get(provider, "")
 
 
-def connections() -> list[dict[str, Any]]:
+def connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     """Every connection the environment carries, and whether it answers.
 
     One failure is that connection's failure. Reported rather than raised so a
     Cloudflare token that expired does not also make the two machines HQ can
     still reach look like they have gone away -- the sweep is the only thing
     that tells an operator which of the two happened.
+
+    `carry` is HQ's list of SSH connections whose last answer is recent and
+    good. Those are reported as carried rather than probed: a probe of an SSH
+    connection is a real login, and the active sweep cadence would make that one
+    a minute. Still reported, because a connection left out of a sweep is one HQ
+    removes.
     """
 
     ssh_refs = set(ssh_connection_refs())
@@ -4491,7 +4654,12 @@ def connections() -> list[dict[str, Any]]:
             "detail": "",
             "reaches": [],
         }
-        if probe is None:
+        if probe is _probe_ssh and connection_ref in carry:
+            # Recorded as unprobed if HQ has no earlier answer to keep.
+            connection.update(
+                carried=True, probed=False, detail="Not asked again this sweep."
+            )
+        elif probe is None:
             # Carried, usable, and not something this knows how to ask. Reported
             # as unprobed rather than omitted: a connection HQ cannot see is one
             # an operator will keep re-adding.

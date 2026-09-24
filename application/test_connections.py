@@ -429,6 +429,41 @@ class SeedTests(TestCase):
 
         self.assertEqual(seeded["forward_host"], "10.0.0.9")
 
+    def test_one_request_resolves_each_resource_once_however_many_names_it_asks(self):
+        """A page asks this once per service; the resources behind it are
+        resolved once for the whole request."""
+
+        from unittest import mock
+
+        from . import naming
+        from .infrastructure import resolved_spec
+        from .projection import projection_scope
+
+        with (
+            mock.patch.object(naming, "resolved_spec", wraps=resolved_spec) as resolve,
+            projection_scope(),
+        ):
+            for name in ("probe.invalid", "other.invalid", "third.invalid"):
+                naming.name_context(name)
+
+        # Only the stack has a provider that serves or covers a name.
+        self.assertEqual(resolve.call_count, 1)
+
+    def test_outside_a_request_nothing_is_kept_between_asks(self):
+        """Per request, never across: a credential replaced between two asks is
+        seen by the second."""
+
+        from unittest import mock
+
+        from . import naming
+        from .infrastructure import resolved_spec
+
+        with mock.patch.object(naming, "resolved_spec", wraps=resolved_spec) as resolve:
+            naming.name_context("probe.invalid")
+            naming.name_context("probe.invalid")
+
+        self.assertEqual(resolve.call_count, 2)
+
     def test_nothing_is_seeded_when_nothing_serves_the_name(self):
         from control_plane.providers import PROVIDERS
 

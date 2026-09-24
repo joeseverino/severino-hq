@@ -449,9 +449,8 @@ The service boundary complements the existing network boundary:
 
 1. The MCP endpoint exists only on the tailnet.
 2. `MCPBoundary` validates the direct peer, Host, and Origin, then the caller:
-   an identity-provider access token naming the agent, or the shared bearer as
-   one service account. It then asks the operator's brake, all before tool
-   dispatch.
+   an identity-provider access token naming the agent, the only credential it
+   accepts. It then asks the operator's brake, all before tool dispatch.
 3. Tools expose task-shaped capabilities, never generic SQL or arbitrary model
    mutation.
 4. A typed `Principal` carries explicit capabilities into the application

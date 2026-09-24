@@ -19,32 +19,70 @@ from control_plane.providers import PROVIDERS, NameContext, certificate_covers
 
 from .infrastructure import declared_machines, delivery_targets, resolved_spec
 from .locate import index_of, join_endpoint, split_endpoint
+from .projection import projection_scope, read_once
 
 
 def name_context(hostname: str) -> NameContext:
     """Everything HQ can say about one name, without being told.
 
-    Built per request rather than cached. It is three small queries, and a cache
+    Built per request rather than cached. A cache that outlived the request
     would answer "which zones can you reach" with what was true before the
     credential was replaced -- which is the one question whose staleness leads
     somewhere expensive.
+
+    Within one request it is shared through `read_once`: a page that asks about
+    many names resolves each resource once, not once per name and reader.
     """
 
     hostname = hostname.strip().lower().rstrip(".")
     if not hostname:
         return NameContext()
-    zones, swept = _reported_zones()
-    return NameContext(
-        hostname=hostname,
-        public_zones=zones,
-        swept=swept,
-        origin=(origin := _origin_for(hostname)),
-        origin_address=_reachable(origin),
-        certificates=_covering(hostname),
-    )
+    # Joins the caller's scope when there is one; otherwise one of its own, so
+    # even a single ask resolves each resource once rather than once per reader.
+    with projection_scope():
+        zones, swept = _reported_zones()
+        return NameContext(
+            hostname=hostname,
+            public_zones=zones,
+            swept=swept,
+            origin=(origin := _origin_for(hostname)),
+            origin_address=_reachable(origin),
+            certificates=_covering(hostname),
+        )
 
 
 def _reported_zones() -> tuple[tuple[str, ...], bool]:
+    return read_once("naming.reported_zones", _load_reported_zones)
+
+
+def _enabled_resolved() -> tuple[tuple[object, object, object], ...]:
+    """Every enabled resource with a provider, its spec resolved once.
+
+    `(resource, provider, spec)`, where spec is the exception resolving raised
+    when it did, so each reader keeps its own rule for a spec that will not
+    resolve: `_origin_for` lets it surface, `_covering` passes over it.
+    """
+
+    def load():
+        targets = delivery_targets()
+        rows = []
+        for resource in ManagedResource.objects.filter(enabled=True):
+            provider = PROVIDERS.get(resource.kind)
+            if provider is None or provider.hostnames is None:
+                continue
+            if provider.origin is None and not provider.covers:
+                continue
+            try:
+                spec = resolved_spec(resource, targets)
+            except Exception as exc:  # noqa: BLE001 - re-raised or skipped by the reader
+                spec = exc
+            rows.append((resource, provider, spec))
+        return tuple(rows)
+
+    return read_once("naming.enabled_resolved", load)
+
+
+def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
     """Zones a connected credential last said it could edit, and whether asked.
 
     The second half matters as much as the first. Nothing having swept and
@@ -88,12 +126,11 @@ def _origin_for(hostname: str) -> str:
     by declaring it -- the same way it joins the service view.
     """
 
-    targets = delivery_targets()
-    for resource in ManagedResource.objects.filter(enabled=True):
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or provider.origin is None or provider.hostnames is None:
+    for _resource, provider, spec in _enabled_resolved():
+        if provider.origin is None:
             continue
-        spec = resolved_spec(resource, targets)
+        if isinstance(spec, Exception):
+            raise spec
         try:
             names = {
                 str(name).strip().lower().rstrip(".")
@@ -132,7 +169,8 @@ def _reachable(origin: str) -> str:
     host, port = split_endpoint(origin)
     if not host or not port:
         return origin
-    address = index_of(declared=declared_machines()).address_for(host)
+    index = read_once("naming.declared_index", lambda: index_of(declared=declared_machines()))
+    address = index.address_for(host)
     return join_endpoint(address, port) if address else origin
 
 
@@ -143,16 +181,18 @@ def _covering(hostname: str) -> tuple[str, ...]:
     certificate the page says covers it and the two cannot disagree.
     """
 
-    targets = delivery_targets()
     found = []
-    for resource in ManagedResource.objects.filter(enabled=True):
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or not provider.covers or provider.hostnames is None:
+    for resource, provider, spec in _enabled_resolved():
+        if not provider.covers:
             continue
+        if isinstance(spec, (KeyError, TypeError, ValueError)):
+            continue
+        if isinstance(spec, Exception):
+            raise spec
         # Resolved, not authored, so this reads the same names the service page
         # does -- one rule for what a certificate covers, not two.
         try:
-            names = frozenset(provider.hostnames(resolved_spec(resource, targets)))
+            names = frozenset(provider.hostnames(spec))
         except (KeyError, TypeError, ValueError):
             continue
         if certificate_covers(hostname, names):

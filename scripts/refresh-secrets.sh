@@ -1,6 +1,5 @@
 #!/bin/sh
 # Refresh Severino HQ secrets from 1Password without exposing them:
-#   - the MCP validator token   -> secrets/severino_mcp_token
 #   - the full app environment  -> secrets/severino_hq_env
 #   - controller providers      -> private tmpfs directory
 # All are root-rendered. Web secrets become container-owned read-only mounts;
@@ -10,12 +9,12 @@ set -eu
 
 # Vault and item names are host configuration.
 readonly vault="${SEVERINO_SECRETS_VAULT:?vault is required}"
-readonly mcp_ref="${SEVERINO_MCP_SECRET_REF:?MCP secret reference is required}"
 readonly env_item="${SEVERINO_ENV_ITEM:?environment item is required}"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly script_dir
 readonly secret_dir="${SEVERINO_HQ_SECRET_DIR:-/opt/apps/severino-hq/secrets}"
-readonly mcp_target="${secret_dir}/severino_mcp_token"
+# Nothing accepts an MCP token file, so none is kept.
+readonly mcp_token_file="${secret_dir}/severino_mcp_token"
 readonly env_target="${secret_dir}/severino_hq_env"
 # shellcheck source=scripts/lib/controller-env.sh
 . "${script_dir}/lib/controller-env.sh"
@@ -36,15 +35,6 @@ secrets_backend_select "${vault}" "${script_dir}"
 any_changed=0
 web_changed=0
 installed_change=0
-
-# MCP validator token
-temporary="${staging}/mcp"
-token="$(op read "${mcp_ref}")"
-if [ "${#token}" -lt 32 ]; then
-    echo "Refusing weak or empty MCP token from 1Password." >&2
-    exit 1
-fi
-printf %s "${token}" >"${temporary}"
 
 # App environment — every UPPER_SNAKE field on the env item
 temporary="${staging}/app"
@@ -69,10 +59,9 @@ if [ "${connections}" -eq 0 ]; then
 fi
 # Retrieval and validation complete before any live file is modified. Existing
 # bind mounts require in-place updates; this is not a multi-file transaction.
-secrets_install_if_changed "${staging}/mcp" "${mcp_target}" 10001 10001
-web_changed="${installed_change}"
+rm -f "${mcp_token_file}"
 secrets_install_if_changed "${staging}/app" "${env_target}" 10001 10001
-if [ "${installed_change}" -eq 1 ]; then web_changed=1; fi
+web_changed="${installed_change}"
 # This file has no persistent bind mount: rename on the same tmpfs gives each
 # reader a complete old or new environment.
 if [ -L "${controller_env}" ] || [ ! -f "${controller_env}" ] ||
