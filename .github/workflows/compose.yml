@@ -101,6 +101,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -488,7 +489,7 @@ jobs:
             --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
             --env DJANGO_ALLOWED_HOSTS=localhost \
             --env SEVERINO_LOG_LEVEL=WARNING \
-            "$image" manage.py test --verbosity 1
+            "$image" manage.py test --verbosity 1 --parallel auto
 
       - name: Scan composed image
         # Skipped only by a scheduled run that found nothing to do.
@@ -573,6 +574,7 @@ jobs:
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. NEVER trigger a self-hosted job from pull_request.
     runs-on: [self-hosted, severino-hq]
+    timeout-minutes: 30
     environment: production
     permissions:
       contents: read

@@ -140,7 +140,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   run "makemigrations --check" "$python_bin" manage.py makemigrations --check --dry-run
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
-      "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test >/dev/null 2>&1 && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
+      "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
     measured="$("$python_bin" -m coverage report --format=total 2>/dev/null || echo '')"
     claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
