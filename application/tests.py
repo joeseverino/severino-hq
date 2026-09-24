@@ -242,6 +242,140 @@ class CapabilityTests(TestCase):
             DocumentationRecord.objects.filter(doc_id="rb-docs-only").exists()
         )
 
+    def test_an_unknown_field_is_refused_by_name(self):
+        """A misspelled field is named, not folded into "could not be executed".
+
+        The generic failure hides handler text for a reason, but these names
+        are the caller's own keys, and without them a typo cannot be found.
+        """
+
+        result = execute_capability(
+            "hq.sync",
+            {"manifest": [], "topology": {}, "manifets": []},
+            principal=cli_principal(),
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(
+            result["error"]["message"],
+            "hq.sync: manifets is not a known field; topology is not a known field.",
+        )
+        self.assertEqual(
+            [detail["loc"] for detail in result["error"]["details"]],
+            [["manifets"], ["topology"]],
+        )
+
+    def _refusal(self, command_type, payload):
+        """Run a synthetic command and return the error it was refused with."""
+
+        spec = CapabilitySpec(
+            "example.decide",
+            "Decide an example.",
+            "read",
+            "example.read",
+            command_type,
+            lambda command, **kwargs: {"ok": True},
+        )
+        principal = Principal("test", "test", frozenset({"example.read"}))
+        with mock.patch(
+            "application.capabilities.capability_registry",
+            return_value={spec.name: spec},
+        ):
+            result = execute_capability(spec.name, payload, principal=principal)
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        return result["error"]
+
+    def test_an_invalid_choice_names_the_allowed_ones(self):
+        from typing import Literal
+
+        class DecideCommand(StrictCommand):
+            verdict: Literal["applies", "does_not_apply"]
+
+        error = self._refusal(DecideCommand, {"verdict": "maybe"})
+
+        self.assertEqual(
+            error["message"],
+            "example.decide: verdict must be one of applies, does_not_apply.",
+        )
+        self.assertEqual(
+            error["details"],
+            [
+                {
+                    "type": "literal_error",
+                    "loc": ["verdict"],
+                    "msg": "Input should be 'applies' or 'does_not_apply'",
+                }
+            ],
+        )
+
+    def test_a_missing_field_is_named(self):
+        result = execute_capability(
+            "project.create", {"slug": "missing-name"}, principal=cli_principal()
+        )
+
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(result["error"]["message"], "project.create: name is required.")
+
+    def test_a_wrong_type_names_the_field_and_the_type(self):
+        class CountCommand(StrictCommand):
+            counts: list[int]
+
+        error = self._refusal(CountCommand, {"counts": [1, "two"]})
+
+        self.assertEqual(
+            error["message"], "example.decide: counts[1] must be a valid integer."
+        )
+
+    def test_a_refusal_never_repeats_the_value_it_refused(self):
+        """Field names and choices only: a payload can carry a secret."""
+
+        from typing import Literal
+
+        from pydantic import field_validator
+
+        secret = "hunter2-not-for-logs"
+
+        class SecretCommand(StrictCommand):
+            verdict: Literal["applies", "does_not_apply"]
+            token: str
+
+            @field_validator("token")
+            @classmethod
+            def _check(cls, value):
+                raise ValueError(f"{value} is not a token")
+
+        error = self._refusal(SecretCommand, {"verdict": secret, "token": secret})
+
+        self.assertNotIn(secret, json.dumps(error, default=repr))
+        self.assertEqual(
+            error["message"],
+            "example.decide: verdict must be one of applies, does_not_apply; "
+            "token is invalid.",
+        )
+        self.assertEqual(
+            [detail["msg"] for detail in error["details"]],
+            ["Input should be 'applies' or 'does_not_apply'", "Input is invalid"],
+        )
+
+    def test_a_domain_refusal_names_the_field_not_the_value(self):
+        secret = "hunter2-not-a-status"
+
+        result = execute_capability(
+            "project.create",
+            {"name": "Domain", "slug": "domain", "status": secret},
+            principal=cli_principal(),
+        )
+
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(
+            result["error"]["message"],
+            "project.create: status is not one of the allowed choices.",
+        )
+        self.assertEqual(result["error"]["details"], {"status": ["invalid_choice"]})
+        self.assertNotIn(secret, json.dumps(result, default=repr))
+
     def test_delete_requires_exact_confirmation(self):
         project = Project.objects.create(name="Keep Me", slug="keep-me")
 

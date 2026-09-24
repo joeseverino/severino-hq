@@ -94,8 +94,10 @@ class ResourceExecutionTests(TestCase):
         )
 
     def test_unknown_filters_are_rejected_before_the_handler(self):
-        with self.assertRaises(InvalidResourceInput):
+        with self.assertRaises(InvalidResourceInput) as refused:
             list_resource("projects", {"limti": 10}, principal=READ)
+
+        self.assertEqual(refused.exception.reason, "projects: limti is not a known field.")
 
     def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
         ManagedResource.objects.create(key="device", kind="tailscale.device", spec={})

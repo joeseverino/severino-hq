@@ -37,6 +37,12 @@ from .documentation import (
     save_documentation,
 )
 from .expenses import ExpenseCommand, save_expense
+from .input_errors import (
+    Refusal,
+    django_refusal,
+    pydantic_refusal,
+    unknown_field_errors,
+)
 from .infrastructure import (
     CERTIFICATE_KIND,
     ManagedResourceCommand,
@@ -73,6 +79,20 @@ from .sync import HQSyncCommand, execute_hq_sync
 
 class _UnusableTarget(Exception):
     """The target arrived, but not as the kind the capability declared."""
+
+
+class _UnknownFields(Exception):
+    """The payload carries fields the command does not have.
+
+    Its own type rather than a ValueError, which the generic handler would turn
+    into "could not be executed" -- leaving a caller who misspelled a field no
+    way to learn which one. It carries Pydantic's ``extra_forbidden`` entries,
+    so it is answered exactly as a StrictCommand's own refusal is.
+    """
+
+    def __init__(self, fields: list[str]):
+        super().__init__()
+        self.errors = unknown_field_errors(fields)
 
 
 def capability_title(name: str) -> str:
@@ -670,6 +690,8 @@ def execute_capability(
         )
     except _UnusableTarget:
         return _error("invalid_input", f"{name} requires a {spec.target_kind} target.")
+    except _UnknownFields as exc:
+        return _invalid(pydantic_refusal(name, exc.errors))
     except TooManyPendingApprovals as exc:
         # Said in full, unlike the generic failure below. This is the one refusal
         # whose remedy is neither a retry nor a fix to the request: somebody has
@@ -692,10 +714,9 @@ def execute_capability(
         )
         return _error(exc.code, exc.reason)
     except PydanticValidationError as exc:
-        return _error("invalid_input", "Payload validation failed.", exc.errors())
+        return _invalid(pydantic_refusal(name, exc.errors()))
     except DjangoValidationError as exc:
-        details = getattr(exc, "message_dict", None) or exc.messages
-        return _error("invalid_input", "Domain validation failed.", details)
+        return _invalid(django_refusal(name, exc))
     except (TypeError, ValueError):
         # Neither handler nor dependency exception text crosses an adapter.
         # It can contain argument names, provider responses, paths, or values
@@ -761,7 +782,13 @@ def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> Non
     known = set(command_schema(spec.command_type).get("properties", {}))
     unknown = sorted(set(payload) - known)
     if unknown:
-        raise ValueError(f"{spec.name} does not take {', '.join(unknown)}.")
+        raise _UnknownFields(unknown)
+
+
+def _invalid(refusal: Refusal) -> dict[str, Any]:
+    """Every validation refusal: which field and why, never the value sent."""
+
+    return _error("invalid_input", refusal.message, refusal.details)
 
 
 def _error(code: str, message: str, details: Any = None) -> dict[str, Any]:

@@ -236,6 +236,7 @@ Always `{"ok": false, "error": {"code", "message", "details"}}`.
 
 | Status | Means |
 |---|---|
+| `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. |
 | `401` | No token, or it failed verification. Mint a new one. |
 | `403` | Verified, but this client was not granted that capability. Fix its scope. |
 | `404` | No such capability on this deployment. |
@@ -243,6 +244,14 @@ Always `{"ok": false, "error": {"code", "message", "details"}}`.
 | `413` | The request exceeds the deployment's body-size safety limit. |
 | `415` | A capability request was not sent as `application/json`. |
 | `503` | `SEVERINO_API_RESOURCE` is unset here. |
+
+An `invalid_input` message names every offending field and why, in one
+sentence: `project.create: name is required.`, or
+`example.decide: verdict must be one of applies, does_not_apply.` It gives field
+paths, expected types and declared choices, never a value the request carried.
+`details` holds the structured list the sentence was built from, under the same
+rule: `type`, `loc` and `msg` for a schema error, field names and error codes
+for a domain one, and no submitted value in either.
 
 ### Safe retries
 
