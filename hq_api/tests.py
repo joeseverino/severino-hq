@@ -274,6 +274,68 @@ class TransportTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "forbidden")
 
+    def test_a_paused_agent_is_refused_on_the_machine_api(self):
+        """The brake /mcp/ has always applied, now on the other door.
+
+        The agents hold these same tokens, so pausing them on one surface
+        alone left every capability one URL away.
+        """
+
+        from core.models import AgentAccess
+        from projects.models import Project
+
+        AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
+        body = {"payload": {"name": "Paused", "slug": "paused", "status": "active"}}
+        with _serving():
+            write = self._post("project.create", body, token=_token(scope="write_projects"))
+            read = self.client.get(
+                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}"
+            )
+        for response in (write, read):
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"]["code"], "agents_paused")
+        self.assertFalse(Project.objects.filter(slug="paused").exists())
+
+    def test_only_an_authenticated_caller_learns_agents_are_paused(self):
+        from core.models import AgentAccess
+
+        AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
+        with _serving():
+            response = self._post("project.create", {}, token=_token(key=_OTHER_KEY))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"]["code"], "invalid_token")
+
+    def test_an_unreadable_switch_refuses_on_the_machine_api(self):
+        from django.db import DatabaseError
+
+        with _serving(), patch(
+            "application.agent_access.AgentAccess.objects.filter",
+            side_effect=DatabaseError("locked"),
+        ):
+            response = self._post(
+                "project.create",
+                {"payload": {"name": "X", "slug": "x", "status": "active"}},
+                token=_token(scope="write_projects"),
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["code"], "agents_paused")
+
+    def test_a_resumed_agent_runs_again(self):
+        """The positive control: without it a brake that refused everything would pass."""
+
+        from core.models import AgentAccess
+        from projects.models import Project
+
+        AgentAccess.objects.update_or_create(pk=1, defaults={"paused": False})
+        with _serving():
+            response = self._post(
+                "project.create",
+                {"payload": {"name": "Resumed", "slug": "resumed", "status": "active"}},
+                token=_token(scope="write_projects"),
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(Project.objects.filter(slug="resumed").exists())
+
     def test_a_granted_capability_actually_runs(self):
         """The half a deny-only test cannot prove.
 

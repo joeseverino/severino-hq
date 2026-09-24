@@ -115,7 +115,9 @@
   flags. There is no second credential and no shared static bearer, and a
   request with no verified caller reaches no tool.
 - An operator can pause every agent from the menu. The switch is global, read
-  on every MCP request, and fails closed.
+  on every request to `/mcp/` and to the machine API (`/api/`), and fails
+  closed. Both surfaces accept the same Pocket ID tokens, so a brake on one
+  alone would leave a paused agent a URL away from its capabilities.
 - Capability policy at `/agents/` sets, per capability and per surface or
   agent, whether a call is allowed, held for approval, or denied. Rules only
   narrow the identity provider's grant. An explicit rule beats the default, and

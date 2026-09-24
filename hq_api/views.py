@@ -21,6 +21,7 @@ from django.core.exceptions import RequestDataTooBig
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from application.agent_access import agents_paused
 from application.agent_registry import observe
 from application.denials import record_denial
 from core.network import client_ip
@@ -210,7 +211,26 @@ def _endpoint(methods: tuple[str, ...]):
                 )
                 status = 401 if isinstance(exc, TokenError) else 403
                 return _fail(exc.reason, code=exc.code, status=status)
+            # Before the brake, so a paused agent is still registered.
             observe(principal)
+            # The same brake /mcp/ applies, and for the same callers: every
+            # token here is a Pocket ID client, and the agents hold exactly
+            # these tokens. Checked only on the machine API used to leave a
+            # paused agent one URL away from every capability it held.
+            # After authentication, so only a valid caller learns it; fails
+            # closed, because agents_paused() does.
+            if agents_paused():
+                record_denial(
+                    interface="api",
+                    reason="agents_paused",
+                    actor=principal.actor,
+                    source=client_ip(request),
+                )
+                return _fail(
+                    "Agents are paused by the operator.",
+                    code="agents_paused",
+                    status=403,
+                )
             request.principal = principal
             request.token_claims = claims
             response = view(request, *args, **kwargs)
