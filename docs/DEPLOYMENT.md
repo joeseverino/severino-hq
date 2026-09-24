@@ -214,8 +214,11 @@ extension onto the new host image, and deploys that. Two deploy paths existed
 once — the host's and each extension's — and whichever ran last won, so a host
 release silently dropped every extension out of production.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running
-image, and restores it automatically if the exact SHA-tagged replacement does
-not become healthy or its controller cannot pass activation. After rollback,
+image and the compose file it was started with, starts the replacement under the
+compose file copied out of that verified image (so a compose change takes effect
+in the same deploy), and restores both the previous image and its compose file
+automatically if the exact SHA-tagged replacement does not become healthy or
+its controller cannot pass activation. After rollback,
 the controller remains stopped for explicit operator review.
 
 ### A.4 Build & run

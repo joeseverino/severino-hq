@@ -23,6 +23,9 @@ mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts" "${run_dir}"
 readonly test_prefix="registry.example/hq/composition@sha256:"
 readonly good_image="${test_prefix}0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+# The compose file each `compose` call ran under is logged by content rather than
+# by path: the staged copies are gone by the time the assertions run, and the
+# content is the thing that has to be right.
 cat >"${bin_dir}/docker" <<'EOF'
 #!/bin/sh
 if [ "$1" = "inspect" ]; then
@@ -30,14 +33,31 @@ if [ "$1" = "inspect" ]; then
         --format)
             case "$3" in
                 *Config.Image*) echo "registry.example/hq/composition@sha256:previous" ;;
-                *Health.Status*) echo "healthy" ;;
+                *Health.Status*) echo "${TEST_HEALTH:-healthy}" ;;
             esac
             ;;
     esac
     exit 0
 fi
+if [ "$1" = "create" ]; then
+    echo "docker $*" >>"${TEST_LOG}"
+    echo "test-compose-container"
+    exit 0
+fi
+if [ "$1" = "cp" ]; then
+    echo "docker $*" >>"${TEST_LOG}"
+    [ "$2" = "test-compose-container:/app/docker-compose.yml" ] || exit 1
+    cat "${TEST_IMAGE_COMPOSE}" >"$3"
+    exit 0
+fi
 if [ "$1" = "compose" ]; then
-    echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-}" >>"${TEST_LOG}"
+    file=""
+    previous=""
+    for argument do
+        [ "${previous}" = "-f" ] && file="${argument}"
+        previous="${argument}"
+    done
+    echo "docker $* image=${SEVERINO_IMAGE:-} DOCKER_CONFIG=${DOCKER_CONFIG:-} compose=$(cat "${file}")" >>"${TEST_LOG}"
     for argument do
         if [ "${argument}" = pull ] && [ "${TEST_PULL_FAIL:-0}" -eq 1 ]; then
             exit 1
@@ -92,13 +112,21 @@ cat >"${bin_dir}/sleep" <<'EOF'
 exit 0
 EOF
 
-# Controller activation fails, which is what drives the rollback path.
+# Controller activation fails unless a case says otherwise, which is what drives
+# the rollback path. Like the real one, it refreshes the lib tree -- compose file
+# included -- from the image now running.
 cat >"${lib_dir}/scripts/install-controller.sh" <<'EOF'
 #!/bin/sh
 printf 'updated scripts\n' >"${SEVERINO_HQ_LIB_DIR}/version"
-exit 1
+cp "${TEST_IMAGE_COMPOSE}" "${SEVERINO_HQ_LIB_DIR}/docker-compose.yml"
+exit "${TEST_CONTROLLER_FAIL:-1}"
 EOF
 printf 'previous scripts\n' >"${lib_dir}/version"
+
+# The running release's compose file, and the one the new image carries.
+printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
+readonly image_compose="${work_dir}/image-compose.yml"
+printf 'next compose\n' >"${image_compose}"
 cat >"${lib_dir}/scripts/run-private.sh" <<'EOF'
 #!/bin/sh
 exit 0
@@ -119,7 +147,47 @@ deploy() {
         SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
+        TEST_IMAGE_COMPOSE="${image_compose}" \
         "${repo_dir}/scripts/deploy-image.sh" "${2:-${good_image}}" </dev/null
+}
+
+# Staged compose files and the container they were copied out of are gone,
+# whichever way the run ended.
+assert_staging_cleaned() {
+    if find "${run_dir}" -name 'severino-hq-compose.*' | grep -q .; then
+        echo "Staged compose files outlived the deploy." >&2
+        exit 1
+    fi
+    if grep -q "docker create" "${log_file}" \
+        && ! grep -q "docker rm -f test-compose-container" "${log_file}"; then
+        echo "The container the compose file was copied from was left behind." >&2
+        exit 1
+    fi
+}
+
+# The new release is started under the compose file its own image carries, not
+# the previous release's copy in the lib tree -- which is only refreshed after
+# the health check, so using it made every compose change land one deploy late.
+assert_new_compose_applied() {
+    if ! grep " up -d " "${log_file}" \
+        | grep "image=${good_image} " | grep -q "compose=next compose$"; then
+        echo "The new image was not started under its own compose file." >&2
+        exit 1
+    fi
+    if ! grep -q "docker create --pull never ${good_image} true" "${log_file}"; then
+        echo "The compose file was not read from the verified image by digest." >&2
+        exit 1
+    fi
+}
+
+# Rollback restores the previous compose file along with the previous image.
+assert_previous_compose_restored() {
+    if ! grep " up -d " "${log_file}" \
+        | grep "image=registry.example/hq/composition@sha256:previous " \
+        | grep -q "compose=previous compose$"; then
+        echo "Rollback did not restore the previous compose file." >&2
+        exit 1
+    fi
 }
 
 run_failure() {
@@ -146,15 +214,56 @@ refuses() {
 
 # A failed image pull leaves the old app running and restores timer state.
 run_failure 1
+assert_staging_cleaned
+if grep -q "docker create" "${log_file}"; then
+    echo "A compose file was read from an image that failed to pull." >&2
+    exit 1
+fi
 
 # A failed controller activation rolls back the image and restores timer state.
 run_failure 0
 grep -q "image=registry.example/hq/composition@sha256:previous" "${log_file}"
 grep -qx 'previous scripts' "${lib_dir}/version"
+grep -qx 'previous compose' "${lib_dir}/docker-compose.yml"
 if find "${run_dir}" -name 'severino-hq-scripts.*' | grep -q .; then
     echo "Controller rollback snapshot was not cleaned up." >&2
     exit 1
 fi
+assert_new_compose_applied
+assert_previous_compose_restored
+assert_staging_cleaned
+
+# A compose change is live after one deploy: the new container is created under
+# the new file, and the lib tree carries it afterwards for the next deploy.
+: >"${log_file}"
+TEST_CONTROLLER_FAIL=0
+export TEST_CONTROLLER_FAIL
+if ! deploy 0 >/dev/null; then
+    echo "Expected a healthy deploy to succeed." >&2
+    exit 1
+fi
+unset TEST_CONTROLLER_FAIL
+assert_new_compose_applied
+assert_staging_cleaned
+if [ "$(grep -c " up -d " "${log_file}")" -ne 1 ]; then
+    echo "A healthy deploy recreated the container more than once." >&2
+    exit 1
+fi
+grep -qx 'next compose' "${lib_dir}/docker-compose.yml"
+printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
+printf 'previous scripts\n' >"${lib_dir}/version"
+
+# A failed health check restores the prior compose file with the prior image,
+# and never reaches controller activation, so the lib tree is untouched.
+TEST_HEALTH=unhealthy
+export TEST_HEALTH
+run_failure 0 2>/dev/null >/dev/null
+unset TEST_HEALTH
+assert_new_compose_applied
+assert_previous_compose_restored
+assert_staging_cleaned
+grep -qx 'previous compose' "${lib_dir}/docker-compose.yml"
+grep -qx 'previous scripts' "${lib_dir}/version"
 
 # The argument decides what runs as a container, and a sudoers rule lets the
 # caller choose it, so each of these must stop before anything is pulled.
@@ -223,6 +332,7 @@ printf 'x-access-token\nsecret-token-value\n' | PATH="${bin_dir}:${PATH}" \
     SEVERINO_HQ_RUN_DIR="${run_dir}" \
     SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
     SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
+    TEST_IMAGE_COMPOSE="${image_compose}" \
     "${repo_dir}/scripts/deploy-image.sh" "${good_image}" >/dev/null 2>&1 || true
 if grep -q "docker login" "${log_file}"; then
     echo "The deploy still logs in, which writes the token to root's home." >&2
@@ -237,4 +347,4 @@ if grep -rl "secret-token-value" "${run_dir}" 2>/dev/null | grep -q .; then
     exit 1
 fi
 
-echo "deploy-image rollback and input-guard tests passed"
+echo "deploy-image rollback, compose and input-guard tests passed"
