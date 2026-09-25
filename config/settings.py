@@ -477,6 +477,21 @@ if sys.argv[1:2] == ["test"]:
 
     _enforce_warning_policy(BASE_DIR)
 
+    # Tests upload receipts and write exports as real files. Without this they
+    # landed in var/ inside the working tree. One directory each per run, made by
+    # the process that starts it and inherited by parallel workers through the
+    # environment, removed when the run ends. An explicit setting still wins.
+    import atexit as _atexit
+    import shutil as _shutil
+
+    for _variable, _kind in (
+        ("SEVERINO_MEDIA_ROOT", "media"),
+        ("SEVERINO_EXPORTS_ROOT", "exports"),
+    ):
+        if _variable not in os.environ:
+            os.environ[_variable] = tempfile.mkdtemp(prefix=f"severino-test-{_kind}-")
+            _atexit.register(_shutil.rmtree, os.environ[_variable], True)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
