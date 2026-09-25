@@ -55,6 +55,9 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
+        # An HTTPError is the error response itself, socket included. Chained
+        # below it would stay open until the ContentSyncError was collected.
+        exc.close()
         raise ContentSyncError(f"Content index HTTP {exc.code}") from exc
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
         raise ContentSyncError(f"Content index fetch failed: {exc}") from exc

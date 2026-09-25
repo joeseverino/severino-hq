@@ -456,6 +456,10 @@ class ReceiptUploadHardeningTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/octet-stream")
         self.assertIn("attachment", response.get("Content-Disposition", ""))
+        # Read to the end, as a server would: the file is closed when the
+        # stream is exhausted, and a test that stops at the headers leaves it
+        # open for the collector.
+        self.assertEqual(b"".join(response.streaming_content), b"markup")
 
     def test_a_pdf_is_still_shown_in_place(self):
         from django.contrib.auth import get_user_model
@@ -472,6 +476,7 @@ class ReceiptUploadHardeningTests(TestCase):
         response = self.client.get(f"/receipts/{receipt.pk}/file/")
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertNotIn("attachment", response.get("Content-Disposition", ""))
+        self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.4")
 
 
 class StaticCachingTests(SimpleTestCase):

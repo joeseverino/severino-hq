@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import secrets
 import shlex
+import sys
 import tempfile
 from pathlib import Path
 
@@ -467,6 +468,14 @@ DATABASES = {
 # Django's own runner, plus a WAL checkpoint before it clones the test database
 # for parallel workers. See core/test_runner.py for why that is necessary.
 TEST_RUNNER = "core.test_runner.SeverinoTestRunner"
+
+# Under test, a warning from this codebase and any leaked resource fail the run.
+# Here rather than in the runner because settings are what every parallel
+# worker imports on start. See config/warning_policy.py.
+if sys.argv[1:2] == ["test"]:
+    from config.warning_policy import enforce as _enforce_warning_policy
+
+    _enforce_warning_policy(BASE_DIR)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -756,11 +756,9 @@ class TheCallerReachesTheToolTests(TestCase):
     """
 
     def test_a_tool_call_runs_as_the_agent_that_presented_the_token(self):
-        import contextlib
-
+        import httpx
         from starlette.applications import Starlette
         from starlette.routing import Mount
-        from starlette.testclient import TestClient
 
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         seen = {}
@@ -768,11 +766,6 @@ class TheCallerReachesTheToolTests(TestCase):
         def capture(*, principal):
             seen["actor"] = principal.actor
             return {"connections": []}
-
-        @contextlib.asynccontextmanager
-        async def lifespan(app):
-            async with mcp.session_manager.run():
-                yield
 
         # A fresh manager for this run -- FastMCP's can be started only once --
         # and the original put back, so nothing here leaks into another test.
@@ -791,25 +784,36 @@ class TheCallerReachesTheToolTests(TestCase):
                     ),
                 )
             ],
-            lifespan=lifespan,
         )
-        with (
-            mock.patch("hq_mcp.services.list_application_connections", side_effect=capture),
-            TestClient(application, client=("100.64.0.10", 50000)) as client,
-        ):
-            response = client.post(
-                "/mcp/",
-                headers={
-                    "Authorization": "Bearer header.payload.signature",
-                    "Accept": "application/json, text/event-stream",
-                },
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "list_connections", "arguments": {}},
-                },
-            )
+
+        # Driven over httpx's own ASGI transport, as the static-asset tests are,
+        # rather than Starlette's TestClient: that one now wants a second HTTP
+        # client installed, and a test is no reason to ship one. The session
+        # manager is entered first and by hand, which is all an app lifespan
+        # does, so its task group still exists before any caller is bound --
+        # the order that makes a lost context observable.
+        async def call():
+            transport = httpx.ASGITransport(app=application, client=("100.64.0.10", 50000))
+            async with (
+                mcp.session_manager.run(),
+                httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+            ):
+                return await client.post(
+                    "/mcp/",
+                    headers={
+                        "Authorization": "Bearer header.payload.signature",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {"name": "list_connections", "arguments": {}},
+                    },
+                )
+
+        with mock.patch("hq_mcp.services.list_application_connections", side_effect=capture):
+            response = async_to_sync(call)()
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn('"isError":true', response.text.replace(" ", ""))
