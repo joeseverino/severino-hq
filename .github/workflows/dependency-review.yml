@@ -1,0 +1,30 @@
+name: dependency review
+
+# Refuses a pull request that adds a dependency with a known high-severity
+# advisory, before it merges. pip-audit in ci.yml audits what is already in
+# requirements.txt; this judges the change itself, including licences.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: dependency review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Only to explain a refusal on the pull request; nothing else is written.
+      pull-requests: write
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure

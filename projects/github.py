@@ -109,6 +109,9 @@ def fetch_last_push(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
+        # An HTTPError is the error response itself, socket included. Chained
+        # below it would stay open until the GitHubMetadataError was collected.
+        exc.close()
         raise GitHubMetadataError(f"GitHub API returned HTTP {exc.code}.") from exc
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
         raise GitHubMetadataError(f"Could not fetch GitHub metadata: {exc}") from exc

@@ -31,10 +31,9 @@ if [ -f .env.dev ]; then
   set +a
 fi
 
-# Read once, then removed from the environment. CI sets this for exactly one
-# step; leaving it set here would make every later step try to import
-# extensions that are not on this interpreter's path.
-EXTENSION_REFS="${SEVERINO_HQ_PLUGINS:-}"
+# Removed from the environment. CI sets this for exactly one step; leaving it
+# set here would make every later step try to import extensions that are not
+# on this interpreter's path.
 unset SEVERINO_HQ_PLUGINS
 
 # The same declaration CI reads: ruff pin, python matrix, coverage floor and
@@ -101,28 +100,6 @@ else
   bad "README python badge says '$claimed_pythons'; the matrix runs '$expected_pythons'"
 fi
 
-# The private-name check CI runs from the COMPOSITION_EXTENSIONS variable. The
-# variable is not available locally, so the same grep runs against whatever
-# extension checkouts SEVERINO_HQ_PLUGINS names -- which is the set a developer
-# actually has, and the one they might accidentally mention.
-if [ -n "$EXTENSION_REFS" ]; then
-  leaked=0
-  for ref in ${EXTENSION_REFS//,/ }; do
-    stem="${ref%%.*}"
-    for form in "$stem" "${stem//_/-}" "${stem//_/.}"; do
-      hits="$(git grep -Iril -e "$form" -- . ':!LICENSE' || true)"
-      if [ -n "$hits" ]; then
-        bad "an extension identifier appears in tracked files: $form"
-        printf '%s\n' "$hits" | sed 's/^/      /'
-        leaked=1
-      fi
-    done
-  done
-  [ "$leaked" -eq 0 ] && ok "no extension identifiers in the tracked tree"
-else
-  skip "SEVERINO_HQ_PLUGINS unset — cannot check for extension identifiers"
-fi
-
 # ---------------------------------------------------------------- test job
 for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   if [ ! -x "$python_bin" ]; then
@@ -140,7 +117,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   run "makemigrations --check" "$python_bin" manage.py makemigrations --check --dry-run
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
-      "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test >/dev/null 2>&1 && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
+      "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
     measured="$("$python_bin" -m coverage report --format=total 2>/dev/null || echo '')"
     claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"

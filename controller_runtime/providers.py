@@ -97,6 +97,22 @@ def _condition(
     }
 
 
+def _release(exc: BaseException) -> None:
+    """Close the response a failed request carries, if it carries one.
+
+    An ``HTTPError`` is not only an exception: it is the error response,
+    socket included, and nothing closes it on our behalf. Chained into a
+    ``ProviderError`` or swallowed into a default, it would hold that socket
+    until the garbage collector found it -- one per refused call, on a worker
+    that makes dozens of them a pass. Every handler that can receive one calls
+    this, so the rule is written once rather than remembered at each site. The
+    other failures a request can raise own nothing, and pass through untouched.
+    """
+
+    if isinstance(exc, urllib.error.HTTPError):
+        exc.close()
+
+
 def _request(
     url: str,
     *,
@@ -118,6 +134,7 @@ def _request(
         ) as response:
             raw = response.read()
     except (urllib.error.URLError, TimeoutError) as exc:
+        _release(exc)
         raise ProviderError(f"Provider request failed: {type(exc).__name__}.") from exc
     if not raw:
         return None
@@ -165,6 +182,7 @@ def _multipart_request(
         ) as response:
             raw = response.read()
     except (urllib.error.URLError, TimeoutError) as exc:
+        _release(exc)
         raise ProviderError(
             f"Provider multipart request failed: {type(exc).__name__}."
         ) from exc
@@ -1740,9 +1758,9 @@ def _cloudflare_envelope(
         ) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
-        raise ProviderError(
-            f"Cloudflare refused the request: {_cloudflare_errors(exc.read())}"
-        ) from exc
+        with exc:
+            detail = _cloudflare_errors(exc.read())
+        raise ProviderError(f"Cloudflare refused the request: {detail}") from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise ProviderError(
             f"Cloudflare request failed: {type(exc).__name__}."
@@ -2876,6 +2894,7 @@ def _tailnet_token(connection_ref: str) -> str:
                     raise ValueError("OAuth response is not an object")
                 token = payload.get("access_token", "")
         except urllib.error.HTTPError as exc:
+            _release(exc)
             raise ProviderError(
                 f"Tailscale refused the credential for {connection_ref} "
                 f"({exc.code}). It has to be an OAuth client, not an API key."
@@ -2958,6 +2977,7 @@ def reconcile_tailnet_device(
         with urllib.request.urlopen(request, timeout=30) as response:
             response.read()
     except urllib.error.HTTPError as exc:
+        _release(exc)
         if exc.code == 403:
             raise ProviderError(
                 "This Tailscale credential may not change devices. It needs "
@@ -3016,6 +3036,7 @@ def approve_tailnet_routes(
         with urllib.request.urlopen(request, timeout=30) as response:
             current = json.loads(response.read())
     except urllib.error.HTTPError as exc:
+        _release(exc)
         # A refusal here is the same missing grant the write would hit, and it
         # is worth naming at the first call rather than the second: an operator
         # told only that the routes could not be read goes looking at the
@@ -3071,6 +3092,7 @@ def approve_tailnet_routes(
         with urllib.request.urlopen(request, timeout=30) as response:
             approved = json.loads(response.read())
     except urllib.error.HTTPError as exc:
+        _release(exc)
         if exc.code in (401, 403):
             raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
         raise ProviderError(
@@ -3138,7 +3160,8 @@ def _tailnet_get(token: str, path: str) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             found = json.loads(response.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
         return {}
     return found if isinstance(found, dict) else {}
 
@@ -3157,7 +3180,8 @@ def _tailnet_policy_etag(token: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.headers.get("etag", "")
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
+        _release(exc)
         return ""
 
 
@@ -3219,6 +3243,7 @@ def reconcile_tailnet_policy(
         with urllib.request.urlopen(check, timeout=30) as response:
             verdict = json.loads(response.read() or b"{}")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
         raise ProviderError("Tailscale could not check the policy.") from exc
     if verdict:
         raise ProviderError(
@@ -3248,6 +3273,7 @@ def reconcile_tailnet_policy(
         with urllib.request.urlopen(write, timeout=30) as response:
             response.read()
     except urllib.error.HTTPError as exc:
+        _release(exc)
         if exc.code == 412:
             raise ProviderError(
                 "The policy changed somewhere else since HQ read it, so this "
@@ -3278,6 +3304,7 @@ def _tailnet_policy(token: str) -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
+        _release(exc)
         raise ProviderError(
             f"Tailscale refused the policy read ({exc.code}). The credential "
             "needs the policy_file scope."
@@ -3310,7 +3337,8 @@ def _who_may_reach(
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read()).get("matches") or []
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
         # One address that cannot be previewed must not lose the others.
         return []
 
@@ -3641,7 +3669,8 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             devices = json.loads(response.read()).get("devices") or []
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
         return {}
     found: dict[str, dict[str, Any]] = {}
     for device in devices:
@@ -3907,6 +3936,7 @@ def _cloudflare_graphql(
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        _release(exc)
         raise ProviderError(
             f"Cloudflare analytics refused the query: HTTP {exc.code}."
         ) from exc

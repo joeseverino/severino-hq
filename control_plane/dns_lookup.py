@@ -172,6 +172,9 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
         # 404 from RDAP means the address is not allocated to anyone the
         # registries know, which is an answer rather than a fault -- but it
         # arrives as an exception, and the service above reads the absence.
+        # The exception is also the response, socket included, so it is closed
+        # here rather than whenever the chained LookupUnavailable is collected.
+        exc.close()
         raise LookupUnavailable("The registry has no record of that.") from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise LookupUnavailable("The registry could not be reached.") from exc

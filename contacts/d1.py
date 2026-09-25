@@ -156,7 +156,11 @@ def query(sql: str, params: list | None = None) -> list[dict]:
         with urllib.request.urlopen(request, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:500]
+        # An HTTPError is the error response itself, socket included, and
+        # nothing closes it for us: chained below, it would stay open until
+        # the D1Error was collected. Read what it says, then let it go.
+        with exc:
+            detail = exc.read().decode("utf-8", "replace")[:500]
         raise D1Error(f"D1 API returned HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise D1Error(f"Could not reach the D1 API: {exc.reason}") from exc

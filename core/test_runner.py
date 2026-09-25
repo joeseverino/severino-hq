@@ -26,6 +26,8 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 
 from __future__ import annotations
 
+import logging
+import sys
 import unittest
 
 from django.db import connections
@@ -48,11 +50,76 @@ class _CompositionIsolation:
         return super().startTest(test)
 
 
-class CompositionTextResult(_CompositionIsolation, unittest.TextTestResult):
+class _HeldLogs(logging.Handler):
+    """One test's log records, kept until the test's outcome is known.
+
+    Many tests exercise a failure on purpose -- a refused token, an audit write
+    that raises -- and the code under test logs it, correctly. Printed as they
+    happen, those records filled the suite's output with warnings and
+    tracebacks that were all expected, and a real one could not be told from
+    them. Django's ``--buffer`` would hold them, but it refuses ``--parallel``.
+    So the root logger writes here for the length of each test, and the
+    records are printed only if that test fails or errors. Nothing is dropped
+    that anyone needs: a passing test's expected noise is the only thing that
+    goes unseen.
+    """
+
+    def __init__(self):
+        super().__init__(logging.NOTSET)
+        self.records: list[logging.LogRecord] = []
+        self.console: list[logging.Handler] = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+    def take_over(self, root: logging.Logger) -> None:
+        # Idempotent, and done at the first test in each process: a parallel
+        # worker is a fresh interpreter whose logging Django configured again.
+        if root.handlers != [self]:
+            self.console = [h for h in root.handlers if h is not self]
+            root.handlers = [self]
+
+    def replay(self, test) -> None:
+        if not self.records:
+            return
+        formatter = next((h.formatter for h in self.console if h.formatter), None)
+        stream = sys.stderr
+        stream.write(f"\n--- log output of {test.id()} ---\n")
+        for record in self.records:
+            stream.write((formatter.format(record) if formatter else record.getMessage()) + "\n")
+        stream.flush()
+
+
+_held_logs = _HeldLogs()
+
+
+class _LogsOnFailure:
+    """Show a test's logs when, and only when, the test fails."""
+
+    def startTest(self, test):  # noqa: N802 - unittest's protocol
+        _held_logs.take_over(logging.getLogger())
+        _held_logs.records.clear()
+        return super().startTest(test)
+
+    def addError(self, test, err):  # noqa: N802
+        _held_logs.replay(test)
+        return super().addError(test, err)
+
+    def addFailure(self, test, err):  # noqa: N802
+        _held_logs.replay(test)
+        return super().addFailure(test, err)
+
+    def addSubTest(self, test, subtest, err):  # noqa: N802
+        if err is not None:
+            _held_logs.replay(subtest)
+        return super().addSubTest(test, subtest, err)
+
+
+class CompositionTextResult(_LogsOnFailure, _CompositionIsolation, unittest.TextTestResult):
     pass
 
 
-class CompositionRemoteResult(_CompositionIsolation, RemoteTestResult):
+class CompositionRemoteResult(_LogsOnFailure, _CompositionIsolation, RemoteTestResult):
     pass
 
 

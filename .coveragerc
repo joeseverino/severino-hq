@@ -1,5 +1,12 @@
 [run]
 source = .
+# The suite runs in parallel worker processes, each writing its own data file;
+# CI combines them before the floor is checked. `thread` stays listed because
+# naming `multiprocessing` replaces the default, and tests run background jobs
+# on threads.
+parallel = true
+concurrency = multiprocessing, thread
+sigterm = true
 omit =
     */migrations/*
     */tests*.py
