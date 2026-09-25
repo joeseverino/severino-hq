@@ -20,6 +20,7 @@ from .providers import (
     dashboard_glance,
     execute,
     inventory,
+    logger,
     provider_snapshot,
 )
 from control_plane.providers import (
@@ -135,12 +136,18 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
         )
     except (BridgeError, ProviderError, OSError, ValueError) as exc:
         # Swallowed, but not silently: stdout is the run's JSON result and is
-        # parsed, so this goes to stderr and lands in the journal. A sweep that
+        # parsed, so this is logged -- the controller's logger, whose plain
+        # message lands on stderr and in the journal. A sweep that
         # quietly stopped reporting would leave the pages it feeds looking
         # settled while going stale, which is the failure worth noticing.
         # The type, not the message -- a provider error can name a host or a
         # path, and this line is the one that gets copied into a paste.
-        print(f"{action} report skipped: {type(exc).__name__}", file=sys.stderr)
+        logger.warning(
+            "%s report skipped: %s",
+            action,
+            type(exc).__name__,
+            extra={"event": "controller.report.skipped", "action": action},
+        )
 
 
 def _analytics_windows(sites: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -164,7 +171,11 @@ def _analytics_windows(sites: list[dict[str, str]]) -> list[dict[str, str]]:
     except BridgeError as exc:
         # Three completed days remain a safe degraded mode. The next successful
         # plan derives the missing span again, so a failed read strands nothing.
-        print(f"analytics plan unavailable: {type(exc).__name__}", file=sys.stderr)
+        logger.warning(
+            "analytics plan unavailable: %s",
+            type(exc).__name__,
+            extra={"event": "controller.plan.unavailable", "plan": "analytics"},
+        )
         return []
     windows = plan.get("windows") if isinstance(plan, dict) else []
     return windows if isinstance(windows, list) else []
@@ -193,7 +204,11 @@ def _report_findings(controller_id: str) -> None:
         # writing, not about looking, and skipping would make one bad bridge
         # call leave the estate unwatched until the next one succeeds. Nothing
         # is carried, either: without HQ's word, every connection is asked.
-        print(f"sweep policy unavailable: {type(exc).__name__}", file=sys.stderr)
+        logger.warning(
+            "sweep policy unavailable: %s",
+            type(exc).__name__,
+            extra={"event": "controller.plan.unavailable", "plan": "sweep"},
+        )
     else:
         if not verdict.get("due", True):
             return
@@ -203,7 +218,11 @@ def _report_findings(controller_id: str) -> None:
         try:
             found = connections(carry=carry)
         except (ProviderError, OSError, ValueError) as exc:
-            print(f"connections sweep skipped: {type(exc).__name__}", file=sys.stderr)
+            logger.warning(
+                "connections sweep skipped: %s",
+                type(exc).__name__,
+                extra={"event": "controller.sweep.skipped", "sweep": "connections"},
+            )
         else:
             _post("connections", controller_id, found)
         _post("inventory", controller_id, inventory())
@@ -215,7 +234,11 @@ def _report_findings(controller_id: str) -> None:
             # reading here that leaves the network HQ controls, so it is also
             # the one most able to be slow or refused -- and a page-view count
             # is never a reason for a sweep of the estate to end early.
-            print(f"analytics sweep skipped: {type(exc).__name__}", file=sys.stderr)
+            logger.warning(
+                "analytics sweep skipped: %s",
+                type(exc).__name__,
+                extra={"event": "controller.sweep.skipped", "sweep": "analytics"},
+            )
         else:
             _post("analytics", controller_id, readings)
 
@@ -226,7 +249,11 @@ def _report_glance(controller_id: str) -> None:
     try:
         plan = _manage("glance-plan", "--controller-id", controller_id)
     except BridgeError as exc:
-        print(f"glance plan unavailable: {type(exc).__name__}", file=sys.stderr)
+        logger.warning(
+            "glance plan unavailable: %s",
+            type(exc).__name__,
+            extra={"event": "controller.plan.unavailable", "plan": "glance"},
+        )
         return
     panels = plan.get("panels") if isinstance(plan, dict) else []
     if not isinstance(panels, list) or not panels:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import os
 import re
@@ -1433,6 +1434,12 @@ class ProviderAdapterTests(TestCase):
 
 
 class WorkerTests(TestCase):
+    def setUp(self):
+        # A pass prints its JSON result on stdout, which is the worker's answer
+        # to systemd, not something these tests read. Captured, so a line in
+        # the suite's output is always something worth looking at.
+        self.enterContext(mock.patch("sys.stdout", new_callable=io.StringIO))
+
     @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
     @mock.patch("controller_runtime.worker.subprocess.run")
     def test_in_process_bridge_uses_running_image_python(self, run):
@@ -2636,13 +2643,19 @@ class WorkerEntryPointTests(TestCase):
         self.assertEqual(run.call_args.args[0], "a-named-controller")
 
     def test_apply_is_off_unless_asked_for(self):
+        # An applying pass reports its step failures on the way out, whatever
+        # happened in it. Unpatched, that report went over the real bridge --
+        # a manage.py subprocess from inside a unit test -- and only passed
+        # because the failure is swallowed.
         with (
             mock.patch.object(worker.sys, "argv", ["worker", "--apply"]),
             mock.patch.object(worker, "run_once", return_value=0) as run,
+            mock.patch.object(worker, "_post") as post,
         ):
             worker.main()
 
         self.assertTrue(run.call_args.kwargs["apply"])
+        self.assertEqual(post.call_args.args[0], "steps")
 
 
 class MachineNameTests(TestCase):
