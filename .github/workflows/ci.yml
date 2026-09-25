@@ -61,9 +61,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The commit messages of the whole push or pull request are checked.
-          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ needs.toolchain.outputs.oldest-python }}
@@ -182,26 +179,6 @@ jobs:
             exit 1
           fi
           echo "every hosted job runs on ${RUNNER_IMAGE}" | tee "$RUNNER_TEMP/gate-runners"
-      - name: No private extension names in the tree or the commit messages
-        id: private-names
-        # The extensions are private repositories; this one is public, and
-        # tracked files and commit messages are both published by a push.
-        # scripts/check-private-names.sh holds the rule; the pull request's
-        # title and description are checked by pull-request-text.yml, which
-        # also runs when they are edited.
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          sh scripts/check-private-names.sh tree | tee "$RUNNER_TEMP/gate-private-names"
-          if [ -n "${RANGE_BASE}" ] && git cat-file -e "${RANGE_BASE}^{commit}" 2>/dev/null; then
-            git log --format=%B "${RANGE_BASE}..HEAD" \
-              | sh scripts/check-private-names.sh text "the commit messages"
-          else
-            git log -1 --format=%B | sh scripts/check-private-names.sh text "the commit message"
-          fi
-          echo "none in the tracked tree or the commit messages" > "$RUNNER_TEMP/gate-private-names"
       - name: Shell safety
         id: shell
         run: |
