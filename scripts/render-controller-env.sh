@@ -63,6 +63,11 @@ item_ids="$(printf '%s' "${items}" | jq -er '
 ')"
 for item_id in ${item_ids}; do
     item="$(op item get "${item_id}" --vault "${vault}" --format json)"
+    connection_ref="$(item_field "${item}" connection_ref)"
+    # Items without a connection_ref are not provider connections. The SSH key
+    # items connections name as their identity are among them: a private key
+    # spans lines, and nothing here renders it.
+    [ -n "${connection_ref}" ] || continue
     # The launcher forwards one variable name per physical line. Reject control
     # characters rather than allowing a value to introduce another assignment.
     printf '%s' "${item}" | jq -e '
@@ -70,9 +75,6 @@ for item_id in ${item_ids}; do
             (.value | type == "string" and (test("[\u0000\r\n]") | not)))
         and all(.urls[]?; .href | type == "string" and (test("[\u0000\r\n]") | not))
     ' >/dev/null || { echo "Invalid controller field value." >&2; exit 1; }
-    connection_ref="$(item_field "${item}" connection_ref)"
-    # Items without a connection_ref are not provider connections.
-    [ -n "${connection_ref}" ] || continue
     if ! printf '%s\n' "${connection_ref}" | LC_ALL=C grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$'; then
         echo "Connection has an invalid connection_ref." >&2
         exit 1
