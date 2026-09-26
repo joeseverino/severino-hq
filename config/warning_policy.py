@@ -11,8 +11,8 @@ so a deprecated third-party API used from here fails here, and a library's
 warnings about its own internals do not.
 
 Every ``ResourceWarning``, wherever it surfaces. Those come from a finalizer,
-and an error raised there cannot propagate -- Python hands it to
-``sys.unraisablehook``, prints it and carries on -- so the hook installed here
+and an error raised there cannot propagate (Python hands it to
+``sys.unraisablehook``, prints it and carries on) so the hook installed here
 also writes each one down, and the process that started the run exits non-zero
 once it has finished if anything was written. One ledger file serves a parallel
 run, because the workers inherit its path through the environment.

@@ -13,6 +13,11 @@
         "source": "field",
         "label": "email"
       },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
+      },
       "PROVIDER": {
         "source": "field",
         "label": "provider",
@@ -27,6 +32,11 @@
       "CONNECTION_REF": {
         "source": "connection_ref"
       },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
+      },
       "PROVIDER": {
         "source": "field",
         "label": "provider",
@@ -40,6 +50,11 @@
     "login": {
       "CONNECTION_REF": {
         "source": "connection_ref"
+      },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
       },
       "PASSWORD": {
         "source": "field",
@@ -71,6 +86,11 @@
       "CONNECTION_REF": {
         "source": "connection_ref"
       },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
+      },
       "PROVIDER": {
         "source": "field",
         "label": "provider",
@@ -84,6 +104,11 @@
       },
       "CONNECTION_REF": {
         "source": "connection_ref"
+      },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
       },
       "PROVIDER": {
         "source": "field",
@@ -102,6 +127,15 @@
       "HOST_KEY": {
         "source": "field",
         "label": "host_key"
+      },
+      "IDENTITY": {
+        "source": "field",
+        "label": "identity"
+      },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
       },
       "PORT": {
         "source": "field",

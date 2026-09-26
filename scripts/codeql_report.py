@@ -10,6 +10,11 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
+
+# Run as a file, so the repository root is not on the path by itself.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from application.ui import counted  # noqa: E402
 
 # Kept in step with `query-filters` in .github/codeql/codeql-config.yml.
 EXCLUDED = {"py/cyclic-import"}
@@ -38,7 +43,7 @@ def main(path: str) -> int:
         )
 
     if alerts:
-        print(f"[security] CodeQL found {len(alerts)} alert(s).", file=sys.stderr)
+        print(f"[security] CodeQL found {counted(len(alerts), 'alert')}.", file=sys.stderr)
         return 1
     return 0
 

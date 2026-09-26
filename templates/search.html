@@ -1,13 +1,5 @@
-{% extends "base.html" %}
-{% block title %}Command Center{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Command Center</h1>
-    <p class="page-lede">Find any record, resource, connection, or operation HQ can perform.</p>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <form class="filter-bar search-page-form" method="get" data-table-toolbar>
   <input type="search" name="q" value="{{ q }}" placeholder="Search records, resources, connections, and commands…" aria-label="Search records, resources, connections, and commands" autofocus>
   <button type="submit">Find</button>
@@ -15,8 +7,12 @@
 
 <div data-search-results>
   <div class="command-center-grid">
+    {% if discovered_estate %}
+    {% include "partials/_discovery_catalog.html" with title="Estate" items=discovered_estate %}
+    {% endif %}
+
     {% if not q or discovered_connections %}
-    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections empty_message="No connections are declared yet." %}
+    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections empty_message="No connections declared." %}
     {% endif %}
 
     {% if not q or discovered_resources %}
@@ -63,7 +59,7 @@
 
 {% if q %}
   <div class="search-summary">
-    <p class="muted">{{ total }} record{{ total|pluralize }} for <strong>{{ q }}</strong></p>
+    <p class="muted">{{ total|counted:"record" }} for <strong>{{ q }}</strong></p>
     {% if total %}
     <nav class="search-scopes" aria-label="Result groups">
       {% for group in groups %}{% if group.count %}
@@ -115,24 +111,25 @@
         <div class="search-hit-main">
           <p class="search-hit-title">
             <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name }}</strong></a>
-            <span class="muted">· {{ item.email }}</span>
+            {% if item.status %}<span class="muted">· {{ item.status|capfirst }}</span>{% endif %}
           </p>
         </div>
         <span class="row-meta">{{ item.created_at }}</span>
       </li>
       {% endfor %}
     </ul>
+    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search email and messages in Contacts &rarr;</a></p>
   </section>
   {% endif %}
 
   {% if not total and not discovery_total %}
   <div class="empty">
-    <p>No records, resources, or commands match <strong>{{ q }}</strong>.</p>
-    <p class="muted">Try a domain, operation, identifier, or shorter term.</p>
+    <p>Nothing matches <strong>{{ q }}</strong>.</p>
+    <p class="muted">Try a shorter term, a domain, an operation, or an ID.</p>
   </div>
   {% endif %}
 {% else %}
-  <p class="command-hint muted"><kbd>⌘ K</kbd> opens this search from anywhere. Type a domain such as <strong>projects</strong>, or an operation such as <strong>sync</strong>.</p>
+  <p class="command-hint muted"><kbd>⌘ K</kbd> opens search from any page. Try <strong>projects</strong> or <strong>sync</strong>.</p>
 {% endif %}
 </div>
 {% endblock %}

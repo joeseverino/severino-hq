@@ -21,6 +21,11 @@ def stored(key: str) -> UpstreamReading | None:
     return UpstreamReading.objects.filter(key=key).first()
 
 
+def stored_many(keys) -> dict[str, UpstreamReading]:
+    """The stored readings for ``keys`` that exist, in one query."""
+    return {reading.key: reading for reading in UpstreamReading.objects.filter(key__in=list(keys))}
+
+
 def refresh(key: str, fetch: Callable[[], Any], *, older_than: timedelta) -> None:
     """Read again if the stored value is missing or older than ``older_than``.
 
@@ -33,10 +38,20 @@ def refresh(key: str, fetch: Callable[[], Any], *, older_than: timedelta) -> Non
     record(key, fetch())
 
 
-def record(key: str, value: Any) -> None:
+def record(key: str, value: Any, *, observed_at: datetime | None = None) -> None:
+    """Store a value. ``observed_at`` is when it was true, if not now."""
     UpstreamReading.objects.update_or_create(
-        key=key, defaults={"value": value, "observed_at": timezone.now()}
+        key=key, defaults={"value": value, "observed_at": observed_at or timezone.now()}
     )
+
+
+def machine_telemetry(machine_key: str) -> str:
+    """The reading key for one machine's CPU, memory and container figures.
+
+    A reading, not resource state: stored on the resource it made every refresh
+    a status change, and every status change an audit row.
+    """
+    return f"machine-telemetry:{machine_key}"
 
 
 def expire(key: str) -> None:

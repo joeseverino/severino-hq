@@ -10,6 +10,10 @@ defusedxml>=0.7,<0.8
 # imports them and a transitive pin can disappear when its parent changes.
 cryptography>=50.0.1,<51
 httpx>=0.28,<1
+# Imported by HQ itself, so declared rather than inherited from mcp or the
+# OIDC client.
+pydantic>=2.13,<3
+PyJWT>=2.13,<3
 # Lets a failing test in a parallel worker report its real traceback instead of
 # "cannot pickle 'traceback' object". Here rather than in a test-only file
 # because the composed image runs the suite in parallel as its own admission

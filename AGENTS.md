@@ -11,7 +11,7 @@ authoritative for human and agentic development in this public repository.
 4. Run `./scripts/ci-local.sh` before pushing.
 
 `check.sh` answers "do my changes work?". `ci-local.sh` answers "will the
-pipeline accept them?" — ruff at the pinned version, the shell gates, the
+pipeline accept them?": ruff at the pinned version, the shell gates, the
 Django deployment check, `pip-audit`, the image build, and the suite *inside*
 that image, which is where composition runs it. It prints what it could not
 run rather than implying full coverage. Point it at every interpreter that has
@@ -24,7 +24,7 @@ SEVERINO_HQ_PLUGINS=… ./scripts/ci-local.sh
 ```
 
 `check.sh` runs the suite three ways: with `DEBUG` on, with it off as production
-runs it, and — when an extension set is supplied — with every extension
+runs it, and (when an extension set is supplied) with every extension
 installed. That third pass is the one that catches what CI cannot, because the
 host and its extensions first meet during compose, long after the merge button.
 It needs an interpreter that has them importable, which this repository's own
@@ -41,15 +41,14 @@ SEVERINO_HQ_PLUGINS=… PYTHONPATH=… ./scripts/check.sh
 ```
 
 Without them the composed pass is skipped, so public CI and a fresh checkout are
-unaffected — but locally that means the gate quietly covers less, which is the
+unaffected, but locally that means the gate quietly covers less, which is the
 reason the file exists.
 
 Local development uses `./scripts/dev.sh`. It collects assets and runs the same
-ASGI/Uvicorn path as production with reload enabled. `hq dev` remains a local
-convenience when the Severino tools CLI is available.
+ASGI/Uvicorn path as production with reload enabled.
 
 `check.sh` runs the suite in parallel, which is why the gate takes ~46s rather
-than ~100s. `core/test_runner.py` is what makes that safe on WAL SQLite — read
+than ~100s. `core/test_runner.py` is what makes that safe on WAL SQLite: read
 it before changing anything about the test database. `CHECK_PARALLEL=1` rules
 parallelism out when a failure looks order- or isolation-dependent.
 
@@ -77,15 +76,15 @@ The detailed boundaries live in `docs/APPLICATION_ARCHITECTURE.md`,
 
 HQ is a host. The extensions it runs are separate packages with their own
 repositories, tests and release cycles, and they are installed at composition
-time rather than vendored here — the same separation any platform keeps from the
+time rather than vendored here: the same separation any platform keeps from the
 things built on it.
 
 So this repository names none of them: not their inventory, repository
 identifiers, routes, models, fixtures or vocabulary. That is an architectural
 constraint before it is anything else. A host that names an extension has taken
-a dependency on it, and the properties this design exists for — add an extension
+a dependency on it, and the properties this design exists for (add an extension
 without touching the host, run the host with none installed, develop the two on
-independent schedules — all quietly stop being true. Examples and tests use the
+independent schedules) all quietly stop being true. Examples and tests use the
 synthetic `example.*` namespace so the host can demonstrate a contract without
 acquiring a consumer.
 
@@ -146,56 +145,42 @@ domain until a genuine shared contract appears.
   the shared delivery model. Styles are the one exception: `style-src` allows
   `'unsafe-inline'` so a chart can position a mark with a per-datum custom
   property (`style="--at: 62%"`), which no class expresses and no nonce covers.
-  Use it for that and nothing else — a test pins `style-src` as the only
+  Use it for that and nothing else: a test pins `style-src` as the only
   relaxed directive, so a second one fails the suite rather than the review.
 
-## Structural checks the test suite cannot make
+## Structural checks
 
-Tests answer "does this behave?". They do not answer "is this still one system?"
-— duplication, tangling and complexity creep are green all the way down. Those
-are graph questions, so ask a graph. With the repository indexed in a code
-knowledge graph, four queries carry the bar:
+Function complexity is part of the gate. Ruff's C901 fails any function whose
+cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
+`application/test_architecture.py` fails any non-test function whose cognitive
+complexity exceeds 20. Its `COMPLEXITY_DEBT` lists the functions that predate
+the limit; an entry only ever shrinks or goes. Split a function into named
+steps rather than adding to that list.
 
-Write the query exactly as given, and mind two traps in this engine.
-
-`is_test` is **not** reliable — test classes carry `is_test: false`, so any
-filter on it silently counts the whole suite and reports a regression that is
-not one. And `NOT <prop> CONTAINS "..."` returns **no rows at all** rather than
-the complement, so a negated filter reads as a clean bar when it measured
-nothing. Both of those cost real time to discover. Filter positively, or return
-the rows and exclude test paths by eye.
+Tests answer "does this behave?". They do not answer "is this still one system?":
+duplication and tangling are green all the way down. Those are graph questions,
+so ask a graph. With the repository indexed in a code knowledge graph, ask:
 
 | Question | Query | Bar |
 | --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` — count the pairs whose files are not tests | does not grow (currently **4**) |
-| Did a function get away from me? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.cognitive >= 22 AND NOT f.file_path CONTAINS "test" RETURN f.qualified_name, f.cognitive` — note the caveat above; verify by eye | no new entries (currently 7, plus one migration) |
-| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | 4 in production, all confirmed bounded or pre-existing |
-| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | 3, all confirmed false positives |
-| Is one file becoming the system? | `git ls-files '*.py' \| grep -v test \| xargs wc -l \| sort -n \| tail -4` | the three largest do not grow (currently `controller_runtime/providers.py`, `control_plane/providers.py`, `application/connection.py`) |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new pair outside tests |
+| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
+| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
+| Is one file becoming the system? | `git ls-files '*.py' \| grep -v test \| xargs wc -l \| sort -n \| tail -4` | the largest files do not grow; split by provider before adding one |
 
-The last row is a shell question rather than a graph one, because the
-per-function bars above stay green while a module quietly absorbs a domain: each
-function is bounded, and the file is four thousand lines. Split by provider
-before adding one.
+Write the queries exactly as given, and mind two traps in this engine.
+`is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
+on it silently counts the whole suite. And `NOT <prop> CONTAINS "..."` returns
+**no rows at all** rather than the complement, so a negated filter reads as a
+clean bar when it measured nothing. Filter positively, or return the rows and
+exclude test paths by eye.
 
-The four standing `SIMILAR_TO` pairs are the asset/project serializers,
-`sections.projects`/`services`, `seed_demo._seed_content`/`_seed_docs`, and
-`exports.documentation_csv`/`projects_csv`.
-
-Two standing cycles resolve `.get()` on a dict to a class method named `get`;
-the third resolves JavaScript's array `.filter()` to the local helper named
-`filter`. Read the functions before believing a fourth. The four standing
-`linear_scan_in_loop` hits are `plugins._validate_composition`,
-`search._fallback_snippet`, `services._faults` and `app.hqShowResponseHeaders`.
-The last loops over a fixed policy-directive tuple and checks the one response
-header string, so its work does not grow with estate or response size.
-
-Re-index after a change and re-run them; a number that moved the wrong way is a
+Re-index after a change and re-run them; a result that moved the wrong way is a
 finding whether or not the suite is green.
 
 Confirm a cycle before believing it. Python's `.get()` on a dict resolves to any
 class method named `get`, so view classes turn up in cycles they have nothing to
-do with — read the function and check it really calls into the loop. The same
+do with: read the function and check it really calls into the loop. The same
 caution applies to `trace_path`: its first hop is exact, deeper hops resolve
 generic names (`get`, `handle`, `search`) optimistically. Use it for blast
 radius, verify before acting on a three-hop claim.
@@ -209,8 +194,8 @@ this repository's graph will report as safe. Grep the extension checkouts.
 
 - The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where
-  applicable—not only the happy path.
-- `./scripts/check.sh` passes — including the composed pass when a change
+  applicable, not only the happy path.
+- `./scripts/check.sh` passes, including the composed pass when a change
   touches `hq_sdk`, because the host and its extensions first meet there.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.

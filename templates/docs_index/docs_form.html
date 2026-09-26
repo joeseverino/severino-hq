@@ -1,7 +1,5 @@
-{% extends "base.html" %}
-{% block title %}{% if form.instance.pk %}Edit{% else %}New{% endif %} doc record{% endblock %}
-{% block content %}
-<h1>{% if form.instance.pk %}Edit doc record{% else %}New doc record{% endif %}</h1>
+{% extends "page.html" %}
+{% block page %}
 <form method="post" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}

@@ -22,11 +22,15 @@ from .glance import (
     _glance_reading,
     dashboard_panels,
     dashboard_refresh_plan,
+    panel_specs,
     record_dashboard_observations,
     request_dashboard_refresh,
     save_dashboard_settings,
     select_dashboard_machine,
 )
+from core.models import AuditLog
+
+from . import readings
 from .security import cli_principal
 
 
@@ -45,23 +49,24 @@ class DashboardGlanceTests(TestCase):
         ):
             with self.subTest(value=value):
                 metric = {"label": "Container CPU", "value": value, "detail": "Scope"}
-                reading = _glance_reading(metric)
+                reading = _glance_reading(metric, panel_specs()[0])
                 self.assertEqual(reading["percent"], expected)
-                self.assertEqual(reading["display_label"], "CPU")
+                self.assertEqual(reading["short_label"], "CPU")
+                self.assertEqual(reading["label"], "Container CPU")
                 self.assertEqual(reading["detail"], "Scope")
                 self.assertNotIn("percent", metric)
 
     def test_compact_summary_preserves_full_readings_in_native_details(self):
-        self.machine.status = {
-            "telemetry": {
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {
                 "metrics": [
                     {"label": "CPU", "value": "12%"},
                     {"label": "Memory", "value": "579 MB"},
                     {"label": "Storage", "value": "3 GB"},
                 ],
-            }
-        }
-        self.machine.save()
+            },
+        )
         html = render_to_string(
             "core/_dashboard_glance.html", {"dashboard_panels": dashboard_panels()}
         )
@@ -140,11 +145,16 @@ class DashboardGlanceTests(TestCase):
         self.machine.refresh_from_db()
         self.assertEqual(result["recorded"], ["infrastructure"])
         self.assertTrue(self.machine.status["kept"])
-        self.assertEqual(self.machine.status["telemetry"]["metrics"][0]["value"], "12%")
-        self.assertEqual(
-            self.machine.status["telemetry"]["controller_id"], "app-server"
+        self.assertNotIn("telemetry", self.machine.status)
+        telemetry = readings.stored(readings.machine_telemetry(self.machine.key))
+        self.assertEqual(telemetry.value["metrics"][0]["value"], "12%")
+        self.assertEqual(telemetry.value["controller_id"], "app-server")
+        # A reading is not a change to the machine, so it is not an audit event.
+        self.assertFalse(
+            AuditLog.objects.filter(
+                object_id=str(self.machine.pk), action=AuditLog.Action.UPDATED
+            ).exists()
         )
-        self.assertIsNotNone(self.machine.last_observed_at)
         self.assertIsNotNone(
             DashboardRefreshRequest.objects.get(
                 panel_id=self.machine_request_id
@@ -205,29 +215,28 @@ class DashboardGlanceTests(TestCase):
                 principal=cli_principal(),
                 controller_id="app-server",
             )
-            self.machine.refresh_from_db()
-            return self.machine
+            return readings.stored(readings.machine_telemetry(self.machine.key))
 
         good = report({"status": "good", "summary": "", "metrics": [{"label": "CPU", "value": "3%"}]})
-        seen_at = good.last_observed_at
+        seen_at = good.observed_at
 
         kept = report(self.FAILED)
 
-        self.assertEqual(kept.status["telemetry"]["metrics"][0]["value"], "3%")
-        self.assertEqual(kept.status["telemetry"]["refresh_failed"], "HTTPError")
-        self.assertEqual(kept.last_observed_at, seen_at)
+        self.assertEqual(kept.value["metrics"][0]["value"], "3%")
+        self.assertEqual(kept.value["refresh_failed"], "HTTPError")
+        self.assertEqual(kept.observed_at, seen_at)
 
     def test_dashboard_projects_machine_and_weather_owners(self):
         observed = timezone.now()
-        self.machine.status = {
-            "telemetry": {
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {
                 "status": "good",
                 "summary": "Host load 0.10",
                 "metrics": [{"label": "CPU", "value": "4%", "detail": ""}],
-            }
-        }
-        self.machine.last_observed_at = observed
-        self.machine.save(update_fields=("status", "last_observed_at", "updated_at"))
+            },
+            observed_at=observed,
+        )
         WeatherObservation.objects.create(
             point="41.0000,-87.0000",
             payload={
@@ -299,11 +308,11 @@ class DashboardGlanceTests(TestCase):
                 self.assertNotIn("Now</dt>", html)
 
     def test_refresh_preserves_old_readings_and_explains_pending_state(self):
-        self.machine.status = {
-            "telemetry": {"metrics": [{"label": "CPU", "value": "4%"}]}
-        }
-        self.machine.last_observed_at = timezone.now() - timedelta(days=5)
-        self.machine.save()
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            observed_at=timezone.now() - timedelta(days=5),
+        )
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
 
         panels = dashboard_panels()
@@ -312,10 +321,11 @@ class DashboardGlanceTests(TestCase):
         )
 
         # The reading stays up while it is replaced, marked as refreshing.
-        self.assertIn("Refreshing · ", html)
+        self.assertIn('title="Refreshing"', html)
         self.assertNotIn("Out of date", html)
         self.assertIn("4%", html)
-        self.assertTrue(panels[0]["stale"])
+        machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
+        self.assertTrue(machine["stale"])
 
     def test_never_observed_panels_are_not_reported_as_stale_readings(self):
         panels = dashboard_panels()
@@ -432,3 +442,175 @@ class DashboardGlanceTests(TestCase):
 
         self.assertEqual(result["requested"], [self.machine_request_id])
         ring.assert_called_once_with()
+
+
+class GlanceRenderingTests(TestCase):
+    """The template renders what the panel data says, whatever the panel is."""
+
+    def setUp(self):
+        self.machine = ManagedResource.objects.create(
+            key="app-server", kind="machine", spec={"name": "app"}
+        )
+        DashboardMachine.objects.create(machine=self.machine)
+        DashboardConfiguration.objects.create(
+            weather_point="0.0000,0.0000",
+            weather_label="Example weather",
+            infrastructure_label="Example lab",
+        )
+        WeatherObservation.objects.create(
+            point="0.0000,0.0000",
+            payload={
+                "status": "attention",
+                "metrics": [
+                    {"label": "Now", "value": "Clear"},
+                    {"label": "High", "value": "20 C"},
+                    {"label": "Alerts", "value": "2"},
+                ],
+            },
+            observed_at=timezone.now(),
+        )
+
+    def test_icon_labels_and_alert_come_from_the_panel_spec(self):
+        panels = {panel["id"]: panel for panel in dashboard_panels()}
+        weather = panels["weather"]
+        machine = panels[f"machine-{self.machine.pk}"]
+
+        self.assertEqual((weather["icon"], weather["head_labels"]), ("weather", False))
+        self.assertEqual((machine["icon"], machine["head_labels"]), ("server", True))
+        self.assertEqual(machine["label"], "Example lab")
+        self.assertEqual(
+            [(r["label"], r["short_label"], r["alert"]) for r in weather["readings"]],
+            [
+                ("Conditions", "Conditions", False),
+                ("High", "High", False),
+                ("Alerts", "Alerts", True),
+            ],
+        )
+
+        html = render_to_string(
+            "core/_dashboard_glance.html", {"dashboard_panels": [weather]}
+        )
+        self.assertIn('<span class="glance-alert">2 alerts</span>', html)
+        self.assertIn('<span class="visually-hidden">Conditions</span>', html)
+        self.assertEqual(html.count("Conditions</dt>"), 1)
+
+    def test_a_zero_alert_count_is_dropped_by_the_spec_alert_metric(self):
+        WeatherObservation.objects.filter(point="0.0000,0.0000").update(
+            payload={"metrics": [{"label": "Alerts", "value": "0"}]}
+        )
+        weather = next(p for p in dashboard_panels() if p["id"] == "weather")
+
+        self.assertEqual(weather["readings"], ())
+
+    def test_empty_text_comes_from_the_spec(self):
+        DashboardMachine.objects.all().delete()
+        spec = panel_specs()[0]
+
+        panel = next(p for p in dashboard_panels() if p["id"] == "infrastructure")
+
+        self.assertEqual((panel["label"], panel["empty"]), (spec.label, spec.empty))
+
+    def test_the_settings_placeholder_is_not_a_coordinate(self):
+        html = render_to_string(
+            "core/_dashboard_glance.html",
+            {"dashboard_panels": (), "dashboard_glance_settings": DashboardConfiguration()},
+        )
+        self.assertIn('placeholder="latitude, longitude"', html)
+
+    def test_machine_routes_read_the_catalogue_once_per_projection(self):
+        from .projection import projection_scope
+
+        with patch("application.machines.machine_catalog", return_value=()) as catalog:
+            with projection_scope():
+                dashboard_panels()
+                dashboard_panels()
+
+        self.assertEqual(catalog.call_count, 1)
+
+
+class GlanceEndpointTests(TestCase):
+    """Reading the glance writes nothing; a POST asks for a refresh."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.client.force_login(
+            get_user_model().objects.create_user("op", password="x" * 20)
+        )
+        self.machine = ManagedResource.objects.create(
+            key="app-server", kind="machine", spec={"name": "app"}
+        )
+        ProviderConnection.objects.create(
+            connection_ref="app-ssh",
+            controller_id="app-server",
+            provider="ssh",
+            endpoint="100.64.0.10",
+            reaches=["app"],
+            observed_at=timezone.now(),
+        )
+        DashboardMachine.objects.create(machine=self.machine)
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            observed_at=timezone.now() - timedelta(hours=1),
+        )
+
+    def test_a_get_on_a_stale_glance_requests_nothing(self):
+        from django.urls import reverse
+
+        with patch("application.glance.ring_doorbell") as doorbell:
+            response = self.client.get(reverse("dashboard_glance"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Out of date")
+        self.assertFalse(DashboardRefreshRequest.objects.exists())
+        doorbell.assert_not_called()
+
+    def test_the_dashboard_page_requests_nothing(self):
+        from django.urls import reverse
+
+        with patch("application.glance.ring_doorbell"):
+            self.client.get(reverse("dashboard"))
+
+        self.assertFalse(DashboardRefreshRequest.objects.exists())
+
+    def test_the_dashboard_reads_its_glance_inside_its_projection(self):
+        from django.urls import reverse
+
+        from . import machines
+
+        with patch.object(
+            machines, "machine_catalog", wraps=machines.machine_catalog
+        ) as catalog:
+            self.client.get(reverse("dashboard"))
+
+        self.assertEqual(catalog.call_count, 1)
+
+    def test_a_stale_post_requests_the_stale_panels_and_shows_them_refreshing(self):
+        from django.urls import reverse
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with patch("application.glance.ring_doorbell") as doorbell:
+                response = self.client.post(
+                    reverse("dashboard_glance"), {"scope": "stale"}
+                )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(
+            list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
+            [f"machine-{self.machine.pk}"],
+        )
+        self.assertContains(response, 'title="Refreshing"', status_code=202)
+        doorbell.assert_called_once()
+
+    def test_a_stale_post_with_nothing_stale_requests_nothing(self):
+        from django.urls import reverse
+
+        readings.record(
+            readings.machine_telemetry(self.machine.key),
+            {"metrics": [{"label": "CPU", "value": "4%"}]},
+        )
+        response = self.client.post(reverse("dashboard_glance"), {"scope": "stale"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(DashboardRefreshRequest.objects.exists())

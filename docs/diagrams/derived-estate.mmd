@@ -1,0 +1,26 @@
+flowchart TB
+    subgraph read["Read: nothing is typed in"]
+        direction LR
+        creds["Credentials<br/>held by the controller"]
+        controller["Controller<br/>one reader per kind"]
+        readings[("Readings<br/>schema is the allowlist")]
+        joins["Joins<br/>hostnames · addresses"]
+        relations[("Relation graph")]
+        creds --> controller --> readings --> joins --> relations
+    end
+
+    subgraph act["Act: every surface, one gate"]
+        direction LR
+        surfaces["Web · API · MCP<br/>CLI · SDK"]
+        gate{"Connection<br/>manages?"}
+        queue[("Queued for<br/>the controller")]
+        refuse["Observe only<br/>forget, never delete"]
+        surfaces --> gate
+        gate -->|"yes"| queue
+        gate -->|"no"| refuse
+    end
+
+    read --> act
+
+    classDef anchor stroke-width:2px;
+    class readings,relations,gate anchor;

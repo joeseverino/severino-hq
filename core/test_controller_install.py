@@ -80,7 +80,7 @@ case "$1" in
         touch "$TEST_ROOT/rendered" ;;
 esac
 ''')
-        for name in ("install-cosign", "provision-controller-ssh"):
+        for name in ("install-cosign",):
             self.stub(self.lib / f"scripts/{name}.sh", f'echo {name} >>"$TEST_ROOT/calls"')
         self.stub(self.lib / "scripts/run-private.sh", '''
 echo preflight >>"$TEST_ROOT/calls"
@@ -102,7 +102,6 @@ echo preflight >>"$TEST_ROOT/calls"
         render = calls.index("start severino-hq-secrets.service")
         self.assertLess(calls.index("verify"), calls.index("daemon-reload"))
         self.assertLess(calls.index("daemon-reload"), render)
-        self.assertLess(render, calls.index("provision-controller-ssh"))
         self.assertLess(render, calls.index("preflight"))
         self.assertEqual(self.unit.read_bytes(),
                          (self.lib / "deploy/systemd/severino-hq-secrets.service").read_bytes())

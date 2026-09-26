@@ -5,8 +5,8 @@ what a Portainer reports it reaches and in a certificate's install list. This is
 where those meet, so "what is on this machine" is one page rather than four read
 in sequence.
 
-A machine exists because something reported it -- a credential that reaches it,
-a container running on it, a service served from it -- or because HQ was told
+A machine exists because something reported it (a credential that reaches it,
+a container running on it, a service served from it) or because HQ was told
 about one directly. Observation first: registering a VPS somewhere is what puts
 it here, and a declaration is for the printer and the offline CA, which nothing
 will ever sweep and which are still part of the place.
@@ -17,13 +17,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from control_plane.models import ManagedResource, ProviderConnection
 
-from .locate import Machines, index_of, points_at_host
+from .hq_self import hq_hostnames, hq_machine, scoped_served_at
+from .locate import Machines, index_of, observed_answers, points_at_host
 from control_plane.providers import (
     MACHINE_KIND,
     PROVIDERS,
@@ -32,9 +32,7 @@ from control_plane.providers import (
 )
 
 from .services import CONTAINER_KIND, Running, container_watchers
-
-
-TAILNET_KIND = "tailscale.device"
+from .tailnet import TAILNET_KIND
 
 
 @dataclass(frozen=True)
@@ -51,9 +49,11 @@ class Presence:
     last_seen: str = ""
     key_expires: str = ""
     addresses: tuple[str, ...] = ()
+    # The LAN and public endpoints the device's client reports, "host:port".
+    endpoints: tuple[str, ...] = ()
     # What the tailnet calls it, which is rarely what HQ does. Worth showing on
     # the machine's own page: it is the name in the Tailscale console, in
-    # MagicDNS, and in an ACL -- so an operator moving between HQ and any of
+    # MagicDNS, and in an ACL, so an operator moving between HQ and any of
     # those needs the join stated rather than inferred.
     tailnet_name: str = ""
     dns_name: str = ""
@@ -83,7 +83,7 @@ class Presence:
     external: bool = False
     # The peering itself, as the machine HQ runs on reports it. This reading is
     # taken from HQ's own daemon, so every device in it is a peer of HQ by
-    # construction -- which HQ knew and never said. A key that has completed a
+    # construction, which HQ knew and never said. A key that has completed a
     # handshake, over a path that was negotiated, carrying counted bytes, is
     # the difference between a machine HQ has been told about and one it is
     # actually talking to.
@@ -103,6 +103,10 @@ class Presence:
     # without anybody having to go and ask it.
     openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
+    # Who took the reading: the controller, and the connection when the
+    # record names one.
+    controller_id: str = ""
+    connection_ref: str = ""
 
     @property
     def peered(self) -> bool:
@@ -110,7 +114,7 @@ class Presence:
 
         Not whether the tailnet lists it. This reading comes from the daemon on
         the machine HQ runs on, so a device appearing at all means HQ has it in
-        its network map -- but a key in a map is a machine HQ *could* talk to.
+        its network map, but a key in a map is a machine HQ *could* talk to.
         A handshake is one it has.
 
         Tailscale dates a peer it has never spoken to ``0001-01-01``, so the
@@ -140,7 +144,7 @@ class Presence:
 
         A direct path means the two daemons found a route through both NATs and
         traffic goes machine to machine. A relayed one means they could not, and
-        Tailscale's DERP servers are carrying the encrypted packets -- still
+        Tailscale's DERP servers are carrying the encrypted packets: still
         end-to-end encrypted, still slower, and worth knowing which.
         """
 
@@ -156,7 +160,7 @@ class Presence:
 
         The silent failure this reading exists for. `tailscale up
         --advertise-routes` succeeds, the machine reports the route forever,
-        and every other device simply never receives it -- so a subnet route or
+        and every other device simply never receives it, so a subnet route or
         an exit node can be declared, believed, and dead, with nothing in the
         estate disagreeing.
         """
@@ -165,6 +169,30 @@ class Presence:
             route
             for route in self.advertised_routes
             if route not in set(self.enabled_routes)
+        )
+
+    @property
+    def tailnet_address(self) -> str:
+        """The device's tailnet IPv4, the address everything on the tailnet uses."""
+
+        from .reach import network_of
+
+        return next(
+            (a for a in self.addresses if ":" not in a and network_of(a) == "tailnet"), ""
+        )
+
+    @property
+    def public_addresses(self) -> tuple[str, ...]:
+        """The endpoints' public addresses: not private, tailnet or documentation."""
+
+        from .locate import host_of
+        from .reach import is_public
+
+        return tuple(
+            dict.fromkeys(
+                host for host in (host_of(endpoint) for endpoint in self.endpoints)
+                if is_public(host)
+            )
         )
 
     @property
@@ -195,15 +223,19 @@ class Machine:
     declaration: str = ""
     # How HQ gets to it, as connection refs. More than one is normal: a machine
     # can be an SSH transport and a Portainer environment at once, and which is
-    # in play depends on what is being asked of it.
+    # in play depends on what is being asked of it. Includes the tailnet
+    # connection that read the machine's device.
     reached_by: tuple[str, ...] = ()
+    # The subset whose credential opens something on the machine: a shell or a
+    # Docker environment. What telemetry can be read through.
+    opened_by: tuple[str, ...] = ()
     # Other names this same machine is known by. Two credentials naming one
     # machine differently is normal, and keeping them apart splits its facts
     # across two rows.
     aliases: tuple[str, ...] = ()
     address: str = ""
     # Every address HQ knows reaches this machine. A machine on a tailnet has
-    # at least two, and which one is right depends on where the client is --
+    # at least two, and which one is right depends on where the client is,
     # so a page that prints one of them is answering a question it was not
     # asked.
     addresses: tuple[str, ...] = ()
@@ -243,35 +275,91 @@ class Machine:
 
     hostnames: tuple[str, ...] = ()
     resources: tuple[str, ...] = field(default_factory=tuple)
+    # Whether HQ itself runs here, and the names it answers at. Derived; see
+    # ``application.hq_self``. Never a declaration.
+    runs_hq: bool = False
+    hq_hostnames: tuple[str, ...] = ()
+    # What it does for the estate, derived; see ``application.machine_roles``.
+    roles: tuple[Any, ...] = ()
+
+    @property
+    def serves_count(self) -> int:
+        return len(self.hostnames) + (1 if self.runs_hq else 0) + len(self.roles)
+
+    @property
+    def public_addresses(self) -> tuple[str, ...]:
+        """Public addresses the machine's tailnet client reports."""
+
+        return self.presence.public_addresses if self.presence is not None else ()
     # What the tailnet says about it, where the tailnet knows it at all.
     presence: "Presence | None" = None
 
     @property
     def url(self) -> str:
-        return reverse("control_plane:machine", kwargs={"name": self.name})
+        return self.link.url
+
+    @property
+    def link(self):
+        from .entity_links import entity_link
+
+        return entity_link("machine", self.name)
+
+    @property
+    def containers_visible(self) -> bool:
+        """Whether any connected credential reads containers, so "none" is a reading."""
+
+        from .services import connected_kinds
+
+        return bool(self.containers) or CONTAINER_KIND in connected_kinds()
 
     @property
     def running(self) -> int:
         return sum(1 for container in self.containers if container.healthy)
 
     # Whether any credential that reaches this answered on the last sweep. A
-    # machine nothing can reach is not necessarily down -- the credential may be
-    # what broke -- so this says what HQ knows rather than what is true, and the
+    # machine nothing can reach is not necessarily down (the credential may be
+    # what broke) so this says what HQ knows rather than what is true, and the
     # page it feeds says which of the two it means.
     #
     # Passed in rather than looked up, because a board of these would otherwise
     # ask the same table once per row.
     reachable: bool = False
+    # The subset of ``reached_by`` whose connection did not answer its last probe.
+    unanswered: tuple[str, ...] = ()
+
+    @property
+    def state(self) -> tuple[str, str]:
+        """``(label, tone)`` for the one state pill a machine shows.
+
+        Presence decides when the tailnet reports the machine: a device that is
+        offline reads as offline whatever a credential says. Without presence, a
+        connection that answered means the machine is up; one that did not is
+        said as that, since the credential may be what broke. Which connection
+        sees it is the "Reached through" column's to say.
+        """
+
+        if self.presence is not None:
+            return ("online", "reachable") if self.presence.online else ("offline", "unreachable")
+        if self.reached_by:
+            return ("online", "reachable") if self.reachable else ("not answering", "unreachable")
+        return ("no credential", "unprobed")
 
 
-def machine_catalog() -> tuple[Machine, ...]:
-    """Every machine anything has reported, with what ties to it."""
+def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machine, ...]:
+    """Every machine anything has reported, with what ties to it.
 
-    connections = tuple(ProviderConnection.objects.all())
+    ``served_at`` is the address a request reached HQ on; left out, the
+    projection's (see ``hq_self.serving``), else none.
+    """
+
+    from .connections import connection_rows
+
+    connections = connection_rows()
     containers = _containers()
-    reached = _reached(connections)
+    opened = _reached(connections)
     declared = _declarations()
     present = tailnet_presence()
+    reached = _with_tailnet(opened, present, connections)
     # One index over everything this page has already read, and the same one
     # every other surface resolves an address through. Built here rather than
     # queried again because the readings above are exactly its evidence.
@@ -285,7 +373,7 @@ def machine_catalog() -> tuple[Machine, ...]:
         # somebody has to retype. They were read on the line above and thrown
         # away: the index held only what a declaration listed, so a tailnet
         # address resolved to a machine exactly when an operator had copied it
-        # into the form -- and removing it from there, a value plainly marked as
+        # into the form, and removing it from there, a value plainly marked as
         # observed, silently broke the resolution it looked redundant to.
         #
         # After the declarations, so a declared name still wins the address it
@@ -299,12 +387,7 @@ def machine_catalog() -> tuple[Machine, ...]:
     )
     services = _services_by_host(index)
     resources, device_keys = _resources_by_host()
-    # A declared machine counts on its own. It used to have to be reached or
-    # running something as well, because the declarations came from a document
-    # that named a printer and a phone as readily as a Docker host and nobody
-    # had asked for either. Declaring one is a deliberate act in HQ now, and a
-    # board that drops what it was just told about is answering a question
-    # nobody asked.
+    # A declared machine counts on its own; declaring one is a deliberate act.
     names = (
         set(containers)
         | set(reached)
@@ -318,13 +401,22 @@ def machine_catalog() -> tuple[Machine, ...]:
     }
     aliases = _same_machine(index, addresses, connections, present)
     canonical = sorted(names - set(aliases))
-    return tuple(
+    hq_names = hq_hostnames()
+    hq_on = hq_machine(
+        index,
+        hq_names,
+        observed_answers() if hq_names else {},
+        served_at=scoped_served_at() if served_at is None else served_at,
+        devices=present.values(),
+    )
+    hq_on = aliases.get(hq_on, hq_on)
+    return _with_roles(
         Machine(
             name=name,
             role=declared.get(name, Declared()).role,
             declaration=declared.get(name, Declared()).key,
             # Presence follows the name the tailnet used, which is often not
-            # the name HQ uses. A laptop is "Joseph's MacBook Pro" there and
+            # the name HQ uses. A laptop is "Sam's MacBook Pro" there and
             # "mac" here, and it is one machine either way.
             presence=present.get(name)
             or next(
@@ -349,27 +441,12 @@ def machine_catalog() -> tuple[Machine, ...]:
             ),
             telemetry=declared.get(name, Declared()).telemetry,
             telemetry_observed_at=declared.get(name, Declared()).telemetry_observed_at,
-            reachable=any(
-                ref in answered
-                for ref in set(reached.get(name, ()))
-                | {
-                    alias_ref
-                    for alias, target in aliases.items()
-                    if target == name
-                    for alias_ref in reached.get(alias, ())
-                }
+            reachable=any(ref in answered for ref in _refs(reached, name, aliases)),
+            unanswered=tuple(
+                ref for ref in _refs(reached, name, aliases) if ref not in answered
             ),
-            reached_by=tuple(
-                sorted(
-                    set(reached.get(name, ()))
-                    | {
-                        ref
-                        for alias in aliases
-                        if aliases[alias] == name
-                        for ref in reached.get(alias, ())
-                    }
-                )
-            ),
+            reached_by=_refs(reached, name, aliases),
+            opened_by=_refs(opened, name, aliases),
             aliases=tuple(
                 sorted(alias for alias, target in aliases.items() if target == name)
             ),
@@ -377,8 +454,8 @@ def machine_catalog() -> tuple[Machine, ...]:
                 addresses.get(name, "")
                 or _address(name, connections)
                 # Told, rather than found. A machine nothing sweeps still has
-                # an address -- it is how a proxy forwarding there was matched
-                # to it in the first place -- and printing nothing while the
+                # an address (it is how a proxy forwarding there was matched
+                # to it in the first place) and printing nothing while the
                 # declaration right below says otherwise is the page arguing
                 # with itself.
                 or next(iter(declared.get(name, Declared()).addresses), "")
@@ -427,9 +504,30 @@ def machine_catalog() -> tuple[Machine, ...]:
                 )
             ),
             resources=tuple(sorted(resources.get(name, ()))),
+            runs_hq=name == hq_on,
+            hq_hostnames=hq_names if name == hq_on else (),
         )
         for name in canonical
     )
+
+
+def _with_roles(machines) -> tuple[Machine, ...]:
+    from dataclasses import replace
+
+    from .machine_roles import role_context, roles_of
+
+    context = role_context()
+    return tuple(replace(item, roles=roles_of(item, context)) for item in machines)
+
+
+def declaration_seed(found: Machine) -> dict[str, Any]:
+    """What a machine declaration starts from: the name and addresses HQ knows.
+
+    Keyed by the machine spec's own fields, so it seeds the form through the
+    same query parameters every other create does.
+    """
+
+    return {"name": found.name, "addresses": list(found.addresses)}
 
 
 def _host_addresses(containers: dict[str, list[Running]]) -> dict[str, str]:
@@ -517,15 +615,13 @@ def _same_machine(
     that laptop years ago. Kept apart, one machine is several rows with a
     fraction of its facts each.
 
-    The address is what they all agree on, so it is the identity -- and the
+    The address is what they all agree on, so it is the identity, and the
     index is what turns an address into the one name kept for it, so the fold
     here and the machine a proxy is said to forward to are the same judgement.
-    This used to compare address strings it had split itself, which meant a
-    machine recorded once as ``10.0.0.5`` and once as ``10.0.0.5:22`` was two
-    machines, and one recorded at a bracketed IPv6 endpoint was two more.
+    ``10.0.0.5`` and ``10.0.0.5:22`` are one machine.
 
     The name kept is the index's: a declaration first, then the name containers
-    are reported under, then a credential's -- most deliberate first.
+    are reported under, then a credential's: most deliberate first.
 
     A machine whose address HQ has never recorded stays its own row. That is not
     a failure to detect a duplicate; it is HQ declining to assert two things are
@@ -537,12 +633,12 @@ def _same_machine(
     # A credential that opens a shell at an address something else already
     # claims is a second name for that machine, not a second machine. Compared
     # only against container sweeps before, which is why a declared machine and
-    # the SSH credential reaching it sat side by side as two rows -- the
+    # the SSH credential reaching it sat side by side as two rows: the
     # declaration holding the role and the address, the credential holding
     # everything served from it.
     aliases.update(_located_aliases(index, located))
     # What a controller calls the host it found is not always that host's name
-    # -- Portainer's own environment is called "local", and a controller
+    # Portainer's own environment is called "local", and a controller
     # filling that in has only its own hostname to offer. Run the sweep from
     # somewhere else and every container lands on a machine that is not
     # running them.
@@ -552,13 +648,13 @@ def _same_machine(
     # And the ones no shared address folds, because the address was only ever
     # in the declaration and has now been left out of it. A tailnet device is
     # often the same machine under a name somebody typed into that laptop years
-    # ago -- but its MagicDNS name is a slug, and a slug is what HQ names
-    # machines with. `Joseph's MacBook Pro` never matched `joes-macbook-pro`;
-    # `joes-macbook-pro.tail…ts.net` does.
+    # ago, but its MagicDNS name is a slug, and a slug is what HQ names
+    # machines with. `Sam's MacBook Pro` never matched `sams-laptop`;
+    # `sams-laptop.example.ts.net` does.
     #
     # Only where an address did not already answer, so a recorded address still
-    # decides. Where neither matches -- a device whose owner named it something
-    # unrelated to HQ's name for the machine -- it stays its own row, which is
+    # decides. Where neither matches (a device whose owner named it something
+    # unrelated to HQ's name for the machine) it stays its own row, which is
     # HQ declining to assert two things are one when nothing says so.
     aliases.update(_presence_name_aliases(index, presence, aliases))
     return aliases
@@ -575,13 +671,16 @@ def _folded(name: str) -> str:
     return "".join(char for char in str(name or "").lower() if char.isalnum())
 
 
-def machine(name: str) -> Machine | None:
-    """A machine by its name, or by another name it is known as -- a tailnet
+def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine | None:
+    """A machine by its name, or by another name it is known as: a tailnet
     device name that is the same machine as a declared one, or the key it was
     declared under, for instance."""
 
+    from .connections import machines_once
+
     wanted = name.strip().lower()
-    catalog = machine_catalog()
+    # Inside a projection, the catalogue every section and the relation graph share.
+    catalog = machines_once() if served_at is None else machine_catalog(served_at=served_at)
     return next(
         (item for item in catalog if item.name.lower() == wanted),
         next(
@@ -597,9 +696,11 @@ def machine(name: str) -> Machine | None:
 
 
 def _containers() -> dict[str, list[Running]]:
+    from .facts import snapshots_of
+
     watchers = container_watchers()
     found: dict[str, list[Running]] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+    for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records:
             host = str(record.get("host", ""))
             if host:
@@ -626,6 +727,7 @@ def tailnet_presence() -> dict[str, Presence]:
                 last_seen=str(record.get("last_seen", "")),
                 key_expires=str(record.get("key_expires", "")),
                 addresses=tuple(str(a) for a in record.get("addresses") or ()),
+                endpoints=tuple(str(e) for e in record.get("endpoints") or ()),
                 tailnet_name=name,
                 dns_name=str(record.get("dns_name", "")),
                 os=str(record.get("os", "")),
@@ -659,6 +761,8 @@ def tailnet_presence() -> dict[str, Presence]:
                     if str(entry.get("port", "")).isdigit()
                 ),
                 observed_at=snapshot.observed_at,
+                controller_id=str(snapshot.controller_id or ""),
+                connection_ref=str(record.get("connection_ref", "") or ""),
             )
     return found
 
@@ -668,7 +772,7 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
 
     Two shapes, because there are two ways a credential names a machine. A
     Portainer reports the environments it holds, and each is a machine. An SSH
-    transport *is* a machine -- the connection's own name is what HQ calls the
+    transport *is* a machine: the connection's own name is what HQ calls the
     thing at the other end of it.
     """
 
@@ -680,7 +784,7 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
         # A connection that opens a shell somewhere *is* that somewhere.
         # Recognised by pointing at a host and a port rather than at a URL,
         # which is what an ssh_transport projection produces and nothing else
-        # does -- so a machine HQ can log into is a machine whether or not
+        # does, so a machine HQ can log into is a machine whether or not
         # anything else ever mentions it.
         if points_at_host(connection.endpoint):
             found.setdefault(connection.connection_ref, set()).add(
@@ -689,11 +793,59 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
     return found
 
 
+def _with_tailnet(
+    opened: dict[str, set[str]],
+    present: dict[str, Presence],
+    connections: tuple[ProviderConnection, ...],
+) -> dict[str, set[str]]:
+    """``opened``, plus each tailnet device reached through the connection that read it.
+
+    A tailnet credential's probe names no machines, but every device in its
+    reading is on the tailnet it opens. The record's ``connection_ref`` names
+    the connection when present; otherwise the tailnet connections of the
+    controller that took the reading.
+    """
+
+    providers = set(PROVIDERS[TAILNET_KIND].connection_providers)
+    by_controller: dict[str, set[str]] = {}
+    for connection in connections:
+        if connection.provider in providers:
+            by_controller.setdefault(connection.controller_id, set()).add(
+                connection.connection_ref
+            )
+    found = {name: set(refs) for name, refs in opened.items()}
+    for name, presence in present.items():
+        refs = (
+            {presence.connection_ref}
+            if presence.connection_ref
+            else by_controller.get(presence.controller_id, set())
+        )
+        if refs:
+            found.setdefault(name, set()).update(refs)
+    return found
+
+
+def _refs(reached: dict[str, set[str]], name: str, aliases: dict[str, str]) -> tuple[str, ...]:
+    """The connections reaching a machine under its own name or any alias."""
+
+    return tuple(
+        sorted(
+            set(reached.get(name, ()))
+            | {
+                ref
+                for alias, target in aliases.items()
+                if target == name
+                for ref in reached.get(alias, ())
+            }
+        )
+    )
+
+
 def _reaches_machines(provider: str) -> bool:
     """Whether what this kind of connection reaches are machines.
 
-    ``reaches`` is deliberately polymorphic -- a Portainer reports the machines
-    it holds and a DNS token reports the zones it may edit -- and read the same
+    ``reaches`` is deliberately polymorphic (a Portainer reports the machines
+    it holds and a DNS token reports the zones it may edit) and read the same
     way, four domains appeared on this page as though they were servers.
 
     Told apart by what the providers behind each connection actually declare: a
@@ -703,8 +855,8 @@ def _reaches_machines(provider: str) -> bool:
     if not provider:
         return False
     return any(
-        provider in spec.connection_providers and "host" in spec.spec_type.model_fields
-        for spec in PROVIDERS.values()
+        provider in spec.connection_providers and declares_host(kind)
+        for kind, spec in PROVIDERS.items()
     )
 
 
@@ -733,19 +885,27 @@ class Declared:
 def _declarations() -> dict[str, Declared]:
     """Everything HQ was told, by machine name."""
 
-    return {
-        str(spec["name"]): Declared(
+    from . import readings
+
+    from .infrastructure import enabled_resources
+
+    declared = [
+        (resource.key, resource.spec)
+        for resource in enabled_resources()
+        if resource.kind == MACHINE_KIND and resource.spec.get("name")
+    ]
+    telemetry = readings.stored_many(readings.machine_telemetry(key) for key, _ in declared)
+    result = {}
+    for key, spec in declared:
+        reading = telemetry.get(readings.machine_telemetry(key))
+        result[str(spec["name"])] = Declared(
             role=str(spec.get("role", "")),
             key=key,
             addresses=tuple(spec.get("addresses") or ()),
-            telemetry=dict((status or {}).get("telemetry") or {}),
-            telemetry_observed_at=last_observed_at,
+            telemetry=dict(reading.value) if reading else {},
+            telemetry_observed_at=reading.observed_at if reading else None,
         )
-        for key, spec, status, last_observed_at in ManagedResource.objects.filter(
-            kind=MACHINE_KIND, enabled=True
-        ).values_list("key", "spec", "status", "last_observed_at")
-        if spec.get("name")
-    }
+    return result
 
 
 def _services_by_host(index: Machines) -> dict[str, set[str]]:
@@ -763,13 +923,15 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     on the board and under the declared machine's on the service page.
     """
 
+    from .infrastructure import enabled_resources
+
     # Ranked exactly as the service catalogue ranks them, through the one rule
     # both read. A name whose ingress declares an origin is served where the
     # ingress forwards; the record pointing at that ingress is not a second
     # answer to file it under a second machine.
     routed: dict[str, str] = {}
     resolved: dict[str, str] = {}
-    for resource in ManagedResource.objects.filter(enabled=True):
+    for resource in enabled_resources():
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
             continue
@@ -812,13 +974,15 @@ def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
 
     The device keys ride along because the loop already reads every enabled
     resource, and a verb offered on a machine page needs the key of the
-    declaration it acts on -- which is not the tailnet's name for the device
+    declaration it acts on, which is not the tailnet's name for the device
     and must not be guessed from it.
     """
 
+    from .infrastructure import enabled_resources
+
     found: dict[str, set[str]] = {}
     devices: dict[str, str] = {}
-    for resource in ManagedResource.objects.filter(enabled=True):
+    for resource in enabled_resources():
         if resource.kind == TAILNET_KIND:
             declared_name = str(resource.spec.get("name", "")).strip()
             if declared_name:
@@ -836,8 +1000,8 @@ def container_context(host: str, name: str) -> dict[str, object]:
 
     The services are the inverse of the runtime claim: a service page resolves
     its origin to a machine and a container, so the containers that answer for a
-    name are exactly the ones some service resolved to. Asked the other way --
-    by matching published ports -- a container on the host network answers for
+    name are exactly the ones some service resolved to. Asked the other way
+    (by matching published ports) a container on the host network answers for
     nothing, because Docker reports no ports for one.
     """
 
@@ -884,7 +1048,7 @@ def observed_addresses() -> dict[str, str]:
 
     Read from the two sweeps that report where a machine answers: the tailnet
     names every address it hands out, and a container sweep names the host it
-    found containers on. Neither is a machine declaration, which is the point --
+    found containers on. Neither is a machine declaration, which is the point,
     these are the addresses nobody needs to type.
     """
 

@@ -4,7 +4,7 @@ Every action is declared once, in ``ACTIONS``: its name, the flags it takes,
 and the function that runs it. The subparsers and the dispatch are both derived
 from that.
 
-Stated twice -- a subparser here, a branch in an if/elif ladder there -- the two
+Stated twice (a subparser here, a branch in an if/elif ladder there) the two
 could disagree, and one disagreement was dangerous rather than merely untidy:
 the ladder ended in a bare ``else`` that ran ``report``, so an action added to
 the parser and forgotten in the ladder would not fail. It would quietly report

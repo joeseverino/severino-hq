@@ -1,73 +1,48 @@
-{% extends "base.html" %}
-{% block title %}Submission {{ submission.id }} · {{ submission.name }}{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Submission #{{ submission.id }}</h1>
-    <p class="muted">{{ submission.name }} · {{ submission.created_at }} · <span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread" }}</span></p>
-  </div>
-  <div class="page-actions">
-    <a class="btn" href="mailto:{{ submission.email }}">Reply via email</a>
-    <a class="btn" href="{% url 'contacts:list' %}">Back to submissions</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <div class="quick-actions">
-  {% if submission.status != "read" %}
-    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
-      {% csrf_token %}<input type="hidden" name="status" value="read">
-      <button type="submit" class="btn">Mark read</button>
-    </form>
-  {% endif %}
-  {% if submission.status != "replied" %}
-    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
-      {% csrf_token %}<input type="hidden" name="status" value="replied">
-      <button type="submit" class="btn">Mark replied</button>
-    </form>
-  {% endif %}
-  {% if submission.status != "archived" %}
-    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
-      {% csrf_token %}<input type="hidden" name="status" value="archived">
-      <button type="submit" class="btn">Archive</button>
-    </form>
-  {% endif %}
-  {% if submission.status != "spam" %}
-    <form method="post" action="{% url 'contacts:set_status' submission.id %}">
-      {% csrf_token %}<input type="hidden" name="status" value="spam">
-      <button type="submit" class="btn">Spam</button>
-    </form>
-  {% endif %}
+  {% url 'contacts:set_status' submission.id as status_url %}
+  {% if submission.status != "read" %}{% post_button "Mark read" status_url name="status" value="read" %}{% endif %}
+  {% if submission.status != "replied" %}{% post_button "Mark replied" status_url name="status" value="replied" %}{% endif %}
+  {% if submission.status != "archived" %}{% post_button "Archive" status_url name="status" value="archived" %}{% endif %}
+  {% if submission.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" %}{% endif %}
   <a class="btn danger" href="{% url 'contacts:delete' submission.id %}">Delete</a>
 </div>
 
-<h2>Message</h2>
-<dl class="kv">
-  <dt>Name</dt><dd>{{ submission.name }}</dd>
-  <dt>Email</dt><dd><a href="mailto:{{ submission.email }}">{{ submission.email }}</a></dd>
-</dl>
-<p>{{ submission.message|linebreaksbr }}</p>
+<section class="card">
+  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread" }}</span></div>
+  <dl class="kv">
+    <dt>Name</dt><dd>{{ submission.name }}</dd>
+    <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email }}</a></dd>
+  </dl>
+  <p>{{ submission.message|linebreaksbr }}</p>
+</section>
 
-<h2>Submission info</h2>
-<dl class="kv">
-  <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
-  <dt>Turnstile</dt><dd>{{ submission.turnstile|default:"—" }}</dd>
-  <dt>Submitted</dt><dd>{{ submission.created_at }}</dd>
-  <dt>Updated</dt><dd>{{ submission.updated_at }}</dd>
-  <dt>IP address</dt><dd>{{ submission.ip_address|default:"—" }}</dd>
-  <dt>Browser</dt><dd>{{ submission.browser|default:"—" }}</dd>
-  <dt>Device</dt><dd>{{ submission.device|default:"—" }}</dd>
-  <dt>Country</dt><dd>{{ submission.country|default:"—" }}</dd>
-  {% if submission.source_url %}<dt>Source URL</dt><dd><a href="{{ submission.source_url }}">{{ submission.source_url }}</a></dd>{% endif %}
-  <dt>User agent</dt><dd class="muted">{{ submission.user_agent|default:"—" }}</dd>
-</dl>
+<section class="card">
+  <div class="section-head"><h2>Submission info</h2></div>
+  <dl class="kv">
+    <dt>Entry ID</dt><dd>#{{ submission.id }}</dd>
+    <dt>Turnstile</dt><dd>{{ submission.turnstile|or_empty }}</dd>
+    <dt>Submitted</dt><dd>{{ submission.created_at }}</dd>
+    <dt>Updated</dt><dd>{{ submission.updated_at }}</dd>
+    <dt>IP address</dt><dd>{{ submission.ip_address|or_empty }}</dd>
+    <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
+    <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
+    <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
+    {% if submission.source_url %}<dt>Source URL</dt><dd><a href="{{ submission.source_url }}">{{ submission.source_url }}</a></dd>{% endif %}
+    <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
+  </dl>
+</section>
 
-<h2>Review</h2>
-<form method="post" class="form">
-  {% csrf_token %}
-  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
-  <div class="form-actions">
-    <button type="submit" class="primary">Save review</button>
-  </div>
-</form>
+<section class="card">
+  <div class="section-head"><h2>Review</h2></div>
+  <form method="post" class="form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+    {% for field in form %}{% include "partials/_form_field.html" %}{% endfor %}
+    <div class="form-actions">
+      <button type="submit" class="primary">Save review</button>
+    </div>
+  </form>
+</section>
 {% endblock %}

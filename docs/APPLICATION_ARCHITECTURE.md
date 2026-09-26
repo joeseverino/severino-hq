@@ -65,18 +65,21 @@ future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
 The page-head glance is also a projection, never an owner. Whole-host CPU,
-memory, and storage observations are stored under the selected machine
-resource's observed `status.telemetry`, so its machine page, resource API, and
+memory, and storage observations are stored as the machine's telemetry reading
+(`machine-telemetry:<key>`, `application/readings.py`), so its machine page, resource API, and
 dashboard summarize the same timestamped fact. The operator selects that owner
 with “Show on dashboard” on the machine edit form; the relationship lives in
 `DashboardConfiguration`, not in deployment environment or desired machine
 state. NWS data is separately owned by the dashboard-configured point's
 `WeatherObservation`; its coordinates and labels are edited in the dashboard
-Settings popover. Both are cold until an operator
-requests a refresh: HQ records a credential-free `DashboardRefreshRequest`,
-rings the existing controller doorbell, and the responsible controller derives
-its target and connection from the machine graph. The browser follows that one
-request for a bounded interval; it never installs a page-lifetime polling loop.
+Settings popover. Reading the glance (`GET /dashboard/glance/`) only reads
+them. A refresh is a CSRF-protected POST to the same address: the refresh
+button asks for every panel, and the dashboard, when it opens on a reading
+older than five minutes, asks for the stale panels only (`scope=stale`). Either
+way HQ records a credential-free `DashboardRefreshRequest`, rings the existing
+controller doorbell, and the responsible controller derives its target and
+connection from the machine graph. The browser follows that one request for a
+bounded interval; it never installs a page-lifetime polling loop.
 An SSH-capable connection yields whole-host readings. A Portainer fallback is
 explicitly labeled as container and Docker scope rather than being presented as
 machine utilization.
@@ -137,7 +140,10 @@ Large projections run inside `application.projection.projection_scope()`. A
 reading may be reused while one answer is assembled and is discarded when that
 scope exits, eliminating repeated joins/counts without serving process-cached
 state to a later request. The dashboard's contact rows, unread total, and
-upstream health likewise arrive from one D1 request.
+upstream health likewise arrive from one D1 request, which
+`manage.py refresh_contacts_inbox` makes hourly
+(`severino-hq-contacts-inbox.timer`) and a D1 write repeats after it changes a
+submission. Pages, the header count and search read the stored result.
 
 The dashboard projection has an executable query budget. Growth that adds an
 unbounded query or N+1 relationship fetch fails CI before it becomes an
@@ -154,7 +160,7 @@ domain identifiers; adapters do not know how text is indexed.
 
 Every entry point requires a `Principal`. Ordinary scopes need the baseline
 `READ` capability; the `audit` scope needs `READ_AUDIT_LOG`, which
-least-privilege adapter principals (MCP) do not hold — free-text search over
+least-privilege adapter principals (MCP) do not hold: free-text search over
 the security log is an operator-only capability. A new adapter therefore
 cannot expose search without deciding whose authority it acts under.
 
@@ -165,8 +171,9 @@ content and applies markup independently. Presentation metadata (group label,
 title field, badge, timestamp) lives on the `SearchDefinition` carried by its
 `ResourceSpec`, so every surface labels a hit the same way. Scopes a principal
 cannot search are omitted from the result, not rendered empty. Contact submissions live
-in Cloudflare D1, not the local database, so the web view merges them as an
-eighth group beside the registry scopes.
+in Cloudflare D1, not the local database; the web view merges the stored inbox
+rows (matched by submitter name) as an eighth group beside the registry scopes.
+Email and message text are searched on the contacts page, which reads D1.
 
 `search_index.SearchDocument` is a derived relational projection. On SQLite,
 an FTS5 external-content table indexes that projection with Unicode tokenization
@@ -334,7 +341,7 @@ everything would make the system less honest, not more unified.
 | Authored documentation | Obsidian vault | Validated metadata, relationships, and vault pointers |
 | Projects, assets, expenses, workflow state | HQ database | Authoritative operational records |
 | Credentials and tokens | 1Password | Nothing secret, with one declared exception below |
-| Which connections exist, what they permit, and what each reaches | Owning provider or 1Password/controller | A typed, timestamped `ConnectionInstance` — never the credential, never a second list |
+| Which connections exist, what they permit, and what each reaches | Owning provider or 1Password/controller | A typed, timestamped `ConnectionInstance`: never the credential, never a second list |
 | Mutation behavior | `application/` | The one executable business contract |
 | Interface presentation | Web / MCP / `hq` wrapper | No business state |
 | Which machines exist, and what reaches them | Sweeps, plus a declaration for what nothing sweeps | Derived first; declared only where nothing can observe |
@@ -358,7 +365,7 @@ It exposes the same application capabilities used in-process by HQ itself.
 ### Projects
 
 `application.projects.save_project()` is the sole project create/update path.
-The web create and edit views, MCP `create_project` / `update_project` tools,
+The web create and edit views, MCP `execute_capability` tool,
 and `create_project` management command all call it and receive the same
 canonical representation.
 
@@ -375,9 +382,8 @@ Project writes provide:
 
 `application.sync.execute_hq_sync()` is the external synchronization boundary.
 The local Vault MCP emits the manifest; `hq sync` sends it in one `hq.sync` MCP
-capability call, applied inside one database transaction. It used to carry an
-authored infrastructure topology alongside the manifest; HQ derives that now, so
-the vault describes documentation and nothing else.
+capability call, applied inside one database transaction. The vault describes
+documentation and nothing else; HQ derives the infrastructure topology.
 
 The sync is:
 
@@ -391,7 +397,7 @@ The sync is:
 ### Assets
 
 `application.assets.save_asset()` extends the same contract to equipment and
-financial metadata. Web create/edit, MCP `create_asset` / `update_asset`, and
+financial metadata. Web create/edit, MCP `execute_capability`, and
 the `create_asset` management command share one transaction and result shape.
 The service resolves project relationships before writing, rolls back on any
 missing slug, normalizes deductible values through the model contract, and
@@ -454,7 +460,7 @@ The service boundary complements the existing network boundary:
 3. Tools expose task-shaped capabilities, never generic SQL or arbitrary model
    mutation.
 4. A typed `Principal` carries explicit capabilities into the application
-   service; the service—not the adapter—authorizes the operation.
+   service; the service (not the adapter) authorizes the operation.
 5. MCP starts read-only. `SEVERINO_MCP_ENABLE_WRITES` enables ordinary mutation
    capabilities. Destructive documentation pruning additionally requires
    `SEVERINO_MCP_ENABLE_PRUNE`; record deletion additionally requires
@@ -477,8 +483,8 @@ rollback trusts readiness rather than an authenticated page redirect.
 
 Routine CLI domain operations use the authenticated MCP endpoint: synchronization,
 registry validation, project/asset upsert, and report export. SSH is reserved
-for host administration—deployment, logs, restart, shell, superuser, and secret
-refresh. In-process management commands remain break-glass recovery paths, but
+for host administration (deployment, logs, restart, shell, superuser, and secret
+refresh). In-process management commands remain break-glass recovery paths, but
 the normal CLI cannot silently become a second transport or rules engine.
 
 ## Adding the next capability
@@ -496,22 +502,16 @@ Business logic in a view, MCP registration function, or management command is
 an architecture regression and should fail review.
 ## Infrastructure control plane
 
-**HQ owns the topology.** An authored document used to describe the world —
-which machines exist, what runs on them, which certificate installs where — and
-HQ read it. That made the answer to "what does this cover" live somewhere HQ
-could read and not edit, so adding a name to a certificate was a file change, a
-sync and a hope rather than saving a form.
-
-Now every part of it is HQ's. A machine is derived from what a credential
+**HQ owns the topology.** Every part of it is HQ's. A machine is derived from what a credential
 reaches and what a sweep found, and declared only where nothing can observe one
-— the printer, the offline CA. A certificate states its own names and the
+(the printer, the offline CA). A certificate states its own names and the
 targets it installs on. How a target takes a certificate is stated once on the
 target, because that is a property of the place rather than of any certificate
 sent to it.
 
 Desired state therefore spans two resources: what a certificate says, and what
 its targets say. Saving a target recomputes the desired state of everything
-installed there and advances the generation of whatever resolved differently —
+installed there and advances the generation of whatever resolved differently,
 otherwise a certificate reports itself in sync against a world that moved
 underneath it.
 
@@ -524,32 +524,29 @@ provider credentials. Every interface invokes the same application capabilities.
 A provider definition also declares how it participates in the surfaces above
 it: which facet of a service it supplies, how to read hostnames out of a
 resolved spec, how to describe itself in one line, and how to rebuild a spec
-from a record the provider already holds. Everything derived from that — the
-service view, the generated create-and-edit forms, adoption — is written once
+from a record the provider already holds. Everything derived from that (the
+service view, the generated create-and-edit forms, adoption) is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
 
 **One address-to-machine resolver, in `application/locate.py`.** Every surface
-that draws a line between two things HQ knows — a proxy and the box it forwards
-to, a credential and the machine it opens, a service and where it runs — is
-asking the same question, and four modules used to answer it independently. The
-four disagreed: one handled loopback, one consulted credentials, one read only
-declarations, one intersected sets of strings, so the same address named a
-machine on one page and nothing on the next. Surfaces now differ only in what
-evidence they hand the resolver, never in how it reads one.
+that draws a line between two things HQ knows (a proxy and the box it forwards
+to, a credential and the machine it opens, a service and where it runs) is
+asking the same question. Surfaces differ only in what evidence they hand the
+resolver, never in how it reads one.
 
 Two invariants keep that from re-splitting. **Names and addresses are separate
 namespaces**, because a machine may legitimately be named like an address while
 another answers at it, and one dictionary silently keeps whichever was written
-last. And **endpoints are parsed in one place** — `core.network.split_host_port`
-— because splitting at the last colon is right for `host:port` and wrong for
+last. And **endpoints are parsed in one place**: `core.network.split_host_port`
+because splitting at the last colon is right for `host:port` and wrong for
 every IPv6 form. A rendered label is never a join key; the resolver joins on
 declared addresses, sweep readings and connection endpoints, all of which are
 facts rather than presentation.
 
 **Identity is declared separately from hostnames**, and the distinction is not
-academic. While every provider held exactly one record per name — an AdGuard
-rewrite, an NPM proxy host — "the same hostname" and "the same record" were the
+academic. While every provider held exactly one record per name (an AdGuard
+rewrite, an NPM proxy host) "the same hostname" and "the same record" were the
 same statement, and identity was simply the hostname. A DNS zone breaks that: an
 apex routinely carries several TXT records, several CAA records and two MX
 records, all on one name. Identified by hostname they collapse into one, and
@@ -558,7 +555,7 @@ carry policy rather than address also declare no hostname at all, so they would
 report as having no identity and stay permanently invisible to the screen built
 to find unmanaged records. A provider that holds more than one record per name
 therefore says what makes each of them itself, and what it *serves* is answered
-separately — for many record types, nothing.
+separately: for many record types, nothing.
 
 Which surface offers creating a resource is likewise declared, not hardcoded: a
 kind that is only meaningful inside something else names that surface, so the
@@ -582,7 +579,7 @@ answer: a DMARC policy, a CAA restriction and an MX record are not services and
 never appear on that board, yet getting them wrong is how mail stops arriving
 and how anyone in the world becomes able to obtain a certificate for the domain.
 Both are derived from the same declarations plus the last provider sweep, so
-they cannot disagree — being the thing that cannot disagree is the whole point,
+they cannot disagree: being the thing that cannot disagree is the whole point,
 and it is why there is no Service model and no Zone model.
 
 What a domain page reports about a zone is stated descriptively rather than as
@@ -591,13 +588,13 @@ else, so it cannot change a zone's TLS posture and does not get to have an
 opinion about it. "DMARC: p=none" is true and useful; flagging it as drift would
 invent a policy nobody declared and that nothing could enforce. The one
 exception is a record that is wrong by its own definition rather than by a
-policy — a left-over ACME challenge outlived the issuance it existed for, and is
+policy: a left-over ACME challenge outlived the issuance it existed for, and is
 garbage whoever you ask.
 
 Certificates arrive two ways. HQ issues one from Let's Encrypt over DNS-01 and
 keeps it renewed and deployed. Or an operator generates one against the offline
-CA — which HQ cannot do, and does not pretend to, because the root key never
-leaves that machine — and hands HQ the result to install and hold.
+CA (which HQ cannot do, and does not pretend to, because the root key never
+leaves that machine) and hands HQ the result to install and hold.
 
 Controllers claim operations with an expiring lease and receive a minimal,
 versioned, desired-only JSON contract. A controller resolves runtime connection
@@ -650,6 +647,6 @@ preventing no change to anything at all.
 HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
 D1-backed contact form. It is never projected into the controller or reused for
 DNS automation. DNS-01 uses the separate least-privilege
-`cloudflare-dns-jseverino` connection.
+`cloudflare-dns-example` connection.
 
 ![Infrastructure control plane](diagrams/infrastructure-control-plane.png)

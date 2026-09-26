@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly public registry read for Severino HQ
+
+[Timer]
+OnBootSec=10min
+OnCalendar=hourly
+RandomizedDelaySec=10min
+Persistent=yes
+Unit=severino-hq-public-registry.service
+
+[Install]
+WantedBy=timers.target

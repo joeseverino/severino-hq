@@ -1,19 +1,12 @@
-"""One registry of every domain HQ composes -- host sections and extensions alike.
+"""One registry of every domain HQ composes: host sections and extensions alike.
 
-HQ's own sections were previously declared three times over: a nav tuple in
-``core.context_processors``, a hand-built work-queue list in
-``application.dashboard``, and a code-to-URL dict in ``core.views`` that existed
-only to rejoin the other two. Adding a section meant editing all three, and a
-section that appeared in one but not the others was a silent hole rather than a
-failure. Meanwhile an *extension* declared the same facts once, in its manifest,
-and got every surface for free.
-
-This module is the single declaration. A domain states what it is once; nav,
+This module is the single declaration, for HQ's own sections as an extension's
+manifest is for an extension. A domain states what it is once; nav,
 and in turn every surface that composes domains, is derived from that. Nothing
 downstream keeps its own list of what exists.
 
 One thing is deliberately not unified. A ``PluginManifest`` also carries
-*distribution* facts -- wheel, admission policy, source workflow, URL mount --
+*distribution* facts: wheel, admission policy, source workflow, URL mount,
 because it crosses a trust boundary. A host section crosses none and is never
 admitted. Runtime behavior is unified: host sections and extensions both carry
 one typed, lazy ``PluginIntegration``. The registry normalises both into one
@@ -43,7 +36,7 @@ from .projection import read_once
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
 # domains, so an installed extension leads the bar ahead of the host's own
-# sections -- the surfaces an operator opens daily are the ones a private
+# sections: the surfaces an operator opens daily are the ones a private
 # extension provides, and the host's registries sit behind them. The host does
 # not know which extensions exist, only that they sort first.
 HOST_ORDER_FLOOR = 100
@@ -72,7 +65,7 @@ class DomainDescriptor:
 class Domain:
     """A descriptor or a manifest, seen through one lens.
 
-    ``origin`` exists for diagnostics and tests -- not for behaviour. A surface
+    ``origin`` exists for diagnostics and tests, not for behaviour. A surface
     that renders domains differently depending on who supplied them would
     reintroduce exactly the host/extension asymmetry this registry removes.
     """
@@ -109,7 +102,7 @@ def _provider(reference: str) -> Callable[[], Any]:
 
 # ----- Host sections ---------------------------------------------------------
 #
-# Grouped by what the operator is doing, not by who owns the data -- everything
+# Grouped by what the operator is doing, not by who owns the data: everything
 # in HQ is the operator's, so ownership cannot discriminate. Build is what gets
 # made; Web is the public site and what it publishes; Business is the company
 # ledger; Infrastructure is declared state a controller reconciles; System is
@@ -155,7 +148,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     ),
     DomainDescriptor(
         # The id stays `hq.content` though the label does not. It is the
-        # registry's stable key -- what attribution is keyed on -- and the
+        # registry's stable key (what attribution is keyed on) and the
         # section being renamed is a change to what an operator reads, not to
         # which domain reported an item.
         id="hq.content",
@@ -175,7 +168,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.pages",
         label="Pages",
-        # The structural pages -- the ones that make the site navigable rather
+        # The structural pages: the ones that make the site navigable rather
         # than worth visiting. Same registry, same table, different half.
         navigation=(
             NavigationItem("Pages", "content:pages", "content", 111, "Web"),
@@ -288,7 +281,17 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
         integration=PluginIntegration(
             attention=_provider("application.attention:services"),
-            dashboard=_provider("application.sections:services"),
+        ),
+    ),
+    DomainDescriptor(
+        id="hq.estate",
+        label="Estate",
+        # No page of its own. Its card is machines, services, domains and
+        # connections at once, each figure linking to the page that lists it.
+        integration=PluginIntegration(
+            attention=_provider("application.estate:attention"),
+            dashboard=_provider("application.estate:cards"),
+            overview=_provider("application.estate:overview"),
         ),
     ),
     DomainDescriptor(
@@ -339,7 +342,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.tailnet",
         label="Tailnet",
         # After machines, because it is about the network they are all on
-        # rather than about any one of them -- and the answers it gives are
+        # rather than about any one of them, and the answers it gives are
         # only meaningful once you know which machine you are asking about.
         navigation=(
             NavigationItem(
@@ -352,7 +355,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.connections",
         label="Connections",
         # Last in the group, and deliberately so. It answers "what can HQ reach
-        # at all" -- the question underneath every other page here, and the one
+        # at all": the question underneath every other page here, and the one
         # asked least often, because the answer only changes when a credential
         # does.
         navigation=(
@@ -472,16 +475,11 @@ def domain_navigation() -> tuple[NavigationItem, ...]:
 
 
 def domain_attention_items() -> tuple[dict[str, Any], ...]:
-    """Everything, anywhere in HQ, that needs a decision -- most urgent first.
+    """Everything, anywhere in HQ, that needs a decision: most urgent first.
 
-    The composed queue. Previously the host built its own list from eight
-    hardcoded queries while extensions had a separate channel nothing on the
-    dashboard read, so an extension could be on fire and the page titled "here
-    is what needs doing" would say nothing about it.
-
-    Each entry carries its source so a surface can attribute the item without
-    the domain restating its own name, and each Insight carries its own url --
-    which is what retired the code-to-URL table the dashboard used to keep.
+    The composed queue, host sections and extensions alike. Each entry carries
+    its source so a surface can attribute the item without the domain restating
+    its own name, and each Insight carries its own url.
 
     A domain reports only what is actually outstanding: an item with nothing to
     do is simply not emitted, rather than emitted as a zero for a reader to
@@ -498,10 +496,7 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
 def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     """Every domain's headline reading, in the order the nav presents them.
 
-    One row of cards rather than two. The host's own figures were previously
-    hand-written into the template as five fixed tiles -- which were not even
-    links, while the extension cards beside them were -- so a new host section
-    meant editing markup, and the row's order could not follow the bar.
+    One row of cards, host sections and extensions alike, in nav order.
 
     Ordered by nav position so the row reads in the same sequence as the
     sections above it. A domain reporting nothing contributes nothing, which is

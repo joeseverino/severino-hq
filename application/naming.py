@@ -14,10 +14,15 @@ goes and gets them.
 
 from __future__ import annotations
 
-from control_plane.models import ManagedResource, ProviderConnection
+from control_plane.names import normalized_hostname
 from control_plane.providers import PROVIDERS, NameContext, certificate_covers
 
-from .infrastructure import declared_machines, delivery_targets, resolved_spec
+from .infrastructure import (
+    declared_machines,
+    delivery_targets,
+    enabled_resources,
+    resolved_spec,
+)
 from .locate import index_of, join_endpoint, split_endpoint
 from .projection import projection_scope, read_once
 
@@ -27,14 +32,14 @@ def name_context(hostname: str) -> NameContext:
 
     Built per request rather than cached. A cache that outlived the request
     would answer "which zones can you reach" with what was true before the
-    credential was replaced -- which is the one question whose staleness leads
+    credential was replaced, which is the one question whose staleness leads
     somewhere expensive.
 
     Within one request it is shared through `read_once`: a page that asks about
     many names resolves each resource once, not once per name and reader.
     """
 
-    hostname = hostname.strip().lower().rstrip(".")
+    hostname = normalized_hostname(hostname)
     if not hostname:
         return NameContext()
     # Joins the caller's scope when there is one; otherwise one of its own, so
@@ -66,7 +71,7 @@ def _enabled_resolved() -> tuple[tuple[object, object, object], ...]:
     def load():
         targets = delivery_targets()
         rows = []
-        for resource in ManagedResource.objects.filter(enabled=True):
+        for resource in enabled_resources():
             provider = PROVIDERS.get(resource.kind)
             if provider is None or provider.hostnames is None:
                 continue
@@ -92,7 +97,7 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
 
     # Which connections hold public zones is derived from the providers that
     # say their effect is public. Named directly, this file would carry the one
-    # word -- "cloudflare_dns" -- that the rest of the pass exists to remove.
+    # word ("cloudflare_dns") that the rest of the pass exists to remove.
     public = {
         provider
         for spec in PROVIDERS.values()
@@ -101,16 +106,15 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
     }
     # Only a connection that answered. One that exists and failed its probe
     # reports no zones, and counted as having reported it would turn an expired
-    # token into "no connected account holds a zone for jseverino.com" -- HQ
-    # refusing to publish a record in a domain it owns, on the strength of not
-    # having been able to ask.
+    # token into "no connected account holds a zone for example.com", and HQ
+    # would refuse to publish in a domain it owns because it could not ask.
     reported = [
         connection
-        for connection in ProviderConnection.objects.all()
+        for connection in _connection_rows()
         if connection.provider in public and connection.reachable and connection.probed
     ]
     zones = {
-        str(zone).strip().lower().rstrip(".")
+        normalized_hostname(zone)
         for connection in reported
         for zone in connection.reaches
         if zone
@@ -123,7 +127,7 @@ def _origin_for(hostname: str) -> str:
 
     Read through the providers' own ``origin`` hooks rather than by reaching
     into any spec, so a provider that starts answering the question joins this
-    by declaring it -- the same way it joins the service view.
+    by declaring it: the same way it joins the service view.
     """
 
     for _resource, provider, spec in _enabled_resolved():
@@ -133,7 +137,7 @@ def _origin_for(hostname: str) -> str:
             raise spec
         try:
             names = {
-                str(name).strip().lower().rstrip(".")
+                normalized_hostname(name)
                 for name in provider.hostnames(spec)
             }
             if hostname not in names:
@@ -190,7 +194,7 @@ def _covering(hostname: str) -> tuple[str, ...]:
         if isinstance(spec, Exception):
             raise spec
         # Resolved, not authored, so this reads the same names the service page
-        # does -- one rule for what a certificate covers, not two.
+        # does: one rule for what a certificate covers, not two.
         try:
             names = frozenset(provider.hostnames(spec))
         except (KeyError, TypeError, ValueError):
@@ -198,3 +202,9 @@ def _covering(hostname: str) -> tuple[str, ...]:
         if certificate_covers(hostname, names):
             found.append(resource.key)
     return tuple(sorted(found))
+
+
+def _connection_rows() -> tuple:
+    from .connections import connection_rows
+
+    return connection_rows()

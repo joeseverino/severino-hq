@@ -3,7 +3,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -21,7 +22,15 @@ from application.projects import (
 )
 from application.deletion import delete_project
 from application.security import web_principal
-from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.ui import counted
+from application.pages import PageAction, PageMixin
+from application.tables import (
+    TableColumn,
+    TableFilter,
+    TableListMixin,
+    TableSort,
+    TableToggle,
+)
 from application.services import service_url_for
 from application.writes import (
     ServiceCreateMixin,
@@ -32,12 +41,24 @@ from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
 
-class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
+PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
+
+
+class ProjectListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     model = Project
     template_name = "projects/project_list.html"
-    context_object_name = "projects"
     paginate_by = 25
+    page_title = "Projects"
     table_search_scope = "projects"
+    table_selectable = True
+    table_columns = (
+        TableColumn("Name", "name"),
+        TableColumn("Category", "category"),
+        TableColumn("Status", "status"),
+        TableColumn("Tech", "technologies_used"),
+        TableColumn("Updated", "updated_at"),
+        TableColumn("", css="row-actions"),
+    )
     table_filters = (
         TableFilter("status", "Status", "status", Project.Status.choices),
         TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
@@ -69,6 +90,9 @@ class ProjectListView(TableListMixin, LoginRequiredMixin, ListView):
     )
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
+
+    def get_page_actions(self):
+        return (PageAction("New project", reverse("projects:create"), primary=True),)
 
     def get_queryset(self):
         qs = Project.objects.all()
@@ -110,7 +134,7 @@ class ProjectRefreshView(LoginRequiredMixin, View):
         if content and content["ok"]:
             messages.success(
                 request,
-                f"Synced {content['total']} content item(s) "
+                f"Synced {counted(content['total'], 'content item')} "
                 f"({content['created']} new, {content['updated']} updated).",
             )
         elif content:
@@ -124,7 +148,17 @@ class ProjectRefreshView(LoginRequiredMixin, View):
         return redirect("projects:detail", slug=slug)
 
 
-class ProjectDetailView(LoginRequiredMixin, DetailView):
+class ProjectPage(PageMixin):
+    """A page about one project, or a new one: its trail runs back to the list."""
+
+    def get_page_trail(self):
+        project = getattr(self, "object", None)
+        if project is None:
+            return (PROJECTS_TRAIL,)
+        return (PROJECTS_TRAIL, (project.name, project.get_absolute_url()))
+
+
+class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
     model = Project
     template_name = "projects/project_detail.html"
     slug_field = "slug"
@@ -138,9 +172,42 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         # The reverse of the tie the service page makes. A project says where it
         # is published and HQ manages that name, so the two are one thing seen
-        # from either side -- and only one side led anywhere.
+        # from either side, and only one side led anywhere.
         context["service_url"] = service_url_for(self.object.public_url)
         return context
+
+    def get_page_title(self):
+        return self.object.name
+
+    def get_page_lede(self):
+        return format_html(
+            '{} · <span class="pill pill-{}">{}</span>',
+            self.object.get_category_display(),
+            self.object.status,
+            self.object.get_status_display(),
+        )
+
+    def get_page_trail(self):
+        return (PROJECTS_TRAIL,)
+
+    def get_page_actions(self):
+        project = self.object
+        actions = []
+        if project.repository_url and "github.com" in project.repository_url:
+            actions.append(
+                PageAction(
+                    "Refresh",
+                    reverse("projects:refresh", args=[project.slug]),
+                    method="post",
+                )
+            )
+        actions += [
+            PageAction("Edit", reverse("projects:edit", args=[project.slug])),
+            PageAction(
+                "Delete", reverse("projects:delete", args=[project.slug]), danger=True
+            ),
+        ]
+        return tuple(actions)
 
 
 class ProjectWrite:
@@ -154,8 +221,9 @@ class ProjectWrite:
 
 
 class ProjectCreateView(
-    ProjectWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView
+    ProjectWrite, ProjectPage, ServiceCreateMixin, LoginRequiredMixin, CreateView
 ):
+    page_title = "New project"
     form_class = ProjectForm
     template_name = "projects/project_form.html"
     service = staticmethod(save_project)
@@ -163,8 +231,9 @@ class ProjectCreateView(
 
 
 class ProjectUpdateView(
-    ProjectWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
+    ProjectWrite, ProjectPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
 ):
+    page_title = "Edit project"
     form_class = ProjectForm
     template_name = "projects/project_form.html"
     slug_field = "slug"
@@ -174,8 +243,9 @@ class ProjectUpdateView(
 
 
 class ProjectDeleteView(
-    ProjectWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
+    ProjectWrite, ProjectPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
 ):
+    page_title = "Delete project?"
     template_name = "projects/project_confirm_delete.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"

@@ -5,25 +5,26 @@ set -eu
 
 readonly connection_ref="${1:?usage: controller-ssh.sh CONNECTION_REF OPERATION}"
 readonly operation="${2:?usage: controller-ssh.sh CONNECTION_REF OPERATION}"
-readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
-readonly ssh_dir="${app_dir}/secrets/ssh"
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=scripts/lib/controller-env.sh
 . "${script_dir}/lib/controller-env.sh"
 readonly env_file="${controller_env}"
+# Rendered by refresh-secrets.sh from each connection's identity item.
+readonly ssh_dir="${controller_runtime_dir}/ssh"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "controller-ssh.sh must run as root." >&2
     exit 1
 fi
+# Held across the exec, so ssh reads the environment and identities of one
+# generation.
+controller_ssh_lock shared
 controller_require_environment
 # shellcheck source=/dev/null
 . "${env_file}"
 prefix=""
 reference=""
-# Only validated variable-name tokens are emitted, not arbitrary lines.
-# shellcheck disable=SC2013
-for candidate in $(sed -n 's/^\([A-Z][A-Z0-9_]*\)_CONNECTION_REF=.*/\1/p' "${env_file}"); do
+for candidate in $(controller_connection_prefixes "${env_file}"); do
     eval "reference=\${${candidate}_CONNECTION_REF}"
     if [ "${reference}" = "${connection_ref}" ]; then
         prefix="${candidate}"

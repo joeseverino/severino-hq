@@ -38,7 +38,7 @@ def validate_receipt_file(upload) -> None:
     content_type = (getattr(upload, "content_type", "") or "").strip().lower()
     if not content_type:
         raise ValidationError(
-            "The receipt file did not declare a type, so it cannot be accepted."
+            "Receipt file has no content type."
         )
     if content_type not in ALLOWED_RECEIPT_CONTENT_TYPES:
         raise ValidationError(f"Unsupported receipt file type: {content_type}.")

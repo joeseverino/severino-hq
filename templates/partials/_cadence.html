@@ -1,10 +1,10 @@
 {% comment %}
-Cadence strip — whether a thing happened, period by period.
+Cadence strip: whether a thing happened, period by period.
 
   {% include "partials/_cadence.html" with cadence=chest_cadence %}
 
 `cadence` is application.ui.Cadence. Use this when the question is "did I keep
-this up", not "how much" -- a gap in a row of filled marks is visible in a way a
+this up", not "how much": a gap in a row of filled marks is visible in a way a
 short bar beside tall ones is not. Pair it with a chart rather than replacing
 one.
 {% endcomment %}
@@ -12,7 +12,7 @@ one.
   <div class="cadence-head">
     {% comment %}
     The title is optional: inside a card that already names the thing, repeating
-    it is noise. The ratio is not optional -- it is the reading.
+    it is noise. The ratio is not optional: it is the reading.
     {% endcomment %}
     {% if cadence.title %}<span class="cadence-title">{{ cadence.title }}</span>{% else %}<span></span>{% endif %}
     <span class="cadence-count">{{ cadence.hits }}/{{ cadence.weeks|length }}{% if cadence.streak > 1 %} · {{ cadence.streak }} in a row{% endif %}</span>

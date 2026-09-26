@@ -2,7 +2,7 @@
 # Run the CI gates that can run on a development machine, before pushing.
 #
 # `scripts/check.sh` answers "do my changes work?". This answers "will the
-# pipeline accept them?" -- ruff at the pinned version, the shell gates, the
+# pipeline accept them?": ruff at the pinned version, the shell gates, the
 # deployment check, the image build, and the suite inside that image.
 #
 # The tools come from scripts/toolchain.env, the same file CI reads. The list of
@@ -48,7 +48,7 @@ skipped=()
 step() { printf '\n\033[1m[ci-local]\033[0m %s\n' "$1"; }
 # Warn when a pinned tool is not the pinned version. The point of this script is
 # predicting the pipeline, and it cannot do that with a different linter than the
-# pipeline runs -- which is how a clean local run preceded a red one.
+# pipeline runs.
 pinned() { # pinned <tool> <pinned-version> <version-extractor>
   [ -n "$2" ] || return 0
   have="$(eval "$3" 2>/dev/null)"
@@ -123,7 +123,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     badge_python="${PYTHON_VERSIONS%% *}"
     if [ "$python_version" != "$badge_python" ]; then
-      # Not ok -- nothing was compared. The badge quotes one interpreter, and
+      # Not ok: nothing was compared. The badge quotes one interpreter, and
       # reporting green for a check that did not run is how the default
       # invocation silently stopped covering this.
       skip "coverage badge not checked (measured on ${python_version}, badge quotes ${badge_python})"
@@ -134,7 +134,7 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
     fi
   else
     run "tests" "$python_bin" manage.py test
-    skip "coverage is not installed — gate and badge not checked"
+    skip "coverage is not installed: gate and badge not checked"
   fi
 done
 
@@ -144,6 +144,7 @@ run "manage.py check --deploy --fail-level WARNING" env \
   DJANGO_DEBUG=0 \
   DJANGO_SECRET_KEY="ci-only-deploy-check-key-0123456789abcdef0123456789abcdef" \
   DJANGO_ALLOWED_HOSTS="hq.example.com" \
+  SEVERINO_OIDC_ISSUER="https://sso.example.com" \
   DJANGO_BEHIND_TLS_PROXY=1 DJANGO_SESSION_COOKIE_SECURE=1 DJANGO_CSRF_COOKIE_SECURE=1 \
   DJANGO_HSTS_SECONDS=31536000 DJANGO_HSTS_INCLUDE_SUBDOMAINS=1 DJANGO_HSTS_PRELOAD=1 \
   "$PY" manage.py check --deploy --fail-level WARNING
@@ -165,7 +166,7 @@ if docker info >/dev/null 2>&1; then
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py test --verbosity 0
 else
-  skip "no container runtime — image build and in-image suite not run"
+  skip "no container runtime: image build and in-image suite not run"
 fi
 
 # ------------------------------------------------------------------ report

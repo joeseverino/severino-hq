@@ -11,7 +11,7 @@
 # a unit file at the top level, or a `.conf` drop-in one directory down. That is
 # systemd's own rule, not a list, so a unit added to the repository is in the set
 # without anything here changing. Templates (`*.example`) are left out by the
-# same rule -- a person copies one into place after replacing its values.
+# same rule: a person copies one into place after replacing its values.
 units_shipped() {
     if [ ! -d "$1" ]; then
         # An empty answer would read as "nothing is shipped", which installs
@@ -42,7 +42,7 @@ units_install() {
 # Print each file shipped in $1 whose copy in $2 is missing or not byte-identical.
 #
 # Only the shipped set is compared. A drop-in the host adds beside a shipped one
-# -- its own naming, a credential mount another repository installs -- is the
+# (its own naming, a credential mount another repository installs) is the
 # host's to own, and reporting it would train whoever reads this to ignore it.
 units_drifted() {
     shipped="$(units_shipped "$1")" || return 1

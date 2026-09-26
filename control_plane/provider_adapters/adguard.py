@@ -86,8 +86,8 @@ def reconcile(
                     "Degraded",
                     True,
                     "Disabled",
-                    "The rewrite exists in AdGuard but is switched off, so the "
-                    "name does not resolve. Re-enable it in AdGuard.",
+                    "The rewrite is disabled in AdGuard, so the name does not "
+                    "resolve. Enable it in AdGuard.",
                 )
             ],
             message="AdGuard rewrite is present but disabled.",
@@ -213,20 +213,20 @@ def build_adapter(*, provider_model, provider_spec, applies):
             min_length=1,
             max_length=253,
             title="Points at",
-            description="The address this hostname resolves to, usually an IP.",
+            description="The IP address this hostname resolves to.",
         )
 
     definition = provider_spec(
         "adguard.rewrite",
-        "Makes a hostname resolve to an IP on your network. Created in AdGuard "
-        "if it is not there yet.",
+        "Resolves a hostname to an IP on your network. HQ creates it in "
+        "AdGuard if it does not exist.",
         AdGuardRewriteSpec,
         actions={"reconcile": applies(automatic=True), "delete": applies()},
         label="Internal DNS record",
         connection_providers=("adguard",),
         removal_note=lambda spec: (
-            f"{spec.get('domain', 'This name')} stops resolving on the LAN, so "
-            "anything reached by that name goes dark inside the network."
+            f"{spec.get('domain', 'This name')} stops resolving on your "
+            "network. Anything reached by that name goes offline."
         ),
         facet="dns",
         hostnames=_hostnames,

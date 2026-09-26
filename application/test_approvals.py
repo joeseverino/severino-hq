@@ -1,10 +1,7 @@
 """What the approval gate promises, written as the promises.
 
-Each test is one sentence about the incident that produced this module: a
-credential, on its own, changed the estate's access policy and the change reached
-the live network within the minute. The properties below are what has to be true
-for that not to be possible again, and each one is here because its absence is
-exactly how the gate would fail quietly rather than loudly.
+A credential on its own must not be able to change a gated kind. Each test is
+one property that has to hold for that, and would fail quietly if it did not.
 """
 
 from __future__ import annotations
@@ -106,6 +103,9 @@ class HeldRequestTests(TestCase):
     """A credential may ask. Asking is all it may do."""
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.resource = declare_policy()
 
     def test_a_reconcile_asked_for_over_a_token_waits_instead_of_queueing(self):
@@ -316,6 +316,9 @@ class OperatorRequestTests(TestCase):
     """A person at the web surface is the signal the gate is waiting for."""
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.resource = declare_policy()
 
     def test_the_same_request_from_the_web_interface_is_not_held(self):
@@ -357,6 +360,9 @@ class DecisionTests(TestCase):
     """What a decision does, and what no decision can do."""
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.resource = declare_policy()
 
     def held(self, payload=None, capability="infrastructure.reconcile"):
@@ -498,6 +504,12 @@ class ControllerTests(TestCase):
     toward a declaration a person has already agreed to. Holding that would stop
     the estate maintaining itself to protect against nothing.
     """
+    def setUp(self):
+        super().setUp()
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+
 
     def test_automatic_convergence_of_a_gated_kind_is_still_scheduled(self):
         gated_device = replace(PROVIDERS["tailscale.device"], requires_approval=True)
@@ -523,7 +535,7 @@ class FloorTests(TestCase):
 
     The hold keys on a capability saying it acts on an infrastructure resource,
     which every capability in the registry does say. What it cannot see is a
-    caller that reaches the use case without going through a capability at all --
+    caller that reaches the use case without going through a capability at all,
     a surface added later, or an extension. So the use cases refuse it too, and
     these are the tests that this floor is really there.
     """
@@ -653,6 +665,9 @@ class SurfaceTests(TestCase):
     """A held request that nobody can see is a held request nobody answers."""
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         declare_policy()
         self.user = get_user_model().objects.create_user(
             username="reviewer", password="test-only-password"

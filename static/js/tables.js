@@ -23,7 +23,7 @@
   // pins it on the compositor and there is nothing here to measure, to
   // schedule, or to fall a frame behind.
   //
-  // `is-pane` marks a wrapper that is genuinely its own scroll box -- one
+  // `is-pane` marks a wrapper that is genuinely its own scroll box: one
   // holding a table too wide to fit, or one an author capped to a reading
   // height. Those pin the heading to the box; everything else pins it to the
   // viewport, and the stylesheet reads this class to tell them apart.
@@ -125,7 +125,7 @@
   }
 
   // A refresh replaces the toolbar, which would otherwise steal focus from
-  // the search box mid-typing. Remember what was focused and the live value —
+  // the search box mid-typing. Remember what was focused and the live value,
   // the user may have typed past what this response's server render reflects.
   function captureFocus() {
     const active = document.activeElement;

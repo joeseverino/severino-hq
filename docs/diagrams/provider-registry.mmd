@@ -1,34 +1,24 @@
-flowchart LR
-    model["Provider definition<br/>one pydantic model + one declaration"]
-
-    subgraph declared["What a provider says about itself"]
-        direction TB
-        shape["Field types · bounds · defaults<br/>titles · descriptions"]
-        facet["Which facet of a service it supplies"]
-        reads["How to read hostnames out of a spec"]
-        writes["How to seed one from a hostname"]
-        back["How to rebuild a spec from a live record"]
-        speaks["How to describe itself in one line"]
+flowchart TB
+    subgraph declared["One provider, declared once"]
+        direction LR
+        model["Provider definition<br/>one pydantic model<br/>+ one declaration"]
+        says["What it says about itself<br/>fields, bounds, defaults, facet,<br/>hostnames, seeding, live records"]
+        model --> says
     end
 
-    model --> declared
+    subgraph derived["Derived from it, no other file edited"]
+        direction LR
+        schema["JSON Schema"]
+        validate["Validation"]
+        contract["Controller contract"]
+        forms["Forms"]
+        service["Service view"]
+        adopt["Adoption"]
+        schema ~~~ validate ~~~ contract
+        forms ~~~ service ~~~ adopt
+    end
 
-    schema["JSON Schema<br/>published by the API"]
-    validate["Validation<br/>every write, every interface"]
-    contract["Controller contract<br/>resolved desired state"]
-    forms["Generated create + edit forms"]
-    service["Service view<br/>one hostname, every part of it"]
-    adopt["Adoption<br/>capture what already exists"]
-
-    declared --> schema
-    declared --> validate
-    declared --> contract
-    declared --> forms
-    declared --> service
-    declared --> adopt
-
-    note["A provider added to the registry reaches<br/>all six without another file being edited"]
-    adopt -.- note
+    declared --> derived
 
     classDef anchor stroke-width:2px;
-    class model,declared anchor;
+    class model,says anchor;

@@ -17,7 +17,7 @@ from .demo import amount, day, demo_scope, label, showing_demo
 class SubstitutionTests(TestCase):
     def test_nothing_is_substituted_until_somebody_asks(self):
         """The call is unconditional at every call site, so the default has to
-        be the real value -- a domain that forgot to check must show the truth,
+        be the real value: a domain that forgot to check must show the truth,
         never a stand-in."""
 
         self.assertFalse(showing_demo())
@@ -76,10 +76,10 @@ class SubstitutionTests(TestCase):
         how somebody works out the other half."""
 
         with demo_scope(True):
-            stood_in = label("Joseph Severino", key="person-1")
+            stood_in = label("Sam Example", key="person-1")
             from_something_else = label("anything else", key="person-1")
 
-        self.assertNotIn("Joseph", stood_in)
+        self.assertNotIn("Sam", stood_in)
         self.assertNotIn("Severino", stood_in)
         # Derived from the key alone, so nothing of the original survives.
         self.assertEqual(stood_in, from_something_else)

@@ -12,7 +12,8 @@ import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Iterable
+from datetime import timedelta
+from typing import Any, Callable, Iterable
 
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
@@ -28,11 +29,41 @@ _AUDITED_MODELS: dict[type, str] = {}
 _operation_context: ContextVar["OperationContext | None"] = ContextVar(
     "hq_operation_context", default=None
 )
+_connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
+
+# The object type of an event about one connection.
+CONNECTION_AUDIT_TYPE = "Connection"
+
+# Machine records of HQ looking, as (action, object type). The only events
+# `prune_routine` removes, after SEVERINO_AUDIT_ROUTINE_DAYS.
+ROUTINE_EVENTS: frozenset[tuple[str, str]] = frozenset(
+    {(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE)}
+)
+# The security record: people, access and change. Never pruned.
+SECURITY_ACTIONS: frozenset[str] = frozenset(
+    {
+        AuditLog.Action.CREATED,
+        AuditLog.Action.UPDATED,
+        AuditLog.Action.DELETED,
+        AuditLog.Action.LOGIN,
+        AuditLog.Action.LOGOUT,
+        AuditLog.Action.LOGIN_FAILED,
+        AuditLog.Action.UPLOADED,
+        AuditLog.Action.EXPORTED,
+        AuditLog.Action.IMPORTED,
+        AuditLog.Action.FAILED,
+        AuditLog.Action.SETTINGS_CHANGED,
+        AuditLog.Action.VIEWED,
+        AuditLog.Action.DENIED,
+    }
+)
+if {action for action, _ in ROUTINE_EVENTS} & SECURITY_ACTIONS:
+    raise ValueError("A security action is declared routine.")
 
 
 
 # What a value looks like in the log. Audit rows are JSON, so a Decimal, date
-# or UUID has to be a string first -- left as it is, the row fails to write and
+# or UUID has to be a string first: left as it is, the row fails to write and
 # `record_event` swallows it.
 REDACTED = "«redacted»"
 VALUE_CHARS = 200
@@ -64,7 +95,7 @@ def _snapshot(instance) -> dict:
 def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
     """Which fields moved, and what they moved between.
 
-    `before` is None for an instance constructed rather than read -- nothing
+    `before` is None for an instance constructed rather than read: nothing
     is known about the previous state, so nothing is claimed about it.
     """
     if before is None:
@@ -123,18 +154,32 @@ def audit_operation(*, operation: str, principal=None, operation_id: str = ""):
         yield
 
 
+@contextmanager
+def audit_connection(connection_ref: str):
+    """Name the connection the events in this block went through."""
+
+    token = _connection_context.set(str(connection_ref or "").strip())
+    try:
+        yield
+    finally:
+        _connection_context.reset(token)
+
+
 def register_audit(
     model,
     type_label: str,
     *,
     redact: Iterable[str] = (),
     observation: Iterable[str] = (),
+    connection: Callable[[Any], str] | None = None,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
     `redact` names fields whose values must never reach the log. The field is
-    still reported as having changed -- that a token was rotated is worth
-    logging -- but the values are replaced.
+    still reported as having changed (that a token was rotated is worth
+    logging) but the values are replaced.
+
+    `connection` returns the connection_ref an instance's work goes through.
     """
 
     if model in _AUDITED_MODELS:
@@ -179,6 +224,7 @@ def register_audit(
             obj=instance,
             type_label=type_label,
             metadata={"changes": changes} if changes else None,
+            connection=_connection_of(connection, instance),
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
@@ -190,11 +236,18 @@ def register_audit(
             action=AuditLog.Action.DELETED,
             obj=instance,
             type_label=type_label,
+            connection=_connection_of(connection, instance),
         )
 
 
-def audited_models() -> Iterable[tuple[type, str]]:
-    return tuple(_AUDITED_MODELS.items())
+def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
+    if extract is None:
+        return ""
+    try:
+        return str(extract(instance) or "")
+    except Exception:  # noqa: BLE001 - attribution never blocks the event
+        logger.exception("Could not name the connection of an audited %s", type(instance))
+        return ""
 
 
 def audit_events():
@@ -213,6 +266,7 @@ def record_event(
     facets=(),
     user=None,
     required: bool = False,
+    connection: str = "",
 ) -> AuditLog:
     """Write an audit row, optionally failing the surrounding transaction.
 
@@ -256,6 +310,7 @@ def record_event(
             object_id=object_id,
             object_repr=object_repr,
             operation_id=context.operation_id if context is not None else "",
+            connection=(str(connection or "").strip() or _connection_context.get())[:160],
             message=message,
             metadata=event_metadata,
         )
@@ -291,3 +346,54 @@ def record_operation(
         facets=facets,
         required=required,
     )
+
+
+def last_activity(connections: Iterable[str]) -> dict[str, AuditLog]:
+    """The latest audit event per named connection, in one query however many."""
+
+    from django.db.models import Max
+
+    refs = {ref for ref in connections if ref}
+    if not refs:
+        return {}
+    latest = (
+        AuditLog.objects.filter(connection__in=refs)
+        .values("connection")
+        .annotate(last=Max("pk"))
+        .values("last")
+    )
+    return {
+        event.connection: event
+        for event in AuditLog.objects.filter(pk__in=latest).only(
+            "pk", "action", "object_type", "object_repr", "message", "connection", "created_at"
+        )
+    }
+
+
+def prune_routine(*, days: int, check_only: bool = False, batch: int = 1000) -> int:
+    """Delete routine machine events older than ``days``; return how many.
+
+    Only ROUTINE_EVENTS with no user are eligible. Deleted in batches.
+    """
+
+    from django.db.models import Q
+    from django.utils import timezone
+
+    if days < 1:
+        raise ValueError("Routine audit retention must be at least one day.")
+    kinds = Q(pk__in=[])
+    for action, object_type in ROUTINE_EVENTS:
+        kinds |= Q(action=action, object_type=object_type)
+    eligible = AuditLog.objects.filter(
+        kinds,
+        user__isnull=True,
+        created_at__lt=timezone.now() - timedelta(days=days),
+    )
+    if check_only:
+        return eligible.count()
+    deleted = 0
+    while True:
+        ids = list(eligible.values_list("pk", flat=True)[:batch])
+        if not ids:
+            return deleted
+        deleted += AuditLog.objects.filter(pk__in=ids).delete()[0]

@@ -1,31 +1,7 @@
-{% extends "base.html" %}
-{% block title %}{{ zone.zone }} · Domains{% endblock %}
-{% block content %}
+{% extends "page.html" %}
+{% block page %}
 
 {% url 'control_plane:create' as create_url %}
-{% comment %}
-Written out rather than included so the star sits on the title's row. Starring
-a domain decides which one `/domains/` opens: the catalog sorts pinned first,
-and that page goes to the first managed domain.
-{% endcomment %}
-<div class="page-head">
-  <div>
-    <h1>{{ zone.zone }}</h1>
-    <p class="page-lede">Every record published in this domain, and what the domain currently says about itself.</p>
-  </div>
-  <div class="page-actions">
-    <form method="post" action="{% url 'zones:pin' zone.zone %}">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <button type="submit" class="btn{% if zone.pinned %} pinned{% endif %}"
-              title="{% if zone.pinned %}Opens by default. Click to unstar.{% else %}Star this domain so Domains opens here.{% endif %}"
-              aria-pressed="{% if zone.pinned %}true{% else %}false{% endif %}">
-        <span aria-hidden="true">{% if zone.pinned %}★{% else %}☆{% endif %}</span>
-        {% if zone.pinned %}Opens by default{% else %}Open this by default{% endif %}
-      </button>
-    </form>
-  </div>
-</div>
 
 {% comment %}
 Rendered as links rather than a select, because there is no submit step to
@@ -45,10 +21,9 @@ four domains behind a click and then need a second one to go anywhere.
 {% if not public_dns_enabled %}
   <section class="msg msg-info">
     <p>
-      <strong>Changing public DNS is switched off in this deployment.</strong>
-      Everything below is what Cloudflare currently holds. HQ will not create,
-      change or remove any of it until
-      <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> is set.
+      <strong>Public DNS changes are off.</strong>
+      These records are read-only. Set
+      <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> to allow changes.
     </p>
   </section>
 {% endif %}
@@ -56,22 +31,21 @@ four domains behind a click and then need a second one to go anywhere.
 {% if not zone.managed %}
   <section class="msg msg-warning">
     <p>
-      <strong>HQ is not managing {{ zone.zone }} yet.</strong>
-      Its records are listed below because the Cloudflare credential can see
-      them, but HQ holds no declaration for this domain and will not change
-      anything in it.
+      <strong>{{ zone.zone }} is not managed.</strong>
+      HQ shows its records but will not change them.
     </p>
-    <form method="post" action="{% url 'zones:adopt' zone.zone %}">
-      {% csrf_token %}
-      <input type="hidden" name="token" value="{{ zone.adopt_token }}">
-      <button type="submit" class="primary">Manage this domain</button>
-    </form>
+    {% if zone.adopt_token %}
+      {% url 'zones:adopt' zone.zone as adopt_url %}
+      <p>{% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}</p>
+    {% elif zone.observed_only %}
+      <p class="muted">Read through a connection that only observes.</p>
+    {% endif %}
   </section>
 {% endif %}
 
-<div class="control-summary">
+<div class="control-summary control-summary-four">
   {% comment %}
-  Each card is contributed by whatever owns the knowledge behind it — the
+  Each card is contributed by whatever owns the knowledge behind it: the
   service catalogue, the certificate registry, the records themselves. This
   template knows there are cards, not what they are made of, so an insight
   added later renders without an edit here.
@@ -80,7 +54,7 @@ four domains behind a click and then need a second one to go anywhere.
   card carried a second line of vague instruction to say what the first line
   already named.
   {% endcomment %}
-  {% for insight in zone.insights %}
+  {% for insight in zone.cards %}
     <div class="control-metric">
       <span class="control-label">{{ insight.label }}</span>
       <strong{% if insight.concern %} class="control-warn"{% endif %}>
@@ -95,6 +69,11 @@ four domains behind a click and then need a second one to go anywhere.
       </strong>
       {% if insight.concern %}<span class="readout"><span class="pill pill-attention">Needs attention</span></span>{% endif %}
       {% if insight.detail %}<span>{{ insight.detail }}</span>{% endif %}
+      {% for label, links in insight.links %}
+        <span class="readout"><span class="readout-label">{{ label }}</span> {% for link in links %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      {% endfor %}
+      {% if insight.lines %}{% include "partials/_record_list.html" with rows=insight.lines label=insight.label %}{% endif %}
+      {% if insight.note %}<span class="muted"{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note }}</span>{% endif %}
     </div>
     {% if insight.rows %}
       {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
@@ -102,36 +81,30 @@ four domains behind a click and then need a second one to go anywhere.
   {% endfor %}
 </div>
 
-{% comment %}
-Written out rather than using _page_head.html, which carries exactly one action
-and this heading has two. Split into a heading block and an actions block
-beneath it, the buttons dropped to their own line and left the heading sitting
-beside empty space — a head is one row.
-{% endcomment %}
-<div class="page-head page-head-compact">
-  <div>
-    <h2>Records</h2>
-    <p class="page-lede">{{ records_lede }}</p>
-  </div>
+{% for notice in zone.notices %}
+  <section class="msg msg-warning">
+    <p><strong>{{ notice.label }}: {{ notice.value }}.</strong> {{ notice.detail }}</p>
+  </section>
+{% endfor %}
+
+<div class="section-head">
+  <h2>Records</h2>
   {% comment %}
-  No "adopt" button. A record in a domain HQ was made responsible for is HQ's,
-  and the sweep takes it on within the minute — see
-  ``zones.adopt_discovered_records``. Offered here, it asked a question whose
-  answer was always yes and reported outstanding work nobody meant to do.
+  No "adopt" button: the sweep adopts records in a managed domain
+  (``zones.adopt_discovered_records``).
   {% endcomment %}
   {% if zone.managed and public_dns_enabled %}
-    <div class="page-actions">
-      <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
-    </div>
+    <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
   {% endif %}
 </div>
+<p class="muted">{{ records_lede }}</p>
 
 {% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled %}
 
 {% comment %}
 Verification strings and issuance rules, folded away. A domain apex answers
 "where does traffic go" underneath four CAA records and three ownership proofs,
-and sorted with the rest they came first — the least interesting rows in the
+and sorted with the rest they came first: the least interesting rows in the
 zone at the top of the page.
 {% endcomment %}
 {% if zone.policy %}
@@ -141,5 +114,10 @@ zone at the top of the page.
   </details>
 {% endif %}
 
-{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind %}
+{% comment %}The domain's own record count, with the sweep's age.{% endcomment %}
+{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind count=zone.records|length %}
+
+{% comment %}What the domain relates to. Access and other overlays rank last.{% endcomment %}
+{% include "partials/_relationships.html" %}
+{% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

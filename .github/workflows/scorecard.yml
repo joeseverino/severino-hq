@@ -1,7 +1,7 @@
 name: scorecard
 
 # OpenSSF Scorecard: an outside, repeatable measure of this repository's
-# supply-chain practices -- pinned actions, token permissions, branch
+# supply-chain practices: pinned actions, token permissions, branch
 # protection, signed releases and the rest. Findings land in code scanning,
 # and the published result backs the README badge.
 on:

@@ -1,39 +1,11 @@
-{% extends "base.html" %}{% load table_tags %}
-{% block title %}Documentation index{% endblock %}
-{% block content %}
-<div class="page-head">
-  <h1>Documentation index</h1>
-  <div class="page-actions">
-    <a class="btn" href="{% url 'docs_index:import' %}">Import manifest</a>
-    <a class="btn primary" href="{% url 'docs_index:create' %}">New doc record</a>
-  </div>
-</div>
-<p class="muted">Severino HQ indexes metadata only. Full runbook bodies live in the Obsidian vault — that's the source of truth.</p>
-
-{% include "partials/_table_toolbar.html" %}
-
-<div class="table-scroll">
-<table class="data-table" data-selectable-table>
-  <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Doc ID" "doc_id" "-doc_id" %}{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "doc_type" "-doc_type" %}{% table_sort_header "Environment" "environment" "-environment" %}{% table_sort_header "Status" "status" "-status" %}{% table_sort_header "Sensitivity" "sensitivity" "-sensitivity" %}{% table_sort_header "Last reviewed" "last_reviewed" "-last_reviewed" %}</tr>
-  </thead>
-  <tbody>
-    {% for d in records %}
-      <tr>
-        <td class="select-column"><input type="checkbox" data-row-select value="{{ d.doc_id }}" aria-label="Select {{ d.doc_id }}"></td>
-        <td><a href="{{ d.get_absolute_url }}"><code>{{ d.doc_id }}</code></a></td>
-        <td>{{ d.title }}</td>
-        <td>{{ d.get_doc_type_display }}</td>
-        <td>{{ d.get_environment_display }}</td>
-        <td><span class="pill pill-{{ d.status }}">{{ d.get_status_display }}</span></td>
-        <td><span class="pill pill-{{ d.sensitivity }}">{{ d.get_sensitivity_display }}</span></td>
-        <td class="muted">{{ d.last_reviewed|default:"never" }}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="8" class="muted">No documentation records.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% include "partials/_pagination.html" %}
+{% extends "list_page.html" %}
+{% block row %}
+  <td><a href="{{ row.get_absolute_url }}"><code>{{ row.doc_id }}</code></a></td>
+  <td>{{ row.title }}</td>
+  <td>{{ row.get_doc_type_display }}</td>
+  <td>{{ row.get_environment_display }}</td>
+  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
+  <td><span class="pill pill-{{ row.sensitivity }}">{{ row.get_sensitivity_display }}</span></td>
+  <td class="muted">{{ row.last_reviewed|default:"never" }}</td>
 {% endblock %}
+{% block empty %}No doc records yet.{% endblock %}

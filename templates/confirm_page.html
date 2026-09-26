@@ -1,0 +1,17 @@
+{% extends "page.html" %}
+{% comment %}
+Confirming a destructive action. The page says what will happen in
+`{% block consequences %}`; this supplies the one button that does it and the
+way back. Context: `confirm` with `url` (where the POST goes), `label` (the
+button, naming the thing) and `cancel_url`. It works with scripting off and is
+the same two clicks either way.
+{% endcomment %}
+{% block page %}
+<section class="card">
+  {% block consequences %}{% endblock %}
+  <p class="form-actions">
+    {% post_button confirm.label confirm.url css="btn danger" %}
+    <a class="btn ghost" href="{{ confirm.cancel_url }}">Cancel</a>
+  </p>
+</section>
+{% endblock %}

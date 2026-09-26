@@ -1,7 +1,7 @@
 """The one-way move from an authored document to declarations HQ owns.
 
 A data migration runs once, against real rows, and cannot be tried again. This
-runs it here instead -- on a snapshot shaped exactly like the one it will meet --
+runs it here instead: on a snapshot shaped exactly like the one it will meet,
 so that what it produces is something to read before it is something to undo.
 
 The fixture is the shape, not the deployment: names, roles and addresses are
@@ -328,7 +328,7 @@ class TailnetKeyRenameTests(TestCase):
     def test_a_display_name_becomes_a_key_a_url_can_carry(self):
         """The mistake this nearly shipped with.
 
-        A device name is a display string — "Joseph's MacBook Pro" — and a key
+        A device name is a display string ("Sam's MacBook Pro") and a key
         appears in a URL. Renaming without slugifying turned a working key into
         one the resource route cannot match, which is worse than the suffix it
         set out to remove.
@@ -336,12 +336,12 @@ class TailnetKeyRenameTests(TestCase):
 
         import re
 
-        self.device("josephs-macbook-pro", "Joseph’s MacBook Pro")
+        self.device("sams-macbook-pro", "Sam’s MacBook Pro")
 
         rename_tailnet_keys.forwards(_RealApps, None)
 
         key = ManagedResource.objects.get(kind="tailscale.device").key
-        self.assertEqual(key, "josephs-macbook-pro-tailnet")
+        self.assertEqual(key, "sams-macbook-pro-tailnet")
         self.assertTrue(re.fullmatch(r"[-a-zA-Z0-9_]+", key))
 
     def test_a_name_with_dots_separates_rather_than_running_together(self):

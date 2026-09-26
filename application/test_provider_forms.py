@@ -58,14 +58,14 @@ class GeneratedFieldTests(TestCase):
         """required=True on a BooleanField means "must be ticked", which is wrong.
 
         Every optional flag would have to be turned on before the form would
-        submit -- including the ones whose model default is False.
+        submit, including the ones whose model default is False.
         """
         self.assertFalse(spec_form_class("npm.proxy_host")().fields["websocket"].required)
 
     def test_an_omitted_optional_falls_back_to_the_model_default(self):
         """Sent as None it would be rejected; restated here it could drift."""
         # The zone field offers the domains HQ knows about rather than free
-        # text, so one has to exist for the form to have a valid answer -- the
+        # text, so one has to exist for the form to have a valid answer: the
         # same reason the page that offers this form is only reachable from a
         # domain.
         ManagedResource.objects.create(
@@ -141,7 +141,7 @@ class IdentityFieldTests(TestCase):
 
     AdGuard matches the rewrite whose ``domain`` equals the spec's; NPM matches
     the host whose ``domain_names`` match. Change one and reconciliation looks
-    for the new name, does not find it, and creates it -- leaving the old record
+    for the new name, does not find it, and creates it: leaving the old record
     in place and serving. Neither has a delete path, so nothing cleans that up.
     """
 
@@ -157,7 +157,7 @@ class IdentityFieldTests(TestCase):
         self.assertFalse(spec_form_class("adguard.rewrite")().fields["domain"].disabled)
 
     def test_a_hostname_can_be_changed_now_that_renaming_works(self):
-        """It was held fixed while a change orphaned the old record.
+        """A hostname is editable.
 
         The controller is handed the previously observed state, so it updates
         the record that exists rather than creating one beside it.
@@ -190,6 +190,9 @@ class ResourceFormViewTests(TestCase):
     """The web write goes through the same use case the API and MCP call."""
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.user = get_user_model().objects.create_user(
             username="operator", password="test-only-password"
         )
@@ -198,7 +201,7 @@ class ResourceFormViewTests(TestCase):
     def test_declaring_a_resource_writes_desired_state(self):
         """Creating asks what HQ cannot know, and derives the rest.
 
-        No key, and no "should this be reconciled" -- a name can be worked out
+        No key, and no "should this be reconciled": a name can be worked out
         from the hostname, and a thing being created is a thing you want applied.
         """
         response = self.client.post(
@@ -277,7 +280,7 @@ class ResourceFormViewTests(TestCase):
         """Every kind except those a provider says belong somewhere else.
 
         A public DNS record is only meaningful inside a zone, and offered here
-        it would have to open by asking which domain -- the one question the
+        it would have to open by asking which domain: the one question the
         page it belongs on has already answered. The provider declares that, so
         this page never grows a hand-maintained list of exclusions.
         """

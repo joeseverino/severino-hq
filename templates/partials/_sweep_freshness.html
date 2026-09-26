@@ -1,5 +1,5 @@
 {% comment %}
-Sweep freshness — how old the provider readings on this page are.
+Sweep freshness: how old the provider readings on this page are.
 
   {% include "partials/_sweep_freshness.html" with inventory=inventory %}
   {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind %}
@@ -10,7 +10,7 @@ not reach still shows its last sweep, and not saying how old it is lets a stale
 list read as current.
 
 Three pages had their own wording for it, and two of them named Cloudflare in
-the markup — which is the one thing a template must not do here, since the
+the markup, which is the one thing a template must not do here, since the
 provider already says what it is called. `snapshot.label` comes from the
 registry, so a provider added later names itself.
 
@@ -22,6 +22,8 @@ whose age does not match its neighbours.
 
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
 no grid, and the page around it has already said which provider it is about.
+`count` replaces the sweep's total when the page shows part of it: one domain's
+records.
 {% endcomment %}
 {% if inventory %}
   {% if only_kind %}
@@ -29,10 +31,8 @@ no grid, and the page around it has already said which provider it is about.
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
           {% if snapshot.reachable %}
-            {{ snapshot.count }} record{{ snapshot.count|pluralize }}, checked
-            {% with age=snapshot.observed_at|timesince %}
-              {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
-            {% endwith %}
+            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}, checked
+            {{ snapshot.observed_at|ago }}
           {% else %}
             unreachable ({{ snapshot.error }})
           {% endif %}
@@ -49,12 +49,10 @@ no grid, and the page around it has already said which provider it is about.
             {% if snapshot.reachable %}
               <span class="sweep-count">{{ snapshot.count }}</span>
               <span class="sweep-age">
-                {% with age=snapshot.observed_at|timesince %}
-                  {% if age == "0 minutes" %}just now{% else %}{{ age }} ago{% endif %}
-                {% endwith %}
+                {{ snapshot.observed_at|ago }}
               </span>
             {% else %}
-              <span class="sweep-count">—</span>
+              <span class="sweep-count">{% empty_value %}</span>
               <span class="sweep-age" title="{{ snapshot.error }}">unreachable</span>
             {% endif %}
           </div>

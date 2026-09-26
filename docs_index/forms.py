@@ -32,7 +32,7 @@ class DocumentationRecordForm(forms.ModelForm):
         }
         help_texts = {
             "doc_id": "Stable identifier, e.g. 'rb-adguard-001'.",
-            "notes": "Index notes only. Do NOT paste full runbook contents or secrets.",
+            "notes": "Index notes only. No runbook text or secrets.",
         }
 
 
@@ -44,12 +44,12 @@ class ManifestImportForm(forms.Form):
         # as likely to arrive typed `application/json` as named `.json`.
         widget=forms.ClearableFileInput(attrs={"accept": ".json,application/json"}),
         help_text=(
-            "JSON array of documentation records as produced by the Obsidian "
-            "vault export script. See docs_index/management/commands/import_docs_manifest.py."
+            "JSON array of doc records from the vault export. Same format as "
+            "the import_docs_manifest command."
         ),
     )
     update_existing = forms.BooleanField(
         required=False,
         initial=True,
-        label="Update existing records (matched by doc_id)",
+        label="Update existing records (match on doc_id)",
     )

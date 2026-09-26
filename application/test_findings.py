@@ -6,13 +6,14 @@ from datetime import timedelta
 import json
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from control_plane.models import ManagedResource, ProviderConnection
 
 from .action_links import ActionLink
 from .findings import derive_findings, finding_rules, findings, rule_for
+from .reach import TAILNET
 from .security import Capability, Principal
 from .topology import Topology, TopologyEdge, TopologyNode, derive_topology
 
@@ -98,9 +99,9 @@ class FindingsTests(TestCase):
         self.assertEqual([f.subject for f in found], ["resource:skipped-record"])
         self.assertEqual(found[0].severity, "serious")
         evidence = dict(found[0].evidence)
-        self.assertEqual(evidence["Behind by"], "6h")
-        self.assertEqual(evidence["Condition reason"], "Reconciled")
-        self.assertEqual(evidence["Records of this kind observed"], "4")
+        self.assertEqual(evidence["Behind by"], "6\xa0hours")
+        self.assertEqual(evidence["Reason"], "Reconciled")
+        self.assertEqual(evidence["Records of this kind seen"], "4")
 
     def test_the_skipped_record_is_offered_a_reconcile(self):
         skipped = self.rewrite("skipped-record")
@@ -142,7 +143,7 @@ class FindingsTests(TestCase):
         offered = [(remedy.capability, remedy.label) for remedy in found.remedies]
         # Removal is offered only to a principal allowed to remove; the edit
         # that marks it on demand is the one every manager gets.
-        self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it on demand"))
+        self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark on demand"))
         self.assertNotIn("infrastructure.reconcile", [capability for capability, _ in offered])
 
     def test_a_healthy_estate_says_nothing(self):
@@ -343,7 +344,7 @@ class FindingsTests(TestCase):
         """The shape that produced 320 findings against the real estate.
 
         A kind with no observation at all has no newest to be behind, so the
-        sibling comparison cannot see it -- and every record of it is "never
+        sibling comparison cannot see it, and every record of it is "never
         observed" on its own. Said once about the kind it is one line; said per
         record it is a queue nobody reads, which is the original bug wearing a
         different hat.
@@ -434,8 +435,7 @@ class FindingsTests(TestCase):
 
         ``False`` and ``0`` are not absence. A record that says a port is
         served, or that key expiry is off, has said something checkable that
-        nothing has checked -- and silencing those alongside the empty ones is
-        how the fix above would have become the bug it was fixing.
+        nothing has checked, so they are not silenced with the empty ones.
         """
 
         record = ManagedResource.objects.create(
@@ -473,8 +473,8 @@ class FindingsTests(TestCase):
         self.assertEqual(dict(found[0].evidence)["Unconfirmed"], "priority")
 
     def test_key_expiry_is_confirmed_by_the_sweep_that_can_see_it(self):
-        """The daemon reading holds presence and key expiry -- "the two that go
-        wrong quietly" -- and the record mapping kept only the name, so every
+        """The daemon reading holds presence and key expiry: "the two that go
+        wrong quietly", and the record mapping kept only the name, so every
         device asserted a setting no sweep confirmed."""
 
         from control_plane.providers import PROVIDERS
@@ -707,10 +707,13 @@ class AutoRepairTests(TestCase):
     """What HQ will queue on its own, and everything that stops it.
 
     HQ queues; the controller pulls and claims. Nothing here executes, and the
-    graph -- not a guess -- decides whether acting is sane.
+    graph (not a guess) decides whether acting is sane.
     """
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.now = timezone.now()
         ProviderConnection.objects.create(
             controller_id="example-controller",
@@ -720,6 +723,7 @@ class AutoRepairTests(TestCase):
             reaches=["adguard"],
             reachable=True,
             probed=True,
+            manages=True,
             observed_at=self.now,
         )
 
@@ -753,7 +757,7 @@ class AutoRepairTests(TestCase):
         """The amplifier guard. Everything stale means the sweep is the fault.
 
         Repairing each record would fan the whole class at a provider that is
-        not answering -- turning one fault into an outage-shaped retry storm.
+        not answering: turning one fault into an outage-shaped retry storm.
         """
 
         for index in range(6):
@@ -879,7 +883,7 @@ class ReachedButUnmeasuredTests(TestCase):
 
     Infrastructure knows what a connection reaches; analytics knows what it
     counts. The finding lives in the gap between them, and the gate is a
-    measured sibling -- most things HQ reaches are containers that will never
+    measured sibling: most things HQ reaches are containers that will never
     carry a beacon, and a rule that cannot stay quiet is a lens, not a finding.
     """
 
@@ -948,15 +952,15 @@ class ReachedButUnmeasuredTests(TestCase):
         found = self._raised("counted.example.com", "uncounted.example.com")[0]
         evidence = dict(found.evidence)
 
-        self.assertEqual(evidence["Measured"], "nothing reports traffic for this name")
+        self.assertEqual(evidence["Traffic"], "not measured")
         self.assertTrue(evidence["Reached by"])
 
 
 class RegistrationLapsingTests(TestCase):
     """A domain that runs out and will not renew itself.
 
-    Everything HQ does for a domain -- the records, the certificate, every name
-    served inside the zone -- stops the day the registration lapses, and no
+    Everything HQ does for a domain (the records, the certificate, every name
+    served inside the zone) stops the day the registration lapses, and no
     other credential here can see it coming.
     """
 
@@ -1008,9 +1012,7 @@ class EveryFindingIsActionableTests(TestCase):
 
     HQ holds the connections, so every finding it raises has to end in
     something: a capability it can run, or a subject whose page it can open.
-    A finding with neither is a dead end that stays in the queue forever --
-    ``kind-never-swept`` was exactly that, and the two reconcile-only sweep
-    misses could never clear for a record the provider no longer has.
+    A finding with neither is a dead end that stays in the queue forever.
     """
 
     def _findings(self):
@@ -1062,7 +1064,7 @@ class EveryFindingIsActionableTests(TestCase):
         missed = [f for f in self._findings() if f.rule == "skipped-by-a-sweep"]
         self.assertTrue(missed)
         for finding in missed:
-            self.assertIn("If it is gone, remove it.", finding.explanation)
+            self.assertIn("remove it", finding.explanation)
             self.assertTrue(finding.subject)
 
 
@@ -1158,7 +1160,7 @@ class OnDemandContainerTests(TestCase):
     def test_otherwise_it_offers_the_two_real_answers_and_not_the_locked_reconcile(self):
         (finding,) = self._missing(on_demand=False)
 
-        self.assertIn("mark it on demand", finding.explanation)
+        self.assertIn("Mark it on demand", finding.explanation)
         self.assertEqual(
             [remedy.capability for remedy in finding.remedies],
             ["infrastructure.resource.update", "infrastructure.resource.remove"],
@@ -1323,10 +1325,10 @@ class PathRefusedByTheTailnetTests(TestCase):
         offered = {remedy.capability for remedy in finding.remedies}
         self.assertIn("tailnet.reach.allow", offered)
         self.assertIn(
-            ("Refused by the tailnet", "a-controller to an-edge on 443"),
+            ("Blocked by tailnet policy", "a-controller to an-edge on 443"),
             finding.evidence,
         )
-        self.assertIn("will not help until a grant admits it", finding.explanation)
+        self.assertIn("The tailnet policy blocks the path", finding.explanation)
 
     def test_a_consumer_merely_down_is_not_sent_at_the_policy(self):
         finding = self._finding(refused=False)
@@ -1368,7 +1370,7 @@ class WorkThatKeepsFailingTests(TestCase):
     def test_unfinished_work_is_claimed_against_its_connection(self):
         (finding,) = self._findings(
             ("Controller", "a-host"),
-            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
+            ("work-unfinished", "SSH routes for shared-hosting (exit 126)"),
         )
 
         self.assertEqual(finding.rule, "work-that-keeps-failing")
@@ -1385,12 +1387,176 @@ class WorkThatKeepsFailingTests(TestCase):
 
     def test_each_unfinished_step_is_its_own_evidence(self):
         (finding,) = self._findings(
-            ("Could not finish", "SSH routes for shared-hosting (exit 126)"),
-            ("Could not finish", "SSH deploy for shared-hosting (exit 1)"),
+            ("work-unfinished", "SSH routes for shared-hosting (exit 126)"),
+            ("work-unfinished", "SSH deploy for shared-hosting (exit 1)"),
         )
 
         self.assertEqual(len(finding.evidence), 2)
-        self.assertIn("2 things", finding.title)
+        self.assertIn("2 tasks", finding.title)
+
+    def test_a_reported_failing_step_reaches_the_finding_through_the_topology(self):
+        from control_plane.models import ProviderConnection
+        from application.findings import derive_findings
+        from application.topology import derive_topology
+
+        now = timezone.now()
+        for controller in ("a-host", "b-host"):
+            ProviderConnection.objects.create(
+                connection_ref="shared-hosting",
+                controller_id=controller,
+                provider="ssh",
+                endpoint="192.0.2.20:22",
+                reachable=True,
+                probed=True,
+                observed_at=now,
+                failing_steps=(
+                    [{"step": "SSH routes for shared-hosting", "reason": "exit 126"}]
+                    if controller == "a-host"
+                    else []
+                ),
+            )
+        with mock.patch("application.plugins.plugin_connection_specs", return_value=()):
+            projection = derive_topology(principal=MANAGE)
+        found = [
+            finding
+            for finding in derive_findings(projection, principal=MANAGE)
+            if finding.rule == "work-that-keeps-failing"
+        ]
+
+        self.assertEqual(len(found), 1)
+        self.assertIn(":a-host:", found[0].subject)
+        self.assertEqual(
+            found[0].evidence,
+            (("Could not finish", "SSH routes for shared-hosting (exit 126)"),),
+        )
+
+
+class TailnetClaimTests(TestCase):
+    """What the tailnet readings say about its DNS and about HQ's trust."""
+
+    def _findings(self, detect, *facts):
+        from application.findings import _estate
+        from application.topology import Topology, TopologyNode
+
+        node = TopologyNode(
+            id="connection:infrastructure.controllers:a-host:a-tailnet",
+            kind="connection",
+            label="a-tailnet",
+            subtitle="tailscale",
+            facts=tuple(facts),
+        )
+        return detect(_estate(Topology(nodes=(node,), edges=())))
+
+    def test_a_resolver_off_the_tailnet_is_claimed(self):
+        from application.findings import _tailnet_dns_off_tailnet
+
+        (finding,) = self._findings(
+            _tailnet_dns_off_tailnet, ("tailnet-dns-off-tailnet", "192.0.2.53")
+        )
+
+        self.assertEqual(finding.severity, "attention")
+        self.assertIn("192.0.2.53", finding.title)
+        self.assertIn("1 tailnet nameserver is", finding.title)
+        self.assertEqual(finding.evidence, (("Nameserver", "192.0.2.53"),))
+
+    def test_a_resolver_on_the_tailnet_claims_nothing(self):
+        from application.findings import _tailnet_dns_off_tailnet
+
+        self.assertEqual(
+            self._findings(
+                _tailnet_dns_off_tailnet, ("tailnet-address", "100.64.0.53")
+            ),
+            (),
+        )
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", str(TAILNET[0])])
+    def test_trusting_the_whole_range_is_reported_with_what_the_tailnet_uses(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        (finding,) = self._findings(
+            _trusted_wider_than_tailnet,
+            ("tailnet-address", "100.64.0.1"),
+            ("tailnet-address", "100.64.0.2"),
+            ("tailnet-route", "192.0.2.0/24"),
+        )
+
+        self.assertEqual(finding.severity, "neutral")
+        self.assertIn("2 device addresses and 1 subnet route", finding.title)
+        self.assertEqual(
+            finding.evidence,
+            (
+                ("Trusted", str(TAILNET[0])),
+                ("Device address", "100.64.0.1"),
+                ("Device address", "100.64.0.2"),
+                ("Subnet route", "192.0.2.0/24"),
+            ),
+        )
+        self.assertEqual(finding.remedies, ())
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "100.64.0.1/32"])
+    def test_trust_already_narrowed_claims_nothing(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        self.assertEqual(
+            self._findings(
+                _trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1")
+            ),
+            (),
+        )
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=[str(TAILNET[0])])
+    def test_without_a_device_reading_nothing_is_claimed(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        self.assertEqual(self._findings(_trusted_wider_than_tailnet), ())
+
+
+class TailnetFactTests(TestCase):
+    """The facts the tailnet rules read, derived from the stored readings."""
+
+    def store(self, kind, records):
+        from control_plane.models import ProviderInventory
+
+        ProviderInventory.objects.create(
+            kind=kind, records=records, observed_at=timezone.now()
+        )
+
+    def facts(self):
+        from application.topology import _tailnet_facts
+
+        return _tailnet_facts()
+
+    def test_a_nameserver_that_is_no_device_address_is_off_the_tailnet(self):
+        self.store(
+            "tailscale.device",
+            [
+                {
+                    "name": "example-host",
+                    "addresses": ["100.64.0.53", "fd7a:115c:a1e0::35"],
+                    "enabled_routes": ["192.0.2.0/24", "0.0.0.0/0", "::/0"],
+                }
+            ],
+        )
+        self.store(
+            "tailscale.dns",
+            [{"record": "dns", "nameservers": ["100.64.0.53", "192.0.2.53"]}],
+        )
+
+        facts = self.facts()
+
+        self.assertIn(("tailnet-dns-off-tailnet", "192.0.2.53"), facts)
+        self.assertNotIn(("tailnet-dns-off-tailnet", "100.64.0.53"), facts)
+        self.assertIn(("tailnet-address", "100.64.0.53"), facts)
+        self.assertIn(("tailnet-route", "192.0.2.0/24"), facts)
+        self.assertNotIn(("tailnet-route", "0.0.0.0/0"), facts)
+        self.assertNotIn(("tailnet-route", "::/0"), facts)
+
+    def test_without_a_device_reading_no_resolver_is_judged(self):
+        self.store(
+            "tailscale.dns", [{"record": "dns", "nameservers": ["192.0.2.53"]}]
+        )
+
+        self.assertEqual(self.facts(), ())
 
 
 class PerimeterClaimTests(TestCase):
@@ -1444,3 +1610,139 @@ class PerimeterClaimTests(TestCase):
         from application.findings import _firewall_stopped
 
         self.assertEqual(self._findings(_firewall_stopped), ())
+
+
+class UnrecognisedContainerTests(TestCase):
+    """A container no compose project declares is reported, never adopted.
+
+    The sweep leaves it unmanaged, so it has no node of its own. Its machine
+    carries it as a fact, and the finding reads it from there and offers the
+    one adoption that takes exactly that record on.
+    """
+
+    STRAY = {
+        "name": "a-stray",
+        "host": "a-docker-host",
+        "connection_ref": "a-portainer",
+        "stack": "",
+    }
+    COMPOSED = {
+        "name": "a-web",
+        "host": "a-docker-host",
+        "connection_ref": "a-portainer",
+        "stack": "a-project",
+    }
+
+    def setUp(self):
+        from .adoption_testing import connection
+        from .security import cli_principal
+        from .sweep import record_sweep
+
+        connection("portainer", "a-portainer")
+        ManagedResource.objects.create(
+            key="a-docker-host",
+            kind="machine",
+            spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
+        )
+        record_sweep(
+            {
+                "portainer.container": {
+                    "ok": True,
+                    "records": [self.COMPOSED, self.STRAY],
+                }
+            },
+            principal=cli_principal(),
+        )
+
+    def projected(self):
+        with mock.patch(
+            "application.plugins.plugin_connection_specs", return_value=()
+        ):
+            return derive_topology(principal=MANAGE)
+
+    def found(self):
+        return [
+            f
+            for f in derive_findings(self.projected(), principal=MANAGE)
+            if f.rule == "unrecognised-container"
+        ]
+
+    def test_it_is_one_serious_finding_about_its_machine(self):
+        (finding,) = self.found()
+
+        self.assertEqual(finding.subject, "machine:a-docker-host")
+        self.assertEqual(finding.severity, "serious")
+        self.assertEqual(
+            finding.title, "Unrecognised container a-stray on a-docker-host"
+        )
+
+    def test_a_container_its_compose_project_declares_is_not_reported(self):
+        self.assertNotIn("a-web", " ".join(f.title for f in self.found()))
+
+    def test_the_remedy_adopts_exactly_that_record(self):
+        from django.urls import reverse
+
+        from .inventory import record_token, unmanaged
+
+        (finding,) = self.found()
+        (remedy,) = finding.remedies
+        (item,) = unmanaged()
+        token = record_token("portainer.container", ("a-docker-host", "a-stray"))
+
+        self.assertEqual(remedy.label, "Adopt it")
+        self.assertEqual(remedy.capability, "infrastructure.resource.create")
+        self.assertEqual(remedy.method, "POST")
+        # The same handle the adoption looks the record up by.
+        self.assertEqual(token, item.token)
+        self.assertEqual(
+            remedy.url,
+            reverse(
+                "control_plane:adopt_record", args=["portainer.container", token]
+            ),
+        )
+
+    def test_adopting_it_from_the_page_clears_the_finding(self):
+        from django.contrib.auth import get_user_model
+
+        (finding,) = self.found()
+        self.client.force_login(
+            get_user_model().objects.create_user(
+                username="operator", password="test-only-password"
+            )
+        )
+
+        self.client.post(finding.remedies[0].url)
+
+        self.assertTrue(
+            ManagedResource.objects.filter(
+                kind="portainer.container", spec__name="a-stray"
+            ).exists()
+        )
+        self.assertEqual(self.found(), [])
+
+    def test_adopting_it_through_the_service_clears_the_finding(self):
+        from .inventory import AdoptCommand, adopt, unmanaged
+        from .security import cli_principal
+
+        (item,) = unmanaged()
+
+        adopt(
+            AdoptCommand(kind="portainer.container", token=item.token),
+            principal=cli_principal(),
+        )
+
+        self.assertEqual(self.found(), [])
+
+    def test_deriving_findings_costs_no_query_with_one_present(self):
+        """The fact is gathered while the topology is built, not by the rule."""
+
+        from django.db import connection as database_connection
+        from django.test.utils import CaptureQueriesContext
+
+        projection = self.projected()
+
+        with CaptureQueriesContext(database_connection) as captured:
+            raised = derive_findings(projection, principal=MANAGE)
+
+        self.assertEqual(len(captured), 0)
+        self.assertIn("unrecognised-container", [f.rule for f in raised])

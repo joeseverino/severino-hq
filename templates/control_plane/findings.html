@@ -1,28 +1,19 @@
-{% extends "base.html" %}{% load value_tags %}
-{% block title %}Findings{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Findings</h1>
-  </div>
-  <div class="page-actions">
-    <a class="btn" href="{% url 'action_items' %}">Action items</a>
-    <a class="btn" href="{% url 'control_plane:topology' %}">Topology</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
+{% if finding_entries or active_rule %}
 <nav class="topology-lenses" aria-label="Finding rules">
-  <a class="scope-chip{% if not active_rule %} is-active{% endif %}" href="{% url 'control_plane:findings' %}"{% if not active_rule %} aria-current="page"{% endif %}>Everything</a>
+  <a class="scope-chip{% if not active_rule %} is-active{% endif %}" href="{% url 'control_plane:findings' %}"{% if not active_rule %} aria-current="page"{% endif %}>All</a>
   {% for rule in finding_rules %}
     <a class="scope-chip{% if active_rule.name == rule.name %} is-active{% endif %}" href="?rule={{ rule.name|urlencode }}"{% if active_rule.name == rule.name %} aria-current="page"{% endif %}>{{ rule.title }}</a>
   {% endfor %}
 </nav>
 
 <div class="topology-summary" role="status">
-  <span><strong>{{ finding_entries|length }}</strong> finding{{ finding_entries|length|pluralize }}</span>
+  <span><strong>{{ finding_entries|length|counted:"finding" }}</strong></span>
   {% if finding_counts.serious %}<span><strong>{{ finding_counts.serious }}</strong> serious</span>{% endif %}
   {% if finding_counts.attention %}<span><strong>{{ finding_counts.attention }}</strong> attention</span>{% endif %}
 </div>
+{% endif %}
 
 <div class="finding-list">
   {% for entry in finding_entries %}
@@ -48,12 +39,12 @@
         {% include "partials/_resolution_workflow.html" with workflow=entry.workflow %}
       {% elif entry.offers or entry.remedies %}
         <div class="finding-offers">
-          <strong>What HQ can do now</strong>
+          <strong>Actions</strong>
           <div class="finding-actions">
             {% for action in entry.offers %}<a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
             {% for action in entry.remedies %}
               {% if action.method == "POST" %}
-                <form action="{{ action.url }}" method="post">{% csrf_token %}<button type="submit" class="btn compact primary">{{ action.label }}</button></form>
+                {% post_button action.label action.url css="btn compact primary" %}
               {% else %}
                 <a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>
               {% endif %}
@@ -63,7 +54,7 @@
       {% endif %}
     </article>
   {% empty %}
-    {% include "partials/_empty_state.html" with message="No derived findings match this view." %}
+    {% include "partials/_empty_state.html" with message="Nothing needs fixing." %}
   {% endfor %}
 </div>
 {% endblock %}

@@ -2,7 +2,7 @@ name: plugin checks
 
 # The reusable pre-admission gate. Every extension repository calls this instead
 # of copying it, so the pinned action SHAs, the Python matrix and the secret
-# scan live in exactly one place -- this one, where Dependabot already keeps
+# scan live in exactly one place: this one, where Dependabot already keeps
 # them current.
 #
 # This workflow deliberately does NOT sign anything. A job that runs from a
@@ -68,14 +68,14 @@ jobs:
           path: host
       - name: Report whether the host pin is current
         id: pin
-        # A stale pin does not fail here -- pinning behind the host is a
+        # A stale pin does not fail here: pinning behind the host is a
         # legitimate state. It surfaces as an ImportError for a name the pinned
         # contract has not got yet, which reads like a bug in the extension and
         # sends you debugging the wrong repository. Saying so up front turns
         # that into one line.
         #
         # A warning rather than a notice, because a notice is not shown on the
-        # checks list or the job summary -- it is a line in a log nobody opens
+        # checks list or the job summary: it is a line in a log nobody opens
         # when the tests are green, and by the time they are not, the pin is the
         # last thing suspected. This one was three commits and several hours
         # behind while the failure read `ModuleNotFoundError: No module named
@@ -126,8 +126,8 @@ jobs:
           fi
 
       # The one line that turns this into a two-minute fix. A host pin behind
-      # main fails as a missing name -- `ModuleNotFoundError: No module named
-      # 'hq_sdk'` -- which reads as a broken extension and sends you into the
+      # main fails as a missing name: `ModuleNotFoundError: No module named
+      # 'hq_sdk'`, which reads as a broken extension and sends you into the
       # wrong repository. It is nearly always the pin, and the pin already
       # knows. Said here, at the failure, rather than as a notice further up
       # that nobody scrolls back to.
@@ -136,9 +136,9 @@ jobs:
         run: |
           echo "::error title=Host pin is ${{ steps.pin.outputs.behind }} commits behind::\
           These checks ran against host ${{ steps.pin.outputs.pinned }}, not main \
-          (${{ steps.pin.outputs.current }}). A name missing from the host contract -- \
-          an ImportError or ModuleNotFoundError for something the host has since \
-          gained -- is this, not a fault in this repository. Bump HQ_COMMIT and \
+          (${{ steps.pin.outputs.current }}). An ImportError or ModuleNotFoundError \
+          for something the host has since gained is this, not a fault in this \
+          repository. Bump HQ_COMMIT and \
           re-run before debugging further: hq pin --rerun"
 
   secret-scan:

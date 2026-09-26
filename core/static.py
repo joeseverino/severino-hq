@@ -1,26 +1,34 @@
 """Fast native-ASGI delivery for versioned static assets."""
 
+import os
 from urllib.parse import parse_qs
 
 from django.conf import settings
+from django.contrib.staticfiles import finders
 from starlette.staticfiles import StaticFiles
 
 
 class CachedStaticFiles(StaticFiles):
     """Cache versioned assets permanently and ordinary assets briefly.
 
-    Never in development, though, and that exception is load-bearing. The
-    version token is a hash of the *source* tree, while this mount serves the
-    *collected* one, and in development those two are only in step just after
-    `collectstatic`. Edit a script, load a page before collecting, and the
-    browser is handed the new URL with the old bytes -- and told to keep them
-    forever. Every later edit is then invisible behind a cache entry that will
-    never be revalidated, which presents as the application simply not running
-    the code on disk.
-
-    Production collects on every boot, so the two trees are never out of step
-    there; the far-future caching that matters is the caching this keeps.
+    Never while serving live (``STATIC_LIVE``), and that exception is
+    load-bearing: the version token hashes the source tree once, so a
+    far-future cache would pin whatever bytes it first saw and every later edit
+    would look like the application not running the code on disk. Production
+    serves the tree it collects on every boot, so token and bytes agree there,
+    and that is the caching this keeps.
     """
+
+    def lookup_path(self, path):
+        # Live, the source trees answer first, through the same finders
+        # collectstatic reads, so there is nothing to collect after an edit.
+        # The finders refuse a path outside their roots; the parent refuses an
+        # absolute one, so that check runs before them.
+        if settings.STATIC_LIVE and not path.startswith(("/", "\\")):
+            found = finders.find(path)
+            if found:
+                return found, os.stat(found)
+        return super().lookup_path(path)
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
@@ -28,7 +36,7 @@ class CachedStaticFiles(StaticFiles):
             query = parse_qs(scope.get("query_string", b""))
             response.headers["Cache-Control"] = (
                 "no-cache"
-                if settings.DEBUG
+                if settings.STATIC_LIVE
                 else "public, max-age=31536000, immutable"
                 if b"v" in query
                 else "public, max-age=3600"

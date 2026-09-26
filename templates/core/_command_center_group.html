@@ -1,0 +1,22 @@
+<section class="command-center-group" aria-labelledby="command-center-group-{{ group.key }}">
+  <h3 id="command-center-group-{{ group.key }}">{{ group.label }}</h3>
+  {% for item in group.items %}
+    <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
+       class="command-center-option" href="{{ item.url }}" role="option"
+       aria-selected="false" tabindex="-1" data-command-center-option>
+      <span class="command-center-kind command-center-kind-{{ item.kind }}" aria-hidden="true">{{ item.kind|slice:":1"|upper }}</span>
+      <span class="command-center-copy">
+        <span class="command-center-title">
+          <strong>{{ item.label }}</strong>
+          {% if item.name != item.label %}<code>{{ item.name }}</code>{% endif %}
+        </span>
+        <span class="muted">{{ item.summary }}</span>
+      </span>
+      <span class="command-center-evidence">
+        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label }}</span>{% endif %}
+        {% for badge in item.badges %}<span class="scope-chip">{{ badge }}</span>{% endfor %}
+      </span>
+      <span class="command-center-arrow" aria-hidden="true">→</span>
+    </a>
+  {% endfor %}
+</section>

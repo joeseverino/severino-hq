@@ -1,10 +1,10 @@
-# Severino HQ — backup & restore
+# Severino HQ: backup & restore
 
 What needs to be backed up:
 
 1. **The SQLite database** (`SEVERINO_DATABASE_PATH`).
 2. **Uploaded receipt files** (`SEVERINO_MEDIA_ROOT`).
-3. **Exports directory** (`SEVERINO_EXPORTS_ROOT`) — optional; can be
+3. **Exports directory** (`SEVERINO_EXPORTS_ROOT`): optional; can be
    regenerated from #1.
 
 Pulling these from a tarball is enough to fully restore the app on a new host.
@@ -90,7 +90,7 @@ sudo systemctl start severino-hq
 
 If you already run `restic` for the rest of your homelab, point it at the
 data directories directly. The trick with SQLite is to **snapshot via
-`VACUUM INTO` first**, then let restic pick up the snapshot — naive backups of
+`VACUUM INTO` first**, then let restic pick up the snapshot: naive backups of
 the live `.sqlite3` file can be torn between writes. The `backup.sh` script
 makes that snapshot for you; you can have restic back up
 `${SEVERINO_BACKUP_DIR}` afterwards.

@@ -1,31 +1,10 @@
-{% extends "base.html" %}
-{% block title %}Jobs{% endblock %}
-{% block content %}
-<section class="section-head">
-  <h1>Background jobs</h1>
-  <p class="lede">Work that runs for longer than a request will wait. Anything whose process stopped without finishing is settled when this page is drawn.</p>
-</section>
-{% if jobs %}
-<div class="table-scroll">
-  <table class="data-table">
-    <thead>
-      <tr><th>Started</th><th>Job</th><th>State</th><th class="num-col">Took</th><th>Last said</th><th>Asked by</th></tr>
-    </thead>
-    <tbody>
-      {% for job in jobs %}
-      <tr>
-        <td>{{ job.created_at|date:"M j, H:i" }}</td>
-        <td>{{ job.label }}</td>
-        <td>{{ job.get_state_display }}</td>
-        <td class="num-col">{% if job.duration_seconds %}{{ job.duration_seconds|floatformat:0 }}s{% else %}—{% endif %}</td>
-        <td>{{ job.note|default:"—" }}</td>
-        <td>{{ job.requested_by|default:"—" }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
-{% include "partials/_empty_state.html" with message="Nothing has run yet." %}
-{% endif %}
+{% extends "list_page.html" %}
+{% block row %}
+  <td>{{ row.created_at|date:"M j, H:i" }}</td>
+  <td>{{ row.label }}</td>
+  <td>{{ row.get_state_display }}</td>
+  <td class="num-col">{% if row.duration_seconds %}{{ row.duration_seconds|floatformat:0 }}s{% else %}{% empty_value %}{% endif %}</td>
+  <td>{{ row.note|or_empty }}</td>
+  <td>{{ row.requested_by|or_empty }}</td>
 {% endblock %}
+{% block empty %}No jobs yet.{% endblock %}

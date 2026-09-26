@@ -30,6 +30,7 @@ from application.connection_contracts import (
     ConnectionSpec,
 )
 from application.security import Capability
+from core.errors import UpstreamUnavailable
 
 
 def connection_specs():
@@ -109,8 +110,12 @@ def connection_specs():
     )
 
 
-class LookupUnavailable(RuntimeError):
+class LookupUnavailable(UpstreamUnavailable):
     """A registry could not be reached, or answered with nothing usable."""
+
+
+class LookupNotFound(LookupUnavailable):
+    """The registry answered, and holds no record of what was asked."""
 
 
 class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
@@ -152,7 +157,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     Every failure collapses to one exception deliberately. The resolver reports
     a missing parameter as a 400 with prose, a name that does not exist as a
     200 with an empty list, and an address with no PTR record as a 200 carrying
-    an error beside a full body -- distinctions too inconsistent to hand
+    an error beside a full body: distinctions too inconsistent to hand
     upward. A caller can act on "no answer"; it could not act on which flavour
     of no answer this was.
     """
@@ -170,12 +175,14 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
         raise
     except HTTPError as exc:
         # 404 from RDAP means the address is not allocated to anyone the
-        # registries know, which is an answer rather than a fault -- but it
+        # registries know, which is an answer rather than a fault, but it
         # arrives as an exception, and the service above reads the absence.
         # The exception is also the response, socket included, so it is closed
         # here rather than whenever the chained LookupUnavailable is collected.
         exc.close()
-        raise LookupUnavailable("The registry has no record of that.") from exc
+        if exc.code == 404:
+            raise LookupNotFound("The registry has no record of that.") from exc
+        raise LookupUnavailable("The registry answered unexpectedly.") from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise LookupUnavailable("The registry could not be reached.") from exc
     except (ValueError, UnicodeDecodeError) as exc:
@@ -202,4 +209,15 @@ def registry(address: str, *, timeout: int | None = None) -> dict:
     """
 
     url = f"{_base('SEVERINO_RDAP_ENDPOINT')}/ip/{address}"
+    return _get(url, timeout=timeout, accept="application/rdap+json, application/json")
+
+
+def domain_registry(name: str, *, timeout: int | None = None) -> dict:
+    """Ask RDAP who registered a domain and until when.
+
+    ``name`` is a hostname the caller has already checked, so it cannot carry a
+    path segment.
+    """
+
+    url = f"{_base('SEVERINO_RDAP_ENDPOINT')}/domain/{name}"
     return _get(url, timeout=timeout, accept="application/rdap+json, application/json")

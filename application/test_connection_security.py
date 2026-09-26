@@ -8,9 +8,9 @@ from control_plane.models import ProviderInventory
 from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
-    observed_firewall_control,
-    observed_ingress_control,
+    observed_request_controls,
 )
+
 from .connections import (
     ConnectionAbility,
     ConnectionAbilityState,
@@ -21,6 +21,14 @@ from .connections import (
     ConnectionView,
 )
 from .security import Capability
+
+
+def observed_ingress_control(hostname):
+    return observed_request_controls(hostname)[0]
+
+
+def observed_firewall_control():
+    return observed_request_controls("hq.example.test")[1]
 
 
 def _groups(*, ability_available=True, status="good", required_scopes=("example:read",)):
@@ -399,3 +407,35 @@ class ArrivalInterfaceTests(TestCase):
         control = observed_firewall_control()
         self.assertEqual(control.state, "good")
         self.assertIn("no rule that drops", control.detail)
+
+
+class IngressRegistryTests(TestCase):
+    """The ingress control asks the registry which kinds carry a source policy."""
+
+    def test_any_kind_declaring_an_ingress_policy_is_read(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from control_plane.provider_adapters.contracts import IngressPolicy
+        from control_plane.providers import PROVIDERS
+
+        proxy = replace(
+            PROVIDERS["npm.proxy_host"],
+            kind="example.proxy",
+            connection_providers=("ssh",),
+            ingress_policy=lambda record: IngressPolicy(
+                hostnames=tuple(record["names"]), restricted=False
+            ),
+        )
+        ProviderInventory.objects.create(
+            kind="example.proxy",
+            observed_at=timezone.now(),
+            reachable=True,
+            records=[{"names": ["hq.example.test"]}],
+        )
+        with mock.patch.dict(PROVIDERS, {"example.proxy": proxy}):
+            edge = observed_ingress_control("hq.example.test")
+
+        self.assertEqual(edge.state, "serious")
+        self.assertEqual(edge.evidence, "No source restriction")
+        self.assertIn("SSH", edge.detail)

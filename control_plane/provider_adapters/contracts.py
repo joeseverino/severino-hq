@@ -8,16 +8,85 @@ from functools import partial
 from types import MappingProxyType
 from typing import Any, Protocol, TypeVar
 
+# Connection providers the controller core probes itself, as a transport,
+# rather than an integration declaring a probe for them.
+CORE_PROBED_CONNECTIONS: frozenset[str] = frozenset({"ssh"})
+
 
 T = TypeVar("T")
+
+
+# Why a provider refused a read: the credential itself (invalid, expired,
+# locked out, used from a refused location), or one permission it lacks.
+CREDENTIAL_REFUSAL = "credential"
+PERMISSION_REFUSAL = "permission"
+REFUSALS = (CREDENTIAL_REFUSAL, PERMISSION_REFUSAL)
+
+# Cloudflare's wording for a refusal of the credential itself rather than of
+# one request. "Authentication error" alone is a missing permission.
+_CLOUDFLARE_CREDENTIAL_REFUSALS = (
+    "from location",
+    "too many authentication failures",
+    "invalid api token",
+    "invalid access token",
+    "expired",
+)
+
+
+def cloudflare_refusal(detail: str, *, status: int = 0) -> str:
+    """Which of ``REFUSALS`` Cloudflare's error text and HTTP status name, or ""."""
+
+    lowered = str(detail or "").lower()
+    if status == 401 or any(phrase in lowered for phrase in _CLOUDFLARE_CREDENTIAL_REFUSALS):
+        return CREDENTIAL_REFUSAL
+    if status == 403 or "authentication error" in lowered:
+        return PERMISSION_REFUSAL
+    return ""
+
+
+@dataclass(frozen=True)
+class IngressPolicy:
+    """The source policy an observed proxy record applies to its names.
+
+    ``rules`` are ``(directive, address)`` in order, lowercased; None when the
+    record carries no rule-level reading. ``authorizations`` is None when unknown.
+    """
+
+    hostnames: tuple[str, ...]
+    restricted: bool
+    rules: tuple[tuple[str, str], ...] | None = None
+    implicit_deny: bool = False
+    satisfy_any: bool = True
+    passes_auth: bool = True
+    authorizations: int | None = None
+
+
+@dataclass(frozen=True)
+class ServedCertificate:
+    """The certificate an observed record serves its names with."""
+
+    hostnames: tuple[str, ...]
+    certificate: Mapping[str, Any]
 
 
 class ProviderError(RuntimeError):
     """A provider operation failed without exposing credential material."""
 
-    def __init__(self, message: str, *, status: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: dict[str, Any] | None = None,
+        refusal: str = "",
+        reason: str = "",
+    ):
         super().__init__(message)
         self.status = status or {}
+        if refusal and refusal not in REFUSALS:
+            raise ValueError(f"Unknown refusal {refusal!r}.")
+        # One of REFUSALS when the provider refused, and its words for why.
+        self.refusal = refusal
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -140,7 +209,7 @@ class ControllerIntegrationAdapter:
             provider
             for definition in definitions
             for provider in definition.connection_providers
-            if provider != "ssh"
+            if provider not in CORE_PROBED_CONNECTIONS
         }
         if set(probes) != declared_probes:
             raise ValueError(

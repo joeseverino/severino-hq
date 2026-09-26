@@ -4,7 +4,7 @@ Most spec fields are fully described by their annotation: a port is an integer
 between 1 and 65535, a scheme is one of two strings. Where a certificate
 installs is not. It has to name something that exists, and rendering it from the
 annotation alone produced a blank text box that worked only if the operator
-already knew the exact slug -- which meant the certificate form could be filled
+already knew the exact slug, which meant the certificate form could be filled
 in correctly only by someone who did not need it.
 
 Kept out of ``control_plane.providers`` because these read the database and that
@@ -19,10 +19,15 @@ from collections.abc import Set as AbstractSet
 from control_plane.models import ManagedResource, ProviderInventory
 from control_plane.providers import (
     CERTIFICATE_KIND,
+    CONTAINER_KIND,
     DELIVERY_TARGET_KIND,
     DNS_RECORD_TYPES,
     MACHINE_KIND,
+    PROVIDERS,
+    TAILNET_KIND,
     UPLOADED_CERTIFICATE_KIND,
+    UPLOADED_CERTIFICATE_REFUSALS,
+    ZONE_KIND,
     NameContext,
 )
 
@@ -41,7 +46,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     # Both kinds. A name no public authority will issue for is served by a
     # certificate HQ was given rather than one it issued, and offering only the
     # issued ones meant the proxy that needs it could not be pointed at it from
-    # the form at all -- on the one flow where an uploaded certificate is the
+    # the form at all: on the one flow where an uploaded certificate is the
     # only possible answer.
     managed = ManagedResource.objects.filter(
         kind__in=(CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND), enabled=True
@@ -52,7 +57,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     # flip, and binding a proxy to a certificate that does not cover its names
     # is a browser warning rather than an error anything reports.
     options = [
-        (resource.key, f"{resource.key} — covers {context.hostname}")
+        (resource.key, f"{resource.key} · covers {context.hostname}")
         for resource in managed
         if resource.key in covering
     ]
@@ -63,7 +68,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
     )
     # No blank option here. Whether "leave it as it is" is even a coherent
     # answer depends on whether the thing exists yet, and only the form knows
-    # that -- offered on a create page it read as "keep the certificate it
+    # that: offered on a create page it read as "keep the certificate it
     # already has" about a proxy host that did not exist.
     return {"certificate_resource": tuple(options)}
 
@@ -96,26 +101,24 @@ def tailnet_device(context: NameContext) -> dict[str, tuple[tuple[str, str], ...
     """The devices the tailnet actually reported, and the credential to use.
 
     Offered rather than typed: the name has to match what the tailnet calls the
-    device exactly, and that is rarely what anyone would guess -- a laptop is
+    device exactly, and that is rarely what anyone would guess: a laptop is
     whatever its owner typed into it years ago.
     """
 
-    from control_plane.models import ProviderInventory
-
     devices: dict[str, str] = {}
-    for snapshot in ProviderInventory.objects.filter(kind="tailscale.device"):
+    for snapshot in ProviderInventory.objects.filter(kind=TAILNET_KIND):
         for record in snapshot.records:
             name = str(record.get("name", ""))
             if not name:
                 continue
             devices[name] = (
-                f"{name} — expires {record['key_expires'][:10]}"
+                f"{name} · key expires {record['key_expires'][:10]}"
                 if record.get("key_expires")
-                else f"{name} — already stays on the tailnet"
+                else f"{name} · key expiry disabled"
             )
     return {
         "name": tuple(sorted(devices.items())),
-        "connection_ref": _connection_choices("tailscale"),
+        "connection_ref": _connections_of(TAILNET_KIND),
     }
 
 
@@ -123,13 +126,9 @@ def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     """Which credential reaches the target, and which certificate names it."""
 
     return {
-        "connection_ref": (
-            _connection_choices("npm")
-            + _connection_choices("ssh")
-            + _connection_choices("onepassword")
-        ),
+        "connection_ref": _connections_of(DELIVERY_TARGET_KIND),
         "certificate_resource": (
-            ("", "Nothing yet"),
+            ("", "None"),
             *sorted(
                 (key, key)
                 for key in ManagedResource.objects.filter(
@@ -144,15 +143,13 @@ def uploaded_certificate_choices(context: NameContext) -> dict[str, tuple[tuple[
     """The same install targets an issued certificate can go to, less cPanel.
 
     Deploying is deploying: a proxy does not care which authority signed the
-    thing it is asked to serve. Shared hosting does -- cPanel will not accept a
+    thing it is asked to serve. Shared hosting does: cPanel will not accept a
     certificate signed by a private CA, and resolution refuses one, so offering
     it would put an answer in the menu that fails only after being chosen.
     """
 
-    # 1Password is out for a second reason. Publishing records what a reconcile
-    # observed about a certificate HQ issued; an uploaded one is not observed
-    # that way, so resolution refuses it and the menu must not offer it.
-    return {"install_on": tuple(_install_targets(exclude={"cpanel", "onepassword"}))}
+    # The targets resolution refuses an uploaded certificate are not offered.
+    return {"install_on": tuple(_install_targets(exclude=UPLOADED_CERTIFICATE_REFUSALS.keys()))}
 
 
 def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -162,7 +159,7 @@ def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
         "zone": _known_zones(),
         # Named rather than lettered. Rendered from the annotation alone the
         # menu reads "A / AAAA / CNAME / TXT / MX / CAA", which is a quiz for
-        # anyone who does not already know the answer -- and the registry
+        # anyone who does not already know the answer, and the registry
         # already carries a sentence about each one.
         "record_type": tuple(
             (record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES
@@ -174,7 +171,7 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
     """Where a stack can run, and which Portainer reaches it.
 
     Both menus come from the connection sweep, because a Portainer is the only
-    thing that knows which machines it holds -- HQ lists a printer and a phone as
+    thing that knows which machines it holds: HQ lists a printer and a phone as
     readily as a Docker host, and a machine registered this morning is available
     whether or not anything has been declared about it.
 
@@ -188,10 +185,11 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
         # Labelled with what the machine is for where HQ has been told, because
         # Portainer calls its own host "local" and that is nobody's hostname.
         "host": tuple(
-            (host, f"{host} — {described[host]}" if described.get(host) else host)
-            for host, _ in reachable_through("portainer")
+            (host, f"{host} · {described[host]}" if described.get(host) else host)
+            for provider in PROVIDERS[CONTAINER_KIND].connection_providers
+            for host, _ in reachable_through(provider)
         ),
-        "connection_ref": _connection_choices("portainer"),
+        "connection_ref": _connections_of(CONTAINER_KIND),
     }
 
 
@@ -212,7 +210,7 @@ def zone(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
 
     return {
         "zone": _known_zones(),
-        "connection_ref": _connection_choices("cloudflare_dns"),
+        "connection_ref": _connections_of(ZONE_KIND),
     }
 
 
@@ -235,29 +233,37 @@ def _known_zones() -> tuple[tuple[str, str], ...]:
 
     declared = {
         resource.spec.get("zone", "")
-        for resource in ManagedResource.objects.filter(
-            kind="cloudflare.zone", enabled=True
-        )
+        for resource in ManagedResource.objects.filter(kind=ZONE_KIND, enabled=True)
         if resource.spec.get("zone")
     }
     seen = {
         str(record.get("zone", ""))
-        for snapshot in ProviderInventory.objects.filter(kind="cloudflare.zone")
+        for snapshot in ProviderInventory.objects.filter(kind=ZONE_KIND)
         for record in snapshot.records
         if record.get("zone")
     }
     options = [(zone, zone) for zone in sorted(declared)]
     options.extend(
-        (zone, f"{zone} — not managed by HQ yet")
+        (zone, f"{zone} · not managed")
         for zone in sorted(seen - declared)
     )
     return tuple(options)
 
 
+def _connections_of(kind: str) -> tuple[tuple[str, str], ...]:
+    """The connections of every provider the registry says reaches ``kind``."""
+
+    return tuple(
+        choice
+        for provider in PROVIDERS[kind].connection_providers
+        for choice in _connection_choices(provider)
+    )
+
+
 def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
     """The connections of one kind, as the controller last reported them.
 
-    Empty until the first sweep, and the field stays typeable -- an empty menu
+    Empty until the first sweep, and the field stays typeable: an empty menu
     is a smaller failure than a menu that cannot describe what already exists.
     A connection that stopped answering is still offered, and says so: it is
     the one an operator already has, and hiding it reads as never having set
@@ -269,7 +275,7 @@ def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
             connection.connection_ref,
             connection.connection_ref
             if connection.reachable
-            else f"{connection.connection_ref} (not answering)",
+            else f"{connection.connection_ref} (unreachable)",
         )
         for connection in connections_for(provider)
     )
@@ -281,7 +287,7 @@ def machine_address_notes() -> dict[str, dict[str, str]]:
     A declaration carries addresses for two unrelated reasons, and the form
     presented both the same way. Some are the only record there is: nothing in
     the estate reports the printer on the LAN, or the public address of a VPS.
-    The rest repeat a reading the tailnet gives on every sweep -- and those are
+    The rest repeat a reading the tailnet gives on every sweep, and those are
     also the key that ties HQ's name for a machine to the tailnet's, which calls
     the same laptop something else entirely.
 

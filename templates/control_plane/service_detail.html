@@ -1,69 +1,29 @@
-{% extends "base.html" %}
+{% extends "page.html" %}
 {% load nav_tags %}
-{% block title %}{{ service.hostname }} · Services{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div class="page-head-copy">
-    <h1>{{ service.hostname }}</h1>
-    <span class="page-head-status pill pill-{{ service.status }}">{{ service.status_label }}</span>
-    <p class="muted">
-      {% comment %}
-      Named here rather than given rows of their own. A CNAME to a name HQ
-      already serves is the same service reached another way, and listed
-      separately it appeared on the board with its own health, its own
-      certificate and its own "not routed" — describing something that is not
-      separate from anything.
-      {% endcomment %}
-      {% if service.aliases %}Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
-      {% if service.project %}{% if service.aliases %} &middot; {% endif %}Published by <a href="{{ service.project.url }}">{{ service.project.name }}</a>{% endif %}
-      {% if service.reach.label %}
-        {% if service.aliases or service.project %}&middot;{% endif %}
-        <span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}"
-              title="{{ service.reach.detail }}">{{ service.reach.label }}</span>
-      {% endif %}
-    </p>
-  </div>
-  <div class="page-actions">
-    {% comment %}
-    The controls sit with the page's other actions rather than inside the card
-    that describes the container. A card reports; this is where you act.
-
-    Which buttons appear is two readings, not a choice: what the controller says
-    it implements for a container, and what the container's own state makes
-    worth asking. Nothing offers Start to something already running.
-    {% endcomment %}
-    {% if service.container.watcher %}
-      {% for route, label in container_actions %}
-        <form method="post" action="{% url route service.container.watcher %}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn icon-btn" title="{{ label }} {{ service.container.name }}">
-            {% include "partials/_icon.html" with name=route|cut:"control_plane:" %}
-            <span>{{ label }}</span>
-          </button>
-        </form>
-      {% endfor %}
-    {% elif service.container %}
-      <form method="post" action="{% url 'control_plane:adopt_record' container_kind service.container.token %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit" class="btn" title="Let HQ start, stop and restart {{ service.container.name }}">Watch this container</button>
-      </form>
-    {% endif %}
-    {% if service.zone_key %}
-      <a class="btn" href="{% url 'zones:detail' service.zone_key %}">Domain</a>
-    {% endif %}
-    <a class="btn" href="{% url 'control_plane:services' %}">All services</a>
-  </div>
-</div>
-
-{% include "partials/_page_navigation.html" with navigation=page_navigation %}
+{% block page %}
+<p class="muted">
+  {% if read_only %}<span class="pill">Read-only</span>{% else %}<span class="pill pill-{{ service.status }}">{{ service.status_label }}</span>{% endif %}
+  {% comment %}
+  Named here rather than given rows of their own. A CNAME to a name HQ
+  already serves is the same service reached another way, and listed
+  separately it appeared on the board with its own health, its own
+  certificate and its own "not routed", describing something that is not
+  separate from anything.
+  {% endcomment %}
+  {% if service.aliases %}&middot; Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+  {% if service.project_link %}&middot; Published by {% entity service.project_link %}{% endif %}
+  {% if service.reach.label %}
+    &middot;
+    <span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}"
+          title="{{ service.reach.detail }}">{{ service.reach.label }}</span>
+  {% endif %}
+</p>
 
 <section id="overview" class="page-section" aria-label="Overview" data-page-section>
 
 {% comment %}
 Faults, not health. Each is a statement about how two declarations relate, so no
-single resource page can show it — which is the reason this page exists. Rendered
+single resource page can show it, which is the reason this page exists. Rendered
 through the host's own row primitive from Service.fault_rows, so the markup is
 not restated here.
 {% endcomment %}
@@ -83,15 +43,15 @@ not restated here.
       {% comment %}
       A facet HQ both declares and watches says it once. The container's key is
       its machine and its name joined, so printing the key under them repeated
-      both halves a third time — and the state the sweep knows was nowhere,
+      both halves a third time, and the state the sweep knows was nowhere,
       because a declaration nothing reconciles observes nothing.
       {% endcomment %}
       {% if facet.present and facet.observed %}
         {% with claim=facet.claims.0 %}
           <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
           <span class="readout">
-            <a href="{{ claim.url }}"><code>{{ facet.observed.name }}</code></a>
-            {% if facet.machine %}on <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a>{% endif %}
+            {% entity claim.link code=True label=facet.observed.name %}
+            {% if facet.machine %}on {% entity facet.machine.link %}{% endif %}
           </span>
           <details class="control-diagnostics">
             <summary>What is running</summary>
@@ -100,9 +60,9 @@ not restated here.
               {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
               {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-              <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
+              <dt>Seen</dt><dd>{{ facet.observed.observed_at|ago }}</dd>
             </dl>
-            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit this declaration &rarr;</a></span>
+            <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit declaration &rarr;</a></span>
           </details>
         {% endwith %}
       {% elif facet.present %}
@@ -110,7 +70,7 @@ not restated here.
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
               <strong>{{ reading.value }}</strong>
-              {% if reading.drifted %}<span class="pill pill-serious">Drifted — declared {{ reading.desired }}</span>{% endif %}
+              {% if reading.drifted %}<span class="pill pill-serious">Drifted: declared {{ reading.desired }}</span>{% endif %}
             {% else %}
               <span class="readout"><span class="readout-label">{{ reading.label }}</span> {{ reading.value }}{% if reading.drifted %} <span class="pill pill-serious">declared {{ reading.desired }}</span>{% endif %}</span>
             {% endif %}
@@ -118,38 +78,44 @@ not restated here.
             <strong>Declared</strong>
           {% endfor %}
           <span class="readout">
-            <a href="{{ claim.url }}"><code>{{ claim.resource_key }}</code></a>
+            {% entity claim.link code=True %}
             <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>
             <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
           </span>
         {% endfor %}
         {% comment %}
         Where it runs, once, as a link. Named in prose on the observed card and
-        as a plain readout row on the declared one, it went nowhere either way —
+        as a plain readout row on the declared one, it went nowhere either way,
         so "what else is on this machine" meant going to find it.
         {% endcomment %}
         {% if facet.machine %}
-          <span class="readout"><span class="readout-label">On</span> <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a></span>
+          <span class="readout"><span class="readout-label">On</span> {% entity facet.machine.link %}</span>
         {% endif %}
+      {% elif facet.readings %}
+        {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
+        <strong>{{ facet.reading_lines.0.label }}</strong>
       {% elif service.origin.external and facet.routes %}
         {% comment %}
         Not a gap. A name resolving straight to something outside is already
-        routed, and nothing on this network should answer for it — the page
+        routed, and nothing on this network should answer for it: the page
         said "nothing supplies this" beside a card naming exactly what does,
         and offered to add a proxy in front of a site that must not have one.
 
         Named by what it would otherwise have taken, rather than by whoever
         answers instead. Every facet that routes takes this branch, so naming
         the operator here prints one fact once per card. Who serves it belongs
-        in one place — the note below the row.
+        in one place: the note below the row.
 
         What differs per card is what is not needed, and each facet already
         says that: its own providers are the things it would otherwise want.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
         {% for kind, label in facet.declarable %}
-          <span class="readout">No {{ label }} to add.</span>
+          <span class="readout">No {{ label }} needed.</span>
         {% endfor %}
+        {% if facet.id == runtime_facet %}
+          <span class="readout">Served by <strong>{{ service.origin.headline }}</strong> from <code>{{ service.origin.address }}</code></span>
+        {% endif %}
       {% elif facet.observed %}
         {% comment %}
         Found, not declared. Two lines and a disclosure: the state and the name
@@ -159,7 +125,7 @@ not restated here.
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
         <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
-        <span class="readout"><code>{{ facet.observed.name }}</code>{% if facet.machine %} on <a href="{{ facet.machine.url }}">{{ facet.machine.name }}</a>{% else %} on {{ facet.observed.host }}{% endif %}</span>
+        <span class="readout"><code>{{ facet.observed.name }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>What is running</summary>
           <dl class="kv compact">
@@ -167,18 +133,15 @@ not restated here.
             {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
             {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
             {% comment %}
-            Only when it differs from the container's own name. A one-service
-            compose file names the project after the service, so the row read
-            "Compose project: severino-hq" under a heading already saying
-            severino-hq -- a fact charged twice.
+            Only when it differs from the container's own name.
             {% endcomment %}
             {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-            <dt>Seen</dt><dd>{{ facet.observed.observed_at|timesince }} ago</dd>
+            <dt>Seen</dt><dd>{{ facet.observed.observed_at|ago }}</dd>
             {% comment %}
             The offer to take it on, only when taking it on would not mean
             building a second one. A container started by compose on the machine
             is invisible to Portainer's stack list, so declaring it here asks
-            Portainer to stand up its own copy of something already serving —
+            Portainer to stand up its own copy of something already serving,
             which, for the container running this page, means HQ redeploying
             itself.
             {% endcomment %}
@@ -196,17 +159,29 @@ not restated here.
                 Portainer.
                 {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a>{% endfor %}
               {% else %}
-                A compose file on {{ facet.observed.host }}, which HQ has not seen.
+                A compose file on {{ facet.observed.host }}. HQ cannot read it.
               {% endif %}
             </dd>
           </dl>
         </details>
+      {% elif read_only and facet.id == runtime_facet and hq_machine %}
+        {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
+        <strong>{{ hq_label }}</strong>
+        <span class="readout"><span class="readout-label">Runs on</span> {% entity hq_machine %}</span>
+      {% elif facet.not_visible and not facet.reading_lines %}
+        <strong class="control-unknown">Not visible</strong>
+        <span>{{ facet.not_visible }}</span>
+        {% if not read_only %}{% for kind, label in facet.declarable %}
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
+        {% endfor %}{% endif %}
+      {% elif read_only %}
+        <strong class="control-unknown">Not declared</strong>
       {% else %}
         <strong class="control-unknown">Not declared</strong>
-        <span>Nothing supplies this for {{ service.hostname }}.</span>
+        <span>None for {{ service.hostname }}.</span>
         {% comment %}
         Named by the provider's own label. Offered as the bare kind, this read
-        "Add cloudflare.dns_record" — an identifier where a sentence belongs.
+        "Add cloudflare.dns_record": an identifier where a sentence belongs.
         The hostname rides along, so the form opens already knowing which name
         it is being asked about.
         {% endcomment %}
@@ -222,74 +197,44 @@ not restated here.
           <span class="readout muted"><span class="readout-label">{{ label }}</span> {{ reason }}</span>
         {% endfor %}
       {% endif %}
+      {% comment %}One line per reading kind. The kind is named unless the headline above already is it.{% endcomment %}
+      {% for line in facet.reading_lines %}
+        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label }}</span> {% endif %}{% if line.issued %}{{ line.detail }}{% else %}{% for link in line.entities %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Stale</span>{% endif %}</span>
+      {% endfor %}
     </div>
 
   {% endfor %}
 </div>
 
 {% comment %}
-Origin is a sentence, not a fifth card. Four facets are what a name needs to
-answer, and the cards already carry most of what a fifth would say — the ingress
-card prints the address, the runtime card names the container.
-
-What is left is the one thing neither says on its own: which of them is actually
-answering. That is a claim about the row, so it reads under it.
+What serves the name is in Relationships. Two things are said here because no
+card can say them: the name points at a documentation address where nothing
+answers, or at an address no known machine holds.
 {% endcomment %}
-{% if service.origin_is_news %}
-<p class="control-origin">
-  {% comment %}
-  No branch for "nothing is routed": this whole note is skipped when there is no
-  origin, because the facets above already read "Not declared" and a fourth way
-  of saying so is not a fourth fact.
-  {% endcomment %}
-  {% if service.origin.external %}
-    {% comment %}
-    A statement, not a disclaimer. This is a working arrangement: something else
-    serves the content and HQ publishes the record that sends people there.
-    Written as "outside your network … managed at the provider" it read as a
-    limitation being apologised for, about the half of it HQ actually runs.
-    {% endcomment %}
-    Served by <strong>{{ service.origin.operator }}</strong> from
-    <code>{{ service.origin.address }}</code>.
-  {% elif service.origin.known %}
-    {% comment %}
-    Two sentences, because there are two ways HQ knows. An ingress forwards
-    somewhere; a record just says the name answers there. Written only the first
-    way, a name with no ingress at all was told "ingress forwards to …" directly
-    beneath its own Ingress card reading "Not declared".
-    {% endcomment %}
-    {% if service.origin.routed %}
-      Served from <strong>{{ service.origin.label }}</strong> — ingress forwards to
-      <code>{{ service.origin.address }}</code>.
-      {% if not service.origin.container %}No single container on that host claims the port, so HQ will not guess which one.{% endif %}
-    {% else %}
-      Served from <strong>{{ service.origin.label }}</strong> — this name answers at
-      <code>{{ service.origin.address }}</code>.
-      {% if not service.origin.container %}The record names a machine rather than a port, so HQ cannot tell which container answers.{% endif %}
-    {% endif %}
-  {% else %}
-    {% if service.origin.routed %}
-      Ingress forwards to <code>{{ service.origin.address }}</code>, which
-    {% else %}
-      This name answers at <code>{{ service.origin.address }}</code>, which
-    {% endif %}
-    <strong>HQ cannot match to any machine it knows</strong>. Add it to a
-    machine's addresses if it is one.
-  {% endif %}
-</p>
+{% if service.origin.parked %}
+  <p class="control-origin">Parked. The name resolves to <code>{{ service.origin.address }}</code>, where nothing answers.</p>
+{% elif service.origin and not service.origin.external and not service.origin.known %}
+  <p class="control-origin">
+    {% if service.origin.routed %}Ingress forwards to{% else %}The name resolves to{% endif %}
+    <code>{{ service.origin.address }}</code>, which <strong>matches no known machine</strong>.
+    If it belongs to one, add it to that machine's addresses.
+  </p>
 {% endif %}
 </section>
 
 {% comment %}
 What else HQ holds about this name. Each band is a section the registry produced,
-rendered through the shared renderer — so a section HQ gains later appears here
+rendered through the shared renderer, so a section HQ gains later appears here
 without this template learning anything about it, and the machine page renders
 the same shape from the same file.
 {% endcomment %}
 {% include "partials/_page_sections.html" %}
+{% include "partials/_relationships.html" %}
 
+{% if service.claims or service.alias_claims %}
 <section id="resources" class="page-section" data-page-section>
-<h2>Resources behind this name</h2>
+<h2>Resources</h2>
+{% if service.claims %}
 <div class="table-scroll">
   <table class="data-table">
     <thead><tr><th>Resource</th><th>Kind</th><th>Supplies</th><th>Health</th></tr></thead>
@@ -297,8 +242,8 @@ the same shape from the same file.
       {% for facet in service.facets %}
         {% for claim in facet.claims %}
           <tr>
-            <td><a href="{{ claim.url }}"><strong>{{ claim.resource_key }}</strong></a></td>
-            <td><code>{{ claim.kind }}</code></td>
+            <td><strong>{% entity claim.link %}</strong></td>
+            <td>{{ claim.kind|kind_label }}</td>
             <td>{{ facet.label }}</td>
             <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
           </tr>
@@ -308,13 +253,14 @@ the same shape from the same file.
     </tbody>
   </table>
 </div>
+{% endif %}
 
 {% comment %}
 The declarations behind the other names, folded away.
 
 Not in the cards above: a card describes what answers for *this* name, and an
 alias's CNAME put a second answer in the DNS box that read as two records
-competing for one name — HQ raised a wiring fault and called a working site
+competing for one name: HQ raised a wiring fault and called a working site
 incomplete. Dropped instead, which is where this started, the record appeared
 on no page at all.
 
@@ -330,8 +276,8 @@ it is not what anyone opened this page to read.
         <tbody>
           {% for alias, claim in service.alias_claims %}
             <tr>
-              <td><a href="{{ claim.url }}"><strong>{{ claim.resource_key }}</strong></a></td>
-              <td><code>{{ claim.kind }}</code></td>
+              <td><strong>{% entity claim.link %}</strong></td>
+              <td>{{ claim.kind|kind_label }}</td>
               <td>{{ alias }}</td>
               <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
             </tr>
@@ -342,4 +288,5 @@ it is not what anyone opened this page to read.
   </details>
 {% endif %}
 </section>
+{% endif %}
 {% endblock %}

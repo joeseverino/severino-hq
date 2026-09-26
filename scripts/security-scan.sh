@@ -59,7 +59,7 @@ $codeql_cmd database analyze "$db" \
     --format=sarif-latest \
     --output="$results" \
     --sarif-category=/language:python \
-    -- codeql/python-queries:codeql-suites/python-security-and-quality.qls >/dev/null
+    codeql/python-queries:codeql-suites/python-security-and-quality.qls >/dev/null
 
 # The rule the config filters is filtered here too, so local and CI agree on
 # what counts as a finding. See .github/codeql/codeql-config.yml for why.

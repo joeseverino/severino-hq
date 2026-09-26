@@ -3,7 +3,8 @@ from __future__ import annotations
 import uuid
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from functools import cached_property
+from typing import Any, get_origin
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -22,7 +23,6 @@ from application.infrastructure import (
     NotFoundError,
     OperationCommand,
     PolicyError,
-    certificate_renewal_allowed,
     controller_contract,
     declared_machines,
     delivery_targets,
@@ -52,7 +52,11 @@ from application.certificates import (
     UploadCertificateCommand,
     store_certificate,
 )
-from application.connections import connection_catalog
+from application.connections import CONTROLLER_CONNECTIONS, connection_catalog, machines_once
+from application.machine_context import machine_links
+from application.entity_links import NODE_KINDS, entity_link, kind_label, node_link
+from application.relationships import relationships_for
+from application.credential_sight import sight_by_connection
 from application.connection_security import (
     connection_security_posture,
     observed_connection_controls,
@@ -61,14 +65,22 @@ from application.analytics import HOST_TRAFFIC_DAYS
 from application.action_links import topology_url
 from application.findings import derive_findings, finding_rules, rule_for
 from application.topology import (
+    RELATIONS,
+    relation_rank,
     apply_lens,
     apply_trace,
     derive_topology,
     lens_for,
+    observable,
     topology_lenses,
 )
-from application.machines import container_context, machine, machine_catalog
-from application.services import machine_link, whereabouts
+from application.hq_self import LABEL as HQ_LABEL, hq_service
+from application.machines import (
+    container_context,
+    declaration_seed,
+    machine,
+)
+from application.services import RUNTIME_FACET, machine_link, whereabouts
 from application.naming import name_context
 from application.plugins import _import
 from application.provider_forms import (
@@ -79,7 +91,14 @@ from application.provider_forms import (
 from application.security import AuthorizationError, safe_next, web_principal
 from application.machine_context import sections_for as machine_sections
 from application.service_context import sections_for
-from application.ui import PageNavigation, PageSection
+from application.pages import PageAction, PageMixin, page_context
+from application.resource_capabilities import (
+    LIFECYCLE_VERBS,
+    VERB_LABELS,
+    kind_converges,
+    resource_capabilities,
+)
+from application.ui import PageNavigation, PageSection, counted
 from application.services import (
     CONTAINER_KIND,
     alias_target,
@@ -88,6 +107,8 @@ from application.services import (
 )
 
 from core import secrets
+from core.audit import last_activity
+from core.templatetags.nav_tags import returning_to
 
 from .models import ManagedResource, OperationRequest
 from .providers import (
@@ -132,8 +153,8 @@ def _web_operation(request, resource, action):
 class ResourceFormView(LoginRequiredMixin, View):
     """Declare or amend one resource, on a form its provider generates.
 
-    The write goes through ``save_managed_resource`` -- the same use case the
-    API and the MCP call -- so the capability check, the spec validation, the
+    The write goes through ``save_managed_resource`` (the same use case the
+    API and the MCP call) so the capability check, the spec validation, the
     generation bump and the audit record are the ones that already existed. This
     view supplies a form and a redirect and decides nothing else.
     """
@@ -163,7 +184,11 @@ class ResourceFormView(LoginRequiredMixin, View):
                         provider
                         for provider in describe_providers()["providers"]
                         if not provider["created_from"]
-                    ]
+                    ],
+                    **page_context(
+                        "What do you want to add?",
+                        "HQ creates it at the provider and keeps it in sync.",
+                    ),
                 },
             )
         material_class = _material_form(kind) if not resource else None
@@ -181,7 +206,7 @@ class ResourceFormView(LoginRequiredMixin, View):
             {
                 "kind": kind,
                 "resource": resource,
-                "label": PROVIDERS[kind].label or kind,
+                "label": kind_label(kind),
                 "summary": PROVIDERS[kind].summary,
                 # Only when editing. Creating something asks what HQ cannot
                 # know and nothing else: a name it can derive, and a pause
@@ -204,7 +229,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                 "apply_note": _apply_note(kind),
                 # What this resource already is, when editing one. A form whose
                 # fields are mostly derived elsewhere shows empty boxes and
-                # nothing else -- an edit page for a certificate said nothing
+                # nothing else: an edit page for a certificate said nothing
                 # about the names it covers or where it is installed, which is
                 # the whole of what a person came to check.
                 "facts": _form_facts(resource, spec) if resource else (),
@@ -213,6 +238,7 @@ class ResourceFormView(LoginRequiredMixin, View):
                     and kind == MACHINE_KIND
                     and dashboard_machine_selected(resource.key)
                 ),
+                **_form_page(kind, resource),
             },
         )
 
@@ -271,12 +297,12 @@ class ResourceFormView(LoginRequiredMixin, View):
                 messages.success(
                     request,
                     f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
-                    "HQ will apply it at the provider within about a minute.",
+                    "Applies at the provider within about a minute.",
                 )
                 # Back where the operator was working. Publishing a service
                 # takes two or three declarations, and landing on each one's
                 # own page after saving it made the next step a navigation
-                # problem -- the service page is the thing being built.
+                # problem: the service page is the thing being built.
                 return redirect(_after_save(request, kind, resource, saved))
         return render(
             request,
@@ -284,7 +310,7 @@ class ResourceFormView(LoginRequiredMixin, View):
             {
                 "kind": kind,
                 "resource": resource,
-                "label": PROVIDERS[kind].label or kind,
+                "label": kind_label(kind),
                 "summary": PROVIDERS[kind].summary,
                 "identity": identity,
                 "spec": spec,
@@ -294,17 +320,23 @@ class ResourceFormView(LoginRequiredMixin, View):
                     and kind == MACHINE_KIND
                     and dashboard_machine_selected(resource.key)
                 ),
+                **_form_page(kind, resource),
             },
         )
 
 
-def _spec_value(value: Any) -> str:
-    """One spec field as a person reads it.
+def _form_page(kind: str, resource) -> dict:
+    """The head of the resource form, the same on a first render and a retry."""
 
-    A list rendered straight into a template comes out as its Python repr, so
-    the last thing shown before a destructive action was
-    ``['private.jseverino.com']`` -- brackets, quotes and all.
-    """
+    label = kind_label(kind)
+    return page_context(
+        f"Edit {resource.key}" if resource else f"Add {label}",
+        PROVIDERS[kind].summary,
+    )
+
+
+def _spec_value(value: Any) -> str:
+    """One spec field as a person reads it: a list as its items, not its repr."""
 
     if isinstance(value, (list, tuple)):
         return ", ".join(str(item) for item in value)
@@ -316,24 +348,18 @@ def _spec_value(value: Any) -> str:
 def _spec_rows(resource) -> dict[str, tuple[tuple[str, str], ...]]:
     """A spec as an operator reads it, split the way the form splits it.
 
-    Three things this fixes, all of them seen on the confirmation page shown
-    before a destructive action:
+    Shown before a destructive action, so:
 
-    - Raw field names. It listed "record_type" and "ttl" -- the same failure
-      that once asked an operator for a "Topology ref". The titles already
-      exist on the model.
-    - Unset optionals. A field nobody filled in rendered as "None", which is
-      Python's word for it and nobody else's.
-    - Every tuning knob at equal weight. Fifteen rows, of which "Hsts
-      subdomains: False" and "Access list: 0" are defaults nobody chose, buried
-      the four that say what this actually is. The provider already declares
-      which of its fields are routine; this is the same split the form makes.
+    - Fields by their titles from the model, never their names.
+    - An unset optional is left out rather than shown as "None".
+    - Fields the provider declares routine fold away, the same split the form
+      makes.
     """
 
     provider = PROVIDERS[resource.kind]
     fields = provider.spec_type.model_fields
     # What the readout above already printed. On anything with a handful of
-    # fields the readout *is* the spec, so the disclosure repeated it whole --
+    # fields the readout *is* the spec, so the disclosure repeated it whole,
     # a machine showed "What it is for" and its addresses, then offered "every
     # field of this declaration" and showed the same two again with the name.
     shown = {str(label).strip().casefold() for label, _, _ in _readout_rows(resource)}
@@ -390,36 +416,28 @@ def _provider_machine(resource):
     """
 
     from application.connections import connection_readings
-    from application.machines import machine_catalog
+    from application.machines import machine as machine_named
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None:
         return None
-    catalog = machine_catalog()
-    known = {item.name.lower(): item for item in catalog}
-    for item in catalog:
-        for alias in item.aliases:
-            known.setdefault(alias.lower(), item)
     matches = {
-        (machine.name, machine.url)
+        found.name
         for reading in connection_readings()
         if reading.provider in provider.connection_providers
-        if (machine := known.get(reading.controller_id.lower())) is not None
+        if (found := machine_named(reading.controller_id)) is not None
     }
     if len(matches) != 1:
         return None
-    name, url = matches.pop()
-    return {"name": name, "url": url}
+    link = entity_link("machine", matches.pop())
+    return {"name": link.label, "url": link.url, "link": link}
 
 
 def _service_links(resource) -> tuple[tuple[str, str], ...]:
     """``(hostname, url)`` for every service this resource takes part in.
 
-    The page named the resource by its key and nothing else, so the hostname --
-    the single most identifying fact about a DNS record -- appeared only inside
-    a collapsed disclosure. And there was no way from here to the service page,
-    which is where the rest of what serves that name lives and where the next
-    thing is added.
+    The hostname is the most identifying fact about a DNS record, and its
+    service page is where the rest of what serves that name lives.
     """
 
     provider = PROVIDERS[resource.kind]
@@ -429,18 +447,8 @@ def _service_links(resource) -> tuple[tuple[str, str], ...]:
         names = provider.hostnames(resolved_spec(resource))
     except (KeyError, TypeError, ValueError):
         return ()
-    return tuple(
-        (
-            name,
-            reverse(
-                "control_plane:service", kwargs={"hostname": name.lower().rstrip(".")}
-            ),
-        )
-        for name in names
-        # A wildcard covers names rather than naming one, and there is no
-        # service page for "*.example.com" to link to.
-        if "*" not in name
-    )
+    links = ((name, entity_link("service", name).url) for name in names)
+    return tuple((name, url) for name, url in links if url)
 
 
 def _apply_note(kind: str) -> str:
@@ -448,7 +456,7 @@ def _apply_note(kind: str) -> str:
 
     The form promised every resource would be applied at the provider within
     about a minute. That is true of most of them and false of any whose actions
-    are locked -- a domain declaration records what HQ is responsible for and
+    are locked: a domain declaration records what HQ is responsible for and
     changes nothing, so the page was making a promise the capability registry
     already contradicted. The registry's own reason is the honest answer, and it
     is written once, there.
@@ -458,11 +466,41 @@ def _apply_note(kind: str) -> str:
         kind, OperationRequest.Action.RECONCILE
     )
     if applies:
-        return (
-            "HQ applies this at the provider within about a minute, then shows "
-            "you what it actually found there."
-        )
+        return "Applies at the provider within about a minute."
     return explanation
+
+
+def _linked_readout(resource, relationships) -> tuple[tuple[str, str, str, tuple], ...]:
+    """The readout, with each value that names a related entity as its link.
+
+    A blank connection field is filled from the connections the relation graph
+    says use this declaration.
+    """
+
+    related = {
+        item.entity.label: item.entity
+        for group in relationships.groups
+        for item in group.items
+    }
+    connections = tuple(
+        item.entity
+        for group in relationships.groups
+        for item in group.items
+        if item.entity.kind == "connection"
+    )
+    field = PROVIDERS[resource.kind].spec_type.model_fields.get("connection_ref")
+    connection_label = (field.title or "") if field is not None else ""
+    rows = []
+    for label, desired, observed in _readout_rows(resource):
+        value = str(observed or desired or "")
+        if value in related:
+            links = (related[value],)
+        elif not value and connection_label and label == connection_label:
+            links = connections
+        else:
+            links = ()
+        rows.append((label, desired, observed, links))
+    return tuple(rows)
 
 
 def _readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
@@ -490,15 +528,12 @@ def _form_facts(resource, form) -> tuple[tuple[str, str, str], ...]:
     person came to check.
 
     On a machine it had the opposite problem. Every field on that form is on
-    that form, so the panel repeated them -- "What it is for" twice and the
+    that form, so the panel repeated them: "What it is for" twice and the
     addresses twice, once as text and once as inputs, on one screen. Matched by
     label against the form's own fields, a row survives only when nothing below
     is asking about it.
 
-    The identifier leads, and is the reason this is not empty for a machine. It
-    used to be an input near the bottom behind the Options disclosure, directly
-    beneath a field called "Name", so the resource appeared to have two names
-    and the fixed one looked like the optional one.
+    The identifier leads, and is the reason this is not empty for a machine.
 
     Added here rather than in the readout, which every list and detail surface
     shares: they identify the resource in their own way already, and a row
@@ -530,7 +565,7 @@ def _removal_note(resource) -> str:
 def _after_save(request, kind: str, resource, saved: str) -> str:
     """Where saving lands: back at whatever this was being added to.
 
-    Same rule as Cancel, and for the same reason -- the surface an operator came
+    Same rule as Cancel, and for the same reason: the surface an operator came
     from is the one that knows what is still missing.
     """
 
@@ -547,8 +582,8 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
 def _return_to(request) -> str:
     """The page that sent the operator here, if it said so and is ours.
 
-    A form is reached from wherever the thing being edited appears -- a
-    service, a domain, a list -- and returning to the resource instead put the
+    A form is reached from wherever the thing being edited appears (a
+    service, a domain, a list) and returning to the resource instead put the
     operator somewhere they had not been, several clicks from the page they
     were working on. The origin is carried explicitly rather than guessed from
     Referer, which is absent, stale or forged often enough not to navigate by.
@@ -565,7 +600,7 @@ def _cancel_url(request, kind: str, resource) -> str:
 
     The page that linked here wins, because it is the only one that actually
     knows. Failing that, editing returns to the resource and creating returns
-    to the surface the provider says offered it -- so a record added from a
+    to the surface the provider says offered it, so a record added from a
     domain goes back to that domain rather than to the resource registry.
     """
 
@@ -621,7 +656,7 @@ def _initial_spec(request, kind: str, resource) -> dict | None:
         # A field the declaration leaves blank because something else still
         # answers it is shown holding that answer, so the form states what is
         # true rather than an empty box beside a page saying otherwise. Saving
-        # writes it in, which is how a derived value becomes an authored one --
+        # writes it in, which is how a derived value becomes an authored one,
         # the same adoption every record goes through, and equally a no-op the
         # first time.
         return {**_derived_spec(resource), **resource.spec}
@@ -630,7 +665,12 @@ def _initial_spec(request, kind: str, resource) -> dict | None:
     hostname = request.GET.get("hostname", "").strip()
     if provider.seed and hostname:
         initial.update(provider.seed(name_context(hostname)))
-    for name in provider.spec_type.model_fields:
+    for name, field in provider.spec_type.model_fields.items():
+        if get_origin(field.annotation) is list:
+            values = [item.strip() for item in request.GET.getlist(name) if item.strip()]
+            if values:
+                initial[name] = values
+            continue
         value = request.GET.get(name, "").strip()
         if value:
             initial[name] = value
@@ -643,7 +683,7 @@ def _form_context(request, resource) -> NameContext:
     On create the name arrives in the query string, the same way every other
     seeded value does. On edit it is read back out of the resource through its
     own provider, because a form has to keep offering whatever the record
-    already holds -- a menu that cannot describe an existing value tells the
+    already holds: a menu that cannot describe an existing value tells the
     operator their unmodified record is invalid.
     """
 
@@ -672,11 +712,8 @@ def _store_material(kind: str, key: str, cleaned: dict, request) -> None:
 def _derived_key(kind: str, spec: dict) -> str:
     """A name for a declaration the operator did not want to name.
 
-    Asked for one, the form stopped to demand an identifier for a row in a table
-    nobody had mentioned yet. The provider says what its own records should be
-    called, and the same function answers here, at adoption, and during
-    onboarding -- these disagreed once, and the form suggested a key built from
-    a hostname the record did not have.
+    The provider says what its own records should be called, and the same
+    function answers here, at adoption, and during onboarding.
     """
 
     return suggest_key(kind, spec)
@@ -700,7 +737,7 @@ class AdoptView(LoginRequiredMixin, View):
 
     One click, no form. The spec is read back out of the live record, so the
     declaration starts equal to the world and the first reconciliation changes
-    nothing -- which is the only reason adopting is safe to do without asking
+    nothing, which is the only reason adopting is safe to do without asking
     the operator to confirm every field first.
     """
 
@@ -716,8 +753,7 @@ class AdoptView(LoginRequiredMixin, View):
         adopted = ", ".join(result["adopted"])
         messages.success(
             request,
-            f"Adopted {hostname} as {adopted}, exactly as configured now. "
-            "Nothing changed at the provider.",
+            f"Adopted {hostname} as {adopted}. Nothing changed at the provider.",
         )
         return redirect("control_plane:service", hostname=result["hostname"])
 
@@ -726,6 +762,14 @@ class CertificateUploadView(LoginRequiredMixin, View):
     """Take a certificate generated elsewhere and hold it for installation."""
 
     template_name = "control_plane/certificate_upload.html"
+
+    @staticmethod
+    def _page(resource) -> dict:
+        return page_context(
+            f"Certificate for {resource.key}",
+            "A certificate and key issued by your offline CA. HQ installs it on "
+            "this resource's consumers and keeps it for reuse.",
+        )
 
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
@@ -737,6 +781,7 @@ class CertificateUploadView(LoginRequiredMixin, View):
                 "form": CertificateUploadForm(),
                 "store_ready": secrets.available(),
                 "material": getattr(resource, "material", None),
+                **self._page(resource),
             },
         )
 
@@ -758,8 +803,8 @@ class CertificateUploadView(LoginRequiredMixin, View):
             else:
                 messages.success(
                     request,
-                    f"Stored a certificate covering {', '.join(stored['domains'])}. "
-                    "HQ installs it on the next controller pass.",
+                    f"Stored a certificate for {', '.join(stored['domains'])}. "
+                    "It installs on the next controller pass.",
                 )
                 return redirect("control_plane:detail", key=resource.key)
         return render(
@@ -770,6 +815,7 @@ class CertificateUploadView(LoginRequiredMixin, View):
                 "form": form,
                 "store_ready": secrets.available(),
                 "material": getattr(resource, "material", None),
+                **self._page(resource),
             },
         )
 
@@ -787,26 +833,33 @@ class ResourceRemoveView(LoginRequiredMixin, View):
 
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
-        allowed, explanation = controller_action_policy(
-            resource.kind, OperationRequest.Action.DELETE
-        )
-        if PROVIDERS[resource.kind].declaration_only:
-            allowed, explanation = True, ""
+        capabilities = resource_capabilities(resource)
+        forget = capabilities.removal == "forget"
         return render(
             request,
             self.template_name,
             {
                 "resource": resource,
-                "label": PROVIDERS[resource.kind].label or resource.kind,
-                "removal_allowed": allowed,
-                "removal_explanation": explanation,
+                "label": kind_label(resource.kind),
+                "removal_allowed": capabilities.removal != "unavailable",
+                "removal_explanation": capabilities.removal_reason,
                 # Said by the provider, because what breaks depends on which
                 # record this is: removing one of four CAA records is
                 # housekeeping, and removing the last MX record stops the
                 # domain receiving mail.
                 "removal_note": _removal_note(resource),
                 "spec_rows": _spec_rows(resource),
-                "declaration_only": PROVIDERS[resource.kind].declaration_only,
+                "forget": forget,
+                "holds_records": bool(PROVIDERS[resource.kind].contains),
+                "confirm": {
+                    "url": reverse("control_plane:remove", args=[resource.key]),
+                    "label": "Stop managing" if forget else "Remove",
+                    "cancel_url": resource.get_absolute_url(),
+                },
+                **page_context(
+                    f"Remove {resource.key}?",
+                    kind_label(resource.kind),
+                ),
             },
         )
 
@@ -831,10 +884,9 @@ class ResourceRemoveView(LoginRequiredMixin, View):
             released = len(result["released"])
             messages.success(
                 request,
-                f"HQ is no longer responsible for “{result['forgotten']}”"
+                f"Stopped managing “{result['forgotten']}”"
                 + (
-                    f", and has released {released} record declaration"
-                    f"{'' if released == 1 else 's'} in it"
+                    f" and {counted(released, 'record declaration', 'record declarations')} in it"
                     if released
                     else ""
                 )
@@ -844,16 +896,28 @@ class ResourceRemoveView(LoginRequiredMixin, View):
         verb = "Queued" if result["queued"] else "Already queued"
         messages.success(
             request,
-            f"{verb} removal of “{resource.key}”. HQ forgets it once the "
-            "controller confirms the provider is clear.",
+            f"{verb} removal of “{resource.key}”. HQ drops it once the "
+            "provider is clear.",
         )
         return redirect("control_plane:detail", key=key)
 
 
-class ServiceListView(LoginRequiredMixin, TemplateView):
+class ServiceListView(PageMixin, LoginRequiredMixin, TemplateView):
     """The hostname view of the same declarations the resource list shows."""
 
     template_name = "control_plane/service_list.html"
+    page_title = "Services"
+    page_lede = "Hostnames HQ manages, with their DNS, ingress and certificate."
+
+    def get_page_actions(self):
+        # "Add" on the services board starts a service, not the resource picker.
+        return (
+            PageAction(
+                "Publish a service",
+                reverse("control_plane:service_start"),
+                primary=True,
+            ),
+        )
 
     def get_context_data(self, **kwargs):
         from application.pins import SERVICE, ordered
@@ -864,7 +928,7 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         found = service_catalog(favorites)
         # Two tables rather than one with a rule through it. The few an
         # operator keeps at the top are a different list with a different
-        # question -- "is my stuff healthy" against "what else is out there" --
+        # question: "is my stuff healthy" against "what else is out there",
         # and reordering only means anything within the first.
         context["favorites"] = [item for item in found if item.pinned]
         context["services"] = [item for item in found if not item.pinned]
@@ -877,7 +941,7 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         context["runtime_facet"] = RUNTIME_FACET
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
-        # touched -- and a facet no provider supplies yet gets none.
+        # touched, and a facet no provider supplies yet gets none.
         context["facets"] = [
             facet for facet in service_facets() if facet[0] != RUNTIME_FACET
         ]
@@ -888,68 +952,145 @@ class ServiceListView(LoginRequiredMixin, TemplateView):
         # the estate.
         context["unmanaged"] = unmanaged_services()
         context["inventory"] = inventory_state()
+        # HQ itself: derived, listed, and never reconciled.
+        context["hq_service"] = hq_service(self.request)
         return context
 
 
-class ServiceDetailView(LoginRequiredMixin, TemplateView):
+class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
     """One hostname, whether or not anything has been declared for it yet.
 
-    A name with nothing behind it used to 404, which made this page unreachable
-    at exactly the moment it is most useful: before anything exists. Publishing
-    something therefore began at the resource picker, where an operator chose a
-    kind of thing and typed a hostname, and only after saving did a page appear
-    that knew what the name still needed -- so the second resource meant typing
-    the name a second time.
+    A name with nothing behind it still has a page: it is where publishing a
+    service starts.
     """
 
     template_name = "control_plane/service_detail.html"
-
-    # Verbs, from the capability registry rather than from this template. A
-    # controller that stops implementing one stops offering it here, and one
-    # that gains a verb needs a route and a phrase -- not an edit to a page.
-    LIFECYCLE = ("start", "stop", "restart")
 
     def get(self, request, *args, **kwargs):
         """An alias goes to the service it is an alias of.
 
         Rendered here, the page could only report that nothing supplied a name
-        whose record is declared, healthy and listed on the domain page -- HQ
+        whose record is declared, healthy and listed on the domain page: HQ
         contradicting itself about its own data.
         """
 
+        if not entity_link("service", kwargs["hostname"]).url:
+            raise Http404("Not a host name.")
         canonical = alias_target(kwargs["hostname"])
         if canonical:
             return redirect("control_plane:service", hostname=canonical)
         return super().get(request, *args, **kwargs)
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["service"] = service_or_prospect(self.kwargs["hostname"])
-        context["container_kind"] = CONTAINER_KIND
+    @cached_property
+    def service(self):
+        return service_or_prospect(self.kwargs["hostname"])
+
+    @cached_property
+    def own(self):
+        """HQ's own service, when this page is about it. Derived and read-only."""
+
+        own = hq_service(catalog=machines_once())
+        if own is not None and self.service.hostname in own.hostnames:
+            return own
+        return None
+
+    @cached_property
+    def relationships(self):
+        return relationships_for(
+            f"service:{self.service.hostname}",
+            principal=web_principal(self.request.user),
+        )
+
+    @cached_property
+    def sections(self):
         # Everything else HQ holds about this name, gathered by the name. Only
         # here: the board builds every service and needs none of it.
-        context["sections"] = sections_for(context["service"])
-        context["page_navigation"] = PageNavigation(
+        return sections_for(self.service)
+
+    def get_page_title(self):
+        return self.service.hostname
+
+    def get_page_trail(self):
+        return (("Services", reverse("control_plane:services")),)
+
+    def get_page_navigation(self):
+        return PageNavigation(
             (
                 PageSection("overview", "Overview"),
+                *(PageSection(section.id, section.label) for section in self.sections),
                 *(
-                    PageSection(section.id, section.label)
-                    for section in context["sections"]
+                    (PageSection("relationships", "Relationships"),)
+                    if self.relationships
+                    else ()
                 ),
-                PageSection("resources", "Resources"),
+                *(
+                    (PageSection("resources", "Resources"),)
+                    if self.service.claims or self.service.alias_claims
+                    else ()
+                ),
             )
         )
-        # Two filters, and both are readings rather than opinions: what the
-        # controller says it implements for a container, and what the container's
-        # current state makes worth asking. Offering all three always means
-        # offering Start to something already running, whose only outcome is
-        # Docker answering "already started" in a job result a minute later.
-        container = context["service"].container
-        offered = container.verbs if container else ()
-        context["container_actions"] = tuple(
-            (f"control_plane:{action}", action.capitalize())
-            for action in self.LIFECYCLE
-            if action in offered and controller_action_policy(CONTAINER_KIND, action)[0]
+
+    def get_page_actions(self):
+        """The container's verbs, then the way to the domain.
+
+        In the page head rather than the card that describes the container.
+        Which verbs appear is the watching declaration's capabilities, given
+        the container's current state.
+        """
+
+        if self.own is not None:
+            # HQ does not act on itself from its own page.
+            return ()
+        container = self.service.container
+        actions = []
+        watcher = (
+            ManagedResource.objects.filter(key=container.watcher).first()
+            if container and container.watcher
+            else None
+        )
+        if watcher is not None:
+            capabilities = resource_capabilities(watcher, running=container.verbs)
+            actions.extend(
+                PageAction(
+                    VERB_LABELS[verb],
+                    reverse(f"control_plane:{verb}", kwargs={"key": watcher.key}),
+                    method="post",
+                    disabled=not allowed.enabled,
+                    title=allowed.reason or f"{VERB_LABELS[verb]} {container.name}",
+                )
+                for verb, allowed in capabilities.page_actions
+                if verb in LIFECYCLE_VERBS
+            )
+        elif container:
+            actions.append(
+                PageAction(
+                    "Watch container",
+                    reverse(
+                        "control_plane:adopt_record",
+                        kwargs={"kind": CONTAINER_KIND, "token": container.token},
+                    ),
+                    method="post",
+                    title=f"Let HQ start, stop and restart {container.name}",
+                )
+            )
+        if self.service.zone_key:
+            actions.append(
+                PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key]))
+            )
+        return tuple(actions)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["service"] = self.service
+        context["container_kind"] = CONTAINER_KIND
+        context["sections"] = self.sections
+        context["relationships"] = self.relationships
+        context["read_only"] = self.own is not None
+        context["hq_label"] = HQ_LABEL
+        context["runtime_facet"] = RUNTIME_FACET
+        context["hq_machine"] = (
+            entity_link("machine", self.own.machine) if self.own and self.own.machine else None
         )
         return context
 
@@ -962,7 +1103,11 @@ class ServiceStartView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
-        return render(request, "control_plane/service_start.html", {})
+        return render(
+            request,
+            "control_plane/service_start.html",
+            page_context("Publish a service", "Enter a hostname to see what it needs."),
+        )
 
     def post(self, request):
         hostname = normalized_hostname(request.POST.get("hostname", ""))
@@ -972,23 +1117,26 @@ class ServiceStartView(LoginRequiredMixin, View):
         return redirect("control_plane:service", hostname=hostname)
 
 
-class MachineListView(LoginRequiredMixin, TemplateView):
+class MachineListView(PageMixin, LoginRequiredMixin, TemplateView):
     """Every machine anything reported, and what is on each.
 
     Nothing here is declared. A machine exists because a credential reaches it,
-    a container runs on it, or a service is served from it -- so adding a VPS is
+    a container runs on it, or a service is served from it, so adding a VPS is
     registering it somewhere rather than entering it here.
     """
 
     template_name = "control_plane/machine_list.html"
+    page_title = "Machines"
+    page_lede = "Machines HQ can reach or has seen running something."
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["machines"] = machine_catalog()
+        context["machines"] = machines_once()
+        context["hq_label"] = HQ_LABEL
         return context
 
 
-def whatif_context(request, default: str = "") -> dict:
+def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
     """Everything the reachability panel needs, wherever it is included.
 
     One function because the panel appears on more than one page and the two
@@ -1008,7 +1156,8 @@ def whatif_context(request, default: str = "") -> dict:
     known = devices()
     asked = {
         "source": request.GET.get("source", "") or default,
-        "target": request.GET.get("target", "") or default,
+        "target": request.GET.get("target", "")
+        or (default if target_default is None else target_default),
         "port": request.GET.get("port", ""),
     }
     context = {
@@ -1034,26 +1183,72 @@ def whatif_context(request, default: str = "") -> dict:
     return context
 
 
-class TailnetView(LoginRequiredMixin, TemplateView):
+class TailnetView(PageMixin, LoginRequiredMixin, TemplateView):
     """The tailnet, and whether one machine may reach another.
 
     A page because the question has nowhere else to live. Reachability is not a
-    property of any one declaration -- it is the policy's answer about a pair --
+    property of any one declaration: it is the policy's answer about a pair,
     so it belongs beside the devices rather than on any of them.
     """
 
     template_name = "control_plane/tailnet.html"
+    page_title = "Tailnet"
+    page_lede = "The tailnet access policy. Devices are on the Machines page."
+
+    def get_page_actions(self):
+        from application.tailnet import declaration
+
+        policy_declaration = declaration()
+        return (
+            PageAction(
+                "Policy test",
+                reverse("control_plane:tailnet"),
+                primary=True,
+                modal="whatif",
+            ),
+            *(
+                (
+                    PageAction(
+                        "Edit policy",
+                        reverse("control_plane:edit", args=[policy_declaration]),
+                    ),
+                )
+                if policy_declaration
+                else ()
+            ),
+            PageAction("All machines", reverse("control_plane:machines")),
+        )
 
     def get_context_data(self, **kwargs):
-        from application.tailnet import policy
+        from dataclasses import replace
+
+        from application.policy_links import PolicyNames, tagged
+        from application.tailnet import RESOLVES_THROUGH, devices, grant_ports, policy
 
         context = super().get_context_data(**kwargs)
         context.update(whatif_context(self.request))
-        context["policy"] = policy()
+        found = policy()
+        found = replace(found, grants=grant_ports(found.grants))
+        context["policy"] = found
+        # Every name the policy writes, as the machine it stands for.
+        names = PolicyNames(hosts=found.hosts)
+        context["grant_rows"] = tuple(
+            (grant, names.of(grant.get("src") or ()), names.of(grant.get("dst") or ()))
+            for grant in found.grants
+        )
+        context["ssh_rows"] = tuple(
+            (rule, names.of(rule.get("src") or ()), names.of(rule.get("dst") or ()))
+            for rule in found.ssh_rules
+        )
+        context["fact_rows"] = tuple(
+            (label, names.addresses(value.split(", ")) if label == RESOLVES_THROUGH else None, value)
+            for label, value in found.facts
+        )
+        context["tag_devices"] = tagged(devices(), names)
         return context
 
 
-class MachineDetailView(LoginRequiredMixin, TemplateView):
+class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
     """One machine, and everything that ties to it.
 
     The page exists because the ties did and had nowhere to meet: a container's
@@ -1073,50 +1268,141 @@ class MachineDetailView(LoginRequiredMixin, TemplateView):
             return redirect("control_plane:machine", name=self.found.name)
         return super().get(request, *args, **kwargs)
 
+    def get_page_title(self):
+        return self.found.name
+
+    def get_page_trail(self):
+        return (("Machines", reverse("control_plane:machines")),)
+
+    def get_page_actions(self):
+        # The machine's declaration is edited from its own page.
+        if self.found.declaration:
+            return (
+                PageAction(
+                    "Edit machine",
+                    reverse("control_plane:edit", args=[self.found.declaration]),
+                ),
+                PageAction(
+                    "Remove",
+                    reverse("control_plane:remove", args=[self.found.declaration]),
+                    danger=True,
+                ),
+            )
+        # Seeded with what HQ knows, and back here after saving. A machine the
+        # tailnet device declaration already names gets its details added; one
+        # with no declaration at all is declared.
+        seeded = urlencode(
+            {
+                "kind": MACHINE_KIND,
+                **declaration_seed(self.found),
+                "next": self.found.url,
+            },
+            doseq=True,
+        )
+        return (
+            PageAction(
+                "Add machine details" if self.found.route_approval_key else "Declare machine",
+                f"{reverse('control_plane:create')}?{seeded}",
+            ),
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         found = self.found
         context["machine"] = found
+        device = (
+            ManagedResource.objects.filter(key=found.route_approval_key).first()
+            if found.route_approval_key
+            else None
+        )
+        context["route_approval"] = (
+            resource_capabilities(device, running=()).actions.get("approve-routes")
+            if device is not None
+            else None
+        )
+        context["route_approval_off"] = bool(
+            context["route_approval"] and not context["route_approval"].enabled
+        )
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
         context["sections"] = machine_sections(found)
+        relationships = relationships_for(
+            f"machine:{found.name}", principal=web_principal(self.request.user)
+        )
+        # "Declared as" above names the tailnet device declaration with its kind.
+        if found.route_approval_key:
+            relationships = relationships.without(RELATIONS["on_tailnet"].phrase)
+        context["relationships"] = relationships
+        context.update(machine_links(found))
         # Whether you are reading this on the machine it describes. HQ already
         # judged the caller's address for the network gate, and every machine
-        # carries the addresses it answers at -- so the page could always have
+        # carries the addresses it answers at, so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
         from application.connection import displayed_client_ip
 
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
+        context["hq_label"] = HQ_LABEL
         context["container_kind"] = CONTAINER_KIND
+        from application.machine_context import header_addresses
+
+        context["header_addresses"] = header_addresses(found)
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
         # and changing either is one dropdown rather than three.
-        found = context.get("machine")
+        # From this device to the machine HQ runs on, which is the question a
+        # machine page is usually asked. On HQ's own machine the target is left
+        # for the operator to choose.
+        own = found.presence.tailnet_name if found.presence else ""
+        hq = next((item for item in machines_once() if item.runs_hq), None)
+        hq_device = hq.presence.tailnet_name if hq and hq.presence else ""
         context.update(
             whatif_context(
                 self.request,
-                default=found.presence.tailnet_name if found and found.presence else "",
+                default=own,
+                target_default="" if hq_device == own else hq_device,
             )
         )
         return context
 
 
-class ConnectionListView(LoginRequiredMixin, TemplateView):
+class ConnectionListView(PageMixin, LoginRequiredMixin, TemplateView):
     """What HQ can reach, as the controllers last found it.
 
     Read-only by construction. Every row here started as a 1Password item, and
-    the only way to change one is to change that item -- so this page reports
+    the only way to change one is to change that item, so this page reports
     and never edits, which is what keeps it from becoming a second inventory.
     """
 
     template_name = "control_plane/connection_list.html"
+    page_title = "Connections"
+    page_lede = "What HQ connects to and what each connection can do."
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         groups = connection_catalog(principal=web_principal(self.request.user))
         context["connection_groups"] = groups
+        context["unconfigured_groups"] = [group for group in groups if not group.connections]
+        core = next(
+            (
+                group
+                for group in groups
+                if group.spec.name == CONTROLLER_CONNECTIONS
+            ),
+            None,
+        )
+        context["last_activity"] = last_activity(
+            connection.instance.connection_ref
+            for group in groups
+            for connection in group.connections
+        )
+        (
+            context["sight_by_provider"],
+            context["unconnected_providers"],
+        ) = sight_by_connection(
+            {connection.instance.kind for connection in (core.connections if core else ())}
+        )
         tailnet_policy, edge = observed_connection_controls(self.request.get_host())
         posture = connection_security_posture(
             groups,
@@ -1126,14 +1412,6 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         )
         context["connection_posture"] = posture
         context["connection_count"] = posture.connection_count
-        core = next(
-            (
-                group
-                for group in groups
-                if group.spec.name == "infrastructure.controllers"
-            ),
-            None,
-        )
         context["unlabelled"] = [
             connection
             for connection in (core.connections if core else ())
@@ -1146,14 +1424,27 @@ class ConnectionListView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class TopologyView(LoginRequiredMixin, TemplateView):
+class TopologyView(PageMixin, LoginRequiredMixin, TemplateView):
     """The live, actionable graph derived by the application layer."""
 
     template_name = "control_plane/topology.html"
+    page_title = "Topology"
+    page_lede = (
+        "Relationships between declared resources, observed systems and connections."
+    )
+
+    def get_page_actions(self):
+        return (
+            PageAction("Add resource", reverse("control_plane:create"), primary=True),
+            PageAction("Resources", reverse("control_plane:list")),
+            PageAction("Connections", reverse("control_plane:connections")),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        topology = derive_topology(principal=web_principal(self.request.user))
+        topology = derive_topology(
+            principal=web_principal(self.request.user), request=self.request
+        )
         active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
@@ -1167,16 +1458,14 @@ class TopologyView(LoginRequiredMixin, TemplateView):
         by_id = {node.id: node for node in topology.nodes}
         lens_name = active_lens.name if active_lens else ""
         groups: dict[str, list[dict[str, Any]]] = {}
+        detail = None
         for item in self.node_items(topology, lens_name, trace):
             groups.setdefault(item["node"].kind, []).append(item)
-        labels = {
-            "controller": "Controllers",
-            "connection": "Connections",
-            "ability": "Abilities",
-            "resource": "Resources",
-            "target": "Targets",
-            "dependency": "Dependencies",
-        }
+            if trace and item["node"].id == trace.focus:
+                detail = item
+        # One noun and its plural per kind, from the node kind registry: the
+        # heading is the plural, and a count says one or the other.
+        nouns = {kind: (item.noun, item.plural) for kind, item in NODE_KINDS.items()}
         trace_directions = (
             ("inbound", "Incoming"),
             ("outbound", "Outgoing"),
@@ -1188,7 +1477,8 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 "topology_groups": tuple(
                     {
                         "kind": kind,
-                        "label": labels.get(kind, kind.replace("_", " ").title()),
+                        "label": nouns[kind][1].capitalize(),
+                        "count": counted(len(items), *nouns[kind]),
                         "items": items,
                     }
                     for kind, items in groups.items()
@@ -1200,6 +1490,8 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                         "edge": edge,
                         "source": by_id[edge.source],
                         "target": by_id[edge.target],
+                        "source_link": node_link(by_id[edge.source]),
+                        "target_link": node_link(by_id[edge.target]),
                     }
                     for edge in topology.edges
                 )
@@ -1210,6 +1502,9 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 # that produced the figures the moment either changes.
                 "traffic_window_days": HOST_TRAFFIC_DAYS,
                 "focus_node": trace.focus if trace else "",
+                # The focused node's body, drawn once in the panel below the
+                # lanes rather than inside its card.
+                "topology_detail": detail,
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,
                 "topology_trace": trace,
@@ -1284,22 +1579,37 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 continue
             neighbors[edge.source].add(edge.target)
             neighbors[edge.target].add(edge.source)
+            evidence = {
+                "detail": "" if edge.entities else edge.detail,
+                "entities": edge.entities,
+                "observed_age": cls._observed_age(edge.observed_at),
+                "observed_at": edge.observed_at,
+            }
+            relation = RELATIONS.get(edge.kind)
             relations[edge.source].append(
                 {
                     "direction": "out",
+                    "rank": relation_rank(edge),
                     "label": edge.label,
                     "other": by_id[edge.target],
+                    "other_link": node_link(by_id[edge.target]),
                     "status": edge.status,
                     "url": cls._focus_link(edge.target, lens_name),
+                    **evidence,
                 }
             )
             relations[edge.target].append(
                 {
                     "direction": "in",
-                    "label": edge.label,
+                    "rank": relation_rank(edge),
+                    # Said from where this node stands: a machine "Serves" a
+                    # service that "Runs on" it.
+                    "label": relation.inverse if relation and relation.phrase else edge.label,
                     "other": by_id[edge.source],
+                    "other_link": node_link(by_id[edge.source]),
                     "status": edge.status,
                     "url": cls._focus_link(edge.source, lens_name),
+                    **evidence,
                 }
             )
         items = []
@@ -1310,6 +1620,7 @@ class TopologyView(LoginRequiredMixin, TemplateView):
                 relations[node.id],
                 key=lambda row: (
                     row["direction"],
+                    row["rank"],
                     row["label"],
                     row["other"].label.casefold(),
                 ),
@@ -1317,10 +1628,12 @@ class TopologyView(LoginRequiredMixin, TemplateView):
             items.append(
                 {
                     "node": node,
+                    "link": node_link(node),
                     "neighbors": " ".join(sorted(neighbors[node.id])),
                     "degree": len(neighbors[node.id]),
                     "relations": rows,
                     "observed_age": cls._observed_age(node.observed_at),
+                    "observable": observable(node),
                     "hop": hops.get(node.id),
                     "focus_url": cls._focus_link(node.id, lens_name),
                     "body_url": (
@@ -1374,7 +1687,9 @@ class TopologyNodeView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        topology = derive_topology(principal=web_principal(self.request.user))
+        topology = derive_topology(
+            principal=web_principal(self.request.user), request=self.request
+        )
         active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
@@ -1389,10 +1704,17 @@ class TopologyNodeView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class FindingsView(LoginRequiredMixin, TemplateView):
+class FindingsView(PageMixin, LoginRequiredMixin, TemplateView):
     """Evidence and safe existing actions for claims from the live topology."""
 
     template_name = "control_plane/findings.html"
+    page_title = "Findings"
+
+    def get_page_actions(self):
+        return (
+            PageAction("Action items", reverse("action_items")),
+            PageAction("Topology", reverse("control_plane:topology")),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1462,7 +1784,7 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
         try:
             if decision == "approve":
                 approvals.approve(str(approval_id), principal=web_principal(request.user))
-                messages.success(request, "Approved, and applied as it was requested.")
+                messages.success(request, "Approved and applied.")
             elif decision == "reject":
                 approvals.reject(
                     str(approval_id),
@@ -1476,16 +1798,25 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
             # One handler for both, because a person reading this page is owed
             # the same treatment either way: an approval that cannot be applied
             # says why, on the page, with the request left as it was.
-            messages.error(request, str(exc) or "That decision could not be taken.")
+            messages.error(request, str(exc) or "Could not record that decision.")
         return redirect(
             safe_next(request, fallback=f"{reverse('core:audit_list')}?awaiting=1")
         )
 
 
-class InfrastructureListView(LoginRequiredMixin, ListView):
+class InfrastructureListView(PageMixin, LoginRequiredMixin, ListView):
     model = ManagedResource
     template_name = "control_plane/resource_list.html"
     context_object_name = "resources"
+    page_title = "Infrastructure"
+    page_lede = "Declared resources and their last observed state."
+
+    def get_page_actions(self):
+        return (
+            PageAction("Add", reverse("control_plane:create"), primary=True),
+            PageAction("Services", reverse("control_plane:services")),
+            PageAction("Provider schemas", reverse("control_plane:providers")),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1500,88 +1831,153 @@ class InfrastructureListView(LoginRequiredMixin, ListView):
             # Where it sends traffic, named rather than addressed, matching
             # what the resource's own page has always said.
             resource.origin_machine = _origin_machine(resource, machines, at, targets)
-            # What it is, in the provider's own words. A list of keys alone
-            # said "jseverino-com-caa-2" twenty times over -- names HQ invented,
-            # each describing nothing.
+            # What it is, in the provider's own words.
             rows = _readout_rows(resource)
             resource.summary = rows[0][1] or rows[0][2] if rows else ""
-            # Nothing to converge, so nothing is ever pending. A domain records
-            # a responsibility and has no controller action at all; reported as
-            # "Pending" and "Never observed" it described a resource waiting
-            # forever for something that is never coming.
-            resource.declaration_only = PROVIDERS[resource.kind].declaration_only
+            resource.converges = kind_converges(resource.kind)
         context["operations"] = OperationRequest.objects.select_related("resource")[:12]
         context["provider_catalog"] = describe_providers()
         return context
 
 
-class InfrastructureDetailView(LoginRequiredMixin, DetailView):
+class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
     model = ManagedResource
     slug_field = "key"
     slug_url_kwarg = "key"
     template_name = "control_plane/resource_detail.html"
     context_object_name = "resource"
 
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        home = self.object.get_absolute_url()
+        if home != request.path:
+            # A kind with a page of its own, such as a machine, lives there.
+            return redirect(home)
+        return super().get(request, *args, **kwargs)
+
+    @cached_property
+    def capabilities(self):
+        return resource_capabilities(self.object)
+
+    @cached_property
+    def container(self):
+        """What the sweep knows about a watched container, and nothing otherwise.
+
+        A container declares identity and nothing else, so everything worth
+        opening the page for is a join: which machine that name is, what the
+        container is doing, and which services reach it through the ports it
+        publishes. All three come from the sweep this resource was adopted out
+        of, so none of it is a second opinion about anything.
+        """
+
+        if self.object.kind != CONTAINER_KIND:
+            return None
+        return container_context(
+            self.object.spec.get("host", ""), self.object.spec.get("name", "")
+        )
+
+    def get_page_title(self):
+        return self.object.key
+
+    def get_page_lede(self):
+        return kind_label(self.object.kind)
+
+    @cached_property
+    def relationships(self):
+        return relationships_for(
+            f"resource:{self.object.key}", principal=web_principal(self.request.user)
+        )
+
+    @cached_property
+    def home(self):
+        """The machine, service or domain this declaration belongs to, if any."""
+
+        return next(
+            (
+                item.entity
+                for group in self.relationships.groups
+                for item in group.items
+                if item.entity.kind in ("machine", "service", "zone")
+            ),
+            None,
+        )
+
+    def get_page_trail(self):
+        return ((self.home.label, self.home.url),) if self.home and self.home.url else ()
+
+    def get_page_actions(self):
+        if self.capabilities.removal_pending:
+            return ()
+        key = self.object.key
+        capabilities = self.capabilities
+        actions = [
+            PageAction(
+                VERB_LABELS[verb],
+                reverse(f"control_plane:{verb}", args=[key]),
+                method="post",
+                primary=verb == "renew",
+                disabled=not allowed.enabled,
+                title="" if allowed.enabled else allowed.reason,
+            )
+            for verb, allowed in capabilities.page_actions
+        ]
+        actions.append(
+            PageAction(
+                "Edit",
+                returning_to(
+                    reverse("control_plane:edit", args=[key]),
+                    self.request.get_full_path(),
+                ),
+            )
+        )
+        if PROVIDERS[self.object.kind].material_form:
+            actions.append(
+                PageAction(
+                    "Replace certificate"
+                    if getattr(self.object, "material", None)
+                    else "Upload certificate",
+                    reverse("control_plane:upload_certificate", args=[key]),
+                    primary=True,
+                )
+            )
+        if capabilities.removal != "unavailable":
+            actions.append(
+                PageAction(
+                    "Stop managing" if capabilities.removal == "forget" else "Remove",
+                    reverse("control_plane:remove", args=[key]),
+                    danger=True,
+                )
+            )
+        return tuple(actions)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        allowed, explanation = certificate_renewal_allowed(self.object)
-        context["renewal_allowed"] = allowed
-        context["renewal_explanation"] = explanation
-        context["control_health"] = resource_health(self.object)
-        reconcile_allowed, reconcile_explanation = controller_action_policy(
-            self.object.kind, OperationRequest.Action.RECONCILE
+        capabilities = self.capabilities
+        context["capabilities"] = capabilities
+        context["controller_rows"] = tuple(
+            (VERB_LABELS.get(verb, verb.replace("-", " ").capitalize()), allowed)
+            for verb, allowed in capabilities.actions.items()
         )
-        context["reconcile_allowed"] = reconcile_allowed
-        context["reconcile_explanation"] = reconcile_explanation
-        context["controller_capability"] = describe_providers()["controller"][
-            "capabilities"
-        ][self.object.kind]["actions"]
-        context["declaration_only"] = PROVIDERS[self.object.kind].declaration_only
+        context["controller_automatic"] = any(
+            allowed.automatic for allowed in capabilities.actions.values()
+        )
+        context["control_health"] = resource_health(self.object)
         context["sync_state"] = (
             "in_sync"
             if self.object.generation == self.object.observed_generation
             else "pending"
         )
-        # What this resource does, said by its own provider. The page used to
-        # carry a hand-written card per kind, reaching into spec.forward_host
-        # and spec.answer -- the one thing nothing outside a provider is allowed
-        # to do, and the reason a provider added later had no detail card at all.
-        context["label"] = PROVIDERS[self.object.kind].label or self.object.kind
+        # What this resource does, said by its own provider.
+        context["label"] = kind_label(self.object.kind)
         context["service_links"] = _service_links(self.object)
         # Where this resource sends traffic, when it sends it anywhere. A
         # provider that declares an origin is one whose thing runs on a machine,
         # so the machine is a link rather than an address printed in a readout.
         context["origin_machine"] = _origin_machine(self.object)
         context["provider_machine"] = _provider_machine(self.object)
-        # A container declares identity and nothing else, so everything worth
-        # opening the page for is a join: which machine that name is, what the
-        # container is doing, and which services reach it through the ports it
-        # publishes. All three come from the sweep this resource was adopted out
-        # of, so none of it is a second opinion about anything.
-        if self.object.kind == CONTAINER_KIND:
-            context["container"] = container_context(
-                self.object.spec.get("host", ""), self.object.spec.get("name", "")
-            )
-        # Lifecycle verbs the controller implements for this kind, narrowed to
-        # the ones the thing's own state makes worth asking. Read from the
-        # registry rather than listed here, so a verb a controller gains needs a
-        # route and a phrase and nothing else.
-        running = (context.get("container") or {}).get("running")
-        offered = running.verbs if running else ()
-        context["lifecycle_actions"] = tuple(
-            (f"control_plane:{action}", action.capitalize())
-            for action in ServiceDetailView.LIFECYCLE
-            if action in offered
-            and controller_action_policy(self.object.kind, action)[0]
-        )
-        # A resource with a removal in flight is on its way out. Offering Edit
-        # and Reconcile unchanged invited an operator to work on something that
-        # is about to stop existing, and to queue a convergence that races the
-        # deletion already waiting for the same controller.
-        context["removal_pending"] = self.object.operations.filter(
-            action=OperationRequest.Action.DELETE,
-            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
-        ).exists()
+        if self.container is not None:
+            context["container"] = self.container
+        context["removal_pending"] = self.capabilities.removal_pending
         # Nothing for a container: the panel above is the sweep's answer and
         # the readout is the declaration's, and a container declares identity
         # and nothing else. So it could only repeat what the panel had just said
@@ -1590,7 +1986,7 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         # A change to this resource that a credential asked for and nobody has
         # answered. Said on the resource's own page as well as on the queue,
         # because this is the page an operator opens when they wonder why a
-        # declaration has not moved -- and "something is waiting for you" is the
+        # declaration has not moved, and "something is waiting for you" is the
         # answer, rather than a resource that merely looks idle.
         from application.approvals import pending as pending_approvals
 
@@ -1598,8 +1994,11 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
             held for held in pending_approvals() if held.resource_key == self.object.key
         )
         context["readout_rows"] = (
-            () if self.object.kind == CONTAINER_KIND else _readout_rows(self.object)
+            ()
+            if self.object.kind == CONTAINER_KIND
+            else _linked_readout(self.object, self.relationships)
         )
+        context["relationships"] = self.relationships
         context["spec_rows"] = _spec_rows(self.object)
         context["days_left"] = None
         context["renewal_at"] = None
@@ -1631,8 +2030,9 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
                 operation["completed_at"] = datetime.fromisoformat(
                     operation["completed_at"]
                 )
-        context["resolved_spec"] = self.object.spec
+        context["resolved_spec"] = None
         if self.object.kind == CERTIFICATE_KIND:
+            context["resolved_spec"] = self.object.spec
             try:
                 context["resolved_spec"] = controller_contract(self.object)["resource"][
                     "spec"
@@ -1678,11 +2078,8 @@ class InfrastructureDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-# What each controller verb is called in a sentence. One entry per verb, in one
-# place, because the alternative was one view class per verb: "reconcile" and
-# "renew" had a class each, identical but for this word, and the next verb the
-# credential allows -- purging a cache, rotating a key -- would have been a
-# third copy of the same eleven lines.
+# What each controller verb is called in a sentence. One entry per verb, so a
+# new verb needs no new view class.
 OPERATION_PHRASE = {
     OperationRequest.Action.RECONCILE: "reconciliation",
     OperationRequest.Action.RENEW: "certificate renewal",
@@ -1702,7 +2099,7 @@ class AdoptRecordView(LoginRequiredMixin, View):
     there is no name to route by and no group of records to take on together.
 
     The spec is read back out of the sweep rather than posted, the same as every
-    other adoption -- the declaration starts equal to the world, so the first
+    other adoption: the declaration starts equal to the world, so the first
     reconciliation after it changes nothing.
     """
 
@@ -1717,8 +2114,7 @@ class AdoptRecordView(LoginRequiredMixin, View):
         else:
             messages.success(
                 request,
-                f"HQ is now watching “{result['resource']['key']}”, exactly as "
-                "it is running.",
+                f"Adopted “{result['resource']['key']}”. Nothing changed.",
             )
         return redirect(safe_next(request, fallback=reverse("control_plane:list")))
 
@@ -1736,8 +2132,8 @@ class OperationView(LoginRequiredMixin, View):
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
         # Back where the verb was offered. These forms are on pages that show
-        # the fact the verb answers -- a machine's routes, a service's
-        # container -- and they have been sending `next` all along while this
+        # the fact the verb answers (a machine's routes, a service's
+        # container) and they have been sending `next` all along while this
         # view returned to the resource record regardless. Validated through
         # the shared helper, so the field cannot become an open redirect.
         destination = safe_next(
@@ -1760,12 +2156,12 @@ class CertificateDownloadView(LoginRequiredMixin, View):
         certificate_pem = resource.status.get("certificate_pem", "")
         if resource.kind != CERTIFICATE_KIND or not certificate_pem:
             return JsonResponse(
-                {"ok": False, "error": "No verified public certificate is available."},
+                {"ok": False, "error": "No verified certificate to download."},
                 status=404,
             )
         if "PRIVATE KEY-----" in certificate_pem:
             return JsonResponse(
-                {"ok": False, "error": "Unsafe certificate artifact rejected."},
+                {"ok": False, "error": "Refused: the certificate file contains a private key."},
                 status=500,
             )
         response = HttpResponse(certificate_pem, content_type="application/x-pem-file")
@@ -1825,7 +2221,7 @@ class ServiceMoveView(LoginRequiredMixin, View):
     """Move one favorite past its neighbour.
 
     Up and down rather than dragging: it is one POST, it works without script,
-    and it says out loud which two things swapped -- which a drag does not.
+    and it says out loud which two things swapped, which a drag does not.
     """
 
     def post(self, request, hostname: str):
@@ -1839,7 +2235,7 @@ class ServiceMoveView(LoginRequiredMixin, View):
         return redirect(safe_next(request) or reverse("control_plane:services"))
 
 
-class ToolsView(LoginRequiredMixin, TemplateView):
+class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
     """The tools, one tab at a time, answering on a plain GET.
 
     Deliberately thin. Every tool here is backed by registered capabilities,
@@ -1852,12 +2248,13 @@ class ToolsView(LoginRequiredMixin, TemplateView):
     that tab's capabilities through the same authorization every other adapter
     uses, and hands the results to the tab's own partial.
 
-    A GET rather than a POST because a lookup changes nothing -- which makes a
-    result a URL: linkable, refreshable and back-buttonable, with no
-    idempotency key and no CSRF ceremony for a read.
+    A lookup someone typed is a GET, so a result is a URL. Re-reading a stored
+    answer replaces it, so that is a POST, which redirects back to the result.
     """
 
     template_name = "control_plane/tools.html"
+    page_title = "Tools"
+    page_lede = "Lookups run from outside this network."
 
     def get_context_data(self, **kwargs):
         from application.capabilities import execute_capability
@@ -1880,15 +2277,9 @@ class ToolsView(LoginRequiredMixin, TemplateView):
             for name in current.capabilities
         }
         context["asked"] = asked
-        # `refresh` reaches only the capabilities that accept it, so a tool
-        # without a stored answer is not handed a field its command rejects.
-        refresh = bool(self.request.GET.get("refresh"))
         context["results"] = {
             name: execute_capability(
-                name,
-                {name.rpartition(".")[2]: value}
-                | ({"refresh": True} if refresh and name == "lookup.address" else {}),
-                principal=principal,
+                name, {name.rpartition(".")[2]: value}, principal=principal
             )
             for name, value in asked.items()
             if value
@@ -1903,3 +2294,23 @@ class ToolsView(LoginRequiredMixin, TemplateView):
                 with suppress(ValueError):
                     reading["observed_at"] = datetime.fromisoformat(stamp)
         return context
+
+    def post(self, request, *args, **kwargs):
+        """Re-read an address's stored answer, then show it."""
+
+        from urllib.parse import urlencode
+
+        from application.capabilities import execute_capability
+        from application.security import web_principal
+
+        address = request.POST.get("address", "").strip()
+        if address:
+            execute_capability(
+                "lookup.address",
+                {"address": address, "refresh": True},
+                principal=web_principal(request.user),
+            )
+        query = urlencode({"tab": request.POST.get("tab", ""), "address": address})
+        return redirect(f"{request.path}?{query}")
+
+

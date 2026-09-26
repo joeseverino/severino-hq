@@ -46,7 +46,7 @@ class Command(BaseCommand):
         plan = [
             {
                 "slug": "homelab-dns",
-                "name": "Homelab DNS — AdGuard + Unbound",
+                "name": "Homelab DNS · AdGuard + Unbound",
                 "category": "homelab",
                 "status": Project.Status.ACTIVE,
                 "description": "Filtering and recursion for the homelab LAN.",
@@ -62,7 +62,7 @@ class Command(BaseCommand):
             },
             {
                 "slug": "wp-security-pass",
-                "name": "WordPress security pass — jseverino.com",
+                "name": "WordPress security pass · example.com",
                 "category": "wordpress_security",
                 "status": Project.Status.ACTIVE,
                 "description": "Lockdown pass on the public WordPress site.",
@@ -80,8 +80,8 @@ class Command(BaseCommand):
     def _seed_assets(self, today: date) -> dict[str, Asset]:
         plan = [
             {
-                "slug": "optiplex-7050",
-                "item_name": "Dell OptiPlex 7050 (homelab host)",
+                "slug": "mini-pc",
+                "item_name": "Small-form-factor PC (homelab host)",
                 "vendor": "Dell (refurb)",
                 "category": "server_hardware",
                 "purchase_date": today - timedelta(days=120),
@@ -122,17 +122,17 @@ class Command(BaseCommand):
         plan = [
             {
                 "slug": "homelab-dns-writeup",
-                "title": "How I run AdGuard + Unbound on a $220 OptiPlex",
+                "title": "How I run AdGuard + Unbound on a $220 mini PC",
                 "content_type": ContentItem.Type.ARTICLE,
                 "status": ContentItem.Status.DRAFT,
                 "topic": "Homelab DNS",
                 "tags": "homelab, dns, adguard, unbound",
                 "_related_projects": ["homelab-dns"],
-                "_related_assets": ["optiplex-7050", "unifi-flex-mini"],
+                "_related_assets": ["mini-pc", "unifi-flex-mini"],
             },
             {
                 "slug": "vps-tailscale-only",
-                "title": "Tailnet-only VPS — public name, private surface",
+                "title": "Tailnet-only VPS: public name, private surface",
                 "content_type": ContentItem.Type.GUIDE,
                 "status": ContentItem.Status.DRAFT,
                 "topic": "VPS / Tailscale",
@@ -168,7 +168,7 @@ class Command(BaseCommand):
                 "obsidian_path": "Infra/DNS/AdGuard Home.md",
                 "last_reviewed": today - timedelta(days=20),
                 "_projects": ["homelab-dns"],
-                "_assets": ["optiplex-7050"],
+                "_assets": ["mini-pc"],
             },
             {
                 "doc_id": "dr-vps-tailnet-001",
@@ -210,7 +210,7 @@ class Command(BaseCommand):
             {
                 "date": date(year, 1, 12),
                 "vendor": "Cloudflare",
-                "item": "Cloudflare Pro — jseverino.com",
+                "item": "Cloudflare Pro · example.com",
                 "category": "hosting",
                 "total_cost": Decimal("240.00"),
                 "business_use_percentage": 100,
@@ -220,7 +220,7 @@ class Command(BaseCommand):
             {
                 "date": date(year, 2, 3),
                 "vendor": "Namecheap",
-                "item": "Domain renewal — jseverino.com",
+                "item": "Domain renewal · example.com",
                 "category": "domains",
                 "total_cost": Decimal("14.99"),
                 "business_use_percentage": 100,

@@ -10,6 +10,7 @@ from .labels import human_label
 from .integrations import integration_graph
 from .resources import get_resource, list_resource
 from .security import Principal
+from core.errors import UpstreamUnavailable
 
 
 @dataclass(frozen=True)
@@ -60,11 +61,12 @@ def capability_target_options(
             query["kind"] = governed_kinds[0]
             kinds_applied = True
 
-    collection = list_resource(
-        resource.name,
-        query,
-        principal=principal,
-    )
+    try:
+        collection = list_resource(resource.name, query, principal=principal)
+    except UpstreamUnavailable:
+        # The source is down or not configured: the target is typed instead of
+        # chosen, rather than the page failing.
+        return None
     options = []
     for item in collection["items"]:
         if not isinstance(item, dict):

@@ -1,5 +1,5 @@
 [Unit]
-Description=Pull the jseverino.com content index into Severino HQ
+Description=Pull the example.com content index into Severino HQ
 Documentation=file:///opt/apps/severino-hq/content/content_sync.py
 Wants=network-online.target
 After=network-online.target docker.service severino-hq.service

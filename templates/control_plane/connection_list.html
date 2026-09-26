@@ -1,52 +1,17 @@
-{% extends "base.html" %}
-{% block title %}Connections{% endblock %}
-{% block content %}
-{% include "partials/_page_head.html" with title="Connections" lede="Every system HQ can reach, the authority each connection carries, and what depends on it." %}
-
-<section class="card connection-security connection-security-{{ connection_posture.state }}" aria-labelledby="connection-security-title">
-  <div class="connection-security-story">
-    <div>
-      <span class="eyebrow">Security posture</span>
-      <h2 id="connection-security-title">{{ connection_posture.headline }}</h2>
-      <p>{{ connection_posture.summary }}</p>
-    </div>
-    <a class="button button-small" href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect this request</a>
-  </div>
-  <div class="connection-security-metrics" aria-label="Connection security summary">
-    <div>
-      <strong>{{ connection_posture.healthy_count }}<span>/{{ connection_posture.connection_count }}</span></strong>
-      <span>operational</span>
-      {% if connection_posture.attention_count %}<small>{{ connection_posture.attention_count }} need attention</small>{% else %}<small>No reported failures</small>{% endif %}
-    </div>
-    <div>
-      <strong>{{ connection_posture.external_custody_count }}<span>/{{ connection_posture.connection_count }}</span></strong>
-      <span>external custody</span>
-      <small>HQ holds no secret values</small>
-    </div>
-    <div>
-      <strong>{{ connection_posture.ability_count }}</strong>
-      <span>assigned abilities</span>
-      <small>{{ connection_posture.scope_verified_count }} verified · {{ connection_posture.scope_coarse_count }} whole-account · {{ connection_posture.scope_keyless_count }} keyless{% if connection_posture.scope_undeclared_count %} · {{ connection_posture.scope_undeclared_count }} undeclared{% endif %}{% if connection_posture.scope_unknown_count %} · {{ connection_posture.scope_unknown_count }} unknown{% endif %}{% if connection_posture.scope_missing_count %} · {{ connection_posture.scope_missing_count }} missing{% endif %}</small>
-    </div>
-    <div>
-      <strong>{{ connection_posture.dependency_count }}</strong>
-      <span>attached workflows</span>
-      <small>Derived from declared dependents</small>
-    </div>
-  </div>
-</section>
-
+{% extends "page.html" %}
+{% load nav_tags %}
+{% block page %}
 <div class="connection-summary" role="group" aria-label="Connection summary">
-  <span><strong>{{ connection_count }}</strong> configured</span>
-  <span><strong>{{ connection_groups|length }}</strong> connection type{{ connection_groups|length|pluralize }}</span>
-  {% if observed_at %}<span>Oldest reading {{ observed_at|timesince }} ago</span>{% endif %}
+  <span><strong>{{ connection_count }}</strong> connected</span>
+  {% if connection_posture.attention_count %}<span class="is-attention"><strong>{{ connection_posture.attention_count|counted:"needs attention,need attention" }}</strong></span>{% endif %}
+  {% if connection_posture.connection_count and connection_posture.external_custody_count == connection_posture.connection_count %}<span>No secrets stored in HQ</span>{% endif %}
+  {% if observed_at %}<span>Oldest reading {{ observed_at|ago }}</span>{% endif %}
+  <a class="connection-inspect" href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect this request</a>
 </div>
 
 {% comment %}
-One table of every connection HQ has. The family is a column, not a band: a
-section per family meant seven headers, seven counts and seven sets of buttons
-for twelve rows, and a family holding one connection got the furniture of one
-holding twelve. Families with nothing configured keep a single muted row so
+One table of every connection HQ has. The family is a column, not a band.
+Families with nothing configured keep a single muted row so
 they stay visible and stay in the same table.
 {% endcomment %}
 {% if connection_groups %}
@@ -72,12 +37,22 @@ they stay visible and stay in the same table.
       <tbody>
         {% for group in connection_groups %}
           {% for connection in group.connections %}
-          <tr>
+          <tr id="{{ connection.instance.label|connection_anchor }}">
             <td data-label="Connection">
-              <strong>{{ connection.instance.label }}</strong>
+              <strong>{% entity "connection"|entity_of:connection.instance.label %}</strong>
               {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
-              <br><span class="connection-row-kind">{{ connection.instance.kind }}</span>
+              <br><span class="connection-row-meta">
+                {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secret store: {{ group.spec.secret_store }}{% else %}No credential needed{% endif %}
+                {% if group.spec.documentation_url %} · <a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
+                {% if group.spec.management_route %} · <a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
+              </span>
               {% if connection.instance.facts %}<br><span class="muted">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+              {% with sight=sight_by_provider|dictkey:connection.instance.kind %}
+              {% if sight.credential_refusal %}<p class="connection-sight-refusal">{{ sight.label }} refused this credential: {{ sight.credential_refusal }}</p>{% endif %}
+              {% if sight.sights %}
+                {% include "control_plane/_connection_sight.html" with sight=sight %}
+              {% endif %}
+              {% endwith %}
             </td>
             {% comment %}
             A family earns a name only when it groups more than one connection.
@@ -87,8 +62,8 @@ they stay visible and stay in the same table.
             <td data-label="Can do">
               {% comment %}
               Capped, because a controller credential governs a dozen kinds and
-              a dozen chips made one row four hundred pixels tall. The count
-              carries the rest; the connection's own page carries the detail.
+              a dozen chips made one row four hundred pixels tall. The rest
+              fold behind the count.
               {% endcomment %}
               {% if connection.abilities %}
                 <ul class="connection-ability-list">
@@ -107,8 +82,17 @@ they stay visible and stay in the same table.
                     </li>
                   {% endfor %}
                 </ul>
-                {% if connection.abilities|length > 3 %}<span class="connection-ability-more">+{{ connection.abilities|length|add:"-3" }} more</span>{% endif %}
-              {% else %}<span class="muted">—</span>{% endif %}
+                {% if connection.abilities|length > 3 %}
+                  <details class="connection-ability-more">
+                    <summary>+{{ connection.abilities|length|add:"-3" }} more</summary>
+                    <ul class="connection-ability-list">
+                      {% for state in connection.abilities|slice:"3:" %}
+                        <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}><span>{{ state.ability.label }}</span></li>
+                      {% endfor %}
+                    </ul>
+                  </details>
+                {% endif %}
+              {% else %}{% empty_value %}{% endif %}
             </td>
             {% comment %}
             Inline and wrapping rather than one line per link: four stacked
@@ -122,12 +106,12 @@ they stay visible and stay in the same table.
               machine's name broke at every hyphen to fit beside the others.
               {% endcomment %}
               <span class="connection-depends">
-              {% for link in connection.instance.targets|slice:":3" %}{% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% for link in connection.instance.targets|slice:":3" %}{% entity link|declared_link %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.targets|length > 3 %} <span class="muted">+{{ connection.instance.targets|length|add:"-3" }}</span>{% endif %}
               {% if connection.instance.targets and connection.instance.dependencies %}<br>{% endif %}
-              {% for link in connection.instance.dependencies|slice:":3" %}{% if link.url %}<a href="{{ link.url }}"><code>{{ link.label }}</code></a>{% else %}<code>{{ link.label }}</code>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+              {% for link in connection.instance.dependencies|slice:":3" %}{% entity link|declared_link code=True %}{% if not forloop.last %} · {% endif %}{% endfor %}
               {% if connection.instance.dependencies|length > 3 %} <span class="muted">+{{ connection.instance.dependencies|length|add:"-3" }}</span>{% endif %}
-              {% if not connection.instance.targets and not connection.instance.dependencies %}<span class="muted">—</span>{% endif %}
+              {% if not connection.instance.targets and not connection.instance.dependencies %}{% empty_value %}{% endif %}
               </span>
             </td>
             {% comment %}
@@ -145,29 +129,24 @@ they stay visible and stay in the same table.
               <span class="connection-standing">
                 <span class="connection-state connection-state-{{ connection.lifecycle }}">{{ connection.lifecycle_label }}</span>
                 <span class="connection-authority connection-authority-{{ connection.authority }}" title="{% for state in connection.abilities %}{{ state.ability.label }}: {{ state.evidence_label }}{% if not forloop.last %} · {% endif %}{% endfor %}">{{ connection.authority_label }}</span>
-                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}reported {{ connection.instance.observed_at|timesince }} ago{% endif %}</span>{% endif %}
+                {% if connection.instance.status_label|lower != connection.lifecycle_label|lower or connection.instance.observed_at %}<span class="muted">{% if connection.instance.status_label|lower != connection.lifecycle_label|lower %}{{ connection.instance.status_label }}{% if connection.instance.observed_at %} · {% endif %}{% endif %}{% if connection.instance.observed_at %}reported {{ connection.instance.observed_at|ago }}{% endif %}</span>{% endif %}
+                {% with event=last_activity|dictkey:connection.instance.connection_ref %}
+                {% if event %}<a class="connection-last-activity" href="{% url 'core:audit_detail' event.pk %}" title="Last activity">{{ event.summary }} · {{ event.created_at|ago }}</a>{% endif %}
+                {% endwith %}
               </span>
             </td>
             <td class="connection-next" data-label="Next">
               {% if connection.recommended_action %}
-                <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }} — {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
+                <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }}: {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
               {% endif %}
               {% for action in connection.row_actions %}
                 {% if action.name == "relationships" %}
-                  {# The topology node, as the glyph it opens rather than a sentence on every row. #}
-                  <a class="connection-topology-link" href="{{ action.url }}" title="{{ action.label }} — {{ action.reason }}" aria-label="{{ action.label }} — {{ action.reason }}">
-                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                      <circle cx="12" cy="4.5" r="2.4"/>
-                      <circle cx="5" cy="18" r="2.4"/>
-                      <circle cx="19" cy="18" r="2.4"/>
-                      <path d="M10.4 6.6 6.4 15.7M13.6 6.6l4 9.1M7.4 18h9.2"/>
-                    </svg>
-                  </a>
+                  <a class="connection-direct-action" href="{{ action.url }}" title="{{ action.reason }}">Relationships</a>
                 {% else %}
-                  <a class="connection-direct-action{% if action.effect == 'destructive' %} is-destructive{% endif %}" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }} — {{ action.reason }}"{% endif %}>{{ action.label }}</a>
+                  <a class="connection-direct-action{% if action.effect == 'destructive' %} is-destructive{% endif %}" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }}: {{ action.reason }}"{% endif %}>{{ action.label }}</a>
                 {% endif %}
               {% endfor %}
-              {% if not connection.recommended_action and not connection.row_actions %}<span class="muted">—</span>{% endif %}
+              {% if not connection.recommended_action and not connection.row_actions %}{% empty_value %}{% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -177,41 +156,43 @@ they stay visible and stay in the same table.
   </div>
 
   {% comment %}
-  Families, once each. A family owns the secret store, the documentation and
-  the setup route; a connection owns none of those, so repeating them on every
-  row said the same thing twelve times. One with nothing configured is reported
-  here rather than as a row in a table of connections it has none of.
+  A type with a connection is described by its rows. What is left to say is
+  which types have none yet, and how to connect one.
   {% endcomment %}
-  <div class="connection-family-legend">
-    {% for group in connection_groups %}
-    <div class="connection-legend-item{% if not group.connections %} is-unconfigured{% endif %}">
-      <span class="connection-legend-name">
-        <strong>{{ group.spec.label }}</strong>
-        <span class="count">{{ group.connections|length }}</span>
-      </span>
-      {% if group.connections %}
-        <span class="muted">{{ group.spec.summary }}</span>
-      {% else %}
-        <span class="muted">{{ group.spec.empty_message }}</span>
-      {% endif %}
-      <span class="connection-legend-links">
-        {% if group.spec.secret_store %}<span class="scope-chip">Secrets in {{ group.spec.secret_store }}</span>{% endif %}
-        {% if group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Documentation</a>{% endif %}
-        {% if group.spec.management_route %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
-        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% endif %}
-      </span>
-    </div>
-    {% endfor %}
+  {% if unconfigured_groups or unconnected_providers %}
+  <div class="connection-available">
+    <h2>Not connected</h2>
+    <ul>
+      {% for group in unconfigured_groups %}
+        <li>
+          <strong>{{ group.spec.label }}</strong>
+          <span class="muted">{{ group.spec.empty_message }}</span>
+          {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
+        </li>
+      {% endfor %}
+      {% comment %}
+      A provider the controller holds no credential for. What adding one lets
+      HQ see comes from the readings registry, and what it manages from the
+      resource kinds that name it.
+      {% endcomment %}
+      {% for provider in unconnected_providers %}
+        <li>
+          <strong>{{ provider.label }}</strong>
+          <span class="muted">{% if provider.sees %}Would let HQ see: {{ provider.sees|join:", " }}{% elif provider.manages %}Would let HQ manage: {{ provider.manages|join:", " }}{% endif %}</span>
+        </li>
+      {% endfor %}
+    </ul>
   </div>
+  {% endif %}
 </section>
 {% else %}
-  {% include "partials/_empty_state.html" with message="No connection types are installed." %}
+  {% include "partials/_empty_state.html" with message="No connection types installed." %}
 {% endif %}
 
 {% if unlabelled %}
   <div class="notice notice-attention">
-    <strong>Not yet classified</strong>
-    <p>These connections were reported without a provider kind. Classify them at their secret source so HQ can derive their abilities on the next refresh.</p>
+    <strong>Unclassified connections</strong>
+    <p>These connections have no provider kind. Set the kind at the secret source and refresh.</p>
   </div>
 {% endif %}
 
@@ -219,20 +200,20 @@ they stay visible and stay in the same table.
   <summary>
     <span>
       <span class="eyebrow">Advanced</span>
-      <strong>Security controls and proof</strong>
-      <small>What HQ can establish, what it cannot, and the evidence boundary between them.</small>
+      <strong>Security controls</strong>
+      <small>What HQ can verify, and what it cannot.</small>
     </span>
     <span class="count">{{ connection_posture.controls|length }}</span>
   </summary>
   <section class="connection-trust-path" aria-labelledby="connection-trust-path-title">
     <div>
       <span class="eyebrow">Request-to-resource path</span>
-      <h3 id="connection-trust-path-title">Independent enforcement points</h3>
-      <p>Admission establishes who may reach HQ. Capabilities and provider scopes separately establish what that principal may do.</p>
+      <h3 id="connection-trust-path-title">Enforcement points</h3>
+      <p>Admission controls who can reach HQ. Capabilities and provider scopes control what they can do.</p>
     </div>
     <ol aria-label="Connection enforcement path">
       <li><span>Ingress</span><strong>{{ connection_posture.channel_label }}{% if connection_posture.secure_transport %} + TLS{% endif %}</strong></li>
-      {% if connection_posture.trusted_proxy_count %}<li><span>Identity chain</span><strong>{{ connection_posture.trusted_proxy_count }} trusted proxy hop{{ connection_posture.trusted_proxy_count|pluralize }}</strong></li>{% endif %}
+      {% if connection_posture.trusted_proxy_count %}<li><span>Identity chain</span><strong>{{ connection_posture.trusted_proxy_count|counted:"trusted proxy hop,trusted proxy hops" }}</strong></li>{% endif %}
       <li class="{% if not connection_posture.network_gate_enforced %}is-attention{% endif %}"><span>PEP</span><strong>Pre-auth network gate</strong></li>
       <li><span>Principal</span><strong>Authenticated session</strong></li>
       <li><span>Authorization</span><strong>HQ capability</strong></li>
@@ -246,12 +227,12 @@ they stay visible and stay in the same table.
         <header>
           <h3>{{ control.label }}</h3>
           <span class="pill pill-{{ control.state }}">
-            {% if control.state == "good" %}Proven{% elif control.state == "serious" %}Needs attention{% elif control.state == "attention" %}Attention{% else %}Transparent{% endif %}
+            {% if control.state == "good" %}Proven{% elif control.state == "serious" %}Needs attention{% elif control.state == "attention" %}Attention{% else %}Unverified{% endif %}
           </span>
         </header>
         <strong>{{ control.evidence }}</strong>
         <p>{{ control.detail }}</p>
-        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect the full request path</a>{% endif %}
+        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection" data-connection-source="{% url 'connection' %}">Inspect request path</a>{% endif %}
       </article>
     {% endfor %}
   </div>

@@ -1,0 +1,49 @@
+{% comment %}
+  One node's edges in the relation graph, grouped by what each says from here.
+  Machine, service and domain pages all render this, from
+  ``application.relationships.relationships_for``.
+
+  Expects: `relationships`, a Relationships.
+{% endcomment %}
+{% if relationships %}
+<section id="relationships" class="page-section" data-page-section>
+  <div class="section-head">
+    <h2>Relationships</h2>
+    {% if relationships.focus_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}
+  </div>
+  {% if relationships.groups %}
+  <div class="table-scroll">
+    <table class="data-table compact-table relationship-table">
+      <tbody>
+        {% for group in relationships.groups %}
+          {% for item in group.items %}
+            <tr>
+              {% if forloop.first %}<th scope="rowgroup" rowspan="{{ group.items|length }}">{{ group.phrase }}</th>{% endif %}
+              <td>{% entity item.entity %}</td>
+              <td class="muted">
+                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}<time datetime="{{ item.observed_at.isoformat }}">read {{ item.observed_at|ago }}</time>{% endif %}
+                {% if item.stale %}<span class="pill pill-attention">Stale</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if relationships.unreadable %}
+    <p class="muted">Not readable: {{ relationships.unreadable|join:", " }}. This may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></p>
+  {% endif %}
+  {% if relationships.readouts %}
+    <details class="section-readout">
+      <summary>Raw readings</summary>
+      {% for label, source, text in relationships.readouts %}
+        <details class="section-readout">
+          <summary>{{ label }}{% if source %} via {% entity source %}{% endif %}</summary>
+          <pre>{{ text }}</pre>
+        </details>
+      {% endfor %}
+    </details>
+  {% endif %}
+</section>
+{% endif %}

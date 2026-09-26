@@ -6,9 +6,9 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.urls import reverse
 from django.utils import timezone
 
+from control_plane.provider_adapters.contracts import REFUSALS
 from core.models import TimestampedModel
 
 
@@ -45,14 +45,35 @@ class ManagedResource(TimestampedModel):
         return self.key
 
     def get_absolute_url(self) -> str:
-        return reverse("control_plane:detail", kwargs={"key": self.key})
+        from .providers import resource_home
+
+        return resource_home(self)
+
+    @property
+    def kind_label(self) -> str:
+        from .providers import registry_label
+
+        return registry_label(self.kind)
+
+    @property
+    def search_summary(self) -> str:
+        """The provider's readout as one line, else the kind's label."""
+
+        from .providers import readout_rows
+
+        rows = " · ".join(
+            f"{label}: {desired or observed}"
+            for label, desired, observed in readout_rows(self)
+            if desired or observed
+        )
+        return rows or self.kind_label
 
 
 class ProviderInventory(TimestampedModel):
     """What a provider actually holds, as a controller last saw it.
 
     A cache, and named to stay one. HQ must not become a second copy of AdGuard
-    or Nginx Proxy Manager -- those own their own state, and a stored mirror is
+    or Nginx Proxy Manager: those own their own state, and a stored mirror is
     wrong the moment anything changes outside HQ. Nothing reconciles from this
     and nothing is derived from it that outlives the next sweep; it exists so an
     operator can see what is out there and adopt it.
@@ -64,7 +85,14 @@ class ProviderInventory(TimestampedModel):
     kind = models.CharField(primary_key=True, max_length=64)
     records = models.JSONField(default=list, blank=True)
     reachable = models.BooleanField(default=True)
+    # False when the controller holds no connection that could read the kind.
+    connected = models.BooleanField(default=True)
     error = models.CharField(max_length=500, blank=True)
+    # What the provider refused when unreachable: the credential, or one
+    # permission. Blank when the read failed for another reason.
+    refusal = models.CharField(
+        max_length=16, blank=True, choices=[(value, value) for value in REFUSALS]
+    )
     observed_at = models.DateTimeField()
     controller_id = models.CharField(max_length=160, blank=True)
 
@@ -80,7 +108,7 @@ class ProviderConnection(TimestampedModel):
     """One endpoint a controller can reach, as that controller last found it.
 
     HQ holds no credential and never will. What it holds is the fact that one
-    exists, what kind of thing it opens, and what that thing said when asked --
+    exists, what kind of thing it opens, and what that thing said when asked,
     which is enough to offer it as an answer and to say when it stopped working.
 
     The credential itself is a 1Password item, and that item is the only place a
@@ -89,7 +117,7 @@ class ProviderConnection(TimestampedModel):
     and reports that. So a page listing connections cannot drift from the vault,
     because it was never a second copy of it.
 
-    ``reaches`` is what the credential can act on -- the machines behind a
+    ``reaches`` is what the credential can act on: the machines behind a
     Portainer, the zones a DNS token may edit. It is why this is worth sweeping
     rather than merely declaring: nothing in HQ can know it, and every menu that
     asks "which machine" or "which domain" should be offering exactly this.
@@ -109,6 +137,9 @@ class ProviderConnection(TimestampedModel):
     # look like an outage every time the page loaded.
     probed = models.BooleanField(default=True)
     detail = models.CharField(max_length=500, blank=True)
+    # Whether the connection's item declares that HQ manages through it. False
+    # means it only observes, and nothing it reads is adopted.
+    manages = models.BooleanField(default=False)
     # Work that went through this connection and could not finish, as the last
     # pass found it. A probe asks whether the credential still opens the door;
     # this is what happened to the things that walked through it, and the two
@@ -132,6 +163,31 @@ class ProviderConnection(TimestampedModel):
 
     def __str__(self) -> str:
         return self.connection_ref
+
+
+class NotManaged(TimestampedModel):
+    """A record an operator said HQ does not manage.
+
+    Written when a declaration HQ adopted is forgotten, and read by adoption,
+    which skips the record until an operator manages it again. Keyed by kind and
+    the record's token (``inventory.record_token``).
+    """
+
+    kind = models.CharField(max_length=64)
+    token = models.CharField(max_length=16)
+    label = models.CharField(max_length=300, blank=True)
+    actor = models.CharField(max_length=160, blank=True)
+
+    class Meta:
+        ordering = ("kind", "label")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("kind", "token"), name="one_not_managed_row_per_record"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.label or self.token}"
 
 
 class DashboardRefreshRequest(TimestampedModel):
@@ -181,7 +237,7 @@ class CertificateMaterial(TimestampedModel):
     this, that is a copy and paste into a provider's web form, and installing it
     somewhere else later means another trip to the offline CA.
 
-    Sealed with a key that is not in this database -- see ``core.secrets`` -- and
+    Sealed with a key that is not in this database (see ``core.secrets``) and
     never returned by any serializer. The controller reads it through its own
     bridge command, so it does not ride along in the contract that every other
     resource's export prints.
@@ -198,7 +254,7 @@ class CertificateMaterial(TimestampedModel):
     fingerprint_sha256 = models.CharField(max_length=95, blank=True)
     # The names the certificate actually carries, read out of it at upload. The
     # deploy path needs them to know which proxy hosts to rebind, and the
-    # service view needs them to know what this covers -- neither is declared,
+    # service view needs them to know what this covers: neither is declared,
     # both are facts about the artifact.
     domains = models.JSONField(default=list, blank=True)
     not_after = models.DateTimeField(null=True, blank=True)
@@ -214,7 +270,7 @@ class OperationRequest(TimestampedModel):
         RENEW = "renew", "Renew certificate"
         DELETE = "delete", "Delete"
         # Lifecycle, not convergence. Restarting a container does not move the
-        # world toward a declaration -- it is a thing an operator asks for once,
+        # world toward a declaration: it is a thing an operator asks for once,
         # about something already exactly as declared, which is why none of
         # these is ever scheduled automatically.
         RESTART = "restart", "Restart"
@@ -222,7 +278,7 @@ class OperationRequest(TimestampedModel):
         STOP = "stop", "Stop"
         # Consent, not convergence. A route a machine advertises is inert until
         # the tailnet approves it, and approving is a decision about trusting
-        # that machine to carry that traffic -- so it is asked for once, by an
+        # that machine to carry that traffic, so it is asked for once, by an
         # operator, about a route the machine is already offering.
         APPROVE_ROUTES = "approve-routes", "Approve advertised routes"
 
@@ -282,7 +338,7 @@ class ApprovalRequest(TimestampedModel):
     Written after a single service token, held on a laptop, changed the whole
     estate's access policy twice inside a minute: once to amend the declaration
     and once to push it, with nothing in between that a human had to see. Both
-    calls were authorized. Authority was never the missing thing -- consent was.
+    calls were authorized. Authority was never the missing thing: consent was.
 
     So this is not a second permission system. The caller already held the
     capability; what it did not hold was a person's agreement, and that is the
@@ -300,7 +356,7 @@ class ApprovalRequest(TimestampedModel):
     the diff they were shown, and only that diff.
 
     ``expires_at`` exists because a request nobody ever answers is not a
-    pending decision, it is litter -- and litter that still applies a change if
+    pending decision, it is litter, and litter that still applies a change if
     it is clicked six weeks later.
     """
 
@@ -336,7 +392,7 @@ class ApprovalRequest(TimestampedModel):
     # would be the obvious thing and would answer a question nobody asks: what
     # matters is that a person on the web surface agreed, and both of those
     # facts are here. ``OperationRequest.requested_by`` is the counter-example
-    # sitting next door -- a user column no writer has ever filled in.
+    # sitting next door: a user column no writer has ever filled in.
     decided_actor = models.CharField(max_length=160, blank=True)
     decided_interface = models.CharField(max_length=32, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
@@ -375,7 +431,7 @@ class AddressReading(models.Model):
     transferred between organisations; a PTR record changes when someone
     reconfigures a network. Neither happens between two page loads, and
     re-asking on every load spends a stranger's rate limit to be told the same
-    thing -- and tells them, each time, which addresses HQ is interested in.
+    thing, and tells them, each time, which addresses HQ is interested in.
 
     A cache rather than declared state: nothing here is HQ's to be right about,
     the row is disposable, and an operator who thinks it has gone stale can ask

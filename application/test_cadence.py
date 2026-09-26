@@ -2,7 +2,6 @@
 
 Two properties. Applying queued work must not wait for a polling interval, and
 sweeping must not cost a provider call a minute for records that change monthly.
-Both used to ride one timer, where only one of them could be right.
 """
 
 from __future__ import annotations
@@ -124,6 +123,9 @@ class SweepPolicyTests(TestCase):
 
 class DoorbellTests(TestCase):
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.settings_override, self.directory = markers()
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)

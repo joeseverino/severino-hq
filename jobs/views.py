@@ -6,19 +6,34 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.views.generic import DetailView, ListView
 
-from application.tables import TableFilter, TableListMixin, TableSort
+from application.pages import PageMixin
+from application.tables import TableColumn, TableFilter, TableListMixin, TableSort
 
 from .models import Job
 from .runner import reap
 
 
-class JobListView(TableListMixin, LoginRequiredMixin, ListView):
+class JobListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     """Every job, newest first, through the host's own table contract."""
 
     model = Job
     template_name = "jobs/job_list.html"
-    context_object_name = "jobs"
     paginate_by = 40
+    page_title = "Background jobs"
+    page_lede = (
+        "Tasks that run outside a web request. Jobs whose process exited early "
+        "are marked Lost when this page loads."
+    )
+    table_search_fields = ("label", "kind", "note")
+    table_search_placeholder = "Search jobs and notes…"
+    table_columns = (
+        TableColumn("Started", "created_at"),
+        TableColumn("Job"),
+        TableColumn("State"),
+        TableColumn("Duration", css="num-col"),
+        TableColumn("Last update"),
+        TableColumn("Requested by"),
+    )
     table_sorts = (
         TableSort("-created_at", "Newest first", "-created_at"),
         TableSort("created_at", "Oldest first", "created_at"),

@@ -1,10 +1,7 @@
-{% extends "base.html" %}
-{% block title %}Machines{% endblock %}
-{% block content %}
-{% include "partials/_page_head.html" with title="Machines" lede="Everything HQ can reach or has seen something running on, and what is on each." %}
-
+{% extends "page.html" %}
+{% block page %}
 {% comment %}
-No add button. A machine is here because something reported it — a credential
+No add button. A machine is here because something reported it: a credential
 that reaches it, a container running on it, a service served from it. Entering
 one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
@@ -25,51 +22,36 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            <a href="{{ machine.url }}"><strong>{{ machine.name }}</strong></a>
+            <strong>{% entity machine.link %}</strong>
             {% if machine.role %}<br><span class="muted">{{ machine.role }}</span>{% endif %}
           </td>
           <td>
-            {% for ref in machine.reached_by %}<code>{{ ref }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+            {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
           </td>
           <td>
             {% if machine.containers %}
               {{ machine.running }} of {{ machine.containers|length }} running
+            {% elif machine.containers_visible %}
+              {% empty_value %}
             {% else %}
-              <span class="muted">—</span>
+              <span class="muted">Not visible</span>
             {% endif %}
           </td>
           <td>
-            {% for hostname in machine.hostnames %}<a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">—</span>{% endfor %}
+            {% for role in machine.roles %}<span title="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last or machine.runs_hq or machine.hostnames %}<br>{% endif %}{% endfor %}
+            {% if machine.runs_hq %}{{ hq_label }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
+            {% for hostname in machine.hostnames %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% if not machine.runs_hq and not machine.roles %}{% empty_value %}{% endif %}{% endfor %}
           </td>
           <td>
             {% comment %}
-            Two different questions, so two answers rather than one merged one.
-            Presence is whether the machine is on the network at all; reachable
-            is whether a credential opened something running on it. A machine
-            can be up with a broken token, and reporting either as the other is
-            how a switched-off box and an expired credential became the same
-            sentence.
+            One state. Presence decides when the tailnet reports the machine;
+            the connection that sees it is in "Reached through".
             {% endcomment %}
-            {% if machine.presence %}
-              {% if machine.presence.online %}
-                <span class="pill pill-reachable">up</span>
-              {% else %}
-                <span class="pill pill-unreachable">down</span>
-              {% endif %}
-            {% endif %}
-            {% if machine.reached_by %}
-              <span class="pill pill-{% if machine.reachable %}reachable{% else %}unreachable{% endif %}">{% if machine.reachable %}reachable{% else %}unreachable{% endif %}</span>
-            {% elif not machine.presence %}
-              {% comment %}
-              Seen, never reached, and not on the tailnet either. Something
-              reported this machine's name and nothing HQ holds opens it.
-              {% endcomment %}
-              <span class="pill pill-unprobed">no credential</span>
-            {% endif %}
+            <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0 }}</span>
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5">{% include "partials/_empty_state.html" with compact=True message="No controller has reported yet. Machines appear here after the first sweep — nothing is entered by hand." %}</td></tr>
+        <tr><td colspan="5">{% include "partials/_empty_state.html" with compact=True message="No machines yet. They appear after the first sweep." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

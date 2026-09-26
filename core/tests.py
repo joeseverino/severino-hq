@@ -1,6 +1,6 @@
 """Smoke tests for Severino HQ.
 
-These don't aim for exhaustive coverage — they verify that the auth gate works
+These don't aim for exhaustive coverage: they verify that the auth gate works
 and every page in the main nav (including reports + exports) renders without a
 500. Add module-specific tests inside each app as it grows.
 """
@@ -28,9 +28,13 @@ from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
+
+from application.security import cli_principal
 from django.urls import reverse
 from django.utils import timezone
 
+from application import readings
+from application.dashboard import operating_snapshot
 from assets.models import Asset
 from content.models import ContentItem
 from core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
@@ -68,7 +72,7 @@ class AuthGateTests(TestCase):
         # contributes a `plugin:<id>` check of its own, so an equality here is
         # an assertion that nothing else is installed. That is true in this
         # repository's CI, which loads no extension, and false in the composed
-        # image, which is the only place it matters -- it passed every gate and
+        # image, which is the only place it matters: it passed every gate and
         # failed the composition.
         #
         # What this test is for is that readiness answers anonymously and
@@ -119,7 +123,7 @@ class AuthGateTests(TestCase):
         """Pin the one exception so it stays one exception.
 
         ``style-src`` allows ``'unsafe-inline'`` because charts position their
-        marks with a per-datum custom property -- ``style="--at: 62%"`` -- which
+        marks with a per-datum custom property (``style="--at: 62%"``) which
         no class can express and no nonce can cover, because nonces apply to
         style *elements* and not to style *attributes*.
 
@@ -402,7 +406,7 @@ class SearchPageTests(_AuthedTestCase):
                 "core.views.global_search",
                 return_value={"groups": [], "total": 0},
             ) as records,
-            patch("core.views.search_submissions") as contacts,
+            patch("contacts.inbox.search") as contacts,
         ):
             response = self.client.get(
                 "/search/",
@@ -471,7 +475,7 @@ class SearchPageTests(_AuthedTestCase):
             name="Highlight target",
             description="global search rendering check",
         )
-        with mock.patch("core.views.search_submissions", return_value=[]):
+        with mock.patch("contacts.d1.query", side_effect=AssertionError("search called D1")):
             response = self.client.get("/search/", {"q": "highlight"})
 
         content = response.content.decode()
@@ -488,22 +492,23 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         observed = timezone.now()
         machine = ManagedResource.objects.create(
-            key="homelab-server",
+            key="example-host",
             kind="machine",
-            spec={"name": "homelab-server"},
-            status={
-                "telemetry": {
-                    "status": "good",
-                    "summary": "Host load 0.30",
-                    "metrics": [{"label": "CPU", "value": "9%", "detail": "8 cores"}],
-                }
+            spec={"name": "example-host"},
+        )
+        readings.record(
+            readings.machine_telemetry("example-host"),
+            {
+                "status": "good",
+                "summary": "Host load 0.30",
+                "metrics": [{"label": "CPU", "value": "9%", "detail": "8 cores"}],
             },
-            last_observed_at=observed,
+            observed_at=observed,
         )
         DashboardMachine.objects.create(machine=machine)
 
         dashboard = self.client.get("/")
-        machine_page = self.client.get("/infrastructure/machines/homelab-server/")
+        machine_page = self.client.get("/infrastructure/machines/example-host/")
 
         self.assertContains(dashboard, "CPU")
         self.assertContains(dashboard, "9%")
@@ -519,17 +524,17 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
 
         machine = ManagedResource.objects.create(
-            key="homelab-server",
+            key="example-host",
             kind="machine",
-            spec={"name": "homelab-server"},
+            spec={"name": "example-host"},
         )
         DashboardMachine.objects.create(machine=machine)
         ProviderConnection.objects.create(
-            connection_ref="homelab-portainer",
-            controller_id="homelab-server",
+            connection_ref="example-portainer",
+            controller_id="example-host",
             provider="portainer",
             endpoint="https://portainer.example.test",
-            reaches=["homelab-server"],
+            reaches=["example-host"],
             reachable=True,
             observed_at=timezone.now(),
         )
@@ -597,7 +602,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             page = self.client.get("/projects/")
         # The count is fetched after the page, which is where D1 is read again.
         with (
-            patch("contacts.d1.get_unread_count", return_value=0),
+            patch("contacts.d1.get_dashboard_state", return_value=([], 0)),
             patch("application.domains.extension_domains", return_value=()),
         ):
             count = self.client.get("/action-items/count/")
@@ -605,47 +610,31 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(page, "data-action-count hidden")
         self.assertEqual(count.json()["count"], 1)
 
-    def test_the_dashboard_defers_recent_contacts_and_never_waits_on_d1(self):
-        state = (
-            [{"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}],
-            3,
-        )
-        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
+    def test_neither_the_dashboard_nor_its_contacts_panel_waits_on_d1(self):
+        from application import readings
+        from contacts import d1
+
+        row = {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}
+        readings.record(d1.UNREAD, {"count": 3, "rows": [row], "status": "ok"})
+        with patch("contacts.d1.query", side_effect=AssertionError("a page called D1")):
             page = self.client.get("/")
-        with patch("contacts.d1.get_dashboard_state", return_value=state) as live:
             panel = self.client.get(reverse("dashboard_contacts"))
 
         self.assertContains(page, 'data-deferred="%s"' % reverse("dashboard_contacts"))
-        live.assert_called_once_with(limit=4)
         self.assertContains(panel, "One call")
         self.assertContains(panel, "3 unread")
 
     def test_an_empty_contact_feed_renders_nothing(self):
-        with patch("contacts.d1.get_dashboard_state", return_value=([], 0)):
+        with patch("contacts.d1.query", side_effect=AssertionError("a page called D1")):
             panel = self.client.get(reverse("dashboard_contacts"))
 
         self.assertNotContains(panel, "Recent contacts")
-
-    def test_recent_activity_links_to_the_event_in_plain_language(self):
-        event = AuditLog.objects.create(
-            action=AuditLog.Action.UPDATED,
-            object_type="example.resource",
-            object_repr="Useful dashboard target",
-            user=self.user,
-        )
-
-        with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            response = self.client.get("/")
-
-        self.assertContains(response, "Useful dashboard target")
-        self.assertContains(response, "updated by")
-        self.assertContains(response, reverse("core:audit_detail", args=[event.pk]))
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         from control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec={},
             generation=2,
@@ -660,7 +649,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             ],
         )
 
-        response = self.client.get("/")
+        response = self.client.get("/action-items/")
 
         # Each finding is its own item, linked to its own rule's evidence.
         self.assertNotContains(response, "Infrastructure findings")
@@ -679,10 +668,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Open items")
-        self.assertContains(response, "Needs attention")
         self.assertContains(response, "Active projects")
-        self.assertContains(response, "1 need output")
+        self.assertContains(response, "1 needs output")
         self.assertNotContains(response, "Active projects need output")
         self.assertNotContains(response, "/projects/?needs_output=1")
         self.assertNotContains(response, "Project opportunities")
@@ -697,11 +684,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             status=DocumentationRecord.Status.ACTIVE,
         )
 
-        response = self.client.get("/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "All active docs reviewed recently.")
-        self.assertNotContains(response, "Review queue")
+        self.assertEqual(operating_snapshot(principal=cli_principal())["kpis"]["docs_needing_review"], 0)
 
     def test_projects_can_filter_for_missing_output(self):
         project = Project.objects.create(
@@ -767,7 +750,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertCountEqual(response.context["projects"], [active_lab, idea_lab])
+        self.assertCountEqual(response.context["object_list"], [active_lab, idea_lab])
         status_filter = next(
             item
             for item in response.context["table"]["filters"]
@@ -784,7 +767,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
     def test_a_search_that_matches_nothing_is_an_empty_table_not_an_error(self):
         """`apply_search` returned a bare `.none()` when nothing matched, so
-        the `_search_rank` the table layer orders by did not exist -- and
+        the `_search_rank` the table layer orders by did not exist, and
         Django resolves an ordering name against the model whether or not a row
         will ever be built. Every list page answered 500 to a misspelt vendor
         or a doc that was never written."""
@@ -807,7 +790,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/projects/", {"q": "operations django"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context["projects"]), [matching])
+        self.assertEqual(list(response.context["object_list"]), [matching])
 
     @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
     def test_docs_review_filter_uses_configured_interval(self):
@@ -868,7 +851,7 @@ class ExportSmokeTests(_AuthedTestCase):
     def setUp(self):
         super().setUp()
         self.project = Project.objects.create(
-            name="Lab — homelab DNS", status=Project.Status.ACTIVE
+            name="Lab: homelab DNS", status=Project.Status.ACTIVE
         )
         self.asset = Asset.objects.create(
             item_name="Test switch",
@@ -986,9 +969,9 @@ class ManifestImportTests(TestCase):
         self.assertNotIn("projects_tech_backfilled", stats)
 
     def test_task_doc_imports_with_its_own_status_lifecycle(self):
-        # A task carries open/active/parked/done/wontfix — the standard status
+        # A task carries open/active/parked/done/wontfix: the standard status
         # set rejects these, so the importer must validate tasks per-doc-type
-        # (the bug that wedged `hq sync`: every open task failed validation).
+        # rather than against the standard status set.
         stats = import_manifest_data(
             [
                 {
@@ -1062,7 +1045,7 @@ class ManifestImportTests(TestCase):
 
     # The schema's prefixes and required fields were loaded but never read, so
     # an entry breaking either upserted cleanly. Each rejection is asserted on
-    # both paths -- the preflight and the write -- since they share one check.
+    # both paths (the preflight and the write) since they share one check.
     STANDARD_DOC = {
         "doc_id": "rb-complete",
         "title": "Complete",
@@ -1189,7 +1172,7 @@ class ManifestImportTests(TestCase):
                     "slug": "building-a-custom-mcp-layer",
                     "title": "Building a Custom MCP Layer",
                     "doc_type": DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-                    "system": "jseverino.com",
+                    "system": "example.com",
                     "environment": DocumentationRecord.Environment.CLOUDFLARE,
                     "status": DocumentationRecord.Status.DRAFT,
                     "sensitivity": DocumentationRecord.Sensitivity.INTERNAL,
@@ -1317,8 +1300,8 @@ class AuditChangeTests(TestCase):
         self.assertEqual(changes["status"], ["idea", "active"])
 
     def test_a_save_that_changed_nothing_is_not_an_event(self):
-        # Django writes every column on every save, so a form re-submitted
-        # unchanged used to leave a row saying "Updated" and meaning nothing.
+        # Django writes every column on every save; an unchanged re-submission
+        # records no event.
         project = Project.objects.create(name="Steady", status=Project.Status.IDEA)
         before = AuditLog.objects.count()
 
@@ -1377,6 +1360,8 @@ class AuditDetailPageTests(_AuthedTestCase):
         self.assertContains(page, "What changed")
         self.assertContains(page, "Before")
         self.assertContains(page, "After")
+        self.assertEqual(page.context["page"].title, "Audit event")
+        self.assertEqual(page.context["page"].trail, (("Audit log", reverse("core:audit_list")),))
 
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
@@ -1495,7 +1480,7 @@ class NavigationTests(TestCase):
 
     def test_every_entry_lights_its_own_group_and_no_other(self):
         """Checked for every entry the registry declares, so a new one cannot
-        claim someone else's section -- an entry with no namespace once lit
+        claim someone else's section: an entry with no namespace once lit
         its group on every root page, the dashboard included."""
 
         from django.test import RequestFactory
@@ -1561,7 +1546,7 @@ class CompressedResponseTests(TestCase):
     Django emits header names in the case they were set; ASGI says lowercase,
     and Starlette's compressor matches on lowercase. Mismatched, it appends a
     second Content-Length rather than replacing the first, and h11 refuses to
-    send a response carrying two -- a 502 on every page big enough to compress.
+    send a response carrying two: a 502 on every page big enough to compress.
     """
 
     def _send_through(self, app, headers, body):

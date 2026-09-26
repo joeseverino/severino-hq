@@ -1,96 +1,28 @@
-{% extends "base.html" %}
-{% load nav_tags %}
-{% block title %}{{ resource.key }} · Infrastructure{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ resource.key }}</h1>
-    <p class="muted"><code>{{ resource.kind }}</code></p>
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+Nothing to act on while a removal is in flight, so the head offers nothing and
+this says why. Shown unchanged, the page invited an operator to edit something
+about to stop existing, and to queue a convergence racing the deletion already
+waiting for the same controller.
+{% endcomment %}
+{% if removal_pending %}
+  <div class="notice notice-attention">
+    <strong>Removal in progress</strong>
+    <p>HQ drops this declaration once the provider confirms the deletion.</p>
   </div>
-  <div class="page-actions">
-    {% comment %}
-    Nothing to act on while a removal is in flight. Shown unchanged, the page
-    invited an operator to edit something about to stop existing, and to queue a
-    convergence racing the deletion already waiting for the same controller.
-    {% endcomment %}
-    {% if removal_pending %}
-      <span class="pill pill-attention">Removal in progress</span>
-      <a class="btn" href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
-    {% else %}
-    {% comment %}
-    Reconcile leads: it is the thing an operator comes here to do, and the one
-    that acts on the world rather than on the declaration.
-    {% endcomment %}
-    {% comment %}
-    What the controller can actually do to this, in the order it matters. A
-    container cannot be reconciled — its definition lives in a compose file HQ
-    has never seen — so offering Reconcile greyed out and nothing else made the
-    page about the one verb that does not apply.
-    {% endcomment %}
-    {% for route, label in lifecycle_actions %}
-      <form action="{% url route resource.key %}" method="post">
-        {% csrf_token %}
-        <button type="submit" class="btn icon-btn">{% include "partials/_icon.html" with name=route|cut:"control_plane:" %}<span>{{ label }}</span></button>
-      </form>
-    {% endfor %}
-    {% if reconcile_allowed or not lifecycle_actions %}
-      <form action="{% url 'control_plane:reconcile' resource.key %}" method="post">
-        {% csrf_token %}
-        <button type="submit" {% if not reconcile_allowed %}disabled title="{{ reconcile_explanation }}"{% endif %}>Reconcile</button>
-      </form>
-    {% endif %}
-    {% url 'control_plane:edit' resource.key as edit_url %}
-    <a class="btn" href="{{ edit_url|returning_to:request.get_full_path }}">Edit</a>
-    {% if resource.kind == "tls.uploaded_certificate" %}
-      <a class="btn primary" href="{% url 'control_plane:upload_certificate' resource.key %}">{% if resource.material %}Replace certificate{% else %}Upload certificate{% endif %}</a>
-    {% endif %}
-    {% if resource.kind == "tls.certificate" %}
-      <form action="{% url 'control_plane:renew' resource.key %}" method="post">
-        {% csrf_token %}
-        <button type="submit" class="primary" {% if not renewal_allowed %}disabled title="{{ renewal_explanation }}"{% endif %}>Request renewal</button>
-      </form>
-    {% endif %}
-
-    {% comment %}
-    Everything you might want, behind one control, so the things you came to do
-    stay on one line. Wrapping these onto a second row gave a download the same
-    weight as Remove; hiding them entirely would lose them. A `details` needs no
-    script, so the menu opens whether or not anything else on the page works.
-    {% endcomment %}
-    <details class="overflow-menu" data-menu>
-      <summary title="More actions" aria-label="More actions"><span aria-hidden="true">···</span></summary>
-      <div class="overflow-menu-panel">
-        {% comment %}
-        Removal lives here rather than in the row: it is the rarest thing anyone
-        does to a resource and the only one that cannot be undone, so it does
-        not need to sit a stray tap away from Reconcile.
-        {% endcomment %}
-        <a href="{% url 'control_plane:remove' resource.key %}">Remove</a>
-        <a href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
-        {% comment %}
-        Only when there is something to download. A menu lists what can be done;
-        an entry saying a thing cannot be done yet is a status report filed in
-        the wrong place, and it sat between two working links looking like one.
-        {% endcomment %}
-        {% if resource.kind == "tls.certificate" and resource.status.certificate_pem %}
-          <a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
-        {% endif %}
-      </div>
-    </details>
-    {% endif %}
-  </div>
-</div>
+{% endif %}
 
 {% comment %}
 Said here as well as on the queue. This is the page somebody opens when a
 declaration has not moved and they want to know why, and "a credential asked for
-this and nobody has answered" is the answer -- invisible otherwise, because a
+this and nobody has answered" is the answer: invisible otherwise, because a
 held request writes nothing and queues nothing by design.
 {% endcomment %}
 {% if awaiting_approval %}
   <div class="notice notice-attention">
-    <strong>{{ awaiting_approval|length }} change{{ awaiting_approval|length|pluralize }} waiting for your approval</strong>
-    <p>Asked for by {% for held in awaiting_approval %}<code>{{ held.requested_actor }}</code> over <code>{{ held.requested_interface }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}. Nothing has been written and nothing is queued.</p>
+    <strong>{{ awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" }}</strong>
+    <p>Requested by {% for held in awaiting_approval %}<code>{{ held.requested_actor }}</code> over <code>{{ held.requested_interface }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}. Nothing is written or queued yet.</p>
     <p><a class="btn compact primary" href="{% url 'core:audit_list' %}?awaiting=1">Review and decide</a></p>
   </div>
 {% endif %}
@@ -98,15 +30,9 @@ held request writes nothing and queues nothing by design.
 <div class="control-summary">
   <div class="control-metric">
     <span class="control-label">Configuration</span>
-    {% comment %}
-    A declaration nothing converges has no generation to wait for. Asked only
-    whether observed matches desired, this card read "Pending" beside one saying
-    there is nothing to converge — two cards contradicting each other about the
-    same resource, forever.
-    {% endcomment %}
-    {% if declaration_only %}
-      <strong class="control-declared">Recorded</strong>
-      <span>What HQ is responsible for, which is the whole of this declaration.</span>
+    {% if not capabilities.converges %}
+      <strong class="control-declared">Declared</strong>
+      <span>HQ keeps this as declared. The controller does not change it.</span>
     {% elif sync_state == "in_sync" %}
       <strong class="control-good">In sync</strong>
       <span>Observed generation {{ resource.observed_generation }} matches desired generation {{ resource.generation }}.</span>
@@ -116,34 +42,30 @@ held request writes nothing and queues nothing by design.
     {% endif %}
   </div>
   <div class="control-metric">
-    <span class="control-label">Automation</span>
-    {% if resource.kind == "tls.certificate" %}
-      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">{% if controller_capability.renew.automatic %}Automatic{% else %}Observe: {{ controller_capability.reconcile.mode|title }}{% endif %}</strong>
-      <span>{% if controller_capability.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The homelab controller resumes automatically after restarts.{% else %}Renew: {{ controller_capability.renew.mode|title }}{% endif %}{% if controller_capability.renew.reason %} · {{ controller_capability.renew.reason }}{% endif %}</span>
+    <span class="control-label">Controller</span>
+    {% if controller_rows %}
+      <strong class="control-good">{% if controller_automatic %}Automatic{% else %}On request{% endif %}</strong>
+      <span>{% for label, allowed in controller_rows %}{{ label }}{% if not allowed.enabled %} is off: {{ allowed.reason }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>
     {% else %}
-      <strong class="{% if controller_capability.reconcile.mode == 'apply' %}control-good{% else %}control-warn{% endif %}">Reconcile: {{ controller_capability.reconcile.mode|title }}</strong>
-      <span>{% if controller_capability.reconcile.mode == "apply" %}Controller actions are enabled.{% else %}{{ controller_capability.reconcile.reason }}{% endif %}</span>
+      <strong class="control-declared">None</strong>
+      <span>The controller takes no action on this kind.</span>
     {% endif %}
   </div>
   <div class="control-metric">
     <span class="control-label">Runtime health</span>
     <strong class="control-{{ control_health.state }}">{{ control_health.label }}</strong>
-    <span>{{ control_health.message }}</span>
+    <span>{% if capabilities.observed_at %}Last observed {{ capabilities.observed_at|ago }}.{% elif capabilities.unobserved_reason %}{{ capabilities.unobserved_reason }}{% else %}{{ control_health.message }}{% endif %}</span>
   </div>
-  {% if resource.kind == "tls.certificate" %}
+  {% if capabilities.actions.renew %}
     <div class="control-metric">
       <span class="control-label">Renewal policy</span>
-      {% if controller_capability.renew.mode == "locked" %}
-        <strong class="control-warn">Locked</strong>
-      {% else %}
-        <strong class="{% if renewal_allowed %}control-warn{% else %}control-good{% endif %}">{% if renewal_allowed %}Eligible now{% else %}Not due{% endif %}</strong>
-      {% endif %}
-      <span>{{ renewal_explanation }}</span>
+      <strong class="{% if capabilities.actions.renew.enabled %}control-warn{% else %}control-good{% endif %}">{% if capabilities.actions.renew.enabled %}Eligible now{% else %}Not due{% endif %}</strong>
+      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{{ capabilities.actions.renew.reason }}</span>
     </div>
   {% endif %}
 </div>
 
-{% if resource.kind == "tls.certificate" %}
+{% if resolved_spec or resolution_error %}
   {% if resolution_error %}<p class="message error">{{ resolution_error }}</p>{% endif %}
   <div class="two-col">
     <section class="control-card">
@@ -152,8 +74,8 @@ held request writes nothing and queues nothing by design.
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
         <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
         <dt>Expires</dt><dd>{{ resource.status.not_after|default:"Not observed" }}</dd>
-        <dt>Days remaining</dt><dd>{% if days_left != None %}{{ days_left }}{% else %}—{% endif %}</dd>
-        <dt>Renewal window</dt><dd>{{ resolved_spec.renewal_window_days }} days</dd>
+        <dt>Days remaining</dt><dd>{% if days_left != None %}{{ days_left }}{% else %}{% empty_value %}{% endif %}</dd>
+        <dt>Renewal window</dt><dd>{{ resolved_spec.renewal_window_days|counted:"day" }}</dd>
       </dl>
       <h3>Names</h3>
       <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</p>
@@ -184,7 +106,7 @@ held request writes nothing and queues nothing by design.
           <summary>{{ resource.status.unreachable_consumers|length }} not read</summary>
           <ul>
             {% for item in resource.status.unreachable_consumers %}
-              <li><strong>{{ item.consumer }}</strong>{% if item.domain %} &middot; {{ item.domain }}{% endif %} &mdash; {{ item.reason }}</li>
+              <li><strong>{{ item.consumer }}</strong>{% if item.domain %} &middot; {{ item.domain }}{% endif %}: {{ item.reason }}</li>
             {% endfor %}
           </ul>
         </details>
@@ -229,8 +151,8 @@ held request writes nothing and queues nothing by design.
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
   provider says about itself rather than from markup that knows what a proxy
-  host is. There were two hand-written cards here — one reaching into
-  spec.domain_names and spec.forward_host, one into spec.answer — and a
+  host is. There were two hand-written cards here (one reaching into
+  spec.domain_names and spec.forward_host, one into spec.answer) and a
   provider added afterwards got no card at all, because nobody remembered to
   come back and write a third.
 
@@ -242,33 +164,33 @@ held request writes nothing and queues nothing by design.
     {% comment %}
     The names this serves, and the way through to them. The page identified a
     record only by the key HQ invented for it, so the hostname appeared nowhere
-    outside a collapsed disclosure — and the service page, where the rest of
+    outside a collapsed disclosure, and the service page, where the rest of
     what answers for that name lives, could only be reached by typing its URL.
     {% endcomment %}
     {% comment %}
-    Named for what it is. This is the machine the *provider* runs on -- the
-    Portainer, the proxy, the DNS server -- not the machine this resource is on,
+    Named for what it is. This is the machine the *provider* runs on (the
+    Portainer, the proxy, the DNS server) not the machine this resource is on,
     and "Runs on" said the second. A container managed by a Portainer one box
-    over read "Runs on homelab-server" directly above its own "Runs on
-    sl-cloud-edge-01": the same two words for two different facts, wrong one
+    over read "Runs on example-host" directly above its own "Runs on
+    example-edge": the same two words for two different facts, wrong one
     first.
     {% endcomment %}
     {% if provider_machine %}
-      <p class="muted">Managed through <a href="{{ provider_machine.url }}">{{ provider_machine.name }}</a></p>
+      <p class="muted">Managed through {% entity provider_machine.link %}</p>
     {% endif %}
     {% if origin_machine %}
-      <p class="muted">Forwards to <a href="{{ origin_machine.url }}">{{ origin_machine.name }}</a></p>
+      <p class="muted">Forwards to {% entity origin_machine.link %}</p>
     {% endif %}
     {% if service_links %}
       <p class="muted">
         Serves
-        {% for hostname, url in service_links %}<a href="{{ url }}">{{ hostname }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% for hostname, url in service_links %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}
       </p>
     {% endif %}
     {% comment %}
     A container declares identity and nothing else, so on its own this page is
     two names. What it is doing, which machine that is, and which services reach
-    it are all joins the sweep already supports — the last one being the reverse
+    it are all joins the sweep already supports: the last one being the reverse
     of what a service page does, matching a proxy's forwarding port against the
     ports a container publishes.
     {% endcomment %}
@@ -276,7 +198,7 @@ held request writes nothing and queues nothing by design.
       <dl class="kv compact">
         {% if container.machine %}
           <dt>Runs on</dt>
-          <dd><a href="{{ container.machine.url }}">{{ container.machine.name }}</a>{% if container.machine.role %} <span class="muted">{{ container.machine.role }}</span>{% endif %}</dd>
+          <dd>{% entity container.machine.link %}{% if container.machine.role %} <span class="muted">{{ container.machine.role }}</span>{% endif %}</dd>
         {% endif %}
         {% if container.running %}
           <dt>State</dt>
@@ -286,23 +208,23 @@ held request writes nothing and queues nothing by design.
           </dd>
           <dt>Image</dt><dd><code>{{ container.running.image_label }}</code></dd>
           {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published }}</dd>{% endif %}
-          <dt>Seen</dt><dd>{{ container.running.observed_at|timesince }} ago</dd>
+          <dt>Seen</dt><dd>{{ container.running.observed_at|ago }}</dd>
         {% else %}
           <dt>State</dt>
-          <dd><span class="muted">No sweep has reported this container.</span></dd>
+          <dd><span class="muted">Not seen by a sweep yet.</span></dd>
         {% endif %}
         {% if container.serves %}
           <dt>Serves</dt>
-          <dd>{% for hostname in container.serves %}<a href="{% url 'control_plane:service' hostname %}">{{ hostname }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+          <dd>{% for hostname in container.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
         {% endif %}
       </dl>
     {% endif %}
     {% if readout_rows %}
       <dl class="kv compact">
-        {% for row_label, desired, observed in readout_rows %}
+        {% for row_label, desired, observed, links in readout_rows %}
           <dt>{{ row_label }}</dt>
           <dd>
-            <code>{{ observed|default:desired|default:"—" }}</code>
+            {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}<code>{{ value }}</code>{% endif %}{% endwith %}{% endif %}
             {% if desired and observed and desired != observed %}
               <span class="pill pill-serious">declared {{ desired }}</span>
             {% endif %}
@@ -317,7 +239,7 @@ held request writes nothing and queues nothing by design.
     {% endcomment %}
     {% if spec_rows.primary or spec_rows.advanced %}
       <details class="control-diagnostics">
-        <summary>The rest of this declaration</summary>
+        <summary>Other settings</summary>
         <dl class="kv compact">
           {% for row_label, value in spec_rows.primary %}
             <dt>{{ row_label }}</dt><dd><code>{{ value }}</code></dd>
@@ -331,6 +253,8 @@ held request writes nothing and queues nothing by design.
   </section>
 {% endif %}
 
+{% include "partials/_relationships.html" %}
+
 <details class="control-diagnostics">
   <summary>Raw desired and observed JSON</summary>
   <div class="two-col">
@@ -339,6 +263,23 @@ held request writes nothing and queues nothing by design.
   </div>
 </details>
 
+{% comment %}
+Beside the raw readings rather than in the head, so a download never sits at
+the same weight as Reconcile. Still offered while a removal is in flight: the
+one thing worth doing then is reading what it was.
+{% endcomment %}
+<p class="muted">
+  <a href="{% url 'control_plane:report_download' resource.key %}">Download report</a>
+  {% comment %}
+  Only when there is something to download. A link saying a thing cannot be
+  done yet is a status report filed in the wrong place.
+  {% endcomment %}
+  {% if resource.status.certificate_pem %}
+    · <a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+  {% endif %}
+</p>
+
+{% if capabilities.actions or resource.conditions or operations %}
 <h2>Controller conditions</h2>
 {% if resource.conditions %}
   <div class="table-scroll">
@@ -352,7 +293,7 @@ held request writes nothing and queues nothing by design.
     </table>
   </div>
 {% else %}
-  <p class="muted">No controller conditions reported yet.</p>
+  <p class="muted">No conditions.</p>
 {% endif %}
 
 <h2>Operations</h2>
@@ -365,14 +306,14 @@ held request writes nothing and queues nothing by design.
           <td>{{ operation.action_label }}{% if operation.automatic %}<br><span class="tag">automatic</span>{% endif %}</td>
           <td><span class="pill pill-{{ operation.state }}">{{ operation.state_label }}</span></td>
           <td>{{ operation.created_at }}<br><span class="muted">{{ operation.requested_actor }} via {{ operation.requested_interface }}</span>{% if operation.attempt_count %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
-          <td>{{ operation.completed_at|default:"—" }}</td>
+          <td>{{ operation.completed_at|or_empty }}</td>
           <td class="operation-result">
             <strong>{{ operation.headline }}</strong>
             <p class="operation-guidance">{{ operation.guidance }}</p>
             {% if operation.condition.reason %}<p class="muted">Provider reason: <code>{{ operation.condition.reason }}</code></p>{% endif %}
             {% if operation.affected %}
               <details class="operation-evidence" open>
-                <summary>{{ operation.affected|length }} affected target{{ operation.affected|length|pluralize }}</summary>
+                <summary>{{ operation.affected|length|counted:"affected target,affected targets" }}</summary>
                 <ul>
                   {% for item in operation.affected %}
                     <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>; observed <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
@@ -384,7 +325,7 @@ held request writes nothing and queues nothing by design.
                 <summary>Verification evidence</summary>
                 <ul>
                   {% for item in operation.evidence %}
-                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected == True %}matched{% elif item.matches_expected == False %}did not match{% else %}observed (legacy result){% endif %}</li>
+                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }} · <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code> · {% if item.matches_expected == True %}matched{% elif item.matches_expected == False %}did not match{% else %}observed (old result){% endif %}</li>
                   {% endfor %}
                 </ul>
               </details>
@@ -403,4 +344,5 @@ held request writes nothing and queues nothing by design.
     </tbody>
   </table>
 </div>
+{% endif %}
 {% endblock %}

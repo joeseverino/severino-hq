@@ -20,14 +20,16 @@ import re
 from typing import Any, Callable
 
 from control_plane.dns_lookup import LookupUnavailable, registry, resolve
+from control_plane.providers import normalized_hostname
 
 from django.utils.timezone import now
 
 from .projection import iso
+from .reach import is_public
 from .security import Capability, Principal
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
-# gateway owns, so it cannot change the shape of the request -- but a name that
+# gateway owns, so it cannot change the shape of the request, but a name that
 # is not a name is a question not worth asking, and refusing it here means the
 # provider never sees whatever was actually typed.
 HOSTNAME = re.compile(
@@ -56,7 +58,7 @@ class AddressCommand:
     ``refresh`` asks again rather than reading the stored answer. The default
     is the stored one: an allocation moves between organisations rarely and a
     PTR record changes when somebody reconfigures a network, so re-asking per
-    page load spends a stranger's rate limit to hear the same thing -- and
+    page load spends a stranger's rate limit to hear the same thing, and
     discloses, every time, which addresses HQ is interested in.
     """
 
@@ -67,7 +69,7 @@ class AddressCommand:
 def _flatten(data: Any) -> str:
     """One record's value as a line of text.
 
-    The resolver types `data` differently per record type -- a string for A and
+    The resolver types `data` differently per record type: a string for A and
     TXT, an object for MX, CAA and SOA. Flattened once here so no surface
     downstream branches on record type to render a row, and so a type added
     later degrades to readable JSON rather than an exception.
@@ -91,8 +93,8 @@ def _flatten(data: Any) -> str:
     return str(data)
 
 
-def _registrant(payload: dict) -> str:
-    """The organisation an RDAP entity list names as holding the allocation.
+def entity_name(payload: dict, role: str) -> str:
+    """The name an RDAP entity list gives the entity holding ``role``.
 
     RDAP carries contacts as jCard, which is an array-of-arrays with the useful
     string three levels down. Read defensively rather than indexed: registries
@@ -102,7 +104,7 @@ def _registrant(payload: dict) -> str:
     for entity in payload.get("entities") or ():
         if not isinstance(entity, dict):
             continue
-        if "registrant" not in (entity.get("roles") or ()):
+        if role not in (entity.get("roles") or ()):
             continue
         card = entity.get("vcardArray")
         rows = card[1] if isinstance(card, list) and len(card) > 1 else ()
@@ -110,6 +112,38 @@ def _registrant(payload: dict) -> str:
             if isinstance(row, list) and len(row) > 3 and row[0] == "fn":
                 return str(row[3])
     return ""
+
+
+def _registrant(payload: dict) -> str:
+    """The organisation an RDAP entity list names as holding the allocation."""
+
+    return entity_name(payload, "registrant")
+
+
+def allocation_of(held: dict) -> dict[str, Any]:
+    """An RDAP address answer as the fields HQ keeps."""
+
+    prefixes = [
+        f"{item.get('v4prefix') or item.get('v6prefix')}/{item.get('length')}"
+        for item in (held.get("cidr0_cidrs") or ())
+        if isinstance(item, dict)
+    ]
+    return {
+        "organisation": _registrant(held),
+        "name": str(held.get("name") or ""),
+        "handle": str(held.get("handle") or ""),
+        "country": str(held.get("country") or ""),
+        "type": str(held.get("type") or ""),
+        "range": " – ".join(
+            part
+            for part in (
+                str(held.get("startAddress") or ""),
+                str(held.get("endAddress") or ""),
+            )
+            if part
+        ),
+        "prefixes": prefixes,
+    }
 
 
 def look_up_name(
@@ -123,7 +157,7 @@ def look_up_name(
 
     del expected_updated_at
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
-    wanted = str(command.name or "").strip().lower().rstrip(".")
+    wanted = normalized_hostname(command.name or "")
     if not wanted or not HOSTNAME.match(wanted):
         raise ValueError("That is not a hostname.")
     # Resolve at execution time so scoped replacements also cover registry calls.
@@ -152,6 +186,43 @@ def look_up_name(
     }
 
 
+def _address_answer(
+    command: AddressCommand, *, principal: Principal
+) -> tuple[Any, dict[str, Any] | None]:
+    """The parsed address and what HQ can say about it without asking anyone.
+
+    A stored reading, or for a non-routable address the local answer; None
+    when only the registries could say.
+    """
+
+    from control_plane.models import AddressReading
+
+    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
+    try:
+        parsed = ip_address(str(command.address or "").strip())
+    except ValueError as exc:
+        raise ValueError("That is not an IP address.") from exc
+    if not is_public(str(parsed)):
+        return parsed, {
+            "ok": True,
+            "address": str(parsed),
+            "version": parsed.version,
+            "hostnames": [],
+            "note": "This address is not routable on the public internet, so "
+            "nothing out there can say anything about it and HQ does not ask.",
+        }
+    stored = AddressReading.objects.filter(address=str(parsed)).first()
+    if stored is not None:
+        return parsed, {**stored.reading, "observed_at": iso(stored.observed_at)}
+    return parsed, None
+
+
+def stored_address(command: AddressCommand, *, principal: Principal) -> dict[str, Any] | None:
+    """What HQ already holds about an address. Asks no one and writes nothing."""
+
+    return _address_answer(command, principal=principal)[1]
+
+
 def look_up_address(
     command: AddressCommand,
     *,
@@ -168,32 +239,16 @@ def look_up_address(
 
     A non-routable address is answered locally rather than asked about. The
     resolver would attempt it, find nothing, and return a body that looks like
-    an answer -- having been told an address from inside the estate to get
+    an answer: having been told an address from inside the estate to get
     there.
     """
 
     from control_plane.models import AddressReading
 
     del expected_updated_at
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
-    try:
-        parsed = ip_address(str(command.address or "").strip())
-    except ValueError as exc:
-        raise ValueError("That is not an IP address.") from exc
-    if not command.refresh:
-        stored = AddressReading.objects.filter(address=str(parsed)).first()
-        if stored is not None:
-            return {**stored.reading, "observed_at": iso(stored.observed_at)}
-    if not parsed.is_global:
-        return {
-            "ok": True,
-            "address": str(parsed),
-            "version": parsed.version,
-            "hostnames": [],
-            "note": "This address is not routable on the public internet, so "
-            "nothing out there can say anything about it and HQ does not ask.",
-        }
-
+    parsed, known = _address_answer(command, principal=principal)
+    if known is not None and (not command.refresh or not is_public(str(parsed))):
+        return known
     reading: dict[str, Any] = {
         "ok": True,
         "address": str(parsed),
@@ -232,27 +287,7 @@ def look_up_address(
     except LookupUnavailable:
         reading["allocation"] = {}
     else:
-        prefixes = [
-            f"{item.get('v4prefix') or item.get('v6prefix')}/{item.get('length')}"
-            for item in (held.get("cidr0_cidrs") or ())
-            if isinstance(item, dict)
-        ]
-        reading["allocation"] = {
-            "organisation": _registrant(held),
-            "name": str(held.get("name") or ""),
-            "handle": str(held.get("handle") or ""),
-            "country": str(held.get("country") or ""),
-            "type": str(held.get("type") or ""),
-            "range": " – ".join(
-                part
-                for part in (
-                    str(held.get("startAddress") or ""),
-                    str(held.get("endAddress") or ""),
-                )
-                if part
-            ),
-            "prefixes": prefixes,
-        }
+        reading["allocation"] = allocation_of(held)
     # Written even when a registry failed. A partial answer is still worth not
     # asking for again a second later, and `refresh` is how an operator says
     # the stored one is not good enough.

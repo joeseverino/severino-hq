@@ -10,7 +10,7 @@ is unconditional and there is no second code path to keep correct.
     total = amount(record.total, key=record.id)
     title = label(record.title, key=record.id)
 
-``showing_demo`` is for the rare case that has to branch -- a chart that would
+``showing_demo`` is for the rare case that has to branch: a chart that would
 otherwise plot a real series, say. Prefer the substitutions: a branch is a place
 the real value can escape through.
 

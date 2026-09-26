@@ -19,7 +19,7 @@ mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts" "${run_dir}"
 
 # A digest-pinned reference under a test prefix. The script accepts only its own
 # composition by default, so the prefix is overridden rather than the guard
-# loosened -- the guard is one of the things under test.
+# loosened: the guard is one of the things under test.
 readonly test_prefix="registry.example/hq/composition@sha256:"
 readonly good_image="${test_prefix}0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -113,8 +113,8 @@ exit 0
 EOF
 
 # Controller activation fails unless a case says otherwise, which is what drives
-# the rollback path. Like the real one, it refreshes the lib tree -- compose file
-# included -- from the image now running.
+# the rollback path. Like the real one, it refreshes the lib tree (compose file
+# included) from the image now running.
 cat >"${lib_dir}/scripts/install-controller.sh" <<'EOF'
 #!/bin/sh
 printf 'updated scripts\n' >"${SEVERINO_HQ_LIB_DIR}/version"
@@ -166,7 +166,7 @@ assert_staging_cleaned() {
 }
 
 # The new release is started under the compose file its own image carries, not
-# the previous release's copy in the lib tree -- which is only refreshed after
+# the previous release's copy in the lib tree, which is only refreshed after
 # the health check, so using it made every compose change land one deploy late.
 assert_new_compose_applied() {
     if ! grep " up -d " "${log_file}" \
@@ -320,7 +320,7 @@ mv "${verifier_dir}/cosign.hidden" "${verifier_dir}/cosign"
 # A registry credential is written to a private config directory for the length
 # of the run, never handed to `docker login`. Login stores it in root's own
 # ~/.docker/config.json, where it outlives the deploy and every later root docker
-# call reads it -- and where Docker warns, every single deploy, that it is
+# call reads it, and where Docker warns, every single deploy, that it is
 # sitting there in plaintext.
 : >"${log_file}"
 printf 'x-access-token\nsecret-token-value\n' | PATH="${bin_dir}:${PATH}" \

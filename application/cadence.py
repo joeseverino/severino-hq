@@ -13,7 +13,7 @@ and pulls work, and HQ never reaches out.
 
 Cadence is policy, and policy belongs where the observations are. HQ records
 when each provider was last swept, so HQ answers "is one due?" and the controller
-executes -- the same split as claim, schedule and report.
+executes: the same split as claim, schedule and report.
 
 The doorbell is a file HQ touches when it queues something. It carries no
 authority, no credentials and no data: it cannot say what to do, only that
@@ -112,7 +112,7 @@ def slowest_sweep_interval() -> timedelta:
     """The longest gap between sweeps the policy permits, whoever is watching.
 
     The ceiling rather than the current value, for anything that needs a stable
-    number -- a staleness threshold derived from the live interval moves with
+    number: a staleness threshold derived from the live interval moves with
     the thing it is measuring.
     """
 
@@ -124,7 +124,7 @@ def ssh_probe_interval() -> timedelta:
 
     A probe of an SSH connection is a real login: a certificate minted or a key
     offered, a session opened, a command run. That is fine twice a day and not
-    fine every minute, which is what the active sweep cadence would make it --
+    fine every minute, which is what the active sweep cadence would make it,
     and a shared host counts those logins, and may act on them. Everything else
     a sweep reads is cheap enough to keep on the sweep's own clock.
     """
@@ -220,7 +220,7 @@ def request_controller_sweep(
     del command, expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     # An operator asking for fresh state makes HQ active before policy is read,
-    # so the active cadence—not the twelve-hour idle economy—decides the sweep.
+    # so the active cadence (not the twelve-hour idle economy) decides the sweep.
     note_activity()
     verdict = sweep_due()
     if not ring_doorbell():

@@ -8,7 +8,7 @@ cd "$repo_root"
 
 # The same developer-local file the gate reads, on the same terms. It is where
 # the extensions are named and where they are found, so a dev server that did
-# not read it served the host alone -- every extension page a 404, every
+# not read it served the host alone: every extension page a 404, every
 # extension model unimportable, and nothing saying why. Real environment
 # variables still win, and a checkout without the file is unaffected.
 if [ -f .env.dev ]; then
@@ -43,13 +43,13 @@ export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
 export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
 
 # Loopback unless asked otherwise. `tailnet` resolves to this machine's tailnet
-# address, which is what a proxy forwards to -- written as a word rather than
+# address, which is what a proxy forwards to: written as a word rather than
 # an address so it survives the address changing, and so the file that asks for
 # it does not have to be edited on a machine where it differs.
 host=${HQ_DEV_HOST:-127.0.0.1}
 if [ "${host}" = "tailnet" ]; then
     # Found rather than called. On a Mac `tailscale` is usually a shell alias
-    # to the binary inside the app bundle, which a script does not inherit --
+    # to the binary inside the app bundle, which a script does not inherit,
     # so asking for it by name works when typed and fails here.
     tailscale_bin=$(command -v tailscale 2>/dev/null \
         || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)
@@ -63,7 +63,7 @@ port=${HQ_DEV_PORT:-8000}
 
 # Refuse rather than race. This binds loopback by default while the personal
 # `hq-dev serve` command serves the proxied development host, and the two use
-# different databases -- so a second server started here is not a second view
+# different databases, so a second server started here is not a second view
 # of the same state, it is a different estate answering on a nearby port. The
 # symptom is data that appears and disappears depending on which one answered.
 if command -v lsof >/dev/null 2>&1 \

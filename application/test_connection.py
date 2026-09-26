@@ -16,8 +16,9 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from control_plane.models import ProviderInventory
+from control_plane.models import ManagedResource, ProviderInventory
 
+from .ui import MISSING
 from .connection import (
     addresses_of,
     addresses_of_hq,
@@ -110,7 +111,7 @@ class ChannelTests(TestCase):
 class LayerTests(TestCase):
     def setUp(self):
         self.own_addresses = mock.patch(
-            "application.connection._own_addresses",
+            "application.hq_self.host_addresses",
             return_value=frozenset({"100.64.0.9"}),
         )
         self.own_addresses.start()
@@ -221,6 +222,27 @@ class LayerTests(TestCase):
 
         self.assertFalse(layer.holds)
         self.assertTrue(layer.conclusive)
+
+    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
+    def test_the_corroborating_headers_are_the_ones_a_proxy_kind_declares(self):
+        from dataclasses import replace
+
+        from control_plane.providers import PROVIDERS
+
+        request = a_request(A_LAN_ADDRESS)
+        request.META.update(
+            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+            HTTP_X_CLIENT=A_TAILNET_ADDRESS,
+            HTTP_X_SCHEME="https",
+        )
+        declared = replace(
+            PROVIDERS["npm.proxy_host"], forwarding_headers=("X-Client", "X-Scheme")
+        )
+        with mock.patch.dict(PROVIDERS, {"npm.proxy_host": declared}):
+            layer = self.layer(connection(request), "proxy-evidence")
+
+        self.assertTrue(layer.holds)
+        self.assertIn("X-Client=", layer.evidence)
 
     def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
         found = connection(a_request(A_LAN_ADDRESS, secure=True))
@@ -482,7 +504,7 @@ class LinkTests(TestCase):
             a_device("hq-host", "100.64.0.9", observer=True),
         )
 
-        self.assertEqual(connection(a_request()).handshake, "—")
+        self.assertEqual(connection(a_request()).handshake, MISSING)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -613,7 +635,7 @@ class AddressEvidenceTests(TestCase):
         )
 
         with mock.patch(
-            "application.connection._own_addresses",
+            "application.hq_self.host_addresses",
             return_value=frozenset({"100.64.0.9"}),
         ):
             rows = addresses_of_hq(connection(a_request()))
@@ -724,8 +746,8 @@ class CostTests(TestCase):
     """What this costs the pages that merely carry the control.
 
     The badge is in the header of every page in HQ, so anything it costs is
-    paid on every render. The panel behind it is the expensive part -- it reads
-    two inventories and evaluates the access policy -- and it is fetched when
+    paid on every render. The panel behind it is the expensive part (it reads
+    two inventories and evaluates the access policy) and it is fetched when
     somebody opens it and not before.
     """
 
@@ -755,7 +777,7 @@ class CostTests(TestCase):
         # Seven for the panel, plus one for the agent brake: this is a full
         # page, so it draws the operator's menu, and the switch there shows its
         # state. Read once however many times the template asks, and not cached
-        # across requests -- a brake must never display a state that no longer
+        # across requests: a brake must never display a state that no longer
         # holds.
         with self.assertNumQueries(8):
             self.client.get(reverse("connection"))
@@ -848,7 +870,7 @@ class DeclinedHeaderTests(TestCase):
 class ServingDeviceTests(TestCase):
     """Which node HQ says it is running on.
 
-    The sweep's ``self`` flag marks the device whose daemon took the reading --
+    The sweep's ``self`` flag marks the device whose daemon took the reading,
     the controller's host. That is the same machine as HQ's only when the two
     share one, and HQ is not obliged to run there.
     """
@@ -877,43 +899,40 @@ class ServingDeviceTests(TestCase):
             },
         )
 
-    def serving(self, own):
-        from .connection import _serving_device
-        from .infrastructure import declared_machines
-        from . import tailnet
+    def serving(self, own, served=()):
+        return self.resolution(own, served).device
 
-        with mock.patch("application.connection._own_addresses", return_value=frozenset(own)):
-            return _serving_device(tailnet.devices(), declared_machines())
-
-    def resolution(self, own):
+    def resolution(self, own, served=()):
         from .connection import _serving_device_resolution
         from .infrastructure import declared_machines
         from . import tailnet
 
         with mock.patch(
-            "application.connection._own_addresses", return_value=frozenset(own)
+            "application.hq_self.host_addresses", return_value=frozenset(own)
         ):
-            return _serving_device_resolution(tailnet.devices(), declared_machines())
+            return _serving_device_resolution(
+                tailnet.devices(), declared_machines(), tuple(served)
+            )
 
     def test_locating_hq_never_puts_dns_in_the_request_path(self):
         from unittest import mock
 
-        from .connection import _own_addresses
+        from .hq_self import host_addresses
 
-        _own_addresses.cache_clear()
+        host_addresses.cache_clear()
         try:
             with (
                 mock.patch(
-                    "application.connection.socket.getaddrinfo",
+                    "application.hq_self.socket.getaddrinfo",
                     side_effect=AssertionError("DNS must not be consulted"),
                 ),
                 mock.patch(
-                    "application.connection.socket.socket", side_effect=OSError
+                    "application.hq_self.socket.socket", side_effect=OSError
                 ),
             ):
-                self.assertEqual(_own_addresses(), frozenset({"127.0.0.1", "::1"}))
+                self.assertEqual(host_addresses(), frozenset({"127.0.0.1", "::1"}))
         finally:
-            _own_addresses.cache_clear()
+            host_addresses.cache_clear()
 
     def test_the_node_hq_runs_on_is_found_by_its_own_address(self):
         found = self.serving({"100.64.0.5"})
@@ -931,6 +950,22 @@ class ServingDeviceTests(TestCase):
         self.assertEqual(found.name, "example-registered-name")
         self.assertTrue(self.resolution({"192.0.2.10"}).verified)
 
+    def test_the_address_a_request_arrived_on_places_hq(self):
+        resolved = self.resolution(set(), served=("192.0.2.10",))
+
+        self.assertTrue(resolved.verified)
+        self.assertEqual(resolved.device.name, "example-registered-name")
+
+    def test_a_declared_address_with_a_port_still_places_hq(self):
+        ManagedResource.objects.filter(key="example-host").update(
+            spec={"name": "example-host", "addresses": ["192.0.2.10:22", "100.64.0.5"]}
+        )
+
+        self.assertTrue(self.resolution({"192.0.2.10"}).verified)
+
+    def test_loopback_never_places_hq(self):
+        self.assertFalse(self.resolution({"127.0.0.1", "::1"}).verified)
+
     def test_the_observer_flag_is_not_mistaken_for_where_hq_runs(self):
         found = self.serving({"192.0.2.10"})
 
@@ -945,7 +980,7 @@ class ServingDeviceTests(TestCase):
 
     def test_an_observer_fallback_is_not_drawn_or_authorized_as_hq(self):
         with mock.patch(
-            "application.connection._own_addresses", return_value=frozenset()
+            "application.hq_self.host_addresses", return_value=frozenset()
         ):
             found = connection(a_request())
 
@@ -1042,8 +1077,8 @@ class CarriageTests(TestCase):
     def test_the_address_panel_is_offered_only_where_there_is_one_to_ask_about(self):
         """The wiring, asserted at the template rather than by hand.
 
-        The disclosure never renders in development -- the peering there is
-        never `internet` -- so nothing but this would notice it being dropped.
+        The disclosure never renders in development (the peering there is
+        never `internet`) so nothing but this would notice it being dropped.
         """
 
         from django.template.loader import render_to_string
@@ -1069,18 +1104,18 @@ class LocalProxyPolicyTests(TestCase):
 
     The production shape: the proxy runs beside HQ and forwards from a loopback
     address. Asked as "device -> forwarder" the question has no target, because
-    the tailnet has never heard of 127.0.0.1 -- so both policy layers returned
+    the tailnet has never heard of 127.0.0.1, so both policy layers returned
     nothing and the Zero trust policy boundary vanished from the page entirely,
     on the deployment where it matters most.
 
     The hop the policy governs is the one the caller dialled: their device to
-    the node HQ runs on. One tailnet hop, so one layer -- claiming a second for
+    the node HQ runs on. One tailnet hop, so one layer: claiming a second for
     proxy-to-HQ would describe a loopback socket as a policed crossing.
     """
 
     def setUp(self):
         self.own_addresses = mock.patch(
-            "application.connection._own_addresses",
+            "application.hq_self.host_addresses",
             return_value=frozenset({"100.64.0.9"}),
         )
         self.own_addresses.start()
@@ -1131,13 +1166,13 @@ class TailnetLockTests(TestCase):
 
     Everything above this one believes the coordination server handed out the
     right public key for this node. Only lock removes that belief, so the tests
-    that matter are the ones where it is absent, off, or unsigned -- a line that
+    that matter are the ones where it is absent, off, or unsigned: a line that
     can only ever read "signed" is decoration.
     """
 
     def setUp(self):
         self.own_addresses = mock.patch(
-            "application.connection._own_addresses",
+            "application.hq_self.host_addresses",
             return_value=frozenset({"100.64.0.9"}),
         )
         self.own_addresses.start()

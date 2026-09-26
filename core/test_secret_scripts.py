@@ -47,7 +47,13 @@ import os, sys
 print("0:" + oct(os.stat(sys.argv[-1]).st_mode & 0o777)[2:])
 ' "$@"
 ''')
-        self.stub("findmnt", 'printf "%s\\n" "${TEST_FILESYSTEM:-tmpfs}"\n')
+        self.stub("findmnt", '''
+case "$*" in
+    *OPTIONS*) printf '/ rw\\n%s %s\\n' "$SEVERINO_CONTROLLER_SECRET_DIR" "${TEST_OPTIONS:-rw,noswap}" ;;
+    *) printf "%s\\n" "${TEST_FILESYSTEM:-tmpfs}" ;;
+esac
+''')
+        self.stub("flock", "exit 0\n")
         self.item = {"fields": [
             {"label": "connection_ref", "value": "example"},
             {"label": "projection", "value": "service_account"},
@@ -83,6 +89,7 @@ esac
         return subprocess.run(
             ["sh", str(ROOT / "scripts" / name), *args],
             env=self.env, capture_output=True, text=True, timeout=15,
+            stdin=subprocess.DEVNULL,
         )
 
     def test_controller_secrets_are_literal_when_sourced(self):
@@ -196,6 +203,87 @@ exec '{real_mktemp}' "$@"
         self.assertEqual([target.stat().st_ino for target in targets], current)
         self.assertEqual(list(self.runtime.glob(".refresh.*")), [])
 
+    def prepare_identity(self, *, public_from=None):
+        """An SSH connection whose identity item holds a real key pair."""
+
+        targets = self.prepare_refresh()
+        # Host root can update read-only app files; this test runs unprivileged.
+        targets[0].chmod(0o600)
+        keys = self.root / "keys"
+        keys.mkdir()
+        for name in ("identity", "other"):
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f",
+                            str(keys / name)], check=True)
+        self.item = {"fields": [
+            {"label": "connection_ref", "value": "edge"},
+            {"label": "projection", "value": "ssh_transport"},
+            {"label": "env_prefix", "value": "EDGE"},
+            {"label": "host", "value": "edge.example.test"},
+            {"label": "port", "value": "2222"},
+            {"label": "user", "value": "deploy"},
+            {"label": "host_key", "value": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexample"},
+            {"label": "identity", "value": "Edge deploy key"},
+        ]}
+        self.write_item()
+        public = keys / f"{public_from or 'identity'}.pub"
+        self.stub("op", f'''
+case "$1 $2" in
+    "item list") printf '[{{"id":"example-item"}}]' ;;
+    "item get")
+        if [ "$3" = "example env" ]; then cat "$FIXTURES/app.json"; else cat "$FIXTURES/item.json"; fi ;;
+    "read op://Example Vault/Edge deploy key/private key?ssh-format=openssh") cat '{keys / "identity"}' ;;
+    "read op://Example Vault/Edge deploy key/public key") cat '{public}' ;;
+    *) exit 1 ;;
+esac
+''')
+        return targets, keys
+
+    def test_ssh_identities_render_to_the_secret_mount_with_pinned_hosts(self):
+        _, keys = self.prepare_identity()
+        result = self.run_script("refresh-secrets.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        live = self.runtime / "ssh"
+        self.assertEqual((live / "edge").read_text(), (keys / "identity").read_text())
+        self.assertEqual((live / "edge").stat().st_mode & 0o777, 0o400)
+        self.assertEqual((live / "known_hosts").read_text(),
+                         "[edge.example.test]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexample\n")
+        self.assertEqual(list(self.runtime.glob(".refresh.*")), [])
+
+    def test_an_identity_whose_halves_differ_is_refused_and_nothing_changes(self):
+        self.prepare_identity(public_from="other")
+        live = self.runtime / "ssh"
+        live.mkdir(mode=0o700)
+        (live / "edge").write_text("previous-key")
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("do not match", result.stderr)
+        self.assertEqual((live / "edge").read_text(), "previous-key")
+
+    def test_a_removed_connection_takes_its_identity_with_it(self):
+        self.prepare_identity()
+        live = self.runtime / "ssh"
+        live.mkdir(mode=0o700)
+        (live / "retired").write_text("an old key")
+        result = self.run_script("refresh-secrets.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((live / "retired").exists())
+        self.assertTrue((live / "edge").exists())
+
+    def test_a_tab_in_a_connection_field_is_refused(self):
+        self.prepare_identity()
+        self.item["fields"][3]["value"] = "edge.example.test\tinjected"
+        self.write_item()
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.runtime / "ssh").exists())
+
+    def test_an_identity_must_name_an_item_not_a_reference(self):
+        self.prepare_identity()
+        self.item["fields"][-1]["value"] = "op://Elsewhere/key"
+        self.write_item()
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+
     def controller_contract(self, command):
         return subprocess.run(
             ["sh", "-c", '. "$1"; ' + command, "sh",
@@ -243,6 +331,36 @@ exec '{real_mktemp}' "$@"
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("tmpfs", result.stderr)
         self.assertFalse((self.root / "op-called").exists())
+
+    def test_swappable_runtime_is_rejected_before_fetching_secrets(self):
+        self.prepare_refresh()
+        self.env["TEST_OPTIONS"] = "rw,nosuid,noswapfile"
+        self.stub("op", 'touch "$FIXTURES/op-called"; exit 1\n')
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("noswap", result.stderr)
+        self.assertFalse((self.root / "op-called").exists())
+
+    def test_private_keys_left_on_disk_stop_the_refresh(self):
+        self.prepare_refresh()
+        self.stub("op", 'touch "$FIXTURES/op-called"; exit 1\n')
+        legacy = self.root / "secrets" / "ssh"
+        legacy.mkdir()
+        (legacy / "edge.pub").write_text("ssh-ed25519 AAAA example\n")
+        (legacy / "edge").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nexample\n")
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(str(legacy), result.stderr)
+        self.assertFalse((self.root / "op-called").exists())
+        self.assertTrue((legacy / "edge").exists())
+
+    def test_public_halves_alone_on_disk_do_not_stop_the_refresh(self):
+        self.prepare_identity()
+        legacy = self.root / "secrets" / "ssh"
+        legacy.mkdir()
+        (legacy / "edge.pub").write_text("ssh-ed25519 AAAA example\n")
+        result = self.run_script("refresh-secrets.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_ssh_resolves_shell_quoted_reference_literally(self):
         credential = self.runtime / "severino_controller_env"

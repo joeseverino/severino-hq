@@ -3,7 +3,7 @@
 ``control_plane.providers`` already declares each provider once, as a pydantic
 model, and three things are derived from that declaration: the JSON Schema the
 API publishes, the contract the controller is handed, and the validation every
-write passes through. The web had a fourth copy of the same knowledge -- except
+write passes through. The web had a fourth copy of the same knowledge: except
 it did not, because nobody wrote it, which is why infrastructure could be
 created over the API and the MCP but not in HQ.
 
@@ -14,7 +14,7 @@ gets a working create-and-edit page with nothing written here.
 Two rules keep this honest:
 
 - **Rendering only.** The form decides what the inputs look like. It does not
-  decide what is valid -- ``clean`` hands the assembled spec back to
+  decide what is valid: ``clean`` hands the assembled spec back to
   ``validate_spec`` and reports whatever pydantic says. A second implementation
   of the rules would be a second answer to the same question, and the two would
   drift on the day someone tightened one of them.
@@ -54,7 +54,7 @@ class NameListWidget(forms.Widget):
     Rows post under the same name and are read back with `getlist`, so the
     field receives an actual list and no parsing rules live in two places.
     Without scripting the existing rows still edit and the spare row still
-    adds -- only the extra add/remove convenience needs JavaScript.
+    adds: only the extra add/remove convenience needs JavaScript.
     """
 
     def value_from_datadict(self, data, files, name):
@@ -70,8 +70,8 @@ class NameListWidget(forms.Widget):
         return [line.strip() for line in str(value).splitlines() if line.strip()]
 
     # ``{value: note}`` for values HQ can see for itself. A machine's addresses
-    # are the case this exists for: half of them are the only record there is --
-    # nothing reports a printer's address -- and half repeat a reading from the
+    # are the case this exists for: half of them are the only record there is
+    # (nothing reports a printer's address) and half repeat a reading from the
     # tailnet. Presented identically, the field invites somebody to correct HQ
     # about something HQ is watching, and gives no way to tell which is which.
     notes: dict[str, str] = {}
@@ -80,7 +80,7 @@ class NameListWidget(forms.Widget):
         """One value, editable unless HQ is the one that found it.
 
         A value carrying a note is a value a sweep reports, so HQ holds it
-        whether or not this field does -- and offering to remove it was
+        whether or not this field does, and offering to remove it was
         offering to delete a fact. It read as though the tailnet address of a
         machine on the tailnet were HQ's to forget.
 
@@ -187,13 +187,13 @@ class ResourceIdentityForm(forms.Form):
 
     # Labelled for what it is. "Name in HQ" sat directly beneath a field called
     # "Name" and read as a second one, inviting the question of which the
-    # machine is actually called -- and the help text answered "the hostname",
+    # machine is actually called, and the help text answered "the hostname",
     # which is true of a proxy host and not of a machine, whose identifier comes
     # from its name. What it really is is the string in this page's address and
     # in every operation and audit entry, which is why it must not move.
     # No identifier field. It was an input labelled "Name in HQ" sitting
     # directly beneath one labelled "Name", so a machine appeared to have two
-    # names and no way to tell which it was actually called -- and the honest
+    # names and no way to tell which it was actually called, and the honest
     # answer is neither: it is the string in this page's address and in every
     # operation and audit entry recorded against the resource.
     #
@@ -259,7 +259,7 @@ class ProviderSpecForm(forms.Form):
         knobs in front of the four that matter.
 
         Shown rather than hidden, because a default is only a good answer until
-        the day it is not -- and once it is not, the field comes out from behind
+        the day it is not, and once it is not, the field comes out from behind
         the disclosure, because it is no longer routine.
         """
 
@@ -292,7 +292,7 @@ class ProviderSpecForm(forms.Form):
 def identity_fields(kind: str) -> tuple[str, ...]:
     """The spec fields that decide which record this is at the provider.
 
-    A provider matches its own records by hostname, never by HQ's key --
+    A provider matches its own records by hostname, never by HQ's key,
     AdGuard finds the rewrite whose ``domain`` equals the spec's, NPM the host
     whose ``domain_names`` match. So changing one of these does not rename
     anything: reconciliation looks for the new name, does not find it, and
@@ -304,7 +304,7 @@ def identity_fields(kind: str) -> tuple[str, ...]:
     why a sentinel is safe to pass.
 
     A covering provider is excluded. A certificate is not found at its provider
-    by a name it carries -- it is a lineage HQ issues and re-issues, and editing
+    by a name it carries: it is a lineage HQ issues and re-issues, and editing
     which names it covers is exactly how that is done. Warning that the change
     "renames the record and the old name stops resolving" would describe a
     provider that does not work that way, about an edit that is the point.
@@ -328,7 +328,7 @@ def spec_form_class(
     ``identity_fields`` for why those cannot be changed in place.
 
     Not cached. Building it is a dict comprehension over a handful of fields,
-    and a cache keyed on kind is wrong the moment a test registers a provider --
+    and a cache keyed on kind is wrong the moment a test registers a provider,
     which is exactly how the plug-and-play property is proved.
     """
 
@@ -356,7 +356,7 @@ def spec_form_class(
             or (
                 ""
                 if options
-                else "Nothing to choose yet — none have been described to HQ."
+                else "Nothing to choose yet. None have been described to HQ."
             ),
         )
     for name, effect in provider.change_effects:
@@ -376,9 +376,9 @@ def spec_form_class(
         for name in identity_fields(kind):
             if name not in fields:
                 continue
-            # No longer disabled. The controller is handed what the provider was
+            # Editable. The controller is handed what the provider was
             # last seen holding, so it finds the existing record by its old name
-            # and updates that one in place -- a real rename rather than a
+            # and updates that one in place: a real rename rather than a
             # second record beside the first. The warning stays because the
             # change reaches a live name on the next pass.
             fields[name].help_text = (
@@ -403,7 +403,7 @@ def _optional_inner(annotation: Any) -> Any:
     Every optional field before this one happened to be a string, where falling
     through to a text box was accidentally correct. The first optional integer
     was rendered as text, and submitting it empty sent "" to a model that would
-    accept an integer or nothing at all -- so the field could not be left blank
+    accept an integer or nothing at all, so the field could not be left blank
     and could not be filled in with anything the model liked either.
     """
 
@@ -437,7 +437,7 @@ def _field_for(field: Any) -> forms.Field:
     # The model's own title, so a field is labelled by the question it asks
     # rather than by the variable that holds the answer. Django would otherwise
     # prettify the attribute name, which turned `topology_ref` into
-    # "Topology ref" -- an accurate name for the field and no help at all.
+    # "Topology ref": an accurate name for the field and no help at all.
     if field.title:
         options["label"] = field.title
 
@@ -538,7 +538,7 @@ class CertificateUploadForm(forms.Form):
     fullchain = forms.CharField(
         label="Certificate",
         widget=forms.Textarea(attrs={"rows": 8, "spellcheck": "false"}),
-        help_text="The contents of fullchain.pem — the certificate and its CA chain.",
+        help_text="The contents of fullchain.pem: the certificate and its CA chain.",
     )
     private_key = forms.CharField(
         label="Private key",

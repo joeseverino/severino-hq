@@ -1,42 +1,18 @@
-{% extends "base.html" %}{% load table_tags %}
-{% block title %}{{ heading }}{% endblock %}
-{% block content %}
-<div class="page-head">
-  <h1>{{ heading }}</h1>
-  <a class="btn primary" href="{% url 'content:create' %}">New content item</a>
-</div>
-
-{% include "partials/_table_toolbar.html" %}
-
-<div class="table-scroll">
-<table class="data-table" data-selectable-table>
-  <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Title" "title" "-title" %}{% table_sort_header "Type" "content_type" "-content_type" %}{% table_sort_header "Status" "status" "-status" %}<th>Description</th><th class="num-col" title="Page views in the last {{ traffic_days }} days">Views</th>{% table_sort_header "Published" "published_at" "-published_at" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th class="actions-col">Open</th></tr>
-  </thead>
-  <tbody>
-    {% for c in items %}
-      <tr>
-        <td class="select-column"><input type="checkbox" data-row-select value="{{ c.slug }}" aria-label="Select {{ c.title }}"></td>
-        <td><a href="{{ c.get_absolute_url }}"><strong>{{ c.title }}</strong></a><br><span class="muted">{{ c.slug }}</span></td>
-        <td>{{ c.get_content_type_display }}</td>
-        <td><span class="pill pill-{{ c.status }}">{{ c.get_status_display }}</span></td>
-        <td class="muted">{{ c.topic|default:"—" }}</td>
-        <td class="num-col">{% if c.pageviews is None %}<span class="muted">—</span>{% else %}{{ c.pageviews }}{% endif %}</td>
-        <td class="muted">{{ c.published_at|default:"—" }}</td>
-        <td class="muted">{{ c.updated_at }}</td>
-        <td class="actions-col">
-          {% if c.published_url %}
-            <a class="icon-link" href="{{ c.published_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
-          {% else %}
-            <span class="muted">—</span>
-          {% endif %}
-        </td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="9" class="muted">No content yet.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% include "partials/_pagination.html" %}
+{% extends "list_page.html" %}
+{% block row %}
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a><br><span class="muted">{{ row.slug }}</span></td>
+  <td>{{ row.get_content_type_display }}</td>
+  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
+  <td class="muted">{{ row.topic|or_empty }}</td>
+  <td class="num-col">{{ row.pageviews|or_empty }}</td>
+  <td class="muted">{{ row.published_at|or_empty }}</td>
+  <td class="muted">{{ row.updated_at }}</td>
+  <td class="actions-col">
+    {% if row.published_url %}
+      <a class="icon-link" href="{{ row.published_url }}" target="_blank" rel="noopener noreferrer" title="Open published page" aria-label="Open published page">↗</a>
+    {% else %}
+      {% empty_value %}
+    {% endif %}
+  </td>
 {% endblock %}
+{% block empty %}No content yet.{% endblock %}

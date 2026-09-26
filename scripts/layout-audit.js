@@ -1,4 +1,4 @@
-// Layout audit — the checks a person should not have to run by eye.
+// Layout audit: the checks a person should not have to run by eye.
 //
 // Every rule here exists because the same complaint was made more than once
 // about a rendered page: a card with a band of empty space under its last row,
@@ -29,7 +29,7 @@ async (page) => {
     const CARD_SLACK = 28;
     // How much of a card's slack is owed to the pair it sits in. A stretched
     // pair is equal by construction, so the shorter card's spare height is the
-    // difference between them -- that is what "equal" costs, not a defect.
+    // difference between them: that is what "equal" costs, not a defect.
     // Only the difference is forgiven: slack beyond it is still a fault, so
     // this cannot quietly excuse an unrelated gap.
     const filled = (el) => {
@@ -51,7 +51,7 @@ async (page) => {
       );
       if (kids.length !== 2) return 0;
       // Compared by *content*, not by box. Once a pair has stretched, the two
-      // boxes are equal by construction and their difference is zero -- so
+      // boxes are equal by construction and their difference is zero, so
       // measuring the boxes forgives nothing and flags the shorter card for
       // slack the stretch itself created. What one card was stretched by is
       // how much less it had to say than the other.
@@ -99,8 +99,8 @@ async (page) => {
     });
     if (seams.size > 1) add('seam-mismatch', { seams: [...seams].sort() });
 
-    // A card far wider than what is drawn in it. Measured as ink -- text-node
-    // rects and replaced elements -- because a paragraph, a flex row or a
+    // A card far wider than what is drawn in it. Measured as ink (text-node
+    // rects and replaced elements) because a paragraph, a flex row or a
     // table stretches to the card whatever its contents need, so no wrapper's
     // width says how much of the card is actually used.
     const CARD_FILL = 0.72;
@@ -164,7 +164,7 @@ async (page) => {
 
     // A scrollbar nobody asked for. Any box that offers to scroll and has
     // something to scroll is reported, in both axes, with the overflow that
-    // earned it -- because the two ways this has gone wrong were invisible to
+    // earned it, because the two ways this has gone wrong were invisible to
     // reading the stylesheet.
     //
     // A drawing given a `min-width` wider than the column it is placed in: the
@@ -198,7 +198,7 @@ async (page) => {
       // does not run off the page, a wide table held to its card so it scrolls
       // instead of widening the document. The cap is the statement of intent,
       // so it is read from the box rather than kept as a list of class names
-      // here -- a list would need editing every time a capped box is added,
+      // here: a list would need editing every time a capped box is added,
       // and the one nobody edited it for would be reported as a fault.
       //
       // An accidental scrollbar is exactly the case with no cap: nothing was
@@ -221,8 +221,8 @@ async (page) => {
     // Controls sitting together at different heights. A row of buttons is
     // read as one object, and one control four pixels shorter than its
     // neighbours is the kind of thing that is obvious in a screenshot and
-    // invisible in a diff. It happens whenever a control is wrapped -- a
-    // button in a form, a summary in a details -- because the wrapper stretches
+    // invisible in a diff. It happens whenever a control is wrapped (a
+    // button in a form, a summary in a details) because the wrapper stretches
     // and its child does not.
     document.querySelectorAll('.page-actions, .form-actions, .filter-bar').forEach((row) => {
       const controls = Array.from(row.children)
@@ -242,7 +242,7 @@ async (page) => {
 
     // Content wider than the box holding it, where the box hides the evidence.
     // `overflow: clip` and `hidden` produce no scrollbar, so the last control
-    // in a row is simply cut in half and nothing anywhere reports it -- the
+    // in a row is simply cut in half and nothing anywhere reports it: the
     // scrollbar rule above cannot see this, which is exactly how a clipped
     // action row reached production.
     document.querySelectorAll('main, .page-head, .page-actions, .card').forEach((el) => {
@@ -274,7 +274,7 @@ async (page) => {
     //
     // Text is not the only thing a cell can hold. The row-selection column is
     // a checkbox under a deliberately blank header, so measured by text alone
-    // it read as dead on every list page in HQ -- a rule that is wrong on
+    // it read as dead on every list page in HQ: a rule that is wrong on
     // pages that are right is worse than no rule, because the next real dead
     // column arrives in a report nobody trusts. A cell counts as saying
     // something if it has text or if it has a control in it.
@@ -318,7 +318,7 @@ async (page) => {
 
     // A paired row whose two cards end at different points. This is the single
     // most-repeated complaint about these pages, and it was answered by hand
-    // each time -- reordering cards, trimming a table, moving a panel -- which
+    // each time (reordering cards, trimming a table, moving a panel) which
     // only ever fixed the one session whose data happened to be on screen.
     // A pair stretches; if these differ, something stopped it stretching.
     document.querySelectorAll('.two-col').forEach((row) => {
@@ -342,7 +342,7 @@ async (page) => {
     // defect that prompted it, because the text read "27.06%." and the
     // pattern wanted letters before the full stop. What actually distinguishes
     // a sentence from a row of chips is that a sentence interleaves bare text
-    // with elements -- a chip row is elements all the way down. That has no
+    // with elements: a chip row is elements all the way down. That has no
     // heuristic in it and no false positives on the rows already written.
     document.querySelectorAll('.list-rows .row-main, .list-rows li').forEach((row) => {
       if (getComputedStyle(row).display !== 'flex') return;

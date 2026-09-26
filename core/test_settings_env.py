@@ -1,11 +1,9 @@
 """The 1Password-rendered app env file must work for ANY container process.
 
-The regression this pins: env_file was removed from compose, and sourcing the
-mounted env only in the entrypoint left `docker compose exec` processes
-(hq sync / shell / superuser) without DJANGO_SECRET_KEY. settings.py now loads
-the file itself, so a bare `python -c "from config import settings"` — the
-shape of every exec'd management command — must succeed with no secrets in
-its inherited environment.
+settings.py loads the mounted env file itself, so every process (including
+`docker compose exec`) has it, and a bare `python -c "from config import settings"` (the shape of every
+exec'd management command) succeeds with no secrets in its inherited
+environment.
 """
 
 from __future__ import annotations
@@ -21,15 +19,15 @@ from django.test import SimpleTestCase
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Names that switch the extension set on. Cleared from every subprocess below,
-# because these tests are about one thing -- whether settings can read the
-# mounted env file -- and inherit the caller's environment to prove it works
+# because these tests are about one thing (whether settings can read the
+# mounted env file) and inherit the caller's environment to prove it works
 # from a bare process.
 #
 # Left inherited, they made this file fail whenever it was run with extensions
 # installed, which is precisely the pass that is meant to catch problems before
 # a merge. A subprocess here starts with no DJANGO_DEBUG, so admission switches
 # itself on, looks for the signed lock a composed image would have supplied, and
-# refuses to start -- a true statement about a situation none of these tests are
+# refuses to start: a true statement about a situation none of these tests are
 # describing. It is the failure mode `scripts/check.sh` warns about in its own
 # comments: a host test that quietly assumed nothing was installed.
 PLUGIN_ENV = (

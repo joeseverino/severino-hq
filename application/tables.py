@@ -25,6 +25,34 @@ class TableSort:
 
 
 @dataclass(frozen=True)
+class TableColumn:
+    """One column: its heading, and the field it sorts by if it sorts.
+
+    Declared once on the view. The list page draws the header from these, and
+    when a view declares no ``table_sorts`` the sort menu comes from them too,
+    so a column cannot sort one way in its header and another in the menu.
+    """
+
+    label: str
+    sort: str = ""
+    ascending_label: str = ""
+    descending_label: str = ""
+    css: str = ""
+
+    def sorts(self) -> tuple[TableSort, ...]:
+        if not self.sort:
+            return ()
+        return (
+            TableSort(self.sort, self.ascending_label or f"{self.label}, ascending", self.sort),
+            TableSort(
+                f"-{self.sort}",
+                self.descending_label or f"{self.label}, descending",
+                f"-{self.sort}",
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class TableToggle:
     name: str
     label: str
@@ -49,6 +77,9 @@ class TableListMixin:
     table_search_fields: tuple[str, ...] = ()
     table_search_scope = ""
     table_filters: tuple[TableFilter, ...] = ()
+    table_columns: tuple[TableColumn, ...] = ()
+    # A checkbox per row, for copying the selected rows' ids.
+    table_selectable = False
     table_sorts: tuple[TableSort, ...] = ()
     table_toggles: tuple[TableToggle, ...] = ()
     table_totals: tuple[TableTotal, ...] = ()
@@ -64,7 +95,9 @@ class TableListMixin:
         return self._resolved_table_filters
 
     def get_table_sorts(self) -> tuple[TableSort, ...]:
-        return self.table_sorts
+        if self.table_sorts:
+            return self.table_sorts
+        return tuple(sort for column in self.table_columns for sort in column.sorts())
 
     def table_values(self, name: str) -> list[str]:
         return [value for value in self.request.GET.getlist(name) if value]
@@ -169,6 +202,8 @@ class TableListMixin:
                 else self.request.GET.get("sort", self.table_default_sort)
             ),
             "toggles": toggles,
+            "columns": self.table_columns,
+            "selectable": self.table_selectable,
             "active_count": active_count,
             "querystring": query_params.urlencode(),
         }

@@ -4,7 +4,7 @@ A connection is a credential, and HQ holds none. It holds the *report* of one:
 the controller renders the vault into its own environment, asks each endpoint
 whether it still answers and what it can see, and sends that back. So this
 module reads a cache and never a secret, and the page it feeds is a view of the
-vault that cannot drift from it -- there is no second list to keep in step.
+vault that cannot drift from it: there is no second list to keep in step.
 
 The point of ``reaches`` is that it is the only place some facts exist at all.
 Nothing in HQ can know which machines a Portainer holds or which zones a token
@@ -22,7 +22,13 @@ from datetime import datetime, timedelta
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from control_plane.models import ProviderConnection
-from control_plane.providers import PROVIDERS, connection_credential, observer_abilities
+from control_plane.observations import OBSERVATIONS
+from control_plane.providers import (
+    PROVIDERS,
+    connection_credential,
+    observer_abilities,
+    registry_label,
+)
 
 from .contracts import (
     SCOPE_NAME,
@@ -39,6 +45,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .entity_links import entity_link
 from .integrations import integration_graph
 from .integration_validation import required_capability_names, safe_connection_url
 from .action_links import (
@@ -78,12 +85,14 @@ class ConnectionReading:
     probed: bool
     detail: str
     observed_at: datetime
-    # The machines this reaches, as (name, url). What a credential opens is the
-    # most useful thing about it and the page named them as plain text.
+    # The machines this reaches, as (name, url): what a credential opens.
     machines: tuple[tuple[str, str], ...] = ()
     # Declarations that name this connection, as (key, url). The reverse of the
     # ref every spec already carries.
     resources: tuple[tuple[str, str], ...] = ()
+    # Those declarations that are one named thing, as (name, key, home url): a
+    # domain by its zone, a device by its name.
+    named: tuple[tuple[str, str, str], ...] = ()
     # Work that went through this and could not finish, as the last pass found
     # it. A connection can answer every probe and refuse every operation, and
     # `reachable` only ever describes the probe.
@@ -124,12 +133,12 @@ EVIDENCE_LABELS = {
 # The sentence behind each label, for the place that has room for one.
 EVIDENCE_DETAILS = {
     "verified": "The provider reported every grant this ability needs.",
-    "coarse": "The credential is the whole account; the provider offers nothing narrower.",
-    "not_applicable": "No credential is involved, so there is no grant to prove.",
-    "unverified": "The provider issues scoped credentials, but HQ has not declared which grants this ability needs.",
-    "undeclared": "Neither the ability nor the credential has declared how authority is proven.",
-    "unknown": "This ability needs specific grants and the provider has not reported which it holds.",
-    "missing": "The provider reported its grants and one this ability needs is absent.",
+    "coarse": "Full-account credential. The provider offers no narrower scope.",
+    "not_applicable": "No credential involved.",
+    "unverified": "Scoped credential. The grants this ability needs are not declared.",
+    "undeclared": "Neither the ability nor the credential declares how access is proven.",
+    "unknown": "The provider has not reported which grants this credential holds.",
+    "missing": "A grant this ability needs is missing.",
     "revoked": "The provider rejected this credential.",
 }
 # Evidence that settles the question: the ability may be performed and HQ can
@@ -169,7 +178,7 @@ def grant_evidence(
     credential satisfies any ability and is worth naming as such, because it is
     the opposite of least privilege. Only a scoped requirement is checked scope
     by scope, and only when the provider reported grants. Anything left is a
-    requirement nobody declared -- said as "unverified" when the provider could
+    requirement nobody declared: said as "unverified" when the provider could
     have been asked, and "undeclared" when nothing is known either way.
     """
 
@@ -313,10 +322,8 @@ class ConnectionView:
     def row_actions(self) -> tuple[ActionLink, ...]:
         """What is true of this connection rather than of its whole family.
 
-        Documentation, Manage and Set up come from the family's spec, so every
-        instance repeats them: twelve rows carrying the same two links to the
-        same two pages. They belong once, beside the family, and what stays on
-        the row is the command this connection can run and its topology node.
+        Documentation, Manage and Set up belong to the family, once. What stays
+        on the row is the command this connection can run and its topology node.
         """
 
         return tuple(
@@ -333,18 +340,23 @@ def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
 
     The last is the one this page was missing. A credential that opens a shell
     on a machine HQ was told about printed the address and nothing else, on the
-    one page whose subject is what HQ can reach -- while the machine's own page
+    one page whose subject is what HQ can reach, while the machine's own page
     sat one click away under a name.
 
     Silence when none of the three lands, which leaves the endpoint column
     saying exactly what HQ knows.
     """
 
-    reached = tuple(
-        (name, known[name.lower()].url) for name in row.reaches if name.lower() in known
-    )
-    if reached:
-        return reached
+    by_url = {
+        known[name.lower()].url: name for name in row.reaches if name.lower() in known
+    }
+    # And every machine the catalog says this connection reaches, such as the
+    # devices a tailnet connection read.
+    for item in known.values():
+        if row.connection_ref in item.reached_by:
+            by_url.setdefault(item.url, item.name)
+    if by_url:
+        return tuple((name, url) for url, name in by_url.items())
     if row.connection_ref.lower() in known:
         found = known[row.connection_ref.lower()]
         return ((found.name, found.url),)
@@ -354,22 +366,95 @@ def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
     return ()
 
 
+def _one_name(resource) -> str:
+    """The one name a declaration stands for, or "" when it is not one thing.
+
+    Read from the provider: its hostnames, else an identity of a single value.
+    """
+
+    from control_plane.providers import normalized_hostname
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None:
+        return ""
+    spec = resource.spec or {}
+    try:
+        if provider.hostnames is not None:
+            names = tuple(provider.hostnames(spec))
+        elif provider.identity is not None:
+            names = tuple(provider.identity(spec))
+        else:
+            return ""
+    except (KeyError, TypeError, ValueError):
+        return ""
+    return normalized_hostname(str(names[0])) if len(names) == 1 else ""
+
+
+def _depends(reading: ConnectionReading) -> tuple[
+    tuple[ConnectionLink, ...], tuple[ConnectionLink, ...]
+]:
+    """Targets and dependencies, with a declaration that is a target shown once.
+
+    A declaration naming the same thing a target names folds into the target:
+    the name stays, linked to the target's page or else the declaration's home,
+    and carries the declaration's key.
+    """
+
+    from control_plane.providers import normalized_hostname
+
+    targets = (
+        tuple(ConnectionLink(name, url) for name, url in reading.machines)
+        if reading.machines
+        else tuple(ConnectionLink(name) for name in reading.reaches)
+    )
+    by_name = {name: (key, url) for name, key, url in reading.named}
+    folded: set[str] = set()
+    merged = []
+    for link in targets:
+        match = by_name.get(normalized_hostname(link.label))
+        if match is None or match[0] in folded:
+            merged.append(link)
+            continue
+        key, home = match
+        folded.add(key)
+        merged.append(ConnectionLink(link.label, link.url or home, resource_key=key))
+    dependencies = tuple(
+        ConnectionLink(key, url, resource_key=key)
+        for key, url in reading.resources
+        if key not in folded
+    )
+    return tuple(merged), dependencies
+
+
+def machines_once() -> tuple:
+    """The machine catalogue, read once per projection and shared."""
+
+    from .machines import machine_catalog
+    from .projection import read_once
+
+    return read_once("machines.catalog", machine_catalog)
+
+
+def connection_rows() -> tuple:
+    """Every reported connection row, read once per projection and shared."""
+
+    from .projection import read_once
+
+    return read_once(
+        "connections.rows", lambda: tuple(ProviderConnection.objects.all())
+    )
+
+
 def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
 
-    from django.urls import reverse
 
-    from control_plane.models import ManagedResource
-
+    from .infrastructure import enabled_resources
     from .locate import index_of
-    from .machines import machine_catalog
 
-    catalog = machine_catalog()
+    catalog = machines_once()
     # Every name the board has for a machine, its own and the ones it folded
-    # in. A credential whose ref turned out to be a second name for a machine
-    # already on the board linked nowhere, because only the kept name was here
-    # -- the row said "reaches nothing HQ has a page for" about a machine whose
-    # page it had just been folded into.
+    # in, so a credential named after an alias still links to the machine.
     known = {item.name.lower(): item for item in catalog}
     # A kept name is never displaced by somebody else's alias: the board chose
     # the kept name deliberately, and an alias that happens to collide with one
@@ -385,16 +470,24 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
     located = index_of(
         declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
     )
+    from control_plane.providers import resource_home
+
     using: dict[str, list[tuple[str, str]]] = {}
-    for resource in ManagedResource.objects.filter(enabled=True):
+    named: dict[str, list[tuple[str, str, str]]] = {}
+    for resource in enabled_resources():
         ref = str(resource.spec.get("connection_ref", "")).strip()
         if ref:
             using.setdefault(ref, []).append(
                 (
                     resource.key,
-                    reverse("control_plane:detail", kwargs={"key": resource.key}),
+                    entity_link("resource", resource.key).url,
                 )
             )
+            name = _one_name(resource)
+            if name:
+                named.setdefault(ref, []).append(
+                    (name, resource.key, resource_home(resource))
+                )
     return tuple(
         ConnectionReading(
             connection_ref=row.connection_ref,
@@ -408,14 +501,33 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             observed_at=row.observed_at,
             machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
-            failing_steps=tuple(
-                (str(item.get("step", "")), str(item.get("reason", "")))
-                for item in (row.failing_steps or ())
-                if isinstance(item, dict) and item.get("step")
-            ),
+            named=tuple(sorted(named.get(row.connection_ref, ()))),
+            failing_steps=_failing_steps(row),
         )
-        for row in ProviderConnection.objects.all()
+        for row in connection_rows()
     )
+
+
+def _failing_steps(row) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (str(item.get("step", "")), str(item.get("reason", "")))
+        for item in (row.failing_steps or ())
+        if isinstance(item, dict) and item.get("step")
+    )
+
+
+def unfinished_work() -> dict[tuple[str, str], tuple[str, ...]]:
+    """``(controller id, connection ref)`` to each step the last pass could not
+    finish through that connection, as "step (reason)"."""
+
+    found = {}
+    for row in connection_rows():
+        steps = _failing_steps(row)
+        if steps:
+            found[(row.controller_id, row.connection_ref)] = tuple(
+                f"{step} ({reason})" for step, reason in steps
+            )
+    return found
 
 
 def _controller_contract() -> tuple[
@@ -431,7 +543,7 @@ def _controller_contract() -> tuple[
         abilities.append(
             ConnectionAbility(
                 name=kind,
-                label=spec.label or kind,
+                label=registry_label(kind),
                 summary=spec.summary,
                 effect="destructive" if spec.destructive else "infrastructure_change",
                 governs_kinds=(kind,),
@@ -456,6 +568,23 @@ def _controller_contract() -> tuple[
         )
         by_provider.setdefault(observer.provider, []).append(observer.name)
 
+    # Every reading a provider feeds is something its credential lets HQ see.
+    for kind, reading in sorted(OBSERVATIONS.items()):
+        abilities.append(
+            ConnectionAbility(
+                name=kind,
+                label=reading.label,
+                summary=" ".join(
+                    (
+                        f"Reads {reading.label} records.",
+                        *((f"Needs {', '.join(reading.requires)}.",) if reading.requires else ()),
+                    )
+                ),
+                effect="read",
+            )
+        )
+        by_provider.setdefault(reading.provider, []).append(kind)
+
     return tuple(abilities), {
         provider: tuple(kinds) for provider, kinds in by_provider.items()
     }
@@ -468,11 +597,7 @@ def _controller_instances(
     readings = connection_readings()
     name_controller = len({item.controller_id for item in readings}) > 1
     for reading in readings:
-        targets = (
-            tuple(ConnectionLink(name, url) for name, url in reading.machines)
-            if reading.machines
-            else tuple(ConnectionLink(name) for name in reading.reaches)
-        )
+        targets, dependencies = _depends(reading)
         instances.append(
             ConnectionInstance(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
@@ -491,10 +616,7 @@ def _controller_instances(
                 observed_at=reading.observed_at,
                 ability_names=ability_names.get(reading.provider, ()),
                 targets=targets,
-                dependencies=tuple(
-                    ConnectionLink(key, url, resource_key=key)
-                    for key, url in reading.resources
-                ),
+                dependencies=dependencies,
                 facts=tuple(
                     fact
                     for fact in (
@@ -509,6 +631,7 @@ def _controller_instances(
                     if fact is not None
                 ),
                 controller_id=reading.controller_id,
+                connection_ref=reading.connection_ref,
                 # The controller reports reach, not permission. What kind of
                 # credential this is comes from the provider's own model,
                 # declared once beside the providers.
@@ -523,17 +646,14 @@ def _controller_connection_spec() -> ConnectionSpec:
     return ConnectionSpec(
         name=CONTROLLER_CONNECTIONS,
         label="Infrastructure connections",
-        summary="Credentials rendered to controllers and the systems they can reach.",
+        summary="Controller credentials and the systems they reach.",
         required_capability=Capability.READ,
         instance_provider=lambda: _controller_instances(ability_names),
         abilities=abilities,
         secret_store="1Password",
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message=(
-            "No controller has reported yet. Connections appear here "
-            "automatically when their provider reports an instance."
-        ),
+        empty_message="No controller has reported yet.",
     )
 
 
@@ -851,7 +971,7 @@ def connections_for(provider: str) -> tuple[ProviderConnection, ...]:
     """The connections that are one of these, reachable ones first.
 
     Ordering is the whole contract: a menu built from this offers a working
-    credential before a broken one, and never silently omits the broken one --
+    credential before a broken one, and never silently omits the broken one,
     an operator whose token expired needs to see the connection they already
     have, marked, rather than an empty list that reads as "you never set it up".
     """
@@ -884,7 +1004,7 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
 
     A console and an API base are both URLs and only one is worth a link. Told
     apart by the shape a credential's endpoint already has: an API is reached at
-    a path -- a version, a prefix -- and a console is reached at the host
+    a path (a version, a prefix) and a console is reached at the host
     itself. So a proxy's web interface is offered and a DNS API is not, without
     a list here naming either.
 
@@ -894,6 +1014,8 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
     """
 
     from urllib.parse import urlsplit
+
+    from control_plane.providers import CONNECTION_LABELS
 
     from .labels import human_label
 
@@ -907,7 +1029,9 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
             continue
         found.append(
             (
-                human_label(connection.provider) or connection.connection_ref,
+                CONNECTION_LABELS.get(connection.provider)
+                or human_label(connection.provider)
+                or connection.connection_ref,
                 connection.connection_ref,
                 endpoint,
             )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.test import SimpleTestCase
 
 
@@ -35,3 +37,18 @@ class OnLinkNetworkTests(SimpleTestCase):
         from .reach import on_link_networks
 
         self.assertEqual(on_link_networks(Path("/nonexistent/if_inet6")), ())
+
+
+class PublicLabelTests(SimpleTestCase):
+    def test_ipv6_folds_to_its_64_and_non_addresses_are_skipped(self):
+        from .public_registry import public_endpoints
+        from .reach import public_label
+
+        self.assertEqual(public_label("2001:db8:0:1::a1"), "2001:db8:0:1::/64")
+        self.assertEqual(public_label("203.0.113.7"), "203.0.113.7")
+        self.assertEqual(public_label("not-an-address"), "")
+        with mock.patch("application.public_registry.holders", return_value={}):
+            self.assertEqual(
+                public_endpoints(("not-an-address", "2001:db8:0:1::a1", "2001:db8:0:1::b2")),
+                (("2001:db8:0:1::/64", ""),),
+            )

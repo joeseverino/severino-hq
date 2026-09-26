@@ -1,20 +1,12 @@
 """Changes a credential may ask for but only a person may allow.
 
-The incident this exists for took two calls and about a minute. A service token
-held on a workstation amended the estate's access policy, then asked for the
-amendment to be applied, and the privileged controller applied it to the live
-network. Every step was authorized: the token held the infrastructure
-capability, the capability registry ran exactly what it was asked to run, and
-the controller did precisely its job. Nothing failed. Nobody agreed.
+Authority answers "may this caller do it"; it cannot answer "does anybody want
+it done", and for a credential held on a workstation those are different
+questions. Anything that comes to hold the token (a compromised machine, an
+automated caller following instructions it read somewhere) inherits the
+authority. For the kinds that matter most, a person has to agree.
 
-That is the gap this closes. Authority answers "may this caller do it"; it has
-never been able to answer "does anybody want it done", and for a credential
-sitting on a laptop those are different questions. Anything that comes to hold
-the token -- a compromised machine, an automated caller following instructions
-it read somewhere, a transcript someone kept -- inherits the authority and
-nothing else stands between it and the network.
-
-Four decisions, each of which was the alternative to something worse:
+Four decisions:
 
 **The unit is the resource kind, not the capability effect.** Effect describes
 how forceful an act is. It cannot describe how much stands behind the thing
@@ -30,8 +22,8 @@ so no filter has to remember to exclude it, and no later change to how work is
 claimed can accidentally let one through. The one place a held request could
 become real is the replay below, and the replay only happens from a decision.
 
-**It sits at the capability boundary.** Every non-interactive adapter -- token
-API, machine bridge, local command line -- funnels through one function to run a
+**It sits at the capability boundary.** Every non-interactive adapter (token
+API, machine bridge, local command line) funnels through one function to run a
 capability, so one check covers all of them and cannot be bypassed by adding
 another adapter. The operator's own surfaces call the use cases directly and are
 deliberately unaffected: a click behind an identity provider and a passkey is
@@ -63,6 +55,7 @@ from control_plane.models import ApprovalRequest, ManagedResource
 from control_plane.providers import PROVIDERS
 from core.audit import operation_context
 
+from .entity_links import entity_link
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
 
 # How long an unanswered request stands. A day, because the person it is waiting
@@ -123,7 +116,7 @@ def fingerprint(
     Both halves matter and for different reasons. The call is what would run, so
     a second request differing by one character is a different decision. The
     baseline is what a person compared it to, so a declaration that moves while
-    the request waits makes the comparison they were shown untrue -- and an
+    the request waits makes the comparison they were shown untrue, and an
     approval of an untrue comparison is not an approval of anything.
     """
 
@@ -242,8 +235,8 @@ def consent_gap(kind: str, *, principal: Principal) -> str:
     the hold knows only what it can see: it keys on a capability declaring that
     it acts on an infrastructure resource, and a future capability, or an
     extension's, could write one of these declarations without saying so. The
-    boundary is the useful check -- it can answer "waiting for approval" instead
-    of refusing -- and this is the one that cannot be walked around.
+    boundary is the useful check (it can answer "waiting for approval" instead
+    of refusing) and this is the one that cannot be walked around.
 
     A string rather than an exception so the caller raises its own domain error,
     which keeps this module free of imports from the use cases that call it.
@@ -381,7 +374,7 @@ def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
 
     Expiry happens here, on the way past, rather than on a timer. The only two
     moments that matter are somebody reading the queue and somebody deciding,
-    and both go through this or through the check in ``approve`` -- so a lapsed
+    and both go through this or through the check in ``approve``, so a lapsed
     request is never approvable whether or not anything has swept it. A timer
     would be a second thing to keep running for a guarantee that already holds.
 
@@ -408,7 +401,7 @@ def _settle(held: ApprovalRequest, state: str, note: str = "") -> None:
 
     Its own, because the two callers below go on to raise. Written inside the
     caller's transaction the mark would be rolled back by the very exception it
-    exists to explain, and the request would be found still pending -- which
+    exists to explain, and the request would be found still pending, which
     means the next reader is offered a decision that cannot be taken.
     """
 
@@ -469,15 +462,14 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     The replay is the original call, under a principal that still names whoever
     asked for it and now also names who allowed it. Attribution is not moved
     onto the approver: the audit trail has to keep saying that a token asked and
-    a person agreed, because those are two different facts and the interesting
-    incident is the one where the first happens without the second.
+    a person agreed, because those are two different facts.
 
     Deliberately not one transaction from end to end. The checks may have to
     record that a request has lapsed or been superseded and then refuse, and a
     refusal that rolls back its own explanation leaves the request pending for
     the next reader to be offered again. So the marks commit on their own, and
-    only the application -- re-reading the row under a lock, because two people
-    may be looking at this page -- is atomic.
+    only the application (re-reading the row under a lock, because two people
+    may be looking at this page) is atomic.
     """
 
     from .capabilities import authorize_capability, capability_registry, execute_approved
@@ -516,7 +508,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     )
     with transaction.atomic():
         # Re-read under a lock. Two people can have this page open, and an
-        # approval applied twice is the change made twice -- which for a queued
+        # approval applied twice is the change made twice, which for a queued
         # operation is caught by its idempotency key and for a declaration is not.
         locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
         if locked.state != ApprovalRequest.State.PENDING:
@@ -588,7 +580,7 @@ class ChangePreview:
     ``rows`` is the semantic reading: a document is parsed and compared by path,
     so an access policy shows the three grants that moved rather than two walls
     of text that differ somewhere. ``lines`` is the honest fallback for content
-    that will not parse -- a policy document with comments in it, for instance --
+    that will not parse: a policy document with comments in it, for instance,
     where a unified diff is the most that can truthfully be said.
     """
 
@@ -669,7 +661,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> Cha
         # Absent and empty are the same nothing. A validated declaration carries
         # every optional field as a blank while the request that would replace it
         # simply omits them, so read literally the diff opens with a row per
-        # unset field, each saying a blank became a blank -- and the one line
+        # unset field, each saying a blank became a blank, and the one line
         # that matters is somewhere underneath.
         if (was or "") == (now or ""):
             continue
@@ -704,7 +696,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     Two different comparisons, because two different things are being asked.
     Amending a declaration is a change to what HQ intends, so it is read against
     what HQ intends now. Applying one is a change to the world, so it is read
-    against what the world was last seen holding -- which is the only reading
+    against what the world was last seen holding, which is the only reading
     that answers "what happens to the network if I click this".
     """
 
@@ -786,7 +778,7 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "title": capability_title(held.capability),
         "preview": preview(held),
         "resource_url": (
-            reverse("control_plane:detail", kwargs={"key": held.resource_key})
+            entity_link("resource", held.resource_key).url
             if held.resource_kind
             and ManagedResource.objects.filter(key=held.resource_key).exists()
             else ""

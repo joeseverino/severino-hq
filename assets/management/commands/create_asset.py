@@ -1,6 +1,6 @@
 """Create or update an Asset record from the CLI.
 
-Idempotent — re-running with the same slug updates the existing record.
+Idempotent: re-running with the same slug updates the existing record.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class Command(BaseCommand):
     help = "Create or update an Asset record by slug."
 
     def add_arguments(self, parser):
-        parser.add_argument("slug", help="URL slug (e.g. jseverino-com).")
+        parser.add_argument("slug", help="URL slug (e.g. home-server).")
         parser.add_argument(
             "--name",
             required=True,

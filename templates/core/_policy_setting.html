@@ -1,12 +1,9 @@
-<div class="policy-setting">
-  <span class="policy-setting-name">{{ cell.column }}{% if cell.dormant %} <span class="muted">· off on this server</span>{% endif %}</span>
-  {% if cell.unavailable %}
-    <span class="muted">{{ cell.unavailable }}</span>
-  {% else %}
-    <select class="policy-select rule-{{ cell.rule|default:'default' }}{% if cell.dormant %} is-dormant{% endif %}" name="{{ cell.field }}" aria-label="{{ row.label }}, {{ group.label }}, for {{ cell.column }}">
-      {% for value, label in cell.options %}
-        <option value="{{ value }}"{% if value == cell.rule or not value and not cell.rule %} selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  {% endif %}
-</div>
+{% if cell.unavailable %}
+  <span class="muted policy-unavailable">{{ cell.unavailable }}</span>
+{% else %}
+  <select class="policy-select rule-{{ cell.rule|default:'default' }}{% if cell.dormant %} is-dormant{% endif %}" name="{{ cell.field }}" aria-label="{{ row.label }}, {{ group.label }}, for {{ cell.column }}"{% if cell.dormant %} title="Off on this server until MCP allows it"{% endif %}>
+    {% for value, label in cell.options %}
+      <option value="{{ value }}"{% if value == cell.rule or not value and not cell.rule %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+{% endif %}

@@ -1,7 +1,7 @@
 """The policies a domain publishes about its own mail, read and written back.
 
-Every record here is a real shape -- the quoting DNS carries, the split strings
-a long TXT arrives in, the tags nobody models -- because the one thing an editor
+Every record here is a real shape (the quoting DNS carries, the split strings
+a long TXT arrives in, the tags nobody models) because the one thing an editor
 must never do is publish something other than what the operator chose.
 """
 
@@ -153,6 +153,9 @@ class MailPageTests(TestCase):
     """
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         for key, name, content, priority in (
             ("mx1", "example.com", "mx01.mail.example.net", 10),
             ("spf", "example.com", '"v=spf1 include:example.net -all"', None),
@@ -180,7 +183,7 @@ class MailPageTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertContains(response, "delivered anyway")
-        self.assertContains(response, "Who may send as this domain")
+        self.assertContains(response, "Senders (SPF)")
 
     def test_tightening_the_policy_publishes_it(self):
         self.client.post(self.url, {"section": "dmarc", "p": "reject", "sp": "",

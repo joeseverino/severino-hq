@@ -69,3 +69,24 @@ def mark(user, keys, *, read: bool, current: list[dict[str, Any]]) -> None:
         ActionItemRead.objects.filter(user=user, read_at__lt=now - FORGET_AFTER).exclude(
             key__in=live
         ).delete()
+
+
+def filter_items(
+    items: list[dict[str, Any]], *, query: str = "", status: str = "", source: str = ""
+) -> list[dict[str, Any]]:
+    """The items matching an exact status and source, and words in their text."""
+
+    query = query.strip().casefold()
+    status = status.strip()
+    source = source.strip()
+    return [
+        item
+        for item in items
+        if (not status or item["status"] == status)
+        and (not source or item["source_id"] == source)
+        and (
+            not query
+            or query
+            in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold()
+        )
+    ]

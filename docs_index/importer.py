@@ -18,7 +18,7 @@ Reads a JSON array like:
     }, ...]
 
 and upserts DocumentationRecord rows. The Obsidian vault stays the source of
-truth — we only track metadata + relationships.
+truth: we only track metadata + relationships.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from django.db.models import Count, F, Q
 from assets.models import Asset
 from content.models import ContentItem
 from projects.models import Project
+from application.ui import counted
 
 from . import frontmatter_schema
 from .models import DocumentationRecord
@@ -53,7 +54,7 @@ def _coerce_date(value: Any) -> date | None:
 
 
 def _validate_choice(value: str, allowed, *, field: str) -> str:
-    # `allowed` is a canonical set from frontmatter_schema — the same definition
+    # `allowed` is a canonical set from frontmatter_schema: the same definition
     # the MCP validates writes against, so HQ never rejects a value the MCP just
     # wrote. Do not pass model `.choices` here; that would reintroduce drift.
     if value in allowed:
@@ -111,7 +112,8 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
     ]
     if missing:
         raise ManifestImportError(
-            f"{label}: missing required field(s): {', '.join(missing)}"
+            f"{label}: {counted(len(missing), 'required field missing', 'required fields missing')}: "
+            f"{', '.join(missing)}"
         )
     if _is_content_entry(entry):
         return
@@ -176,7 +178,7 @@ def validate_manifest_data(items: Iterable[dict]) -> list[dict]:
     """Read-only preflight: validate every entry against the canonical schema
     WITHOUT touching the database, so contract drift (a bad doc_id prefix, a
     missing required field, or an invalid status / doc_type / environment /
-    sensitivity — the class that wedged `hq sync`) is caught locally before the
+    sensitivity: the class that wedged `hq sync`) is caught locally before the
     deployed importer ever runs. Returns a list of ``{doc_id, errors:[...]}`` for
     entries that fail; empty means the manifest is importable. Validates exactly
     what the write path does, via the shared ``_build_record_defaults``.
@@ -425,7 +427,7 @@ def _reap_orphans(manifest_doc_ids: set[str], *, prune: bool, stats: dict) -> No
     """Records HQ holds that the manifest no longer claims.
 
     Reported always, deleted only on request. A mirrored ContentItem goes with
-    them only when *every* doc it hangs off is an orphan -- an item shared with
+    them only when *every* doc it hangs off is an orphan: an item shared with
     a doc that survived is not this manifest's to remove.
     """
 
@@ -467,14 +469,14 @@ def import_manifest_data(
     """Upsert the manifest and return a stats dict.
 
     The returned ``stats`` is the contract `import_docs_manifest --json` emits
-    and the `hq sync` wrapper parses. Keys (treat as additive — do not rename):
+    and the `hq sync` wrapper parses. Keys (treat as additive: do not rename):
 
-    - ``created`` / ``updated`` / ``skipped`` — DocumentationRecord counts.
+    - ``created`` / ``updated`` / ``skipped``: DocumentationRecord counts.
     - ``missing_relations`` (int) + ``missing_relations_detail`` (list of
-      ``{doc_id, kind, slug}``) — doc relations pointing at an absent registry slug.
-    - ``content_items_synced`` / ``content_items_pruned`` — mirrored ContentItem counts.
+      ``{doc_id, kind, slug}``): doc relations pointing at an absent registry slug.
+    - ``content_items_synced`` / ``content_items_pruned``: mirrored ContentItem counts.
     - ``orphans`` (list of doc_id) + ``orphans_pruned`` / ``orphans_pruned_records``
-      — present only when ``report_orphans``/``prune_orphans``.
+      present only when ``report_orphans``/``prune_orphans``.
     """
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")

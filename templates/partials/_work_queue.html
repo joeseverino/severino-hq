@@ -1,29 +1,13 @@
 {% comment %}
-The canonical work_queue projection, shared by the dashboard and full queue.
+The canonical work_queue projection, rendered by the action items page.
 Workflow actions retain their owner's method, route, and authorization boundary.
 {% endcomment %}
-{% if compact %}
-<ul class="dashboard-attention-list">
-  {% for item in items %}
-    <li>
-      <a href="{% if item.url %}{{ item.url }}{% else %}{% url 'action_items' %}{% endif %}">
-        <span class="attention-source">{{ item.source }} · {{ item.count }} · {{ item.status|capfirst }}</span>
-        <strong>{{ item.label }}</strong>
-        {% if item.detail %}<span class="attention-detail">{{ item.detail }}</span>{% endif %}
-        <span class="action-arrow" aria-hidden="true">&rarr;</span>
-      </a>
-    </li>
-  {% empty %}
-    <li><p class="attention-clear">Nothing is waiting on you.</p></li>
-  {% endfor %}
-</ul>
-{% else %}
 <ul class="attention-list">
   {% for item in items %}
     <li class="attention-row">
       <span class="pill pill-{{ item.status }}">{{ item.status|capfirst }}</span>
       <div class="attention-body">
-        <small class="muted">{{ item.source }}</small>
+        <small class="muted">{{ item.source }}{% if item.subject %} · <a href="{{ item.subject.url }}">{{ item.subject.label }}</a>{% endif %}</small>
         {% if item.url %}<a class="attention-title" href="{{ item.url }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
         {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
         {% if item.action %}<p class="attention-action"><span class="insight-action-label">Next</span> {{ item.action }}</p>{% endif %}
@@ -31,30 +15,29 @@ Workflow actions retain their owner's method, route, and authorization boundary.
           <div class="attention-actions">
             {% for action in item.actions %}
               {% if action.method == "POST" %}
-                <form action="{{ action.url }}" method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="btn compact{% if action.recommended %} primary{% endif %}">{{ action.label }}</button></form>
+                {% if action.recommended %}{% post_button action.label action.url css="btn compact primary" %}{% else %}{% post_button action.label action.url css="btn compact" %}{% endif %}
               {% else %}
                 <a class="btn compact{% if action.recommended %} primary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
               {% endif %}
             {% endfor %}
           </div>
         {% endif %}
-        {% if item.workflow %}<details class="attention-workflow"><summary>Resolution workflow</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
+        {% if item.workflow %}<details class="attention-workflow"><summary>Steps to resolve</summary>{% include "partials/_resolution_workflow.html" with workflow=item.workflow compact=True %}</details>{% endif %}
       </div>
       <div class="attention-end">
         <span class="attention-value">{{ item.count }}</span>
         {% if markable %}
-          <form method="post" action="{% url 'action_items_read' %}">
-            {% csrf_token %}
-            <input type="hidden" name="key" value="{{ item.key }}">
-            <input type="hidden" name="read" value="{% if item.read %}0{% else %}1{% endif %}">
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="btn compact ghost">{% if item.read %}Mark unread{% else %}Mark read{% endif %}</button>
-          </form>
+          {% if item.read %}
+            {% url 'action_items_mark_unread' as mark_url %}
+            {% post_button "Mark unread" mark_url name="key" value=item.key css="btn compact ghost" %}
+          {% else %}
+            {% url 'action_items_mark_read' as mark_url %}
+            {% post_button "Mark read" mark_url name="key" value=item.key css="btn compact ghost" %}
+          {% endif %}
         {% endif %}
       </div>
     </li>
   {% empty %}
-    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing is waiting on you." }}</p></li>
+    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing to do." }}</p></li>
   {% endfor %}
 </ul>
-{% endif %}

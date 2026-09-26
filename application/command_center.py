@@ -8,6 +8,8 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
+from control_plane.providers import normalized_hostname
+
 from .capabilities import CapabilitySpec
 from .connections import (
     ConnectionAbility,
@@ -15,11 +17,14 @@ from .connections import (
     connection_catalog,
 )
 from .contracts import route_url
+from .entity_links import entity_link
 from .integrations import integration_graph
 from .resources import ResourceSpec
 from .security import Capability, Principal
+from .facts import in_zone
 from .findings import finding_rules
 from .topology import topology_lenses
+from .ui import counted
 
 
 _MATCHING_ABILITY_BADGE_LIMIT = 3
@@ -84,8 +89,8 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
     terms = _SEARCH_WORD.findall(query.casefold())
     # A controller-qualified connection id is globally unique, but its prefix
     # is context rather than the connection's own name. Searching `homelab`
-    # should rank `homelab-npm` above every unrelated credential observed by a
-    # controller named `homelab-server`.
+    # should rank `example-npm` above every unrelated credential observed by a
+    # controller named `example-host`.
     primary_name = (
         item.name.rpartition(":")[2]
         if item.kind == "connection" and ":" in item.name
@@ -308,10 +313,137 @@ def _live_connection_item(group, connection) -> DiscoveryItem:
     )
 
 
+# Among equally good matches: the machine, then the service, then the domain.
+_ESTATE_ORDER = {"machine": 0, "service": 1, "zone": 2}
+# An exact name or address outranks any number of partial word matches.
+_EXACT = 1000
+
+
+def _estate_items() -> tuple[DiscoveryItem, ...]:
+    """Machines, services and domains, from the catalogues their pages read."""
+
+    from .estate import estate_reading
+
+    estate = estate_reading()
+    machines = tuple(
+        DiscoveryItem(
+            kind="machine",
+            name=machine.name,
+            label=machine.name,
+            summary=" · ".join(
+                part
+                for part in (
+                    ", ".join(role.label for role in machine.roles),
+                    machine.role,
+                    counted(len(machine.hostnames), "service") if machine.hostnames else "",
+                )
+                if part
+            ),
+            url=machine.url,
+            destination_label="Machine",
+            badges=(machine.state[0],),
+            search_terms=tuple(
+                term
+                for term in (
+                    *machine.aliases,
+                    machine.declaration,
+                    *(
+                        (machine.presence.tailnet_name, machine.presence.dns_name)
+                        if machine.presence
+                        else ()
+                    ),
+                    *machine.addresses,
+                    *machine.public_addresses,
+                )
+                if term
+            ),
+        )
+        for machine in estate.machines
+    )
+    services = tuple(
+        DiscoveryItem(
+            kind="service",
+            name=service.hostname,
+            label=service.hostname,
+            summary=service.origin.headline if service.origin else "",
+            url=service.url,
+            destination_label="Service",
+            badges=(),
+            search_terms=tuple(service.aliases),
+        )
+        for service in estate.services
+    )
+    domains = tuple(
+        DiscoveryItem(
+            kind="zone",
+            name=domain,
+            label=domain,
+            summary="Domain",
+            url=entity_link("zone", domain).url,
+            destination_label="Domain",
+            badges=(),
+        )
+        for domain in estate.domains
+    )
+    return (*machines, *services, *domains)
+
+
+def _exact(item: DiscoveryItem, query: str) -> bool:
+    wanted = normalized_hostname(query)
+    return wanted in {
+        normalized_hostname(value) for value in (item.name, item.label, *item.search_terms)
+    }
+
+
+def _holds_name(item: DiscoveryItem, query: str) -> bool:
+    """A domain holds every hostname under it."""
+
+    return item.kind == "zone" and in_zone(query, normalized_hostname(item.name))
+
+
+def _matching_estate(items: tuple[DiscoveryItem, ...], query: str) -> tuple[DiscoveryItem, ...]:
+    if not query.strip():
+        return ()
+    scored = [
+        (
+            (_EXACT if _exact(item, query) else 0) + _match_score(item, query),
+            item,
+        )
+        for item in items
+        if _matches(item, query) or _holds_name(item, query)
+    ]
+    return tuple(
+        item
+        for _score, item in sorted(
+            scored, key=lambda pair: (-pair[0], _ESTATE_ORDER.get(pair[1].kind, 9))
+        )
+    )
+
+
+def estate_search(query: str, *, principal: Principal) -> tuple[DiscoveryItem, ...]:
+    """Machines, services and domains matching ``query``, best first."""
+
+    if not query.strip() or not _permitted((Capability.READ,), principal):
+        return ()
+    return _matching_estate(_estate_items(), query)
+
+
 def command_center(
     query: str, *, principal: Principal, include_live_connections: bool = False
 ) -> dict:
     """Return every permitted resource and capability matching ``query``."""
+
+    from .projection import projection_scope
+
+    with projection_scope():
+        return _command_center(
+            query, principal=principal, include_live_connections=include_live_connections
+        )
+
+
+def _command_center(
+    query: str, *, principal: Principal, include_live_connections: bool
+) -> dict:
 
     graph = integration_graph()
     registered_resources = tuple(graph.resources.values())
@@ -435,7 +567,11 @@ def command_center(
         if _permitted((Capability.READ,), principal)
         else ()
     )
+    # The estate is live state, like the live connections: only the palette
+    # and the search page ask for it.
+    estate = estate_search(query, principal=principal) if include_live_connections else ()
     return {
+        "estate": estate,
         "resources": _matching(resources, query),
         "commands": (
             tuple(

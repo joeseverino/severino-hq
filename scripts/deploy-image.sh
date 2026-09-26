@@ -4,7 +4,7 @@
 # Runs as root, invoked by the deploy through a single sudoers rule naming this
 # path. Everything privileged happens here rather than in the workflow, so the
 # identity running the workflow needs neither the docker socket nor general
-# sudo -- it hands over one verified image reference and reads the outcome.
+# sudo: it hands over one verified image reference and reads the outcome.
 #
 # Both inputs come from the cosign-verified image rather than from the deploy
 # checkout: the scripts (this file included) and the compose file that decides
@@ -75,7 +75,7 @@ if [ ! -t 0 ]; then
 fi
 if [ -n "${registry_token}" ]; then
     # Written, not logged in. `docker login` stores the token in root's own
-    # ~/.docker/config.json -- and says so, in a warning, every deploy. That
+    # ~/.docker/config.json, and says so, in a warning, every deploy. That
     # store outlives the command that made it and is read by every later root
     # docker call, so a logout is the only thing standing between one deploy's
     # credential and the next. An ephemeral config directory removes the
@@ -114,15 +114,15 @@ fi
 if ! "${cosign}" verify \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     --certificate-identity-regexp \
-        "^https://github\.com/${SEVERINO_HQ_REPOSITORY:-joeseverino/severino-hq}/\.github/workflows/compose\.yml@refs/" \
+        "^https://github\.com/${SEVERINO_HQ_REPOSITORY:-joeseverino/severino-hq}/\.github/workflows/compose\.yml@refs/heads/main$" \
     "${image}" >/dev/null 2>&1; then
     echo "Refusing to deploy ${image}: not signed by this repository's compose workflow." >&2
     exit 1
 fi
 
 # The compose file the *running* release was deployed with. Falls back to the
-# checkout only when the root-owned tree has not been populated yet -- a first
-# bring-up, before severino-hq-sync-scripts has run -- and says so, because that
+# checkout only when the root-owned tree has not been populated yet (a first
+# bring-up, before severino-hq-sync-scripts has run) and says so, because that
 # path is the one this script exists to stop using silently.
 #
 # It pulls the new image and, snapshotted, puts the old one back on rollback. It
@@ -220,7 +220,7 @@ fi
 # Out of the image that was verified and pulled above, by its digest, and never
 # pulled again: `--pull never` makes a missing local copy an error rather than a
 # second fetch, so the file cannot come from anything cosign did not check. No
-# fallback to the previous file -- that is the one-deploy-late behaviour this
+# fallback to the previous file: that is the one-deploy-late behaviour this
 # replaces, and it would be silent.
 if ! compose_cid="$(docker create --pull never "${image}" true)" \
     || ! docker cp "${compose_cid}:/app/docker-compose.yml" "${compose_stage}/next.yml"; then

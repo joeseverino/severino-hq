@@ -34,7 +34,7 @@ def _keyed(hint: str) -> str:
     """The key ``suggest_key`` would produce for this hint.
 
     Slugified the same way and for the same reason: a device name is a display
-    string -- "Joseph's MacBook Pro" -- and a key is an identifier that appears
+    string ("Sam's MacBook Pro") and a key is an identifier that appears
     in a URL. Renaming without this turns a perfectly good key into one the
     resource route cannot match, which is a worse outcome than the suffix.
 

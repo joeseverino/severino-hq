@@ -2,9 +2,8 @@
 
 The safety property that makes one-click adoption defensible: the spec is read
 back out of the live record, so the declaration starts equal to the world and
-the first reconciliation is a no-op. If that ever stops being true, adopting a
-proxy host silently resets it to HQ's defaults -- which is exactly the bug that
-used to switch HSTS off.
+the first reconciliation is a no-op. Otherwise adopting a proxy host would
+reset it to HQ's defaults (HSTS off, for one).
 """
 
 from __future__ import annotations
@@ -32,6 +31,7 @@ from .inventory import (
 )
 from .inventory import confirm_observed, record_inventory
 from .sweep import record_sweep
+from .adoption_testing import managing_everything
 from .infrastructure import NotFoundError
 from .security import cli_principal
 
@@ -185,7 +185,7 @@ class UnmanagedTests(TestCase):
         """The reconcilers find their record by hostname, so this must too.
 
         A declaration whose answer has drifted from the live record is still the
-        same record -- offering to adopt it would create a second declaration
+        same record: offering to adopt it would create a second declaration
         for one rewrite.
         """
         ManagedResource.objects.create(
@@ -212,6 +212,7 @@ class UnmanagedTests(TestCase):
 
 class AdoptionTests(TestCase):
     def setUp(self):
+        managing_everything()
         record_inventory(
             a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}),
             principal=cli_principal(),
@@ -220,9 +221,8 @@ class AdoptionTests(TestCase):
     def test_adopting_captures_the_record_exactly_as_it_is(self):
         """The whole safety argument: the first reconcile after this is a no-op.
 
-        Every setting comes from the live record, including the ones HQ used to
-        assert. Adopting with defaults instead would turn HSTS off on a host
-        that had it on, at the next pass, with nobody having asked.
+        Every setting comes from the live record. Adopting with defaults would
+        turn HSTS off on a host that had it on.
         """
         adopt(
             AdoptCommand(kind="npm.proxy_host", hostname="shop.example.com"),
@@ -306,21 +306,16 @@ class AdoptionWebTests(TestCase):
             username="operator", password="test-only-password"
         )
         self.client.force_login(self.user)
+        managing_everything()
         # Stored without adopting, because the tests below exercise the manual
-        # button -- which only has anything to do when nothing took the record
+        # button, which only has anything to do when nothing took the record
         # first. A real sweep adopts, and the test for that says so itself.
         record_inventory(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
 
     def test_a_swept_record_is_managed_without_being_opted_in(self):
-        """If HQ can see it, HQ manages it.
-
-        The page used to list what HQ had found and not taken, one row at a
-        time, waiting to be clicked. The decision was made when the credential
-        was added; asking again per record is a question whose answer is always
-        yes, and a list of them is a chore standing in for a choice.
-        """
+        """Through a connection that manages, a swept record needs no click."""
 
         record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
@@ -366,7 +361,7 @@ class ProviderRecordContractTests(TestCase):
         This asserted ``hostnames``, which was the same thing while every
         provider held exactly one record per name. A zone holds several for one
         name and a domain declares no hostname at all, so the question the test
-        was always asking -- "what makes this record itself" -- is now answered
+        was always asking ("what makes this record itself") is now answered
         by ``identity``, falling back to the hostnames where they still say it.
         """
 
@@ -393,6 +388,7 @@ class AdoptServiceTests(TestCase):
     """A hostname is one decision, even when it is several records."""
 
     def setUp(self):
+        managing_everything()
         record_inventory(
             a_sweep(
                 **{
@@ -472,7 +468,7 @@ class AdoptServiceTests(TestCase):
 class AdoptedIsObservedTests(TestCase):
     """Adoption is the one write that starts in sync, so it must say so.
 
-    Everything else is born unobserved and waits for a controller to look --
+    Everything else is born unobserved and waits for a controller to look,
     correct, because a typed declaration is a claim about a world nobody has
     checked. An adopted spec was read from the live record moments earlier.
 
@@ -482,6 +478,7 @@ class AdoptedIsObservedTests(TestCase):
     """
 
     def setUp(self):
+        managing_everything()
         record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
@@ -508,17 +505,14 @@ class AdoptedIsObservedTests(TestCase):
 
 
 class NothingWaitsToBeOptedInTests(TestCase):
-    """If HQ can see it, HQ manages it.
+    """Through a connection that manages, everything adoptable is adopted.
 
-    The estate arrived a click at a time: every rewrite, proxy host and
-    container a credential could reach sat in a list of things to take on, and
-    the answer was always yes. The decision was made when the credential was
-    added.
-
-    Nothing is exempt. A token that can edit a zone is the decision that HQ
-    manages it, the same way a Portainer credential is the decision about the
-    containers behind it.
+    The one exception is a container no compose project declares: nobody
+    decided it should exist, so it waits for a person and a finding says so.
     """
+
+    def setUp(self):
+        managing_everything(("cloudflare_dns", "a-token"), ("portainer", "a-portainer"))
 
     def swept(self, **kinds):
         record_sweep(a_sweep(**kinds), principal=cli_principal())
@@ -537,8 +531,27 @@ class NothingWaitsToBeOptedInTests(TestCase):
 
         self.assertEqual([item.hostname for item in unmanaged()], [])
 
+    def test_everything_adoptable_is_adopted_and_only_a_stackless_container_waits(self):
+        record_sweep(
+            a_sweep(
+                **{
+                    "adguard.rewrite": [A_REWRITE, ANOTHER],
+                    "npm.proxy_host": [A_PROXY],
+                    "portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER],
+                }
+            ),
+            principal=cli_principal(),
+        )
+
+        waiting = unmanaged()
+
+        self.assertEqual([item for item in waiting if item.adoptable], [])
+        self.assertEqual(
+            [(item.kind, item.identity) for item in waiting],
+            [("portainer.container", ("a-docker-host", "a-stray"))],
+        )
+
     def test_a_domain_the_credential_reaches_is_taken_on(self):
-        """The last place still asking. Holding the token is the answer."""
 
         kinds = self.swept(
             **{"cloudflare.zone": [{"zone": "example.com", "connection_ref": "a-token"}]}
@@ -552,11 +565,12 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
 
     Only a reconcile ever did. Nothing queues a reconcile for a resource that
     has not drifted, so the first look never came and a declaration nothing had
-    touched reported "never reported" forever -- with whole services reading as
+    touched reported "never reported" forever: with whole services reading as
     unverified while every part of them was running and had just been seen.
     """
 
     def setUp(self):
+        managing_everything()
         record_sweep(
             a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
         )
@@ -601,6 +615,85 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
         )
 
 
+A_COMPOSED_CONTAINER = {
+    "name": "a-web",
+    "host": "a-docker-host",
+    "connection_ref": "a-portainer",
+    "stack": "a-project",
+}
+A_STRAY_CONTAINER = {
+    "name": "a-stray",
+    "host": "a-docker-host",
+    "connection_ref": "a-portainer",
+    "stack": "",
+}
+
+
+class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
+    """A container is taken on unasked only when a compose file declares it.
+
+    Everything that belongs on a machine is started by a compose project, so
+    the label is the declaration. A container carrying none was started by hand
+    or by something HQ does not know, and adopting it would make a container
+    nobody declared look exactly like one somebody did.
+    """
+
+    def setUp(self):
+        managing_everything(("portainer", "a-portainer"))
+        record_sweep(
+            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}),
+            principal=cli_principal(),
+        )
+
+    def names(self):
+        return {
+            resource.spec.get("name")
+            for resource in ManagedResource.objects.filter(kind="portainer.container")
+        }
+
+    def test_a_container_its_compose_project_declares_is_adopted(self):
+        self.assertIn("a-web", self.names())
+
+    def test_a_container_no_compose_project_declares_is_not_adopted(self):
+        self.assertNotIn("a-stray", self.names())
+
+    def test_it_stays_unmanaged_and_says_it_is_not_adoptable(self):
+        (item,) = unmanaged()
+
+        self.assertEqual(item.identity, ("a-docker-host", "a-stray"))
+        self.assertFalse(item.adoptable)
+
+    def test_a_later_sweep_still_leaves_it_waiting(self):
+        """Not a first-pass accident: every sweep declines it the same way."""
+
+        record_sweep(
+            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}),
+            principal=cli_principal(),
+        )
+
+        self.assertNotIn("a-stray", self.names())
+
+    def test_adopting_everything_of_its_kind_skips_it(self):
+        self.assertEqual(
+            adopt_discovered("portainer.container", principal=cli_principal()),
+            {"adopted": []},
+        )
+        self.assertNotIn("a-stray", self.names())
+
+    def test_a_person_can_still_adopt_it_by_its_token(self):
+        """Declining to take it on unasked is not refusing to take it on."""
+
+        (item,) = unmanaged()
+
+        adopt(
+            AdoptCommand(kind="portainer.container", token=item.token),
+            principal=cli_principal(),
+        )
+
+        self.assertIn("a-stray", self.names())
+        self.assertEqual(unmanaged(), ())
+
+
 def _adoptable():
     """Every provider a sweep can rebuild a spec for, with its sample record."""
 
@@ -611,11 +704,7 @@ def _adoptable():
 class DriftIsSaidOutLoudTests(TestCase):
     """A sweep that finds a contradiction has to report one.
 
-    Drift was skipped in silence: not confirmed, and not described. The
-    declaration kept the condition from the last time it *did* match -- "the
-    last sweep found this exactly as declared" -- beside a timestamp slowly
-    ageing away from it, so the page read Healthy and In sync while the world
-    said the opposite. Five tailnet devices sat like that for days.
+    The declaration does not keep the condition from the last time it matched.
     """
 
     def setUp(self):
@@ -635,7 +724,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         self.resource.save(update_fields=["conditions"])
 
     def _sweep(self, key_expiry_disabled):
-        # A sweep reports the expiry date, and its *absence* is the setting --
+        # A sweep reports the expiry date, and its *absence* is the setting,
         # see `_tailnet_device_from_record`. Built from the record shape rather
         # than from the spec shape, so this exercises the same mapping the real
         # sweep goes through.
@@ -669,7 +758,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         """A condition nothing reads is a condition that was not written.
 
         Asserted through `resource_health`, because that is what the page shows
-        above the conditions table -- and a false `Ready` is not the opposite of
+        above the conditions table, and a false `Ready` is not the opposite of
         a true one, it is a row that surface skips entirely.
         """
 
@@ -692,7 +781,7 @@ class UnobservableFieldTests(TestCase):
     NPM answers with a certificate id, not an HQ resource key, so
     `_proxy_from_record` blanks `certificate_resource`. Compared as a value,
     every proxy host that named a certificate differed from its declaration
-    forever -- and `confirm_observed` rightly refuses to call drift observed, so
+    forever, and `confirm_observed` rightly refuses to call drift observed, so
     those resources kept the condition their last reconcile wrote and no sweep
     ever confirmed them again. They read healthy the whole time.
     """
@@ -720,7 +809,7 @@ class UnobservableFieldTests(TestCase):
         self.assertEqual(self.resource.spec["certificate_resource"], "example-wildcard")
 
     def test_drift_in_an_observable_field_is_still_refused(self):
-        """The fix must not become a blanket exemption for the whole record."""
+        """Only unobservable fields are exempt, not the whole record."""
         self.sweep({**A_PROXY, "forward_port": 9999})
         self.assertIsNone(self.resource.last_observed_at)
 
@@ -764,7 +853,7 @@ class UnobservableFieldTests(TestCase):
         Booleans are covered as well as strings, and that omission is why this
         guard was green while a container's ``hidden`` raised a finding on every
         record that set it. A flag is exactly the kind of field HQ keeps for
-        itself -- fold this row away, keep this device on the tailnet -- so
+        itself (fold this row away, keep this device on the tailnet) so
         skipping the type was skipping the likeliest case.
         """
 
@@ -838,7 +927,7 @@ class ObservationIsNotAnEventTests(TestCase):
 
     `confirm_observed` stamps `last_observed_at` on every declaration it
     matches, every pass. Audited as a change that is one row per resource per
-    sweep -- at a sixty-second interval, thousands a day saying "checked, still
+    sweep: at a sixty-second interval, thousands a day saying "checked, still
     fine", with every real event buried among them.
     """
 
@@ -896,7 +985,7 @@ class EveryKindIsWatchedOrSaysWhyNotTests(TestCase):
     """The collector registry and the provider list were never joined.
 
     One is a dict in the controller, the other is this list of kinds, and
-    nothing compared them -- so a kind could be declared and swept by nothing
+    nothing compared them, so a kind could be declared and swept by nothing
     at all, indefinitely, with the only symptom a staleness finding no sweep
     could ever clear.
     """
@@ -1019,8 +1108,8 @@ class LineEndingsAreNotDriftTests(TestCase):
 class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
     """A spec and a reading are two vocabularies, and some never overlap.
 
-    A certificate declares what was asked for -- which name, which domains,
-    where to install -- and its reading reports what exists: issuer, expiry,
+    A certificate declares what was asked for (which name, which domains,
+    where to install) and its reading reports what exists: issuer, expiry,
     the PEM. Compared by field name every declared field is unconfirmed
     forever, and no sweep or reconcile can clear it. The same was true of a
     machine, whose only reading is telemetry.
@@ -1070,10 +1159,7 @@ class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
     thing it describes.
 
     A tailnet device joined by somebody running `tailscale up` on it. HQ never
-    created it and has no delete for it, so removal queued a controller action
-    the provider does not implement and was refused -- leaving a declaration
-    for a device that had been renamed away impossible to remove, and a finding
-    about it that nothing could clear.
+    created it and has no delete for it, so removing the declaration forgets it.
     """
 
     def test_removal_is_offered_for_everything_hq_did_not_create(self):
@@ -1090,7 +1176,7 @@ class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
                 self.assertTrue(
                     allowed or provider.removal_gap,
                     f"{kind} is not declaration-only, so removal queues a "
-                    f"controller delete -- which is refused: {explanation}. "
+                    f"controller delete, which is refused: {explanation}. "
                     "Implement the delete, mark it declaration-only, or say in "
                     "`removal_gap` why its declarations cannot be removed.",
                 )
@@ -1151,6 +1237,17 @@ class ObservationKindTests(TestCase):
         )
 
         self.assertNotIn("host.firewall", {item.kind for item in unmanaged()})
+
+    def test_every_kind_the_controller_sweeps_is_kept(self):
+        from controller_runtime.providers import PROVIDER_INVENTORY
+
+        from control_plane.providers import OBSERVATION_KINDS, PROVIDERS
+
+        dropped = sorted(
+            kind for kind in PROVIDER_INVENTORY
+            if kind not in PROVIDERS and kind not in OBSERVATION_KINDS
+        )
+        self.assertEqual(dropped, [])
 
     def test_a_kind_this_hq_has_never_heard_of_is_still_dropped(self):
         record_inventory(

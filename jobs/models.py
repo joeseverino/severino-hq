@@ -6,7 +6,7 @@ a request that hangs until the proxy gives up, leaving no way to tell whether
 the work finished or died.
 
 So a job is a row: created before the work starts, updated while it runs, and
-outliving it either way. That buys three things — a page that can ask "and
+outliving it either way. That buys three things: a page that can ask "and
 now?" cheaply, evidence when a process is killed mid-run, and a lock that
 stops the same job starting twice.
 
@@ -49,7 +49,7 @@ class Job(models.Model):
     state = models.CharField(
         max_length=16, choices=State, default=State.QUEUED, db_index=True
     )
-    # 0-100, or null where the work cannot say — better than a number that
+    # 0-100, or null where the work cannot say: better than a number that
     # stops moving.
     percent = models.PositiveSmallIntegerField(null=True, blank=True)
     note = models.CharField(max_length=200, blank=True)
@@ -69,14 +69,14 @@ class Job(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     # Touched by every progress report. Not `auto_now`, which any unrelated
-    # write would also move — this has to stop when the process stops.
+    # write would also move: this has to stop when the process stops.
     heartbeat_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
         constraints = [
             # One live job per kind, enforced by the database rather than by
-            # checking first — which lets two through on a double-click.
+            # checking first, which lets two through on a double-click.
             models.UniqueConstraint(
                 fields=("kind",),
                 condition=models.Q(state__in=("queued", "running")),

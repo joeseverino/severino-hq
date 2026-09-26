@@ -81,8 +81,8 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
     )
     agent_rule = rules.get(Scope.AGENT)
     if agent_rule and (
-        # An explicit rule for this agent beats the default outright -- it is
-        # how one agent is allowed what the rest still wait for -- and against
+        # An explicit rule for this agent beats the default outright (it is
+        # how one agent is allowed what the rest still wait for) and against
         # an explicit surface rule, only the stricter of the two survives.
         decision.source == "default"
         or _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]
@@ -361,7 +361,7 @@ def _cell(spec, column: Column, current, grants, ceiling) -> Cell:
     if column.scope == Scope.AGENT and not _held_by_grant(spec, grants[column.subject]):
         return Cell(field, column.scope, column.label, None, (), "Not granted in Pocket ID")
     dormant = column.subject == "mcp" and not ceiling.permits(*spec.required_capabilities)
-    options = [("", f"Default · {_default_label(spec)}"), (Rule.ALLOW, Rule.ALLOW.label)]
+    options = [("", "Default"), (Rule.ALLOW, Rule.ALLOW.label)]
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, Rule.APPROVE.label))
     options.append((Rule.DENY, Rule.DENY.label))

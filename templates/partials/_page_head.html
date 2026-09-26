@@ -1,15 +1,24 @@
-<header class="page-head{% if compact %} page-head-compact{% endif %}">
+{% comment %}
+A page's head, from `page` (application.pages.Page). The only place a head is
+drawn: a page template extends page.html rather than including this.
+{% endcomment %}
+<header class="page-head">
   <div>
-    <h1>{{ title }}</h1>
-    {% if lede %}<p class="page-lede">{{ lede }}</p>{% endif %}
+    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label }}</a> / {% endfor %}</p>{% endif %}
+    <h1>{{ page.title }}</h1>
+    {% if page.lede %}<p class="page-lede">{{ page.lede }}</p>{% endif %}
   </div>
-  {% if action_url and action_label %}
+  {% if page.actions %}
     <div class="page-actions">
-      {% comment %}
-      action_modal names a dialog on this page. The link still points at a page
-      that does the same job, so the action works whether or not the dialog does.
-      {% endcomment %}
-      <a class="btn{% if action_primary %} primary{% endif %}" href="{{ action_url }}"{% if action_modal %} data-modal-open="{{ action_modal }}"{% endif %}>{{ action_label }}</a>
+      {% for action in page.actions %}
+        {% if action.method == "post" %}
+          {% post_button action.label action.url value=action.value css=action.css title=action.title disabled=action.disabled %}
+        {% elif action.disabled %}
+          <span class="{{ action.css }}" aria-disabled="true"{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</span>
+        {% else %}
+          <a class="{{ action.css }}" href="{{ action.url }}"{% if action.modal %} data-modal-open="{{ action.modal }}"{% endif %}{% if action.title %} title="{{ action.title }}"{% endif %}>{{ action.label }}</a>
+        {% endif %}
+      {% endfor %}
     </div>
   {% endif %}
 </header>

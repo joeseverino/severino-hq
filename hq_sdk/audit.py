@@ -9,9 +9,8 @@ from core.audit import (
     register_audit,
 )
 # Typed metadata, exported so an extension records "12 updated, 1 failed" in
-# the vocabulary every other event already uses. Without these an extension can
-# only pass a free-form dict, which is how `metadata` became uncomparable
-# across callers in the first place -- the problem facets were added to solve.
+# the vocabulary every other event already uses, so `metadata` stays comparable
+# across callers.
 from core.facets import Counts, Failure, Source, Steps, Timing
 from core.models import AuditLog
 

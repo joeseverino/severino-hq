@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly contact inbox read for Severino HQ
+
+[Timer]
+OnBootSec=3min
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=yes
+Unit=severino-hq-contacts-inbox.service
+
+[Install]
+WantedBy=timers.target

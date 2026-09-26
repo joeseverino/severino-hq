@@ -1,8 +1,8 @@
 """Whether one machine on the tailnet may reach another, and on which port.
 
 HQ does not evaluate the policy. Tailscale does, during the sweep: for each
-device and port it is asked which principals a rule admits, and the answer --
-with groups already flattened to the users in them -- is what gets stored. What
+device and port it is asked which principals a rule admits, and the answer
+(with groups already flattened to the users in them) is what gets stored. What
 happens here is set membership. That distinction is the whole design: a second
 implementation of an access policy would be believed exactly as much as the
 real one and wrong in ways nobody notices until it matters.
@@ -21,10 +21,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from control_plane.models import ProviderInventory
+from control_plane.providers import TAILNET_KIND, TAILNET_POLICY_KIND
 
 from .projection import read_once
+from .ui import counted
 
-TAILNET_KIND = "tailscale.device"
+# The settings row naming the tailnet's resolvers, by address.
+RESOLVES_THROUGH = "Resolves through"
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ class Device:
     rules: dict[int, tuple[dict, ...]] = field(default_factory=dict)
     addresses: tuple[str, ...] = ()
     # Names the policy gives this device's addresses. Not a property of the
-    # device at all -- the policy decides it -- so it is attached when the two
+    # device at all (the policy decides it) so it is attached when the two
     # readings are joined rather than read from the device.
     aliases: tuple[str, ...] = ()
     dns_name: str = ""
@@ -71,7 +74,7 @@ class Device:
         """The name worth showing a person for this device.
 
         A node registers under whatever its operating system calls itself, and
-        several of them call themselves the same unhelpful thing -- a phone
+        several of them call themselves the same unhelpful thing: a phone
         reporting "localhost" is not a bug in the sweep, it is the hostname.
         The MagicDNS label is the tailnet's own name for the node and is unique
         within it by construction, so it wins wherever the two disagree.
@@ -82,7 +85,7 @@ class Device:
 
     @property
     def path(self) -> str:
-        """Direct, relayed, or not currently negotiated -- in those words.
+        """Direct, relayed, or not currently negotiated: in those words.
 
         A relayed peer still works; it is slower and it crosses a machine
         neither end owns. Saying which is the point: the two look identical
@@ -100,7 +103,7 @@ class Device:
         """Every name a rule could admit this device by.
 
         Three kinds, not two. A policy may name a device by its owner, by a
-        tag, or by an alias it gives one of the device's addresses -- and a
+        tag, or by an alias it gives one of the device's addresses, and a
         policy written the third way is admitting the machine rather than
         whoever is signed in on it, which is a stricter thing to say and the
         reason to write it. Counting only the first two reports a device the
@@ -232,7 +235,7 @@ def device_at(address: str, known: dict[str, Device] | None = None) -> Device | 
 
 
 def observer(known: dict[str, Device] | None = None) -> Device | None:
-    """The device whose daemon took the reading -- the one HQ runs on."""
+    """The device whose daemon took the reading: the one HQ runs on."""
 
     return next(
         (
@@ -283,7 +286,10 @@ _PORT = re.compile(r"\*|[0-9]+(?:-[0-9]+)?")
 
 
 def _port_order(port: str) -> tuple[int, str]:
-    return (int(port), "") if port.isdigit() else (1 << 16, port)
+    """Numeric order for ``443``, ``tcp:443``; anything else after."""
+
+    match = _PORT_ENTRY.fullmatch(str(port))
+    return (int(match.group(1)), str(port)) if match else (1 << 16, str(port))
 
 
 def ports() -> tuple[int, ...]:
@@ -308,22 +314,20 @@ def may_reach(
     if who_asks is None or who_answers is None:
         missing = source if who_asks is None else target
         return Verdict(
-            False, False, f"{missing} is not a device the last sweep described."
+            False, False, f"{missing} was not in the last sweep."
         )
     if not who_asks.principals:
         return Verdict(
             False,
             False,
-            f"{source} carries no user or tag, so no rule can name it. It may "
-            "not have been seen by a credential that reports identity.",
+            f"{source} has no user or tag, so no rule can match it.",
         )
     admitted = who_answers.reach.get(port)
     if admitted is None:
         return Verdict(
             False,
             False,
-            f"Nothing was asked about port {port} on {target}, so HQ has no "
-            "answer for it either way.",
+            f"Port {port} on {target} was not checked.",
         )
     matched = tuple(sorted(who_asks.principals & set(admitted)))
     owners = alias_owners(known)
@@ -331,7 +335,7 @@ def may_reach(
         return Verdict(
             True,
             True,
-            f"The policy admits {', '.join(as_devices(matched, owners))} to "
+            f"Allowed: {', '.join(as_devices(matched, owners))} to "
             f"{owners.get(target, target)} on {port}.",
             via=matched,
             rules=who_answers.rules.get(port, ()),
@@ -339,14 +343,14 @@ def may_reach(
     return Verdict(
         False,
         True,
-        f"No rule admits {', '.join(as_devices(sorted(who_asks.principals), owners))} "
-        f"to {owners.get(target, target)} on {port}. It is open to "
+        f"No rule allows {', '.join(as_devices(sorted(who_asks.principals), owners))} "
+        f"to {owners.get(target, target)} on {port}. Allowed: "
         f"{', '.join(as_devices(admitted, owners))}.",
         rules=who_answers.rules.get(port, ()),
     )
 
 
-POLICY_KIND = "tailscale.policy"
+POLICY_KIND = TAILNET_POLICY_KIND
 
 
 @dataclass(frozen=True)
@@ -378,7 +382,7 @@ class Policy:
         rows: list[tuple[str, str]] = []
         nameservers = self.dns.get("dns") or []
         if nameservers:
-            rows.append(("Resolves through", ", ".join(nameservers)))
+            rows.append((RESOLVES_THROUGH, ", ".join(nameservers)))
         rows.append(("MagicDNS", "On" if self.dns.get("magicDNS") else "Off"))
         days = self.settings.get("devicesKeyDurationDays")
         if days:
@@ -407,7 +411,7 @@ class Policy:
             rows.append((
                 "Tailnet lock",
                 (
-                    f"On · {keys} signing key{'' if keys == 1 else 's'}"
+                    f"On · {counted(keys, 'signing key', 'signing keys')}"
                     if self.lock.get("enabled")
                     else "Off"
                 ),
@@ -447,7 +451,7 @@ def proposed_grant(source: str, target: str, port: int) -> dict:
     """The grant that would allow a thing the policy currently refuses.
 
     Offered rather than applied. It is written in the terms the policy already
-    uses -- a tag where the machine carries one, the owner where it does not --
+    uses: a tag where the machine carries one, the owner where it does not,
     because a grant naming a raw address would work once and then be wrong the
     first time an address moved.
     """
@@ -468,7 +472,7 @@ def snapshots() -> dict[str, list]:
     """Both tailnet readings, in one query, once per projection.
 
     The devices and the policy live in the same table under two kinds, and the
-    dashboard wants both -- what each machine reports, and what lock is
+    dashboard wants both: what each machine reports, and what lock is
     filtering out. Read separately that was two queries for one table, and the
     second pushed the host's page over its budget. Read together it is one, and
     every caller inside the projection shares it.
@@ -523,7 +527,7 @@ def policy_allowing(
 
     The port is appended rather than inserted. A reviewer reads the diff of the
     single most dangerous document in the estate, and an insertion renumbers
-    every element after it -- one added port rendering as four changed lines is
+    every element after it: one added port rendering as four changed lines is
     a diff that hides what it is.
     """
 
@@ -572,3 +576,140 @@ def policy_allowing(
     parsed["tests"] = tests
 
     return json.dumps(parsed), "; ".join(changed)
+
+
+# Names for ports no connection or container on the destination explains.
+WELL_KNOWN_PORTS = {
+    22: "SSH",
+    53: "DNS",
+    80: "HTTP",
+    443: "HTTPS",
+    3389: "RDP",
+    5432: "PostgreSQL",
+}
+_PORT_ENTRY = re.compile(r"(?:(?:tcp|udp|sctp):)?([0-9]+)")
+
+
+def grant_ports(
+    grants, known: dict[str, Device] | None = None, machines=None
+) -> tuple[dict, ...]:
+    """Each grant with ``ports``: ``(entry, name)`` per ``ip`` entry.
+
+    A single port is named, in order, by HQ itself when the destination runs HQ
+    on that port, an SSH connection to a destination machine on that port, a
+    container publishing it there, then ``WELL_KNOWN_PORTS``. Otherwise the
+    name is blank.
+    """
+
+    from .projection import projection_scope
+
+    with projection_scope():
+        return _grant_ports(grants, known, machines)
+
+
+def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
+    from .connections import machines_once
+
+    known = devices() if known is None else known
+    machines = machines_once() if machines is None else machines
+    by_name: dict[str, object] = {}
+    for item in machines:
+        for name in (item.name, *item.aliases):
+            by_name.setdefault(str(name).lower(), item)
+    namer = _PortNamer(_ssh_ports())
+    shown = []
+    for grant in grants:
+        targets = _grant_machines(grant.get("dst") or (), known, by_name)
+        ports = []
+        for entry in grant.get("ip") or ():
+            match = _PORT_ENTRY.fullmatch(str(entry))
+            ports.append((entry, namer.name(int(match.group(1)), targets) if match else ""))
+        shown.append({**grant, "ports": tuple(sorted(ports, key=lambda port: _port_order(port[0])))})
+    return tuple(shown)
+
+
+def _ssh_ports() -> dict[str, set[int]]:
+    """The port each SSH-shaped connection opens, by connection ref."""
+
+    from .connections import connection_rows
+    from .locate import points_at_host, split_endpoint
+
+    found: dict[str, set[int]] = {}
+    for row in connection_rows():
+        if not points_at_host(row.endpoint):
+            continue
+        port = split_endpoint(row.endpoint)[1]
+        if port.isdigit():
+            found.setdefault(row.connection_ref, set()).add(int(port))
+    return found
+
+
+def _grant_machines(names, known, by_name) -> tuple:
+    """The machines a grant's destinations name, through their tailnet devices."""
+
+    found = []
+    for device in known.values():
+        if not any(
+            name == "*" or name in device.principals or name in device.addresses
+            for name in names
+        ):
+            continue
+        machine = by_name.get(device.label.lower()) or by_name.get(device.name.lower())
+        if machine is not None and machine not in found:
+            found.append(machine)
+    return tuple(found)
+
+
+class _PortNamer:
+    """What answers on a port of a grant's machines: HQ, SSH, a container, a service."""
+
+    def __init__(self, ssh_ports: dict[str, set[int]]):
+        from .hq_self import scoped_served_port
+
+        self.ssh_ports = ssh_ports
+        self.hq_port = scoped_served_port()
+
+    def name(self, port: int, targets) -> str:
+        from control_plane.providers import CONNECTION_LABELS
+
+        from .hq_self import site_label
+
+        if port == self.hq_port and any(getattr(t, "runs_hq", False) for t in targets):
+            return site_label()
+        if any(self._opens(target, port) for target in targets):
+            return CONNECTION_LABELS["ssh"]
+        for target in targets:
+            for running in sorted(target.containers, key=lambda item: item.name):
+                if port in running.ports:
+                    return running.name
+        return WELL_KNOWN_PORTS.get(port, "")
+
+    def _opens(self, target, port: int) -> bool:
+        refs = {*target.reached_by, *target.opened_by}
+        return any(port in self.ssh_ports.get(ref, ()) for ref in refs)
+
+
+def posture_facts() -> tuple[tuple[str, str], ...]:
+    """Policy settings worth a finding, as topology facts on the tailnet connection.
+
+    ``devices-join-unapproved`` when device approval is read and off;
+    ``empty-group-granted`` for each group with no members that a grant or
+    shell rule names.
+    """
+
+    found = policy()
+    entries: list[tuple[str, str]] = []
+    if found.settings.get("devicesApprovalOn") is False:
+        entries.append(("devices-join-unapproved", "Off"))
+    named = {
+        name
+        for rule in (*found.grants, *found.ssh_rules)
+        for side in ("src", "dst")
+        for name in rule.get(side) or ()
+    }
+    entries.extend(
+        ("empty-group-granted", str(group.get("name", "")))
+        for group in found.groups
+        if not group.get("members") and group.get("name") in named
+    )
+    return tuple(entries)

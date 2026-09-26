@@ -45,7 +45,7 @@ class Expense(TimestampedModel):
         decimal_places=2,
         default=Decimal("0.00"),
         editable=False,
-        help_text="Auto-calculated. Estimate only — not tax advice.",
+        help_text="Calculated on save. Estimate, not tax advice.",
     )
     payment_method = models.CharField(
         max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True
@@ -53,7 +53,7 @@ class Expense(TimestampedModel):
     business_purpose = models.CharField(
         max_length=300,
         blank=True,
-        help_text="Short justification of the business reason for this expense.",
+        help_text="Why this is a business expense, in one line.",
     )
     notes = models.TextField(blank=True)
 
@@ -95,7 +95,7 @@ class Expense(TimestampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.date} {self.vendor} — {self.item}"
+        return f"{self.date} {self.vendor} · {self.item}"
 
     def save(self, *args, **kwargs):
         pct = max(0, min(int(self.business_use_percentage or 0), 100))

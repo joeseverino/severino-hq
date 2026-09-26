@@ -8,15 +8,27 @@ provider, opens a vault, or invents an external firewall guarantee.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from django.conf import settings
 
+from control_plane.observations.host import FIREWALL_KIND
+from control_plane.provider_adapters.contracts import IngressPolicy
+from control_plane.providers import (
+    CONNECTION_LABELS,
+    PROVIDERS,
+    TAILNET_POLICY_KIND,
+    normalized_hostname,
+)
+from core.network import split_host_port
+
 from .connection import channel_for_request, hops_of
 from .connections import ConnectionGroup
 from .reach import TAILNET
+from .ui import counted
 
 
 # Lifecycle states that need a person: stale evidence, missing access, a
@@ -98,71 +110,82 @@ def _unattested_tailnet_policy() -> SecurityControl:
     )
 
 
-def _tailnet_only(policy: dict[str, Any]) -> bool:
-    clients = policy.get("clients")
-    if not isinstance(clients, list):
+def _tailnet_only(policy: IngressPolicy) -> bool:
+    if policy.rules is None:
         return False
-    rules = [
-        (str(rule.get("directive", "")).lower(), str(rule.get("address", "")).lower())
-        for rule in clients
-        if isinstance(rule, dict)
-    ]
-    tailnet_allows = [("allow", str(network)) for network in TAILNET]
-    deny_all = rules == [*tailnet_allows, ("deny", "all")] or (
-        rules == tailnet_allows and policy.get("implicit_deny") is True
+    tailnet_allows = tuple(("allow", str(network)) for network in TAILNET)
+    deny_all = policy.rules == (*tailnet_allows, ("deny", "all")) or (
+        policy.rules == tailnet_allows and policy.implicit_deny
     )
     return (
         deny_all
-        and policy.get("satisfy_any") is False
-        and policy.get("pass_auth") is False
-        and policy.get("authorization_count") == 0
+        and not policy.satisfy_any
+        and not policy.passes_auth
+        and policy.authorizations == 0
     )
 
 
-def _ingress_control(hostname: str, snapshot) -> SecurityControl:
-    host = hostname.partition(":")[0].strip().lower().rstrip(".")
-    if snapshot is None:
-        return _unattested_edge()
-    record = next(
-        (
-            item
-            for item in snapshot.records
-            if isinstance(item, dict)
-            and host
-            in {
-                str(name).strip().lower().rstrip(".")
-                for name in item.get("domain_names") or ()
-            }
-        ),
-        None,
+def _ingress_kinds() -> tuple[str, ...]:
+    """The kinds whose observed records carry an ingress policy."""
+
+    return tuple(kind for kind, spec in PROVIDERS.items() if spec.ingress_policy is not None)
+
+
+def _proxy_label(kind: str) -> str:
+    spec = PROVIDERS[kind]
+    return next(
+        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS),
+        spec.label,
     )
-    if record is None:
-        return _unattested_edge()
-    if not snapshot.reachable:
+
+
+def _ingress_control(hostname: str, snapshots: Mapping[str, Any]) -> SecurityControl:
+    """The first ingress policy any proxy reports for ``hostname``, judged."""
+
+    host = normalized_hostname(split_host_port(hostname)[0])
+    for kind in _ingress_kinds():
+        snapshot = snapshots.get(kind)
+        if snapshot is None or not host:
+            continue
+        read = PROVIDERS[kind].ingress_policy
+        policy = next(
+            (
+                found
+                for found in (read(item) for item in snapshot.records if isinstance(item, dict))
+                if host in found.hostnames
+            ),
+            None,
+        )
+        if policy is not None:
+            return _judged(policy, reachable=snapshot.reachable, proxy=_proxy_label(kind))
+    return _unattested_edge()
+
+
+def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityControl:
+    if not reachable:
         return SecurityControl(
             "edge",
             "Ingress policy",
             "neutral",
             "Last proof is aging",
-            "The NPM connection is not currently reachable. HQ keeps the last "
+            f"The {proxy} connection is not currently reachable. HQ keeps the last "
             "observation visible without presenting it as current proof.",
         )
-    if not record.get("access_list_id"):
+    if not policy.restricted:
         return SecurityControl(
             "edge",
             "Ingress policy",
             "serious",
             "No source restriction",
-            "NPM reports no access list on this hostname.",
+            f"{proxy} reports no access list on this hostname.",
         )
-    policy = record.get("access_policy")
-    if not isinstance(policy, dict):
+    if policy.rules is None:
         return SecurityControl(
             "edge",
             "Ingress policy",
             "neutral",
             "Rules not yet observed",
-            "NPM reports an assigned policy, but the cached sweep predates "
+            f"{proxy} reports an assigned policy, but the cached sweep predates "
             "rule-level evidence.",
         )
     if not _tailnet_only(policy):
@@ -171,20 +194,18 @@ def _ingress_control(hostname: str, snapshot) -> SecurityControl:
             "Ingress policy",
             "serious",
             "Not Tailnet-only",
-            "The assigned NPM policy does not exactly allow both Tailscale "
+            f"The assigned {proxy} policy does not exactly allow both Tailscale "
             "address ranges and then deny every other source without proxy auth.",
         )
-    implicit = policy.get("implicit_deny") is True and not any(
-        str(rule.get("directive", "")).lower() == "deny"
-        for rule in policy.get("clients") or ()
-        if isinstance(rule, dict)
+    implicit = policy.implicit_deny and not any(
+        directive == "deny" for directive, _address in policy.rules
     )
     return SecurityControl(
         "edge",
         "Ingress policy",
         "good",
         f"Tailnet ranges · {'implicit ' if implicit else ''}deny all",
-        "NPM's authenticated API reports that this hostname allows Tailscale "
+        f"{proxy}'s authenticated API reports that this hostname allows Tailscale "
         "IPv4 and IPv6 sources, denies everything else"
         f"{' through its generated final rule' if implicit else ''}, and passes "
         "no proxy credentials to HQ.",
@@ -220,21 +241,11 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
         "Tailscale policy",
         "good",
         (
-            f"Observed · {len(grants)} grant{'s' if len(grants) != 1 else ''} · "
-            f"{len(tests)} test{'s' if len(tests) != 1 else ''}"
+            f"Observed · {counted(len(grants), 'grant')} · "
+            f"{counted(len(tests), 'test')}"
         ),
         "HQ read the active policy through its scoped Tailscale connection. "
         "The request inspector applies its device-to-HQ verdict to this request.",
-    )
-
-
-def observed_ingress_control(hostname: str) -> SecurityControl:
-    """Derive one hostname's edge control from the cached NPM observation."""
-
-    from control_plane.models import ProviderInventory
-
-    return _ingress_control(
-        hostname, ProviderInventory.objects.filter(kind="npm.proxy_host").first()
     )
 
 
@@ -295,6 +306,14 @@ def _host_firewall_control(snapshot) -> SecurityControl:
     )
 
 
+def _snapshots(*kinds: str) -> dict:
+    """The stored inventory of each kind, by kind, in one query."""
+
+    from control_plane.models import ProviderInventory
+
+    return {row.kind: row for row in ProviderInventory.objects.filter(kind__in=kinds)}
+
+
 def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityControl]:
     """The two cached readings the request panel projects, in one query.
 
@@ -303,27 +322,10 @@ def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityC
     inventory once per device, per address, per layer or per header.
     """
 
-    from control_plane.models import ProviderInventory
-
-    snapshots = {
-        row.kind: row
-        for row in ProviderInventory.objects.filter(
-            kind__in=("npm.proxy_host", "host.firewall")
-        )
-    }
+    snapshots = _snapshots(*_ingress_kinds(), FIREWALL_KIND)
     return (
-        _ingress_control(hostname, snapshots.get("npm.proxy_host")),
-        _host_firewall_control(snapshots.get("host.firewall")),
-    )
-
-
-def observed_firewall_control() -> SecurityControl:
-    """The host firewall reading on its own, for callers that need only it."""
-
-    from control_plane.models import ProviderInventory
-
-    return _host_firewall_control(
-        ProviderInventory.objects.filter(kind="host.firewall").first()
+        _ingress_control(hostname, snapshots),
+        _host_firewall_control(snapshots.get(FIREWALL_KIND)),
     )
 
 
@@ -332,17 +334,10 @@ def observed_connection_controls(
 ) -> tuple[SecurityControl, SecurityControl]:
     """Read both provider controls in one constant local-cache query."""
 
-    from control_plane.models import ProviderInventory
-
-    snapshots = {
-        row.kind: row
-        for row in ProviderInventory.objects.filter(
-            kind__in=("npm.proxy_host", "tailscale.policy")
-        )
-    }
+    snapshots = _snapshots(*_ingress_kinds(), TAILNET_POLICY_KIND)
     return (
-        _tailnet_policy_control(snapshots.get("tailscale.policy")),
-        _ingress_control(hostname, snapshots.get("npm.proxy_host")),
+        _tailnet_policy_control(snapshots.get(TAILNET_POLICY_KIND)),
+        _ingress_control(hostname, snapshots),
     )
 
 
@@ -423,8 +418,7 @@ def connection_security_posture(
             "Proxy identity",
             "good" if trusted_proxies else "neutral",
             (
-                f"{trusted_proxies} trusted proxy "
-                f"hop{'s' if trusted_proxies != 1 else ''}"
+                counted(trusted_proxies, "trusted proxy hop", "trusted proxy hops")
                 if trusted_proxies
                 else "Forwarded identity ignored"
                 if forwarded
@@ -454,7 +448,7 @@ def connection_security_posture(
             "authorization",
             "Capability authorization",
             "good",
-            f"{len(groups)} permitted connection type{'s' if len(groups) != 1 else ''}",
+            counted(len(groups), "permitted connection type", "permitted connection types"),
             "HQ checks every family's required capabilities before invoking "
             "its instance provider, so an unauthorized reader cannot trigger it.",
         ),

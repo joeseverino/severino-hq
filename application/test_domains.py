@@ -51,7 +51,7 @@ class DomainRegistryTests(SimpleTestCase):
         """A typo in the registry must fail here, not on every page at once.
 
         The nav renders in ``base.html``, so an unresolvable route is not a
-        broken link -- it is a 500 on every authenticated surface in HQ
+        broken link: it is a 500 on every authenticated surface in HQ
         simultaneously, including the dashboard an operator would use to notice.
         """
         for item in domain_navigation():
@@ -66,7 +66,7 @@ class DomainRegistryTests(SimpleTestCase):
         """Orders below the floor belong to extensions, which lead the bar.
 
         A host section numbered into that band would silently push an installed
-        extension down the bar -- and because this repo cannot see which
+        extension down the bar, and because this repo cannot see which
         extensions exist, nothing else would catch it.
         """
         for descriptor in HOST_DOMAINS:
@@ -98,8 +98,8 @@ class DomainRegistryTests(SimpleTestCase):
     def test_the_registry_is_the_only_list_of_sections(self):
         """No module may keep a second roster of what HQ contains.
 
-        Three parallel lists -- a nav tuple, a work-queue list, and a
-        code-to-URL dict -- are what the registry replaced. A section present in
+        Three parallel lists (a nav tuple, a work-queue list, and a
+        code-to-URL dict) are what the registry replaced. A section present in
         one and missing from another was a silent hole rather than a failure, so
         the duplication is worth a test rather than a convention.
         """
@@ -116,10 +116,7 @@ class DomainRegistryTests(SimpleTestCase):
     def test_the_view_keeps_no_code_to_url_table(self):
         """The queue's links come from the domains, not from a lookup here.
 
-        The dashboard used to rejoin a work-queue entry to its filtered list
-        through a dict keyed by a hand-assigned code. A code in one and not the
-        other was a ``KeyError`` on the home page, which is the worst place in
-        HQ for one.
+        Each entry carries its own url, so there is no code to look up.
         """
         source = (Path(settings.BASE_DIR) / "core" / "views.py").read_text()
         self.assertNotIn("routes = {", source)
@@ -186,7 +183,7 @@ class ComposedQueueTests(TestCase):
         """An extension on fire has to be visible on the page that lists work.
 
         Before the registry, the host built its queue from its own models and
-        extensions reported through a channel the dashboard never read -- so
+        extensions reported through a channel the dashboard never read, so
         this page could say "no cleanup items" while a domain was failing.
         """
         ContentItem.objects.create(

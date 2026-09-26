@@ -22,7 +22,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
         <tr>
           <td>
             {% if record.service_url %}
-              <a href="{{ record.service_url }}"><strong>{{ record.name }}</strong></a>
+              <strong>{% entity "service"|entity_of:record.name %}</strong>
             {% else %}
               <strong>{{ record.name }}</strong>
             {% endif %}
@@ -43,7 +43,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
               ought to act on it.
               {% endcomment %}
               {% if not record.manageable %}
-                <span class="pill pill-neutral">{{ record.record_type }} not managed by HQ</span>
+                <span class="pill pill-neutral">{{ record.record_type }} not managed</span>
               {% elif record.managed %}
                 <span class="pill control-{{ record.health.state }}">{{ record.health.label }}</span>
               {% else %}
@@ -62,7 +62,7 @@ Expects `rows`, `zone`, and `public_dns_enabled`.
         </tr>
       {% empty %}
         <tr><td colspan="6">
-          {% include "partials/_empty_state.html" with compact=True message="No records of this kind." %}
+          {% include "partials/_empty_state.html" with compact=True message="No records." %}
         </td></tr>
       {% endfor %}
     </tbody>

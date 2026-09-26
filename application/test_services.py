@@ -7,7 +7,7 @@ is public, and a fixture is documentation whether or not it was meant to be.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from control_plane.models import ManagedResource
@@ -15,7 +15,7 @@ from control_plane.providers import PROVIDERS, SERVICE_FACETS, SERVICE_FACET_IDS
 from projects.models import Project
 
 from .attention import services as service_attention
-from .sections import services as service_cards
+from .estate import cards as estate_cards
 from .services import (
     alias_target,
     find_service,
@@ -189,14 +189,11 @@ class ServiceCompositionTests(TestCase):
     def test_disabling_the_ingress_leaves_the_name_still_pointed_somewhere(self):
         """Losing the proxy is not the name forgetting where it was sent.
 
-        This assertion used to read ``assertIsNone(service.origin)``, in the
-        same test as the one above. It passed for a reason that was never the
-        point being made: only an ingress declared an origin, so removing the
-        ingress removed the last thing that could name one.
+        A record still names where the name points once the ingress is gone.
 
         The DNS record was always still there, still reconciled, still pointing
         this name at a machine HQ knows by name. Reporting nothing was not
-        caution -- it was HQ declining to read a declaration it holds. What is
+        caution: it was HQ declining to read a declaration it holds. What is
         true with the proxy disabled is that requests still arrive at app-host
         and nothing there answers them, and those are two facts rather than the
         absence of one.
@@ -260,7 +257,7 @@ class OriginResolutionTests(TestCase):
         service = self._proxy(forward_host="10.9.9.9")
 
         self.assertFalse(service.origin.known)
-        self.assertIn("cannot match to any machine", " ".join(service.faults))
+        self.assertIn("matches no known machine", " ".join(service.faults))
 
     def _rewrite(self, answer="10.0.0.10"):
         healthy(
@@ -274,10 +271,7 @@ class OriginResolutionTests(TestCase):
     def test_a_record_with_no_ingress_names_where_the_name_is_sent(self):
         """A rewrite pointing at a machine is a statement of where it is served.
 
-        Nothing proxies this name, so nothing else in HQ is in a position to say
-        -- and the page said "nothing supplies this" about a name whose entire
-        configuration is an instruction to send it to a machine HQ sweeps,
-        credentials and installs certificates on.
+        Nothing proxies this name, so the rewrite is what says where it goes.
         """
 
         self._rewrite()
@@ -322,10 +316,10 @@ class OriginProvenanceTests(TestCase):
         )
 
     def test_a_name_with_only_a_record_is_not_told_an_ingress_forwards_it(self):
-        """The sentence used to come from the only branch there was.
+        """A record-derived origin is not described as an ingress.
 
         A record-derived origin rendered as "ingress forwards to 10.0.0.10"
-        directly beneath an Ingress card reading "Not declared" -- one page
+        directly beneath an Ingress card reading "Not declared": one page
         contradicting itself in two adjacent elements.
         """
 
@@ -339,8 +333,10 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        self.assertContains(response, "this name answers at")
-        self.assertNotContains(response, "ingress forwards to")
+        # Where it runs is in Relationships, not a sentence under the cards.
+        self.assertNotContains(response, "The name resolves to")
+        self.assertNotContains(response, "Ingress forwards to")
+        self.assertContains(response, '<th scope="rowgroup" rowspan="1">Runs on</th>')
 
     def test_a_proxied_name_still_says_its_ingress_forwards(self):
         healthy(
@@ -358,14 +354,16 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        self.assertContains(response, "ingress forwards to")
+        # The ingress card says where it forwards; no sentence repeats it.
+        self.assertContains(response, "10.0.0.10:6379")
+        self.assertNotContains(response, "Ingress forwards to")
 
 
 class SurfacesAgreeTests(TestCase):
     """The service page and the machine board must name the same machine.
 
     Both answer "where is this served", from the same declarations, through the
-    same index -- and they answer it in two different functions. Every time one
+    same index, and they answer it in two different functions. Every time one
     of those grew a rule the other did not, a name appeared under one machine on
     its own page and under another, or none, on the board. The rule they share
     is now stated once; this is what notices when only one of them reads it.
@@ -450,7 +448,7 @@ class WiringFaultTests(TestCase):
 
         service = find_service("app.example.test")
 
-        self.assertIn("no declared certificate covers it", " ".join(service.faults))
+        self.assertIn("No declared certificate covers this name", " ".join(service.faults))
         self.assertEqual(service.status, "attention")
 
     def test_two_declarations_of_the_same_kind_contradict_each_other(self):
@@ -600,7 +598,7 @@ class ServiceResolutionTests(TestCase):
         certificate = facet(service, "certificate")
         self.assertTrue(certificate.present)
         self.assertNotIn(
-            "no declared certificate covers it", " ".join(service.faults)
+            "No declared certificate covers this name", " ".join(service.faults)
         )
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
@@ -654,16 +652,17 @@ class ServiceSurfaceTests(TestCase):
         ))
         self.assertEqual(item.status, "attention")
 
-    def test_the_card_counts_services_and_names_the_incomplete_ones(self):
-        card = service_cards()[0]
+    def test_the_estate_card_counts_services_and_names_the_incomplete_ones(self):
+        card = next(card for card in estate_cards() if card["id"] == "hq.estate.services")
 
         self.assertEqual(card["value"], "1")
         self.assertEqual(card["detail"], "1 incompletely wired")
+        self.assertEqual(card["url"], reverse("control_plane:services"))
 
-    def test_no_services_means_no_card(self):
+    def test_no_estate_means_no_card(self):
         ManagedResource.objects.all().delete()
 
-        self.assertEqual(service_cards(), ())
+        self.assertEqual(estate_cards(), ())
         self.assertEqual(service_reading(), {"total": 0, "incomplete": 0})
 
 
@@ -762,6 +761,17 @@ class AliasNavigationTests(TestCase):
     def test_a_real_service_is_not_an_alias(self):
         self.assertEqual(alias_target("example.com"), "")
 
+    def test_a_proxied_record_is_answered_by_its_provider_whatever_its_readout_says(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from control_plane.providers import PROVIDERS
+
+        spec = PROVIDERS["cloudflare.dns_record"]
+        quiet = replace(spec, readout=lambda spec, status: (("Record", "", ""),))
+        with mock.patch.dict(PROVIDERS, {"cloudflare.dns_record": quiet}):
+            self.assertTrue(find_service("example.com").provider_answers)
+
     def test_the_alias_page_goes_to_the_service_rather_than_reporting_nothing(self):
         """It reported "Nothing declared" for a name whose record is healthy."""
 
@@ -813,9 +823,9 @@ class OriginNoteTests(TestCase):
         from .services import Origin, Service
 
         service = Service(
-            hostname="jseverino.com",
+            hostname="example.com",
             facets=(),
-            origin=Origin(address="jseverino.pages.dev"),
+            origin=Origin(address="example.pages.dev"),
         )
 
         self.assertTrue(service.origin_is_news)
@@ -859,7 +869,7 @@ class OriginWordingTests(TestCase):
     def test_something_outside_is_named_rather_than_called_unknown(self):
         from .services import Origin
 
-        origin = Origin(address="jseverino.pages.dev")
+        origin = Origin(address="example.pages.dev")
 
         self.assertTrue(origin.external)
         self.assertEqual(origin.qualifier, "")
@@ -975,7 +985,7 @@ class PortlessOriginTests(TestCase):
 
         from .services import _locate
 
-        origin = _locate("jseverino.pages.dev", ())
+        origin = _locate("example.pages.dev", ())
 
         self.assertTrue(origin.external)
 
@@ -984,26 +994,26 @@ class ParkedNameTests(TestCase):
     """A record that exists is not a name that answers.
 
     Boards ask whether a record is declared and reconciled, and both are true of
-    a name pointed at an address reserved for documentation -- so a parked
+    a name pointed at an address reserved for documentation, so a parked
     domain reads as a working service.
     """
 
     def test_a_documentation_address_is_a_wiring_fault(self):
         from .services import Origin, _points_nowhere
 
-        self.assertIn("reserved", _points_nowhere(Origin(address="192.0.2.1")))
-        self.assertIn("reserved", _points_nowhere(Origin(address="203.0.113.9:443")))
+        self.assertIn("documentation address", _points_nowhere(Origin(address="192.0.2.1")))
+        self.assertIn("documentation address", _points_nowhere(Origin(address="203.0.113.9:443")))
 
     def test_an_unspecified_address_is_too(self):
         from .services import Origin, _points_nowhere
 
-        self.assertIn("reached", _points_nowhere(Origin(address="0.0.0.0")))
+        self.assertIn("not a reachable address", _points_nowhere(Origin(address="0.0.0.0")))
 
     def test_a_real_address_is_not(self):
         from .services import Origin, _points_nowhere
 
         self.assertEqual(_points_nowhere(Origin(address="10.0.0.9:8000")), "")
-        self.assertEqual(_points_nowhere(Origin(address="jseverino.pages.dev")), "")
+        self.assertEqual(_points_nowhere(Origin(address="example.pages.dev")), "")
 
     def test_nothing_routed_is_not_a_parked_name(self):
         from .services import _points_nowhere
@@ -1014,9 +1024,9 @@ class ParkedNameTests(TestCase):
 class LoopbackOriginTests(TestCase):
     """A proxy forwarding to itself still names a machine.
 
-    Terminating TLS and forwarding over loopback is the safer arrangement --
-    the request never crosses a network between the proxy and the thing it
-    serves -- and it made every such service unresolvable: no machine is
+    Terminating TLS and forwarding over loopback is the safer arrangement
+    (the request never crosses a network between the proxy and the thing it
+    serves) and it made every such service unresolvable: no machine is
     declared at 127.0.0.1 because every machine is, so matching by address
     reported "unknown host" for the one hop that never left the box.
     """
@@ -1086,7 +1096,7 @@ class WwwIsTheSameSiteTests(TestCase):
     and two verdicts about one website.
 
     Narrow on purpose. Every other subdomain sharing an address is a different
-    service on one host -- mail and a quiz on one cPanel are not each other --
+    service on one host: mail and a quiz on one cPanel are not each other,
     so the rule is the one prefix that conventionally means the same site.
     """
 
@@ -1129,9 +1139,8 @@ class TlsHqDoesNotOwnTests(TestCase):
 
     An internally signed certificate is signed by a CA that is deliberately
     air-gapped, so HQ cannot own one and never will. Counting only declared
-    certificates reported "no certificate covers this" for names that had been
-    served over TLS the whole time -- and the fix is not to declare something
-    HQ cannot fulfil, but to look at what the proxy is actually serving.
+    certificates would report "no certificate covers this" for names served
+    over TLS, so HQ looks at what the proxy is actually serving.
     """
 
     def a_proxy_serving(self, hostname, certificate=None):
@@ -1159,6 +1168,22 @@ class TlsHqDoesNotOwnTests(TestCase):
             _certificates_in_use()["a-host.example.com"]["name"], "a-host.example.com"
         )
 
+    def test_the_certificate_is_read_through_the_kinds_that_declare_one(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from control_plane.providers import PROVIDERS
+
+        from .services import _certificates_in_use
+
+        self.a_proxy_serving(
+            "a-host.example.com",
+            {"name": "a-host.example.com", "domains": ["a-host.example.com"]},
+        )
+        silent = replace(PROVIDERS["npm.proxy_host"], served_certificate=None)
+        with mock.patch.dict(PROVIDERS, {"npm.proxy_host": silent}):
+            self.assertEqual(_certificates_in_use(), {})
+
     def test_a_proxy_serving_nothing_over_tls_is_not_counted(self):
         from .services import _certificates_in_use
 
@@ -1178,3 +1203,18 @@ class TlsHqDoesNotOwnTests(TestCase):
         held.covering("anything")
         held.covering("anything else")
         self.assertEqual(taken, [1])
+
+
+class ServicePageLinkTests(SimpleTestCase):
+    """A service's own URL is the entity link's, so a wildcard or metadata name has none."""
+
+    def test_a_wildcard_or_metadata_name_has_no_page(self):
+        from .entity_links import entity_link
+        from .services import Service
+
+        self.assertEqual(Service(hostname="*.example.com", facets=()).url, "")
+        self.assertEqual(Service(hostname="_dmarc.example.com", facets=()).url, "")
+        self.assertEqual(
+            Service(hostname="www.example.com", facets=()).url,
+            entity_link("service", "www.example.com").url,
+        )

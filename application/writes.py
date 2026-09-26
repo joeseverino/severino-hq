@@ -1,6 +1,6 @@
 """Form views whose write is one application service call.
 
-The read side of a list page is already declarative -- a view names its filters
+The read side of a list page is already declarative: a view names its filters
 and sorts and ``TableListMixin`` derives the rest. The write side was not: every
 create, update and delete in every domain restated the same five steps by hand,
 so the same five steps could drift five ways, and a plugin adding a sixth domain
@@ -9,7 +9,7 @@ had nothing to inherit.
 The steps never varied. Build a command from the cleaned data, call the service
 with a web principal, reload the record the service names, say what happened,
 and go to it. What varies is only which service, which record, and what the
-thing is called -- so those are what a view declares here.
+thing is called, so those are what a view declares here.
 
 Reloading is deliberate rather than wasteful. Services return serialisable
 results because the API and the MCP share them; a Django view needs a model
@@ -52,7 +52,7 @@ class ServiceWriteMixin:
         The model attribute carrying identity, e.g. ``"slug"`` or ``"pk"``.
     ``identity_result_key``
         That same identity's key inside the result, when it is spelled
-        differently there -- ``pk`` on the model is ``id`` in the payload.
+        differently there: ``pk`` on the model is ``id`` in the payload.
         Defaults to ``identity_attr``.
     ``identity_kwarg``
         The keyword naming the record being amended, e.g. ``"current_slug"``.
@@ -61,7 +61,7 @@ class ServiceWriteMixin:
         What to call the thing in a message, e.g. ``"Content item"``.
 
     Declared here as a contract and not as attributes. A placeholder value that
-    is never correct -- an empty noun, an empty result key -- collides with the
+    is never correct (an empty noun, an empty result key) collides with the
     real one on whichever base supplies it, so which wins depends on the order
     the bases were written in and reordering them breaks the view silently. It
     also turns "forgot to set this" into a message reading "“Ada” created" with
@@ -158,6 +158,18 @@ class ServiceDeleteMixin(ServiceWriteMixin):
     time there is something to announce the record is gone.
     """
 
+    def get_context_data(self, **kwargs):
+        # What confirm_page.html needs: one button that posts here, and a way
+        # back to the record being deleted.
+        context = super().get_context_data(**kwargs)
+        back = getattr(self.object, "get_absolute_url", None)
+        context["confirm"] = {
+            "url": self.request.path,
+            "label": "Delete",
+            "cancel_url": back() if back else self.success_url,
+        }
+        return context
+
     def form_valid(self, form):
         identity = self.current_identity()
         result = self.service(
@@ -176,15 +188,15 @@ class CommandFormMixin:
 
     The three mixins above cover a record with a URL of its own: create it,
     amend it, delete it, go to it. Plugins mostly do not have that shape. They
-    have a *command* -- adjust a threshold, open a period, correct a recorded
-    value -- posted from a page that then shows itself again.
+    have a *command* (adjust a threshold, open a period, correct a recorded
+    value) posted from a page that then shows itself again.
 
     That shape repeated too, and identically: build a command, call the service
     with a web principal, turn the domain's refusal into a form error rather
     than a traceback, say what happened, redirect somewhere fixed. The fourth
     step is the one worth sharing. A service that raises ``ValueError`` for
     "you cannot do that yet" is reporting a domain rule, and a rule belongs on
-    the form beside the field it concerns -- not on a 500 page.
+    the form beside the field it concerns, not on a 500 page.
 
     Subclasses declare ``service`` (as a ``staticmethod``), ``command`` (the
     command class, if the cleaned data maps straight onto one), ``success_url_name``

@@ -136,8 +136,15 @@ def documentation_status() -> dict[str, Any]:
     }
 
 
-def recent_activity(*, limit: int = 25) -> dict[str, Any]:
-    """Return stable audit summaries without free-form metadata payloads."""
+def recent_activity(*, principal, limit: int = 25) -> dict[str, Any]:
+    """Return stable audit summaries without free-form metadata payloads.
+
+    The audit trail is gated apart from baseline reads (``READ_AUDIT_LOG``).
+    """
+
+    from .security import Capability
+
+    principal.require(Capability.READ_AUDIT_LOG)
     items = [
         {
             "id": event.id,
@@ -162,7 +169,7 @@ def change_feed(*, since: int | None = None, limit: int = 100) -> dict[str, Any]
 
     Deliberately thinner than ``recent_activity``: a cache needs to know *what*
     changed, not what it said. Ordered by primary key, the only monotonic
-    column available -- ``created_at`` defaults to ``timezone.now``, so two
+    column available: ``created_at`` defaults to ``timezone.now``, so two
     events written in the same tick would make a timestamp cursor lossy.
 
     ``since=None`` is "I have nothing yet": it returns the current head and no

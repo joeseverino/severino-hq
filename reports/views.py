@@ -12,6 +12,7 @@ from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
+from application.pages import PageMixin
 from assets.models import Asset
 from content.models import ContentItem
 from core.audit import record_event
@@ -23,8 +24,9 @@ from projects.models import Project
 from . import exports as exporters
 
 
-class ReportsView(LoginRequiredMixin, TemplateView):
+class ReportsView(PageMixin, LoginRequiredMixin, TemplateView):
     template_name = "reports/reports.html"
+    page_title = "Reports"
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -92,8 +94,8 @@ CSV = "text/csv; charset=utf-8"
 class Export:
     """One downloadable report, declared rather than written out.
 
-    Every export did the same four things -- build a body, name a file, record
-    that it was taken, and return it as an attachment -- and differed only in
+    Every export did the same four things (build a body, name a file, record
+    that it was taken, and return it as an attachment) and differed only in
     which builder and which name. Seven view classes stated those differences
     in prose; here they are data, and the four things happen once.
     """
@@ -150,8 +152,8 @@ class ExportView(LoginRequiredMixin, View):
         else:
             raw = request.GET.get("year", "").strip()
             if raw and not raw.isdigit():
-                # Answered rather than ignored. Silently exporting all time --
-                # or this year -- for a request that named neither hands back a
+                # Answered rather than ignored. Silently exporting all time
+                # (or this year) for a request that named neither hands back a
                 # document that is not the one asked for, and nothing says so.
                 return HttpResponseBadRequest("year must be a four-digit year.")
             if raw:

@@ -16,6 +16,7 @@ from expenses.models import Expense
 from projects.models import Project
 from .security import Capability, Principal
 from .projection import iso
+from .ui import counted
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -92,7 +93,10 @@ def _resolve(model, field: str, values: tuple, label: str):
     found = {getattr(record, field) for record in records}
     missing = sorted(set(values) - found)
     if missing:
-        raise NotFoundError(f"Related {label}(s) not found: {', '.join(map(str, missing))}")
+        found_none = counted(
+            len(missing), f"related {label} not found", f"related {label}s not found"
+        )
+        raise NotFoundError(f"{found_none}: {', '.join(map(str, missing))}")
     return records
 
 

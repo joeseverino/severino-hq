@@ -1,4 +1,4 @@
-# Severino HQ — deployment
+# Severino HQ: deployment
 
 Severino HQ is designed for **private, Tailscale-only access** on either:
 
@@ -10,7 +10,7 @@ the Tailscale interface. The public internet never reaches it.
 
 ---
 
-## Option A — Docker on the homelab (recommended)
+## Option A: Docker on the homelab (recommended)
 
 ### A.1 Files
 
@@ -50,7 +50,7 @@ migration; production authentication does not change merely by updating code.
 Production refreshes the validator token AND the full app environment from
 the dedicated 1Password vault with `severino-hq-secrets.service`
 (`scripts/refresh-secrets.sh`). The app env renders from the app-environment
-item into a root-owned file the entrypoint sources — compose has no
+item into a root-owned file the entrypoint sources: compose has no
 `env_file`, and the on-host `.env` holds only the two non-secret
 `*_FILE_HOST` interpolation paths. The renderer's authentication token is a
 host-bound encrypted systemd credential, not an environment-file value. Select
@@ -77,7 +77,7 @@ passwords are never copied into the app-environment item.
 
 One field on the app-environment item, and the only secret HQ holds rather
 than reads. It seals a certificate the operator generated against the offline CA
-and asked HQ to install — the leaf and its key, the same pair that would
+and asked HQ to install: the leaf and its key, the same pair that would
 otherwise be pasted into a provider's web form by hand. Provider credentials are
 unaffected and stay outside the web container.
 
@@ -107,14 +107,20 @@ Create the item. Nothing else. `connection_ref`, `projection` and `env_prefix`
 on the item are what make it one, and the renderer reads them, so no file in
 this repository names any connection.
 
-What kind of thing it is comes from the env prefix — `ADGUARD_*` is AdGuard,
-`PORTAINER_*` is Portainer — unless the item carries a `provider` field, which
+What kind of thing it is comes from the env prefix: `ADGUARD_*` is AdGuard,
+`PORTAINER_*` is Portainer, unless the item carries a `provider` field, which
 overrides it. That field is what lets two of a kind coexist: `PORTAINER_HOME`
 and `PORTAINER_CLOUD` are both `portainer`, and each resource says which it
 uses. It is optional, so an existing vault keeps working untouched.
 
+A connection only observes unless the item carries a `manages` field set to
+`1`. HQ adopts what a sweep finds only through a connection that manages, so a
+deployment that relies on sweeps adopting zones and records sets it on the
+production Cloudflare DNS connection, and on any other connection it adopts
+through. See `docs/DERIVED_FACTS.md`, Adoption.
+
 On each pass the controller probes every connection it was handed and reports
-what answered and what that thing can act on — the machines behind a Portainer,
+what answered and what that thing can act on: the machines behind a Portainer,
 the zones a DNS token may edit. HQ stores the report, not the credential, and
 `/infrastructure/connections/` is that report. Every menu asking "which machine"
 or "which domain" is derived from it, so registering a new VPS with Portainer is
@@ -124,6 +130,42 @@ OAuth probes exchange the injected client credential for a short-lived access
 token, discard that token immediately, and report only safe connection health.
 Neither the client secret nor the access token crosses the controller boundary.
 
+#### Minting observer credentials
+
+Two scripts mint read-only credentials on the operator's machine. Both take the
+bootstrap credential from the environment, never from an argument. Without
+`--print-secret` they print what they would create and create nothing, because
+each provider shows a secret once. With it they create the credential, report
+its id on stderr, and write only the secret to stdout, for piping into the
+connection's item.
+
+```sh
+CLOUDFLARE_BOOTSTRAP_TOKEN=... scripts/mint-cloudflare-token.sh \
+    --account <account-id> --days 90 --allow-ip 192.0.2.0/24 --print-secret
+TAILSCALE_BOOTSTRAP_TOKEN=... scripts/mint-tailscale-client.sh --print-secret
+```
+
+- `mint-cloudflare-token.sh` needs a bootstrap token with API Tokens Write. It
+  resolves the names in `scripts/cloudflare-observer-permissions.txt` to IDs
+  through `GET /user/tokens/permission_groups` and creates a user-owned token
+  (the probe verifies it at `/user/tokens/verify`) with an expiry and optional
+  client IP ranges. A name Cloudflare does not list stops the mint;
+  `--list-groups` prints the current names. The secret is the `cloudflare_api`
+  item's `API_TOKEN`.
+- `mint-tailscale-client.sh` creates an OAuth client (`keyType: client`) through
+  `POST /tailnet/{tailnet}/keys`. The bootstrap credential needs the
+  `oauth_keys` scope: an API access token, or an OAuth client given as
+  `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`. Scopes
+  come from `scripts/tailscale-observer-scopes.txt` and must all be `:read`.
+  OAuth clients do not expire and take no IP restriction. The printed id is the
+  item's `CLIENT_ID`, the secret its `CLIENT_SECRET`. The same scopes can be
+  ticked under Trust credentials in the admin console instead. An observer
+  client cannot approve routes or edit the policy; those need a separate
+  credential with write scopes.
+
+Both lists are the `requires` of every reading for that provider plus
+`control_plane.credential_reads`, and a test fails when they differ.
+
 The controller trusts internal provider TLS through the host trust store or a
 deployment-provided `HQ_CONTROLLER_CA_FILE`. The internal CA certificate
 is not stored in this public repository. Never disable TLS verification.
@@ -131,7 +173,7 @@ is not stored in this public repository. Never disable TLS verification.
 `hq sync` asks the Vault MCP for its complete validated manifest, then submits
 it in one authenticated `hq.sync` Streamable HTTP MCP call over Tailscale. HQ
 validates and commits it in one transaction. No intermediate payload is written
-on homelab-server, and routine synchronization requires no SSH access. What HQ
+on example-host, and routine synchronization requires no SSH access. What HQ
 holds about the infrastructure itself is not synchronized from anywhere: it is
 swept, or declared in HQ.
 
@@ -145,13 +187,13 @@ container never receives the provider environment.
 What it installs is every unit and drop-in under `deploy/systemd`, found by
 walking the directory (`scripts/lib/systemd-units.sh`); `*.example` templates
 are copied into place by hand and never installed. Every shipped timer and path
-is enabled. Adding a unit is adding its file — there is no list to update. The
+is enabled. Adding a unit is adding its file: there is no list to update. The
 daily `severino-hq-script-drift` check compares the same set, byte for byte,
 with `/etc/systemd/system`, and names each file that differs. A drop-in the host
 adds beside a shipped one is the host's and is not compared.
 
 The same activation gate performs an authenticated pull of the live
-`jseverino.com` content index before installing and enabling its persistent
+`example.com` content index before installing and enabling its persistent
 daily timer. Cloudflare Access credentials come from uppercase fields on the
 existing the app-environment item item through the normal app-environment projection;
 there is no second credential registry. A restart cannot lose the schedule:
@@ -179,18 +221,29 @@ Do not use the web application's `CLOUDFLARE_API_TOKEN` for DNS-01. That token
 belongs exclusively to the D1 contact-submission path. DNS-01 uses the separate
 `Cloudflare DNS - HQ Controller` API Credential item in the `Severino HQ
 Production` vault. Its stable `connection_ref` is
-`cloudflare-dns-jseverino`; the controller resolves that reference through
+`cloudflare-dns-example`; the controller resolves that reference through
 `config/controller-connections.json`. The token is restricted to Zone Read and
-DNS Edit for `jseverino.com`, `jseverino.net`, `jseverino.org`, and
-`joeseverino.com`. Controller activation verifies the token and proves all four
+DNS Edit for `example.com`, `example.net`, `example.org`, and
+`example.test`. Controller activation verifies the token and proves all four
 zones are readable without performing a DNS mutation.
 
-Deployment identities are machine-specific SSH keys generated on
-`homelab-server` by `scripts/provision-controller-ssh.sh`. They never enter
-1Password, the repository, the web container, or Joe's Mac keychain. The same
-connection registry emits each target's host, port, remote user, and pinned
-Ed25519 host key; `scripts/controller-ssh.sh` derives strict, batch-only,
-operation-allowlisted SSH invocations from it. It does not accept arbitrary
+Deployment identities are SSH key items in the controller's vault, generated
+by 1Password, so no private key is ever created on or written to a host's disk.
+Each SSH connection names its key item in an `identity` field.
+`refresh-secrets.sh` renders the private half, the public half and a
+`known_hosts` pinned from the connection's Ed25519 host key into the
+controller's secret mount (a tmpfs mounted `noswap`, which the scripts check
+with `findmnt` before rendering), refuses an item whose two halves do not
+match, and installs the set with the controller environment as one generation
+under an exclusive lock that readers take shared. It refuses to run while
+private keys remain in the legacy `secrets/ssh/` directory on disk; the
+operator removes those by hand. The web
+container, the repository and the operator's workstation never hold them.
+Rotating a key is generating a new item, authorizing its public half on the
+target, and pointing the connection's `identity` at it. The same connection
+registry emits each target's host, port and remote user;
+`scripts/controller-ssh.sh` derives strict, batch-only, operation-allowlisted
+SSH invocations from it. It does not accept arbitrary
 remote commands. Authorize each generated `.pub` key with the narrowest
 remote account or forced command available. Renewal stays locked until both
 deployment paths pass non-mutating preflight, deployment, live-certificate
@@ -219,7 +272,7 @@ image but does **not** deploy it.
 Deployment is the composition workflow's job, and it is the only path to
 production. It waits for the host workflow to finish, rebuilds every admitted
 extension onto the new host image, and deploys that. Two deploy paths existed
-once — the host's and each extension's — and whichever ran last won, so a host
+once (the host's and each extension's) and whichever ran last won, so a host
 release silently dropped every extension out of production.
 `scripts/deploy-image.sh` stops reconciliation, records the currently running
 image and the compose file it was started with, starts the replacement under the
@@ -262,15 +315,15 @@ Keep `satisfy_any` and proxy authorization disabled. As defense in depth, limit
 host ingress for 443 and direct MCP port 8000 to `tailscale0` (plus loopback
 where needed), and ensure no router forwards either port publicly.
 
-### A.5 Tailscale-only exposure — pick one
+### A.5 Tailscale-only exposure: pick one
 
 Two common patterns:
 
-1. **Tailscale on the host, Caddy on the host** — install Tailscale on the
+1. **Tailscale on the host, Caddy on the host**: install Tailscale on the
    homelab host, then run Caddy on the host listening on the host's Tailscale
    IP. Caddy proxies to `127.0.0.1:8000`. This is the simplest.
 
-2. **Tailscale sidecar container** — run a `tailscale/tailscale` container in
+2. **Tailscale sidecar container**: run a `tailscale/tailscale` container in
    the same Compose project, set `TS_HOSTNAME=severino-hq`, share its network
    namespace with the app via `network_mode: "service:tailscale"`, and let
    Tailscale Serve handle TLS:
@@ -297,7 +350,7 @@ composition workflow runs on a schedule and rebuilds when the extension wheel
 digests change. See [`PLUGINS.md`](PLUGINS.md#composition). To deploy an
 extension immediately, run that workflow by hand (`workflow_dispatch`).
 
-> **`hq deploy` is legacy — do not run it.** It predates composition and
+> **`hq deploy` is legacy: do not run it.** It predates composition and
 > deploys the *host-only* image, which takes every extension off production
 > until the next composition. To rebuild by hand, run **Compose and deploy
 > extensions**; to roll back, re-run it at the commit you want.
@@ -320,7 +373,7 @@ media, and exports. Off-host replication remains an explicit operator duty.
 
 ---
 
-## Option B — systemd + Caddy/Nginx on a VPS
+## Option B: systemd + Caddy/Nginx on a VPS
 
 ### B.1 OS user, directories
 
@@ -401,7 +454,7 @@ sudo systemctl status severino-hq
 ### B.5 Tailscale-only Caddy
 
 Find your Tailscale IP (`tailscale ip -4`) or magic-DNS name. Bind Caddy to
-the Tailscale interface only — for example `100.x.y.z:443`:
+the Tailscale interface only: for example `100.x.y.z:443`:
 
 ```caddy
 severino-hq.<your-tailnet>.ts.net {
@@ -468,11 +521,11 @@ event.
 
 ## Common gotchas
 
-- **502 from Caddy/Nginx** — the app isn't running on `127.0.0.1:8000`.
+- **502 from Caddy/Nginx**: the app isn't running on `127.0.0.1:8000`.
   Check `systemctl status severino-hq` or `docker compose logs app`.
-- **CSRF errors after sign-in** — your `DJANGO_CSRF_TRUSTED_ORIGINS` doesn't
+- **CSRF errors after sign-in**: your `DJANGO_CSRF_TRUSTED_ORIGINS` doesn't
   include the full origin (scheme + host).
-- **`SECRET_KEY must be set`** — the env file isn't being read by the unit.
+- **`SECRET_KEY must be set`**: the env file isn't being read by the unit.
   Check `EnvironmentFile=` and that the file is readable by the service user.
-- **Receipt downloads 404** — `SEVERINO_MEDIA_ROOT` doesn't match where the
+- **Receipt downloads 404**: `SEVERINO_MEDIA_ROOT` doesn't match where the
   file was originally written. Make sure the value is stable across restarts.

@@ -1,30 +1,14 @@
-{% extends "base.html" %}
-{% block title %}Action items{% endblock %}
-{% block content %}
-<header class="page-head">
-  <div><h1>Action items</h1></div>
-  {% if action_items %}
-    <div class="page-actions">
-      <form method="post" action="{% url 'action_items_read' %}">
-        {% csrf_token %}
-        {% for item in action_items %}<input type="hidden" name="key" value="{{ item.key }}">{% endfor %}
-        <input type="hidden" name="read" value="1">
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit" class="btn">Mark all read</button>
-      </form>
-    </div>
-  {% endif %}
-</header>
-
+{% extends "page.html" %}
+{% block page %}
 <form class="filter-bar" method="get" role="search">
   <input type="search" name="q" value="{{ action_query }}" placeholder="Filter action items" aria-label="Filter action items">
   <select name="status" aria-label="Severity">
-    <option value="">Every severity</option>
+    <option value="">All severities</option>
     <option value="serious"{% if action_status == "serious" %} selected{% endif %}>Serious</option>
     <option value="attention"{% if action_status == "attention" %} selected{% endif %}>Attention</option>
   </select>
   <select name="source" aria-label="Source">
-    <option value="">Every source</option>
+    <option value="">All sources</option>
     {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
   </select>
   <button class="btn" type="submit">Apply</button>

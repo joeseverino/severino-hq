@@ -1,4 +1,4 @@
-# Severino HQ — security checklist
+# Severino HQ: security checklist
 
 ## Posture
 
@@ -6,7 +6,7 @@
 - Tailscale-only network exposure. No path from the public internet.
 - Tailnet-only is stated by the application, not only inherited from the
   network. The shipped `SEVERINO_TRUSTED_NETWORKS` default is Tailscale's IPv4
-  and IPv6 ranges plus loopback — deliberately **not** RFC 1918. A LAN holds
+  and IPv6 ranges plus loopback: deliberately **not** RFC 1918. A LAN holds
   printers, televisions and guests; it is not a boundary anyone maintains, and
   a host firewall that is the only thing enforcing the rule is one `ufw
   disable` from silently admitting all of it.
@@ -56,7 +56,7 @@
   Application JavaScript is external; a regression test rejects inline scripts
   and event handlers before they can weaken the policy.
 - The policy also requires Trusted Types, so assigning a string to `innerHTML`,
-  `outerHTML`, `srcdoc` or a script URL throws instead of parsing — a DOM-based
+  `outerHTML`, `srcdoc` or a script URL throws instead of parsing: a DOM-based
   XSS sink cannot execute even if one is introduced, and `trusted-types 'none'`
   means no policy can be declared to opt back out. It costs nothing today
   because every dynamic node HQ builds uses `createElement`/`textContent`.
@@ -65,7 +65,7 @@
   else; a test asserts the relaxation stays that narrow.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, the blocked URI and
-  the reporting address to the audit log — bounded body size, truncated fields,
+  the reporting address to the audit log: bounded body size, truncated fields,
   and one row per distinct complaint per hour. It is the only way HQ learns
   that a directive enforced in someone else's browser has stopped holding.
 - Django 6.1's secure default rejects legacy cookies using the ambiguous
@@ -78,7 +78,7 @@
 - Receipt files:
   - Stored at `SEVERINO_MEDIA_ROOT`, **outside the app code directory**.
   - Filenames are randomized (UUID), not user-supplied.
-  - Storage's `base_url` is `None` — there is no public URL for these files.
+  - Storage's `base_url` is `None`: there is no public URL for these files.
   - The `receipts:file` view requires authentication, streams the file, sets
     `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`,
     and audits the view.
@@ -89,6 +89,11 @@
   authenticated caller's refusal gets its own row; rejected credentials are
   counted per surface, source and reason per minute. Credentials are never
   recorded.
+- Routine machine events (a connection probed by a sweep) are deleted after
+  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `prune_audit`
+  timer. Only the types listed in `core.audit.ROUTINE_EVENTS` are eligible, and
+  only when no user is attached. Logins, refusals, settings changes, deletions
+  and every change to a resource or credential are kept indefinitely.
 - Request-user attribution uses an ASGI-safe context variable, preventing one
   concurrent request's identity from leaking into another request's audit row.
 - Server-generated request IDs connect response headers to structured JSON
@@ -176,7 +181,7 @@
 - [ ] Restore drill done once, and documented locally.
 - [ ] Superuser created via `manage.py createsuperuser`; no shared accounts.
 - [ ] If SSO is enabled, Pocket ID has an `admins` group and the HQ OIDC
-      client callback is `https://hq.jseverino.com/oidc/callback/`.
+      client callback is `https://hq.example.com/oidc/callback/`.
 - [ ] If SSO is enabled, `SEVERINO_OIDC_ALLOWED_GROUPS=admins` and
       `SEVERINO_OIDC_CLIENT_SECRET` is delivered through the rendered app
       environment file, not the compose interpolation `.env`.
@@ -226,11 +231,11 @@
       `SEVERINO_MCP_ENABLE_DELETES` are enabled only for the capabilities the
       MCP service account actually needs.
 - [ ] The DNS-01 token is a distinct `Cloudflare DNS - HQ Controller` item with
-      `connection_ref=cloudflare-dns-jseverino`; it has only Zone Read and DNS
+      `connection_ref=cloudflare-dns-example`; it has only Zone Read and DNS
       Edit on the four declared Severino zones and is not the D1 application
       token.
 - [ ] No personal SSH private key is rendered for the controller. Dedicated
-      Ed25519 identities are generated on `homelab-server`, remote host keys
+      Ed25519 identities are generated on `example-host`, remote host keys
       are pinned in the connection registry, and each public key is authorized
       only for its declared target and deployment role.
 

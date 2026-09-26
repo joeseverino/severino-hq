@@ -17,6 +17,7 @@ from analytics.models import AnalyticsSite, RumDaily
 from control_plane.models import ManagedResource
 
 from .machine_context import SECTIONS, sections_for
+from .ui import MISSING
 
 
 def a_machine(*hostnames, resources=(), name="probe", declaration="", device=""):
@@ -74,13 +75,29 @@ class NamesTests(TestCase):
         self.assertEqual(row[0].text, "site.test")
         self.assertEqual(row[2].text, "site-dns")  # the DNS column
 
+    def test_columns_follow_the_facet_registry_by_id(self):
+        from unittest import mock
+
+        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        relabelled = (
+            ("runtime", "Runtime"),
+            ("dns", "Resolver"),
+            ("proxy", "Ingress"),
+            ("certificate", "Certificate"),
+        )
+        with mock.patch("control_plane.providers.SERVICE_FACETS", relabelled):
+            section = by_id(a_machine("site.test"))["names"]
+
+        self.assertEqual(section.columns[2], "Resolver")
+        self.assertEqual(section.records[0][2].text, "site-dns")
+
     def test_a_name_nothing_supplies_says_so_per_column(self):
-        """Blank is "nothing supplies this" — not unhealthy, not unmeasured."""
+        """Blank is "nothing supplies this", not unhealthy, not unmeasured."""
 
         row = row_for(a_machine("bare.test"), "bare.test")
 
         for cell in row[1:5]:
-            self.assertEqual(cell.text, "—")
+            self.assertEqual(cell.text, MISSING)
             self.assertTrue(cell.muted)
 
     def test_traffic_rides_along_and_names_absence_as_absence(self):
@@ -148,7 +165,7 @@ class IdentityTests(TestCase):
         rows = by_id(a_machine(name="box", declaration="box", device="box-2"))["identity"].records
 
         self.assertEqual([row[0].text for row in rows], ["box", "box-2"])
-        self.assertEqual([row[1].text for row in rows], ["machine", "tailscale.device"])
+        self.assertEqual([row[1].text for row in rows], ["Machine", "Tailnet device"])
 
     def test_a_suffixed_key_says_why_it_is_suffixed(self):
         """The question this band exists to stop anyone asking twice."""

@@ -13,7 +13,12 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.contrib.humanize.templatetags.humanize import intcomma
+from django.template.defaultfilters import floatformat
+from django.urls import reverse, reverse_lazy
+from django.utils.formats import date_format
+from django.utils.html import format_html
+from django.utils.timezone import localtime
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -34,7 +39,8 @@ from application.receipts import (
 )
 from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
-from application.tables import TableListMixin, TableSort, TableToggle
+from application.pages import PageAction, PageMixin
+from application.tables import TableColumn, TableListMixin, TableToggle
 
 from expenses.models import Expense
 from .forms import ReceiptUploadForm
@@ -45,27 +51,32 @@ from .validation import (
 from .models import Receipt
 
 
-class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
+RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
+PRIVATE_FILES = "Files are private. Only signed-in users can open them."
+
+
+class ReceiptListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     model = Receipt
     template_name = "receipts/receipt_list.html"
-    context_object_name = "receipts_list"
     paginate_by = 25
+    page_title = "Receipts"
+    page_lede = PRIVATE_FILES
     table_search_scope = "receipts"
-    table_sorts = (
-        TableSort("-uploaded_at", "Recently uploaded", "-uploaded_at"),
-        TableSort("-date", "Newest receipt date", "-date"),
-        TableSort("date", "Oldest receipt date", "date"),
-        TableSort("vendor", "Vendor A–Z", "vendor"),
-        TableSort("-vendor", "Vendor Z–A", "-vendor"),
-        TableSort("-amount", "Highest amount", "-amount"),
-        TableSort("amount", "Lowest amount", "amount"),
-        TableSort("original_filename", "Filename A–Z", "original_filename"),
-        TableSort("-original_filename", "Filename Z–A", "-original_filename"),
-        TableSort("uploaded_at", "Least recently uploaded", "uploaded_at"),
+    table_selectable = True
+    table_columns = (
+        TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
+        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
+        TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
+        TableColumn("Amount", "amount", "Lowest amount", "Highest amount"),
+        TableColumn("Filename", "original_filename", "Filename A–Z", "Filename Z–A"),
+        TableColumn("Links"),
     )
     table_toggles = (TableToggle("unlinked", "Unlinked only"),)
     table_default_sort = "-uploaded_at"
     table_search_placeholder = "Search vendors, filenames, and notes…"
+
+    def get_page_actions(self):
+        return (PageAction("Upload receipt", reverse("receipts:create"), primary=True),)
 
     def get_queryset(self):
         qs = Receipt.objects.select_related("related_expense", "related_asset")
@@ -74,20 +85,87 @@ class ReceiptListView(TableListMixin, LoginRequiredMixin, ListView):
         return self.apply_table_query(qs)
 
 
-class ReceiptDetailView(LoginRequiredMixin, DetailView):
+def dollars(amount) -> str:
+    return f"${intcomma(floatformat(amount, 2))}"
+
+
+class ReceiptPage(PageMixin):
+    """A page about one receipt, or a new one: its trail runs back to the list."""
+
+    def get_receipt(self):
+        return getattr(self, "object", None)
+
+    def get_page_trail(self):
+        receipt = self.get_receipt()
+        if receipt is None:
+            return (RECEIPTS_TRAIL,)
+        return (RECEIPTS_TRAIL, (str(receipt), receipt.get_absolute_url()))
+
+
+class ReceiptDetailView(PageMixin, LoginRequiredMixin, DetailView):
     model = Receipt
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
 
+    def get_page_title(self):
+        return self.object.vendor or "Receipt"
 
-class ReceiptMatchView(LoginRequiredMixin, TemplateView):
+    def get_page_lede(self):
+        receipt = self.object
+        return (
+            f"{receipt.original_filename or 'file'} · "
+            f"uploaded {date_format(localtime(receipt.uploaded_at), 'DATETIME_FORMAT')}"
+        )
+
+    def get_page_trail(self):
+        return (RECEIPTS_TRAIL,)
+
+    def get_page_actions(self):
+        receipt = self.object
+        actions = []
+        if not receipt.related_expense and not receipt.related_asset:
+            actions.append(
+                PageAction(
+                    "Link to expense",
+                    reverse("receipts:match", args=[receipt.pk]),
+                    primary=True,
+                )
+            )
+        actions += [
+            PageAction("Download file", reverse("receipts:file", args=[receipt.pk])),
+            PageAction("Edit", reverse("receipts:edit", args=[receipt.pk])),
+            PageAction(
+                "Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True
+            ),
+        ]
+        return tuple(actions)
+
+
+class ReceiptMatchView(ReceiptPage, LoginRequiredMixin, TemplateView):
     """Suggest potential Expense links for an unlinked receipt."""
 
     template_name = "receipts/receipt_match.html"
+    page_title = "Link receipt to expense"
+
+    def get_receipt(self):
+        if not hasattr(self, "receipt"):
+            self.receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
+        return self.receipt
+
+    def get_page_lede(self):
+        receipt = self.get_receipt()
+        return format_html(
+            "<strong>{}</strong> · {}",
+            receipt.vendor or "(Unknown vendor)",
+            dollars(receipt.amount),
+        )
+
+    def get_page_actions(self):
+        return (PageAction("Cancel", self.get_receipt().get_absolute_url()),)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
+        receipt = self.get_receipt()
 
         # Only suggest if it's currently unlinked.
         if receipt.related_expense or receipt.related_asset:
@@ -138,7 +216,9 @@ class ReceiptMatchView(LoginRequiredMixin, TemplateView):
         return redirect(receipt.get_absolute_url())
 
 
-class ReceiptCreateView(LoginRequiredMixin, CreateView):
+class ReceiptCreateView(ReceiptPage, LoginRequiredMixin, CreateView):
+    page_title = "Upload receipt"
+    page_lede = PRIVATE_FILES
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
@@ -155,7 +235,9 @@ class ReceiptCreateView(LoginRequiredMixin, CreateView):
         return redirect(self.object.get_absolute_url())
 
 
-class ReceiptUpdateView(LoginRequiredMixin, UpdateView):
+class ReceiptUpdateView(ReceiptPage, LoginRequiredMixin, UpdateView):
+    page_title = "Edit receipt"
+    page_lede = PRIVATE_FILES
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
@@ -172,7 +254,8 @@ class ReceiptUpdateView(LoginRequiredMixin, UpdateView):
         return redirect(self.object.get_absolute_url())
 
 
-class ReceiptDeleteView(LoginRequiredMixin, DeleteView):
+class ReceiptDeleteView(ReceiptPage, LoginRequiredMixin, DeleteView):
+    page_title = "Delete receipt?"
     model = Receipt
     template_name = "receipts/receipt_confirm_delete.html"
     success_url = reverse_lazy("receipts:list")

@@ -1,14 +1,14 @@
 """The one answer an ``invalid_input`` refusal carries: its message and details.
 
-Every validation failure an adapter answers with -- a Pydantic command or query,
-a Django model's ``full_clean``, a field the command does not have -- is told
+Every validation failure an adapter answers with (a Pydantic command or query,
+a Django model's ``full_clean``, a field the command does not have) is told
 to the caller the same way: which field, and why, in ``error.message``, with the
 structured list in ``details``. The message is for a caller (often an agent)
 that reads only the sentence.
 
 Neither carries a submitted value. A payload can hold a secret, and an error
-travels further than the request did -- into logs, the audit trail, idempotency
-records and agent transcripts -- while the caller already has its own input. So
+travels further than the request did (into logs, the audit trail, idempotency
+records and agent transcripts) while the caller already has its own input. So
 both are built from field names, error types, expected types and declared
 choices only:
 
@@ -117,7 +117,7 @@ def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:
 
 
 def _message(subject: str, problems: list[tuple[str, str]]) -> str:
-    """``subject: field reason; field reason`` -- the one sentence for all of them."""
+    """``subject: field reason; field reason``: the one sentence for all of them."""
 
     # A problem with no field is about the input as a whole.
     named = [f"{where or 'the input'} {reason}" for where, reason in problems]

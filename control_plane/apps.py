@@ -10,7 +10,7 @@ class ControlPlaneConfig(AppConfig):
         from application.approvals import AUDIT_LABEL as APPROVAL_AUDIT_LABEL
         from core.audit import register_audit
 
-        from .models import ApprovalRequest, ManagedResource, OperationRequest
+        from .models import ApprovalRequest, ManagedResource, NotManaged, OperationRequest
 
         register_audit(
             ManagedResource,
@@ -18,9 +18,21 @@ class ControlPlaneConfig(AppConfig):
             # A sweep stamps this on every declaration it confirms. That is HQ
             # reporting that it looked, not the world reporting that it moved.
             observation=("last_observed_at",),
+            connection=_resource_connection,
         )
-        register_audit(OperationRequest, "Infrastructure operation")
-        # Audited like everything else, and for the reason the whole feature
-        # exists: who asked for a held change, who agreed to it and when are
-        # exactly the facts an incident review has to be able to read back.
+        register_audit(
+            OperationRequest,
+            "Infrastructure operation",
+            connection=lambda operation: _resource_connection(operation.resource),
+        )
+        # An operator's choice that a record stays unmanaged, and its reversal.
+        register_audit(NotManaged, "Not managed")
+        # Who asked for a held change, who agreed to it and when.
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL)
+
+
+def _resource_connection(resource) -> str:
+    """The connection a resource's work goes through, from its spec."""
+
+    spec = resource.spec if isinstance(resource.spec, dict) else {}
+    return str(spec.get("connection_ref", "") or "")

@@ -27,7 +27,7 @@ fi
 # Hard failure rather than a fallback: the units name that path, so a host
 # without the tree would fail to start them anyway, and failing here says why.
 if [ ! -x /usr/local/sbin/severino-hq-sync-scripts ]; then
-    echo "severino-hq-sync-scripts is missing — run fix-root-ownership.sh --apply on this host first." >&2
+    echo "severino-hq-sync-scripts is missing: run fix-root-ownership.sh --apply on this host first." >&2
     exit 1
 fi
 /usr/local/sbin/severino-hq-sync-scripts
@@ -39,11 +39,7 @@ fi
 /usr/local/lib/severino-hq/scripts/install-cosign.sh
 
 # What is installed is what the repository ships: every unit and drop-in under
-# deploy/systemd, found by walking it. This used to be a list, and a list is a
-# record of the units that existed the day it was written -- the finance and
-# drift units and the secrets timer were never on it, and the drop-ins were not
-# either, so the host kept whatever copy it had first been given while the
-# repository moved on. A unit added to deploy/systemd is now installed, verified
+# deploy/systemd, found by walking it. A unit added there is installed, verified
 # and, if it is a timer or path, enabled, with nothing here edited.
 shipped="$(units_shipped "${unit_dir}")"
 # The secrets unit and its drop-ins go first and alone: the render has to run as
@@ -102,7 +98,6 @@ for f in ${render_units}; do
 done
 systemctl daemon-reload
 systemctl start "${render_unit}"
-"${lib_dir}/scripts/provision-controller-ssh.sh"
 controller_require_environment
 
 # These commands intentionally return rich machine JSON: locally useful,

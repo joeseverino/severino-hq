@@ -1,21 +1,18 @@
-{% extends "base.html" %}
-{% block title %}{% if approval %}Approval{% else %}Audit event{% endif %}{% endblock %}
-{% block content %}
+{% extends "page.html" %}
+{% block page %}
 {% if approval %}
-{% include "partials/_page_head.html" with title="Approval" %}
 {% include "partials/approval_card.html" with entry=approval %}
 {% else %}
-{% include "partials/_page_head.html" with title="Audit event" %}
 
 <section class="card">
-  <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.object_type }}{% endif %}</h2></div>
+  <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.type_label }}{% endif %}</h2></div>
   <div class="table-scroll">
     <table class="data-table compact-table">
       <tbody>
         <tr><th>When</th><td>{{ event.created_at|date:"M j, Y H:i:s" }}</td></tr>
         <tr><th>Who</th><td>{{ event.actor_label }}</td></tr>
         <tr><th>Action</th><td>{{ event.get_action_display }}</td></tr>
-        {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.object_type }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
+        {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.type_label }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
         {% if event.operation_id %}<tr><th>Operation</th><td><code>{{ event.operation_id }}</code></td></tr>{% endif %}
         {% if event.message %}<tr><th>Message</th><td>{{ event.message }}</td></tr>{% endif %}
       </tbody>
@@ -33,8 +30,8 @@
         {% for change in changes %}
         <tr>
           <th>{{ change.field }}</th>
-          <td>{{ change.before|default_if_none:"—" }}</td>
-          <td>{{ change.after|default_if_none:"—" }}</td>
+          <td>{{ change.before|or_empty }}</td>
+          <td>{{ change.after|or_empty }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -71,8 +68,8 @@
         <tr>
           <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"H:i:s" }}</a></td>
           <td>{{ row.get_action_display }}</td>
-          <td>{{ row.object_repr|default:row.object_type|default:"—" }}</td>
-          <td>{{ row.message|default:"—"|truncatewords:12 }}</td>
+          <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
+          <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -93,7 +90,7 @@
           <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|date:"M j, H:i" }}</a></td>
           <td>{{ row.get_action_display }}</td>
           <td>{{ row.actor_label }}</td>
-          <td>{{ row.message|default:"—"|truncatewords:12 }}</td>
+          <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -101,6 +98,4 @@
   </div>
 </section>
 {% endif %}
-
-<p class="section-foot"><a href="{% url 'core:audit_list' %}">Back to the audit log &rarr;</a></p>
 {% endblock %}

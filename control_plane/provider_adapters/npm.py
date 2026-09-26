@@ -7,12 +7,60 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from core.network import split_host_port
+
+from ..names import normalized_hostname
 from .contracts import (
     ControllerIntegrationAdapter,
+    IngressPolicy,
     ProviderError,
     ProviderResult,
     ProviderRuntime,
+    ServedCertificate,
 )
+
+# The corroborating headers NPM adds beside X-Forwarded-For: client, then scheme.
+FORWARDING_HEADERS = ("X-Real-IP", "X-Forwarded-Scheme")
+
+
+def _names(record: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name in (normalized_hostname(item) for item in record.get("domain_names") or ())
+        if name
+    )
+
+
+def ingress_policy(record: dict[str, Any]) -> IngressPolicy:
+    """A proxy host record's access list, in provider-neutral terms."""
+
+    policy = record.get("access_policy")
+    if not isinstance(policy, dict):
+        return IngressPolicy(_names(record), bool(record.get("access_list_id")))
+    clients = policy.get("clients")
+    count = policy.get("authorization_count")
+    return IngressPolicy(
+        hostnames=_names(record),
+        restricted=bool(record.get("access_list_id")),
+        rules=tuple(
+            (str(rule.get("directive", "")).lower(), str(rule.get("address", "")).lower())
+            for rule in (clients if isinstance(clients, list) else ())
+            if isinstance(rule, dict)
+        ),
+        implicit_deny=policy.get("implicit_deny") is True,
+        satisfy_any=policy.get("satisfy_any") is not False,
+        passes_auth=policy.get("pass_auth") is not False,
+        authorizations=count if isinstance(count, int) and not isinstance(count, bool) else None,
+    )
+
+
+def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
+    """The certificate a proxy host record serves its names with, when it names one."""
+
+    certificate = record.get("certificate") or {}
+    if not isinstance(certificate, dict) or not certificate.get("name"):
+        return None
+    return ServedCertificate(_names(record), certificate)
 
 
 def api_url(configured_url: str) -> str:
@@ -105,8 +153,8 @@ def reconcile(
         current = matches[0]
         if spec["force_ssl"] and not current.get("certificate_id"):
             raise ProviderError(
-                "NPM host requires TLS but has no certificate; attach the managed "
-                "certificate before reconciliation."
+                "The proxy host forces HTTPS but has no certificate. Attach "
+                "one, then reconcile."
             )
         if not desired["certificate_id"]:
             desired["certificate_id"] = current.get("certificate_id", 0)
@@ -123,7 +171,7 @@ def reconcile(
     else:
         if spec["force_ssl"] and not desired["certificate_id"]:
             raise ProviderError(
-                "Creating an HTTPS NPM host requires a resolved certificate ID."
+                "An HTTPS proxy host needs an issued certificate. None is set yet."
             )
         if apply:
             runtime.request(
@@ -274,28 +322,28 @@ def build_adapter(*, provider_model, provider_spec, applies):
         domain_names: list[str] = Field(
             min_length=1,
             title="Hostnames",
-            description="One per line. Every name this proxy should answer for.",
+            description="One per line.",
         )
         forward_scheme: Literal["http", "https"] = Field(
             title="Reach it over",
-            description="How the proxy talks to your service, not how visitors do.",
+            description="How the proxy connects to your service.",
         )
         forward_host: str = Field(
             min_length=1,
             max_length=255,
             title="Send traffic to",
-            description="The address of the service itself, usually an internal IP.",
+            description="The service's address, usually an internal IP.",
         )
         forward_port: int = Field(ge=1, le=65535, title="Port")
         certificate_resource: str = Field(
             default="",
             title="Certificate",
-            description="Which certificate secures these names. Required when forcing HTTPS, which Nginx Proxy Manager cannot do without one.",
+            description="Secures these names. Required when Force HTTPS is on.",
         )
         force_ssl: bool = Field(
             default=True,
             title="Force HTTPS",
-            description="Redirect anyone arriving over plain HTTP.",
+            description="Redirect HTTP to HTTPS.",
         )
         http2: bool = Field(default=True, title="HTTP/2")
         websocket: bool = Field(
@@ -318,7 +366,7 @@ def build_adapter(*, provider_model, provider_spec, applies):
         advanced_config: str = Field(
             default="",
             title="Extra nginx configuration",
-            description="Passed through as-is. Leave blank unless you need it.",
+            description="Passed through as-is. Usually blank.",
         )
         hsts_enabled: bool = False
         hsts_subdomains: bool = False
@@ -363,7 +411,7 @@ def build_adapter(*, provider_model, provider_spec, applies):
         }
 
     def seed(context):
-        host, _, port = (context.origin_address or context.origin).rpartition(":")
+        host, port = split_host_port(context.origin_address or context.origin)
         result = {"domain_names": [context.hostname]}
         if host and port.isdigit():
             result.update(forward_host=host, forward_port=int(port))
@@ -373,7 +421,7 @@ def build_adapter(*, provider_model, provider_spec, applies):
 
     definition = provider_spec(
         "npm.proxy_host",
-        "Sends a hostname to something running on your network, over HTTPS. Created in Nginx Proxy Manager if it is not there yet.",
+        "Forwards a hostname to a service on your network over HTTPS. HQ creates it in Nginx Proxy Manager if it does not exist.",
         NPMProxyHostSpec,
         ResolvedNPMProxyHostSpec,
         resolve,
@@ -381,7 +429,7 @@ def build_adapter(*, provider_model, provider_spec, applies):
         label="Proxy host",
         connection_providers=("npm",),
         removal_note=lambda spec: (
-            "Every name this answers for stops being served: "
+            "These names stop being served: "
             + ", ".join(spec.get("domain_names", ()))
             + "."
         ),
@@ -401,7 +449,11 @@ def build_adapter(*, provider_model, provider_spec, applies):
             "serving",
         ),
         facet="proxy",
+        ingress_policy=ingress_policy,
+        served_certificate=served_certificate,
+        forwarding_headers=FORWARDING_HEADERS,
         hostnames=lambda spec: tuple(spec["domain_names"]),
+        certificate=lambda spec: str(spec.get("certificate_resource", "") or ""),
         origin=lambda spec: f"{spec['forward_host']}:{spec['forward_port']}",
         seed=seed,
         from_record=from_record,

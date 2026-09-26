@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% comment %}
+The frame every page shares. A view supplies `page` (application.pages); this
+draws its trail, head, actions and section navigation, and the page fills only
+`{% block page %}`.
+{% endcomment %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block content %}
+{% include "partials/_page_head.html" %}
+{% if page.navigation %}{% include "partials/_page_navigation.html" with navigation=page.navigation %}{% endif %}
+{% block page %}{% endblock %}
+{% endblock %}

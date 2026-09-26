@@ -37,7 +37,7 @@ def receipt_upload_path(instance, filename: str) -> str:
 class PrivateReceiptStorage(FileSystemStorage):
     """File storage rooted at SEVERINO_MEDIA_ROOT.
 
-    ``base_url`` is intentionally None so calling ``.url`` raises — there is
+    ``base_url`` is intentionally None so calling ``.url`` raises: there is
     no public URL for these files.
     """
 

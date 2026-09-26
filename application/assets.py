@@ -16,6 +16,7 @@ from projects.models import Project
 from .security import Capability, Principal
 from .upserts import upsert_by_slug
 from .projection import addressable, iso, listing
+from .ui import counted
 
 SAFE_SENSITIVITIES = (
     DocumentationRecord.Sensitivity.PUBLIC,
@@ -143,7 +144,10 @@ def save_asset(
         found_slugs = {project.slug for project in projects}
         missing = sorted(set(project_slugs) - found_slugs)
         if missing:
-            raise NotFoundError(f"Related project(s) not found: {', '.join(missing)}")
+            raise NotFoundError(
+                f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
+                f"{', '.join(missing)}"
+            )
 
         for field, value in values.items():
             setattr(asset, field, value)

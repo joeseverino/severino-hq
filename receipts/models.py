@@ -18,7 +18,7 @@ class Receipt(TimestampedModel):
     file = models.FileField(
         upload_to=receipt_upload_path,
         storage=PrivateReceiptStorage(),
-        help_text="PDF / image / screenshot. Stored privately; not exposed publicly.",
+        help_text="PDF or image. Private to signed-in users.",
     )
     original_filename = models.CharField(max_length=255, blank=True)
     content_type = models.CharField(max_length=100, blank=True)
@@ -58,7 +58,7 @@ class Receipt(TimestampedModel):
 
     def __str__(self) -> str:
         label = self.original_filename or (self.file.name if self.file else "receipt")
-        return f"{self.vendor or 'Receipt'} — {label}"
+        return f"{self.vendor or 'Receipt'} · {label}"
 
     def get_absolute_url(self) -> str:
         return reverse("receipts:detail", args=[self.pk])

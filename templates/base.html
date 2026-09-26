@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex,nofollow">
   {% comment %}
   A page names only itself; the site name is appended once, here. Left to each
-  page it drifted both ways -- nineteen titles carried no site name at all and
+  page it drifted both ways: nineteen titles carried no site name at all and
   seven hardcoded the string `SEVERINO_SITE_NAME` is allowed to change.
   `application/test_architecture.py` fails if a title block names it again.
   {% endcomment %}
@@ -35,14 +35,14 @@
       `details`-based one. It fails safe: nothing hides the nav by default, so
       a stylesheet that does not load, or a browser that disagrees about how a
       widget hides its own content, leaves the links plainly visible. A
-      `details` wrapper forced open by CSS did the opposite -- Chrome moved
+      `details` wrapper forced open by CSS did the opposite: Chrome moved
       that hiding onto `::details-content`, the override stopped applying, and
       the whole nav disappeared.
       {% endcomment %}
       {% comment %}
       Two links in one place, swapped by `:target`: closed, the control points
       at the menu; open, it points back out. One link cannot do both, because
-      CSS can style an anchor but not rewrite where it goes -- and a control
+      CSS can style an anchor but not rewrite where it goes, and a control
       that only ever opens is a control that appears broken on the second tap.
       {% endcomment %}
       <a class="nav-toggle nav-toggle-open" href="#sections" aria-label="Sections" aria-controls="primary-navigation" aria-expanded="false">
@@ -54,10 +54,6 @@
       </a>
       {% comment %}
       Both halves carry the state, because only one of them is ever on screen.
-      The state used to live on the opening half alone, which is the half that
-      is `display: none` exactly when it reads "expanded" -- so the control an
-      operator had just been moved to announced no state at all, and the one
-      announcing it could not be reached.
       {% endcomment %}
       <a class="nav-toggle nav-toggle-close" href="#" aria-label="Close sections" aria-controls="primary-navigation" aria-expanded="true">
         <svg viewBox="0 0 16 12" width="15" height="12" aria-hidden="true" fill="currentColor">
@@ -90,38 +86,30 @@
         {% endfor %}
       </nav>
       {% comment %}
-      The magnifier is drawn over the field rather than beside it, so that on a
-      phone the field can shrink to the size of the icon and still be the thing
-      you tap. Focusing it is what opens it -- no state, no script, and the
-      form still submits identically at every width.
+      A doorway, not a field: it opens the command center, and without script it
+      is a link to the search page. With nothing to type into here there is no
+      focus to return to it and nothing to expand over its neighbours.
       {% endcomment %}
-      <form class="global-search" action="{% url 'search' %}" method="get" data-command-center-open>
+      <a class="global-search" href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
         <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <circle cx="11" cy="11" r="6"></circle>
           <line x1="15.5" y1="15.5" x2="20" y2="20"></line>
         </svg>
-        <input
-          type="search"
-          name="q"
-          value="{{ search_query|default:'' }}"
-          placeholder="Find anything"
-          aria-label="Find anything"
-          aria-haspopup="dialog"
-          aria-controls="modal-command-center"
-        >
-      </form>
+        <span class="search-label">Find anything</span>
+        <kbd class="search-key" aria-hidden="true">⌘K</kbd>
+      </a>
       {% comment %}
       In the header rather than on a page, because the mode outlives whichever
       page is open and the one failure worth designing against is an operator
       forgetting it is on and filing a screenshot of fiction as fact.
       {% endcomment %}
       {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
-      <a class="action-badge" href="{% url 'action_items' %}" data-action-badge{% if not show_action_count or not profile_action_count %} hidden{% endif %}>
+      <a class="action-badge" href="{% url 'action_items' %}" title="Action items" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
-        <span data-action-badge-count>{% if show_action_count %}{{ profile_action_count }}{% endif %}</span>
-        <span class="visually-hidden">unread action items</span>
+        <span data-action-count{% if not show_action_count or not profile_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
+        <span class="visually-hidden">Action items</span>
       </a>
-      <details class="user-menu" data-menu data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
+      <details class="user-menu" data-menu>
         <summary>
           <span class="user-name">{{ user.get_username }}</span>
           <svg class="user-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -130,10 +118,6 @@
           </svg>
         </summary>
         <div class="user-menu-panel">
-          <a class="menu-item menu-item-split" href="{% url 'action_items' %}">
-            <span>Action items</span>
-            <span class="menu-item-status user-menu-count" data-action-count{% if not show_action_count or not profile_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
-          </a>
           <a class="menu-item" href="{% url 'admin:index' %}">Admin</a>
           {% comment %}
           A real link to the page that answers this, so it works with the dialog
@@ -150,7 +134,7 @@
             <span class="menu-item-status" aria-hidden="true"><span class="conn-dot"></span></span>
           </a>
           {% comment %}
-          A switch, not a verb. The state is the label -- a menu entry that
+          A switch, not a verb. The state is the label: a menu entry that
           renamed itself each time left you reading the button to work out what
           was currently true. POST because it changes what every number on the
           page means, and a thing that flips by following a link can be flipped
@@ -207,10 +191,15 @@
   </footer>
 
   {% if user.is_authenticated %}
+    {% comment %}
+    The one form every post_button submits. Outside everything else on the
+    page, so a button inside another form still posts only what it names.
+    {% endcomment %}
+    <form id="hq-post" method="post" hidden>{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
     {% include "partials/_modal.html" with id="command-center" title="Command center" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and
-    evaluates the access policy, and this dialog is on every page -- so it
+    evaluates the access policy, and this dialog is on every page, so it
     fetches on first open rather than making every page pay for a panel almost
     nobody opens.
     {% endcomment %}

@@ -69,9 +69,8 @@ case "${operation}" in
     routes:write)
         # The routes HQ declares, and only those. They go in a file of their
         # own that the operator's Caddyfile imports, so HQ never edits a line
-        # somebody else wrote -- health.jseverino.com answers with `respond`,
-        # which no route HQ can declare expresses, and a writer that owned the
-        # whole file would have had to reproduce it or drop it.
+        # somebody else wrote. A hand-written site block (a `respond` health
+        # check, say) stays as its author wrote it.
         #
         # Validated before it is installed and rolled back if the reload fails,
         # the same shape the certificate deploy uses. A Caddyfile that does not

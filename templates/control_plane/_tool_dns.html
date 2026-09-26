@@ -2,8 +2,8 @@
 <div class="lookup-grid">
   <section class="card">
     <div class="tool-intro">
-      <h2>A name</h2>
-      <p class="help">Asked of a resolver outside this network.</p>
+      <h2>Name lookup</h2>
+      <p class="help">Resolved from outside this network.</p>
     </div>
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
@@ -33,7 +33,7 @@
                     <td><code>{{ answer.value }}</code></td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="3" class="muted">No records. This name does not resolve publicly.</td></tr>
+                  <tr><td colspan="3" class="muted">No public records.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -42,7 +42,7 @@
             <p class="help">Answered by {{ reading.resolver }}.</p>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"That lookup could not be completed." }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
       {% endif %}
     {% endwith %}
@@ -51,7 +51,7 @@
 
   <section class="card">
     <div class="tool-intro">
-      <h2>An address</h2>
+      <h2>Address lookup</h2>
       <p class="help">Reverse DNS and the registry allocation.</p>
     </div>
     <form method="get" class="lookup-form">
@@ -100,11 +100,16 @@
             <p class="help">
               From
               <time datetime="{{ reading.observed_at|date:'c' }}">{{ reading.observed_at|date:"M j, Y, g:i a" }}</time>
-              <a href="?tab=dns&amp;address={{ asked|dictkey:'lookup.address'|urlencode }}&amp;refresh=1">Refresh</a>
+              <form method="post" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="tab" value="dns">
+                <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address' }}">
+                <button type="submit" class="btn ghost compact">Refresh</button>
+              </form>
             </p>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"That lookup could not be completed." }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
       {% endif %}
     {% endwith %}

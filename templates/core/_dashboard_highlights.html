@@ -4,7 +4,7 @@
   {% for section in dashboard_highlights %}
     <article class="highlight-card card">
       <div class="section-head">
-        <h2>{{ section.label }}</h2>
+        <h2>{{ section.label }}{% if section.overview.period %} <span class="section-period">{{ section.overview.period }}</span>{% endif %}</h2>
         <a class="section-action" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">Explore &rarr;</a>
       </div>
       {% if section.overview.kpis %}

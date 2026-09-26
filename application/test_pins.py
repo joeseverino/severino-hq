@@ -2,7 +2,7 @@
 
 A pin is a preference about a person, never about the thing pinned: starring a
 hostname must not reach a spec, bump a generation or queue a reconcile. The
-order is the substance of it -- alphabetical among favorites is an ordering
+order is the substance of it: alphabetical among favorites is an ordering
 nobody chose, which is the whole reason the list needed one.
 """
 

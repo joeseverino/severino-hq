@@ -10,20 +10,22 @@
   templates drift the moment one gains a column, and the difference shows up as
   one page quietly missing what the other shows.
 
-  Expects: `sections` — an iterable of ServiceSection.
+  Expects: `sections`: an iterable of ServiceSection.
 {% endcomment %}
 {% for section in sections %}
 <section id="{{ section.id }}" class="page-section" data-page-section>
   <h2>{{ section.label }}</h2>
   <div class="table-scroll">
-    <table class="data-table">
+    <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
       <tbody>
         {% for record in section.records %}
           <tr>
             {% for cell in record %}
               <td>
-                {% if cell.url %}
+                {% if cell.link %}
+                  {% entity cell.link %}
+                {% elif cell.url %}
                   <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text }}</a>
                 {% elif cell.muted %}
                   <span class="muted">{{ cell.text }}</span>
@@ -37,6 +39,12 @@
       </tbody>
     </table>
   </div>
+  {% for label, text in section.readouts %}
+    <details class="section-readout">
+      <summary>{{ label }}</summary>
+      <pre>{{ text }}</pre>
+    </details>
+  {% endfor %}
   {% for label, url in section.actions %}
     <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
   {% endfor %}

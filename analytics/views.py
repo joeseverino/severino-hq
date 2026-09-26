@@ -10,10 +10,12 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView
 
 from application.analytics import DEFAULT_WINDOW_DAYS, overview
+from application.pages import PageMixin
 
 
-class AnalyticsOverviewView(LoginRequiredMixin, TemplateView):
+class AnalyticsOverviewView(PageMixin, LoginRequiredMixin, TemplateView):
     template_name = "analytics/overview.html"
+    page_title = "Analytics"
 
     def get_context_data(self, **kwargs):
         try:

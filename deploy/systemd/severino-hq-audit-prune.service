@@ -1,0 +1,16 @@
+[Unit]
+Description=Delete routine Severino HQ audit events past their retention window
+Documentation=file:///opt/apps/severino-hq/core/management/commands/prune_audit.py
+After=docker.service severino-hq.service
+
+[Service]
+Type=oneshot
+# Only core.audit.ROUTINE_EVENTS are eligible; the security record is kept.
+ExecStart=/usr/bin/docker exec severino-hq python manage.py prune_audit
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

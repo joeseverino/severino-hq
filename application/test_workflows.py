@@ -123,6 +123,6 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
             {"entries": ({"item": insight, "source": "Example"},)},
         )
 
-        self.assertIn("Resolution workflow", html)
+        self.assertIn("Steps to resolve", html)
         self.assertIn("Inspect bill", html)
-        self.assertIn("Verify from fresh facts", html)
+        self.assertIn("Confirm the fix", html)

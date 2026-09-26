@@ -85,6 +85,7 @@ class ResourceExecutionTests(TestCase):
         self.assertEqual(
             outcome,
             {
+                "estate": (),
                 "resources": (),
                 "commands": (),
                 "connections": (),
@@ -184,7 +185,7 @@ class TailnetDeviceKeyTests(TestCase):
     """A machine and its tailnet device must not compete for one key.
 
     Both providers keyed on the bare device name, so the second declaration
-    adopted was filed as `<name>-2` — a suffix recording arrival order on an
+    adopted was filed as `<name>-2`: a suffix recording arrival order on an
     estate where the name is what everything else joins on.
     """
 

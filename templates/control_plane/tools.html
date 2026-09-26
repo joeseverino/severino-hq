@@ -1,8 +1,5 @@
-{% extends "base.html" %}
-{% block title %}Tools{% endblock %}
-{% block content %}
-  {% include "partials/_page_head.html" with title="Tools" lede="Questions answered by asking somebody outside this network." %}
-
+{% extends "page.html" %}
+{% block page %}
   {% if tabs %}
     <nav class="tool-tabs" aria-label="Tools">
       {% for entry in tabs %}
@@ -14,6 +11,6 @@
     <p class="muted tool-summary">{{ tab.summary }}</p>
     {% include tab.template %}
   {% else %}
-    <p class="muted">No tools are available to this account.</p>
+    <p class="muted">No tools available.</p>
   {% endif %}
 {% endblock %}

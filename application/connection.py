@@ -6,7 +6,7 @@ session says they are, and the sequence of independent things that each had to
 hold before any of it got this far.
 
 It is assembled rather than asserted. A page claiming "your connection is
-secure" is decoration -- it says the same words when the gate is switched off,
+secure" is decoration: it says the same words when the gate is switched off,
 when the policy has been loosened, and when the request arrived from a coffee
 shop. So every line below is read from something that would change if the fact
 changed: the settings the middleware actually enforces, the backends actually
@@ -26,13 +26,12 @@ from datetime import datetime, timezone as utc
 from django.conf import settings
 from django.utils.csp import CSP
 
-from functools import cache
-import socket
 
 from core.network import client_ip, is_trusted_proxy, split_host_port
 
 from . import tailnet
 from .reach import network_of, on_link_networks
+from .ui import MISSING, counted, elapsed, moment
 
 
 @dataclass(frozen=True)
@@ -73,7 +72,7 @@ OPAQUE_CHANNEL = Channel(
     "Address not passed through",
     "Every hop in the chain was a proxy HQ knows, so the address it is judging "
     "is a proxy's rather than the caller's. Whoever is asking may well be on "
-    "the tailnet -- nothing here can tell, which means the network gate is "
+    "the tailnet: nothing here can tell, which means the network gate is "
     "checking the proxy rather than them.",
 )
 ELSEWHERE_CHANNEL = Channel(
@@ -114,7 +113,7 @@ class Layer:
 
     ``holds`` is what the badge and the ordering read. ``evidence`` is the
     value it was decided from, kept separate from ``detail`` so the reasoning
-    and the reading are never confused for each other -- the whole failure this
+    and the reading are never confused for each other: the whole failure this
     page exists to avoid is prose that sounds like a measurement.
     """
 
@@ -151,7 +150,7 @@ class Peering:
     lounge produce an identical page everywhere else in HQ, because both are
     "on the tailnet over WireGuard".
 
-    Tailscale already knows the difference and HQ already stores the answer --
+    Tailscale already knows the difference and HQ already stores the answer,
     the endpoint the two nodes negotiated. A private address means they found
     each other on the same network and nothing crossed the internet; a public
     one means this session is riding over it from that address; a relayed path
@@ -184,7 +183,7 @@ PEERING_UNKNOWN = Peering(
 # Not the same statement, and conflating the two was the first thing this row
 # got wrong. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
-# proxy and declines to attribute the request to any device at all -- so it has
+# proxy and declines to attribute the request to any device at all, so it has
 # nothing to read a peering from, which is not evidence that none exists.
 PEERING_UNATTRIBUTED = Peering(
     "unattributed",
@@ -195,8 +194,8 @@ PEERING_UNATTRIBUTED = Peering(
     "deployment simply cannot see past it to report on it.",
 )
 # The sweep is what fills the device inventory, and an instance that has never
-# run one -- a fresh development database, a deployment whose Tailscale
-# connection is not configured -- resolves nothing. Saying "not established"
+# run one (a fresh development database, a deployment whose Tailscale
+# connection is not configured) resolves nothing. Saying "not established"
 # there would blame the network for an empty table.
 PEERING_UNOBSERVED = Peering(
     "unobserved",
@@ -244,7 +243,7 @@ def _peering(device: tailnet.Device | None) -> Peering:
             "The two nodes negotiated a direct path across the internet, so "
             "this session is riding over it from the address below. WireGuard "
             "encrypts every packet, and nothing between the two ends can read "
-            "it -- but the path is a public one.",
+            "it, but the path is a public one.",
             address=host,
         )
     # A tailnet-range endpoint means the peering is itself being carried by
@@ -490,7 +489,7 @@ class Connection:
 
     @property
     def handshake(self) -> str:
-        return _ago(self.caller_device.last_handshake) if self.caller_device else "—"
+        return elapsed(self.caller_device.last_handshake) if self.caller_device else MISSING
 
     @property
     def carried(self) -> str:
@@ -506,7 +505,7 @@ class Connection:
         """The two node keys behind this connection, yours first.
 
         The evidence the rest of the link section is describing. Everything
-        above it -- an endpoint, a handshake age, a byte count -- is a
+        above it (an endpoint, a handshake age, a byte count) is a
         consequence of these two keys having agreed; naming them is what turns
         "HQ says you are a peer" into something checkable against `tailscale
         status` on either machine.
@@ -538,7 +537,7 @@ class Connection:
                 return PEERING_UNATTRIBUTED
             # HQ's own node comes from the same sweep as everyone else's. Not
             # finding itself there means the inventory is empty rather than
-            # that this caller is missing from it -- read from a field the
+            # that this caller is missing from it: read from a field the
             # page already holds, so distinguishing the two costs no query.
             if self.observer is None:
                 return PEERING_UNOBSERVED
@@ -560,7 +559,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR"))
     forwarding_trusted = forwarded and is_trusted_proxy(peer)
     untrusted_forwarding = forwarded and not forwarding_trusted
-    # (see `_serving_device` for why the observer flag is not the answer)
+    # (see `_serving_device_resolution` for why the observer flag is not the answer)
     # A chain that never named the caller is its own answer, and a more useful
     # one than the class its last proxy happens to fall in. Reporting "local
     # network" here would describe the proxy and read as a fact about the
@@ -576,7 +575,9 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     from .infrastructure import declared_machines
 
     declared = declared_machines()
-    serving = _serving_device_resolution(known, declared)
+    from .hq_self import served_at
+
+    serving = _serving_device_resolution(known, declared, served_at(request))
     # A fallback observer is useful provenance, but it is not a placement
     # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
     serves = serving.device if serving.verified else None
@@ -814,7 +815,7 @@ def _name_layer(request) -> Layer:
 
     from .zones import public_answers_for
 
-    host = request.get_host().partition(":")[0]
+    host, _port = split_host_port(request.get_host())
     answers = public_answers_for(host)
     return Layer(
         "name",
@@ -841,7 +842,7 @@ def _arrival_layer(firewall) -> Layer | None:
     from packets that arrived on the tailnet interface, which is not a field and
     cannot be set from somewhere else.
 
-    Absent when nothing observed it -- on a machine that does not run this
+    Absent when nothing observed it: on a machine that does not run this
     firewall there is no reading to project, and inventing a verdict from that
     silence is the failure this page is built to avoid.
     """
@@ -857,7 +858,7 @@ def _arrival_layer(firewall) -> Layer | None:
         boundary="Network",
         mechanism="Interface-bound firewall rule",
         # "neutral" is the reading that never came, and that is neither a pass
-        # nor a denial -- an unobserved firewall must not read as an open one.
+        # nor a denial: an unobserved firewall must not read as an open one.
         conclusive=firewall.state != "neutral",
     )
 
@@ -906,7 +907,7 @@ def _policy_layers(
         # A reverse proxy on the same host forwards from a loopback address,
         # which the tailnet never sees and cannot have a grant about. Asked as
         # "device -> forwarder" the question has no target, so both layers
-        # returned nothing and the whole boundary disappeared from the page --
+        # returned nothing and the whole boundary disappeared from the page,
         # on the deployment where it matters most.
         #
         # The hop the policy actually governs is the one the caller dialled:
@@ -987,7 +988,7 @@ def _policy_layer(
         evidence=", ".join(tailnet.as_devices(verdict.via, owners)) or f"port {port}",
         # The grant itself. "Allowed" without the rule that allowed it is a
         # verdict nobody can check, and the rule is the thing an operator would
-        # go and change -- so the answer carries it rather than pointing at a
+        # go and change, so the answer carries it rather than pointing at a
         # policy document and wishing them luck.
         rules=tuple(
             f"{', '.join(tailnet.as_devices(rule.get('who') or ['?'], owners))} → "
@@ -1000,9 +1001,8 @@ def _policy_layer(
 
 
 def _port_of(request) -> int:
-    host = request.get_host()
-    _, separator, port = host.rpartition(":")
-    if separator and port.isdigit():
+    _host, port = split_host_port(request.get_host())
+    if port.isdigit():
         return int(port)
     return 443 if request.is_secure() else 80
 
@@ -1078,7 +1078,7 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
     distributed the right public key for this node. Tailnet lock is the only
     thing that removes that trust: with it on, a node key is filtered by every
     peer unless a signing key vouches for it, and the coordination server does
-    not hold the signing keys. So this is not another check on the device -- it
+    not hold the signing keys. So this is not another check on the device: it
     is the check on the thing the device check was believing.
     """
 
@@ -1125,7 +1125,7 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
         f"Tailnet lock is on, and {device.label}'s node key carries a valid "
         "signature. A key the coordination server invented for this name would "
         "carry none, and every peer would drop it unread.",
-        evidence=f"Signed · {keys} signing key{'' if keys == 1 else 's'}",
+        evidence=f"Signed · {counted(keys, 'signing key', 'signing keys')}",
         boundary="Device identity",
         mechanism="Tailnet lock signature",
     )
@@ -1232,23 +1232,47 @@ def _forwarder_layer(
 
 
 def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | None:
-    """Cross-check redundant NPM headers without granting them authority."""
+    """Cross-check a proxy's redundant forwarding headers without granting them authority.
+
+    The headers are the ones a proxy kind declares as ``forwarding_headers``.
+    """
 
     if not trusted:
         return None
-    real = str(request.META.get("HTTP_X_REAL_IP", "") or "").strip()
-    scheme = str(request.META.get("HTTP_X_FORWARDED_SCHEME", "") or "").strip().lower()
+    from control_plane.providers import CONNECTION_LABELS, PROVIDERS
+
+    declared = next(
+        (spec for spec in PROVIDERS.values() if spec.forwarding_headers), None
+    )
+    if declared is None:
+        return None
+    client_header, scheme_header = declared.forwarding_headers
+    proxy = next(
+        (
+            CONNECTION_LABELS[name]
+            for name in declared.connection_providers
+            if name in CONNECTION_LABELS
+        ),
+        declared.label,
+    )
+    mechanism = f"{proxy} forwarding headers"
+
+    def header(name: str) -> str:
+        return str(request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()
+
+    real = header(client_header)
+    scheme = header(scheme_header).lower()
     if not real or not scheme:
         return Layer(
             "proxy-evidence",
             "The proxy headers are consistent",
             False,
             "The forwarding peer is trusted, but it did not supply both of "
-            "NPM's corroborating X-Real-IP and X-Forwarded-Scheme headers. "
+            f"{proxy}'s corroborating {client_header} and {scheme_header} headers. "
             "HQ still uses its canonical forwarding inputs for admission.",
             evidence="corroborating headers incomplete",
             boundary="Forwarding evidence",
-            mechanism="NPM forwarding headers",
+            mechanism=mechanism,
             conclusive=False,
         )
     real_host = split_host_port(real)[0]
@@ -1259,17 +1283,20 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
         "The proxy headers are consistent",
         agrees,
         (
-            "NPM's redundant client and scheme headers agree with the values "
+            f"{proxy}'s redundant client and scheme headers agree with the values "
             "HQ selected from its canonical forwarding inputs. This detects "
             "proxy drift; it is corroboration by one proxy, not a second "
             "identity authority."
             if agrees
-            else "NPM's redundant forwarding headers disagree with the client "
+            else f"{proxy}'s redundant forwarding headers disagree with the client "
             "or scheme HQ selected. Treat the proxy path as misconfigured."
         ),
-        evidence=f"X-Real-IP={real_host or 'missing'} · X-Forwarded-Scheme={scheme or 'missing'}",
+        evidence=(
+            f"{client_header}={real_host or 'missing'} · "
+            f"{scheme_header}={scheme or 'missing'}"
+        ),
         boundary="Forwarding evidence",
-        mechanism="NPM forwarding headers",
+        mechanism=mechanism,
     )
 
 
@@ -1328,11 +1355,11 @@ def _tailnet_observation_layer(
 def _expiry_phrase(stamp: str) -> str:
     """When a node key runs out, in the tense that fits.
 
-    An expired key is not a smaller version of a valid one -- the device stops
-    being on the tailnet -- so the two do not share a sentence.
+    An expired key is not a smaller version of a valid one (the device stops
+    being on the tailnet) so the two do not share a sentence.
     """
 
-    parsed = _parsed(stamp)
+    parsed = moment(stamp)
     if parsed is None:
         return "has an expiry HQ could not read"
     days = (parsed - datetime.now(utc.utc)).days
@@ -1363,7 +1390,7 @@ def _gate_layer(channel: Channel) -> Layer:
         enforced and channel.private,
         (
             "Requests from outside the ranges HQ accepts are refused before "
-            "sessions, authentication or any view runs -- so an address that "
+            "sessions, authentication or any view runs, so an address that "
             "may not be here cannot reach the sign-in form or appear in the "
             "audit log as an attempt at anything."
             if enforced
@@ -1383,7 +1410,7 @@ def _sign_in_layer(identity: Identity) -> Layer:
         identity.sso_only,
         (
             "No password backend is installed, so there is no password to "
-            "guess, reuse or leak -- signing in goes through the identity "
+            "guess, reuse or leak: signing in goes through the identity "
             "provider and nothing else."
             if identity.sso_only
             else "A password backend is installed, so a password can sign "
@@ -1420,7 +1447,7 @@ def _session_layer(request, identity: Identity) -> Layer:
         (
             "The session cookie is not sent over plain HTTP, cannot be read by "
             "script, is not attached to requests another site starts, and "
-            "carries the `__Host-` prefix -- so the browser refuses to store "
+            "carries the `__Host-` prefix, so the browser refuses to store "
             "one of this name from any other host or path, and nothing under "
             "this domain can plant a session for HQ to read back."
             if holds
@@ -1438,7 +1465,7 @@ def _browser_layer() -> Layer:
 
     Every other layer on this page is about reaching HQ. This one is about what
     happens after: the page is the last place a credential is held, and the
-    policy is the only boundary HQ cannot check from the inside -- it is
+    policy is the only boundary HQ cannot check from the inside: it is
     enforced in someone else's browser, and a directive that has quietly
     stopped applying looks exactly like one that is quietly working. So the
     policy is stated here, and violations are reported back.
@@ -1464,7 +1491,7 @@ def _browser_layer() -> Layer:
         (
             "Script runs only from this origin or under a nonce minted for "
             "this one response, the page cannot be framed, and Trusted Types "
-            "makes assigning a string to a DOM sink throw rather than parse -- "
+            "makes assigning a string to a DOM sink throw rather than parse: "
             "so a cross-site scripting bug has nowhere to execute even if one "
             "is introduced. The browser reports anything it refuses, which is "
             "the only way HQ learns a directive stopped holding."
@@ -1506,7 +1533,7 @@ def _canonical_layer() -> Layer:
             "name, so the plain port HQ binds is not a second front door. The "
             "browser is told to refuse plain HTTP for this name from now on, "
             "which closes the one request that would otherwise be made in the "
-            "clear -- the first one, before any redirect."
+            "clear: the first one, before any redirect."
             if holds
             else "HQ is serving plain HTTP on the port it binds"
             if not redirected
@@ -1564,19 +1591,15 @@ class Address:
 def _address_row(value: str, source: str, *, current: bool = False) -> Address | None:
     """An endpoint classified by the range it falls in.
 
-    ``host:port`` and bracketed IPv6 both arrive here -- the daemon writes
-    endpoints that way -- so the port is taken off before classifying and put
+    ``host:port`` and bracketed IPv6 both arrive here (the daemon writes
+    endpoints that way) so the port is taken off before classifying and put
     back for display, because which port a path uses is part of the answer.
     """
 
     text = str(value or "").strip()
     if not text:
         return None
-    bare = text
-    if bare.startswith("["):
-        bare = bare.partition("]")[0].lstrip("[")
-    elif bare.count(":") == 1:
-        bare = bare.rpartition(":")[0]
+    bare, _port = split_host_port(text)
     channel = channel_of(bare)
     return Address(
         value=text,
@@ -1596,9 +1619,9 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
 
     Three different things get called "my IP" and they are rarely the same
     number: the one Tailscale issued, the one the router handed out, and the
-    one the internet sees. HQ holds all three from separate places -- the
-    request itself, the device record, and the path the two daemons negotiated
-    -- and this is the only surface that puts them beside each other.
+    one the internet sees. HQ holds all three from separate places (the
+    request itself, the device record, and the path the two daemons negotiated)
+    and this is the only surface that puts them beside each other.
     """
 
     current = found.peer_address
@@ -1630,90 +1653,42 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
     return tuple(_deduplicated(rows))
 
 
-@cache
-def _own_addresses() -> frozenset[str]:
-    """Every address this process is actually reachable at.
-
-    Asked of the host rather than of any inventory, because it is the one fact
-    about "where HQ runs" that no sweep can be wrong about. A UDP socket is
-    only connected locally -- it sends no packet -- and exposes the address
-    the kernel would route from without putting DNS in a request path.
-
-    Cached for the life of the process. Where HQ runs does not change without
-    a restart, and a restart is what clears this.
-    """
-
-    found = {"127.0.0.1", "::1"}
-    for family, destination in (
-        (socket.AF_INET, "192.0.2.1"),
-        (socket.AF_INET6, "2001:db8::1"),
-    ):
-        try:
-            with socket.socket(family, socket.SOCK_DGRAM) as probe:
-                probe.connect((destination, 9))
-                found.add(str(probe.getsockname()[0]).split("%", 1)[0])
-        except OSError:
-            continue
-    return frozenset(found)
-
-
 def _serving_device_resolution(
-    known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
+    known: dict[str, tailnet.Device],
+    declared: tuple[dict[str, object], ...],
+    served: tuple[str, ...] = (),
 ) -> ServingDeviceResolution:
     """The tailnet node HQ is actually running on.
 
-    The obvious answer -- the device the sweep marked ``self`` -- is the device
-    whose *daemon took the reading*, which is the controller's host. Those are
-    the same machine only when HQ and the controller share one, and they are
-    not obliged to: run HQ anywhere else and it introduces itself as the
-    controller's host, then evaluates the reachability verdict against the
-    wrong node, confidently.
+    The device the sweep marked ``self`` is the controller's host, which is HQ's
+    host only when the two share a machine. So the node is found by address
+    through ``hq_self``: a device holding one of HQ's own addresses, else the
+    device holding an address of the machine ``hq_machine`` places HQ on.
 
-    Resolved by address, never by name: a tailnet name, an mDNS name and a
-    declaration key are three strings for one machine, and matching any of them
-    is how the wrong node gets picked.
-
-    It takes two hops, because neither end holds both halves. The host knows
-    the addresses it answers at -- a LAN address, typically, since a tailnet
-    address lives on an interface the hostname does not resolve to. The tailnet
-    knows only its own addresses. The *declaration* is the one place both are
-    written down, so it is the bridge: own address -> declared machine ->
-    tailnet device.
-
-    Falls back to the observer flag when nothing resolves, which keeps a
-    single-host deployment behaving exactly as it did.
+    Falls back to the observer flag when nothing resolves.
     """
 
-    mine = _own_addresses()
-    if mine:
+    from .hq_self import hq_machine, own_addresses
+    from .locate import index_of
+
+    for address in own_addresses(served):
+        device = tailnet.device_at(address, known)
+        if device is not None:
+            return ServingDeviceResolution(device, True, "matched to an address on this host")
+    index = index_of(declared=declared)
+    machine = hq_machine(index, (), {}, served_at=served, devices=known.values())
+    if machine:
         for device in known.values():
-            if mine.intersection(device.addresses):
+            if any(index.at(address) == machine for address in device.addresses):
                 return ServingDeviceResolution(
-                    device, True, "matched to an address on this host"
+                    device, True, "matched through HQ's machine declaration"
                 )
-        for machine in declared:
-            addresses = frozenset(machine.get("addresses") or ())
-            if not mine.intersection(addresses):
-                continue
-            for device in known.values():
-                if addresses.intersection(device.addresses):
-                    return ServingDeviceResolution(
-                        device, True, "matched through HQ's machine declaration"
-                    )
     observer = tailnet.observer(known)
     return ServingDeviceResolution(
         observer,
         False,
         "fallback to the sweep observer" if observer else "not resolved",
     )
-
-
-def _serving_device(
-    known: dict[str, tailnet.Device], declared: tuple[dict[str, object], ...]
-) -> tailnet.Device | None:
-    """Compatibility projection for callers that need only the best candidate."""
-
-    return _serving_device_resolution(known, declared).device
 
 
 def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
@@ -1732,7 +1707,7 @@ def _machine_name(addresses, declared) -> str:
     """The declared machine answering at any of these addresses.
 
     By address, because the tailnet's name for a machine is rarely the one HQ
-    uses -- a laptop is whatever its owner typed into it years ago -- and the
+    uses (a laptop is whatever its owner typed into it years ago) and the
     address is the one thing every source of a machine agrees on.
 
     Resolved through the shared index, over the declarations this page has
@@ -1752,11 +1727,9 @@ def _machine_name(addresses, declared) -> str:
 
 
 def _machine_url(name: str) -> str:
-    if not name:
-        return ""
-    from django.urls import reverse
+    from .entity_links import entity_link
 
-    return reverse("control_plane:machine", kwargs={"name": name})
+    return entity_link("machine", name).url
 
 
 def _deduplicated(rows) -> list[Address]:
@@ -1813,7 +1786,7 @@ class Header:
 
 
 # What each header HQ reads is read *for*. Written here rather than inferred,
-# because the thing being described is what the code does with it -- and a
+# because the thing being described is what the code does with it, and a
 # header nobody reads has no entry, which is the point of the second list.
 HEADERS_READ = {
     "Host": "Which site this is, checked against the hosts HQ will answer for.",
@@ -1850,7 +1823,7 @@ def headers_of(request) -> tuple[Header, ...]:
     """Every header this request carried, with the ones HQ acts on first.
 
     The raw input to every decision on this page. A value HQ reads is worth
-    seeing beside the conclusion drawn from it -- and the ones it does *not*
+    seeing beside the conclusion drawn from it, and the ones it does *not*
     read are worth seeing too, because "the proxy is sending X-Real-IP and
     nothing here looks at it" is invisible until somebody prints both lists.
     """
@@ -1896,7 +1869,7 @@ def hops_of(request) -> tuple[Hop, ...]:
 
     The most quietly consequential decision on the page. Behind a proxy every
     request arrives from the proxy, and the caller's address is in a header
-    anyone can write -- so which hop HQ believes is the whole of whether the
+    anyone can write, so which hop HQ believes is the whole of whether the
     network gate means anything. Showing the working is how a misconfigured
     proxy list becomes visible instead of silently trusting a stranger.
     """
@@ -1954,7 +1927,7 @@ def hops_of(request) -> tuple[Hop, ...]:
         for index, value in enumerate(chain)
     ]
     if not settled:
-        # Every hop was a known proxy, so the peer is as close as this gets --
+        # Every hop was a known proxy, so the peer is as close as this gets,
         # and nothing in the chain identified the caller at all.
         found[-1] = Hop(
             judged,
@@ -1963,32 +1936,6 @@ def hops_of(request) -> tuple[Hop, ...]:
             "distinct caller address was supplied. HQ evaluates the socket peer.",
         )
     return tuple(found)
-
-
-def _ago(stamp: str) -> str:
-    """A provider's timestamp as an age, or as the fact that there is none.
-
-    What is local here is reading a stamp that spells "never" as the zero time
-    and one that has not happened yet. The phrasing is `ui.ago`, so this reads
-    the same as every other elapsed time in HQ.
-    """
-
-    from .ui import ago
-
-    parsed = _parsed(stamp)
-    if parsed is None:
-        return "—"
-    if parsed > datetime.now(utc.utc):
-        return "just now"
-    return ago(parsed)
-
-
-def _parsed(stamp: str) -> datetime | None:
-    """The shared parse, kept as a name this module already reads by."""
-
-    from .ui import moment
-
-    return moment(stamp)
 
 
 def _bytes(count: int) -> str:

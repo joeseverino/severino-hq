@@ -13,6 +13,7 @@ from django.utils import timezone
 from control_plane.models import ManagedResource, OperationRequest
 from control_plane.providers import CERTIFICATE_KIND, enabled_controller_actions
 
+from .adoption import manages_through, observes_only
 from .infrastructure import controller_contract, serialize_operation, serialize_resource
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
@@ -31,15 +32,15 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     """Mark the places a certificate was just verified at as observed.
 
     A delivery target is the one declaration nothing could ever confirm. No
-    sweep reports one -- how a place takes a certificate is not something any
-    provider volunteers, which is exactly why it has to be stated -- so
+    sweep reports one (how a place takes a certificate is not something any
+    provider volunteers, which is exactly why it has to be stated) so
     ``confirm_observed`` skips it, and "last confirmed" read *never* for as long
     as the target existed. On a board, permanently unconfirmable and simply
     unchecked look identical, and every target was being shown as the latter.
 
     It was never unobserved. Reconciling the certificate opens a connection to
     each target, asks what it is serving and matches the fingerprint against
-    what HQ issued -- a stronger check than any sweep performs. The answer was
+    what HQ issued: a stronger check than any sweep performs. The answer was
     thrown away because it came back under the certificate's name rather than
     the target's.
 
@@ -202,11 +203,12 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     from .security import cli_principal
 
     queued: list[str] = []
+    manages = manages_through()
     for repair in auto_remediable(principal=cli_principal()):
         resource = ManagedResource.objects.select_for_update().filter(
             key=repair.resource_key, enabled=True
         ).first()
-        if resource is None:
+        if resource is None or observes_only(resource.kind, resource.spec, manages):
             continue
         # Keyed on the evidence, not the attempt.
         idempotency_key = (
@@ -247,7 +249,10 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     resources = ManagedResource.objects.select_for_update().filter(
         enabled=True, kind__in=by_kind
     )
+    manages = manages_through()
     for resource in resources:
+        if observes_only(resource.kind, resource.spec, manages):
+            continue
         selected = next(
             (
                 (action, reason, identity)
@@ -346,7 +351,7 @@ def _next_resolvable(operations, now):
     A resource whose spec cannot be resolved is not work waiting to happen; it
     is work that cannot be done, and saying so is the only useful thing left.
     Raised instead, it rolled back the claim and left the operation at the head
-    of a queue ordered by age -- so every poll after it hit the same one and
+    of a queue ordered by age, so every poll after it hit the same one and
     nothing else was ever claimed. A certificate naming a target that has been
     removed stopped DNS, proxies and renewals, silently, everywhere.
     """
@@ -449,7 +454,7 @@ def report_operation(
         # removed explicitly rather than by loosening the foreign key: PROTECT
         # is what stops an accidental delete elsewhere taking history with it,
         # and this is the one place the removal is deliberate. The audit trail
-        # is unaffected -- it is written separately, and outlives both.
+        # is unaffected: it is written separately, and outlives both.
         answer = {
             "ok": True,
             "operation": serialize_operation(operation),

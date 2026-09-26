@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regression: command output never crosses the public deployment boundary.
+# Command output never crosses the public deployment boundary.
 
 set -eu
 

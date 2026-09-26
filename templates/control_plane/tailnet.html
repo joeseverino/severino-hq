@@ -1,23 +1,6 @@
-{% extends "base.html" %}
-{% block title %}Tailnet{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Tailnet</h1>
-    <p class="muted">
-      The access policy, and what it allows. The machines themselves are on the
-      machines page; this is what governs reaching them.
-    </p>
-  </div>
-  <div class="page-actions">
-    <a class="btn primary" href="{% url 'control_plane:tailnet' %}" data-modal-open="whatif">Policy test</a>
-    {% if policy_declaration %}
-      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
-    {% endif %}
-    <a class="btn" href="{% url 'control_plane:machines' %}">All machines</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% load nav_tags %}
+{% block page %}
 {% if policy.known %}
   <div class="control-summary">
     <div class="control-metric">
@@ -33,18 +16,18 @@
       <strong>{{ policy.tags|length }}</strong>
     </div>
     <div class="control-metric">
-      <span class="control-label">Its own tests</span>
+      <span class="control-label">Policy tests</span>
       <strong>{{ policy.tests|length }}</strong>
     </div>
   </div>
 
   {% if policy.facts %}
-    <h2>How this tailnet is set up</h2>
+    <h2>Settings</h2>
     <div class="table-scroll">
       <table class="data-table compact-table">
         <tbody>
-          {% for label, value in policy.facts %}
-            <tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>
+          {% for label, addresses, value in fact_rows %}
+            <tr><th scope="row">{{ label }}</th><td>{% if addresses %}{% include "control_plane/_policy_names.html" with names=addresses %}{% else %}{{ value }}{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -53,43 +36,39 @@
 
   <div class="section-head">
     <h2>Grants</h2>
-    {% if policy_declaration %}
-      <a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Edit policy</a>
-    {% endif %}
   </div>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>From</th><th>To</th><th>On</th>{% if policy_declaration %}<th></th>{% endif %}</tr></thead>
+      <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
       <tbody>
-        {% for grant in policy.grants %}
+        {% for grant, sources, destinations in grant_rows %}
           <tr>
-            <td>{% for src in grant.src %}<code>{{ src }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            <td>{% for dst in grant.dst %}<code>{{ dst }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            <td>{% for ip in grant.ip %}<code>{{ ip }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            {% if policy_declaration %}
-              <td><a class="subtle-link" href="{% url 'control_plane:edit' policy_declaration %}">Edit &rarr;</a></td>
-            {% endif %}
+            <td>{% include "control_plane/_policy_names.html" with names=sources %}</td>
+            <td>{% include "control_plane/_policy_names.html" with names=destinations %}</td>
+            <td><span class="code-list">{% for ip, name in grant.ports %}<code>{{ ip }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  <h2>Who is who</h2>
+  <h2>Groups and tags</h2>
   <div class="table-scroll">
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Is</th></tr></thead>
+      <thead><tr><th>Name</th><th>Members</th><th>Devices</th></tr></thead>
       <tbody>
         {% for group in policy.groups %}
           <tr>
             <td><code>{{ group.name }}</code></td>
             <td>{{ group.members|join:", " }}</td>
+            <td></td>
           </tr>
         {% endfor %}
         {% for tag in policy.tags %}
           <tr>
             <td><code>{{ tag.name }}</code></td>
             <td><span class="muted">owned by</span> {{ tag.owners|join:", " }}</td>
+            <td>{% with carried=tag_devices|dictkey:tag.name %}{% for link in carried %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% empty_value %}{% endfor %}{% endwith %}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -100,7 +79,7 @@
   Two more ways this tailnet reaches things, neither of which is a device and
   neither of which shows anywhere else. A Service is a name the tailnet serves,
   published by whichever nodes advertise it. An app connector is a node routing
-  traffic for named domains on the tailnet's behalf -- declared inside the
+  traffic for named domains on the tailnet's behalf: declared inside the
   policy above rather than anywhere HQ was looking, so it is read from the
   document rather than fetched.
 
@@ -116,9 +95,9 @@
           {% for service in policy.services %}
             <tr>
               <td><code>{{ service.name }}</code></td>
-              <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
-              <td>{{ service.ports|join:" "|default:"—" }}</td>
-              <td class="muted">{{ service.comment|default:"—" }}</td>
+              <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+              <td>{{ service.ports|join:" "|or_empty }}</td>
+              <td class="muted">{{ service.comment|or_empty }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -136,12 +115,12 @@
     <h2>Shell access</h2>
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>From</th><th>To</th><th>As</th><th>Asks again</th></tr></thead>
+        <thead><tr><th>From</th><th>To</th><th>As</th><th>Re-authenticate</th></tr></thead>
         <tbody>
-          {% for rule in policy.ssh_rules %}
+          {% for rule, sources, destinations in ssh_rows %}
             <tr>
-              <td>{% for src in rule.src %}<code>{{ src }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-              <td>{% for dst in rule.dst %}<code>{{ dst }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% include "control_plane/_policy_names.html" with names=sources %}</td>
+              <td>{% include "control_plane/_policy_names.html" with names=destinations %}</td>
               <td>{% for user in rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
               <td>{% if rule.action == "check" %}Yes{% elif rule.action == "accept" %}<strong>No</strong>{% else %}{{ rule.action }}{% endif %}</td>
             </tr>
@@ -160,8 +139,8 @@
           {% for connector in policy.app_connectors %}
             <tr>
               <td><code>{{ connector.name }}</code></td>
-              <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
-              <td>{% for domain in connector.domains %}<code>{{ domain }}</code>{% if not forloop.last %} {% endif %}{% empty %}—{% endfor %}</td>
+              <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+              <td>{% for domain in connector.domains %}{% entity "service"|entity_of:domain code=True %}{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -169,8 +148,8 @@
     </div>
   {% endif %}
 {% else %}
-  {% include "partials/_empty_state.html" with message="No sweep has read the tailnet policy yet." %}
+  {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." %}
 {% endif %}
 
-{% include "partials/_modal.html" with id="whatif" title="Policy test" lede="What the policy admits, evaluated by Tailscale rather than worked out here." body_template="control_plane/_whatif_form.html" %}
+{% include "partials/_modal.html" with id="whatif" title="Policy test" lede="Check whether the policy allows a connection. Tailscale evaluates it." body_template="control_plane/_whatif_form.html" %}
 {% endblock %}

@@ -3,7 +3,7 @@
 Hostnames carry their operator in the domain they sit under:
 ``mx01.mail.icloud.com`` is iCloud, ``site.pages.dev`` is Cloudflare Pages,
 ``node.example.ts.net`` is Tailscale. Reading that off the name turns a
-row of DNS trivia into the answer somebody was actually after -- who has the
+row of DNS trivia into the answer somebody was actually after: who has the
 mailbox, who serves the site.
 
 Derived, not configured. Nothing here is a per-domain setting; it is a small
@@ -19,6 +19,8 @@ on one card rather than breaking anything.
 """
 
 from __future__ import annotations
+
+from control_plane.names import in_zone, normalized_hostname
 
 # Suffix -> what a person calls it. Longest match wins, so a more specific
 # suffix can name a service running under a broader one.
@@ -41,11 +43,11 @@ def registrable(hostname: str) -> str:
     and being wrong here costs a slightly odd label on one card.
 
     An address is returned whole. Taking the last two labels of one produced
-    "100.72" from 198.51.100.72 -- not a domain, not an address, and not
+    "100.72" from 198.51.100.72, not a domain, not an address, and not
     anything a person could act on.
     """
 
-    candidate = str(hostname).strip().lower().rstrip(".")
+    candidate = normalized_hostname(hostname)
     if ":" in candidate or all(label.isdigit() for label in candidate.split(".")):
         return candidate
     labels = candidate.split(".")
@@ -55,11 +57,11 @@ def registrable(hostname: str) -> str:
 def operator(hostname: str) -> str:
     """What a person calls whoever runs this name, or its domain if unknown."""
 
-    candidate = str(hostname).strip().lower().rstrip(".")
+    candidate = normalized_hostname(hostname)
     matches = [
         (len(suffix), name)
         for suffix, name in OPERATORS
-        if candidate == suffix or candidate.endswith(f".{suffix}")
+        if in_zone(candidate, suffix)
     ]
     if matches:
         return max(matches)[1]

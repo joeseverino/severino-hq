@@ -1,0 +1,15 @@
+# Read permissions for HQ's cloudflare_api observer token, one per line as
+# "<permission group name> (<account|zone>)". The requires of every Cloudflare
+# reading plus control_plane.credential_reads; a test keeps them equal.
+Access: Apps Read (account)
+Access: Policies Read (account)
+Access: Service Tokens Read (account)
+Account Analytics Read (account)
+Account Settings Read (account)
+Cloudflare Pages Read (account)
+Cloudflare Tunnel Read (account)
+D1 Read (account)
+Registrar: Domains Read (account)
+SSL and Certificates Read (zone)
+Zone Read (zone)
+Zone Settings Read (zone)

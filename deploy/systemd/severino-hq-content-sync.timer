@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily pull of the jseverino.com content index into Severino HQ
+Description=Daily pull of the example.com content index into Severino HQ
 
 [Timer]
 OnBootSec=5min

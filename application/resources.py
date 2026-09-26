@@ -26,6 +26,7 @@ from . import (
     analytics,
     assets,
     contact_submissions,
+    derived_reads,
     infrastructure,
     projects,
     read_models,
@@ -38,6 +39,13 @@ from .input_errors import pydantic_refusal
 from .integration_validation import required_capability_names
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal
+
+
+class ResourceSearchDefinition(SearchDefinition):
+    """A declaration's result opens the machine, service or domain it belongs to."""
+
+    def url(self, instance) -> str:
+        return services.home_url(instance)
 
 
 class ResourceQuery(BaseModel):
@@ -104,6 +112,21 @@ class EmptyQuery(ResourceQuery):
 class ContactSubmissionQuery(BoundedQuery):
     status: str = ""
     query: str = ""
+
+
+class ActionItemQuery(BoundedQuery):
+    query: str = Field(default="", max_length=200)
+    status: str = ""
+    source: str = ""
+
+
+class ReadingQuery(BoundedQuery):
+    provider: str | None = None
+
+
+class SearchQuery(BoundedQuery):
+    query: str = Field(default="", max_length=200)
+    limit: int = Field(default=20, ge=1)
 
 
 CORE_RESOURCE_SPECS = (
@@ -257,7 +280,10 @@ CORE_RESOURCE_SPECS = (
                 "message",
             ),
             label="Audit log",
+            title_field="search_title",
+            badge_field="type_label",
             timestamp_field="created_at",
+            snippet_field="search_snippet",
         ),
         web_route="core:audit_list",
     ),
@@ -271,14 +297,15 @@ CORE_RESOURCE_SPECS = (
         infrastructure.get_managed_resource,
         "key",
         not_found_errors=(infrastructure.NotFoundError,),
-        search=SearchDefinition(
+        search=ResourceSearchDefinition(
             "infrastructure.resources",
             ManagedResource,
             "key",
             ("key", "kind", "spec", "status", "conditions"),
             label="Infrastructure resources",
             title_field="key",
-            badge_field="kind",
+            badge_field="kind_label",
+            snippet_field="search_summary",
         ),
         web_route="control_plane:list",
     ),
@@ -294,13 +321,100 @@ CORE_RESOURCE_SPECS = (
         not_found_errors=(services.NotFoundError,),
         web_route="control_plane:services",
     ),
+    ResourceSpec(
+        "estate",
+        "Estate",
+        "Machines online, services, domains, next renewals and connections needing attention.",
+        Capability.READ,
+        derived_reads.list_estate,
+        EmptyQuery,
+        web_route="dashboard",
+    ),
+    ResourceSpec(
+        "action.items",
+        "Action items",
+        "The composed action queue: what needs doing, from every domain.",
+        Capability.READ,
+        derived_reads.list_action_items,
+        ActionItemQuery,
+        web_route="action_items",
+    ),
+    ResourceSpec(
+        "machines",
+        "Machines",
+        "Every machine anything reported, its roles, addresses and what runs on it.",
+        Capability.READ,
+        derived_reads.list_machines,
+        BoundedQuery,
+        derived_reads.get_machine,
+        "name",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:machines",
+    ),
+    ResourceSpec(
+        "domains",
+        "Domains",
+        "Every domain HQ declares or a sweep has seen, its services and registration.",
+        Capability.READ,
+        derived_reads.list_domains,
+        BoundedQuery,
+        derived_reads.get_domain,
+        "name",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="zones:index",
+    ),
+    ResourceSpec(
+        "relationships",
+        "Relationships",
+        "One machine, service, domain or declaration and everything related to it.",
+        Capability.READ,
+        detail_handler=derived_reads.get_relationships,
+        identifier="node",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:topology",
+        pass_principal=True,
+    ),
+    ResourceSpec(
+        "readings",
+        "Readings",
+        "Each reading kind, its last read, and its stored records as its schema admits them.",
+        Capability.READ,
+        derived_reads.list_readings,
+        ReadingQuery,
+        derived_reads.get_reading,
+        "kind",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:connections",
+    ),
+    ResourceSpec(
+        "credentials",
+        "Credential sight",
+        "What each connection provider's credential can see, and what it would need to see more.",
+        Capability.READ,
+        derived_reads.list_credentials,
+        EmptyQuery,
+        derived_reads.get_credential,
+        "provider",
+        not_found_errors=(derived_reads.NotFoundError,),
+        web_route="control_plane:connections",
+    ),
+    ResourceSpec(
+        "search",
+        "Search",
+        "Machines, services and domains, then records, matching a query.",
+        Capability.READ,
+        derived_reads.search,
+        SearchQuery,
+        web_route="search",
+        pass_principal=True,
+    ),
 )
 
 
 class ResourceError(ValueError):
     """Base for resource failures: ``reason`` is this module's own text.
 
-    Adapters answer a caller with ``reason``, never ``str(exc)`` -- a relayed
+    Adapters answer a caller with ``reason``, never ``str(exc)``: a relayed
     handler message can name internals the caller has no business seeing.
     """
 
@@ -386,6 +500,10 @@ def _authorize(spec: ResourceSpec, principal: Principal) -> None:
         principal.require(capability)
 
 
+def _caller(spec: ResourceSpec, principal: Principal) -> dict[str, Principal]:
+    return {"principal": principal} if spec.pass_principal else {}
+
+
 def list_resource(
     name: str,
     query: dict[str, Any] | None = None,
@@ -401,7 +519,7 @@ def list_resource(
         parsed = spec.list_query_type.model_validate(query or {}, strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
-    result = spec.list_handler(**parsed.model_dump())
+    result = spec.list_handler(**parsed.model_dump(), **_caller(spec, principal))
     if (
         not isinstance(result, dict)
         or not isinstance(result.get("items"), list)
@@ -428,7 +546,7 @@ def get_resource(
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     try:
-        result = spec.detail_handler(parsed)
+        result = spec.detail_handler(parsed, **_caller(spec, principal))
     except spec.not_found_errors as exc:
         # A provider declares these types; their text is written for the
         # provider, not for a caller, so answer with this module's own.

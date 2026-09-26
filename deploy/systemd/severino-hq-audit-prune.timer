@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily prune of routine Severino HQ audit events
+
+[Timer]
+OnBootSec=20min
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=yes
+Unit=severino-hq-audit-prune.service
+
+[Install]
+WantedBy=timers.target

@@ -31,7 +31,7 @@ class DocumentationQuerySet(models.QuerySet):
         Two doc types are excluded because they are not documentation about a
         system and so have no review cycle to fall behind. A public article
         draft belongs to the Content pipeline. A task belongs to the task
-        lifecycle -- it is open until it is done, and "last reviewed: never" is
+        lifecycle: it is open until it is done, and "last reviewed: never" is
         not a finding about a task, it is what every task says from the moment
         it is written. Both put an item in the queue that reviewing cannot
         clear, which is the one thing a queue must never contain.
@@ -79,7 +79,7 @@ class DocumentationRecord(TimestampedModel):
 
     class TaskStatus(models.TextChoices):
         # A task doc carries its own lifecycle (the importer writes these into the
-        # same status field). Mirrors the schema's task_statuses — guarded in tests.
+        # same status field). Mirrors the schema's task_statuses: guarded in tests.
         OPEN = "open", "Open"
         ACTIVE = "active", "Active"
         PARKED = "parked", "Parked"
@@ -102,8 +102,7 @@ class DocumentationRecord(TimestampedModel):
         max_length=80,
         unique=True,
         help_text=(
-            "Stable identifier, e.g. 'rb-adguard-001'. Used by the future "
-            "knowledge-router MCP and JSON exports."
+            "Stable identifier, e.g. 'rb-adguard-001'. Never rename it."
         ),
     )
     title = models.CharField(max_length=200)
@@ -128,8 +127,8 @@ class DocumentationRecord(TimestampedModel):
         choices=Sensitivity.choices,
         default=Sensitivity.INTERNAL,
         help_text=(
-            "Sensitivity label. Public/internal docs can be referenced by the "
-            "future MCP; sensitive/restricted should not be."
+            "Public and internal docs are safe for AI export. Sensitive and "
+            "restricted are not."
         ),
     )
 
@@ -180,7 +179,7 @@ class DocumentationRecord(TimestampedModel):
         verbose_name = "Documentation record"
 
     def __str__(self) -> str:
-        return f"{self.doc_id} — {self.title}"
+        return f"{self.doc_id} · {self.title}"
 
     def get_absolute_url(self) -> str:
         return reverse("docs_index:detail", args=[self.doc_id])

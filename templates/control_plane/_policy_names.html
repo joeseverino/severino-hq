@@ -1,0 +1,5 @@
+{% comment %}
+  Names a tailnet policy writes. One that stands for a machine links to it
+  through the link builder; the rest stay as written. Expects: `names`, a
+  sequence of application.policy_links.PolicyName.
+{% endcomment %}<span class="code-list">{% for name in names %}{% if name.link %}{% entity name.link code=True %}{% else %}<code>{{ name.text }}</code>{% endif %}{% if not forloop.last %} {% endif %}{% endfor %}</span>

@@ -1,4 +1,4 @@
-# Severino HQ — machine-client API
+# Severino HQ: machine-client API
 
 The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
 phone, a Shortcut, or a cron job can run an HQ capability over HTTP.
@@ -47,10 +47,10 @@ here on signature alone. Signature is not identity.
 In Pocket ID, **Administration → APIs**:
 
 1. Create an API. Name it, and set its **Resource** to the value you will put in
-   `SEVERINO_API_RESOURCE` (e.g. `https://hq.jseverino.com/api`). This becomes
+   `SEVERINO_API_RESOURCE` (e.g. `https://hq.example.com/api`). This becomes
    the `aud` claim and **cannot be changed later**.
 2. Add a **Permission** for each capability the client needs, named *exactly*
-   as HQ names it — `example.write`, `write_receipts`, `write_expenses`.
+   as HQ names it: `example.write`, `write_receipts`, `write_expenses`.
 
 The permission keys are HQ's capability names on purpose. A mapping table
 between the two systems would be a third home for the authorization model and
@@ -79,18 +79,18 @@ With no rules set, only changes to gated infrastructure are held.
 Get a token:
 
 ```bash
-curl -s https://sso.jseverino.com/api/oidc/token \
+curl -s https://sso.example.com/api/oidc/token \
   -d grant_type=client_credentials \
   -d client_id="$CLIENT_ID" \
   -d client_secret="$CLIENT_SECRET" \
-  -d resource="https://hq.jseverino.com/api" \
+  -d resource="https://hq.example.com/api" \
   -d scope="example.write"
 ```
 
 Ask what it may do:
 
 ```bash
-curl -s https://hq.jseverino.com/api/v2/ -H "Authorization: Bearer $TOKEN"
+curl -s https://hq.example.com/api/v2/ -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json
@@ -100,7 +100,7 @@ curl -s https://hq.jseverino.com/api/v2/ -H "Authorization: Bearer $TOKEN"
 Run a capability:
 
 ```bash
-curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
+curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
@@ -123,7 +123,7 @@ curl -s https://hq.jseverino.com/api/v2/capabilities/example.import/ \
 
 `/api/` is exempt from the session-login redirect but **not** from
 authentication. An anonymous request gets `401` with a `WWW-Authenticate`
-header, never a 302 to an HTML login page — a Shortcut cannot fill one in, and
+header, never a 302 to an HTML login page: a Shortcut cannot fill one in, and
 would record the redirect as success while importing nothing.
 
 Each capability description includes the domain `input_schema` and the complete
@@ -160,6 +160,40 @@ optional search projection once. HQ derives the API catalog and read routes,
 the generic MCP tools, and global-search registration from that declaration.
 Unknown filters, repeated URL parameters, unregistered resources, unsupported
 operations, and insufficient grants fail before a domain query runs.
+
+### What each surface exposes
+
+Every derived read is a `ResourceSpec` in `application/resources.py`. One
+registration serves the API (`/api/v2/resources/<name>/`), MCP (`list_resource`,
+`get_resource`), the CLI (`manage.py hq_call` over those tools) and the SDK
+(`hq_sdk.resources.list_resource` / `get_resource`). Each handler calls the
+function its page calls. All need `read`, which every MCP principal holds;
+the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
+
+| Derived feature | Page | Resource | API | MCP | CLI | SDK |
+|---|---|---|---|---|---|---|
+| Estate reading (`estate.cards`) | Dashboard | `estate` | yes | yes | yes | yes |
+| Action items (`dashboard.work_queue`, estate items included) | Action items | `action.items` | yes | yes | yes | yes |
+| Machine catalogue, roles, HQ's own machine | Machines | `machines` | yes | yes | yes | yes |
+| Domains, their services and registration | Domains | `domains` | yes | yes | yes | yes |
+| Services and their facets | Services | `services` | yes | yes | yes | yes |
+| `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
+| Readings, schema-filtered (`control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
+| Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
+| Credential sight | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
+| Estate and record search (command center) | Search | `search` | yes | yes | yes | yes |
+| Topology and impact trace | Topology | `/topology/`, `get_topology` | yes | yes | yes | no |
+| Findings | Findings | `/findings/`, `get_findings` | yes | yes | yes | no |
+| Connections | Connections | `/connections/`, `list_connections` | yes | yes | yes | no |
+| Registry import | none | `hq.import` capability | yes | yes | yes | yes |
+| Public registry refresh | none | `manage.py refresh_public_registry` | no | no | yes | no |
+
+Readings leave only through their schema: `ObservationSpec.admitted` drops any
+field the record model does not name. Node ids are the topology's:
+`machine:<name>`, `service:<hostname>`, `zone:<domain>`, `resource:<key>`.
+Topology, findings and connections are served by their own routes and tools
+rather than resources; the SDK does not re-export them. The public registry
+refreshes on a timer by design and is never triggered by a caller.
 
 Connection descriptions are generated by `describe_connections` from
 `ConnectionSpec`. The response's `connections` array is the complete static
@@ -215,7 +249,7 @@ workflow registry.
 
 The `analytics` resource reports `coverage` for the requested completed-day
 window. Coverage is recorded even when a healthy site had zero traffic, so
-`missing_days` means HQ has not read that site-day—not that no visit occurred.
+`missing_days` means HQ has not read that site-day, not that no visit occurred.
 The controller discovers sites, asks HQ for bounded missing windows, and
 backfills them idempotently; API and web readers do not invent their own
 freshness policy.
@@ -260,7 +294,7 @@ header. Generate one opaque key per logical operation and keep it unchanged
 when retrying that operation. HQ stores the actor, canonical request hash, HTTP
 status, and response in the same database transaction as the domain write. A
 retry therefore receives the committed response without running the command a
-second time—even after a process restart. Reusing the key with different input
+second time, even after a process restart. Reusing the key with different input
 returns `409 idempotency_conflict`.
 
 Records expire after 24 hours by default and expired records are pruned by the
@@ -279,13 +313,13 @@ payload; its private repository owns the corresponding setup guide.
 In an automation client:
 
 1. Produce the source records for one logical operation.
-2. Request a token from `https://sso.jseverino.com/api/oidc/token`, POST,
+2. Request a token from `https://sso.example.com/api/oidc/token`, POST,
    `Form` body: `grant_type=client_credentials`, `client_id`, `client_secret`,
-   `resource=https://hq.jseverino.com/api`, `scope=example.write`.
+   `resource=https://hq.example.com/api`, `scope=example.write`.
 3. Read `access_token` from the result.
 4. Generate a UUID and retain it as the operation's retry key.
 5. POST to
-   `https://hq.jseverino.com/api/v2/capabilities/example.import/`, with
+   `https://hq.example.com/api/v2/capabilities/example.import/`, with
    headers `Authorization: Bearer <the value from step 3>` and
    `Idempotency-Key: <the UUID from step 4>`, `JSON` body:
 

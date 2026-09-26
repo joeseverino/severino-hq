@@ -89,6 +89,9 @@ class ResourceSpec:
     not_found_errors: tuple[type[Exception], ...] = ()
     search: SearchDefinition | None = None
     web_route: str = ""
+    # The handlers also take ``principal=``: the answer depends on what the
+    # caller may see, not only on whether it may read the resource.
+    pass_principal: bool = False
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

@@ -1,21 +1,15 @@
 """What the providers hold, and which of it HQ does not manage.
 
-The controller fetches every rewrite and every proxy host on each pass and, for
-years, kept exactly one record per pass -- the one it had been asked to
-reconcile. Everything else was discarded at the point where it had already been
-paid for. So HQ knew about the resources it had created and nothing about the
-thirteen that were simply there.
-
-This records the rest. It is a cache and stays one: nothing reconciles from it,
+The controller fetches every record a provider holds on each pass. This records
+what HQ does not manage. It is a cache and stays one: nothing reconciles from it,
 and HQ never becomes a second copy of AdGuard. What it buys is the difference
-between a registry and a console -- an operator can see what exists, and adopt
+between a registry and a console: an operator can see what exists, and adopt
 what HQ should be looking after.
 
 Adoption is safe because the spec is read back out of the live record through
 the provider's own ``from_record``. The declaration starts equal to the world,
 so the first reconciliation after adopting changes nothing. Anything else would
-mean adopting a host quietly reset it to HQ's defaults, which is precisely the
-bug that made HSTS switch itself off.
+mean adopting a host quietly reset it to HQ's defaults.
 """
 
 from __future__ import annotations
@@ -33,17 +27,24 @@ from control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
-from control_plane.providers import OBSERVATION_KINDS, PROVIDERS, service_facets
+from control_plane.observations import OBSERVATIONS
+from control_plane.provider_adapters.contracts import REFUSALS
+from control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label, service_facets
+from core.audit import CONNECTION_AUDIT_TYPE, record_event
+from core.models import AuditLog
+
+from control_plane.names import normalized_hostname
 
 from .contracts import endpoint_has_private_parts
 
 from .security import Capability, Principal
+from .ui import counted
 
 
 def record_token(kind: str, identity: tuple[str, ...]) -> str:
     """A short, stable handle for one live record, safe to put in a URL.
 
-    Derived rather than stored because nothing persists an unmanaged record --
+    Derived rather than stored because nothing persists an unmanaged record,
     it exists only in the last sweep. Hashed rather than joined because an
     identity contains a DNS value, and a TXT record's value is neither short nor
     URL-safe.
@@ -70,10 +71,18 @@ class Unmanaged:
     hostnames: tuple[str, ...]
     spec: dict[str, Any]
     observed_at: Any
+    # False when the provider will not take this record on unasked: it stays
+    # here, and a finding says so, until a person adopts or removes it.
+    adoptable: bool = True
+    # The connection that read it, when the record names one.
+    connection_ref: str = ""
+    # True unless it was read through a connection that manages. An observed
+    # record is shown and never adopted. See ``application.adoption``.
+    observed_only: bool = True
 
     @property
     def label(self) -> str:
-        return PROVIDERS[self.kind].label or self.kind
+        return registry_label(self.kind)
 
     @property
     def hostname(self) -> str:
@@ -84,7 +93,7 @@ class Unmanaged:
         """A short, stable handle for this exact record, safe to put in a URL.
 
         Derived rather than stored because nothing persists an unmanaged record
-        -- it exists only in the last sweep. Hashed rather than joined because
+        it exists only in the last sweep. Hashed rather than joined because
         an identity contains a DNS value, and a TXT record's value is neither
         short nor URL-safe.
         """
@@ -144,20 +153,38 @@ def record_inventory(
             # controller upgrade take the whole inventory down.
             continue
         reached = bool(report.get("ok", True))
-        seen = {"records": report.get("records") or [], "observed_at": observed_at}
+        connected = bool(report.get("connected", True))
+        records = report.get("records") or []
+        error = str(report.get("error", ""))
+        refusal = str(report.get("refusal", "")) if not reached else ""
+        # An unknown refusal is stored as none, so no remedy is offered for it.
+        if refusal not in REFUSALS:
+            refusal = ""
+        observation = OBSERVATIONS.get(kind)
+        if observation is not None:
+            records, refused = observation.clean(records)
+            if refused:
+                error = error or (
+                    f"{counted(refused, 'record')} did not match the {kind} schema."
+                )
+        seen = {"records": records, "observed_at": observed_at}
         ProviderInventory.objects.update_or_create(
             kind=kind,
             # An unreachable provider leaves the last sweep's records and the
             # moment it took them exactly where they were.
             defaults={
                 "reachable": reached,
-                "error": str(report.get("error", ""))[:500],
+                "connected": connected,
+                "error": error[:500],
+                "refusal": refusal,
                 "controller_id": controller_id,
                 **(seen if reached else {}),
             },
             create_defaults={
                 "reachable": reached,
-                "error": str(report.get("error", ""))[:500],
+                "connected": connected,
+                "error": error[:500],
+                "refusal": refusal,
                 "controller_id": controller_id,
                 **seen,
             },
@@ -180,7 +207,7 @@ def confirm_observed(payload: dict[str, Any]) -> int:
 
     A declaration is "in sync" when what HQ asked for is what is there, and a
     sweep is HQ going and looking. Yet only a reconcile ever wrote that down,
-    so a declaration nothing had changed sat reporting "never reported" -- and
+    so a declaration nothing had changed sat reporting "never reported", and
     nothing queues a reconcile for a resource that has not drifted, so the
     first look never came. Whole services read as unverified while every part
     of them was running and had just been seen.
@@ -245,24 +272,6 @@ def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | Non
         return None
 
 
-def _same_declaration(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> bool:
-    """Whether the live record says what the declaration asks for.
-
-    Compared on the fields the declaration carries. A provider hands back more
-    than was asked for -- an id it assigned, a status it keeps -- and requiring
-    those to appear in a spec nobody wrote would report drift on every record.
-
-    Fields the provider declared ``unobservable`` are skipped: a blank it was
-    never able to fill is not a disagreement. Comparing them anyway made every
-    NPM proxy host that named a certificate differ forever, which
-    ``confirm_observed`` rightly refused to call observed -- so the resource
-    kept its last reconcile's condition and read healthy while no sweep had
-    confirmed it since.
-    """
-
-    return not _differences(kind, declared, found)
-
-
 def _differences(
     kind: str, declared: dict[str, Any], found: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
@@ -289,7 +298,7 @@ def _text(value: Any) -> str:
 
     A browser submits a textarea as CRLF and every provider returns LF, so a
     multi-line field saved through a form differs from the identical document
-    read back -- byte for byte the same but for the line endings. A tailnet
+    read back: byte for byte the same but for the line endings. A tailnet
     policy sat drifted on that for a week, having been applied successfully and
     accepted by Tailscale seconds earlier.
     """
@@ -330,24 +339,20 @@ def _record_drift(
 ) -> None:
     """Say what the sweep found instead, rather than leaving the last good word.
 
-    A declaration the live record contradicts was skipped entirely -- not
-    confirmed, and not described either. It kept the condition from the last
-    time it did match, "the last sweep found this exactly as declared", beside a
-    timestamp slowly ageing away from it. So the page read healthy and stale at
-    once and said nothing about the only thing that had changed, and the operator
-    was left to notice a date.
+    A declaration the live record contradicts is described, not left with the
+    condition from the last time it matched.
 
     Still not marked observed: this is not what HQ asked for, and the timestamp
     has to keep meaning "last seen as declared" or it means nothing. What gets
     written is the disagreement itself, named field by field, because which side
-    is wrong is not HQ's to decide -- often it is the declaration that is out of
+    is wrong is not HQ's to decide: often it is the declaration that is out of
     date, and an operator can only see that if HQ says which value it is arguing
     about.
     """
 
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
     # is a fact that holds, and ``resource_health`` reads only the ones that do
-    # -- so a false Ready is not the opposite of a true one, it is a condition
+    # so a false Ready is not the opposite of a true one, it is a condition
     # nothing looks at, and the summary card went on saying "not observed" above
     # a table that described the drift in full.
     resource.conditions = [
@@ -430,19 +435,27 @@ def record_connections(
             )
         if connection.get("carried"):
             # Reported without being asked again, because HQ said its last
-            # answer was recent and good. Kept as it was -- result and the time
-            # it was taken -- so the page says when it was last really checked.
+            # answer was recent and good. Kept as it was (result and the time
+            # it was taken) so the page says when it was last really checked.
             # A connection HQ has never seen answer cannot be carried.
             carried = ProviderConnection.objects.filter(
                 controller_id=controller_id, connection_ref=connection_ref
             ).update(
                 provider=str(connection.get("provider", ""))[:64],
                 endpoint=endpoint,
+                manages=connection.get("manages") is True,
             )
             if carried:
                 stored.append(connection_ref)
                 continue
-        ProviderConnection.objects.update_or_create(
+        before = (
+            ProviderConnection.objects.filter(
+                controller_id=controller_id, connection_ref=connection_ref
+            )
+            .values_list("reachable", "probed", "manages")
+            .first()
+        )
+        row, _ = ProviderConnection.objects.update_or_create(
             controller_id=controller_id,
             connection_ref=connection_ref,
             defaults={
@@ -454,9 +467,16 @@ def record_connections(
                 "reachable": bool(connection.get("ok", True)),
                 "probed": bool(connection.get("probed", True)),
                 "detail": str(connection.get("detail", ""))[:500],
+                # Only an explicit true manages; anything else observes.
+                "manages": connection.get("manages") is True,
                 "observed_at": observed_at,
             },
         )
+        # The row carries when it was last checked; the audit log carries changes.
+        if before is None or before[:2] != (row.reachable, row.probed):
+            _record_probe(row)
+        if (before[2] if before else False) != row.manages:
+            _record_manages(row)
         stored.append(connection_ref)
     ProviderConnection.objects.filter(controller_id=controller_id).exclude(
         connection_ref__in=stored
@@ -466,6 +486,38 @@ def record_connections(
         "recorded": sorted(stored),
         "observed_at": observed_at.isoformat(),
     }
+
+
+def _record_probe(row: ProviderConnection) -> None:
+    """A routine event for a connection first seen, or whose probe outcome changed."""
+
+    if not row.probed:
+        outcome = "not probed"
+    elif row.reachable:
+        outcome = "reachable"
+    else:
+        outcome = "unreachable"
+    record_event(
+        action=AuditLog.Action.OBSERVED,
+        obj=row,
+        type_label=CONNECTION_AUDIT_TYPE,
+        message=f"Probed, {outcome}",
+        metadata={"controller_id": row.controller_id, "provider": row.provider},
+        connection=row.connection_ref,
+    )
+
+
+def _record_manages(row: ProviderConnection) -> None:
+    """Whether a connection may make records managed. Kept, never pruned."""
+
+    record_event(
+        action=AuditLog.Action.SETTINGS_CHANGED,
+        obj=row,
+        type_label=CONNECTION_AUDIT_TYPE,
+        message="Manages" if row.manages else "Observes only",
+        metadata={"controller_id": row.controller_id, "provider": row.provider},
+        connection=row.connection_ref,
+    )
 
 
 def _service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
@@ -480,7 +532,7 @@ def _service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
         return ()
     try:
         return tuple(
-            sorted(name.strip().lower().rstrip(".") for name in provider.hostnames(spec))
+            sorted(normalized_hostname(name) for name in provider.hostnames(spec))
         )
     except (KeyError, TypeError, ValueError):
         return ()
@@ -491,7 +543,7 @@ def _identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
 
     Falls back to the hostnames, which is what identity meant when every
     provider had one record per name. A provider that can hold several records
-    for a single name says so itself -- see ``ProviderSpec.identity`` -- because
+    for a single name says so itself (see ``ProviderSpec.identity``) because
     hostname identity would silently merge them and adopt whichever the provider
     listed first.
     """
@@ -514,14 +566,19 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     actually happens.
     """
 
+    from .infrastructure import enabled_resources
+
     declared: dict[str, set[tuple[str, ...]]] = {}
-    for resource in ManagedResource.objects.filter(enabled=True):
+    for resource in enabled_resources():
         if resource.kind not in PROVIDERS:
             continue
         declared.setdefault(resource.kind, set()).add(
             _identity(resource.kind, resource.spec)
         )
 
+    from .adoption import manages_through
+
+    manages = manages_through()
     found: list[Unmanaged] = []
     for snapshot in ProviderInventory.objects.all():
         provider = PROVIDERS.get(snapshot.kind)
@@ -536,6 +593,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
             identity = _identity(snapshot.kind, spec)
             if not identity or identity in known:
                 continue
+            connection_ref = str(record.get("connection_ref", "") or "")
             found.append(
                 Unmanaged(
                     kind=snapshot.kind,
@@ -543,6 +601,9 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     hostnames=_service_hostnames(snapshot.kind, spec),
                     spec=spec,
                     observed_at=snapshot.observed_at,
+                    adoptable=provider.adopts is None or provider.adopts(record),
+                    connection_ref=connection_ref,
+                    observed_only=not manages(snapshot.kind, connection_ref),
                 )
             )
     return tuple(sorted(found, key=lambda item: (item.identity, item.kind)))
@@ -555,12 +616,18 @@ class UnmanagedService:
     Grouped because a hostname is the unit an operator thinks in, and because
     the managed table beside this one is already per-hostname. Listed per record
     instead, one service appeared as two adjacent rows with the same name, and
-    onboarding it took two clicks -- the page taught two different shapes for
+    onboarding it took two clicks: the page taught two different shapes for
     the same idea.
     """
 
     hostname: str
     items: tuple[Unmanaged, ...]
+
+    @property
+    def observed_only(self) -> bool:
+        """Whether every record behind the name is read only to observe."""
+
+        return all(item.observed_only for item in self.items)
 
     @property
     def observed_at(self):
@@ -570,8 +637,8 @@ class UnmanagedService:
     def facets(self) -> tuple[tuple[str, str, str], ...]:
         """``(id, label, value)`` per facet, lining up with the managed table.
 
-        The value only. Each readout row carries its own label -- "Answers with",
-        "Forwards to" -- which is right on a detail card that has no column
+        The value only. Each readout row carries its own label: "Answers with",
+        "Forwards to", which is right on a detail card that has no column
         headings, and pure noise in a table whose column already says DNS. The
         secondary rows go the same way: what a list is for is scanning where a
         name points, and the rest is one click away.
@@ -625,7 +692,7 @@ def find_unmanaged(
     candidates = [item for item in unmanaged() if item.kind == kind]
     if token:
         return next((item for item in candidates if item.token == token), None)
-    wanted = hostname.strip().lower().rstrip(".")
+    wanted = normalized_hostname(hostname)
     return next((item for item in candidates if wanted in item.hostnames), None)
 
 
@@ -643,7 +710,7 @@ def adopt_service(
 ) -> dict[str, Any]:
     """Adopt every unmanaged record behind one hostname, or none of them.
 
-    A hostname is the unit an operator is thinking about -- its DNS record and
+    A hostname is the unit an operator is thinking about: its DNS record and
     the proxy host in front of it are one decision, not two. Atomic because a
     half-adopted service is worse than an unadopted one: HQ would manage the
     name's ingress while its DNS answer stayed outside, and the service page
@@ -657,7 +724,7 @@ def adopt_service(
         (
             service
             for service in unmanaged_services()
-            if service.hostname == command.hostname.strip().lower().rstrip(".")
+            if service.hostname == normalized_hostname(command.hostname)
         ),
         None,
     )
@@ -665,6 +732,13 @@ def adopt_service(
         raise NotFoundError(
             f"Nothing unmanaged was last seen for {command.hostname!r}. It may "
             "have been adopted already, or removed at the provider."
+        )
+    from .infrastructure import PolicyError
+
+    writable = [item for item in found.items if not item.observed_only]
+    if not writable:
+        raise PolicyError(
+            f"{found.hostname} is read through connections that only observe."
         )
     adopted = [
         adopt(
@@ -674,7 +748,7 @@ def adopt_service(
             AdoptCommand(kind=item.kind, token=item.token),
             principal=principal,
         )["resource"]["key"]
-        for item in found.items
+        for item in writable
     ]
     return {"ok": True, "hostname": found.hostname, "adopted": adopted}
 
@@ -702,7 +776,7 @@ def adopt(
     resource is created already in sync with the world, and the first
     reconciliation is a no-op. That is the whole safety argument, and it is why
     this reads the record again at adoption time rather than trusting a spec
-    posted by a browser -- a form could carry a stale or edited copy, and the
+    posted by a browser: a form could carry a stale or edited copy, and the
     point of adopting is to capture what is actually there.
 
     Routed through ``save_managed_resource`` rather than creating a row, so the
@@ -711,7 +785,13 @@ def adopt(
     """
 
     del expected_updated_at
-    from .infrastructure import ManagedResourceCommand, NotFoundError, save_managed_resource
+    from .adoption import let_in
+    from .infrastructure import (
+        ManagedResourceCommand,
+        NotFoundError,
+        PolicyError,
+        save_managed_resource,
+    )
 
     found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
@@ -719,6 +799,11 @@ def adopt(
         raise NotFoundError(
             f"No unmanaged {command.kind} was last seen for {subject!r}. "
             "It may have been adopted already, or removed at the provider."
+        )
+    if found.observed_only:
+        raise PolicyError(
+            f"This {found.label.lower()} is read through a connection that only "
+            "observes. Set manages on the connection to adopt it."
         )
     result = save_managed_resource(
         ManagedResourceCommand(
@@ -731,6 +816,8 @@ def adopt(
         copied_from_live=True,
     )
     _record_as_observed(result.get("resource", {}).get("key", ""), found)
+    # Adopting is the operator managing it again.
+    let_in(found.kind, found.token)
     return result
 
 
@@ -741,7 +828,7 @@ def _record_as_observed(key: str, found: "Unmanaged") -> None:
     and look, which is right: a declaration somebody typed is a claim about a
     world nobody has checked. Adoption is the one case where that is false. The
     spec was read from the live record moments ago, so a resource created from
-    it is in sync by construction -- that is the entire safety argument for
+    it is in sync by construction: that is the entire safety argument for
     adopting rather than declaring.
 
     Left unmarked, it says "never reported" forever: nothing queues a
@@ -793,34 +880,36 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
     return tuple(
         {
             "kind": snapshot.kind,
-            "label": (PROVIDERS[snapshot.kind].label or snapshot.kind)
-            if snapshot.kind in PROVIDERS
-            else snapshot.kind,
+            "label": registry_label(snapshot.kind),
             "count": len(snapshot.records),
             "reachable": snapshot.reachable,
             "error": snapshot.error,
             "observed_at": snapshot.observed_at,
         }
-        for snapshot in ProviderInventory.objects.all()
+        # A kind no connection could read is not a reading of zero.
+        for snapshot in ProviderInventory.objects.filter(connected=True)
     )
 
 
 def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
     """Take on every record of one kind that no declaration accounts for.
 
-    One implementation rather than one per kind. The argument is the same each
-    time -- the decision was made when the credential was added, and asking
-    again per record is a question whose answer is always yes -- so the only
-    thing that varies is which sweep it applies to.
+    Only records read through a connection that manages, and none an operator
+    said HQ does not manage. The connection's ``manages`` is the decision; a
+    connection that only observes adopts nothing.
     """
 
     from django.core.exceptions import ValidationError
 
+    from .adoption import kept_out
     from .infrastructure import NotFoundError, PolicyError
 
+    excluded = kept_out()
     adopted: list[str] = []
     for item in unmanaged():
-        if item.kind != kind:
+        if item.kind != kind or not item.adoptable or item.observed_only:
+            continue
+        if (item.kind, item.token) in excluded:
             continue
         try:
             result = adopt(
@@ -833,18 +922,3 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
             continue
         adopted.append(result.get("resource", {}).get("key", ""))
     return {"adopted": [key for key in adopted if key]}
-
-
-def adopt_discovered_containers(*, principal) -> dict[str, Any]:
-    """Watch every container a sweep found on a machine HQ already reaches.
-
-    Exited containers are watched too, deliberately. A container that is down
-    is exactly the one worth having a start button for, and refusing to watch
-    it would mean HQ could only ever act on what was already working.
-
-    Noise is handled by hiding rather than by not watching -- see ``hidden`` on
-    the spec. The two are different questions: whether HQ can act on a thing,
-    and whether it belongs at the top of a page.
-    """
-
-    return adopt_discovered("portainer.container", principal=principal)

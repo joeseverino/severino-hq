@@ -1,6 +1,6 @@
 """Everything else HQ holds about a service, gathered by the name it is.
 
-HQ is two halves. One is densely related -- a project links to its content, its
+HQ is two halves. One is densely related: a project links to its content, its
 assets, its expenses and its documents, each of those back again. The other is
 infrastructure, where a connection relates to nothing, an inventory relates to
 nothing, and a declaration relates only to its own operations. Nothing joins the
@@ -13,8 +13,8 @@ the thing that identifies the other, and storing the tie again would make two
 answers where there is one.
 
 So a section is a function from a service to rows, and the registry below is the
-list of them. Adding what HQ knows next -- workflow runs, deployments, an
-uptime history -- is one function and one entry, and the page renders it without
+list of them. Adding what HQ knows next (workflow runs, deployments, an
+uptime history) is one function and one entry, and the page renders it without
 learning anything.
 """
 
@@ -27,9 +27,11 @@ from urllib.parse import urlparse
 from django.urls import reverse
 
 from core.models import AuditLog
-from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
+from control_plane.names import normalized_hostname
+from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .entity_links import EntityLink, entity_link
 from .services import projects_by_hostname
-from .ui import PAGE_SECTION_ID
+from .ui import MISSING, PAGE_SECTION_ID, ago
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,14 @@ class Cell:
     # linked page cannot reach back through window.opener.
     external: bool = False
     muted: bool = False
+    # An entity mention, rendered through the link builder's answer.
+    link: "EntityLink | None" = None
+
+    @classmethod
+    def of(cls, link: "EntityLink", *, muted: bool = False) -> "Cell":
+        """A cell naming one entity, from ``entity_link``."""
+
+        return cls(link.label, link.url, external=link.external, muted=muted, link=link)
 
 
 @dataclass(frozen=True)
@@ -49,7 +59,7 @@ class ServiceSection:
     """One band under a service: a heading, columns, and rows of cells.
 
     A table rather than a list because that is what the rest of HQ shows and
-    what everything else this will hold turns out to be -- workflow runs, deploys
+    what everything else this will hold turns out to be: workflow runs, deploys
     and changes are all a few named columns and a row each.
     """
 
@@ -58,9 +68,13 @@ class ServiceSection:
     columns: tuple[str, ...]
     records: tuple[tuple[Cell, ...], ...]
     # ``(label, url)`` for the one thing worth doing about this section. Held as
-    # data so a section that gains an action -- redeploy, open the run -- needs
+    # data so a section that gains an action (redeploy, open the run) needs
     # no template change.
     actions: tuple[tuple[str, str], ...] = ()
+    # ``(label, text)`` shown read-only under a disclosure, for raw readouts.
+    readouts: tuple[tuple[str, str], ...] = ()
+    # Rendered as a compact table.
+    compact: bool = False
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
@@ -97,19 +111,16 @@ def _delivery(service, project) -> ServiceSection | None:
         columns=("Project", "Repository", "Last push"),
         records=(
             (
-                Cell(
-                    project.name,
-                    reverse("projects:detail", kwargs={"slug": project.slug}),
-                ),
+                Cell(project.name, entity_link("project", project.slug).url),
                 Cell(
                     _repository_label(project.repository_url),
                     project.repository_url,
                     external=True,
                 )
                 if project.repository_url
-                else Cell("—", muted=True),
+                else Cell(MISSING, muted=True),
                 Cell(
-                    _ago(project.last_push_at) if project.last_push_at else "—",
+                    ago(project.last_push_at) if project.last_push_at else MISSING,
                     muted=not project.last_push_at,
                 ),
             ),
@@ -124,17 +135,12 @@ def _repository_label(url: str) -> str:
     return path or url
 
 
-def _ago(moment) -> str:
-    from .ui import ago
-
-    return ago(moment)
-
 
 def _activity(service, project) -> ServiceSection | None:
     """What has recently happened to the things behind this name.
 
     Audit entries name the object they changed, and the objects behind a service
-    are its resources -- so the tie is the key each already carries. Kept to the
+    are its resources, so the tie is the key each already carries. Kept to the
     resources rather than the whole log: this answers "what changed here", not
     "what changed".
     """
@@ -150,7 +156,7 @@ def _activity(service, project) -> ServiceSection | None:
                 reverse("core:audit_detail", kwargs={"pk": event.pk}),
             ),
             Cell(event.get_action_display()),
-            Cell(_ago(event.created_at), muted=True),
+            Cell(ago(event.created_at), muted=True),
         )
         for event in events
     )
@@ -170,7 +176,7 @@ def _traffic(service, project) -> ServiceSection | None:
     The join is the name, like every other section here: analytics stores a
     reading against a hostname and a service *is* a hostname, so neither side
     needs a key to the other. A service nothing measures returns None and the
-    band does not render -- an empty traffic table would imply the site is dead
+    band does not render: an empty traffic table would imply the site is dead
     rather than unmeasured, which are opposite conclusions.
 
     Sampling is carried rather than hidden. A figure extrapolated from one
@@ -182,7 +188,7 @@ def _traffic(service, project) -> ServiceSection | None:
     if not hostname:
         return None
     measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(
-        normalize_host(hostname)
+        normalized_hostname(hostname)
     )
     if not measured:
         return None

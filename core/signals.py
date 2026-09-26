@@ -43,7 +43,7 @@ def _on_login_failed(sender, credentials, request=None, **kwargs):
 
     The source address is not decoration. `core.throttle` reads these rows back
     to decide whether sign-in is currently barred, so an attempt logged without
-    one is an attempt the lockout cannot count -- a password sprayed across
+    one is an attempt the lockout cannot count: a password sprayed across
     many usernames would leave nothing for the per-source rule to see.
     """
 

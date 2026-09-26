@@ -1,6 +1,6 @@
 """Encrypting the few secrets HQ has to hold, and refusing to hold them otherwise.
 
-HQ deliberately keeps provider credentials out of the web container -- they are
+HQ deliberately keeps provider credentials out of the web container: they are
 rendered to a root-owned file the controller reads and HQ cannot. That covers
 every credential HQ *uses*.
 
@@ -24,9 +24,10 @@ import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
+from .errors import UpstreamUnavailable
 
 
-class SecretsUnavailable(RuntimeError):
+class SecretsUnavailable(UpstreamUnavailable):
     """No key material is configured, so nothing can be stored or read."""
 
 

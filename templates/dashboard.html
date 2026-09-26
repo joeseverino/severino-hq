@@ -1,19 +1,29 @@
 {% extends "base.html" %}
-{% load humanize %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Dashboard</h1>
+{% comment %}
+Rows, not columns: each row is a grid whose cards share one width and one
+height, so the page stays even whatever set of domains an installation has.
+Domains contribute through their cards, overviews and attention items; nothing
+here names one.
+{% endcomment %}
+<header class="page-head dash-head">
+  <div class="dash-hello">
+    <p class="dash-date">{% now "l, F j" %}</p>
+    <h1>{{ greeting }}</h1>
+    <p class="dash-status">
+      {% if action_queue_count %}
+        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>
+      {% else %}
+        All clear. Nothing needs you.
+      {% endif %}
+    </p>
   </div>
   {% include "core/_dashboard_glance.html" %}
-</div>
+</header>
 
 {% include "core/_dashboard_highlights.html" %}
 
-{% comment %}
-Runtime contributions keep this summary independent of the installed domains.
-{% endcomment %}
 {% if dashboard_cards %}<section class="dashboard-counts" aria-label="Across HQ">
   {% for card in dashboard_cards %}
     <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
@@ -26,20 +36,18 @@ Runtime contributions keep this summary independent of the installed domains.
 
 {% for section in dashboard_highlights %}
   {% if section.overview.charts or section.overview.calendars %}
-    <section class="dashboard-patterns" aria-label="{{ section.label }} trends and activity">
+    <section class="dashboard-patterns" aria-label="{{ section.label }} trends">
       {% for chart in section.overview.charts|slice:":1" %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
       {% for calendar in section.overview.calendars|slice:":1" %}{% include "partials/_activity_calendar.html" with calendar=calendar calendar_id="dashboard-calendar-"|add:section.id %}{% endfor %}
     </section>
   {% endif %}
 {% endfor %}
 
-<div class="dashboard-board">
-<div class="dashboard-main">
-<section class="snapshot-grid">
-  {% if active_projects %}<section class="card">
+<div class="dash-row">
+  <section class="card">
     <div class="section-head">
-      <h2>Active projects</h2>
-      <span class="count">{{ active_project_count }}</span>
+      <h2>Projects</h2>
+      {% if active_project_count %}<span class="count">{{ active_project_count }} active</span>{% endif %}
     </div>
     {% if active_projects %}
       <ul class="list-rows">
@@ -48,9 +56,7 @@ Runtime contributions keep this summary independent of the installed domains.
             <span class="row-main">
               <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
               {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
-              <a href="{% url 'projects:detail' p.slug %}"><strong>{{ p.name }}</strong></a>
-              {% if p.repository_url %}<a class="subtle-link" href="{{ p.repository_url }}" target="_blank" rel="noopener">code</a>{% endif %}
-              {% if p.public_url %}<a class="subtle-link" href="{{ p.public_url }}" target="_blank" rel="noopener">live</a>{% endif %}
+              <strong>{% entity "project"|entity_of:p.slug label=p.name %}</strong>
             </span>
             <span class="row-meta">{{ p.updated_at|date:"M j" }}</span>
           </li>
@@ -58,130 +64,53 @@ Runtime contributions keep this summary independent of the installed domains.
       </ul>
       <p class="section-foot"><a href="{% url 'projects:list' %}">All projects &rarr;</a></p>
     {% else %}
-      <div class="empty dashboard-empty-row">
-        <p>No active projects yet.</p>
-        <p><a class="empty-cta" href="{% url 'projects:create' %}">Add your first project &rarr;</a></p>
-      </div>
+      <p class="dash-empty">No active projects. <a href="{% url 'projects:create' %}">Add one &rarr;</a></p>
     {% endif %}
   </section>
-  {% endif %}
 
-  {% if content_rows or published_rows %}<section class="card">
+  {% if content_rows or published_rows %}
+  <section class="card">
     <div class="section-head">
       <h2>Publishing</h2>
-      {% if draft_content_count %}<span class="count">{{ draft_content_count }} draft</span>{% endif %}
+      {% if draft_content_count %}<span class="count">{{ draft_content_count|counted:"draft" }}</span>{% endif %}
     </div>
     {% if content_rows %}
       {% include "partials/_record_list.html" with rows=content_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Draft queue &rarr;</a></p>
-    {% elif published_rows %}
+      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts &rarr;</a></p>
+    {% else %}
       {% include "partials/_record_list.html" with rows=published_rows %}
       <p class="section-foot"><a href="{% url 'content:list' %}">All content &rarr;</a></p>
     {% endif %}
-  </section>{% endif %}
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Docs review</h2>
-      {% if docs_needing_review_count %}<span class="count">{{ docs_needing_review_count }}</span>{% endif %}
-    </div>
-    {% if docs_rows %}
-      {% include "partials/_record_list.html" with rows=docs_rows %}
-      <p class="section-foot"><a href="{% url 'docs_index:list' %}?needs_review=1">Review queue &rarr;</a></p>
-    {% else %}
-      <div class="empty dashboard-empty-row"><p>All active docs reviewed recently.</p></div>
-    {% endif %}
   </section>
-
-</section>
-
-    <div data-deferred="{% url 'dashboard_contacts' %}"></div>
-
-<section class="card activity-tail">
-  <div class="section-head">
-    <h2>Recent activity</h2>
-    {% if recent_audit %}<a class="section-action" href="{% url 'core:audit_list' %}">Full log &rarr;</a>{% endif %}
-  </div>
-  {% if recent_audit %}
-    <ul class="audit-list compact-audit">
-      {% for ev in recent_audit|slice:":6" %}
-        <li>
-          <a class="activity-event" href="{{ ev.url }}">
-            <span class="activity-copy">
-              <strong>{% if ev.object_repr %}{{ ev.object_repr|truncatechars:70 }}{% elif ev.object_type %}{{ ev.object_type }}{% else %}HQ{% endif %}</strong>
-              <span class="muted">{{ ev.action_label|lower }} by {{ ev.actor }}</span>
-            </span>
-            <time class="ts" datetime="{{ ev.created_at|date:'c' }}" title="{{ ev.created_at }}">{{ ev.created_at|naturaltime }}</time>
-            <span class="activity-arrow" aria-hidden="true">&rarr;</span>
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <div class="empty"><p>No activity yet.</p></div>
   {% endif %}
-</section>
-</div>
-  <aside class="command-side">
-    <section class="card priority-card">
-      <div class="section-head">
-        <h2>Needs attention</h2>
-        <a class="count" href="{% url 'action_items' %}">Open items{% if action_queue_count %} · {{ action_queue_count }}{% endif %} &rarr;</a>
-      </div>
-      {% include "partials/_work_queue.html" with items=action_queue|slice:":3" compact=True %}
-      {% if action_queue_group_count > 3 %}<p class="section-foot"><a href="{% url 'action_items' %}">All {{ action_queue_group_count }} areas &rarr;</a></p>{% endif %}
-    </section>
-    <section class="ops-panel">
-      <div class="section-head">
-        <h2>Live &amp; external</h2>
-        {% comment %}
-        The chooser opens under the heading rather than beside it: squeezed into
-        the header row it took the heading's width and wrapped the title.
 
-        A `details` so it needs no script, and a plain form inside so it submits
-        without one. `data-live-form` upgrades it to save in place where script
-        is available -- this is a preference, and reloading the dashboard to
-        record one is a lot of work to move two checkboxes.
-        {% endcomment %}
-        <details class="ext-choose" data-menu>
-          <summary>Edit</summary>
-          <form method="post" action="{% url 'dashboard_links' %}" data-live-form>
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <p class="ext-chooser-lede">Pick what you want here. With none picked, everything HQ can reach is shown.</p>
-            <ul class="ext-choices">
-              {% for choice in external_choices %}
-                <li>
-                  <label>
-                    <input type="checkbox" name="href" value="{{ choice.href }}"{% if choice.chosen %} checked{% endif %}>
-                    <span class="ext-choice-label">{{ choice.label }}</span>
-                    <span class="ext-choice-sub muted">{{ choice.sub }}</span>
-                  </label>
-                </li>
-              {% endfor %}
-            </ul>
-            <div class="ext-chooser-actions">
-              <button type="submit" class="btn primary">Save</button>
-              <button type="button" class="btn" data-live-cancel>Cancel</button>
-              <span class="ext-chooser-status muted" data-live-status role="status"></span>
-            </div>
-          </form>
-        </details>
-      </div>
-      <ul class="ext-links">
-        {% for l in external_links %}
-          <li>
-            <a href="{{ l.href }}" target="_blank" rel="noopener">
-              <span class="ext-text">
-                <span class="ext-label">{{ l.label }}</span>
-                <span class="ext-sub">{{ l.sub }}</span>
-              </span>
-              <span class="ext-arrow" aria-hidden="true">↗</span>
-            </a>
-          </li>
-        {% endfor %}
-      </ul>
+  <div class="dash-cell" data-deferred="{% url 'dashboard_contacts' %}">
+    <section class="card">
+      <div class="section-head"><h2>Contacts</h2></div>
+      <p class="dash-empty">Loading…</p>
     </section>
-  </aside>
+  </div>
 </div>
+
+{% if external_links or external_choices %}
+<section class="dash-links" aria-label="Links">
+  <h2>Links</h2>
+  <ul class="ext-links">
+    {% for l in external_links %}
+      <li>
+        <a href="{{ l.href }}" target="_blank" rel="noopener" title="{{ l.sub }}">
+          <span class="ext-label">{{ l.label }}</span>
+          <span class="ext-arrow" aria-hidden="true">↗</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  {% comment %}
+  A link to the links page, which does the same job without script; with it
+  the page opens as a dialog, which cannot fall off the bottom of the page.
+  {% endcomment %}
+  <a class="ext-edit" href="{% url 'dashboard_links' %}" data-modal-open="links">Edit</a>
+</section>
+{% include "partials/_modal.html" with id="links" title="Dashboard links" lede="Pick the links to show. With none picked, every one HQ can reach is shown." body_template="core/_dashboard_links_form.html" %}
+{% endif %}
 {% endblock %}

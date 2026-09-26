@@ -7,8 +7,8 @@ queries:
 query-filters:
   # py/cyclic-import counts an import wherever it sits, including inside a
   # function. Deferring an import to call time is how this codebase breaks
-  # registry cycles on purpose -- capabilities compose plugin specs, which may
-  # themselves declare connections -- and each of those deliberate deferrals is
+  # registry cycles on purpose (capabilities compose plugin specs, which may
+  # themselves declare connections) and each of those deliberate deferrals is
   # commented where it sits. The rule reports them anyway, at note severity,
   # with no form the code can take that would satisfy it short of re-siting
   # settled design.
