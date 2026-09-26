@@ -84,7 +84,7 @@ class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), lambda expense: str(expense))
+        return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), str)
 
 
 class ExpenseDetailView(PageMixin, LoginRequiredMixin, DetailView):
