@@ -13,7 +13,7 @@ from django.views.generic import (
 from application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
 from application.content import content_command_from_cleaned_data, save_content
 from application.deletion import delete_content
-from application.pages import PageAction, PageMixin
+from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from application.writes import (
     ServiceCreateMixin,
@@ -134,10 +134,7 @@ class ContentPage(PageMixin):
     """A page about one content item, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        item = getattr(self, "object", None)
-        if item is None:
-            return (CONTENT_TRAIL,)
-        return (CONTENT_TRAIL, (item.title, item.get_absolute_url()))
+        return record_trail(CONTENT_TRAIL, getattr(self, "object", None), lambda item: item.title)
 
 
 class ContentDetailView(PageMixin, LoginRequiredMixin, DetailView):

@@ -14,7 +14,7 @@ from django.views.generic import (
 
 from application.expenses import expense_command_from_cleaned_data, save_expense
 from application.deletion import delete_expense
-from application.pages import PageAction, PageMixin
+from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from application.writes import (
     ServiceCreateMixin,
@@ -84,10 +84,7 @@ class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        expense = getattr(self, "object", None)
-        if expense is None:
-            return (EXPENSES_TRAIL,)
-        return (EXPENSES_TRAIL, (str(expense), expense.get_absolute_url()))
+        return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), lambda expense: str(expense))
 
 
 class ExpenseDetailView(PageMixin, LoginRequiredMixin, DetailView):

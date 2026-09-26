@@ -78,24 +78,31 @@ def connection_specs():
     )
 
 
-def fetch_last_push(
-    repository_url: str,
-    *,
-    token: str = "",
-    timeout: int = 10,
-) -> datetime | None:
-    parsed = urlparse(repository_url)
+def github_repository(repository_url: str) -> tuple[str, str] | None:
+    """``(owner, repository)`` when the URL names a GitHub repository, else None."""
+
+    parsed = urlparse(str(repository_url or ""))
     parts = [part for part in parsed.path.split("/") if part]
     if (
         parsed.scheme != "https"
         or parsed.hostname not in {"github.com", "www.github.com"}
         or len(parts) != 2
     ):
+        return None
+    owner, repository = parts[0], parts[1].removesuffix(".git")
+    return (owner, repository) if owner and repository else None
+
+
+def fetch_last_push(
+    repository_url: str,
+    *,
+    token: str = "",
+    timeout: int = 10,
+) -> datetime | None:
+    found = github_repository(repository_url)
+    if found is None:
         raise GitHubMetadataError("Project repository URL must identify a GitHub repository.")
-    owner, repository = parts
-    repository = repository.removesuffix(".git")
-    if not owner or not repository:
-        raise GitHubMetadataError("Project repository URL must identify a GitHub repository.")
+    owner, repository = found
 
     request = urllib.request.Request(
         f"https://api.github.com/repos/{owner}/{repository}",

@@ -21,9 +21,10 @@ from application.projects import (
     save_project,
 )
 from application.deletion import delete_project
+from projects.github import github_repository
 from application.security import web_principal
 from application.ui import counted
-from application.pages import PageAction, PageMixin
+from application.pages import PageAction, PageMixin, record_trail
 from application.tables import (
     TableColumn,
     TableFilter,
@@ -152,10 +153,7 @@ class ProjectPage(PageMixin):
     """A page about one project, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        project = getattr(self, "object", None)
-        if project is None:
-            return (PROJECTS_TRAIL,)
-        return (PROJECTS_TRAIL, (project.name, project.get_absolute_url()))
+        return record_trail(PROJECTS_TRAIL, getattr(self, "object", None), lambda project: project.name)
 
 
 class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
@@ -193,7 +191,7 @@ class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
     def get_page_actions(self):
         project = self.object
         actions = []
-        if project.repository_url and "github.com" in project.repository_url:
+        if github_repository(project.repository_url):
             actions.append(
                 PageAction(
                     "Refresh",

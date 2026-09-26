@@ -86,6 +86,15 @@ def page_context(
     }
 
 
+def record_trail(list_crumb: tuple[str, str], record, label) -> tuple[tuple[str, str], ...]:
+    """A list page's crumb, then the record's own when there is one."""
+
+    crumbs = [list_crumb]
+    if record is not None:
+        crumbs.append((label(record), record.get_absolute_url()))
+    return tuple(crumbs)
+
+
 class PageMixin:
     """Declare a page's head on the view; ``page.html`` renders it."""
 

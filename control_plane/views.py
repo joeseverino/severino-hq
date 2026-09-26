@@ -1277,16 +1277,14 @@ class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
     def get_page_actions(self):
         # The machine's declaration is edited from its own page.
         if self.found.declaration:
-            return (
-                PageAction(
-                    "Edit machine",
-                    reverse("control_plane:edit", args=[self.found.declaration]),
-                ),
-                PageAction(
-                    "Remove",
-                    reverse("control_plane:remove", args=[self.found.declaration]),
-                    danger=True,
-                ),
+            key = self.found.declaration
+            return tuple(
+                [
+                    PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
+                    PageAction(
+                        "Remove", reverse("control_plane:remove", args=[key]), danger=True
+                    ),
+                ]
             )
         # Seeded with what HQ knows, and back here after saving. A machine the
         # tailnet device declaration already names gets its details added; one
@@ -1903,7 +1901,10 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
         )
 
     def get_page_trail(self):
-        return ((self.home.label, self.home.url),) if self.home and self.home.url else ()
+        crumbs = []
+        if self.home and self.home.url:
+            crumbs.append((self.home.label, self.home.url))
+        return tuple(crumbs)
 
     def get_page_actions(self):
         if self.capabilities.removal_pending:
@@ -2311,6 +2312,6 @@ class ToolsView(PageMixin, LoginRequiredMixin, TemplateView):
                 principal=web_principal(request.user),
             )
         query = urlencode({"tab": request.POST.get("tab", ""), "address": address})
-        return redirect(f"{request.path}?{query}")
+        return redirect(f"{reverse('control_plane:tools')}?{query}")
 
 

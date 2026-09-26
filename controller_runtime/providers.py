@@ -189,6 +189,12 @@ class _SameOriginRedirects(dict):
         self._origin = _origin(url)
         self._method = method.upper()
 
+    # A ledger belongs to one request, so two are equal only when they are one.
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
+    __hash__ = None  # type: ignore[assignment]
+
     def get(self, key: Any, default: Any = None) -> Any:
         if self._method not in _REDIRECTABLE:
             raise ProviderError(

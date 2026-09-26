@@ -290,28 +290,10 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: The README badge states the coverage actually measured
-        # The badge was hand-typed and drifted: it claimed 80% against a real
-        # 86% and a gate of 70%, three numbers for one fact in a repository
-        # whose argument is that a fact should be stated once. It cannot be
-        # generated (the README is static), so it is verified instead: the
-        # number a reader sees has to be the number this run measured.
+        # The README is static, so the badge is verified rather than
+        # generated. The same script runs in scripts/ci-local.sh.
         if: matrix.python-version == needs.toolchain.outputs.oldest-python
-        run: |
-          set -euo pipefail
-          # Whole percent, rounded down. The default total is rounded, and
-          # a figure on a .5 boundary rounds differently across versions.
-          measured="$(coverage report --format=total --precision=2)"
-          measured="${measured%.*}"
-          # One capture group, not two greps: the URL-encoded percent sign in
-          # `coverage-86%25-brightgreen` is itself digits, and a looser match
-          # reads the badge as both 86 and 25.
-          claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
-          if [ "$measured" != "$claimed" ]; then
-            echo "::error::README claims ${claimed}% coverage; this run measured ${measured}%."
-            echo "Update the badge in README.md to ${measured}%."
-            exit 1
-          fi
-          echo "README badge agrees with the measured ${measured}%."
+        run: scripts/coverage-badge.sh
 
   security:
     name: security

@@ -118,8 +118,6 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   if "$python_bin" -c "import coverage" 2>/dev/null; then
     run "tests with coverage gate" sh -c \
       "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
-    measured="$("$python_bin" -m coverage report --format=total 2>/dev/null || echo '')"
-    claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
     badge_python="${PYTHON_VERSIONS%% *}"
     if [ "$python_version" != "$badge_python" ]; then
@@ -127,10 +125,8 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
       # reporting green for a check that did not run is how the default
       # invocation silently stopped covering this.
       skip "coverage badge not checked (measured on ${python_version}, badge quotes ${badge_python})"
-    elif [ -n "$measured" ] && [ "$measured" != "$claimed" ]; then
-      bad "README badge says ${claimed}%, this run measured ${measured}%"
-    elif [ -n "$measured" ]; then
-      ok "README coverage badge agrees with the measured ${measured}%"
+    else
+      run "README coverage badge (scripts/coverage-badge.sh)" scripts/coverage-badge.sh "$python_bin"
     fi
   else
     run "tests" "$python_bin" manage.py test

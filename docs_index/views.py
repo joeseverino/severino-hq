@@ -23,7 +23,7 @@ from application.documentation import (
 )
 from application.deletion import delete_documentation
 from application.security import web_principal
-from application.pages import PageAction, PageMixin, page_context
+from application.pages import PageAction, PageMixin, page_context, record_trail
 from application.tables import (
     TableColumn,
     TableFilter,
@@ -128,10 +128,7 @@ class DocsPage(PageMixin):
     """A page about one doc record, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        record = getattr(self, "object", None)
-        if record is None:
-            return (DOCS_TRAIL,)
-        return (DOCS_TRAIL, (record.doc_id, record.get_absolute_url()))
+        return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
 
 
 class DocsDetailView(PageMixin, LoginRequiredMixin, DetailView):

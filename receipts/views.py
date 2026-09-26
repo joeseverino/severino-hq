@@ -39,7 +39,7 @@ from application.receipts import (
 )
 from application.deletion import DeleteCommand, delete_receipt
 from application.security import web_principal
-from application.pages import PageAction, PageMixin
+from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableListMixin, TableToggle
 
 from expenses.models import Expense
@@ -96,10 +96,7 @@ class ReceiptPage(PageMixin):
         return getattr(self, "object", None)
 
     def get_page_trail(self):
-        receipt = self.get_receipt()
-        if receipt is None:
-            return (RECEIPTS_TRAIL,)
-        return (RECEIPTS_TRAIL, (str(receipt), receipt.get_absolute_url()))
+        return record_trail(RECEIPTS_TRAIL, self.get_receipt(), str)
 
 
 class ReceiptDetailView(PageMixin, LoginRequiredMixin, DetailView):

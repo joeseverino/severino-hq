@@ -12,7 +12,7 @@ from django.views.generic import (
 
 from application.assets import asset_command_from_cleaned_data, save_asset
 from application.deletion import delete_asset
-from application.pages import PageAction, PageMixin
+from application.pages import PageAction, PageMixin, record_trail
 from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from application.writes import (
     ServiceCreateMixin,
@@ -64,11 +64,11 @@ class AssetPage(PageMixin):
     """A page about one asset, or a new one: its trail runs back to the list."""
 
     def get_page_trail(self):
-        trail = (("Assets", reverse("assets:list")),)
-        asset = getattr(self, "object", None)
-        if asset is None:
-            return trail
-        return (*trail, (asset.item_name, asset.get_absolute_url()))
+        return record_trail(
+            ("Assets", reverse("assets:list")),
+            getattr(self, "object", None),
+            lambda asset: asset.item_name,
+        )
 
 
 class AssetDetailView(PageMixin, LoginRequiredMixin, DetailView):

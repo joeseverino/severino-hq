@@ -365,8 +365,12 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
     page_title = "Action items"
 
     def get_page_actions(self):
-        if not self._unread:
-            return ()
+        actions = []
+        if self._unread:
+            actions.append(PageAction("Mark all read", self._mark_all_url(), method="post"))
+        return tuple(actions)
+
+    def _mark_all_url(self) -> str:
         # The filters travel in the URL, so "all" means all that are shown.
         shown = self.request.GET.copy()
         for name in list(shown):
@@ -375,7 +379,7 @@ class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
         url = reverse("action_items_read_all")
         if shown:
             url = f"{url}?{shown.urlencode()}"
-        return (PageAction("Mark all read", url, method="post"),)
+        return url
 
     def get_context_data(self, **kwargs):
         all_items, items = _action_items(self.request)
