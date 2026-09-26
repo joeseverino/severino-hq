@@ -90,6 +90,11 @@ class PluginContractTests(TestCase):
     def tearDown(self):
         clear_plugin_composition_cache()
 
+    def test_the_admission_policy_admits_the_api_this_host_runs(self):
+        policy = Path(__file__).resolve().parent.parent / "policy" / "plugin-admission-v1.json"
+        declared = json.loads(policy.read_text())["plugin_api_version"]
+        self.assertEqual(declared, PLUGIN_API_VERSION)
+
     def load(self, manifest=VALID):
         clear_plugin_composition_cache()
         env = mock.patch.dict(
