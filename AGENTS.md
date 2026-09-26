@@ -197,6 +197,10 @@ this repository's graph will report as safe. Grep the extension checkouts.
   applicable, not only the happy path.
 - `./scripts/check.sh` passes, including the composed pass when a change
   touches `hq_sdk`, because the host and its extensions first meet there.
+- A change to templates or CSS passes the browser layout gate:
+  `CHECK_BROWSER=1 ./scripts/check.sh` (Playwright, set up as the README's
+  development section shows). A UI change is also walked in a real browser
+  through the workflow it serves, not checked page by page.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
