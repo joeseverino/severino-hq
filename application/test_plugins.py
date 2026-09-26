@@ -90,10 +90,14 @@ class PluginContractTests(TestCase):
     def tearDown(self):
         clear_plugin_composition_cache()
 
-    def test_the_admission_policy_admits_the_api_this_host_runs(self):
-        policy = Path(__file__).resolve().parent.parent / "policy" / "plugin-admission-v1.json"
-        declared = json.loads(policy.read_text())["plugin_api_version"]
-        self.assertEqual(declared, PLUGIN_API_VERSION)
+    def test_every_statement_of_the_plugin_api_names_the_one_this_host_runs(self):
+        root = Path(__file__).resolve().parent.parent
+        policy = json.loads((root / "policy" / "plugin-admission-v1.json").read_text())
+        self.assertEqual(policy["plugin_api_version"], PLUGIN_API_VERSION)
+        for path in (*root.glob("*.md"), *root.glob("docs/*.md")):
+            for found in re.findall(r"api_version=(\d+)", path.read_text()):
+                with self.subTest(path=path.name):
+                    self.assertEqual(int(found), PLUGIN_API_VERSION)
 
     def load(self, manifest=VALID):
         clear_plugin_composition_cache()
