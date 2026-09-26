@@ -169,6 +169,14 @@ write_op '[{"id":"item-1"}]' '{"fields":[
 ]}'
 check_empty "unrelated vault item is skipped" "${fixture_dir}/projections-only.json" 0
 
+# 8b. The SSH key items connections name as their identity live in the same
+#     vault, and a private key spans lines.
+write_op '[{"id":"key-1"}]' '{"fields":[
+  {"id":"private_key","label":"private key","value":"-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n"},
+  {"id":"public_key","label":"public key","value":"ssh-ed25519 AAAA"}
+]}'
+check_empty "identity key item is skipped" "${fixture_dir}/projections-only.json" 0
+
 # 9. No script may still read a registry key the registry no longer has. The
 #    renderer is covered by the cases above; this covers every other script
 #    that reads the file.
