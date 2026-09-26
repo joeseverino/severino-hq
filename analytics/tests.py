@@ -1,7 +1,7 @@
 """What a reading has to survive between Cloudflare and a page.
 
-The shapes here are the ones the live API actually returns -- verified against
-it -- with synthetic values, because this repository is public and a real site
+The shapes here are the ones the live API actually returns (verified against
+it) with synthetic values, because this repository is public and a real site
 tag and its traffic are not things to publish alongside the code that reads
 them.
 """
@@ -116,7 +116,7 @@ class RecordingTests(TestCase):
         self.assertEqual(RumDaily.objects.get().pageviews, 50)
 
     def test_a_day_outside_the_window_is_not_erased(self):
-        """The one way this differs from every other controller report.
+        """Traffic accumulates; a day outside the window is kept.
 
         A connection HQ can no longer reach should stop being listed. A day of
         traffic that already happened should not stop having happened because
@@ -536,7 +536,7 @@ class OverviewPageTests(TestCase):
         response = self.client.get("/analytics/?days=7")
 
         self.assertContains(response, "1 of 7 site-days read")
-        self.assertContains(response, "HQ will backfill the remaining 6 automatically")
+        self.assertContains(response, "6 queued for backfill")
 
     def test_signing_in_is_required(self):
         self.client.logout()

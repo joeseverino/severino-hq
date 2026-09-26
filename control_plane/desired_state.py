@@ -3,7 +3,7 @@
 The authored spec alone is not desired state. A certificate names where it
 installs; how each of those places takes a certificate is stated on the place.
 So two resources are involved in one answer, and a resource can fall out of date
-without anyone editing it -- which is why the fingerprint covers the resolved
+without anyone editing it, which is why the fingerprint covers the resolved
 form and not just the authored one.
 
 That is also why a save is not always local. Editing a target changes what every
@@ -48,8 +48,8 @@ def desired_fingerprint(
     ``names_at`` defaults to the real derivation rather than to nothing, and
     that choice is load-bearing. This fingerprint decides whether desired state
     has moved, and the contract handed to a controller is resolved separately by
-    a caller that supplies its own. Resolve those two differently -- which is
-    what a forgotten argument at any of three call sites would do -- and the
+    a caller that supplies its own. Resolve those two differently (which is
+    what a forgotten argument at any of three call sites would do) and the
     fingerprint never matches the thing it is fingerprinting: every pass sees a
     change, advances the generation, and queues the work again. Silently, and
     forever.

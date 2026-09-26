@@ -1,4 +1,4 @@
-"""Pull the jseverino.com content index into ContentItems.
+"""Pull the example.com content index into ContentItems.
 
 Run on a daily systemd timer (deploy/systemd/severino-hq-content-sync.*) and
 on demand from the project "Refresh" button. The DB is the cache between runs.
@@ -14,10 +14,11 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from content.content_sync import ContentSyncError, sync_content_index
+from application.ui import counted
 
 
 class Command(BaseCommand):
-    help = "Pull the jseverino.com content index into ContentItems."
+    help = "Pull the site content index into ContentItems."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -38,7 +39,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Content index synced: {stats['total']} item(s) "
+                f"Content index synced: {counted(stats['total'], 'item')} "
                 f"({stats['created']} new, {stats['updated']} updated) "
                 f"→ project {stats['project'] or '(none found)'}"
             )

@@ -1,7 +1,7 @@
 name: ci
 
 # Push to main is the deploy trigger. Every gate below must pass before the
-# self-hosted deploy job runs — a red commit physically cannot reach the box.
+# self-hosted deploy job runs: a red commit physically cannot reach the box.
 # Pull requests run the checks only (no build, no deploy).
 on:
   push:
@@ -105,7 +105,7 @@ jobs:
           [ -n "$command" ] || { echo "::error::requirements.txt does not name its command"; exit 1; }
           # Compiled on top of a copy, so uv keeps the committed pins: this asks
           # whether the file is the command's output, not whether newer
-          # releases exist -- that is Dependabot's job, not a red build's.
+          # releases exist: that is Dependabot's job, not a red build's.
           fresh="$(mktemp)"
           cp requirements.txt "$fresh"
           # shellcheck disable=SC2086  # the recorded command is meant to split
@@ -290,28 +290,10 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: The README badge states the coverage actually measured
-        # The badge was hand-typed and drifted -- it claimed 80% against a real
-        # 86% and a gate of 70%, three numbers for one fact in a repository
-        # whose argument is that a fact should be stated once. It cannot be
-        # generated (the README is static), so it is verified instead: the
-        # number a reader sees has to be the number this run measured.
+        # The README is static, so the badge is verified rather than
+        # generated. The same script runs in scripts/ci-local.sh.
         if: matrix.python-version == needs.toolchain.outputs.oldest-python
-        run: |
-          set -euo pipefail
-          # Whole percent, rounded down. The default total is rounded, and
-          # a figure on a .5 boundary rounds differently across versions.
-          measured="$(coverage report --format=total --precision=2)"
-          measured="${measured%.*}"
-          # One capture group, not two greps: the URL-encoded percent sign in
-          # `coverage-86%25-brightgreen` is itself digits, and a looser match
-          # reads the badge as both 86 and 25.
-          claimed="$(sed -nE 's/.*coverage-([0-9]+)%25-.*/\1/p' README.md | head -1)"
-          if [ "$measured" != "$claimed" ]; then
-            echo "::error::README claims ${claimed}% coverage; this run measured ${measured}%."
-            echo "Update the badge in README.md to ${measured}%."
-            exit 1
-          fi
-          echo "README badge agrees with the measured ${measured}%."
+        run: scripts/coverage-badge.sh
 
   security:
     name: security
@@ -327,13 +309,14 @@ jobs:
       # Production-posture check: DEBUG off, real host. --fail-level WARNING
       # turns Django's security advisories into hard failures. The env below
       # mirrors a real prod config so the check validates how settings.py
-      # translates it — not CI artifacts. The key is a throwaway >50-char value
+      # translates it, not CI artifacts. The key is a throwaway >50-char value
       # only to satisfy the strength check (W009).
       - name: Django deployment check
         env:
           DJANGO_DEBUG: "0"
           DJANGO_SECRET_KEY: "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef"
           DJANGO_ALLOWED_HOSTS: "hq.example.com"
+          SEVERINO_OIDC_ISSUER: "https://sso.example.com"
           DJANGO_BEHIND_TLS_PROXY: "1"
           DJANGO_SESSION_COOKIE_SECURE: "1"
           DJANGO_CSRF_COOKIE_SECURE: "1"
@@ -398,9 +381,9 @@ jobs:
   build:
     name: build
     needs: [lint, test, security]
-    # Also on pull requests, and that is the point. The composition -- the only
+    # Also on pull requests, and that is the point. The composition (the only
     # environment that runs this application the way production does, with
-    # DEBUG off and the extensions loaded -- can only be built on top of a host
+    # DEBUG off and the extensions loaded) can only be built on top of a host
     # image. While this job ran on main alone, there was no host image for a
     # pull request, so the composition could not be checked until after the
     # merge that created it. Three separate failures reached main that way, each
@@ -441,7 +424,7 @@ jobs:
         env:
           # The commit the composition will look for. On a pull request
           # `GITHUB_SHA` is the merge commit, while the `workflow_run` event
-          # that starts the composition reports `head_sha` -- the branch tip.
+          # that starts the composition reports `head_sha`: the branch tip.
           # Tagging by the merge commit would publish an image the composition
           # then could not find, and the failure would read as "no such image"
           # rather than "these two disagree about which commit this is".
@@ -466,7 +449,7 @@ jobs:
       # An admitted extension wheel already carries a signature naming the
       # workflow that produced it, and the composition refuses to install one
       # that does not. The image those wheels are installed *into* carried
-      # nothing -- so the part of the system that runs everything was the one
+      # nothing, so the part of the system that runs everything was the one
       # part taken on trust. This is the other half of that check.
       #
       # Signed by digest, not by tag: a tag is a pointer somebody can move, and

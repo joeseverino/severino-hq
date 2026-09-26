@@ -1,6 +1,6 @@
 """The connection sweep: what HQ can reach, and everything derived from it.
 
-Two properties hold this together. HQ never stores a credential -- only the
+Two properties hold this together. HQ never stores a credential: only the
 report that one exists and what it answered. And every menu asking "which
 machine" or "which domain" is derived from that report, so an estate grows by
 being given a credential rather than by anything here being edited.
@@ -91,7 +91,7 @@ class RecordingTests(TestCase):
         """A broken credential is still the credential the operator has.
 
         Dropped from the sweep, an expired token reads as "you never set this
-        up" -- so the page invites adding a second one, and the real problem
+        up", so the page invites adding a second one, and the real problem
         stays invisible.
         """
 
@@ -168,7 +168,7 @@ class DerivationTests(TestCase):
         """A machine is a place to run something because a Portainer holds it.
 
         Read from the connection rather than from containers found on it, so a
-        machine running nothing is still offered -- which is exactly when this
+        machine running nothing is still offered, which is exactly when this
         form is being filled in.
         """
 
@@ -203,6 +203,19 @@ class DerivationTests(TestCase):
             zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,)
         )
 
+    def test_the_menu_offers_whatever_providers_the_registry_says_reach_the_kind(self):
+        from dataclasses import replace
+        from unittest import mock
+
+        from control_plane.providers import PROVIDERS, ZONE_KIND
+
+        sweep(A_DNS_TOKEN, {**A_PORTAINER, "connection_ref": "another-dns"})
+        widened = replace(PROVIDERS[ZONE_KIND], connection_providers=("cloudflare_dns", "portainer"))
+        with mock.patch.dict(PROVIDERS, {ZONE_KIND: widened}):
+            refs = [ref for ref, _ in zone(NameContext())["connection_ref"]]
+
+        self.assertEqual(refs, ["cloudflare-dns", "another-dns"])
+
     def test_a_broken_connection_is_offered_last_and_says_so(self):
         """Still offered, because it is the one that already exists.
 
@@ -218,7 +231,7 @@ class DerivationTests(TestCase):
         refs = [ref for ref, _ in container_stack(NameContext())["connection_ref"]]
         labels = dict(container_stack(NameContext())["connection_ref"])
         self.assertEqual(refs, ["a-portainer", "a-broken-one"])
-        self.assertIn("not answering", labels["a-broken-one"])
+        self.assertIn("(unreachable)", labels["a-broken-one"])
 
     def test_menus_are_empty_before_the_first_sweep(self):
         """And the fields stay typeable. An empty menu is a smaller failure
@@ -261,13 +274,13 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, 'class="connection-endpoint"')
         self.assertContains(response, 'class="connection-ability-list"')
         # A probed Portainer holds a whole-account credential: reached, proven,
-        # and so ready -- the lifecycle rather than the raw probe result.
+        # and so ready: the lifecycle rather than the raw probe result.
         self.assertContains(response, 'class="connection-state connection-state-ready"')
         self.assertContains(response, "Authority proven")
         self.assertNotContains(response, "connection-ability-chip")
 
     def test_the_page_never_carries_a_secret(self):
-        """It cannot, because nothing here has one -- and this is the assertion
+        """It cannot, because nothing here has one, and this is the assertion
         that keeps it that way if a field is ever added to the report."""
 
         sweep({**A_PORTAINER, "detail": "2 of 2 environments reachable."})
@@ -287,14 +300,16 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Not yet classified")
+        self.assertContains(response, "Unclassified connections")
         self.assertContains(response, "a-portainer")
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):
         # One constant inventory read derives Tailscale policy and NPM edge proof.
         # Installed extensions may contribute their own constant connection
         # reads, so the invariant is growth rather than one host-only absolute.
-        # It never probes a provider and twenty more rows cost no more queries.
+        # It never probes a provider and twenty more rows cost no more queries
+        # than one. No connection at all skips the activity read entirely.
+        sweep(A_PORTAINER)
         with CaptureQueriesContext(connection) as baseline:
             self.client.get(reverse("control_plane:connections"))
 
@@ -568,7 +583,7 @@ class AdoptionSafetyTests(TestCase):
     def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
         response = self._service_page(portainer_managed=False)
 
-        self.assertContains(response, "which HQ has not seen")
+        self.assertContains(response, "HQ cannot read it")
         self.assertNotContains(response, "Manage as container stack")
 
     def test_one_portainer_created_can_be_redefined(self):
@@ -588,13 +603,13 @@ class AdoptionSafetyTests(TestCase):
             with self.subTest(portainer_managed=created_by_portainer):
                 response = self._service_page(portainer_managed=created_by_portainer)
 
-                self.assertContains(response, "Watch this container")
+                self.assertContains(response, "Watch container")
 
     def test_watching_it_is_what_puts_the_controls_there(self):
         """Buttons appear once a declaration exists to hang an operation on.
 
         Every operation targets a resource, so a container nothing declares has
-        nothing to queue against -- which is what adoption is for here, and why
+        nothing to queue against, which is what adoption is for here, and why
         it asserts nothing about the container's definition.
         """
 
@@ -616,7 +631,7 @@ class AdoptionSafetyTests(TestCase):
         )
 
         self.assertContains(response, "Restart")
-        self.assertNotContains(response, "Watch this container")
+        self.assertNotContains(response, "Watch container")
 
 
 class ControllerColumnTests(TestCase):
@@ -652,7 +667,7 @@ class ControllerColumnTests(TestCase):
 class ExpiredCredentialTests(TestCase):
     """A credential that stopped answering must not read as an answer.
 
-    The two look identical from the zone list -- both report none -- and taken
+    The two look identical from the zone list (both report none) and taken
     the same way, a token expiring turns every public name HQ owns into a name
     it claims no account holds.
     """
@@ -836,3 +851,64 @@ class StepFailureRecordingTests(TestCase):
         )
 
         self.assertEqual(connection_readings()[0].failing_steps, ())
+
+
+class DependsOnceTests(TestCase):
+    """A declaration that is the same thing as a target is listed once, by name."""
+
+    def setUp(self):
+        from control_plane.models import ManagedResource
+
+        for name in ("example.com", "example.net"):
+            ManagedResource.objects.create(
+                key=name.replace(".", "-"),
+                kind="cloudflare.zone",
+                spec={"zone": name, "connection_ref": "cloudflare-dns"},
+            )
+        ManagedResource.objects.create(
+            key="www-record",
+            kind="cloudflare.dns_record",
+            spec={
+                "zone": "example.com",
+                "name": "www.example.com",
+                "record_type": "CNAME",
+                "content": "example.com",
+                "connection_ref": "cloudflare-dns",
+            },
+        )
+        sweep(A_DNS_TOKEN)
+
+    def instance(self):
+        group = next(
+            group
+            for group in connection_catalog(principal=cli_principal())
+            if group.spec.name == CONTROLLER_CONNECTIONS
+        )
+        return next(
+            item.instance
+            for item in group.connections
+            if item.instance.label == "cloudflare-dns"
+        )
+
+    def test_a_zone_is_named_once_and_links_to_its_page(self):
+        instance = self.instance()
+
+        self.assertEqual(
+            [(link.label, link.url, link.resource_key) for link in instance.targets],
+            [
+                ("example.com", reverse("zones:detail", kwargs={"zone": "example.com"}), "example-com"),
+                ("example.net", reverse("zones:detail", kwargs={"zone": "example.net"}), "example-net"),
+            ],
+        )
+        self.assertEqual([link.label for link in instance.dependencies], ["www-record"])
+
+    def test_the_page_shows_the_zone_key_nowhere(self):
+        user = get_user_model().objects.create_user(
+            username="operator", password="not-a-real-password"
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "<code>example-com</code>")
+        self.assertContains(response, "<code>www-record</code>")

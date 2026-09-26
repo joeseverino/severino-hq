@@ -92,7 +92,7 @@ class ProgressTests(TestCase):
 
         Every step of a long job reports once as it begins, and consecutive
         steps can begin within the same window. Rate-limiting those away makes
-        the panel claim to still be doing the first thing -- indistinguishable,
+        the panel claim to still be doing the first thing: indistinguishable,
         from outside, from the job having hung.
         """
         job = Job.objects.create(kind="test.notes", label="Notes")
@@ -116,7 +116,7 @@ class ProgressTests(TestCase):
         self.assertEqual(job.percent, 10)
 
     def test_force_writes_a_repeated_note_anyway(self):
-        # `force` is for the caller who must know the row was touched -- the
+        # `force` is for the caller who must know the row was touched: the
         # last report of a run, or a heartbeat during a step long enough to
         # look dead. It overrides the window; it is not how ordinary progress
         # gets through, which is why a changed note does not need it.
@@ -159,8 +159,8 @@ class ReapTests(TestCase):
         self.assertEqual(reap(), 1)
         job.refresh_from_db()
         self.assertEqual(job.state, Job.State.LOST)
-        # And it says so. Nothing was watching when this died -- that is what
-        # being lost means -- so the reaper writes the only record there will
+        # And it says so. Nothing was watching when this died (that is what
+        # being lost means) so the reaper writes the only record there will
         # ever be of how it ended.
         self.assertTrue(
             AuditLog.objects.filter(

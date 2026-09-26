@@ -9,7 +9,7 @@ description: >-
 #   cosign verify-blob --certificate-identity \
 #     "https://github.com/<repo>/<workflow>@refs/heads/main"
 # and Fulcio derives that certificate identity from the OIDC `job_workflow_ref`
-# claim -- the workflow file the *job* actually runs from.
+# claim: the workflow file the *job* actually runs from.
 #
 # A composite action runs inside the calling job, so `job_workflow_ref` stays
 # the caller's own .github/workflows/admit-plugin.yml and the identity is
@@ -33,8 +33,8 @@ inputs:
   hq-commit:
     description: >-
       Immutable 40-character host commit this admission is built against. A tag
-      or branch is rejected. Leave empty -- which is what an extension with no
-      HQ_COMMIT variable passes -- and the host's current main is resolved to
+      or branch is rejected. Leave empty (which is what an extension with no
+      HQ_COMMIT variable passes) and the host's current main is resolved to
       its own commit and used, so the admission still records an exact one.
     required: false
     default: ""
@@ -62,7 +62,7 @@ runs:
         # Pinning to an exact host commit is the point: the wheel is built
         # against that source and the admission records which. What was not
         # the point was requiring the *caller* to supply it, because the
-        # supported configuration is to have no HQ_COMMIT variable at all --
+        # supported configuration is to have no HQ_COMMIT variable at all,
         # deleting it is the documented fix when an extension goes stale. The
         # checks job already handled that with `vars.HQ_COMMIT || 'main'`; this
         # one did not, so every extension with the correct configuration failed

@@ -1,5 +1,9 @@
-<div class="topology-node-body">
-  {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
+<div class="topology-node-body" data-topology-body-of="{{ item.node.id }}">
+  <header class="topology-detail-head">
+    <h2>{% entity item.link %}</h2>
+    <span class="muted">{{ item.node.subtitle }} · {{ item.degree|counted:"direct relationship,direct relationships" }}</span>
+    {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
+  </header>
   {% if item.node.detail %}<p class="muted">{{ item.node.detail }}</p>{% endif %}
 
   {% comment %}
@@ -10,7 +14,7 @@
   <dl class="topology-facts">
     {% if item.node.pageviews is not None %}
       <div class="topology-fact">
-        <dt>Traffic · {{ traffic_window_days }} days</dt>
+        <dt>Traffic · {{ traffic_window_days|counted:"day" }}</dt>
         <dd>
           <strong>{{ item.node.pageviews }}</strong> pageviews from
           <strong>{{ item.node.visits }}</strong> visits.
@@ -20,7 +24,7 @@
     {% if not item.node.managed %}
       <div class="topology-fact">
         <dt>Management</dt>
-        <dd><span class="pill">Unmanaged</span> Nobody asked for this to be true, so a difference here is not a finding.</dd>
+        <dd><span class="pill">Unmanaged</span> Not declared, so differences are not findings.</dd>
       </div>
     {% endif %}
     {% if item.node.declared_revision or item.node.observed_revision %}
@@ -29,25 +33,25 @@
         <dd>
           {% if not item.node.observed_revision %}
             <span class="pill pill-attention">Never confirmed</span>
-            Declaration {{ item.node.declared_revision }} has never been read back.
+            Revision {{ item.node.declared_revision }} not read back yet.
           {% elif item.node.observed_revision == item.node.declared_revision %}
             <span class="pill pill-good">Reconciled</span>
-            A reconcile ran against declaration {{ item.node.declared_revision }} — the current one.
+            Revision {{ item.node.declared_revision }} is current and reconciled.
           {% else %}
             <span class="pill pill-attention">Behind</span>
-            Declared {{ item.node.declared_revision }}, last confirmed {{ item.node.observed_revision }} — the declaration moved since anything agreed with it.
+            Declared revision {{ item.node.declared_revision }}, last confirmed {{ item.node.observed_revision }}.
           {% endif %}
         </dd>
       </div>
     {% endif %}
     {% if item.node.unconfirmed_fields %}
       <div class="topology-fact">
-        <dt>Unconfirmed by the last reading</dt>
+        <dt>Not confirmed by the last reading</dt>
         <dd>
           <ul class="topology-field-list">
             {% for field in item.node.unconfirmed_fields %}<li><code>{{ field }}</code></li>{% endfor %}
           </ul>
-          <span class="muted">Asserted here and not echoed back — unverified, not agreed.</span>
+          <span class="muted">Declared here but not reported back by the provider.</span>
         </dd>
       </div>
     {% endif %}
@@ -55,10 +59,12 @@
       <dt>Last observed</dt>
       <dd>
         {% if item.observed_age %}
-          <time datetime="{{ item.node.observed_at }}" title="{{ item.node.observed_at }}">{{ item.observed_age|timesince }} ago</time>
+          <time datetime="{{ item.node.observed_at }}" title="{{ item.node.observed_at }}">{{ item.observed_age|ago }}</time>
           {% if item.node.reason %}<span class="muted">· {{ item.node.reason }}</span>{% endif %}
+        {% elif item.observable %}
+          <span class="muted">Not observed yet.</span>
         {% else %}
-          <span class="muted">Never — nothing observes this, so its health describes no reading.</span>
+          <span class="muted">Never. Nothing observes this.</span>
         {% endif %}
       </dd>
     </div>
@@ -77,32 +83,47 @@
         <ul class="topology-relation-list topology-relation-{{ group.grouper }}">
           {% for row in group.list %}
             <li class="topology-relation">
-              <a class="topology-relation-link" href="{{ row.url }}">
+              <a class="topology-relation-link" href="{{ row.url }}" data-entity="{{ row.other_link.kind_label }}">
                 <span class="topology-relation-arrow" aria-hidden="true">{% if group.grouper == "out" %}&rarr;{% else %}&larr;{% endif %}</span>
                 <span class="visually-hidden">{% if group.grouper == "out" %}Outgoing:{% else %}Incoming:{% endif %}</span>
                 <span class="topology-relation-verb">{{ row.label }}</span>
                 <span class="topology-relation-other">{{ row.other.label }}</span>
-                <span class="topology-relation-kind">{{ row.other.kind }}</span>
+                <span class="topology-relation-kind">{{ row.other_link.kind_label }}</span>
               </a>
               {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title }}</span>{% endif %}
+              {% if row.entities %}
+                <ul class="topology-relation-values">
+                  {% for link in row.entities %}
+                    <li>
+                      <span class="topology-relation-value">{% entity link %}</span>
+                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · <time datetime="{{ row.observed_at }}">read {{ row.observed_age|ago }}</time>{% endif %}</span>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% elif row.detail or row.observed_age %}
+                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}<time datetime="{{ row.observed_at }}">read {{ row.observed_age|ago }}</time>{% endif %}</p>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>
       {% endfor %}
     </div>
   {% else %}
-    <p class="muted">No derived relationships — nothing declared or observed reaches this node.</p>
+    <p class="muted">No relationships.</p>
   {% endif %}
 
-  {% if topology_trace %}<p class="topology-hop"><span class="pill">Hop {{ item.hop }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
+  {% if topology_trace and item.hop %}<p class="topology-hop"><span class="pill">Hop {{ item.hop }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
   {% if item.node.actions %}
     <div class="topology-node-actions">
       {% for action in item.node.actions %}
         {% if action.method == "POST" %}
-          <form action="{{ action.url }}" method="post">
-            {% csrf_token %}
-            <button type="submit" class="btn compact{% if action.effect == 'destructive' %} danger{% elif action.effect == 'infrastructure_change' or action.recommended %} primary{% endif %}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</button>
-          </form>
+          {% if action.effect == "destructive" %}
+            {% post_button action.label action.url css="btn compact danger" title=action.reason %}
+          {% elif action.effect == "infrastructure_change" or action.recommended %}
+            {% post_button action.label action.url css="btn compact primary" title=action.reason %}
+          {% else %}
+            {% post_button action.label action.url css="btn compact" title=action.reason %}
+          {% endif %}
         {% else %}
           <a class="btn compact{% if action.effect == 'destructive' %} danger{% elif action.recommended %} primary{% endif %}" href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>
         {% endif %}

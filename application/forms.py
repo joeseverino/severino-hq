@@ -15,7 +15,7 @@ class MultipleFileInput(forms.FileInput):
 
     Django gates multiple selection behind this flag rather than the ``multiple``
     attribute, because a widget that renders ``multiple`` while reading a single
-    file is worse than one that refuses -- it silently drops uploads. Setting the
+    file is worse than one that refuses: it silently drops uploads. Setting the
     flag makes the widget read ``files.getlist`` and add the attribute itself.
     """
 
@@ -28,8 +28,8 @@ class MultipleFileField(forms.FileField):
     ``FileField.clean`` is written for a single upload. Pointed at a multiple
     input it keeps whichever file the widget happened to return and discards the
     rest, so an operator who selected three files would see one imported and no
-    error explaining the other two. This runs the field's own validation --
-    size, extension, whatever a subclass adds -- over each upload and returns
+    error explaining the other two. This runs the field's own validation
+    (size, extension, whatever a subclass adds) over each upload and returns
     the full list, so the caller gets either every file or the first failure.
     """
 

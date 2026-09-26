@@ -11,15 +11,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Callable
 from django.urls import reverse
 
-from control_plane.models import ManagedResource, OperationRequest
-from control_plane.providers import CERTIFICATE_KIND, PROVIDERS, controller_action_policy
+from control_plane.names import normalized_hostname
+from control_plane.models import ManagedResource
+from control_plane.providers import CONNECTION_LABELS, PROVIDERS
 
-from .analytics import HOST_TRAFFIC_DAYS, normalize_host, traffic_for_hosts
+from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .connections import (
     ConnectionGroup,
     ConnectionLink,
@@ -28,7 +29,9 @@ from .connections import (
 )
 from .action_links import ActionLink as TopologyAction
 from .action_links import capability_action_link, connection_action_links, topology_url
-from .infrastructure import certificate_renewal_allowed, resource_health
+from .entity_links import EntityLink, entity_link, kind_label
+from .infrastructure import resource_health
+from .resource_capabilities import removals_pending, resource_capabilities
 from .security import AuthorizationError, Capability, Principal
 
 
@@ -44,11 +47,18 @@ class TopologyNode:
     status_label: str = ""
     detail: str = ""
     url: str = ""
-    # What this node is an instance of -- a provider kind, or the connection
+    # What this node is an instance of: a provider kind, or the connection
     # family that emitted it. The subtitle already reads as this, but a subtitle
     # is a rendered label and must never become a join key; grouping siblings
     # needs identity.
     kind_key: str = ""
+    # A connection node's provider (``tailscale``, ``cloudflare_api``): the join
+    # key its readings are matched by. The subtitle is that provider's label.
+    provider: str = ""
+    # A connection node's ref and the controller that reported it: the join keys
+    # for facts about the connection. A ref is unique per controller only.
+    connection_ref: str = ""
+    controller_id: str = ""
     # When this was last observed, ISO 8601, or "" when nothing observes it.
     # Health describes the content of the last observation and says nothing
     # about its age, so a thing observed once and never again reads healthy
@@ -72,12 +82,12 @@ class TopologyNode:
     # Fields this declaration asserts that the last observation did not echo
     # back, excluding the ones the provider declared it cannot report. Drift is
     # compared only across fields present in both, so a field the reading omits
-    # is unverified rather than agreed -- the difference between "we set this"
+    # is unverified rather than agreed: the difference between "we set this"
     # and "we checked this".
     unconfirmed_fields: tuple[str, ...] = ()
     # Facts a sweep reports that no declaration carries, as flat strings. A
     # findings rule derives from this topology and is not allowed a query of its
-    # own -- the suite measures that -- so an observation a rule has to reason
+    # own (the suite measures that) so an observation a rule has to reason
     # about has to arrive here or not at all.
     #
     # Flat and small on purpose. This is not a second copy of the inventory; it
@@ -85,7 +95,7 @@ class TopologyNode:
     facts: tuple[tuple[str, str], ...] = ()
     # What this name actually served, where anything measures it. ``None`` is
     # not zero: nobody visited and nobody looked are opposite findings, and the
-    # second is the one worth acting on -- a target HQ reaches, and nothing
+    # second is the one worth acting on: a target HQ reaches, and nothing
     # measures, is a site running unobserved.
     pageviews: int | None = None
     visits: int | None = None
@@ -102,6 +112,66 @@ class TopologyEdge:
     kind: str
     label: str
     status: str = "neutral"
+    # For an edge a reading supports: the reading kind, what it names, and
+    # when it was read. An edge exists only while its reading does.
+    source_kind: str = ""
+    detail: str = ""
+    observed_at: str = ""
+    # For a reading edge: each record it stands for, through the link builder,
+    # and the facet the reading supplies.
+    entities: tuple[EntityLink, ...] = ()
+    facet: str = ""
+
+
+@dataclass(frozen=True)
+class RelationKind:
+    """What an edge kind says from each end, and where it ranks on a page.
+
+    ``phrase`` reads from the source, ``inverse`` from the target. A lower
+    ``rank`` is shown first.
+    """
+
+    phrase: str
+    inverse: str
+    rank: int
+
+
+# Every structural edge kind, stated once. Reading edges take their phrase from
+# the reading's ``relation`` and their rank from its facet.
+RELATIONS: dict[str, RelationKind] = {
+    "runs_on": RelationKind("Runs on", "Serves", 10),
+    "runs": RelationKind("Runs", "Runs on", 15),
+    "contains": RelationKind("Contains", "In domain", 30),
+    "reaches": RelationKind("Reaches", "Reached through", 70),
+    "on_tailnet": RelationKind("On the tailnet as", "Tailnet device of", 75),
+    "declared_by": RelationKind("Declared by", "Declares", 80),
+    "carries": RelationKind("Carries", "Carried by", 85),
+    "used_by": RelationKind("Used by", "Uses", 85),
+    "enables": RelationKind("Enables", "Enabled by", 85),
+    "governs": RelationKind("Governs", "Governed by", 85),
+    "reading": RelationKind("", "Reads", 88),
+}
+
+# Where a reading's relation ranks, by the facet it supplies. What serves a
+# name comes first; a protective overlay with no facet (Access) comes last.
+READING_RANKS: dict[str, int] = {
+    "runtime": 20,
+    "network": 20,
+    "dns": 35,
+    "proxy": 40,
+    "certificate": 50,
+    "registration": 60,
+    "": 90,
+}
+
+
+def relation_rank(edge: "TopologyEdge") -> int:
+    """Where an edge's relation is shown among a node's relationships."""
+
+    if edge.kind == "reading":
+        return READING_RANKS.get(edge.facet, READING_RANKS[""])
+    relation = RELATIONS.get(edge.kind)
+    return relation.rank if relation else 99
 
 
 @dataclass(frozen=True)
@@ -125,11 +195,47 @@ class TopologyTrace:
 _KIND_ORDER = {
     "controller": 0,
     "connection": 1,
-    "ability": 2,
-    "resource": 3,
-    "target": 4,
-    "dependency": 5,
+    "machine": 2,
+    "service": 3,
+    "zone": 4,
+    "ability": 5,
+    "resource": 6,
+    "registry": 7,
+    "target": 8,
+    "dependency": 9,
 }
+
+# Node kinds whose ``observed_at`` is the newest of the readings joined to
+# them rather than one sweep's stamp, so siblings are not compared by it.
+JOINED_KINDS = frozenset({"machine", "service", "zone", "registry", "controller"})
+
+# Node kinds a sweep or a reading can observe. A declaration is observable
+# unless its provider says no sweep reads it.
+_OBSERVABLE_KINDS = frozenset({"connection", *JOINED_KINDS})
+
+
+def observable(node: TopologyNode) -> bool:
+    """Whether anything can observe this node, so "never observed" is a gap."""
+
+    if node.kind == "resource":
+        provider = PROVIDERS.get(node.kind_key)
+        return not (provider and provider.unobserved_reason)
+    return node.kind in _OBSERVABLE_KINDS
+
+
+def newest_stamp(*stamps: str) -> str:
+    """The latest of several ISO 8601 instants, or ""."""
+
+    moments = []
+    for stamp in stamps:
+        try:
+            moment = datetime.fromisoformat(stamp) if stamp else None
+        except ValueError:
+            continue
+        if moment is not None:
+            moments.append(moment if moment.tzinfo else moment.replace(tzinfo=UTC))
+    return max(moments).isoformat() if moments else ""
+
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
 MAX_TRACE_DEPTH = 5
@@ -154,13 +260,13 @@ def _focus_url(node_id: str) -> str:
     return topology_url(node_id)
 
 
-def _edge(source: str, target: str, kind: str, label: str, status="neutral"):
+def _edge(source: str, target: str, kind: str, label: str = "", status="neutral"):
     return TopologyEdge(
         id=_derived_id("edge", source, target, kind),
         source=source,
         target=target,
         kind=kind,
-        label=label,
+        label=label or RELATIONS[kind].phrase,
         status=status,
     )
 
@@ -180,7 +286,7 @@ def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
 
 
 def _resource_actions(
-    resource: ManagedResource, principal: Principal
+    resource: ManagedResource, principal: Principal, removal_pending: bool, manages
 ) -> tuple[TopologyAction, ...]:
     key = resource.key
     actions = [
@@ -188,7 +294,7 @@ def _resource_actions(
             "open",
             "Open",
             "read",
-            reverse("control_plane:detail", kwargs={"key": key}),
+            resource.get_absolute_url(),
         )
     ]
     if not _permitted(principal, Capability.MANAGE_INFRASTRUCTURE):
@@ -203,48 +309,50 @@ def _resource_actions(
             target=key,
         )
     )
-    if resource.enabled:
-        reconcile, _ = controller_action_policy(
-            resource.kind, OperationRequest.Action.RECONCILE
-        )
-        if reconcile:
-            actions.append(
-                TopologyAction(
-                    "reconcile",
-                    "Reconcile",
-                    "infrastructure_change",
-                    reverse("control_plane:reconcile", kwargs={"key": key}),
-                    method="POST",
-                    capability="infrastructure.reconcile",
-                    target=key,
-                )
-            )
-        if (
-            resource.kind == CERTIFICATE_KIND
-            and _permitted(principal, Capability.REQUEST_CERTIFICATE_RENEWAL)
-            and certificate_renewal_allowed(resource)[0]
-        ):
-            actions.append(
-                TopologyAction(
-                    "renew",
-                    "Renew certificate",
-                    "infrastructure_change",
-                    reverse("control_plane:renew", kwargs={"key": key}),
-                    method="POST",
-                    capability="certificate.renew",
-                    target=key,
-                )
-            )
-    actions.append(
-        TopologyAction(
-            "remove",
-            "Review removal",
-            "destructive",
-            reverse("control_plane:remove", kwargs={"key": key}),
-            capability="infrastructure.resource.remove",
-            target=key,
-        )
+    capabilities = resource_capabilities(
+        resource, running=(), removal_pending=removal_pending, manages=manages
     )
+    reconcile = capabilities.actions.get("reconcile")
+    if reconcile and reconcile.enabled:
+        actions.append(
+            TopologyAction(
+                "reconcile",
+                "Reconcile",
+                "infrastructure_change",
+                reverse("control_plane:reconcile", kwargs={"key": key}),
+                method="POST",
+                capability="infrastructure.reconcile",
+                target=key,
+            )
+        )
+    renew = capabilities.actions.get("renew")
+    if (
+        renew
+        and renew.enabled
+        and _permitted(principal, Capability.REQUEST_CERTIFICATE_RENEWAL)
+    ):
+        actions.append(
+            TopologyAction(
+                "renew",
+                "Renew certificate",
+                "infrastructure_change",
+                reverse("control_plane:renew", kwargs={"key": key}),
+                method="POST",
+                capability="certificate.renew",
+                target=key,
+            )
+        )
+    if capabilities.removal != "unavailable":
+        actions.append(
+            TopologyAction(
+                "remove",
+                "Stop managing" if capabilities.removal == "forget" else "Review removal",
+                "destructive",
+                reverse("control_plane:remove", kwargs={"key": key}),
+                capability="infrastructure.resource.remove",
+                target=key,
+            )
+        )
     return tuple(actions)
 
 
@@ -315,13 +423,13 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
     """What this declaration asserts that the last reading did not echo back.
 
     Drift is compared only across fields present in *both*, so a field the
-    reading omits is never judged -- it is unverified rather than agreed.
+    reading omits is never judged: it is unverified rather than agreed.
     Fields the provider declared it cannot report are excluded: those are a
     known gap rather than a silent one. And a field carrying no value is
     excluded because there is nothing there to confirm.
 
     Without that last clause every DNS record that is not an MX asserted an
-    unconfirmed ``priority`` -- twenty-eight of them, none clearable, since the
+    unconfirmed ``priority``: twenty-eight of them, none clearable, since the
     provider correctly declines to read a priority back for a type that has
     none. They buried the findings that were real.
     """
@@ -330,7 +438,7 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
         return ()
     # A provider with no ``from_record`` cannot turn a reading into a spec, so
     # no field of that spec is ever echoed back. A certificate declares what was
-    # asked for -- which name, which domains, where to install -- and its
+    # asked for (which name, which domains, where to install) and its
     # reading reports what exists: issuer, expiry, the PEM. Two vocabularies
     # that were never meant to overlap, and a per-field exemption list for them
     # is a list that goes stale.
@@ -356,8 +464,12 @@ def _merge_controller_node(
     group_label: str,
     url: str,
     principal: Principal,
+    observed_at: str = "",
 ) -> None:
-    """Join every distinct emitted connection workflow onto one controller."""
+    """Join every distinct emitted connection workflow onto one controller.
+
+    Its observed time is the newest of the connections it reports.
+    """
 
     action = TopologyAction("open", f"Open {group_label}", "read", url) if url else None
     refresh = capability_action_link(
@@ -375,6 +487,7 @@ def _merge_controller_node(
             label=label,
             subtitle="Controller",
             url=url,
+            observed_at=observed_at,
             actions=emitted,
         )
     else:
@@ -383,8 +496,11 @@ def _merge_controller_node(
             for item in emitted
             if all(existing.url != item.url for existing in current.actions)
         )
-        if additions:
-            nodes[node_id] = replace(current, actions=current.actions + additions)
+        nodes[node_id] = replace(
+            current,
+            observed_at=newest_stamp(current.observed_at, observed_at),
+            actions=current.actions + additions,
+        )
 
 
 def _connection_nodes(
@@ -396,179 +512,117 @@ def _connection_nodes(
     for group in groups:
         spec_actions = _connection_actions(group.spec)
         connection_url = spec_actions[0].url if spec_actions else ""
-        # A declared ability exists even when no controller currently reports a
-        # matching connection. Keeping it in the graph makes the difference
-        # between unsupported and temporarily unobserved explicit, and keeps
-        # resources of that kind discoverable instead of orphaning them.
-        for ability in group.spec.abilities:
-            ability_id = f"ability:{group.spec.name}:{ability.name}"
-            nodes.setdefault(
-                ability_id,
-                TopologyNode(
-                    id=ability_id,
-                    kind="ability",
-                    label=ability.label,
-                    subtitle=ability.name,
-                    detail=ability.summary,
-                    url=_focus_url(ability_id),
-                    actions=_ability_actions(ability, ability_id, principal),
-                ),
-            )
+        _declared_ability_nodes(group, nodes, principal)
         for connection in group.connections:
             instance = connection.instance
-            connection_id = f"connection:{group.spec.name}:{instance.id}"
-            nodes[connection_id] = TopologyNode(
-                id=connection_id,
-                kind="connection",
-                label=instance.label,
-                subtitle=instance.kind,
-                status=instance.status,
-                status_label=instance.status_label,
-                detail=instance.detail,
-                url=connection_url,
-                kind_key=group.spec.name,
-                observed_at=(
-                    instance.observed_at.isoformat() if instance.observed_at else ""
-                ),
-                actions=spec_actions,
-            )
+            node = _connection_node(group, instance, spec_actions, connection_url)
+            nodes[node.id] = node
             if instance.controller_id:
-                controller_id = _derived_id("controller", instance.controller_id)
-                _merge_controller_node(
-                    nodes,
-                    node_id=controller_id,
-                    label=instance.controller_id,
-                    group_label=group.spec.label,
-                    url=connection_url,
-                    principal=principal,
-                )
-                relation = _edge(
-                    controller_id, connection_id, "carries", "Carries"
-                )
-                edges[relation.id] = relation
-            for target in instance.targets:
-                node = _link_node(target, kind="target")
-                nodes.setdefault(node.id, node)
-                relation = _edge(
-                    connection_id, node.id, "reaches", "Reaches", instance.status
-                )
-                edges[relation.id] = relation
-            for dependency in instance.dependencies:
-                resource_id = f"resource:{dependency.resource_key}"
-                if dependency.resource_key and resource_id in nodes:
-                    target_id = resource_id
-                else:
-                    node = _link_node(dependency, kind="dependency")
-                    nodes.setdefault(node.id, node)
-                    target_id = node.id
-                relation = _edge(
-                    connection_id, target_id, "used_by", "Used by", instance.status
-                )
-                edges[relation.id] = relation
-            for state in connection.abilities:
-                ability = state.ability
-                ability_id = f"ability:{group.spec.name}:{ability.name}"
-                available = (
-                    "good"
-                    if state.available is True
-                    else "serious" if state.available is False else "neutral"
-                )
-                relation = _edge(
-                    connection_id, ability_id, "enables", "Enables", available
-                )
-                edges[relation.id] = relation
+                _controller_edge(group, instance, node, connection_url, nodes, edges, principal)
+            _target_edges(instance, node.id, nodes, edges)
+            _dependency_edges(instance, node.id, nodes, edges)
+            _ability_edges(group, connection, node.id, edges)
 
 
-# Derived node kinds that only stand for a machine something mentioned: a
-# controller is the machine it runs on, a target is the machine it reaches.
-_FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": "Reached as"}
-
-
-def _one_node_per_machine(
-    nodes: dict[str, TopologyNode],
-    edges: dict[str, TopologyEdge],
-    resources: tuple[ManagedResource, ...],
-) -> None:
-    """Give every declared machine exactly one node.
-
-    A controller and a reached target that resolve to a declared machine are
-    that machine, so they fold into its node: their edges move to it and what
-    they were is kept as a fact. A tailnet device stays its own node, since HQ
-    keeps decisions about it, and is linked to its machine through the address
-    they share. Resolution is the machine index every surface uses, never a
-    match on labels.
-    """
-
-    from . import tailnet
-    from .locate import machines_index
-    from .machines import declares_host
-
-    machine_nodes = {
-        str((resource.spec or {}).get("name") or resource.key): f"resource:{resource.key}"
-        for resource in resources
-        if resource.kind == "machine" and f"resource:{resource.key}" in nodes
-    }
-    if not machine_nodes:
-        return
-    index = machines_index()
-
-    folded: dict[str, str] = {}
-    for node_id, node in nodes.items():
-        if node.kind in _FOLDS_INTO_MACHINE:
-            host = machine_nodes.get(index.resolve(node.label))
-            if host:
-                folded[node_id] = host
-    for node_id, host in folded.items():
-        node, machine = nodes[node_id], nodes[host]
-        fact = (_FOLDS_INTO_MACHINE[node.kind], node.label)
-        nodes[host] = replace(
-            machine,
-            facts=machine.facts + ((fact,) if fact not in machine.facts else ()),
-            actions=machine.actions
-            + tuple(
-                action
-                for action in node.actions
-                if all(existing.url != action.url for existing in machine.actions)
+def _declared_ability_nodes(group, nodes, principal) -> None:
+    # A declared ability exists even when no controller currently reports a
+    # matching connection. Keeping it in the graph makes the difference
+    # between unsupported and temporarily unobserved explicit, and keeps
+    # resources of that kind discoverable instead of orphaning them.
+    for ability in group.spec.abilities:
+        ability_id = f"ability:{group.spec.name}:{ability.name}"
+        nodes.setdefault(
+            ability_id,
+            TopologyNode(
+                id=ability_id,
+                kind="ability",
+                label=ability.label,
+                subtitle=ability.name,
+                detail=ability.summary,
+                url=_focus_url(ability_id),
+                actions=_ability_actions(ability, ability_id, principal),
             ),
         )
-    moved: dict[str, TopologyEdge] = {}
-    for edge in edges.values():
-        source = folded.get(edge.source, edge.source)
-        target = folded.get(edge.target, edge.target)
-        if source == target:
-            continue
-        relation = _edge(source, target, edge.kind, edge.label, edge.status)
-        moved[relation.id] = relation
-    edges.clear()
-    edges.update(moved)
-    for node_id in folded:
-        del nodes[node_id]
 
-    # Whatever declares the machine it runs on -- a container, a stack -- is
-    # linked to that machine's node.
-    for resource in resources:
-        resource_id = f"resource:{resource.key}"
-        if not declares_host(resource.kind):
-            continue
-        host = machine_nodes.get(index.resolve((resource.spec or {}).get("host")))
-        if host and host != resource_id and resource_id in nodes:
-            relation = _edge(host, resource_id, "runs", "Runs")
+
+def _connection_node(group, instance, spec_actions, connection_url) -> TopologyNode:
+    return TopologyNode(
+        id=f"connection:{group.spec.name}:{instance.id}",
+        kind="connection",
+        label=instance.label,
+        subtitle=CONNECTION_LABELS.get(instance.kind, group.spec.label),
+        provider=instance.kind,
+        connection_ref=instance.connection_ref,
+        controller_id=instance.controller_id,
+        status=instance.status,
+        status_label=instance.status_label,
+        detail=instance.detail,
+        # The connection's row on the connections page, unless its
+        # spec routes it to a page of its own.
+        url=(
+            entity_link("connection", instance.label).url
+            if connection_url == reverse("control_plane:connections")
+            else connection_url
+        ),
+        kind_key=group.spec.name,
+        observed_at=(instance.observed_at.isoformat() if instance.observed_at else ""),
+        actions=spec_actions,
+    )
+
+
+def _controller_edge(group, instance, node, connection_url, nodes, edges, principal) -> None:
+    controller_id = _derived_id("controller", instance.controller_id)
+    _merge_controller_node(
+        nodes,
+        node_id=controller_id,
+        label=instance.controller_id,
+        group_label=group.spec.label,
+        url=connection_url,
+        principal=principal,
+        observed_at=node.observed_at,
+    )
+    relation = _edge(controller_id, node.id, "carries", "Carries")
+    edges[relation.id] = relation
+
+
+def _target_edges(instance, connection_id, nodes, edges) -> None:
+    for target in instance.targets:
+        node = _link_node(target, kind="target")
+        nodes.setdefault(node.id, node)
+        relation = _edge(connection_id, node.id, "reaches", "Reaches", instance.status)
+        edges[relation.id] = relation
+        # A target that is also a declaration using this connection.
+        resource_id = f"resource:{target.resource_key}"
+        if target.resource_key and resource_id in nodes:
+            relation = _edge(
+                connection_id, resource_id, "used_by", "Used by", instance.status
+            )
             edges[relation.id] = relation
 
-    devices = tailnet.devices()
-    for resource in resources:
-        device_id = f"resource:{resource.key}"
-        if resource.kind != "tailscale.device" or device_id not in nodes:
-            continue
-        device = devices.get(str((resource.spec or {}).get("name") or ""))
-        hosts = {
-            machine_nodes[name]
-            for name in (index.at(address) for address in (device.addresses if device else ()))
-            if name in machine_nodes
-        }
-        for host in hosts:
-            relation = _edge(host, device_id, "on_tailnet", "On the tailnet as")
-            edges[relation.id] = relation
+
+def _dependency_edges(instance, connection_id, nodes, edges) -> None:
+    for dependency in instance.dependencies:
+        resource_id = f"resource:{dependency.resource_key}"
+        if dependency.resource_key and resource_id in nodes:
+            target_id = resource_id
+        else:
+            node = _link_node(dependency, kind="dependency")
+            nodes.setdefault(node.id, node)
+            target_id = node.id
+        relation = _edge(connection_id, target_id, "used_by", "Used by", instance.status)
+        edges[relation.id] = relation
+
+
+def _ability_edges(group, connection, connection_id, edges) -> None:
+    for state in connection.abilities:
+        ability_id = f"ability:{group.spec.name}:{state.ability.name}"
+        available = (
+            "good"
+            if state.available is True
+            else "serious" if state.available is False else "neutral"
+        )
+        relation = _edge(connection_id, ability_id, "enables", "Enables", available)
+        edges[relation.id] = relation
 
 
 # A label is a candidate hostname when it looks like one. Deliberately a shape
@@ -586,12 +640,12 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
     ties them and none is stored twice.
 
     One query for the whole graph, and none at all when nothing in it is named
-    like a host -- a deployment measuring nothing pays nothing, which is what
+    like a host: a deployment measuring nothing pays nothing, which is what
     lets this sit in the shared projection rather than in one adapter.
     """
 
     candidates = {
-        node.id: normalize_host(node.label)
+        node.id: normalized_hostname(node.label)
         for node in nodes.values()
         if _HOSTNAME_SHAPE.match(node.label.strip().lower())
     }
@@ -610,33 +664,21 @@ def _measure(nodes: dict[str, TopologyNode]) -> None:
             )
 
 
-# The kinds this module reads out of the provider inventory, fetched together.
-# Two filters against one table are two queries, and this runs inside the
-# projection whose query count the dashboard measures.
-_READ_KINDS = ("host.perimeter", "cloudflare.zone")
-
-
 def _inventory_of(kind: str) -> tuple[Any, ...]:
-    """Snapshots of one kind, from a single read of every kind used here."""
+    """Snapshots of one kind, from the join engine's one read of the inventory."""
 
-    from control_plane.models import ProviderInventory
+    from .facts import snapshots_of
 
-    from .projection import read_once
-
-    def load() -> dict[str, tuple[Any, ...]]:
-        grouped: dict[str, list[Any]] = {name: [] for name in _READ_KINDS}
-        for snapshot in ProviderInventory.objects.filter(kind__in=_READ_KINDS):
-            grouped.setdefault(snapshot.kind, []).append(snapshot)
-        return {name: tuple(rows) for name, rows in grouped.items()}
-
-    return read_once("topology.inventory", load).get(kind, ())
+    return snapshots_of(kind)
 
 
 def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
     """Each machine's perimeter reading, keyed by the connection that took it."""
 
     found: dict[str, tuple[tuple[str, str], ...]] = {}
-    for snapshot in _inventory_of("host.perimeter"):
+    from control_plane.observations.host import PERIMETER_KIND
+
+    for snapshot in _inventory_of(PERIMETER_KIND):
         for record in snapshot.records:
             connection_ref = str(record.get("connection_ref", "")).strip()
             if not connection_ref:
@@ -654,6 +696,49 @@ def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
     return found
 
 
+_EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
+
+
+def _tailnet_facts() -> tuple[tuple[str, str], ...]:
+    """What the tailnet uses, and each global resolver that is not part of it.
+
+    Addresses are the IPv4 addresses of every device the device reading holds;
+    routes are the subnet routes approved for them, exit routes excluded.
+    Nothing is said without a device reading, since every claim here compares
+    against it.
+    """
+
+    from core.network import parse_ip
+
+    addresses: set[str] = set()
+    routes: set[str] = set()
+    for snapshot in _inventory_of("tailscale.device"):
+        for record in snapshot.records:
+            addresses.update(str(item) for item in record.get("addresses") or ())
+            routes.update(
+                str(route)
+                for route in record.get("enabled_routes") or ()
+                if str(route) not in _EXIT_ROUTES
+            )
+    if not addresses:
+        return ()
+    entries: list[tuple[str, str]] = []
+    for snapshot in _inventory_of("tailscale.dns"):
+        for record in snapshot.records:
+            entries.extend(
+                ("tailnet-dns-off-tailnet", str(address))
+                for address in record.get("nameservers") or ()
+                if parse_ip(str(address)) is not None and str(address) not in addresses
+            )
+    entries.extend(
+        ("tailnet-address", address)
+        for address in sorted(addresses)
+        if getattr(parse_ip(address), "version", 0) == 4
+    )
+    entries.extend(("tailnet-route", route) for route in sorted(routes))
+    return tuple(entries)
+
+
 def _policy_verdicts(
     found: dict[str, tuple[tuple[str, str], ...]],
     blocked: list[tuple[str, dict[str, str]]],
@@ -661,7 +746,7 @@ def _policy_verdicts(
     """Add, for each unreachable address, whether the tailnet is what refused.
 
     Three answers are possible and only one of them is this fact. A policy that
-    admits the path leaves nothing here -- the consumer is down, or the service
+    admits the path leaves nothing here: the consumer is down, or the service
     is not listening, and saying "the tailnet allows this" would be noise. A
     tailnet HQ has not swept leaves nothing either: not knowing is not the same
     as knowing it is shut, and a rule that confused them would send an operator
@@ -699,8 +784,8 @@ def _observed_facts(
     """The observed facts a rule needs, keyed by the node they belong to.
 
     A domain's registration, which lives in the zone sweep rather than in any
-    declaration -- nobody writes down when a domain expires, the registrar is
-    asked -- and the consumers a reading could not reach, which a sweep records
+    declaration (nobody writes down when a domain expires, the registrar is
+    asked) and the consumers a reading could not reach, which a sweep records
     and no declaration mentions. A rule reasoning about either has no other way
     to see it, and rules may not query.
     """
@@ -736,10 +821,8 @@ def _observed_facts(
 
     # Why it could not be reached, where the tailnet policy is the answer.
     #
-    # HQ can already decide whether one machine may reach another on a port,
-    # and until now a person had to think to go and ask it. The reading knows
-    # what it tried; this asks the question on their behalf, so the answer
-    # arrives with the failure instead of waiting to be looked up.
+    # HQ can decide whether one machine may reach another on a port, so the
+    # answer arrives with the failure instead of waiting to be looked up.
     #
     # Paid for only when something is actually unreachable, the way the zone
     # facts below refuse to buy a query to learn there are no domains.
@@ -756,25 +839,16 @@ def _observed_facts(
     if not zones:
         return found
 
-    registrations: dict[str, dict[str, Any]] = {}
-    for snapshot in _inventory_of(ZONE_KIND):
-        for record in snapshot.records:
-            name = str(record.get("zone", "")).strip().lower().rstrip(".")
-            registration = record.get("registration") or {}
-            if name and registration:
-                registrations[name] = registration
-    if not registrations:
-        return found
+    from .facts import Subject, inventory_about
 
-    found: dict[str, tuple[tuple[str, str], ...]] = {}
     for resource in zones:
-        name = str(resource.spec.get("zone", "")).strip().lower().rstrip(".")
-        registration = registrations.get(name)
-        if not registration:
+        name = normalized_hostname(resource.spec.get("zone"))
+        registration: dict[str, Any] = {}
+        for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(name,))):
+            registration = dict(record.get("registration") or {})
+        if not registration or registration.get("unread"):
             continue
-        # Added to, never over. Two kinds cannot be the same resource today, so
-        # this is a guard rather than a case -- but a second contributor here
-        # silently dropping the first is not a failure anything would catch.
+        # Added to, never over: the unreachable consumers above are kept.
         found[f"resource:{resource.key}"] = found.get(
             f"resource:{resource.key}", ()
         ) + (
@@ -786,41 +860,79 @@ def _observed_facts(
     return found
 
 
-def derive_topology(*, principal: Principal) -> Topology:
-    """Derive the complete topology visible to ``principal`` from live state."""
+def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
+    """Derive the complete topology visible to ``principal`` from live state.
+
+    ``request``, where there is one, says which address reached HQ.
+    """
+
+    from .hq_self import serving
+    from .projection import projection_scope
 
     principal.require(Capability.READ)
-    nodes: dict[str, TopologyNode] = {}
-    edges: dict[str, TopologyEdge] = {}
-    resources = tuple(ManagedResource.objects.all())
-    for resource in resources:
-        provider = PROVIDERS.get(resource.kind)
-        status, status_label, detail = _resource_status(resource)
-        resource_id = f"resource:{resource.key}"
-        nodes[resource_id] = TopologyNode(
-            id=resource_id,
-            kind="resource",
-            label=resource.key,
-            subtitle=(provider.label if provider and provider.label else resource.kind),
-            status=status,
-            status_label=status_label,
-            detail=detail,
-            url=reverse("control_plane:detail", kwargs={"key": resource.key}),
-            kind_key=resource.kind,
-            observed_at=(
-                resource.last_observed_at.isoformat()
-                if resource.last_observed_at
-                else ""
-            ),
-            declared_revision=resource.generation,
-            observed_revision=resource.observed_generation,
-            reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),
-            managed=resource.enabled,
-            on_demand=bool((resource.spec or {}).get("on_demand")),
-            unconfirmed_fields=_unconfirmed(resource, provider),
-            actions=_resource_actions(resource, principal),
+    with projection_scope(seed=serving(request) if request is not None else None):
+        return _derive(principal)
+
+
+def _resource_node(resource: ManagedResource) -> TopologyNode:
+    """A declaration as a node: its key, its kind's label, its page."""
+
+    return TopologyNode(
+        id=f"resource:{resource.key}",
+        kind="resource",
+        label=resource.key,
+        subtitle=kind_label(resource.kind),
+        url=resource.get_absolute_url(),
+        kind_key=resource.kind,
+    )
+
+
+@dataclass(frozen=True)
+class RelationGraph:
+    """The estate's nodes and edges, and the join key of each estate node."""
+
+    topology: Topology
+    subjects: dict[str, Any]
+
+
+def relation_graph(*, principal: Principal) -> RelationGraph:
+    """Machines, services, domains, declarations and connections, and their edges.
+
+    The topology's own node and edge code, without what only the topology page
+    needs: health, actions, abilities' governance, traffic and perimeter facts.
+    Read once per projection, so every page section shares one derivation.
+    """
+
+    from .projection import read_once
+    from .topology_estate import add_estate
+
+    principal.require(Capability.READ)
+
+    def build() -> RelationGraph:
+        nodes: dict[str, TopologyNode] = {}
+        edges: dict[str, TopologyEdge] = {}
+        resources = tuple(ManagedResource.objects.all())
+        for resource in resources:
+            node = _resource_node(resource)
+            nodes[node.id] = node
+        _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal)
+        subjects = add_estate(nodes, edges, resources)
+        return RelationGraph(
+            Topology(tuple(nodes.values()), tuple(edges.values())), subjects
         )
 
+    capabilities = ",".join(sorted(str(item) for item in principal.capabilities))
+    return read_once(
+        f"topology.relations:{principal.actor}:{principal.interface}:{capabilities}", build
+    )
+
+
+def _derive(principal: Principal) -> Topology:
+    from .topology_estate import add_estate
+
+    edges: dict[str, TopologyEdge] = {}
+    resources = tuple(ManagedResource.objects.all())
+    nodes = _resource_nodes(resources, principal)
     # Observed facts that decide a finding, attached to the resource they are
     # about. Read once here rather than by a rule, which must cost no queries.
     for resource_id, extra in _observed_facts(resources).items():
@@ -829,38 +941,9 @@ def derive_topology(*, principal: Principal) -> Topology:
 
     groups = connection_catalog(principal=principal)
     _connection_nodes(groups, nodes, edges, principal)
-    _one_node_per_machine(nodes, edges, resources)
-
-    # What each edge relies on to stay shut, from its own reading. Two claims
-    # come out of this and they differ in kind: a firewall unit that is not
-    # running is a control that stopped, and a port answering publicly is the
-    # thing that control exists to prevent, already happening.
-    #
-    # Joined on the ref a connection is labelled with. The node id composes a
-    # group name and a controller as well, and rebuilding it here would be a
-    # second copy of a format only the line above should know.
-    perimeter = _perimeter_facts()
-    if perimeter:
-        for node_id, node in list(nodes.items()):
-            entries = perimeter.get(node.label) if node.kind == "connection" else None
-            if entries:
-                nodes[node_id] = replace(node, facts=node.facts + entries)
-
-    resources_by_kind: dict[str, list[str]] = {}
-    for resource in resources:
-        resources_by_kind.setdefault(resource.kind, []).append(
-            f"resource:{resource.key}"
-        )
-    for group in groups:
-        for ability in group.spec.abilities:
-            ability_id = f"ability:{group.spec.name}:{ability.name}"
-            for kind in ability.governs_kinds:
-                for resource_id in resources_by_kind.get(kind, ()):
-                    relation = _edge(
-                        ability_id, resource_id, "governs", "Governs"
-                    )
-                    edges[relation.id] = relation
-
+    add_estate(nodes, edges, resources)
+    _add_connection_facts(nodes)
+    _governs_edges(groups, resources, edges)
     _measure(nodes)
 
     ordered_nodes = tuple(
@@ -875,13 +958,102 @@ def derive_topology(*, principal: Principal) -> Topology:
     return Topology(ordered_nodes, ordered_edges)
 
 
+def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
+    """One node per declaration, with its state and what may be done to it."""
+
+    from .adoption import manages_through
+
+    # Only an operator is offered actions, so only an operator's view reads this.
+    pending_removal = (
+        removals_pending()
+        if resources and _permitted(principal, Capability.MANAGE_INFRASTRUCTURE)
+        else frozenset()
+    )
+    # Read on first use, once for every resource.
+    manages = manages_through()
+    nodes: dict[str, TopologyNode] = {}
+    for resource in resources:
+        provider = PROVIDERS.get(resource.kind)
+        status, status_label, detail = _resource_status(resource)
+        nodes[f"resource:{resource.key}"] = replace(
+            _resource_node(resource),
+            status=status,
+            status_label=status_label,
+            detail=detail,
+            observed_at=(
+                resource.last_observed_at.isoformat() if resource.last_observed_at else ""
+            ),
+            declared_revision=resource.generation,
+            observed_revision=resource.observed_generation,
+            reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),
+            managed=resource.enabled,
+            on_demand=bool((resource.spec or {}).get("on_demand")),
+            unconfirmed_fields=_unconfirmed(resource, provider),
+            actions=_resource_actions(
+                resource, principal, resource.key in pending_removal, manages
+            ),
+        )
+    return nodes
+
+
+def _add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
+    """Facts a connection node carries for the findings that read them.
+
+    What each edge relies on to stay shut (joined on the connection's ref), a
+    credential its provider refused, work the last pass could not finish, and
+    the tailnet's own readings on the connections of the tailnet's providers.
+    """
+
+    from .connections import unfinished_work
+    from .estate import refused_connections
+    from .tailnet import TAILNET_KIND, posture_facts
+
+    perimeter = _perimeter_facts()
+    refused = refused_connections()
+    unfinished = unfinished_work()
+    tailnet = _tailnet_facts() + posture_facts()
+    tailnet_providers = PROVIDERS[TAILNET_KIND].connection_providers
+
+    def facts_for(node: TopologyNode) -> tuple[tuple[str, str], ...]:
+        found = tuple(perimeter.get(node.connection_ref, ()))
+        if node.connection_ref in refused:
+            found += (("credential-refused", refused[node.connection_ref]),)
+        steps = unfinished.get((node.controller_id, node.connection_ref), ())
+        found += tuple(("work-unfinished", step) for step in steps)
+        if node.provider in tailnet_providers:
+            found += tailnet
+        return found
+
+    for node_id, node in list(nodes.items()):
+        if node.kind != "connection":
+            continue
+        extra = facts_for(node)
+        if extra:
+            nodes[node_id] = replace(node, facts=node.facts + extra)
+
+
+def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
+    """An ability governs every declaration of the kinds it names."""
+
+    resources_by_kind: dict[str, list[str]] = {}
+    for resource in resources:
+        resources_by_kind.setdefault(resource.kind, []).append(f"resource:{resource.key}")
+    for group in groups:
+        for ability in group.spec.abilities:
+            ability_id = f"ability:{group.spec.name}:{ability.name}"
+            for kind in ability.governs_kinds:
+                for resource_id in resources_by_kind.get(kind, ()):
+                    relation = _edge(ability_id, resource_id, "governs", "Governs")
+                    edges[relation.id] = relation
+
+
 @dataclass(frozen=True)
 class TopologyLens:
     """A standing question about the graph, answered from the graph itself.
 
     A lens owns no inventory and runs no query. It selects ids out of a
     projection already derived and already authorized, so a lens can only ever
-    narrow what a principal sees -- never widen it.
+    narrow what a principal sees: never widen it.
     """
 
     name: str
@@ -954,7 +1126,7 @@ def _stale_observations(topology: Topology) -> frozenset[str]:
     latest: dict[str, datetime] = {}
     seen: dict[str, datetime] = {}
     for node in topology.nodes:
-        if not node.observed_at or not node.kind_key:
+        if not node.observed_at or not node.kind_key or node.kind in JOINED_KINDS:
             continue
         try:
             observed = datetime.fromisoformat(node.observed_at)
@@ -986,10 +1158,10 @@ TOPOLOGY_LENSES: tuple[TopologyLens, ...] = (
     TopologyLens("attention", "Needs attention",
         "Everything currently reported as pending, drifted, degraded, or unreachable.",
         _needs_attention),
-    TopologyLens("unobserved-resources", "Resources no connection reports",
+    TopologyLens("unobserved-resources", "Unreported resources",
         "Declared resources that no live connection currently names as a dependency.",
         _unobserved_resources),
-    TopologyLens("ungoverned-resources", "Resources no ability governs",
+    TopologyLens("ungoverned-resources", "Ungoverned resources",
         "Declared resources whose kind no connection ability claims to govern.",
         _ungoverned_resources),
     TopologyLens("unobserved-abilities", "Abilities with no live connection",

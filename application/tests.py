@@ -175,12 +175,7 @@ class CapabilityTests(TestCase):
         self.assertEqual(Project.objects.get().name, "Second")
 
     def test_hq_sync_refuses_a_payload_it_no_longer_understands(self):
-        """The topology it used to carry is HQ's own now, so nothing sends one.
-
-        Refused rather than ignored: a caller still sending one is describing a
-        world HQ derives, and accepting it quietly would leave them believing
-        the document still governed something.
-        """
+        """A topology in the payload is refused: HQ derives its own."""
 
         result = execute_capability(
             "hq.sync",
@@ -211,7 +206,7 @@ class CapabilityTests(TestCase):
 
         It also needed infrastructure authority while the sync carried a
         topology. The only way to grant that was to hand the same account
-        resource upsert, removal and reconcile -- full control-plane write, to
+        resource upsert, removal and reconcile: full control-plane write, to
         run a documentation sync.
         """
 
@@ -886,7 +881,7 @@ class DocumentationSyncTests(TestCase):
             response, reverse("docs_index:detail", args=["rb-web-doc"])
         )
         self.assertEqual(
-            AuditLog.objects.get(object_repr="rb-web-doc — Web Doc").metadata[
+            AuditLog.objects.get(object_repr="rb-web-doc · Web Doc").metadata[
                 "operation"
             ],
             "documentation.create",
@@ -1119,7 +1114,7 @@ class MultipleFileFieldTests(SimpleTestCase):
     """Several files selected must mean several files imported.
 
     Django's FileField binds one upload; pointed at a multiple input it keeps
-    whichever the widget returned and drops the rest silently -- an operator
+    whichever the widget returned and drops the rest silently: an operator
     would see one file land and no explanation for the others.
     """
 

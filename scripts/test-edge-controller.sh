@@ -82,7 +82,7 @@ refuse "empty input is refused" "${empty_dir}"
 # the point of this suite is that a check which cannot run must not look like
 # one that passed.
 old_dir="${root}/expired"; mkdir -p "${old_dir}"
-if openssl req -x509 -help 2>&1 | grep -q -- '-not_before'; then
+if openssl req -x509 -help 2>&1 | grep -q: '-not_before'; then
     openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=expired.example.test \
         -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" \
         -not_before 20200101000000Z -not_after 20200102000000Z >/dev/null 2>&1
@@ -94,7 +94,7 @@ fi
 
 # The read-only arm. Stubbed at `docker`, because what is being checked is that
 # the operation is allowlisted and passes the adapted config through untouched
-# -- not that Caddy adapts a Caddyfile, which is Caddy's own test to run.
+# not that Caddy adapts a Caddyfile, which is Caddy's own test to run.
 cat >"${bin_dir}/docker" <<'EOF'
 #!/bin/sh
 printf '%s' '{"apps":{"http":{"servers":{"srv0":{"routes":[]}}}}}'

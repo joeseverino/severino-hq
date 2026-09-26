@@ -12,9 +12,9 @@ def _asset_fingerprint() -> str:
     """Content fingerprint for every bundle loaded by the application shell.
 
     STORAGES deliberately uses the non-manifest static backend, so asset URLs
-    carry no content hash -- while WhiteNoise serves them with far-future cache
+    carry no content hash, while WhiteNoise serves them with far-future cache
     headers. Without a version token a deployed asset change is invisible to a
-    browser holding a cached copy. Content—not mtimes—means an image rebuild
+    browser holding a cached copy. Content, not mtimes, means an image rebuild
     neither busts unchanged assets nor retains changed JavaScript.
     """
     digest = hashlib.sha256()
@@ -52,8 +52,8 @@ def _development_asset_version() -> str:
     dislodge it. The symptom is not a caching one: it is the application
     running code that is no longer on disk, indefinitely.
 
-    A per-run token cannot land in that state -- the next start has a different
-    URL whatever happened during the last one -- and `core.static` sends
+    A per-run token cannot land in that state (the next start has a different
+    URL whatever happened during the last one) and `core.static` sends
     `no-cache` in development anyway, so edits still appear without a restart.
     """
 
@@ -72,7 +72,7 @@ def _asset_version() -> str:
 def site(request):
     return {
         "SITE_NAME": getattr(settings, "SEVERINO_SITE_NAME", "Severino HQ"),
-        "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "hq.jseverino.com"),
+        "SITE_HOST": getattr(settings, "SEVERINO_SITE_HOST", "localhost"),
         "ASSET_VERSION": _asset_version(),
     }
 
@@ -86,7 +86,7 @@ def nav(request):
     into one dropdown, so the bar stays a fixed handful of controls no matter
     how many sections exist.
 
-    The entries themselves are not defined here -- they are derived from
+    The entries themselves are not defined here: they are derived from
     ``application.domains``, which is where a section declares itself once. This
     function only decides what is *currently* active.
     """
@@ -125,7 +125,7 @@ def nav(request):
             entries.append(groups[nav_item.group])
         groups[nav_item.group]["items"].append(item)
         # The group is active for anywhere in the section, including pages that
-        # have no nav entry of their own -- otherwise opening one makes the
+        # have no nav entry of their own, otherwise opening one makes the
         # current section vanish from the bar.
         # An item with no namespace shares one with every root page, so it can
         # only light its group by being the page itself.
@@ -145,7 +145,7 @@ def auth_config(request):
 def connection(request):
     """Which network this request came over, for the header badge.
 
-    Address arithmetic and the configured proxy ranges only -- no query and no
+    Address arithmetic and the configured proxy ranges only: no query and no
     inventory. The badge is on every page, so anything it costs is a cost every
     page pays; the panel behind it does the expensive part, and only when
     somebody opens it. Applying the proxy rule here keeps an opaque chain from

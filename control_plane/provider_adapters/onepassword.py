@@ -46,7 +46,7 @@ from .contracts import ProviderError, ProviderRuntime
 #
 # The expiry is a real date rather than a string that looks like one, and that is
 # the point of it. Typed, the credential store itself knows when the certificate
-# goes stale -- it renders and sorts it as a date, and can be asked -- so the
+# goes stale (it renders and sorts it as a date, and can be asked) so the
 # warning does not depend on HQ being up, configured, or sweeping.
 PUBLISHED_FIELDS: Mapping[str, str] = MappingProxyType(
     {
@@ -65,8 +65,8 @@ PUBLISHED_LABELS = tuple(PUBLISHED_FIELDS)
 FINGERPRINT_LABEL = "Fingerprint (SHA-256)"
 
 # What `op` calls each of those when it reads the item back. The assignment
-# keyword and the stored type are not the same word -- `[text]` is stored as
-# `STRING` -- so a comparison that assumed they were would find every text field
+# keyword and the stored type are not the same word: `[text]` is stored as
+# `STRING`, so a comparison that assumed they were would find every text field
 # different on every pass and rewrite all of them forever.
 _STORED_AS: Mapping[str, str] = MappingProxyType({"text": "STRING", "date": "DATE"})
 
@@ -89,8 +89,8 @@ MANAGED_TAG = "hq-managed"
 ATTACHMENT_LABELS = ("fullchain", "privkey")
 
 # A reader for the certificate and its key, called only when they are actually
-# going to be uploaded. Lazy rather than eager so the ordinary pass -- nothing
-# changed, nothing to write -- never reads a private key off disk at all.
+# going to be uploaded. Lazy rather than eager so the ordinary pass (nothing
+# changed, nothing to write) never reads a private key off disk at all.
 Material = Callable[[], tuple[bytes, bytes]]
 
 
@@ -99,7 +99,7 @@ def _fingerprint(status: dict[str, Any]) -> str:
 
     After a deployment the expected fingerprint is stated outright. After a
     plain observation there is only what each consumer served, so it is the
-    answer when they agree and no answer at all when they do not -- a
+    answer when they agree and no answer at all when they do not: a
     disagreement is what a drift condition is for, and averaging it into one
     published fact would record a certainty HQ does not have.
     """
@@ -183,7 +183,7 @@ def _current(
     """What the item already says, every tag it carries, and which files it holds.
 
     Read before writing so an unchanged certificate costs no write at all. Every
-    other field on the item is read past and left alone -- the item exists for
+    other field on the item is read past and left alone: the item exists for
     the operator's own reasons and this adapter is a guest on it.
 
     Each owned field comes back as its stored *type* beside its value, because a
@@ -252,8 +252,8 @@ def publish(
     pieces of addressing and nothing else. ``desired`` is built by ``facts``
     from the certificate HQ resolved and the certificate HQ just observed. So
     the set of fields, their labels and their values are all fixed in this
-    module, and a declaration -- which is operator input, held in HQ's database,
-    editable through a form -- cannot name an extra field, supply a value, or
+    module, and a declaration (which is operator input, held in HQ's database,
+    editable through a form) cannot name an extra field, supply a value, or
     point this at different content. That is the reason a token that can write
     is safe to hand to this path: the worst a wrong declaration can do is write
     five true facts onto the wrong item.
@@ -268,7 +268,7 @@ def publish(
     Whether the material is current is answered by the fingerprint, which is the
     certificate's own content identity and is already being published. So the
     key is never read back out of 1Password to compare, and on the ordinary pass
-    it is not read off disk either -- ``material`` is called only once something
+    it is not read off disk either: ``material`` is called only once something
     has actually changed.
 
     Two things it does not do, each deliberate:
@@ -285,8 +285,8 @@ def publish(
     had added by hand.
 
     Idempotent by comparison rather than by hope: unchanged facts and a tag
-    already present produce no write at all, so the ordinary case -- a
-    certificate observed every pass and renewed every couple of months --
+    already present produce no write at all, so the ordinary case (a
+    certificate observed every pass and renewed every couple of months)
     touches 1Password twice a year.
     """
 
@@ -390,6 +390,6 @@ def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
     if not isinstance(vaults, list):
         raise ProviderError("1Password returned a vault list HQ could not read.")
     return {
-        "detail": f"Service account accepted; it holds {len(vaults)} vaults.",
+        "detail": f"Service account accepted. It can access {len(vaults)} vaults.",
         "reaches": [],
     }

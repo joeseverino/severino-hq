@@ -1,9 +1,5 @@
-{% extends "base.html" %}
-{% block title %}Analytics{% endblock %}
-
-{% block content %}
-  {% include "partials/_page_head.html" with title="Analytics" %}
-
+{% extends "page.html" %}
+{% block page %}
   <div class="window-bar">
     <nav class="window-switch" aria-label="Reporting window">
       {% for option in windows %}
@@ -18,9 +14,9 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|date:"j M" }} – {{ totals.end|date:"j M Y" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|timesince }} ago{% endif %}
+      {{ totals.start|date:"j M" }} – {{ totals.end|date:"j M Y" }}{% if totals.sample_interval > 1 %} · sampled 1:{{ totals.sample_interval }}{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
       {% if coverage.expected_days and not coverage.complete %}
-        · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read; HQ will backfill the remaining {{ coverage.missing_days }} automatically
+        · {{ coverage.covered_days }} of {{ coverage.expected_days }} site-days read, {{ coverage.missing_days }} queued for backfill
       {% endif %}
     </p>
 
@@ -39,7 +35,7 @@
               {% endfor %}
             </ol>
           {% else %}
-            {% include "partials/_empty_state.html" with message="Nothing in this window." compact=1 %}
+            {% include "partials/_empty_state.html" with message="No data in this window." compact=1 %}
           {% endif %}
         </section>
       {% endfor %}

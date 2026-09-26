@@ -3,7 +3,7 @@
 A plugin's own suite loads that plugin and nothing else, so a surface that
 composes across extensions is only ever tested in a world where it is alone.
 Every assertion that reads "nothing else is installed" then passes locally and
-is wrong in production, and no per-repo CI can see it — the sibling lives in a
+is wrong in production, and no per-repo CI can see it: the sibling lives in a
 different repository.
 
 The failure this exists to prevent, verbatim: a composing page asserted its
@@ -33,6 +33,7 @@ from typing import Any, Iterable
 from unittest import mock
 
 from .plugins import (
+    PLUGIN_API_VERSION,
     PluginIntegration,
     PluginManifest,
     clear_plugin_composition_cache,
@@ -47,13 +48,13 @@ SIBLING_PREFIX = "example."
 def undefined_style_classes(template_root) -> list[str]:
     """Class names an extension's templates use that the host does not define.
 
-    An extension that invents a class gets no error and no styling -- the page
+    An extension that invents a class gets no error and no styling: the page
     renders, slightly wrong, and stays that way. The host has this check for
     its own partials, but it cannot see an extension's templates: they live in
     another repository and are not installed when the host's suite runs. So the
     check has to run from the extension's side, against the host's real bundle.
 
-    It caught `.section-action` -- a section-head link two extensions used and
+    It caught `.section-action`: a section-head link two extensions used and
     nothing ever styled, shipped to production reading as a plain browser link.
 
         class StyleTests(SimpleTestCase):
@@ -108,7 +109,7 @@ def sibling(
         distribution=identifier.replace(".", "-"),
         source_repository=f"example/{identifier.replace('.', '-')}",
         source_workflow=".github/workflows/admit-plugin.yml",
-        api_version=2,
+        api_version=PLUGIN_API_VERSION,
         integration_provider=f"{identifier}:integration",
         **manifest_fields,
     )
@@ -155,7 +156,7 @@ class ComposedPluginTestCase:
                     ),
                     # A sibling built here exists for the length of one test.
                     # It has no wheel, no artifact digest and no signed
-                    # approval, so it can never appear in the admission lock --
+                    # approval, so it can never appear in the admission lock,
                     # and admission requires the lock to match the enabled set
                     # exactly. Left on, the kit's own siblings are read as an
                     # unsigned plugin and every suite using it fails.

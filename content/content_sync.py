@@ -1,4 +1,4 @@
-"""Pull the jseverino.com published-content index into ContentItems.
+"""Pull the example.com published-content index into ContentItems.
 
 Mirrors the GitHub metadata refresh: HQ reaches an already-public external
 source over HTTP, authenticated with a Cloudflare Access service token, and
@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from datetime import datetime
 
 from django.conf import settings
@@ -38,6 +39,8 @@ def _parse_date(value):
 def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
     """GET the content index with the Cloudflare Access service-token headers."""
     url = url or settings.CONTENT_INDEX_URL
+    if not url:
+        raise ContentSyncError("CONTENT_INDEX_URL is not set.")
     headers = {
         "Accept": "application/json",
         # Cloudflare's browser-integrity check rejects urllib's default
@@ -63,6 +66,22 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> dict:
         raise ContentSyncError(f"Content index fetch failed: {exc}") from exc
 
 
+def index_project() -> Project | None:
+    """The configured project, else the one whose public URL serves the index."""
+    slug = getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", "")
+    if slug:
+        return Project.objects.filter(slug=slug).first()
+    host = urlsplit(getattr(settings, "CONTENT_INDEX_URL", "")).hostname
+    if not host:
+        return None
+    matches = [
+        project
+        for project in Project.objects.exclude(public_url="")
+        if urlsplit(project.public_url).hostname == host
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def sync_content_index(payload: dict | None = None) -> dict:
     """Upsert ContentItems from the index, related to the site project.
 
@@ -75,9 +94,7 @@ def sync_content_index(payload: dict | None = None) -> dict:
     if not isinstance(items, list):
         raise ContentSyncError("Content index payload has no 'items' list.")
 
-    project = Project.objects.filter(
-        slug=getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", "")
-    ).first()
+    project = index_project()
 
     created = updated = total = 0
     for entry in items:

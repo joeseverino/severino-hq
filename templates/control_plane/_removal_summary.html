@@ -1,0 +1,39 @@
+{% comment %}What a removal does: delete at the provider, or forget the declaration.{% endcomment %}
+{% if forget %}
+  <p>
+    HQ stops managing {{ resource.key }}{% if holds_records %} and the records it holds{% endif %}.
+    Nothing is deleted at the provider.
+    Sweeps leave it unmanaged until you manage it again.
+  </p>
+{% else %}
+  <p>
+    The controller deletes this at the provider. HQ drops the declaration
+    once the provider confirms the deletion.
+  </p>
+{% endif %}
+{% comment %}
+What this one costs, said by the provider. "Are you sure" about a table of
+fields is a question whose honest answer depends entirely on which record it
+is, and the page was asking it without that.
+{% endcomment %}
+{% if removal_note %}<p class="msg msg-warning">{{ removal_note }}</p>{% endif %}
+{% comment %}
+What this is, then the tuning underneath. Every field at equal weight put
+"Hsts subdomains: No" and "Access list: 0" (defaults nobody chose) among the
+four rows that say what is about to be deleted.
+{% endcomment %}
+<dl class="kv compact">
+  {% for label, value in spec_rows.primary %}
+    <dt>{{ label }}</dt><dd><code>{{ value }}</code></dd>
+  {% endfor %}
+</dl>
+{% if spec_rows.advanced %}
+  <details class="control-diagnostics">
+    <summary>Other settings ({{ spec_rows.advanced|length }})</summary>
+    <dl class="kv compact">
+      {% for label, value in spec_rows.advanced %}
+        <dt>{{ label }}</dt><dd><code>{{ value }}</code></dd>
+      {% endfor %}
+    </dl>
+  </details>
+{% endif %}

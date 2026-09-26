@@ -3,11 +3,10 @@
 The inverse of ``import_docs_manifest --report-orphans``: that reports vault
 relations pointing at a missing registry slug; this reports registry rows that
 *no* documentation references (zero ``documentation_records``). A zero-doc row
-is not always wrong — a freshly registered project may not have a doc yet — but
+is not always wrong (a freshly registered project may not have a doc yet) but
 it is the fingerprint of a rename that left a stale slug, or a duplicate row.
 
-Read-only. Replaces an inline ORM script that `hq validate` used to pipe into
-`manage.py shell` over SSH, so the logic is now testable and versioned.
+Read-only.
 """
 
 from __future__ import annotations
@@ -52,11 +51,11 @@ class Command(BaseCommand):
 
         if orphan_projects or orphan_assets:
             self.stdout.write(
-                "Registry  review orphans above — stale slug from a rename, "
+                "Registry  review orphans above: a stale slug from a rename, "
                 "or a duplicate row"
             )
         else:
             self.stdout.write(
-                "Registry  ok — every Project and Asset is referenced by at "
+                "Registry  ok: every Project and Asset is referenced by at "
                 "least one doc"
             )

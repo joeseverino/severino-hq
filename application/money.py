@@ -4,7 +4,7 @@ Rounding is not a formatting preference; it is arithmetic that has to be
 identical everywhere or two surfaces holding the same money disagree by a cent
 and neither is obviously wrong. Python's default is banker's rounding
 (``ROUND_HALF_EVEN``), which is a defensible choice and *not* the one this
-codebase already made -- assets and expenses have quantized half-up since they
+codebase already made: assets and expenses have quantized half-up since they
 were written.
 
 So the rule lives here rather than in whichever domain needed it first. It was

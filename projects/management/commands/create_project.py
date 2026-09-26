@@ -1,6 +1,6 @@
 """Create or update a Project record from the CLI.
 
-Idempotent — re-running with the same slug updates the existing record.
+Idempotent: re-running with the same slug updates the existing record.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ class Command(BaseCommand):
     help = "Create or update a Project record by slug."
 
     def add_arguments(self, parser):
-        parser.add_argument("slug", help="URL slug (e.g. jseverino-public-site).")
+        parser.add_argument("slug", help="URL slug (e.g. public-site).")
         parser.add_argument(
             "--name",
             required=True,

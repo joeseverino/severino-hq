@@ -75,14 +75,14 @@ if ! check; then
 fi
 
 # A changed unit, a changed drop-in, and a unit that never arrived are each
-# named -- by path, since "something differs" sends a person to diff eleven files.
-printf '# edited on the host\n' >>"${etc}/severino-hq-finance-sync.timer"
+# named: by path, since "something differs" sends a person to diff eleven files.
+printf '# edited on the host\n' >>"${etc}/severino-hq-audit-prune.timer"
 printf '# edited on the host\n' >>"${etc}/severino-hq-backup.service.d/10-root-owned-exec.conf"
 rm "${etc}/severino-hq-script-drift.timer"
 if check; then
     fail "a drifted host passed the check"
 fi
-for drifted in severino-hq-finance-sync.timer \
+for drifted in severino-hq-audit-prune.timer \
     severino-hq-backup.service.d/10-root-owned-exec.conf \
     severino-hq-script-drift.timer; do
     grep -qF "${etc}/${drifted}" "${fixture}/err" || fail "drift in ${drifted} was not reported"
@@ -97,9 +97,7 @@ done
 #    unit itself runs.
 #
 # The drop-in wins, so a change to the unit's ExecStart that the drop-in does
-# not repeat is a change that never takes effect. This used to be looked for on
-# the host once a day, after the fact; it is a property of the repository, so it
-# is refused here instead.
+# not repeat is a change that never takes effect, so it is refused here.
 exec_start() { sed -n 's/^ExecStart=\(..*\)/\1/p' "$1" | tail -1; }
 for f in $(units_shipped deploy/systemd); do
     case "${f}" in *.d/*) ;; *) continue ;; esac

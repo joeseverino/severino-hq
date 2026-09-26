@@ -17,6 +17,7 @@ from docs_index.importer import (
 )
 from docs_index.models import DocumentationRecord
 from .security import Capability, Principal
+from .ui import counted
 from assets.models import Asset
 from expenses.models import Expense
 from projects.models import Project
@@ -93,7 +94,10 @@ def _resolve(model, field, values, label):
     found = {getattr(record, field) for record in records}
     missing = sorted(set(values) - found)
     if missing:
-        raise ManifestImportError(f"Related {label}(s) not found: {missing}")
+        found_none = counted(
+            len(missing), f"related {label} not found", f"related {label}s not found"
+        )
+        raise ManifestImportError(f"{found_none}: {missing}")
     return records
 
 
@@ -205,7 +209,7 @@ def sync_documentation(
         record_event(
             action=AuditLog.Action.IMPORTED,
             type_label="DocumentationRecord",
-            message="Synchronized vault documentation manifest.",
+            message="Synced the documentation manifest.",
             metadata={"stats": stats},
         )
     return {"ok": True, "stats": stats}

@@ -89,7 +89,7 @@ page it falls back to. Nothing here knows which one it is in.
         <dt>Tailnet account</dt>
         <dd>
           {% if connection.identity.tailnet_user %}<code>{{ connection.identity.tailnet_user }}</code>
-          {% else %}<span class="muted">—</span>{% endif %}
+          {% else %}{% empty_value %}{% endif %}
         </dd>
         <dt>Device</dt>
         <dd>
@@ -176,9 +176,10 @@ page it falls back to. Nothing here knows which one it is in.
                 About <code>{{ connection.peering.address }}</code>
               </summary>
               <div class="conn-rows"
-                   data-peering-source="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}">
+                   data-deferred="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
+                   data-deferred-failure="The lookup could not be reached.">
                 <div class="conn-row">
-                  <span class="conn-row-note">Looked up when you open this, not when the page is built.</span>
+                  <span class="conn-row-note">Read when you open this, not when the page is built.</span>
                 </div>
               </div>
             </details>
@@ -197,7 +198,7 @@ page it falls back to. Nothing here knows which one it is in.
         {% endif %}
         <dt>Browser round trip</dt>
         <dd>
-          <span data-rtt>—</span>
+          <span data-rtt>{% empty_value %}</span>
           <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
         </dd>
         <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
@@ -205,7 +206,7 @@ page it falls back to. Nothing here knows which one it is in.
           {% comment %}
           The evidence the rest of this section is describing. An endpoint, a
           handshake age and a byte count are all consequences of these two keys
-          having agreed -- naming them is what turns "HQ says you are a peer"
+          having agreed: naming them is what turns "HQ says you are a peer"
           into something checkable against `tailscale status` on either machine.
           Folded away because it is proof rather than a reading: wanted when the
           claim is doubted, noise on every other visit.
@@ -217,7 +218,7 @@ page it falls back to. Nothing here knows which one it is in.
               {% comment %}
               Stacked rather than the shared row grid: that grid sizes its value
               column to `max-content`, which for a seventy-character key is the
-              key's full width -- it pushed past the panel and crushed the label
+              key's full width: it pushed past the panel and crushed the label
               beside it into one letter per line.
               {% endcomment %}
               <dl class="conn-keys">
@@ -244,7 +245,7 @@ page it falls back to. Nothing here knows which one it is in.
         <strong>Connection path</strong>
         <small>Every hop and the trust decision HQ made about it</small>
       </span>
-      <span class="count">{{ hops|length }} hop{{ hops|length|pluralize }}</span>
+      <span class="count">{{ hops|length|counted:"hop" }}</span>
     </summary>
     <div class="conn-protocol-body">
       <div>
@@ -269,7 +270,7 @@ page it falls back to. Nothing here knows which one it is in.
         <strong>Addresses</strong>
         <small>The identities and interfaces behind both ends</small>
       </span>
-      <span class="count">{{ addresses|length }} yours{% if hq_addresses %} · {{ hq_addresses|length }} HQ{% endif %}</span>
+      <span class="count">Yours {{ addresses|length }}{% if hq_addresses %} · HQ {{ hq_addresses|length }}{% endif %}</span>
     </summary>
     <div class="conn-protocol-body">
       <section>
@@ -316,7 +317,7 @@ page it falls back to. Nothing here knows which one it is in.
     <div class="conn-protocol-body">
       <section>
         <h3>What this request carried</h3>
-        <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too — a proxy sending one nothing looks at is invisible until both lists are printed.</p>
+        <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too, because a proxy sending one that nothing looks at is invisible until both lists are printed.</p>
         <div class="conn-rows">
           {% for header in headers %}{% if header.used %}
             <div class="conn-row conn-row-wide conn-row-used">

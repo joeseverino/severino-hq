@@ -16,7 +16,7 @@ def returning_to(url: str, origin: str) -> str:
     Carried explicitly rather than inferred from Referer: a form reached from a
     service, a domain and a list should return to whichever of those it was,
     and only the link knows. The value is checked again server-side before any
-    redirect uses it -- a query parameter is not evidence of anything.
+    redirect uses it: a query parameter is not evidence of anything.
     """
 
     if not origin:

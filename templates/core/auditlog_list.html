@@ -1,33 +1,9 @@
-{% extends "base.html" %}{% load table_tags %}
-{% block title %}Audit log{% endblock %}
-{% block content %}
-<h1>Audit log</h1>
-<p class="muted">Every important action — create / update / delete / login / export / refusal — is recorded here.</p>
-<p class="page-actions">
-  <a class="btn compact{% if not awaiting %} primary{% endif %}" href="{% url 'core:audit_list' %}">All events</a>
-  <a class="btn compact{% if awaiting %} primary{% endif %}" href="{% url 'core:audit_list' %}?awaiting=1">Awaiting approval · {{ awaiting_count }}</a>
-</p>
-
-{% include "partials/_table_toolbar.html" %}
-
-<div class="table-scroll">
-<table class="data-table" data-selectable-table>
-  <thead><tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "When" "created_at" "-created_at" %}{% table_sort_header "Who" "user__username" "-user__username" %}{% table_sort_header "Action" "action" "-action" %}{% table_sort_header "Object" "object_type" "-object_type" %}{% table_sort_header "Message" "message" "-message" %}</tr></thead>
-  <tbody>
-    {% for ev in events %}
-      <tr>
-        <td class="select-column"><input type="checkbox" data-row-select value="{{ ev.pk }}" aria-label="Select audit event {{ ev.pk }}"></td>
-        <td class="muted"><a href="{% url 'core:audit_detail' ev.pk %}">{{ ev.created_at }}</a></td>
-        <td>{{ ev.actor_label }}</td>
-        <td><span class="pill pill-{{ ev.action }}">{{ ev.get_action_display }}</span></td>
-        <td>{% if ev.object_type %}<code>{{ ev.object_type }}</code>{% if ev.object_id %} #{{ ev.object_id }}{% endif %}{% endif %}<br><span class="muted">{{ ev.object_repr }}</span></td>
-        <td class="muted">{{ ev.message }}{% if ev.operation_id %}<br><code>{{ ev.operation_id }}</code>{% endif %}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="6" class="muted">{% if awaiting %}Nothing is waiting for approval.{% else %}No audit events.{% endif %}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% include "partials/_pagination.html" %}
+{% extends "list_page.html" %}
+{% block row %}
+  <td class="muted date-col"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at }}</a></td>
+  <td>{{ row.actor_label }}</td>
+  <td><span class="pill pill-{{ row.action }}">{{ row.get_action_display }}</span></td>
+  <td>{{ row.object_repr|default:row.type_label }}{% if row.object_type and row.object_repr %}<br><span class="muted">{{ row.type_label }}</span>{% endif %}</td>
+  <td class="muted">{{ row.message }}{% if row.operation_id %}<br><code>{{ row.operation_id }}</code>{% endif %}</td>
 {% endblock %}
+{% block empty %}{% if awaiting %}Nothing is waiting for approval.{% else %}No audit events.{% endif %}{% endblock %}

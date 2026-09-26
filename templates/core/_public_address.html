@@ -1,3 +1,4 @@
+<div class="conn-rows" data-public-address>
 {% if reading %}
   <div class="conn-row conn-row-wide">
     <code>{{ reading.address }}</code>
@@ -27,8 +28,21 @@
       </div>
     {% endif %}
   {% endif %}
+{% elif failure %}
+  <div class="conn-row">
+    <span class="conn-row-note">{{ failure }}</span>
+  </div>
 {% else %}
   <div class="conn-row">
-    <span class="conn-row-note">{{ failure|default:"Nothing could be read about this address." }}</span>
+    <span class="conn-row-note">Not looked up yet. Looking it up asks reverse DNS and the address registry.</span>
   </div>
 {% endif %}
+{% if not failure and not reading or reading.observed_at %}
+  <form class="conn-row" method="post" action="{% url 'tool_public_address' %}" data-public-address-lookup>
+    {% csrf_token %}
+    <input type="hidden" name="address" value="{{ address }}">
+    <button class="btn" type="submit">{% if reading %}Look up again{% else %}Look up{% endif %}</button>
+    {% if reading.observed_at %}<span class="conn-row-note">Read <time datetime="{{ reading.observed_at }}">{{ reading.observed_at }}</time></span>{% endif %}
+  </form>
+{% endif %}
+</div>

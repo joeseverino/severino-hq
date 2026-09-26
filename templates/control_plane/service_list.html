@@ -1,16 +1,9 @@
-{% extends "base.html" %}
-{% block title %}Services{% endblock %}
-{% block content %}
-{% comment %}
-"Add" on a board of services means adding a service. It pointed at the resource
-picker, which asks which kind of thing to declare — a different question, and
-the one that made publishing a name start in the wrong place.
-{% endcomment %}
+{% extends "page.html" %}
+{% block page %}
 {% url 'control_plane:service_start' as start_url %}
-{% include "partials/_page_head.html" with title="Services" action_primary=True lede="Every hostname HQ manages, and whether its DNS, ingress and certificate are all in place." action_url=start_url action_label="Publish a service" %}
 
 {% comment %}
-Columns come from SERVICE_FACETS, not from this markup — minus the runtime one,
+Columns come from SERVICE_FACETS, not from this markup: minus the runtime one,
 which now shares the "Runs on" column with the origin it was duplicating.
 {% endcomment %}
 {% if favorites %}
@@ -18,25 +11,38 @@ which now shares the "Runs on" column with the origin it was duplicating.
   {% include "control_plane/_service_rows.html" with rows=favorites reorderable=True show_service_projects=service_projects %}
 {% endif %}
 
-{% if favorites %}<h2 class="section-heading">Everything else</h2>{% endif %}
-{% include "control_plane/_service_rows.html" with rows=services show_service_projects=service_projects empty_message="Nothing points at a hostname yet. Add a DNS record or a proxy and it will show up here." %}
+{% if favorites %}<h2 class="section-heading">Other services</h2>{% endif %}
+{% include "control_plane/_service_rows.html" with rows=services show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
+
+{% if hq_service %}
+  {% comment %}HQ itself. Derived from its own hosts and addresses; read-only.{% endcomment %}
+  <h2 class="section-heading">HQ</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr><th>Hostname</th><th>Runs on</th><th>State</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{ hq_service.hostname }}</strong><br><span class="muted">{{ hq_service.label }}</span></td>
+          <td>{% if hq_service.machine %}{% entity "machine"|entity_of:hq_service.machine %}{% else %}{% empty_value %}{% endif %}</td>
+          <td><span class="pill">Read-only</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 
 {% if unmanaged %}
   {% comment %}
-  Normally empty, and kept for when it is not. A sweep adopts everything a
-  credential reached, so what survives is either inside a domain HQ was never
-  made responsible for -- taking one of those on is a decision, not a sweep --
-  or something adoption could not validate. Both are worth seeing rather than
-  dropping, and neither is a chore standing between an operator and a managed
-  estate.
+  A sweep adopts what a connection that manages reached. What remains is
+  read through a connection that only observes, in a domain HQ does not
+  manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
   <details class="unmanaged">
     <summary>{{ unmanaged|length }} not adopted</summary>
     <p class="muted">
-      A sweep adopts everything a credential reaches. These were not: their
-      domain has not been adopted, so the records inside it are not HQ's to
-      take — or the provider holds a spec HQ could not validate. Adopt the
-      domain and the rest follow on the next sweep.
+      Observed only, in a domain HQ does not manage, or not valid as a spec.
     </p>
     <div class="table-scroll">
       <table class="data-table">
@@ -52,13 +58,15 @@ which now shares the "Runs on" column with the origin it was duplicating.
             <tr>
               <td><strong>{{ service.hostname }}</strong></td>
               {% for id, label, value in service.facets %}
-                <td>{% if value %}<code>{{ value }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% if value %}<code>{{ value }}</code>{% else %}{% empty_value %}{% endif %}</td>
               {% endfor %}
               <td>
-                <form method="post" action="{% url 'control_plane:adopt' service.hostname %}">
-                  {% csrf_token %}
-                  <button type="submit">Retry</button>
-                </form>
+                {% if service.observed_only %}
+                  <span class="muted">Observed</span>
+                {% else %}
+                  {% url 'control_plane:adopt' service.hostname as retry_url %}
+                  {% post_button "Adopt" retry_url %}
+                {% endif %}
               </td>
             </tr>
           {% endfor %}
@@ -69,4 +77,5 @@ which now shares the "Runs on" column with the origin it was duplicating.
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory %}
+{% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

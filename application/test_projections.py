@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from django.db import connection
 from django.test import TestCase, override_settings
+
+from application.security import cli_principal
 from django.test.utils import CaptureQueriesContext
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -317,7 +319,7 @@ class LineChartTests(TestCase):
         # Against the constants, not against 48 and 702. Written as literals
         # this test pinned a copy of the geometry rather than the geometry, so
         # moving the plot broke the test that exists to prove the plot moved
-        # everywhere at once -- the same copied-constant fault the templates
+        # everywhere at once: the same copied-constant fault the templates
         # had.
         self.assertAlmostEqual(line.series[0].points[0].x, PLOT_LEFT, places=1)
         self.assertAlmostEqual(
@@ -356,15 +358,9 @@ class ChartAxisSpanTests(TestCase):
 
 # What the host's own dashboard is allowed to cost, and what each installed
 # extension may add on top. Two numbers because the dashboard composes every
-# domain: a single fixed budget is wrong by construction the moment an extension
-# is installed, and it failed exactly that way in the composed image while
-# passing everywhere else.
-# 32 rather than 31 since the topology began reading the perimeter: one read
-# of the provider inventory, shared with the zone registrations that used to
-# buy it alone. Raised deliberately and once, because the number is the whole
-# guard -- a budget nudged up whenever something exceeds it measures nothing.
-# 33 since the contact count is stored rather than read from D1 per render: one
-# local read in place of a round trip to Cloudflare.
+# domain: a single fixed budget is wrong the moment an extension is installed.
+# Raised only deliberately: a budget nudged up whenever something exceeds it
+# measures nothing.
 HOST_QUERY_BUDGET = 33
 PER_EXTENSION_QUERY_BUDGET = 10
 
@@ -376,7 +372,7 @@ class DashboardProjectionTests(TestCase):
             patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(connection) as queries,
         ):
-            operating_snapshot()
+            operating_snapshot(principal=cli_principal())
         return queries
 
     def test_snapshot_stays_within_its_query_budget(self):
@@ -393,8 +389,8 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        # The snapshot assembles the whole page -- KPIs, the composed queue, the
-        # card row and the recent lists -- in one call, so this covers all of it
+        # The snapshot assembles the whole page (KPIs, the composed queue, the
+        # card row and the recent lists) in one call, so this covers all of it
         # rather than a part. Section readings and the service join are shared
         # only for this projection; a later snapshot always reads again.
         with (
@@ -408,7 +404,7 @@ class DashboardProjectionTests(TestCase):
             queries = self._snapshot_queries()
 
         # Counts only. This assertion runs in the composed image too, where the
-        # captured SQL names the private extensions' tables and columns -- and
+        # captured SQL names the private extensions' tables and columns, and
         # a failing public CI job prints its message into a world-readable log.
         self.assertLessEqual(
             len(queries),
@@ -450,12 +446,10 @@ class DashboardProjectionTests(TestCase):
 
         readings.record(UNREAD, {"count": 2, "status": "ok"})
         with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            snapshot = operating_snapshot()
+            snapshot = operating_snapshot(principal=cli_principal())
 
         json.dumps(snapshot)
-        # Keyed by the domain that raised it. Entries no longer carry a
-        # hand-assigned code, because nothing needs one: the link an entry
-        # points at travels with the entry.
+        # Keyed by the domain that raised it; the link travels with the entry.
         items = {item["source_id"]: item for item in snapshot["priority"]}
         self.assertEqual(items["hq.contacts"]["count"], 2)
         self.assertTrue(items["hq.contacts"]["url"])
@@ -497,7 +491,7 @@ class DashboardProjectionTests(TestCase):
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
             patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         ):
-            snapshot = operating_snapshot()
+            snapshot = operating_snapshot(principal=cli_principal())
         self.assertEqual(snapshot["kpis"]["expenses_count"], 1)
         self.assertEqual(Decimal(snapshot["kpis"]["expenses_total"]), Decimal("10.00"))
 
@@ -507,7 +501,7 @@ class DashboardProjectionTests(TestCase):
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
             patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         ):
-            snapshot = operating_snapshot()
+            snapshot = operating_snapshot(principal=cli_principal())
         self.assertEqual(snapshot["kpis"]["expenses_count"], 2)
 
 
@@ -579,7 +573,7 @@ class OperationProjectionTests(TestCase):
             resource=resource,
             action=OperationRequest.Action.RECONCILE,
             state=OperationRequest.State.FAILED,
-            requested_actor="homelab-controller",
+            requested_actor="example-controller",
             requested_interface="controller",
             idempotency_key="failed-projection",
             result={

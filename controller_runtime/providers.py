@@ -26,8 +26,11 @@ import urllib.request
 from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
+from application.ui import MISSING
 from control_plane.providers import (
     CERTIFICATE_KIND,
+    CONNECTION_CREDENTIALS,
+    PROVIDERS,
     caa_parts,
     certificate_covers,
     controller_capability_registry,
@@ -37,8 +40,10 @@ from control_plane.providers import (
     normalized_hostname,
 )
 from control_plane.provider_adapters.contracts import (
+    CREDENTIAL_REFUSAL,
     ProviderError,
     ProviderResult,
+    cloudflare_refusal,
     compile_controller_adapters,
 )
 from control_plane.provider_adapters import npm, onepassword
@@ -103,7 +108,7 @@ def _release(exc: BaseException) -> None:
     An ``HTTPError`` is not only an exception: it is the error response,
     socket included, and nothing closes it on our behalf. Chained into a
     ``ProviderError`` or swallowed into a default, it would hold that socket
-    until the garbage collector found it -- one per refused call, on a worker
+    until the garbage collector found it: one per refused call, on a worker
     that makes dozens of them a pass. Every handler that can receive one calls
     this, so the rule is written once rather than remembered at each site. The
     other failures a request can raise own nothing, and pass through untouched.
@@ -111,6 +116,139 @@ def _release(exc: BaseException) -> None:
 
     if isinstance(exc, urllib.error.HTTPError):
         exc.close()
+
+
+_HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+_DIRECT_ADDRESS = "Use the provider's direct API address."
+
+
+def _json_answer(url: str, response: Any, raw: bytes) -> Any:
+    """The JSON a provider answered, or a ProviderError saying what answered instead.
+
+    A URL behind a sign-in proxy is redirected to a login page and answers
+    HTML. Only the redirect's host is named: its query string carries client
+    IDs and state.
+    """
+
+    asked = (urllib.parse.urlsplit(url).hostname or "").lower()
+    final = response.geturl() if callable(getattr(response, "geturl", None)) else ""
+    landed = (
+        (urllib.parse.urlsplit(final).hostname or "").lower()
+        if isinstance(final, str)
+        else ""
+    )
+    headers = getattr(response, "headers", None)
+    content_type = headers.get_content_type() if hasattr(headers, "get_content_type") else ""
+    html = (isinstance(content_type, str) and content_type in _HTML_TYPES) or (
+        isinstance(raw, bytes) and raw.lstrip()[:1] == b"<"
+    )
+    if landed and asked and landed != asked:
+        raise ProviderError(
+            f"The address answered with a sign-in page at {landed}, not the API. "
+            f"{_DIRECT_ADDRESS}"
+            if html
+            else f"The address redirected to {landed}, not the API. {_DIRECT_ADDRESS}"
+        )
+    if html:
+        raise ProviderError(
+            f"The address answered with a web page, not the API. {_DIRECT_ADDRESS}"
+        )
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProviderError("Provider returned invalid JSON.") from exc
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parts = urllib.parse.urlsplit(url)
+    scheme = parts.scheme.lower()
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    return scheme, (parts.hostname or "").lower(), port or _DEFAULT_PORTS.get(scheme)
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+_REDIRECTABLE = frozenset({"GET", "HEAD"})
+
+
+class _SameOriginRedirects(dict):
+    """urllib's per-request redirect ledger, refusing a hop that leaves the request.
+
+    ``HTTPRedirectHandler`` consults ``redirect_dict`` before it follows each
+    hop, so a request carrying this one refuses a redirect to another scheme,
+    host or port, and any redirect of a request that is not a read, before the
+    next request is sent.
+    """
+
+    def __init__(self, url: str, method: str):
+        super().__init__()
+        self._origin = _origin(url)
+        self._method = method.upper()
+
+    # A ledger belongs to one request, so two are equal only when they are one.
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if self._method not in _REDIRECTABLE:
+            raise ProviderError(
+                f"The address redirected a {self._method} request, which is not "
+                f"followed. {_DIRECT_ADDRESS}"
+            )
+        if _origin(str(key)) != self._origin:
+            landed = urllib.parse.urlsplit(str(key)).hostname or "another address"
+            raise ProviderError(
+                f"The address redirected to {landed}, not the API. {_DIRECT_ADDRESS}"
+            )
+        return super().get(key, default)
+
+
+def _provider_request(
+    url: str, *, data: bytes | None, headers: dict[str, str], method: str
+) -> urllib.request.Request:
+    """A request whose caller-supplied headers are not sent on to a redirect.
+
+    urllib copies headers to wherever a redirect points, credentials included;
+    unredirected headers stay with the address they were meant for. The
+    request also carries ``_SameOriginRedirects``, so a redirect off its origin
+    is refused rather than followed.
+    """
+
+    request = urllib.request.Request(url, data=data, method=method)
+    for name, value in headers.items():
+        if name.lower() in {"accept", "content-type"}:
+            request.add_header(name, value)
+        else:
+            request.add_unredirected_header(name, value)
+    request.redirect_dict = _SameOriginRedirects(url, method)  # type: ignore[attr-defined]
+    return request
+
+
+def _open(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    data: bytes | None = None,
+    timeout: float = 15,
+) -> Any:
+    """The one way the controller sends a provider request.
+
+    Credentials ride only as unredirected headers, a redirect off the request's
+    origin is refused, and TLS is verified with ``_tls_context()``. Returns the
+    open response; ``urllib.error`` exceptions propagate to the caller.
+    """
+
+    request = _provider_request(url, data=data, headers=headers or {}, method=method)
+    return urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
+        request, timeout=timeout, context=_tls_context()
+    )
 
 
 def _request(
@@ -125,23 +263,15 @@ def _request(
     if payload is not None:
         body = json.dumps(payload).encode()
         request_headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        url, data=body, headers=request_headers, method=method
-    )
     try:
-        with urllib.request.urlopen(  # noqa: S310 - URLs are deployment config.
-            request, timeout=15, context=_tls_context()
+        with _open(
+            url, data=body, headers=request_headers, method=method
         ) as response:
             raw = response.read()
+            return _json_answer(url, response, raw)
     except (urllib.error.URLError, TimeoutError) as exc:
         _release(exc)
         raise ProviderError(f"Provider request failed: {type(exc).__name__}.") from exc
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ProviderError("Provider returned invalid JSON.") from exc
 
 
 def _multipart_request(
@@ -166,38 +296,42 @@ def _multipart_request(
             )
         )
     chunks.append(f"--{boundary}--\r\n".encode())
-    request = urllib.request.Request(
-        url,
-        data=b"".join(chunks),
-        headers={
-            "Accept": "application/json",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            **headers,
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(  # noqa: S310 - URL is deployment config.
-            request, timeout=30, context=_tls_context()
+        with _open(
+            url,
+            data=b"".join(chunks),
+            headers={
+                "Accept": "application/json",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                **headers,
+            },
+            method="POST",
+            timeout=30,
         ) as response:
             raw = response.read()
+            return _json_answer(url, response, raw)
     except (urllib.error.URLError, TimeoutError) as exc:
         _release(exc)
         raise ProviderError(
             f"Provider multipart request failed: {type(exc).__name__}."
         ) from exc
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ProviderError("Provider returned invalid JSON.") from exc
+
+
+# What a missing setting reads as wherever an error is stored or shown. The
+# variable it names stays in the controller's own log.
+NOT_CONFIGURED = "A setting this needs is not configured on the controller."
 
 
 def _required(prefix: str, name: str) -> str:
     value = os.environ.get(f"{prefix}_{name}", "").strip()
     if not value:
-        raise ProviderError(f"{prefix}_{name} is required.")
+        logger.warning(
+            "controller setting missing: %s_%s",
+            prefix,
+            name,
+            extra={"event": "controller.config.missing"},
+        )
+        raise ProviderError(NOT_CONFIGURED)
     return value
 
 
@@ -455,7 +589,7 @@ def connection_prefixes() -> dict[str, str]:
     The rendered environment is the inventory. `render-controller-env.sh`
     resolves each 1Password item into `<PREFIX>_CONNECTION_REF` alongside that
     connection's values, so what the controller can reach is exactly what it was
-    given credentials for -- nothing here has to be told separately.
+    given credentials for: nothing here has to be told separately.
     """
 
     suffix = "_CONNECTION_REF"
@@ -470,7 +604,7 @@ def connection_provider(connection_ref: str) -> str:
     """What kind of thing one connection reaches.
 
     The env prefix is the answer unless the 1Password item says otherwise, which
-    makes the long-standing convention -- `ADGUARD_URL` is AdGuard's URL -- the
+    makes the long-standing convention (`ADGUARD_URL` is AdGuard's URL) the
     rule rather than a coincidence every provider had to restate. Declaring it
     on the item is what lets two of the same kind coexist: `PORTAINER_HOME` and
     `PORTAINER_CLOUD` are both portainer, and neither has to be named here.
@@ -480,6 +614,23 @@ def connection_provider(connection_ref: str) -> str:
     if not prefix:
         return ""
     return os.environ.get(f"{prefix}_PROVIDER", "").strip() or prefix.lower()
+
+
+def effective_provider(connection_ref: str, ssh_refs: set[str] | None = None) -> str:
+    """The provider a connection acts as: its own, or ``ssh`` for a transport.
+
+    A connection whose provider has no probe of its own but carries a host and
+    a user is an SSH transport, whatever its prefix spells.
+    """
+
+    provider = connection_provider(connection_ref)
+    if provider in _CONNECTION_PROBES:
+        return provider
+    refs = set(ssh_connection_refs()) if ssh_refs is None else ssh_refs
+    if connection_ref in refs:
+        prefix = connection_prefixes().get(connection_ref, "")
+        return os.environ.get(f"{prefix}_PROVIDER", "").strip() or "ssh"
+    return provider
 
 
 def connection_prefix(provider: str, connection_ref: str = "") -> str:
@@ -552,6 +703,21 @@ def connection_role(connection_ref: str) -> str:
     return os.environ.get(f"{prefix}_ROLE", "").strip()
 
 
+def connection_manages(connection_ref: str) -> bool:
+    """Whether the connection's item says HQ manages through it.
+
+    Declared as ``<PREFIX>_MANAGES``. Absent or anything but a yes means the
+    connection only observes: a credential's permissions are not readable
+    without more permissions, so the item states the intent.
+    """
+
+    prefix = connection_prefixes().get(connection_ref, "")
+    if not prefix:
+        return False
+    value = os.environ.get(f"{prefix}_MANAGES", "").strip().lower()
+    return value in {"1", "true", "yes"}
+
+
 def connection_refs_for_role(role: str) -> tuple[str, ...]:
     """Every SSH connection declared for ``role``.
 
@@ -589,7 +755,7 @@ def _transport(connection_ref: str) -> dict[str, Any]:
         raise ProviderError(f"Unknown certificate transport: {connection_ref}.")
     port = _required(prefix, "PORT")
     if not port.isdigit() or not 1 <= int(port) <= 65535:
-        raise ProviderError(f"{prefix}_PORT is not a port number.")
+        raise ProviderError(f"The port configured for {connection_ref} is not a port number.")
     return {
         "host": _required(prefix, "HOST"),
         "port": int(port),
@@ -659,11 +825,8 @@ def _run(
 ) -> bytes:
     """Run a subprocess, saying which step failed rather than which module ran it.
 
-    Every caller here used to report the same sentence, so a failure anywhere
-    -- certbot, openssl, or an SSH call to a host -- surfaced as "Certificate
-    controller command failed." A DNS reconcile that never touches a
-    certificate reported a certificate error, and the search started in the
-    wrong place. `step` names the thing that actually failed.
+    `step` names the thing that failed: certbot, openssl, or an SSH call to a
+    host.
 
     The subprocess's own output never reaches the result: it carries paths and
     remote messages that belong in an operator's log rather than in a provider
@@ -678,7 +841,7 @@ def _run(
     ``env`` is added to this process's environment for the one call, for a tool
     that takes its credential that way. It is not an argument, because an
     argument list is readable by anything else on the machine, and its values are
-    struck out of the stderr logged below -- a tool that echoed back what it was
+    struck out of the stderr logged below: a tool that echoed back what it was
     given would otherwise put the credential in the journal, and this function is
     the only place that knows the value to look for.
     """
@@ -694,8 +857,8 @@ def _run(
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         # The tool was not there, or never returned. There is no exit code to
-        # report, so the exception's type is what names the cause -- a missing
-        # binary is a FileNotFoundError -- and it goes in the message, which is
+        # report, so the exception's type is what names the cause (a missing
+        # binary is a FileNotFoundError) and it goes in the message, which is
         # the part the controller's plain formatter prints.
         logger.warning(
             "controller step failed: %s (%s)",
@@ -880,7 +1043,7 @@ def _foreign_acme_entry(acme_dir: Path) -> str:
 
     Certbot saves a renewal by copying the previous key's owner and group onto
     the new one. A process that is not root can only chown to itself, so one
-    file carrying another group is enough to fail the save -- after the CA has
+    file carrying another group is enough to fail the save: after the CA has
     already issued, which spends a certificate against its rate limit and leaves
     an orphaned key behind. Checked before asking the CA for anything.
     """
@@ -995,17 +1158,83 @@ def _resumable_lineage(
     return fullchain, private_key
 
 
+_NPM_CERTIFICATE_IDS = "npm_certificate_ids"
+
+
+def _npm_certificate_name(consumer: dict[str, Any]) -> str:
+    """The display name HQ gives the NPM certificate it installs for a consumer."""
+
+    return f"Severino HQ - {consumer['name']}"
+
+
+def _npm_certificate_ids(
+    spec: dict[str, Any], observed: dict[str, Any] | None
+) -> dict[str, int]:
+    """The NPM certificate id HQ installed for each NPM consumer, as last reported.
+
+    The id is the certificate's identity in NPM; its display name is editable
+    there and is not. A report from a single NPM consumer that carries only
+    ``npm_certificate_id`` names that consumer's certificate.
+    """
+
+    observed = observed or {}
+    consumers = [
+        consumer["name"] for consumer in spec.get("consumers", ()) if consumer["kind"] == "npm"
+    ]
+    reported = observed.get(_NPM_CERTIFICATE_IDS)
+    ids = {
+        str(name): value
+        for name, value in (reported.items() if isinstance(reported, dict) else ())
+        if type(value) is int
+    }
+    single = observed.get("npm_certificate_id")
+    if not ids and len(consumers) == 1 and type(single) is int:
+        ids = {consumers[0]: single}
+    return {name: ids[name] for name in consumers if name in ids}
+
+
+def _with_npm_certificate_ids(
+    result: ProviderResult, known: dict[str, int]
+) -> ProviderResult:
+    """Carry the installed certificate ids into a report that did not install one."""
+
+    if not known or _NPM_CERTIFICATE_IDS in result.status:
+        return result
+    return ProviderResult(
+        changed=result.changed,
+        status={
+            **result.status,
+            _NPM_CERTIFICATE_IDS: known,
+            "npm_certificate_id": list(known.values())[-1],
+        },
+        conditions=result.conditions,
+        message=result.message,
+    )
+
+
 def _npm_managed_certificate(
     consumer: dict[str, Any],
     certificate_domains: list[str],
     fullchain: bytes,
     private_key: bytes,
+    known_id: int | None = None,
 ) -> tuple[int, dict[str, str]]:
+    """Upload into the certificate HQ installed for this consumer, or a new one.
+
+    Found by the id HQ recorded when it has one, so a certificate renamed in
+    NPM is still the one updated. The display name finds it only when no id
+    is recorded.
+    """
+
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
-    nice_name = f"Severino HQ - {consumer['name']}"
+    nice_name = _npm_certificate_name(consumer)
     certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
-    matches = [item for item in certificates if item.get("nice_name") == nice_name]
+    matches = [
+        item
+        for item in certificates
+        if known_id is not None and item.get("id") == known_id
+    ] or [item for item in certificates if item.get("nice_name") == nice_name]
     if len(matches) > 1:
         raise ProviderError("NPM contains duplicate HQ-managed certificates.")
     if matches:
@@ -1160,6 +1389,7 @@ def _deploy_certificate(
     fullchain: bytes,
     private_key: bytes,
     plan: dict[str, list[str]],
+    known: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     deployment_status: dict[str, Any] = {}
     bundle = _certificate_bundle(fullchain, private_key)
@@ -1173,12 +1403,19 @@ def _deploy_certificate(
         try:
             if consumer["kind"] == "npm":
                 certificate_id, identity = _npm_managed_certificate(
-                    consumer, spec["domains"], fullchain, private_key
+                    consumer,
+                    spec["domains"],
+                    fullchain,
+                    private_key,
+                    (known or {}).get(consumer["name"]),
                 )
                 deployment_status.update(
                     npm_certificate_id=certificate_id,
                     npm_certificate_identity=identity,
                 )
+                deployment_status.setdefault(_NPM_CERTIFICATE_IDS, {})[
+                    consumer["name"]
+                ] = certificate_id
             elif consumer["kind"] == "caddy":
                 _ssh(consumer["connection_ref"], "deploy", bundle)
             elif consumer["kind"] == "cpanel":
@@ -1301,16 +1538,19 @@ def _deploy_tls_transaction(
     artifact_source: str,
     reason: str,
     message: str,
+    known: dict[str, int] | None = None,
 ) -> ProviderResult:
     expected_fingerprint = _validate_certificate(
         fullchain, private_key, spec["domains"]
     )
     try:
-        deployment_status = _deploy_certificate(spec, fullchain, private_key, plan)
+        deployment_status = _deploy_certificate(
+            spec, fullchain, private_key, plan, known
+        )
         observed = _verify_tls_deployment(spec, expected_fingerprint)
     except ProviderError as exc:
         try:
-            _deploy_certificate(spec, previous_fullchain, previous_key, plan)
+            _deploy_certificate(spec, previous_fullchain, previous_key, plan, known)
         except ProviderError as rollback_exc:
             raise ProviderError(
                 f"Certificate deployment failed ({exc}); rollback also failed "
@@ -1352,7 +1592,9 @@ def _lineage(spec: dict[str, Any]) -> tuple[bytes, bytes]:
         ) from exc
 
 
-def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
+def apply_tls_reconcile(
+    spec: dict[str, Any], *, known: dict[str, int] | None = None
+) -> ProviderResult:
     fullchain, private_key = _lineage(spec)
     expected = _validate_certificate(fullchain, private_key, spec["domains"])
     observed = reconcile_tls(spec)
@@ -1386,10 +1628,13 @@ def apply_tls_reconcile(spec: dict[str, Any]) -> ProviderResult:
         artifact_source="existing_lineage",
         reason="Reconciled",
         message="Certificate redistributed and verified without issuance.",
+        known=known,
     )
 
 
-def renew_tls(spec: dict[str, Any]) -> ProviderResult:
+def renew_tls(
+    spec: dict[str, Any], *, known: dict[str, int] | None = None
+) -> ProviderResult:
     caddy = next((item for item in spec["consumers"] if item["kind"] == "caddy"), None)
     if caddy is None:
         raise ProviderError("Certificate renewal requires a rollback source.")
@@ -1419,14 +1664,15 @@ def renew_tls(spec: dict[str, Any]) -> ProviderResult:
         artifact_source=artifact_source,
         reason="Renewed",
         message="Certificate renewed, deployed, and verified.",
+        known=known,
     )
 
 
 def _lineage_material(spec: dict[str, Any]) -> Callable[[], tuple[bytes, bytes]]:
     """Read this certificate's own material, when and only when it is wanted.
 
-    Returned rather than read, so the ordinary pass -- everything already where
-    it should be -- never opens a private key at all. The publisher calls it only
+    Returned rather than read, so the ordinary pass (everything already where
+    it should be) never opens a private key at all. The publisher calls it only
     once it has established that what is filed is a different certificate.
 
     The lineage on disk is the same one the deploy path installs from, so what is
@@ -1517,8 +1763,11 @@ def _tls_reconcile(
     apply: bool,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    result = apply_tls_reconcile(spec) if apply else reconcile_tls(spec)
-    return _publish_tls_facts(spec, result, apply=apply)
+    known = _npm_certificate_ids(spec, observed)
+    result = apply_tls_reconcile(spec, known=known) if apply else reconcile_tls(spec)
+    return _with_npm_certificate_ids(
+        _publish_tls_facts(spec, result, apply=apply), known
+    )
 
 
 def _tls_renew(
@@ -1528,9 +1777,12 @@ def _tls_renew(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     if apply:
-        # A renewal is the moment the facts actually change -- a new expiry and a
-        # new fingerprint -- so it is the one an item most needs to hear about.
-        return _publish_tls_facts(spec, renew_tls(spec), apply=True)
+        # A renewal is the moment the facts actually change (a new expiry and a
+        # new fingerprint) so it is the one an item most needs to hear about.
+        known = _npm_certificate_ids(spec, observed)
+        return _with_npm_certificate_ids(
+            _publish_tls_facts(spec, renew_tls(spec, known=known), apply=True), known
+        )
     return ProviderResult(
         changed=True,
         status={},
@@ -1540,12 +1792,15 @@ def _tls_renew(
 
 
 def reconcile_uploaded_certificate(
-    spec: dict[str, Any], *, apply: bool = True
+    spec: dict[str, Any],
+    *,
+    apply: bool = True,
+    observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     """Install a certificate HQ was given rather than one it issued.
 
-    Deployment is identical -- a proxy does not care which authority signed the
-    thing it serves -- so this reuses the same path as a renewal and differs
+    Deployment is identical (a proxy does not care which authority signed the
+    thing it serves) so this reuses the same path as a renewal and differs
     only in where the material came from. It is never renewed here: the CA is
     air-gapped, and the certificate's expiry is reported so an operator knows
     when to generate the next one.
@@ -1574,7 +1829,11 @@ def reconcile_uploaded_certificate(
         "consumers": spec["consumers"],
     }
     deployment = _deploy_certificate(
-        target, fullchain.encode(), private_key.encode(), _plan_deployment(target)
+        target,
+        fullchain.encode(),
+        private_key.encode(),
+        _plan_deployment(target),
+        _npm_certificate_ids(spec, observed),
     )
     observed = {
         key: value
@@ -1608,7 +1867,7 @@ def delete_uploaded_certificate(
 
     Only Nginx Proxy Manager can be undone from here. A Caddy target receives a
     certificate over an SSH forced command that implements ``deploy`` and
-    nothing else, so removing one means editing the remote side -- and a delete
+    nothing else, so removing one means editing the remote side, and a delete
     that reported success while leaving a file on a host would take HQ's
     declaration with it and lose the only record that the file is there.
 
@@ -1628,9 +1887,23 @@ def delete_uploaded_certificate(
     base_url = _npm_url()
     headers = {"Authorization": f"Bearer {_npm_token(base_url)}"}
     certificates = _request(f"{base_url}/nginx/certificates", headers=headers)
-    wanted = {f"Severino HQ - {consumer['name']}" for consumer in spec["consumers"]}
-    matches = [item for item in certificates if item.get("nice_name") in wanted]
+    installed = set(_npm_certificate_ids(spec, observed).values())
+    matches = [item for item in certificates if item.get("id") in installed]
     if not matches:
+        # A display name is not an identity: NPM lets anyone set one. A
+        # certificate HQ holds no id for is left for an operator to judge.
+        wanted = {_npm_certificate_name(consumer) for consumer in spec["consumers"]}
+        named = sorted(
+            str(item.get("nice_name"))
+            for item in certificates
+            if item.get("nice_name") in wanted
+        )
+        if named:
+            raise ProviderError(
+                "NPM holds " + ", ".join(named) + ", but HQ has no record of "
+                "installing it, so it was not removed. Remove it in NPM if it "
+                "is HQ's, then remove this again."
+            )
         return ProviderResult(
             changed=False,
             status={"removed": True},
@@ -1686,6 +1959,24 @@ def list_npm() -> list[dict[str, Any]]:
     return npm.inventory(_RUNTIME)
 
 
+# ----- Readings ---------------------------------------------------------------
+#
+# A reader for a kind in control_plane.observations registers itself with
+# @reads, beside its own definition.
+
+OBSERVATION_READERS: dict[str, Callable[[], list[dict[str, Any]]]] = {}
+
+
+def reads(kind: str):
+    def register(reader):
+        if kind in OBSERVATION_READERS:
+            raise ValueError(f"Duplicate reader for {kind!r}.")
+        OBSERVATION_READERS[kind] = reader
+        return reader
+
+    return register
+
+
 # ----- Cloudflare ------------------------------------------------------------
 #
 # Two credentials, each scoped to one surface.
@@ -1693,18 +1984,24 @@ def list_npm() -> list[dict[str, Any]]:
 # `cloudflare_dns` is deliberately narrow: it can read the zones on the account
 # and read and write their DNS records, and nothing else. Zone settings,
 # analytics and every account-level surface answer 403 to it. That is why the
-# zone provider declares no reconcile it could perform -- see the capability
-# registry -- and why nothing here reaches for a setting it cannot change.
+# zone provider declares no reconcile it could perform (see the capability
+# registry) and why nothing here reaches for a setting it cannot change.
 #
-# `cloudflare_api` carries the account surface -- analytics, zone settings,
-# registration -- and reaches no DNS record. Neither is a subset of the other,
+# `cloudflare_api` carries the account surface (analytics, zone settings,
+# registration) and reaches no DNS record. Neither is a subset of the other,
 # so a provider states which one it needs and gets exactly that.
+
+
+CLOUDFLARE_API_URL = "https://api.cloudflare.com/client/v4"
 
 
 def _cloudflare_url(
     connection_ref: str = "", *, provider: str = "cloudflare_dns"
 ) -> str:
-    return _required(connection_prefix(provider, connection_ref), "URL").rstrip("/")
+    """The API base; <PREFIX>_URL overrides the public one."""
+
+    prefix = connection_prefix(provider, connection_ref)
+    return (os.environ.get(f"{prefix}_URL", "").strip() or CLOUDFLARE_API_URL).rstrip("/")
 
 
 def _cloudflare_token(
@@ -1724,13 +2021,13 @@ def _cloudflare_envelope(
     """One Cloudflare call, returning the whole envelope with its errors kept.
 
     Not routed through ``_request`` because Cloudflare says something useful in
-    the body of a 400 -- "Content for A record must be a valid IPv4 address",
-    "An identical record already exists" -- and the shared helper turns every
+    the body of a 400: "Content for A record must be a valid IPv4 address",
+    "An identical record already exists", and the shared helper turns every
     non-200 into the same sentence. A rejected DNS change that only says
     "Provider request failed: HTTPError" is a support ticket to yourself.
 
     ``success`` is checked here rather than by each caller, because Cloudflare
-    also answers 200 with ``success: false`` -- a token missing one permission
+    also answers 200 with ``success: false``: a token missing one permission
     returns no ``result`` at all, and a list helper reading ``result`` off that
     collects nothing and reports an empty estate. An account that looks empty
     and an account that refused to answer must not read the same.
@@ -1740,6 +2037,8 @@ def _cloudflare_envelope(
     which is what ``provider`` and ``connection_ref`` select.
     """
 
+    prefix = connection_prefix(provider, connection_ref)
+    _cloudflare_breaker(prefix)
     url = f"{_cloudflare_url(connection_ref, provider=provider)}{path}"
     headers = {
         "Authorization": (
@@ -1751,16 +2050,15 @@ def _cloudflare_envelope(
     if payload is not None:
         body = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(  # noqa: S310 - URL is deployment config.
-            request, timeout=15, context=_tls_context()
-        ) as response:
+        with _open(url, data=body, headers=headers, method=method) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
         with exc:
             detail = _cloudflare_errors(exc.read())
-        raise ProviderError(f"Cloudflare refused the request: {detail}") from exc
+        raise _cloudflare_refused(
+            prefix, f"Cloudflare refused the request: {detail}", detail, status=exc.code
+        ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise ProviderError(
             f"Cloudflare request failed: {type(exc).__name__}."
@@ -1770,10 +2068,49 @@ def _cloudflare_envelope(
     except json.JSONDecodeError as exc:
         raise ProviderError("Cloudflare returned invalid JSON.") from exc
     if not parsed.get("success", False):
-        raise ProviderError(
-            f"Cloudflare refused the request: {_cloudflare_errors(raw)}"
+        detail = _cloudflare_errors(raw)
+        raise _cloudflare_refused(
+            prefix, f"Cloudflare refused the request: {detail}", detail
         )
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _refused_credentials() -> dict[str, str]:
+    """Credentials refused outright during this sweep, by connection prefix."""
+
+    snapshot = _PROVIDER_SNAPSHOT.get()
+    if snapshot is None:
+        return {}
+    return snapshot.setdefault(("refused-credentials",), {})
+
+
+def _cloudflare_breaker(prefix: str) -> None:
+    """Raise without a call when this sweep has already seen the credential refused.
+
+    Every further call with a refused credential is refused too, and repeated
+    failures lock the token out, so each Cloudflare call consults this first.
+    """
+
+    refused = _refused_credentials()
+    if prefix in refused:
+        raise ProviderError(
+            f"Cloudflare refused the request: {refused[prefix]} "
+            "Not retried for the rest of this sweep.",
+            refusal=CREDENTIAL_REFUSAL,
+            reason=refused[prefix],
+        )
+
+
+def _cloudflare_refused(
+    prefix: str, message: str, detail: str, *, status: int = 0
+) -> ProviderError:
+    """The error for one Cloudflare refusal, recording a refused credential."""
+
+    refusal = cloudflare_refusal(detail, status=status)
+    if refusal == CREDENTIAL_REFUSAL:
+        _refused_credentials()[prefix] = detail
+        return ProviderError(message, refusal=CREDENTIAL_REFUSAL, reason=detail)
+    return ProviderError(message, refusal=refusal)
 
 
 def _cloudflare_request(path: str, *, method: str = "GET", payload: Any = None) -> Any:
@@ -1799,7 +2136,7 @@ def _cloudflare_paged(path: str) -> list[dict[str, Any]]:
     """Every page of a list endpoint.
 
     Cloudflare returns 100 records at most. A zone that outgrew one page would
-    otherwise have its tail silently reported as absent -- and "absent" is the
+    otherwise have its tail silently reported as absent, and "absent" is the
     word this system acts on, so the reconciler would set about recreating
     records that were there all along.
     """
@@ -2031,7 +2368,7 @@ def delete_cloudflare_record(
 
 # The zone settings worth carrying: how a domain answers over TLS. Named rather
 # than taken whole, because the settings endpoint returns eighty entries and
-# most of them -- minify, rocket loader, browser cache TTL -- are not posture.
+# most of them (minify, rocket loader, browser cache TTL) are not posture.
 ZONE_POSTURE_SETTINGS = (
     "ssl",
     "min_tls_version",
@@ -2044,32 +2381,36 @@ ZONE_POSTURE_SETTINGS = (
 def _registrar_domains() -> dict[str, dict[str, Any]]:
     """What the registrar holds for every domain on the account, by name.
 
-    Read from Cloudflare rather than from RDAP, which was the first attempt.
-    RDAP is public and needs no credential, and it can only ever answer *when* a
-    domain expires. The registrar knows whether it will renew itself -- and that
+    Read from Cloudflare rather than from RDAP. RDAP can only answer *when* a
+    domain expires; the registrar knows whether it will renew itself, and that
     is the fact worth acting on. A domain three months out with auto-renew on is
     a date; the same domain with auto-renew off is an outage with a countdown,
     and nothing else in HQ would know the difference.
 
-    The account credential already carries the registration surface, so this
-    costs no new secret. A refusal leaves the map empty and the zones report
-    their records as before.
+    The account credential carries the registration surface. A refusal is
+    returned under "" so every zone reports why its registration is unknown.
     """
 
     try:
         account = _analytics_account()
-        domains = _cloudflare_api_list(f"/accounts/{account}/registrar/domains")
-    except (ProviderError, OSError, ValueError):
-        return {}
+        domains = _cloudflare_api_cursor_list(
+            f"/accounts/{account}/registrar/registrations"
+        )
+    except (ProviderError, OSError, ValueError) as exc:
+        refused: dict[str, Any] = {"unread": _unread_reason(exc)}
+        if getattr(exc, "refusal", ""):
+            refused["refusal"] = exc.refusal
+        return {"": refused}
     found: dict[str, dict[str, Any]] = {}
     for domain in domains:
-        name = str(domain.get("name", "")).strip().lower().rstrip(".")
+        name = str(domain.get("domain_name", "")).strip().lower().rstrip(".")
         if not name:
             continue
         found[name] = {
             "expires_at": str(domain.get("expires_at", ""))[:10],
             "auto_renew": bool(domain.get("auto_renew")),
             "locked": bool(domain.get("locked")),
+            "status": str(domain.get("status", "")),
             "registrar": "Cloudflare",
         }
     return found
@@ -2078,33 +2419,34 @@ def _registrar_domains() -> dict[str, dict[str, Any]]:
 def _cloudflare_zone_posture(zone_id: str) -> dict[str, str]:
     """How a zone answers over TLS, read through the credential that can see it.
 
-    The DNS token cannot: it holds records and nothing else, which is why this
-    was blank for as long as it existed. `cloudflare_api` carries the account
-    surface, zone settings included, and has been sitting beside it.
+    The DNS token cannot: it holds records and nothing else. `cloudflare_api`
+    carries the account surface, zone settings included.
 
-    A failure here is not a failed sweep. The account token is a separate
-    credential with its own permissions, and a zone that answers with its
-    records and no posture is a smaller thing to report than no zone at all --
-    so a refusal leaves the key absent and the page says nothing rather than
-    guessing.
+    One request per setting: the batch settings endpoint reaches end of life on
+    2027-03-31. A failure here is not a failed sweep: the zone still reports its
+    records, and the posture carries why it, or which settings, could not be read.
     """
 
     if not zone_id:
         return {}
-    try:
-        envelope = _cloudflare_api_request(f"/zones/{zone_id}/settings")
-    except (ProviderError, OSError, ValueError):
-        return {}
-    settings = (envelope or {}).get("result")
-    if not isinstance(settings, list):
-        return {}
-    return {
-        str(item["id"]): str(item.get("value", ""))
-        for item in settings
-        if isinstance(item, dict)
-        and item.get("id") in ZONE_POSTURE_SETTINGS
-        and item.get("value") not in (None, "")
-    }
+    found: dict[str, str] = {}
+    refused: dict[str, str] = {}
+    for setting in ZONE_POSTURE_SETTINGS:
+        try:
+            envelope = _cloudflare_api_request(f"/zones/{zone_id}/settings/{setting}")
+        except (ProviderError, OSError, ValueError) as exc:
+            refused[setting] = _unread_reason(exc)
+            continue
+        item = (envelope or {}).get("result")
+        if isinstance(item, dict) and item.get("value") not in (None, ""):
+            found[setting] = str(item["value"])
+    if refused and not found:
+        return {"unread": next(iter(refused.values()))}
+    if refused:
+        found["unread"] = "; ".join(
+            f"{setting}: {reason}" for setting, reason in refused.items()
+        )[:200]
+    return found
 
 
 def list_cloudflare_zones() -> list[dict[str, Any]]:
@@ -2123,11 +2465,13 @@ def list_cloudflare_zones() -> list[dict[str, Any]]:
         {
             "zone": zone["name"],
             "connection_ref": connection_ref,
+            "account_id": str((zone.get("account") or {}).get("id") or ""),
             "status": zone.get("status", ""),
             "plan": (zone.get("plan") or {}).get("name", ""),
             "posture": _cloudflare_zone_posture(str(zone.get("id", ""))),
             "registration": registrars.get(
-                str(zone.get("name", "")).strip().lower().rstrip("."), {}
+                str(zone.get("name", "")).strip().lower().rstrip("."),
+                registrars.get("", {}),
             ),
         }
         for zone in _cloudflare_zones()
@@ -2146,6 +2490,343 @@ def list_cloudflare_records() -> list[dict[str, Any]]:
                 continue
             records.append(_record_status(zone_name, live))
     return records
+
+
+# Account readings through `cloudflare_api`. Every list is fetched once per
+# sweep through the provider snapshot; per-item requests are made only where
+# Cloudflare has no list that carries the field. The account allows 1,200
+# requests per five minutes.
+
+
+def _cloudflare_api_refs() -> tuple[str, ...]:
+    # No declared connection still reads once, so a missing credential raises.
+    return provider_connection_refs("cloudflare_api") or ("",)
+
+
+def _cloudflare_account(connection_ref: str) -> str:
+    return _snapshot_value(
+        ("cloudflare-account", connection_ref),
+        lambda: _analytics_account(connection_ref),
+    )
+
+
+def _cloudflare_account_list(
+    connection_ref: str, path: str, *, per_page: int = 100
+) -> list[dict[str, Any]]:
+    """One account list endpoint, read once per sweep."""
+
+    account = _cloudflare_account(connection_ref)
+    return _snapshot_value(
+        ("cloudflare-account-list", connection_ref, path),
+        lambda: _cloudflare_api_list(
+            f"/accounts/{account}{path}", connection_ref, per_page=per_page
+        ),
+    )
+
+
+def _cloudflare_api_result(path: str, connection_ref: str) -> Any:
+    return (_cloudflare_api_request(path, connection_ref) or {}).get("result")
+
+
+@reads("cloudflare.pages_project")
+def list_pages_projects() -> list[dict[str, Any]]:
+    """Pages projects and their latest production deployment."""
+
+    projects = []
+    for ref in _cloudflare_api_refs():
+        account = _cloudflare_account(ref)
+        for project in _cloudflare_account_list(ref, "/pages/projects", per_page=10):
+            deployment = project.get("canonical_deployment") or {}
+            metadata = (deployment.get("deployment_trigger") or {}).get("metadata") or {}
+            projects.append(
+                {
+                    "connection_ref": ref,
+                    "account_id": account,
+                    "name": project.get("name", ""),
+                    "subdomain": project.get("subdomain") or "",
+                    "domains": tuple(project.get("domains") or ()),
+                    "production_branch": project.get("production_branch") or "",
+                    "deployment_id": deployment.get("id") or "",
+                    "deployment_commit": str(metadata.get("commit_hash") or "")[:7],
+                    "deployment_created_on": deployment.get("created_on") or "",
+                }
+            )
+    return projects
+
+
+@reads("cloudflare.d1_database")
+def list_d1_databases() -> list[dict[str, Any]]:
+    """D1 databases. The list omits file_size, so each is read once more."""
+
+    databases = []
+    for ref in _cloudflare_api_refs():
+        account = _cloudflare_account(ref)
+        for database in _cloudflare_account_list(ref, "/d1/database"):
+            uuid = str(database.get("uuid", ""))
+            record = {
+                "connection_ref": ref,
+                "account_id": account,
+                "name": database.get("name", ""),
+                "uuid": uuid,
+                "created_at": database.get("created_at") or "",
+                "version": database.get("version") or "",
+            }
+            try:
+                detail = _cloudflare_api_result(
+                    f"/accounts/{account}/d1/database/{uuid}", ref
+                )
+            except (ProviderError, OSError, ValueError) as exc:
+                record["unread"] = f"file_size: {_unread_reason(exc)}"
+            else:
+                size = (detail or {}).get("file_size")
+                if isinstance(size, int):
+                    record["file_size"] = size
+            databases.append(record)
+    return databases
+
+
+def _access_destination_hosts(destinations: Any) -> tuple[str, ...]:
+    """Hostnames from an application's destinations, without paths or CIDRs."""
+
+    hosts: list[str] = []
+    for destination in destinations or ():
+        if not isinstance(destination, dict):
+            continue
+        if destination.get("type") == "public":
+            uri = str(destination.get("uri") or "")
+            host = uri.split("://", 1)[-1].split("/", 1)[0]
+        else:
+            host = str(destination.get("hostname") or "")
+        host = host.strip().lower().rstrip(".")
+        if host and host not in hosts:
+            hosts.append(host)
+    return tuple(hosts)
+
+
+@reads("cloudflare.access_app")
+def list_access_apps() -> list[dict[str, Any]]:
+    """Access applications at the account, with their policies by name."""
+
+    apps = []
+    for ref in _cloudflare_api_refs():
+        account = _cloudflare_account(ref)
+        for app in _cloudflare_account_list(ref, "/access/apps"):
+            apps.append(
+                {
+                    "connection_ref": ref,
+                    "account_id": account,
+                    "id": app.get("id", ""),
+                    "name": app.get("name") or "",
+                    "type": app.get("type") or "",
+                    "domain": app.get("domain") or "",
+                    "destinations": _access_destination_hosts(app.get("destinations")),
+                    "session_duration": app.get("session_duration") or "",
+                    "policies": tuple(
+                        {"id": policy.get("id") or "", "name": policy.get("name") or ""}
+                        for policy in app.get("policies") or ()
+                        if isinstance(policy, dict)
+                    ),
+                }
+            )
+    return apps
+
+
+def _admits_token(rule: Any, token_id: str) -> bool:
+    if not isinstance(rule, dict):
+        return False
+    if "any_valid_service_token" in rule:
+        return True
+    return str((rule.get("service_token") or {}).get("token_id") or "") == token_id
+
+
+def _apps_admitting(apps: list[dict[str, Any]], token_id: str) -> tuple[dict, ...]:
+    return tuple(
+        {"id": app.get("id") or "", "name": app.get("name") or ""}
+        for app in apps
+        if any(
+            _admits_token(rule, token_id)
+            for policy in app.get("policies") or ()
+            if isinstance(policy, dict)
+            for rule in policy.get("include") or ()
+        )
+    )
+
+
+@reads("cloudflare.access_service_token")
+def list_access_service_tokens() -> list[dict[str, Any]]:
+    """Service tokens, and the applications whose policies include them.
+
+    The client ID is never read into a record.
+    """
+
+    tokens = []
+    for ref in _cloudflare_api_refs():
+        listed = _cloudflare_account_list(ref, "/access/service_tokens")
+        try:
+            apps = _cloudflare_account_list(ref, "/access/apps")
+            unread = ""
+        except (ProviderError, OSError, ValueError) as exc:
+            apps, unread = [], f"apps: {_unread_reason(exc)}"
+        for token in listed:
+            token_id = str(token.get("id", ""))
+            record = {
+                "connection_ref": ref,
+                "id": token_id,
+                "name": token.get("name") or "",
+                "expires_at": token.get("expires_at") or "",
+                "created_at": token.get("created_at") or "",
+            }
+            if unread:
+                record["unread"] = unread
+            else:
+                record["apps"] = _apps_admitting(apps, token_id)
+            tokens.append(record)
+    return tokens
+
+
+def _tunnel_ingress(config: Any) -> tuple[dict[str, str], ...]:
+    rules = ((config or {}).get("config") or {}).get("ingress") or ()
+    return tuple(
+        {"hostname": str(rule["hostname"]), "service": str(rule.get("service") or "")}
+        for rule in rules
+        if isinstance(rule, dict) and rule.get("hostname")
+    )
+
+
+def _tunnel_connections(clients: Any) -> tuple[dict[str, str], ...]:
+    found = []
+    for client in clients or ():
+        if not isinstance(client, dict):
+            continue
+        for connection in client.get("conns") or ():
+            if not isinstance(connection, dict):
+                continue
+            found.append(
+                {
+                    "version": str(
+                        client.get("version") or connection.get("client_version") or ""
+                    ),
+                    "colo": str(connection.get("colo_name") or ""),
+                    "origin_ip": str(connection.get("origin_ip") or ""),
+                }
+            )
+    return tuple(found)
+
+
+@reads("cloudflare.tunnel")
+def list_tunnels() -> list[dict[str, Any]]:
+    """Tunnels, their ingress and their live connections.
+
+    Connections come from each tunnel's own endpoint: the list's ``connections``
+    field is removed on 2026-10-05 and is not read.
+    """
+
+    tunnels = []
+    for ref in _cloudflare_api_refs():
+        account = _cloudflare_account(ref)
+        for tunnel in _cloudflare_account_list(ref, "/cfd_tunnel?is_deleted=false"):
+            tunnel_id = str(tunnel.get("id", ""))
+            base = f"/accounts/{account}/cfd_tunnel/{tunnel_id}"
+            record: dict[str, Any] = {
+                "connection_ref": ref,
+                "account_id": account,
+                "id": tunnel_id,
+                "name": tunnel.get("name") or "",
+                "status": tunnel.get("status") or "",
+                "created_at": tunnel.get("created_at") or "",
+                "conns_active_at": tunnel.get("conns_active_at") or "",
+            }
+            unread = []
+            try:
+                config = _cloudflare_api_result(f"{base}/configurations", ref)
+            except (ProviderError, OSError, ValueError) as exc:
+                unread.append(f"configuration: {_unread_reason(exc)}")
+            else:
+                record["config_source"] = str((config or {}).get("source") or "")
+                record["ingress"] = _tunnel_ingress(config)
+            try:
+                clients = _cloudflare_api_result(f"{base}/connections", ref)
+            except (ProviderError, OSError, ValueError) as exc:
+                unread.append(f"connections: {_unread_reason(exc)}")
+            else:
+                record["connections"] = _tunnel_connections(clients)
+            if unread:
+                record["unread"] = "; ".join(unread)[:200]
+            tunnels.append(record)
+    return tunnels
+
+
+def _cloudflare_api_zones(connection_ref: str) -> list[dict[str, Any]]:
+    return _snapshot_value(
+        ("cloudflare-api-zones", connection_ref),
+        lambda: _cloudflare_api_list("/zones", connection_ref, per_page=50),
+    )
+
+
+def _earliest_expiry(pack: dict[str, Any]) -> str:
+    dates = sorted(
+        str(certificate.get("expires_on"))
+        for certificate in pack.get("certificates") or ()
+        if isinstance(certificate, dict) and certificate.get("expires_on")
+    )
+    return dates[0] if dates else ""
+
+
+@reads("cloudflare.edge_certificate")
+def list_edge_certificates() -> list[dict[str, Any]]:
+    """Certificate packs on every zone the account credential can see.
+
+    A zone whose packs are refused carries ``unread``; every zone refused is a
+    refused read and raises.
+    """
+
+    packs: list[dict[str, Any]] = []
+    for ref in _cloudflare_api_refs():
+        zones = [zone for zone in _cloudflare_api_zones(ref) if zone.get("name")]
+        refused: list[ProviderError] = []
+        for zone in zones:
+            name = str(zone["name"]).strip().lower().rstrip(".")
+            account = str((zone.get("account") or {}).get("id") or "")
+            try:
+                listed = _cloudflare_api_list(
+                    f"/zones/{zone.get('id', '')}/ssl/certificate_packs?status=all",
+                    ref,
+                    per_page=50,
+                )
+            except (ProviderError, OSError, ValueError) as exc:
+                refused.append(
+                    ProviderError(
+                        _unread_reason(exc),
+                        refusal=getattr(exc, "refusal", ""),
+                        reason=getattr(exc, "reason", ""),
+                    )
+                )
+                packs.append(
+                    {
+                        "connection_ref": ref,
+                        "account_id": account,
+                        "zone": name,
+                        "unread": _unread_reason(exc),
+                    }
+                )
+                continue
+            packs.extend(
+                {
+                    "connection_ref": ref,
+                    "account_id": account,
+                    "zone": name,
+                    "id": pack.get("id") or "",
+                    "type": pack.get("type") or "",
+                    "hosts": tuple(pack.get("hosts") or ()),
+                    "status": pack.get("status") or "",
+                    "certificate_authority": pack.get("certificate_authority") or "",
+                    "expires_on": _earliest_expiry(pack),
+                }
+                for pack in listed
+            )
+        if zones and len(refused) == len(zones):
+            raise refused[0]
+    return packs
 
 
 # --- Portainer ---------------------------------------------------------------
@@ -2178,7 +2859,7 @@ def _an_address(host: str) -> str:
     same machine. Resolving is what makes the fourth comparable to the rest.
 
     The name is kept when it does not resolve. That is not a failure worth
-    raising -- an unresolvable name still identifies the endpoint consistently,
+    raising: an unresolvable name still identifies the endpoint consistently,
     which is most of what this is for.
     """
 
@@ -2213,7 +2894,7 @@ def _load_portainer_environments(connection_ref: str = "") -> list[dict[str, Any
     )
     # Where Portainer itself is, which is where its local socket is too. Without
     # this a local environment reports no address at all, and an address is the
-    # one identity every source of a machine agrees on -- so the machine
+    # one identity every source of a machine agrees on, so the machine
     # Portainer runs on was the single one HQ could not recognise by it.
     portainer_at = _an_address(
         urllib.parse.urlsplit(_portainer_url(connection_ref)).hostname or ""
@@ -2244,8 +2925,8 @@ def _portainer_environments(connection_ref: str = "") -> list[dict[str, Any]]:
 def _portainer_environment_for(host: str, connection_ref: str = "") -> dict[str, Any]:
     """The environment that is a given machine.
 
-    Matched on address, or on the environment's own name, or -- for the local
-    socket -- on the machine Portainer runs on, which the controller knows
+    Matched on address, or on the environment's own name, or (for the local
+    socket) on the machine Portainer runs on, which the controller knows
     because it is the machine it runs on too.
     """
 
@@ -2327,7 +3008,7 @@ def _container_record(
     return {
         # Whether Portainer created this, or merely sees it. Everything running
         # today was started by compose on the machine, so Portainer holds no
-        # stack for any of it -- and a declaration built as though it did would
+        # stack for any of it, and a declaration built as though it did would
         # ask Portainer to stand up a second copy of something already serving.
         "portainer_managed": bool(stack) and stack in portainer_stacks,
         "name": (container.get("Names") or ["/"])[0].lstrip("/"),
@@ -2337,7 +3018,7 @@ def _container_record(
         # How it is attached, because it decides whether the ports below can
         # mean anything. A container on the host network binds the machine's
         # ports directly and Docker reports none for it, so an empty list is
-        # "cannot be known from here" rather than "publishes nothing" -- and
+        # "cannot be known from here" rather than "publishes nothing", and
         # only this field tells the two apart.
         "network_mode": (container.get("HostConfig") or {}).get("NetworkMode", ""),
         "state": container.get("State", ""),
@@ -2347,8 +3028,8 @@ def _container_record(
         "reachable": reachable,
         "host": host,
         # Where the machine is, not just what this credential calls it. Two
-        # credentials name one machine differently -- an SSH item and a
-        # Portainer environment for the same VPS -- and the address is the only
+        # credentials name one machine differently (an SSH item and a
+        # Portainer environment for the same VPS) and the address is the only
         # thing both agree on. Without it HQ lists one machine twice and files
         # its containers under whichever name the sweep used.
         "host_address": host_address,
@@ -2455,7 +3136,7 @@ def reconcile_portainer(
                     True,
                     "BoundToLoopback",
                     f"{names} publishes a port on the loopback address, so "
-                    "nothing outside that machine can reach it -- including a "
+                    "nothing outside that machine can reach it, including a "
                     "proxy running in a container on the same host.",
                 )
             ],
@@ -2504,12 +3185,28 @@ def delete_portainer(
     )
 
 
+RUN_LABEL = "severino-hq.run"
+
+
+def _is_this_run(container: dict[str, Any]) -> bool:
+    """Whether a container is the controller running this sweep.
+
+    Matched on a per-run nonce the launcher sets as both a label and
+    ``HQ_CONTROLLER_RUN``. Any container can carry any label, so a fixed label
+    would let one hide itself from the sweep; a nonce it cannot know does not.
+    """
+
+    nonce = os.environ.get("HQ_CONTROLLER_RUN", "").strip()
+    labels = container.get("Labels") or {}
+    return bool(nonce) and labels.get(RUN_LABEL) == nonce
+
+
 def _list_portainer_containers() -> list[dict[str, Any]]:
     """Every container Portainer can see, on every machine it reaches.
 
     Containers rather than stacks, and reported as such. A stack listing
     describes only what Portainer itself created, and everything standing up
-    today was started by compose on the machine -- so a stack listing reports an
+    today was started by compose on the machine, so a stack listing reports an
     estate of nothing while ten containers run.
 
     The distinction is not pedantic. Docker will start, stop and restart any
@@ -2536,11 +3233,7 @@ def _list_portainer_containers() -> list[dict[str, Any]]:
                 if stack.get("Name")
             )
             for container in _portainer_containers(environment["id"], connection_ref):
-                # The controller is running this sweep from inside one of these.
-                # Reporting it adds a row that is gone before the page renders.
-                if (container.get("Labels") or {}).get(
-                    "severino-hq.role"
-                ) == "controller":
+                if _is_this_run(container):
                     continue
                 records.append(
                     _container_record(
@@ -2562,9 +3255,8 @@ def _portainer_container_id(spec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """The Docker id of a declared container, and the environment holding it.
 
     Looked up by name on each pass rather than stored. A container id changes
-    every time it is recreated, and a stored one would address something that no
-    longer exists -- silently, because Docker answers "no such container" the
-    same way whether it never existed or was replaced this morning.
+    every time it is recreated, so a stored one would address a container that
+    is gone.
     """
 
     connection_ref = spec.get("connection_ref", "")
@@ -2659,7 +3351,7 @@ def stop_portainer_container(
 TAILNET_STATUS = os.environ.get("SEVERINO_TAILNET_STATUS", "")
 # Tailnet lock, handed over the same way and for the same reason: the local
 # API is read *and* write, so the controller is given a reading rather than the
-# socket. Separately optional -- a tailnet without lock enabled answers it
+# socket. Separately optional: a tailnet without lock enabled answers it
 # perfectly well, and a daemon too old to know it should cost the sweep
 # nothing.
 TAILNET_LOCK = os.environ.get("SEVERINO_TAILNET_LOCK", "")
@@ -2709,8 +3401,8 @@ def local_tailnet_devices() -> list[dict[str, Any]]:
 
     Kept apart from the enriched sweep because the two have different costs and
     different reasons. This one needs no credential and no network call beyond
-    a unix socket, so anything that only wants to know what a device *is* --
-    reconciling one, for instance -- asks this rather than paying for a policy
+    a unix socket, so anything that only wants to know what a device *is*
+    (reconciling one, for instance) asks this rather than paying for a policy
     read it will not use.
     """
 
@@ -2733,7 +3425,7 @@ def local_tailnet_devices() -> list[dict[str, Any]]:
     nodes = [status.get("Self") or {}, *(status.get("Peer") or {}).values()]
     found = [record for record in map(_tailnet_record, nodes) if record]
     # Which of them took the reading. Every other device is described from its
-    # point of view -- the relay carrying it, the bytes exchanged with it -- so
+    # point of view (the relay carrying it, the bytes exchanged with it) so
     # a reader that cannot tell which one is the observer is reading a set of
     # measurements with no origin.
     for record in found[:1]:
@@ -2751,7 +3443,7 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
 
     Handed in as a file rather than fetched here. The daemon's local API is read
     *and* write, with no read-only mode, so a controller holding its socket
-    could log this machine off the tailnet -- and this is the process that holds
+    could log this machine off the tailnet, and this is the process that holds
     every provider credential. It only ever needed the reading, so the reading
     is what it gets.
 
@@ -2759,21 +3451,36 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
     whether a *service* answered, so a machine whose Portainer token expired and
     a machine that is switched off are indistinguishable. This tells them apart.
 
-    The local view is deliberately not the whole picture -- tags, the policy
+    The local view is deliberately not the whole picture: tags, the policy
     file and the tailnet's DNS configuration are control-plane facts the daemon
     does not hold. What it does hold is presence and key expiry, which are the
     two that go wrong quietly.
     """
 
-    devices = local_tailnet_devices()
+    # The local daemon's reading when one is mounted, since only it knows paths
+    # and relays. Otherwise the coordination server's list, which a tailnet
+    # credential alone can read.
+    if TAILNET_STATUS:
+        devices = local_tailnet_devices()
+        try:
+            identities = _tailnet_identities(_tailnet_token(""))
+        except ProviderError:
+            identities = {}
+    else:
+        try:
+            token = _tailnet_token("")
+        except ProviderError as exc:
+            raise ProviderError(
+                "This controller was not given a tailnet reading or a tailnet "
+                f"credential, so it cannot say which machines are up. {exc}"
+            ) from None
+        listed = _tailnet_api_devices(token)
+        devices = [record for record in map(_api_device_record, listed) if record]
+        identities = _identities_from(listed)
     # Who may reach each one, where a credential makes that answerable. Folded
     # into the device rather than swept separately: it is a fact about that
     # device, and a second inventory kind would be a second thing to join.
     reach = _reach_by_device(devices)
-    try:
-        identities = _tailnet_identities(_tailnet_token(""))
-    except ProviderError:
-        identities = {}
     for device in devices:
         device["reach"] = reach.get(device["name"], [])
         identity = identities.get(device["name"], {})
@@ -2808,9 +3515,9 @@ def list_tailnet_devices() -> list[dict[str, Any]]:
 def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
     """One machine, keyed by the name the rest of HQ already calls it.
 
-    Every field is optional. Tailscale omits rather than nulls -- a device with
+    Every field is optional. Tailscale omits rather than nulls (a device with
     expiry disabled has no ``KeyExpiry`` at all, and a machine that has never
-    been seen has no ``LastSeen`` -- so a reader that requires any of them
+    been seen has no ``LastSeen``) so a reader that requires any of them
     rejects exactly the devices it exists to describe.
     """
 
@@ -2835,20 +3542,20 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "os": str(node.get("OS") or ""),
         # Two different questions, and only the second is a fact about the
         # device. `ExitNode` is whether this peer is the exit node *this*
-        # machine is currently routing through -- a statement about our own
+        # machine is currently routing through: a statement about our own
         # preference. `ExitNodeOption` is whether the peer offers to be one at
         # all. A machine page saying "exit node" means the latter.
         "exit_node_in_use": bool(node.get("ExitNode")),
         "offers_exit_node": bool(node.get("ExitNodeOption")),
         "self": False,
         # How the traffic actually gets there, which is the part nothing else
-        # can answer. A peer is either reached directly -- the two daemons found
-        # a path through both NATs -- or carried by a relay, and the difference
+        # can answer. A peer is either reached directly (the two daemons found
+        # a path through both NATs) or carried by a relay, and the difference
         # is a real one an operator otherwise has to shell in to see. Absent
         # means the peer is idle rather than unreachable: a path is negotiated
         # when there is traffic, so a machine nobody is talking to has neither.
         "direct_endpoint": str(node.get("CurAddr") or ""),
-        # Every address this node can be reached at off the tailnet -- the one
+        # Every address this node can be reached at off the tailnet: the one
         # its router hands out and the one the internet sees it as. Reported
         # only for the node taking the reading; a peer's own list is not
         # something the daemon is told.
@@ -2858,6 +3565,39 @@ def _tailnet_record(node: dict[str, Any]) -> dict[str, Any] | None:
         "active": bool(node.get("Active")),
         "rx_bytes": int(node.get("RxBytes") or 0),
         "tx_bytes": int(node.get("TxBytes") or 0),
+    }
+
+
+def _api_device_record(device: dict[str, Any]) -> dict[str, Any] | None:
+    """One device from the coordination server, in the local reading's shape.
+
+    Path fields (direct endpoint, relay, handshake, traffic) are the daemon's
+    to know and stay empty.
+    """
+
+    name = str(device.get("hostname") or "").strip()
+    if not name:
+        return None
+    connectivity = device.get("clientConnectivity") or {}
+    return {
+        "name": name,
+        "public_key": str(device.get("nodeKey") or ""),
+        "dns_name": str(device.get("name") or "").rstrip("."),
+        "online": bool(device.get("connectedToControl")),
+        "last_seen": str(device.get("lastSeen") or ""),
+        "key_expires": "" if device.get("keyExpiryDisabled") else str(device.get("expires") or ""),
+        "addresses": [str(address) for address in device.get("addresses") or ()],
+        "os": str(device.get("os") or ""),
+        "exit_node_in_use": False,
+        "offers_exit_node": False,
+        "self": False,
+        "direct_endpoint": "",
+        "endpoints": [str(endpoint) for endpoint in connectivity.get("endpoints") or ()],
+        "relay": "",
+        "last_handshake": "",
+        "active": False,
+        "rx_bytes": 0,
+        "tx_bytes": 0,
     }
 
 
@@ -2881,14 +3621,14 @@ def _tailnet_token(connection_ref: str) -> str:
         body = urllib.parse.urlencode(
             {"client_id": client_id, "client_secret": client_secret}
         ).encode()
-        request = urllib.request.Request(
-            f"{TAILNET_API}/oauth/token",
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with _open(
+                f"{TAILNET_API}/oauth/token",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+                timeout=30,
+            ) as response:
                 payload = json.loads(response.read())
                 if not isinstance(payload, dict):
                     raise ValueError("OAuth response is not an object")
@@ -2935,7 +3675,7 @@ def reconcile_tailnet_device(
     """Assert HQ's decision about one device, and report what is true after.
 
     Only the settings HQ declares are touched. Everything else about the device
-    -- its name, its tags, its routes, whether it is even switched on -- belongs
+    its name, its tags, its routes, whether it is even switched on: belongs
     to the machine and to whoever runs it.
     """
 
@@ -2964,17 +3704,17 @@ def reconcile_tailnet_device(
 
     identifier = _tailnet_device_id(name)
     token = _tailnet_token(spec["connection_ref"])
-    request = urllib.request.Request(
-        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/key",
-        data=json.dumps({"keyExpiryDisabled": wanted}).encode(),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/key",
+            data=json.dumps({"keyExpiryDisabled": wanted}).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+            timeout=30,
+        ) as response:
             response.read()
     except urllib.error.HTTPError as exc:
         _release(exc)
@@ -3003,10 +3743,14 @@ def reconcile_tailnet_device(
     )
 
 
-# Said once, because both calls in the approval fail the same way for the same
-# reason, and an operator comparing two wordings would look for two problems.
-_TAILNET_SCOPE_NEEDED = (
-    "This Tailscale credential may not approve routes. It needs the devices:core scope."
+# Each names the scope its own call needs. devices:routes includes the read.
+_TAILNET_ROUTES_READ_SCOPE = (
+    "This Tailscale credential may not read routes. It needs the "
+    "devices:routes:read scope, or devices:routes to approve them."
+)
+_TAILNET_ROUTES_WRITE_SCOPE = (
+    "This Tailscale credential may not approve routes. It needs the "
+    "devices:routes scope."
 )
 
 
@@ -3028,21 +3772,19 @@ def approve_tailnet_routes(
     name = spec["name"]
     identifier = _tailnet_device_id(name)
     token = _tailnet_token(spec.get("connection_ref", ""))
-    request = urllib.request.Request(
-        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
-        headers={"Authorization": f"Bearer {token}"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        ) as response:
             current = json.loads(response.read())
     except urllib.error.HTTPError as exc:
         _release(exc)
-        # A refusal here is the same missing grant the write would hit, and it
-        # is worth naming at the first call rather than the second: an operator
-        # told only that the routes could not be read goes looking at the
-        # device.
+        # Named at the first call: an operator told only that the routes could
+        # not be read goes looking at the device.
         if exc.code in (401, 403):
-            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
+            raise ProviderError(_TAILNET_ROUTES_READ_SCOPE) from exc
         raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ProviderError(f"Tailscale did not report the routes for {name}.") from exc
@@ -3079,22 +3821,22 @@ def approve_tailnet_routes(
             message=f"Would approve {', '.join(pending)} for {name}.",
         )
 
-    request = urllib.request.Request(
-        f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
-        data=json.dumps({"routes": advertised}).encode(),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/device/{urllib.parse.quote(identifier)}/routes",
+            data=json.dumps({"routes": advertised}).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+            timeout=30,
+        ) as response:
             approved = json.loads(response.read())
     except urllib.error.HTTPError as exc:
         _release(exc)
         if exc.code in (401, 403):
-            raise ProviderError(_TAILNET_SCOPE_NEEDED) from exc
+            raise ProviderError(_TAILNET_ROUTES_WRITE_SCOPE) from exc
         raise ProviderError(
             f"Tailscale refused the route approval for {name}."
         ) from exc
@@ -3146,24 +3888,40 @@ def _tailnet_nodes() -> list[dict[str, Any]]:
 
 
 def _tailnet_get(token: str, path: str) -> dict[str, Any]:
-    """One tailnet-level read, or nothing if it is not answerable.
+    """One tailnet-level read. Raises ProviderError with the reason."""
 
-    Nothing rather than an exception: these are separate facts about the same
-    tailnet, and losing the whole sweep because one endpoint is unavailable to
-    this credential would trade six answers for none.
-    """
-
-    request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/{path}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/{path}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        ) as response:
             found = json.loads(response.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
+    except urllib.error.HTTPError as exc:
         _release(exc)
-        return {}
-    return found if isinstance(found, dict) else {}
+        raise ProviderError(f"/{path} answered HTTP {exc.code}.") from None
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
+        raise ProviderError(f"/{path} could not be read: {type(exc).__name__}.") from None
+    if not isinstance(found, dict):
+        raise ProviderError(f"/{path} did not answer with an object.")
+    return found
+
+
+def _tailnet_parts(token: str, parts: dict[str, tuple[str, ...]]) -> tuple[dict, dict]:
+    """Several tailnet reads for one record: what was read, and why the rest was not."""
+
+    read: dict[str, dict[str, Any]] = {}
+    unread: dict[str, str] = {}
+    for name, paths in parts.items():
+        merged: dict[str, Any] = {}
+        for path in paths:
+            try:
+                merged.update(_tailnet_get(token, path))
+            except ProviderError as exc:
+                unread[name] = str(exc)
+        read[name] = merged
+    return read, unread
 
 
 def _tailnet_policy_etag(token: str) -> str:
@@ -3173,16 +3931,65 @@ def _tailnet_policy_etag(token: str) -> str:
     Tailscale takes this back as ``If-Match`` and refuses the write instead.
     """
 
-    request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/acl",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/acl",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=30,
+        ) as response:
             return response.headers.get("etag", "")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
         _release(exc)
         return ""
+
+
+def _policy_tests(policy: dict[str, Any]) -> dict[tuple[str, str], dict[str, set[str]]]:
+    """A policy's tests keyed by (src, proto), with their accept and deny sets."""
+
+    found: dict[tuple[str, str], dict[str, set[str]]] = {}
+    for test in policy.get("tests") or ():
+        if not isinstance(test, dict):
+            continue
+        pair = (str(test.get("src", "")), str(test.get("proto", "")))
+        entry = found.setdefault(pair, {"accept": set(), "deny": set()})
+        for verdict in ("accept", "deny"):
+            entry[verdict].update(str(dst) for dst in test.get(verdict) or ())
+    return found
+
+
+def _refuse_weaker_tests(live: dict[str, Any], document: dict[str, Any]) -> None:
+    """Refuse a policy whose tests check less than the live policy's do.
+
+    Validation is the gate below, and validation runs only the tests the new
+    document carries. A document with no tests passes it unconditionally, so a
+    gate that trusted it alone would wave through exactly the change it exists
+    to stop. Every (src, proto) the live tests cover keeps a test, and every
+    live deny stays a deny; accepts may be rewritten. A policy with no tests is
+    not one HQ writes.
+    """
+
+    wanted = _policy_tests(document)
+    held = _policy_tests(live)
+    if not wanted:
+        raise ProviderError(
+            "The declared policy carries no tests, so Tailscale's check would "
+            "pass it whatever it grants. It was not applied."
+        )
+    missing = sorted(pair for pair in held if pair not in wanted)
+    if missing:
+        src, proto = missing[0]
+        raise ProviderError(
+            f"The declared policy drops the tests for {src!r}"
+            f"{f' over {proto}' if proto else ''}, which removes the check they "
+            "made, so it was not applied."
+        )
+    for pair, entry in sorted(held.items()):
+        dropped = sorted(entry["deny"] - wanted[pair]["deny"])
+        if dropped:
+            raise ProviderError(
+                f"The declared policy no longer tests that {pair[0]!r} is denied "
+                f"{dropped[0]!r}. A live deny is kept, so it was not applied."
+            )
 
 
 def reconcile_tailnet_policy(
@@ -3218,7 +4025,23 @@ def reconcile_tailnet_policy(
         raise ProviderError("The declared policy is not readable JSON.") from exc
 
     token = _tailnet_token(spec.get("connection_ref", ""))
-    if _tailnet_policy(token) == document:
+    live = _tailnet_policy(token)
+    if live == document and not document.get("tests"):
+        return ProviderResult(
+            changed=False,
+            status={"applied": True},
+            conditions=[
+                _condition(
+                    "Ready",
+                    False,
+                    "Untested",
+                    "The policy is as declared and carries no tests, so nothing "
+                    "checks what it grants.",
+                )
+            ],
+            message="Tailnet policy is current and untested.",
+        )
+    if live == document:
         return ProviderResult(
             changed=False,
             status={"applied": True},
@@ -3228,19 +4051,21 @@ def reconcile_tailnet_policy(
             message="Tailnet policy is current.",
         )
 
+    _refuse_weaker_tests(live, document)
+
     # The gate. Validation runs the tests the document carries, so a change
     # that would break one is refused before anything is written.
-    check = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/acl/validate",
-        data=json.dumps(document).encode(),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(check, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/acl/validate",
+            data=json.dumps(document).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+            timeout=30,
+        ) as response:
             verdict = json.loads(response.read() or b"{}")
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
         _release(exc)
@@ -3259,18 +4084,18 @@ def reconcile_tailnet_policy(
         )
 
     etag = _tailnet_policy_etag(token)
-    write = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/acl",
-        data=json.dumps(document).encode(),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            **({"If-Match": etag} if etag else {}),
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(write, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/acl",
+            data=json.dumps(document).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                **({"If-Match": etag} if etag else {}),
+            },
+            method="POST",
+            timeout=30,
+        ) as response:
             response.read()
     except urllib.error.HTTPError as exc:
         _release(exc)
@@ -3296,12 +4121,12 @@ def reconcile_tailnet_policy(
 def _tailnet_policy(token: str) -> dict[str, Any]:
     """The tailnet's policy file, as Tailscale currently holds it."""
 
-    request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/acl",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/acl",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=30,
+        ) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as exc:
         _release(exc)
@@ -3324,18 +4149,18 @@ def _who_may_reach(
     nobody would notice until it mattered.
     """
 
-    request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/acl/preview"
-        f"?type=ipport&previewFor={urllib.parse.quote(target)}",
-        data=json.dumps(policy).encode(),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/acl/preview"
+            f"?type=ipport&previewFor={urllib.parse.quote(target)}",
+            data=json.dumps(policy).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+            timeout=30,
+        ) as response:
             return json.loads(response.read()).get("matches") or []
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
         _release(exc)
@@ -3354,7 +4179,7 @@ def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
 
     An app connector is a node routing traffic for named domains on the
     tailnet's behalf, so it is a way something is reached that is neither a
-    device nor a DNS record -- and it is declared inside the policy rather than
+    device nor a DNS record, and it is declared inside the policy rather than
     anywhere HQ was looking.
     """
 
@@ -3375,13 +4200,14 @@ def _app_connectors(policy: dict[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
+@reads("host.firewall")
 def list_host_firewall() -> list[dict[str, Any]]:
     """Whether the packet had to arrive on the tailnet, or merely to claim it.
 
     The address a request comes from is a field the sender writes. The interface
     it arrived on is not, so a firewall that accepts HQ's port only from the
     tailnet interface is making a stronger statement than one that reads the
-    source address -- and it is the statement the request inspector's "the
+    source address, and it is the statement the request inspector's "the
     address is on the tailnet" line rests on.
 
     Read by root and handed over as one distilled answer; see HOST_FIREWALL.
@@ -3390,8 +4216,8 @@ def list_host_firewall() -> list[dict[str, Any]]:
     # Not caught, for the reason given on list_tailnet_policy: a raising
     # collector is recorded as unreachable and carries its reason, where an
     # empty list is indistinguishable from a host whose firewall says nothing.
-    # The absent-reading case is the one exception, because "no firewall of this
-    # shape here" is a true answer on a machine that does not run one.
+    # With no reading mounted the sweep reports the kind as not connected and
+    # does not call this; the guard covers a direct call.
     if not HOST_FIREWALL:
         raise ProviderError(
             "No host firewall reading was mounted; this host does not report one."
@@ -3416,13 +4242,14 @@ def _answers_from_here(address: str, port: int, timeout: float = 3.0) -> bool:
         return False
 
 
+@reads("host.perimeter")
 def list_host_perimeter() -> list[dict[str, Any]]:
     """What each edge relies on to stay shut, and whether it actually is.
 
     Two halves, because one of them cannot be read without privileges this
     controller deliberately does not have. The machine reports the state of its
-    firewall unit -- a unit can be enabled and dead, and the difference has no
-    symptom until something arrives -- and reports its own public addresses.
+    firewall unit (a unit can be enabled and dead, and the difference has no
+    symptom until something arrives) and reports its own public addresses.
     What is behind that firewall is then answered from here, by connecting to
     those addresses on the ports that machine's own containers publish.
 
@@ -3466,7 +4293,7 @@ def _published_ports_at(connection_ref: str) -> set[int]:
     """Ports the containers on one machine publish, as the sweep found them.
 
     Empty where the machine is not described, which reads as nothing to check
-    rather than as nothing published -- the same distinction the container
+    rather than as nothing published: the same distinction the container
     reading draws about host networking.
     """
 
@@ -3496,32 +4323,37 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
 
     # Not caught here. The sweep records a raising collector as unreachable,
     # keeps what the kind last held and carries the reason. Every failure on
-    # this path -- no credential rendered, a client that is not an OAuth
-    # client, a refused read -- raises with its own message. Swallowed into an
+    # this path (no credential rendered, a client that is not an OAuth
+    # client, a refused read) raises with its own message. Swallowed into an
     # empty list they all became the same thing: a successful sweep of a
     # tailnet with no policy, so nothing was unreachable and nothing said why.
     token = _tailnet_token("")
     policy = _tailnet_policy(token)
+    parts, unread = _tailnet_parts(
+        token,
+        {
+            "settings": ("settings",),
+            "dns": ("dns/preferences", "dns/nameservers", "dns/searchpaths"),
+            "services": ("services",),
+        },
+    )
     return [
         {
             "record": "policy",
+            **({"unread": unread} if unread else {}),
             # The document itself, so a declaration can hold it and be compared
             # against reality without a second read.
             "document": json.dumps(policy, indent=2, sort_keys=True),
             # The aliases the policy gives addresses. A grant may name a device
-            # by one, and then the alias is the name that admits it -- as real
+            # by one, and then the alias is the name that admits it, as real
             # a principal as a user or a tag, and the only one HQ could not see
             # from a device reading alone.
             "hosts": {
                 str(name): str(address)
                 for name, address in (policy.get("hosts") or {}).items()
             },
-            "settings": _tailnet_get(token, "settings"),
-            "dns": {
-                **_tailnet_get(token, "dns/preferences"),
-                **_tailnet_get(token, "dns/nameservers"),
-                **_tailnet_get(token, "dns/searchpaths"),
-            },
+            "settings": parts["settings"],
+            "dns": parts["dns"],
             "groups": [
                 {"name": name, "members": sorted(members)}
                 for name, members in sorted((policy.get("groups") or {}).items())
@@ -3540,10 +4372,10 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
             ],
             "tests": policy.get("tests") or [],
             "lock": _tailnet_lock(),
-            # A Service is a name the tailnet serves that is not a device --
+            # A Service is a name the tailnet serves that is not a device,
             # published by whichever nodes advertise it, and reachable under
             # the policy like anything else. Nothing else in HQ would notice
-            # one appearing.
+            # one appearing. Read from /services, which needs services:read.
             "services": [
                 {
                     "name": str(service.get("name", "")),
@@ -3551,15 +4383,13 @@ def list_tailnet_policy() -> list[dict[str, Any]]:
                     "comment": str(service.get("comment", "")),
                     "ports": sorted(str(p) for p in service.get("ports") or ()),
                 }
-                for service in (
-                    _tailnet_get(token, "vip-services").get("vipServices") or []
-                )
+                for service in parts["services"].get("vipServices") or []
             ],
             # Not fetched: both are declared inside the policy this record
             # already carries, so reading them is reading it.
             "app_connectors": _app_connectors(policy),
-            # Tailscale SSH rules are grants like any other -- who may open a
-            # shell, on what, as which user -- and the grants table above shows
+            # Tailscale SSH rules are grants like any other (who may open a
+            # shell, on what, as which user) and the grants table above shows
             # none of them because they live under their own key.
             "ssh_rules": [
                 {
@@ -3594,7 +4424,7 @@ def _reach_by_device(devices: list[dict[str, Any]]) -> dict[str, list[dict[str, 
         return {}
 
     # Groups are flattened here, where the policy is. HQ then answers "may this
-    # device reach that one" by asking whether its identity is in a list --
+    # device reach that one" by asking whether its identity is in a list,
     # which is reading Tailscale's answer, not re-deriving it. Expanding groups
     # in HQ would be the first step toward a second policy engine.
     members = {
@@ -3649,29 +4479,49 @@ _EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
     """Everything the coordination server knows about each device, in one read.
 
-    ``fields=all`` rather than a call per device. The default projection omits
-    routes, so the first version of this asked the routes endpoint once per
-    device and made the sweep's cost a function of how many machines exist --
-    for facts that already travel in this response.
+    ``fields=all`` rather than a call per device: the default projection omits
+    routes, and this keeps the sweep's cost independent of how many machines
+    exist.
 
     From the API rather than the local daemon for two reasons. The daemon does
     not report tags, which is what a policy names a device by. And a peer's
     routes as the daemon sees them are the routes the ACL lets *this* node
     receive, so a route can be advertised, approved, and still absent from the
-    local reading -- which makes the daemon unable to tell "never offered" from
+    local reading, which makes the daemon unable to tell "never offered" from
     "offered and refused", the one distinction worth reporting.
     """
 
-    request = urllib.request.Request(
-        f"{TAILNET_API}/tailnet/-/devices?fields=all",
-        headers={"Authorization": f"Bearer {token}"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            devices = json.loads(response.read()).get("devices") or []
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as exc:
-        _release(exc)
+        devices = _tailnet_api_devices(token)
+    except ProviderError:
         return {}
+    return _identities_from(devices)
+
+
+def _tailnet_api_devices(token: str) -> list[dict[str, Any]]:
+    """Every device as the coordination server lists it. Raises when refused."""
+
+    try:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/devices?fields=all",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        ) as response:
+            found = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        _release(exc)
+        raise ProviderError(
+            f"The tailnet device list answered HTTP {exc.code}; it needs devices:core:read."
+        ) from None
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        _release(exc)
+        raise ProviderError(f"The tailnet device list could not be read: {type(exc).__name__}.") from None
+    if not isinstance(found, dict):
+        raise ProviderError("The tailnet device list did not answer with an object.")
+    return [device for device in found.get("devices") or () if isinstance(device, dict)]
+
+
+def _identities_from(devices: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     found: dict[str, dict[str, Any]] = {}
     for device in devices:
         hostname = str(device.get("hostname", ""))
@@ -3713,6 +4563,121 @@ def _tailnet_identities(token: str) -> dict[str, dict[str, Any]]:
     return found
 
 
+def _tailnet_read(path: str, what: str, scope: str) -> dict[str, Any]:
+    """One tailnet-level read. A refusal raises and names the scope it needs."""
+
+    token = _tailnet_token("")
+    try:
+        with _open(
+            f"{TAILNET_API}/tailnet/-/{path}",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=30,
+        ) as response:
+            found = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        _release(exc)
+        # Tailscale answers 404 as well as 403 to a credential without the scope.
+        if exc.code in (401, 403, 404):
+            raise ProviderError(
+                f"Tailscale refused the {what} read ({exc.code}). The credential "
+                f"needs the {scope} scope."
+            ) from exc
+        raise ProviderError(f"Tailscale refused the {what} read ({exc.code}).") from exc
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ProviderError(f"Tailscale did not return readable {what}.") from exc
+    if not isinstance(found, dict):
+        raise ProviderError(f"Tailscale did not return readable {what}.")
+    return found
+
+
+def _resolver_addresses(resolvers: Any) -> list[str]:
+    """Resolver objects or bare addresses, as addresses."""
+
+    found = []
+    for resolver in resolvers or ():
+        address = resolver.get("address") if isinstance(resolver, dict) else resolver
+        if address:
+            found.append(str(address))
+    return found
+
+
+@reads("tailscale.dns")
+def list_tailnet_dns() -> list[dict[str, Any]]:
+    """The tailnet's resolvers, MagicDNS, search paths and split DNS."""
+
+    found = _tailnet_read("dns/configuration", "DNS configuration", "dns:read")
+    preferences = found.get("preferences") or {}
+    return [
+        {
+            "record": "dns",
+            "nameservers": _resolver_addresses(found.get("nameservers")),
+            "override_local_dns": bool(preferences.get("overrideLocalDNS")),
+            "magic_dns": bool(preferences.get("magicDNS")),
+            "search_paths": [str(path) for path in found.get("searchPaths") or ()],
+            "split_dns": {
+                str(domain): _resolver_addresses(resolvers)
+                for domain, resolvers in (found.get("splitDNS") or {}).items()
+            },
+        }
+    ]
+
+
+# Setting -> the scope that governs it, where that is not feature_settings:read.
+# Tailscale omits or nulls a setting the credential may not see.
+_SETTING_SCOPES = {
+    "networkFlowLoggingOn": "logs:network:read",
+    "httpsEnabled": "networking_settings:read",
+    "aclsExternallyManagedOn": "policy_file:read",
+}
+
+
+@reads("tailscale.settings")
+def list_tailnet_settings() -> list[dict[str, Any]]:
+    """The tailnet-wide settings that decide who joins and how long keys last."""
+
+    found = _tailnet_read("settings", "settings", "feature_settings:read")
+    unread = sorted(
+        f"{name} needs {scope}"
+        for name, scope in _SETTING_SCOPES.items()
+        if found.get(name) is None
+    )
+    return [
+        {
+            "record": "settings",
+            "devices_approval_on": found.get("devicesApprovalOn"),
+            "devices_key_duration_days": found.get("devicesKeyDurationDays"),
+            "devices_auto_updates_on": found.get("devicesAutoUpdatesOn"),
+            "users_approval_on": found.get("usersApprovalOn"),
+            "network_flow_logging_on": found.get("networkFlowLoggingOn"),
+            "regional_routing_on": found.get("regionalRoutingOn"),
+            "posture_identity_collection_on": found.get("postureIdentityCollectionOn"),
+            "https_enabled": found.get("httpsEnabled"),
+            "acls_externally_managed_on": found.get("aclsExternallyManagedOn"),
+            "unread": "; ".join(unread),
+        }
+    ]
+
+
+@reads("tailscale.user")
+def list_tailnet_users() -> list[dict[str, Any]]:
+    """Who holds access to the tailnet, their role and when each was last seen."""
+
+    found = _tailnet_read("users", "users", "users:read")
+    return [
+        {
+            "id": str(user.get("id", "")),
+            "display_name": str(user.get("displayName", "")),
+            "login_name": str(user.get("loginName", "")),
+            "role": str(user.get("role", "")),
+            "status": str(user.get("status", "")),
+            "created": str(user.get("created", "")),
+            "last_seen": str(user.get("lastSeen", "")),
+        }
+        for user in found.get("users") or ()
+        if isinstance(user, dict) and user.get("id")
+    ]
+
+
 # Where the answers start. Asking about all 65535 would be that many calls per
 # device; these are the ports anything is reached on anywhere, and the rest are
 # added from what this machine can actually see listening.
@@ -3723,7 +4688,7 @@ def _ports_worth_asking() -> tuple[int, ...]:
     """The ports something here actually listens on, plus the usual few.
 
     Derived rather than listed. A hardcoded set answers about ports nothing
-    uses and says "cannot say" about the one an operator came to ask about --
+    uses and says "cannot say" about the one an operator came to ask about,
     and the containers on this machine already state which ports they publish,
     so the set that matters is knowable rather than guessable.
     """
@@ -3801,8 +4766,7 @@ PROVIDER_INVENTORY = {
     "portainer.container": list_portainer_containers,
     "tailscale.device": list_tailnet_devices,
     "tailscale.policy": list_tailnet_policy,
-    "host.firewall": list_host_firewall,
-    "host.perimeter": list_host_perimeter,
+    **OBSERVATION_READERS,
     **_ADAPTER_REGISTRY.inventory,
 }
 
@@ -3811,13 +4775,13 @@ PROVIDER_INVENTORY = {
 #
 # What the controller can reach, and whether it still can. The rendered
 # environment is the inventory, so this enumerates itself: a 1Password item
-# becomes a row here, a probe and -- once HQ has been told -- a row on a page,
+# becomes a row here, a probe and (once HQ has been told) a row on a page,
 # without anything in this file naming it.
 
 
 # A probe answers two questions in one call: whether the credential still works,
 # and what it reaches. The second is why the connection sweep is worth running
-# at all -- a Portainer knows which machines exist, a DNS token knows which zones
+# at all: a Portainer knows which machines exist, a DNS token knows which zones
 # it may touch, and both are facts HQ can only get by asking. Reported as names
 # so every menu that offers "which machine" or "which domain" is derived from
 # the credential that would have to carry out the answer.
@@ -3828,21 +4792,16 @@ def _probe_npm(connection_ref: str) -> dict[str, Any]:
 
 
 def _probe_cloudflare_dns(connection_ref: str) -> dict[str, Any]:
-    headers = {"Authorization": f"Bearer {_cloudflare_token(connection_ref)}"}
-    verification = _request(
-        f"{_cloudflare_url(connection_ref)}/user/tokens/verify", headers=headers
-    )
-    if not isinstance(verification, dict) or not verification.get("success"):
-        raise ProviderError("Cloudflare token verification failed.")
+    _cloudflare_envelope("/user/tokens/verify", connection_ref=connection_ref)
     # Which zones *matter* is not the controller's to know. The credential
     # reports what it can reach; HQ declares which zones it is responsible for
     # and is the only side able to compare the two.
-    zones = _request(
-        f"{_cloudflare_url(connection_ref)}/zones?per_page=50", headers=headers
-    )
+    zones = _cloudflare_envelope(
+        "/zones?per_page=50", connection_ref=connection_ref
+    ).get("result")
     names = sorted(
         zone["name"]
-        for zone in (zones or {}).get("result", [])
+        for zone in zones or ()
         if isinstance(zone, dict) and zone.get("name")
     )
     return {"detail": f"{len(names)} zones.", "reaches": names}
@@ -3858,7 +4817,7 @@ def _probe_cloudflare_api(connection_ref: str) -> dict[str, Any]:
 
     A site with no ruleset bound to a hostname is left out. Cloudflare keeps a
     Web Analytics site around after whatever it was attached to goes away, so
-    the account carries entries that describe nothing -- and a site HQ cannot
+    the account carries entries that describe nothing, and a site HQ cannot
     name a host for is one it could not join to anything either.
     """
 
@@ -3886,7 +4845,7 @@ ANALYTICS_DIMENSIONS = {
 }
 
 # Percentiles HQ keeps, and the field each comes from. p75 because that is the
-# threshold Core Web Vitals is actually defined at -- a metric passes when 75%
+# threshold Core Web Vitals is actually defined at: a metric passes when 75%
 # of samples are good, so the 75th percentile is the number being judged.
 ANALYTICS_VITALS = {
     "largest_contentful_paint_ms": "largestContentfulPaintP75",
@@ -3901,8 +4860,8 @@ ANALYTICS_BUCKETS = ("lcp", "inp", "cls")
 #
 # Every other probe exists because some ProviderSpec names its provider: the
 # credential is there to reconcile something, so the resource registry is the
-# record of why it is carried. Analytics is observed and never reconciled --
-# there is no desired state for a page view -- so nothing in that registry
+# record of why it is carried. Analytics is observed and never reconciled
+# (there is no desired state for a page view) so nothing in that registry
 # would ever name this, and without saying so here the probe would look like a
 # probe for nothing. Declared rather than inferred, so a probe still cannot be
 # added for a connection HQ has no stated use for.
@@ -3916,29 +4875,35 @@ def _cloudflare_graphql(
 
     GraphQL answers 200 with an ``errors`` array rather than an HTTP status, so
     a caller that only checked the status would read a failed query as an empty
-    estate -- which is indistinguishable from a site nobody visited.
+    estate, which is indistinguishable from a site nobody visited.
     """
 
+    prefix = connection_prefix("cloudflare_api", connection_ref)
+    _cloudflare_breaker(prefix)
     base = _cloudflare_url(connection_ref, provider="cloudflare_api")
     body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
-    request = urllib.request.Request(
-        f"{base}/graphql",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": (
-                f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
-            ),
-            "Content-Type": "application/json",
-        },
-    )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _open(
+            f"{base}/graphql",
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": (
+                    f"Bearer {_cloudflare_token(connection_ref, provider='cloudflare_api')}"
+                ),
+                "Content-Type": "application/json",
+            },
+            timeout=30,
+        ) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        _release(exc)
-        raise ProviderError(
-            f"Cloudflare analytics refused the query: HTTP {exc.code}."
+        with exc:
+            detail = _cloudflare_errors(exc.read())
+        raise _cloudflare_refused(
+            prefix,
+            f"Cloudflare analytics refused the query: HTTP {exc.code}.",
+            detail,
+            status=exc.code,
         ) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ProviderError(
@@ -3950,7 +4915,9 @@ def _cloudflare_graphql(
     if payload.get("errors"):
         first = payload["errors"][0]
         message = first.get("message", "") if isinstance(first, dict) else ""
-        raise ProviderError(f"Cloudflare analytics rejected the query: {message}")
+        raise _cloudflare_refused(
+            prefix, f"Cloudflare analytics rejected the query: {message}", message
+        )
     return payload.get("data") or {}
 
 
@@ -3980,7 +4947,36 @@ def _cloudflare_api_list(
         total_pages = int(
             ((response or {}).get("result_info") or {}).get("total_pages") or 0
         )
-        if (total_pages and page >= total_pages) or len(batch) < per_page:
+        # total_pages decides when present: an endpoint may cap per_page below
+        # what was asked, so a short page is not proof of the last one.
+        if (page >= total_pages) if total_pages else (len(batch) < per_page):
+            return collected
+    raise ProviderError("Cloudflare account list did not terminate.")
+
+
+def _unread_reason(exc: BaseException) -> str:
+    """Why an optional read failed, short enough to show on a page."""
+
+    return (str(exc).strip() or type(exc).__name__)[:200]
+
+
+def _cloudflare_api_cursor_list(
+    path: str, connection_ref: str = "", *, per_page: int = 50
+) -> list[dict[str, Any]]:
+    """Every page from a cursor-paginated Cloudflare list; an empty cursor ends it."""
+
+    collected: list[dict[str, Any]] = []
+    cursor = ""
+    for _ in range(200):
+        query = f"per_page={per_page}" + (f"&cursor={urllib.parse.quote(cursor, safe='')}" if cursor else "")
+        separator = "&" if "?" in path else "?"
+        response = _cloudflare_api_request(f"{path}{separator}{query}", connection_ref)
+        batch = (response or {}).get("result", [])
+        if not isinstance(batch, list):
+            raise ProviderError("Cloudflare account list returned an invalid result.")
+        collected.extend(item for item in batch if isinstance(item, dict))
+        cursor = str(((response or {}).get("result_info") or {}).get("cursor") or "")
+        if not cursor:
             return collected
     raise ProviderError("Cloudflare account list did not terminate.")
 
@@ -4453,7 +5449,7 @@ def _nws_glance(point: str) -> dict[str, Any]:
         raise ProviderError("SEVERINO_NWS_POINT is outside valid coordinates.")
     headers = {
         "Accept": "application/geo+json",
-        "User-Agent": "Severino-HQ/1.0 (https://github.com/jseverino/severino-hq)",
+        "User-Agent": "Severino-HQ/1.0 (https://github.com/joeseverino/severino-hq)",
     }
     point_data = (
         _request(
@@ -4489,12 +5485,12 @@ def _nws_glance(point: str) -> dict[str, Any]:
         },
         {
             "label": "Temperature",
-            "value": f"{current.get('temperature', '—')}°{current.get('temperatureUnit', 'F')}",
+            "value": f"{current.get('temperature', MISSING)}°{current.get('temperatureUnit', 'F')}",
             "detail": str(current.get("windChill") or ""),
         },
         {
             "label": "Wind",
-            "value": f"{current.get('windDirection', '')} {current.get('windSpeed', '—')}".strip(),
+            "value": f"{current.get('windDirection', '')} {current.get('windSpeed', MISSING)}".strip(),
             "detail": "NWS hourly forecast",
         },
     ]
@@ -4650,11 +5646,20 @@ def _endpoint(prefix: str, provider: str) -> str:
 
 
 def connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
+    """See _connections. Opens the per-sweep snapshot when the caller has not."""
+
+    if _PROVIDER_SNAPSHOT.get() is not None:
+        return _connections(carry=carry)
+    with provider_snapshot():
+        return _connections(carry=carry)
+
+
+def _connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     """Every connection the environment carries, and whether it answers.
 
     One failure is that connection's failure. Reported rather than raised so a
     Cloudflare token that expired does not also make the two machines HQ can
-    still reach look like they have gone away -- the sweep is the only thing
+    still reach look like they have gone away: the sweep is the only thing
     that tells an operator which of the two happened.
 
     `carry` is HQ's list of SSH connections whose last answer is recent and
@@ -4667,18 +5672,15 @@ def connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     ssh_refs = set(ssh_connection_refs())
     reported: list[dict[str, Any]] = []
     for connection_ref, prefix in sorted(connection_prefixes().items()):
-        provider = connection_provider(connection_ref)
+        provider = effective_provider(connection_ref, ssh_refs)
         probe = _CONNECTION_PROBES.get(provider)
         if probe is None and connection_ref in ssh_refs:
-            # A transport, whatever its prefix happens to spell. The projection
-            # that produced a host and a user is what makes it one, so this
-            # stays true for a machine added under any name.
             probe = _probe_ssh
-            provider = os.environ.get(f"{prefix}_PROVIDER", "").strip() or "ssh"
         connection = {
             "connection_ref": connection_ref,
             "provider": provider,
             "endpoint": _endpoint(prefix, provider),
+            "manages": connection_manages(connection_ref),
             "probed": probe is not None,
             "ok": True,
             "detail": "",
@@ -4707,6 +5709,15 @@ def connections(*, carry: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
 
 
 def inventory() -> dict[str, Any]:
+    """See _inventory. Opens the per-sweep snapshot when the caller has not."""
+
+    if _PROVIDER_SNAPSHOT.get() is not None:
+        return _inventory()
+    with provider_snapshot():
+        return _inventory()
+
+
+def _inventory() -> dict[str, Any]:
     """Everything each provider holds, whether or not HQ declared it.
 
     The reconcilers already fetch these lists in full and keep only the one
@@ -4720,12 +5731,59 @@ def inventory() -> dict[str, Any]:
     """
 
     found: dict[str, Any] = {}
+    ssh_refs = set(ssh_connection_refs())
+    connected = {effective_provider(ref, ssh_refs) for ref in connection_prefixes()}
     for kind, lister in PROVIDER_INVENTORY.items():
+        if not _has_source(kind, connected):
+            found[kind] = {"ok": True, "records": [], "connected": False}
+            continue
         try:
             found[kind] = {"ok": True, "records": lister()}
         except (ProviderError, OSError, ValueError, KeyError) as exc:
-            found[kind] = {"ok": False, "records": [], "error": str(exc)}
+            found[kind] = _refused_report(exc)
     return found
+
+
+def _refused_report(exc: BaseException) -> dict[str, Any]:
+    """A failed read, with whether the credential or one permission was refused."""
+
+    refusal = getattr(exc, "refusal", "")
+    report: dict[str, Any] = {"ok": False, "records": [], "error": str(exc)}
+    if refusal:
+        report["refusal"] = refusal
+    reason = getattr(exc, "reason", "")
+    if refusal == CREDENTIAL_REFUSAL and reason:
+        report["error"] = reason
+    return report
+
+
+# Kinds read from something mounted on this host, and whether it is mounted.
+_LOCAL_SOURCES: dict[str, Callable[[], bool]] = {
+    "tailscale.device": lambda: bool(TAILNET_STATUS),
+    "host.firewall": lambda: bool(HOST_FIREWALL),
+}
+
+
+def _has_source(kind: str, connected: set[str]) -> bool:
+    """Whether anything this controller holds can read the kind.
+
+    A kind whose provider is not a connection provider is read only from its
+    local source; with none mounted it is not connected.
+    """
+
+    from control_plane.observations import OBSERVATIONS
+
+    if kind in OBSERVATIONS:
+        needs = (OBSERVATIONS[kind].provider,)
+    elif kind in PROVIDERS:
+        needs = tuple(PROVIDERS[kind].connection_providers)
+    else:
+        return True
+    needs = tuple(provider for provider in needs if provider in CONNECTION_CREDENTIALS)
+    if set(needs) & connected:
+        return True
+    local = _LOCAL_SOURCES.get(kind)
+    return bool(local and local())
 
 
 def _refuses(reason: str):
@@ -4750,7 +5808,7 @@ def _refuses(reason: str):
 
 
 # Locked actions are generated, so a provider declared as locked needs no entry
-# here at all -- and cannot be declared locked while quietly having a handler
+# here at all, and cannot be declared locked while quietly having a handler
 # that acts.
 PROVIDER_ACTIONS = {
     **{
@@ -4777,6 +5835,40 @@ PROVIDER_ACTIONS = {
 }
 
 
+def _refuse_unless_managed(kind: str, spec: dict[str, Any]) -> None:
+    """Refuse a write through a connection whose item does not declare manages.
+
+    The same rule HQ applies before it offers the action: a resource naming its
+    connection needs that one to manage; one naming none needs every
+    connection of its kind's providers to manage, and at least one to exist.
+    """
+
+    provider = PROVIDERS.get(kind)
+    if provider is None or not provider.connection_providers:
+        return
+    named = str(spec.get("connection_ref") or "")
+    if named:
+        refs: tuple[str, ...] = (named,)
+    else:
+        ssh_refs = set(ssh_connection_refs())
+        refs = tuple(
+            ref
+            for ref in sorted(connection_prefixes())
+            if effective_provider(ref, ssh_refs) in provider.connection_providers
+        )
+    if not refs:
+        raise ProviderError(
+            "No connection this controller holds manages this. Set manages on "
+            "the connection to act through it."
+        )
+    observing = [ref for ref in refs if not connection_manages(ref)]
+    if observing:
+        raise ProviderError(
+            f"{', '.join(observing)} only observes. Set manages on the "
+            "connection to act through it."
+        )
+
+
 def execute(
     resource: dict[str, Any], action: str, *, apply: bool = True
 ) -> ProviderResult:
@@ -4787,6 +5879,10 @@ def execute(
         raise ProviderError(
             f"Unsupported provider/action: {identity[0]}/{identity[1]}."
         ) from exc
+    capability = controller_capability_registry().capabilities.get(identity[0])
+    policy = capability.actions.get(action) if capability else None
+    if apply and (policy is None or policy.mode != "locked"):
+        _refuse_unless_managed(identity[0], resource["spec"])
     return handler(
         resource["spec"], apply=apply, observed=resource.get("observed") or {}
     )

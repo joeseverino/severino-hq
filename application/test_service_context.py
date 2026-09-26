@@ -125,7 +125,12 @@ class PageTests(TestCase):
         self.assertContains(response, 'aria-label="On this page"')
         self.assertContains(response, 'href="#delivery"')
         self.assertContains(response, 'id="delivery"')
-        self.assertContains(response, 'class="page-head-status ', count=1)
+        service = response.context["service"]
+        self.assertContains(
+            response,
+            f'<span class="pill pill-{service.status}">{service.status_label}</span>',
+            count=1,
+        )
 
     def test_a_service_nothing_else_knows_about_grows_no_bands(self):
         a_service()
@@ -253,5 +258,5 @@ class OneWindowTests(TestCase):
             pathlib.Path(__file__).resolve().parents[1]
             / "templates/control_plane/_topology_node_body.html"
         ).read_text()
-        self.assertIn("{{ traffic_window_days }}", template)
+        self.assertIn("{{ traffic_window_days|counted", template)
         self.assertNotIn("Traffic · 7 days", template)

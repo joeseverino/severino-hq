@@ -215,8 +215,7 @@ def _endpoint(methods: tuple[str, ...]):
             observe(principal)
             # The same brake /mcp/ applies, and for the same callers: every
             # token here is a Pocket ID client, and the agents hold exactly
-            # these tokens. Checked only on the machine API used to leave a
-            # paused agent one URL away from every capability it held.
+            # these tokens.
             # After authentication, so only a valid caller learns it; fails
             # closed, because agents_paused() does.
             if agents_paused():
@@ -243,7 +242,7 @@ def _endpoint(methods: tuple[str, ...]):
         wrapper.__doc__ = view.__doc__
         # A fact a test can read, rather than one a reviewer has to notice.
         # `/api/` is exempt from the login *redirect*, so a view added here
-        # without this decorator is not merely unprotected by convention -- it
+        # without this decorator is not merely unprotected by convention: it
         # is served to anyone who asks. `core.test_security` walks these routes
         # and fails if one lacks the mark.
         wrapper.__hq_authenticated__ = True
@@ -485,8 +484,8 @@ class Envelope:
 class Dialect:
     """How one API version reads a request body.
 
-    There is one axis here, not seven. v2 checks the envelope -- media type,
-    JSON strictness, unknown fields, field types, a retry key on every write --
+    There is one axis here, not seven. v2 checks the envelope (media type,
+    JSON strictness, unknown fields, field types, a retry key on every write)
     and v1 checks none of it. Stating that once, as data, is the difference
     between adding v3 and auditing a function for every place a version number
     was compared.
@@ -547,7 +546,7 @@ def _parse_envelope(request, dialect: Dialect) -> tuple[dict[str, Any], Envelope
 
     Returns the raw body alongside the parsed envelope because the idempotency
     fingerprint is taken over what was actually sent, not over what survived
-    interpretation -- two different bodies that normalise to the same command
+    interpretation: two different bodies that normalise to the same command
     are still two different requests.
     """
 

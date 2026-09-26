@@ -53,3 +53,7 @@ coverage.xml
 # under a named static/media directory, never beside the repository README.
 /*.png
 /hq-pass.json
+
+# Personal agent settings and guidance; never published.
+.claude/*.local.json
+CLAUDE.local.md

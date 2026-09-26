@@ -1,18 +1,5 @@
-{% extends "base.html" %}
-{% block title %}Infrastructure{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Infrastructure</h1>
-    <p class="muted">Everything HQ keeps configured for you, and what it last found at the provider.</p>
-  </div>
-  <div class="page-actions">
-    <a class="btn primary" href="{% url 'control_plane:create' %}">Add</a>
-    <a class="btn" href="{% url 'control_plane:services' %}">Services</a>
-    <a class="btn" href="{% url 'control_plane:providers' %}">Provider schemas</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <div class="table-scroll">
   <table class="data-table">
     <thead>
@@ -22,7 +9,7 @@
       {% for resource in resources %}
         <tr>
           <td>
-            <a href="{% url 'control_plane:detail' resource.key %}"><strong>{{ resource.key }}</strong></a>
+            <strong>{% entity "resource"|entity_of:resource.key %}</strong>
             {% comment %}
             Enough to recognise it, not the whole value. A DMARC record ran to
             three wrapped lines and made every row beside it ragged; the full
@@ -30,22 +17,15 @@
             {% endcomment %}
             {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
             {% comment %}
-            The address a proxy forwards to is an address, and the row said
-            only that. HQ usually knows whose address it is — the detail page
-            has named the machine for a while — so the board says it too, and
-            still prints the address above where it cannot.
+            Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
-            {% if resource.origin_machine %}<br><span class="muted">on <a href="{{ resource.origin_machine.url }}">{{ resource.origin_machine.name }}</a></span>{% endif %}
+            {% if resource.origin_machine %}<br><span class="muted">on {% entity resource.origin_machine.link %}</span>{% endif %}
           </td>
-          <td><code>{{ resource.kind }}</code></td>
+          <td>{{ resource.kind_label }}</td>
           <td>
             {% if not resource.enabled %}
               <span class="pill">Disabled</span>
-            {% elif resource.declaration_only %}
-              {% comment %}
-              Nothing to converge. Reported as "Pending", a domain waited
-              forever for a controller action it does not have.
-              {% endcomment %}
+            {% elif not resource.converges %}
               <span class="pill pill-active">Declared</span>
             {% elif resource.observed_generation == resource.generation %}
               <span class="pill pill-active">In sync</span>
@@ -54,16 +34,16 @@
             {% endif %}
           </td>
           <td>
-            {% if resource.declaration_only %}
-              <span class="muted">—</span>
+            {% if not resource.converges and not resource.last_observed_at %}
+              {% empty_value %}
             {% else %}
               <span class="pill control-{{ resource.control_health.state }}">{{ resource.control_health.label }}</span>
             {% endif %}
           </td>
-          <td class="muted">{% if resource.declaration_only %}—{% else %}{{ resource.last_observed_at|default:"Never" }}{% endif %}</td>
+          <td class="muted">{% if resource.last_observed_at %}{{ resource.last_observed_at }}{% elif resource.converges %}Never{% else %}{% empty_value %}{% endif %}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="muted">No managed resources declared yet.</td></tr>
+        <tr><td colspan="5" class="muted">No resources.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -76,7 +56,7 @@
     <tbody>
       {% for operation in operations %}
         <tr>
-          <td><a href="{% url 'control_plane:detail' operation.resource.key %}">{{ operation.resource.key }}</a></td>
+          <td>{% entity "resource"|entity_of:operation.resource.key %}</td>
           <td>{{ operation.get_action_display }}</td>
           <td><span class="pill pill-{{ operation.state }}">{{ operation.get_state_display }}</span></td>
           <td>{{ operation.requested_actor }} <span class="muted">via {{ operation.requested_interface }}</span></td>

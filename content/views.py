@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -12,7 +13,8 @@ from django.views.generic import (
 from application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
 from application.content import content_command_from_cleaned_data, save_content
 from application.deletion import delete_content
-from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.pages import PageAction, PageMixin, record_trail
+from application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from application.writes import (
     ServiceCreateMixin,
     ServiceDeleteMixin,
@@ -22,12 +24,12 @@ from .forms import ContentItemForm
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 
 
-class _ContentSectionView(TableListMixin, LoginRequiredMixin, ListView):
+class _ContentSectionView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     """One half of the registry, as a table.
 
     The registry is cut once, in ``content.models``, and both sections read the
     cut from there. A section states which half it is and its heading; every
-    other part of the table contract -- search scope, sorts, toggles, paging --
+    other part of the table contract: search scope, sorts, toggles, paging,
     is shared, so the two cannot drift into behaving differently.
 
     The type filter offers only the types its own half can contain. Offering all
@@ -46,21 +48,26 @@ class _ContentSectionView(TableListMixin, LoginRequiredMixin, ListView):
     table_filters = (
         TableFilter("status", "Status", "status", ContentItem.Status.choices),
     )
-    table_sorts = (
-        TableSort("-updated_at", "Recently updated", "-updated_at"),
-        TableSort("title", "Title A–Z", "title"),
-        TableSort("-title", "Title Z–A", "-title"),
-        TableSort("-published_at", "Recently published", "-published_at"),
-        TableSort("published_at", "Oldest published", "published_at"),
-        TableSort("status", "Status", "status"),
-        TableSort("-status", "Status reverse", "-status"),
-        TableSort("content_type", "Type", "content_type"),
-        TableSort("-content_type", "Type reverse", "-content_type"),
-        TableSort("updated_at", "Least recently updated", "updated_at"),
+    table_selectable = True
+    table_columns = (
+        TableColumn("Title", "title", "Title A–Z", "Title Z–A"),
+        TableColumn("Type", "content_type", "Type", "Type reverse"),
+        TableColumn("Status", "status", "Status", "Status reverse"),
+        TableColumn("Description"),
+        TableColumn(f"Views, {CONTENT_TRAFFIC_DAYS}d", css="num-col"),
+        TableColumn("Published", "published_at", "Oldest published", "Recently published"),
+        TableColumn("Updated", "updated_at", "Least recently updated", "Recently updated"),
+        TableColumn("Open", css="actions-col"),
     )
     table_toggles = (TableToggle("no_docs", "Missing documentation"),)
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search titles, topics, tags, and notes…"
+
+    def get_page_title(self):
+        return self.heading
+
+    def get_page_actions(self):
+        return (PageAction("New content item", reverse("content:create"), primary=True),)
 
     def get_table_filters(self):
         return (
@@ -91,10 +98,7 @@ class _ContentSectionView(TableListMixin, LoginRequiredMixin, ListView):
         # the reading is one query whatever the page size, and the table engine
         # keeps ownership of which rows and in what order.
         attach_traffic(context["items"])
-        return context | {
-            "heading": self.heading,
-            "traffic_days": CONTENT_TRAFFIC_DAYS,
-        }
+        return context
 
 
 class WriteupListView(_ContentSectionView):
@@ -115,7 +119,7 @@ class ContentListView(_ContentSectionView):
     queue both count across the whole registry, and pointing either at one
     section would make the number and the page it opens disagree.
 
-    It is also where a content type that is neither -- a video, say -- stays
+    It is also where a content type that is neither (a video, say) stays
     visible while there is no section that claims it.
     """
 
@@ -123,7 +127,17 @@ class ContentListView(_ContentSectionView):
     heading = "Content pipeline"
 
 
-class ContentDetailView(LoginRequiredMixin, DetailView):
+CONTENT_TRAIL = ("Content", reverse_lazy("content:list"))
+
+
+class ContentPage(PageMixin):
+    """A page about one content item, or a new one: its trail runs back to the list."""
+
+    def get_page_trail(self):
+        return record_trail(CONTENT_TRAIL, getattr(self, "object", None), lambda item: item.title)
+
+
+class ContentDetailView(PageMixin, LoginRequiredMixin, DetailView):
     model = ContentItem
     template_name = "content/content_detail.html"
     slug_field = "slug"
@@ -140,6 +154,31 @@ class ContentDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         return context | {"traffic": item_traffic(context["item"])}
 
+    def get_page_title(self):
+        return self.object.title
+
+    def get_page_lede(self):
+        return format_html(
+            '{} · <span class="pill pill-{}">{}</span>',
+            self.object.get_content_type_display(),
+            self.object.status,
+            self.object.get_status_display(),
+        )
+
+    def get_page_trail(self):
+        return (CONTENT_TRAIL,)
+
+    def get_page_actions(self):
+        item = self.object
+        actions = []
+        if item.published_url:
+            actions.append(PageAction("↗ Published", item.published_url))
+        actions += [
+            PageAction("Edit", reverse("content:edit", args=[item.slug])),
+            PageAction("Delete", reverse("content:delete", args=[item.slug]), danger=True),
+        ]
+        return tuple(actions)
+
 
 class ContentWrite:
     """What every content write shares, whichever direction it goes."""
@@ -152,8 +191,9 @@ class ContentWrite:
 
 
 class ContentCreateView(
-    ContentWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView
+    ContentWrite, ContentPage, ServiceCreateMixin, LoginRequiredMixin, CreateView
 ):
+    page_title = "New content item"
     form_class = ContentItemForm
     template_name = "content/content_form.html"
     service = staticmethod(save_content)
@@ -161,8 +201,9 @@ class ContentCreateView(
 
 
 class ContentUpdateView(
-    ContentWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
+    ContentWrite, ContentPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView
 ):
+    page_title = "Edit content item"
     form_class = ContentItemForm
     template_name = "content/content_form.html"
     slug_field = "slug"
@@ -172,8 +213,9 @@ class ContentUpdateView(
 
 
 class ContentDeleteView(
-    ContentWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
+    ContentWrite, ContentPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView
 ):
+    page_title = "Delete content item?"
     template_name = "content/content_confirm_delete.html"
     slug_field = "slug"
     slug_url_kwarg = "slug"

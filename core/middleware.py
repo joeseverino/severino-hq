@@ -37,7 +37,7 @@ class DemoModeMiddleware:
     """Enter the substituting scope for a request whose session asked for it.
 
     Middleware rather than a context processor, because the substitution has to
-    be in force while the view runs and not merely while the page renders --
+    be in force while the view runs and not merely while the page renders,
     every number on a page is decided long before a template sees it.
 
     Session-scoped on purpose. The flag never leaves the browser that set it, so
@@ -103,7 +103,7 @@ class RequestContextMiddleware:
             )
             # Nothing here is meant to be read by another origin. Django's
             # default opener policy already isolates the browsing context;
-            # this is the other half -- another site cannot pull a page, an
+            # this is the other half: another site cannot pull a page, an
             # export or a receipt into its own document as a subresource, so a
             # cross-origin read cannot be laundered through an <img> or a
             # <script> tag and measured.
@@ -141,7 +141,7 @@ class AdminPolicyMiddleware:
     relaxation to that surface, and this is the second.
 
     A middleware rather than a decorator because the admin routes a view per
-    registered model and generates most of them -- a decorator that has to be
+    registered model and generates most of them: a decorator that has to be
     remembered on each is one that will eventually be missed, silently, and the
     admin page that missed it simply stops working.
 
@@ -233,3 +233,28 @@ class LoginRequiredMiddleware:
             # Unresolvable paths are non-exempt and continue to authentication.
             pass
         return False
+
+
+class ProjectionMiddleware:
+    """One read projection per page request, seeded with where it arrived.
+
+    Every composer on a GET shares one machine catalogue, one relation graph and
+    one set of readings, and knows the address and port HQ was reached on. A
+    write is left unscoped so it never reads a value it has just changed.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method not in ("GET", "HEAD"):
+            return self.get_response(request)
+        from application.hq_self import serving
+        from application.projection import projection_scope
+
+        with projection_scope(seed=serving(request)):
+            response = self.get_response(request)
+            # A template response renders after the view returns; inside the scope.
+            if hasattr(response, "render") and not getattr(response, "is_rendered", True):
+                response.render()
+            return response

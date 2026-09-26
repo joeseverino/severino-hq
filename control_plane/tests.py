@@ -34,29 +34,39 @@ from .models import (
     ProviderConnection,
     ProviderInventory,
 )
-from .providers import PROVIDERS, describe_providers, validate_resolved_certificate
+from .providers import PROVIDERS, describe_providers
+
 from application.infrastructure import delivery_targets as delivery_targets_for_test
 
 from .desired_state import advance_dependents
 
 
+def validate_resolved_certificate(payload):
+    """The resolved-state validation ``resolve_provider_spec`` applies to a certificate."""
+
+    from pydantic import TypeAdapter
+
+    resolved = TypeAdapter(PROVIDERS["tls.certificate"].resolved_type)
+    return resolved.dump_python(resolved.validate_python(payload), mode="json")
+
+
 DOMAINS = [
-    "jseverino.com",
-    "*.jseverino.com",
-    "jseverino.net",
-    "*.jseverino.net",
-    "jseverino.org",
-    "*.jseverino.org",
-    "joeseverino.com",
-    "*.joeseverino.com",
+    "example.com",
+    "*.example.com",
+    "example.net",
+    "*.example.net",
+    "example.org",
+    "*.example.org",
+    "example.test",
+    "*.example.test",
 ]
 
 
 def certificate_spec():
     return {
-        "certificate_name": "jseverino",
+        "certificate_name": "example",
         "domains": list(DOMAINS),
-        "install_on": ["homelab-npm", "edge", "a-shared-host"],
+        "install_on": ["example-npm", "edge", "a-shared-host"],
         "renewal_window_days": 30,
     }
 
@@ -64,17 +74,17 @@ def certificate_spec():
 TARGETS = (
     {
         "kind": "npm",
-        "connection_ref": "homelab-npm",
-        "name": "jseverino-wildcard",
-        "certificate_resource": "jseverino-wildcard",
-        "verify_domains": ["dev.jseverino.com"],
+        "connection_ref": "example-npm",
+        "name": "example-wildcard",
+        "certificate_resource": "example-wildcard",
+        "verify_domains": ["dev.example.com"],
         "discover_covered_hosts": False,
     },
     {
         "kind": "caddy",
         "connection_ref": "edge",
         "name": "edge-caddy",
-        "certificate_resource": "jseverino-wildcard",
+        "certificate_resource": "example-wildcard",
         "verify_domains": ["health.example.com"],
         "certificate_directory": "/opt/apps/caddy/certs",
     },
@@ -82,9 +92,9 @@ TARGETS = (
         "kind": "cpanel",
         "connection_ref": "a-shared-host",
         "name": "namecheap-shared-hosting",
-        "certificate_resource": "jseverino-wildcard",
-        "verify_domains": ["jseverino.com", "quiz.jseverino.net"],
-        "install_domains": ["jseverino.com", "jseverino.net"],
+        "certificate_resource": "example-wildcard",
+        "verify_domains": ["example.com", "quiz.example.net"],
+        "install_domains": ["example.com", "example.net"],
     },
 )
 
@@ -104,14 +114,14 @@ def declare_targets():
 
 def resolved_certificate_spec():
     return {
-        "certificate_name": "jseverino",
+        "certificate_name": "example",
         "domains": list(DOMAINS),
         "consumers": [
             {
                 "kind": "npm",
-                "name": "jseverino-wildcard",
-                "connection_ref": "homelab-npm",
-                "verify_domains": ["dev.jseverino.com"],
+                "name": "example-wildcard",
+                "connection_ref": "example-npm",
+                "verify_domains": ["dev.example.com"],
                 "discover_covered_hosts": False,
             },
             {
@@ -125,8 +135,8 @@ def resolved_certificate_spec():
                 "kind": "cpanel",
                 "name": "namecheap-shared-hosting",
                 "connection_ref": "a-shared-host",
-                "install_domains": ["jseverino.com", "jseverino.net"],
-                "verify_domains": ["jseverino.com", "quiz.jseverino.net"],
+                "install_domains": ["example.com", "example.net"],
+                "verify_domains": ["example.com", "quiz.example.net"],
             },
         ],
         "renewal_window_days": 30,
@@ -176,7 +186,7 @@ class DerivedConsumerTests(TestCase):
     The bug this pins: a target carried a hand-written set of names to verify,
     so a second name served from the same box was a consumer in reality and
     absent from the certificate. Its own service page showed the certificate
-    correctly the whole time -- that side asks what the certificate covers --
+    correctly the whole time: that side asks what the certificate covers,
     which is what made two answers to one question so hard to see.
     """
 
@@ -194,15 +204,15 @@ class DerivedConsumerTests(TestCase):
             records=[
                 # Covered by the wildcard and answering at the edge box, so a
                 # consumer whether or not anybody wrote it down.
-                {"domain": "status.jseverino.com", "answer": "10.0.0.19"},
+                {"domain": "status.example.com", "answer": "10.0.0.19"},
                 # The same box, and not a name this certificate covers.
-                {"domain": "unrelated.example.com", "answer": "10.0.0.19"},
+                {"domain": "unrelated.invalid", "answer": "10.0.0.19"},
                 # Covered, and somewhere else entirely.
-                {"domain": "elsewhere.jseverino.com", "answer": "10.0.0.44"},
+                {"domain": "elsewhere.example.com", "answer": "10.0.0.44"},
             ],
         )
         return ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -218,7 +228,7 @@ class DerivedConsumerTests(TestCase):
         )
 
     def test_a_name_served_at_the_target_is_a_consumer_without_being_listed(self):
-        self.assertIn("status.jseverino.com", self._caddy_consumer()["verify_domains"])
+        self.assertIn("status.example.com", self._caddy_consumer()["verify_domains"])
 
     def test_the_written_names_are_kept_beside_the_derived_ones(self):
         """A target may serve a name no sweep can see, so declaring still adds."""
@@ -229,14 +239,14 @@ class DerivedConsumerTests(TestCase):
         """Sharing a host is not being covered by the same certificate."""
 
         self.assertNotIn(
-            "unrelated.example.com", self._caddy_consumer()["verify_domains"]
+            "unrelated.invalid", self._caddy_consumer()["verify_domains"]
         )
 
     def test_a_covered_name_answering_elsewhere_is_not_a_consumer(self):
         """Coverage alone would make every name a consumer of every target."""
 
         self.assertNotIn(
-            "elsewhere.jseverino.com", self._caddy_consumer()["verify_domains"]
+            "elsewhere.example.com", self._caddy_consumer()["verify_domains"]
         )
 
     def test_a_target_reached_by_name_is_placed_like_one_reached_by_address(self):
@@ -260,11 +270,11 @@ class DerivedConsumerTests(TestCase):
             observed_at=timezone.now(),
             records=[
                 {"domain": "edge.example.com", "answer": "10.0.0.19"},
-                {"domain": "status.jseverino.com", "answer": "10.0.0.19"},
+                {"domain": "status.example.com", "answer": "10.0.0.19"},
             ],
         )
         certificate = ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -277,7 +287,7 @@ class DerivedConsumerTests(TestCase):
             if item["connection_ref"] == "edge"
         )
 
-        self.assertIn("status.jseverino.com", consumer["verify_domains"])
+        self.assertIn("status.example.com", consumer["verify_domains"])
 
     def test_what_is_only_declared_is_not_yet_evidence(self):
         """A record HQ holds and has not applied is an intention.
@@ -296,10 +306,10 @@ class DerivedConsumerTests(TestCase):
         ManagedResource.objects.create(
             key="pending-dns",
             kind="adguard.rewrite",
-            spec={"domain": "pending.jseverino.com", "answer": "10.0.0.19"},
+            spec={"domain": "pending.example.com", "answer": "10.0.0.19"},
         )
         certificate = ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -312,16 +322,22 @@ class DerivedConsumerTests(TestCase):
             if item["connection_ref"] == "edge"
         )
 
-        self.assertNotIn("pending.jseverino.com", consumer["verify_domains"])
+        self.assertNotIn("pending.example.com", consumer["verify_domains"])
 
 
 class DesiredStateOwnershipTests(TestCase):
     """HQ holds every part of the answer, including the parts it resolves."""
+    def setUp(self):
+        super().setUp()
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+
 
     def _certificate(self):
         declare_targets()
         return ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -385,7 +401,7 @@ class DesiredStateOwnershipTests(TestCase):
         resource.refresh_from_db()
         settled = resource.generation
 
-        target = ManagedResource.objects.get(key="homelab-npm-certificate-target")
+        target = ManagedResource.objects.get(key="example-npm-certificate-target")
         target.spec = {**target.spec, "discover_covered_hosts": True}
         target.save(update_fields=["spec"])
         advance_dependents(delivery_targets())
@@ -467,7 +483,7 @@ class RegistrySymmetryTests(TestCase):
         """Answering for a name and routing it are the same knowledge.
 
         A provider that can say which address a name resolves to can say where
-        that name is served -- the address *is* the answer. Declaring the first
+        that name is served: the address *is* the answer. Declaring the first
         and withholding the second is how a live service came to report "nothing
         supplies this": one DNS provider declared an origin and the other did
         not, so a name carried by the quiet one had no origin at all, no machine,
@@ -507,7 +523,7 @@ class ProviderContractTests(TestCase):
     def test_resolved_certificate_accepts_wildcard_covered_cpanel_vhost(self):
         spec = resolved_certificate_spec()
         cpanel = next(item for item in spec["consumers"] if item["kind"] == "cpanel")
-        cpanel["install_domains"] = ["quiz.jseverino.net"]
+        cpanel["install_domains"] = ["quiz.example.net"]
 
         validate_resolved_certificate(spec)
 
@@ -534,10 +550,10 @@ class ProviderContractTests(TestCase):
 
     def test_certificate_contract_normalizes_and_validates_deployments(self):
         spec = resolved_certificate_spec()
-        spec["domains"][0] = "JSEVERINO.COM."
+        spec["domains"][0] = "EXAMPLE.COM."
         self.assertEqual(
             validate_resolved_certificate(spec)["domains"][0],
-            "jseverino.com",
+            "example.com",
         )
 
         spec["consumers"][-1]["install_domains"].append("not-covered.example")
@@ -551,7 +567,7 @@ class ProviderContractTests(TestCase):
                 "key": "bad-proxy",
                 "kind": "npm.proxy_host",
                 "spec": {
-                    "domain_names": ["dev-hq.jseverino.com"],
+                    "domain_names": ["dev-hq.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "100.64.0.7",
                     "forward_port": 70000,
@@ -571,8 +587,8 @@ class ProviderContractTests(TestCase):
                 kind="cloudflare.dns_record",
                 enabled=False,
                 spec={
-                    "zone": "jseverino.com",
-                    "name": "hq.jseverino.com",
+                    "zone": "example.com",
+                    "name": "hq.example.com",
                     "record_type": "A",
                     "content": "192.0.2.1",
                 },
@@ -580,14 +596,14 @@ class ProviderContractTests(TestCase):
             principal=cli_principal(),
         )
         self.assertTrue(disabled["ok"])
-        with self.assertRaisesRegex(PolicyError, "public DNS"):
+        with self.assertRaisesRegex(PolicyError, "Public DNS changes are off"):
             save_managed_resource(
                 ManagedResourceCommand(
                     key="public-hq",
                     kind="cloudflare.dns_record",
                     spec={
-                        "zone": "jseverino.com",
-                        "name": "hq.jseverino.com",
+                        "zone": "example.com",
+                        "name": "hq.example.com",
                         "record_type": "A",
                         "content": "192.0.2.1",
                     },
@@ -598,6 +614,9 @@ class ProviderContractTests(TestCase):
 
 class InfrastructureWebTests(TestCase):
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.user = get_user_model().objects.create_user(
             username="operator",
             password="test-only-password",
@@ -606,22 +625,22 @@ class InfrastructureWebTests(TestCase):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(
-                key="jseverino-wildcard",
+                key="example-wildcard",
                 kind="tls.certificate",
                 spec=certificate_spec(),
             ),
             principal=cli_principal(),
         )
-        self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
+        self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_machine_edit_can_choose_the_dashboard_telemetry_owner(self):
         from control_plane.models import DashboardMachine
 
         machine = ManagedResource.objects.create(
-            key="homelab-server",
+            key="example-host",
             kind="machine",
             spec={
-                "name": "homelab-server",
+                "name": "example-host",
                 "role": "Infrastructure host",
                 "addresses": ["100.64.0.9"],
             },
@@ -632,7 +651,7 @@ class InfrastructureWebTests(TestCase):
         response = self.client.post(
             edit_url,
             {
-                "name": "homelab-server",
+                "name": "example-host",
                 "role": "Infrastructure host",
                 "addresses": "100.64.0.9",
                 "enabled": "on",
@@ -645,17 +664,20 @@ class InfrastructureWebTests(TestCase):
         self.assertEqual(DashboardMachine.objects.get().machine, machine)
 
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.resource.status = {
             "not_after": (timezone.now() + timedelta(days=89, hours=23)).isoformat(),
             "certificate_pem": "-----BEGIN CERTIFICATE-----\npublic\n",
             "consumers": [
                 {
-                    "consumer": "jseverino-wildcard",
-                    "domain": "hq.jseverino.com",
+                    "consumer": "example-wildcard",
+                    "domain": "hq.example.com",
                 },
                 {
-                    "consumer": "jseverino-wildcard",
-                    "domain": "sso.jseverino.com",
+                    "consumer": "example-wildcard",
+                    "domain": "sso.example.com",
                 },
             ],
         }
@@ -665,20 +687,20 @@ class InfrastructureWebTests(TestCase):
         )
 
         self.assertContains(response, "Automatic")
-        self.assertContains(response, "resumes automatically after restarts")
+        self.assertContains(response, "resumes after restarts")
         self.assertContains(response, "Renewal policy")
         self.assertContains(response, "90 days remaining")
-        self.assertContains(response, "hq.jseverino.com")
-        self.assertContains(response, "sso.jseverino.com")
+        self.assertContains(response, "hq.example.com")
+        self.assertContains(response, "sso.example.com")
         self.assertNotContains(response, "BEGIN CERTIFICATE")
         self.assertContains(response, "certificate_available")
         self.assertContains(response, "True")
 
     def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
         ManagedResource.objects.create(
-            key="homelab-server",
+            key="example-host",
             kind="machine",
-            spec={"name": "homelab-server", "addresses": ["100.64.0.9"]},
+            spec={"name": "example-host", "addresses": ["100.64.0.9"]},
         )
         ManagedResource.objects.create(
             key="app-server",
@@ -687,7 +709,7 @@ class InfrastructureWebTests(TestCase):
         )
         ProviderConnection.objects.create(
             connection_ref="an-npm",
-            controller_id="homelab-server",
+            controller_id="example-host",
             provider="npm",
             endpoint="https://npm.example.test",
             reaches=["app-server"],
@@ -710,13 +732,11 @@ class InfrastructureWebTests(TestCase):
             reverse("control_plane:detail", kwargs={"key": proxy.key})
         )
 
-        self.assertEqual(response.context["provider_machine"]["name"], "homelab-server")
+        self.assertEqual(response.context["provider_machine"]["name"], "example-host")
         self.assertEqual(response.context["origin_machine"].name, "app-server")
         # Two edges, two sentences. Both said "Runs on" once, which on a
-        # container managed by a Portainer one box over printed "Runs on
-        # homelab-server" directly above "Runs on sl-cloud-edge-01" -- the same
-        # words for the machine the provider is on and the machine the thing is
-        # on, wrong one first.
+        # container managed by a Portainer one box over names two machines:
+        # the one the thing runs on, and the one its provider runs on.
         self.assertContains(response, "Managed through")
         self.assertContains(response, "Forwards to")
 
@@ -745,21 +765,24 @@ class InfrastructureWebTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/x-pem-file")
-        self.assertIn("jseverino-wildcard-public.pem", response["Content-Disposition"])
+        self.assertIn("example-wildcard-public.pem", response["Content-Disposition"])
 
 
 class OperationPolicyTests(TestCase):
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(
-                key="jseverino-wildcard",
+                key="example-wildcard",
                 kind="tls.certificate",
                 spec=certificate_spec(),
             ),
             principal=cli_principal(),
         )
-        self.resource = ManagedResource.objects.get(key="jseverino-wildcard")
+        self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_a_verb_returns_to_the_page_that_offered_it(self):
         """These forms sit on pages that show the fact the verb answers, and
@@ -869,7 +892,7 @@ class OperationPolicyTests(TestCase):
         """A domain is the locked capability now that DNS records apply.
 
         Declaring one records which zones HQ is responsible for. It carries no
-        settings, so there is nothing for a reconcile to converge toward -- and
+        settings, so there is nothing for a reconcile to converge toward, and
         asking for one must be refused rather than queued for a worker that
         could only fail.
         """
@@ -883,7 +906,7 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
 
-        with self.assertRaisesRegex(PolicyError, "nothing to converge"):
+        with self.assertRaisesRegex(PolicyError, "no settings to reconcile"):
             request_reconcile(
                 OperationCommand(idempotency_key="zone-locked"),
                 principal=cli_principal(),
@@ -958,21 +981,21 @@ class OperationPolicyTests(TestCase):
         call_command(
             "infrastructure_controller",
             "claim",
-            controller_id="homelab-controller",
+            controller_id="example-controller",
             stdout=claimed,
         )
         claim_payload = json.loads(claimed.getvalue())
         self.assertEqual(claim_payload["operation"]["id"], queued["operation"]["id"])
         self.assertEqual(
             claim_payload["resource"]["spec"]["certificate_name"],
-            "jseverino",
+            "example",
         )
 
         reported = StringIO()
         call_command(
             "infrastructure_controller",
             "report",
-            controller_id="homelab-controller",
+            controller_id="example-controller",
             operation=queued["operation"]["id"],
             payload=json.dumps(
                 {
@@ -1000,14 +1023,14 @@ class DeliveryTargetConfirmationTests(TestCase):
     """Verifying a certificate is the only thing that ever sees its targets.
 
     Nothing sweeps a delivery target, so its "last confirmed" said *never* for
-    as long as it existed -- while every reconcile was opening a connection to
+    as long as it existed, while every reconcile was opening a connection to
     it, reading back what it served and matching the fingerprint. The evidence
     was arriving under the certificate's name and being dropped.
     """
 
     def _report(self, consumers):
         certificate = ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -1016,7 +1039,7 @@ class DeliveryTargetConfirmationTests(TestCase):
             action=OperationRequest.Action.RECONCILE,
             idempotency_key="verify-once",
             state=OperationRequest.State.CLAIMED,
-            claimed_by="homelab-controller",
+            claimed_by="example-controller",
             lease_expires_at=timezone.now() + timedelta(minutes=5),
             input={"generation": certificate.generation},
         )
@@ -1027,7 +1050,7 @@ class DeliveryTargetConfirmationTests(TestCase):
                 observed_generation=certificate.generation,
                 status={"consumers": consumers},
             ),
-            controller_id="homelab-controller",
+            controller_id="example-controller",
         )
 
     def _confirmed(self, connection_ref):
@@ -1065,7 +1088,7 @@ class InfrastructureViewsTests(TestCase):
             username="joe", password="test-password"
         )
         self.resource = ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
             status={"certificate_pem": "PUBLIC CERTIFICATE ONLY"},
@@ -1074,7 +1097,7 @@ class InfrastructureViewsTests(TestCase):
 
     def test_private_dashboard_and_public_certificate_download(self):
         dashboard = self.client.get(reverse("control_plane:list"))
-        self.assertContains(dashboard, "jseverino-wildcard")
+        self.assertContains(dashboard, "example-wildcard")
 
         download = self.client.get(
             reverse("control_plane:certificate_download", args=[self.resource.key])
@@ -1104,7 +1127,7 @@ class InfrastructureViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Findings")
-        self.assertContains(response, "Nothing has ever observed adguard.rewrite")
+        self.assertContains(response, "No adguard.rewrite record has ever been seen")
         self.assertContains(response, "Records of this kind")
         self.assertContains(response, reverse("action_items"))
 
@@ -1139,7 +1162,7 @@ class InfrastructureViewsTests(TestCase):
         ):
             response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, "What HQ can do now")
+        self.assertContains(response, "Actions")
         self.assertContains(response, "Open connections")
         self.assertContains(response, 'href="/topology/?trace"')
         self.assertContains(response, "Trace impact")
@@ -1171,7 +1194,7 @@ class InfrastructureViewsTests(TestCase):
             reverse("control_plane:detail", args=[self.resource.key])
         )
 
-        self.assertContains(detail, "observed (legacy result)")
+        self.assertContains(detail, "observed (old result)")
         self.assertNotContains(detail, "did not match")
 
     def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
@@ -1179,7 +1202,7 @@ class InfrastructureViewsTests(TestCase):
             resource=self.resource,
             action=OperationRequest.Action.RECONCILE,
             state=OperationRequest.State.FAILED,
-            requested_actor="homelab-controller",
+            requested_actor="example-controller",
             requested_interface="controller",
             idempotency_key="structured-failure",
             result={
@@ -1347,8 +1370,8 @@ class QueueHeadTests(TestCase):
 
     The queue is ordered by age and a claim is atomic, so an operation whose
     contract could not be built rolled the claim back and stayed exactly where
-    it was. Every poll after it hit the same one, and nothing else -- no DNS, no
-    proxy hosts, no renewals -- was ever claimed again.
+    it was. Every poll after it hit the same one, and nothing else (no DNS, no
+    proxy hosts, no renewals) was ever claimed again.
     """
 
     def setUp(self):
@@ -1357,7 +1380,7 @@ class QueueHeadTests(TestCase):
         self.claim = claim_next_operation
         declare_targets()
         self.certificate = ManagedResource.objects.create(
-            key="jseverino-wildcard",
+            key="example-wildcard",
             kind="tls.certificate",
             spec=certificate_spec(),
         )
@@ -1400,7 +1423,7 @@ class QueueHeadTests(TestCase):
         self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
 
         broken.refresh_from_db()
-        self.assertIn("receives a certificate", broken.result["message"])
+        self.assertIn("is not a certificate target", broken.result["message"])
 
     def test_a_resolvable_queue_is_untouched(self):
         wanted = self.queue(self.certificate, "wanted")
@@ -1443,7 +1466,7 @@ class ReadoutsSayNothingBlankTests(TestCase):
     sweep does not store. Ten container pages and four domain pages, every one
     of them an em dash under a label promising an observation.
 
-    Blank on the resource in front of you is normal -- a certificate that has
+    Blank on the resource in front of you is normal: a certificate that has
     not been reconciled yet has no expiry. Blank on *every* resource of a kind,
     across desired and observed both, means the row reads a key with no writer.
     """
@@ -1487,7 +1510,7 @@ class ReadoutsSayNothingBlankTests(TestCase):
 
     # No generic "every row can hold a value" test here. Fed a synthetic status
     # that answers every key, four rows that are populated in production came
-    # back blank -- a certificate's consumers and the tailnet policy's grants,
+    # back blank: a certificate's consumers and the tailnet policy's grants,
     # groups and tests all read lists, and a fixture cannot fake a list without
     # knowing its shape. The sound version of this check needs the real estate,
     # so it is an audit run against it rather than a test that would cry wolf
@@ -1498,8 +1521,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     """A certificate can name somewhere that records it rather than serves it.
 
     The security property this pins is where the two halves of the decision
-    live. A declaration is operator input -- it sits in HQ's database and is
-    edited through a form -- so it says only which connection, which vault and
+    live. A declaration is operator input (it sits in HQ's database and is
+    edited through a form) so it says only which connection, which vault and
     which item. What gets written is fixed in the adapter. So the resolved shape
     has to carry addressing and nothing else: no field for a value, no field for
     a label, no field for a sixth fact.
@@ -1621,7 +1644,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_certificate_that_is_only_recorded_is_refused(self):
         """Noting a certificate down is not installing it anywhere."""
 
-        with self.assertRaisesRegex(ValueError, "only recorded, never installed"):
+        with self.assertRaisesRegex(ValueError, "has no install target"):
             self._resolve(self.A_VAULT_TARGET)
 
     def test_a_recording_target_declares_no_name_to_check_it_at(self):
@@ -1642,7 +1665,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_recording_target_needs_both_the_vault_and_the_item(self):
         from .providers import TLSDeliveryTargetSpec
 
-        with self.assertRaisesRegex(ValueError, "vault and the item"):
+        with self.assertRaisesRegex(ValueError, "needs a vault and an item"):
             TLSDeliveryTargetSpec(
                 kind="onepassword",
                 connection_ref="a-password-manager",
@@ -1655,7 +1678,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 
         from .providers import TLSDeliveryTargetSpec
 
-        with self.assertRaisesRegex(ValueError, "applies to onepassword targets"):
+        with self.assertRaisesRegex(ValueError, "applies only to onepassword targets"):
             TLSDeliveryTargetSpec(
                 kind="npm",
                 connection_ref="a-proxy",
@@ -1668,7 +1691,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 
         from .providers import ProviderResolutionContext, resolve_provider_spec
 
-        with self.assertRaisesRegex(ValueError, "no observed facts"):
+        with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(
                 "tls.uploaded_certificate",
                 {
@@ -1679,3 +1702,34 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
                     delivery_targets=(self.A_VAULT_TARGET,)
                 ),
             )
+
+
+class MachineNamesRouteTests(TestCase):
+    """A machine's name is a path segment of its page."""
+
+    def test_a_name_with_a_slash_is_refused(self):
+        from pydantic import ValidationError
+
+        from .providers import validate_spec
+
+        with self.assertRaises(ValidationError):
+            validate_spec("machine", {"name": "a/b"})
+
+    def test_a_plain_name_is_accepted(self):
+        from .providers import validate_spec
+
+        self.assertEqual(validate_spec("machine", {"name": "a-box"})["name"], "a-box")
+
+    def test_an_unroutable_stored_name_falls_back_to_the_detail_page(self):
+        resource = ManagedResource(key="a-box", kind="machine", spec={"name": "a/b"})
+        self.assertEqual(
+            resource.get_absolute_url(),
+            reverse("control_plane:detail", kwargs={"key": "a-box"}),
+        )
+
+    def test_a_routable_name_gets_the_machine_page(self):
+        resource = ManagedResource(key="a-box", kind="machine", spec={"name": "a-box"})
+        self.assertEqual(
+            resource.get_absolute_url(),
+            reverse("control_plane:machine", kwargs={"name": "a-box"}),
+        )

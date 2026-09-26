@@ -1,13 +1,15 @@
 """
 Contact submission review screens.
 
-Submissions are stored in Cloudflare D1 by the jseverino.com contact form.
-These views read and write that table over the D1 HTTP API — there is no
+Submissions are stored in Cloudflare D1 by the example.com contact form.
+These views read and write that table over the D1 HTTP API: there is no
 local model. Review edits (status / assignee / notes) are written back to D1
 and recorded in the HQ audit log.
 """
 
 from __future__ import annotations
+
+from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -15,6 +17,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from application.pages import PageAction, page_context
 from application.contact_submissions import (
     ContactDeleteCommand,
     ContactReviewCommand,
@@ -32,6 +35,18 @@ from .d1 import (
 from .forms import STATUS_CHOICES, ContactReviewForm
 
 VALID_STATUSES = {value for value, _ in STATUS_CHOICES}
+
+
+def reply_mailto(address: str, subject: str = "Re: your message") -> str:
+    """A mailto URL whose address and subject cannot add headers.
+
+    The address comes from a public form: CR and LF are stripped, and it and
+    the subject are percent-encoded so `?`, `&` and `%` stay literal.
+    """
+
+    address = "".join(ch for ch in str(address or "") if ch not in "\r\n")
+    subject = "".join(ch for ch in subject if ch not in "\r\n")
+    return f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}"
 
 
 @login_required
@@ -63,6 +78,7 @@ def contact_list(request):
             "q": q,
             "total_count": sum(counts.values()),
             "error": error,
+            **page_context("Contact submissions"),
         },
     )
 
@@ -106,10 +122,21 @@ def contact_detail(request, pk: int):
             }
         )
 
+    reply = reply_mailto(submission["email"])
     return render(
         request,
         "contacts/contact_detail.html",
-        {"submission": submission, "form": form},
+        {
+            "submission": submission,
+            "reply_href": reply,
+            "form": form,
+            **page_context(
+                f"Submission #{pk}",
+                f"{submission['name']} · {submission['created_at']}",
+                actions=(PageAction("Reply via email", reply),),
+                trail=(("Contact submissions", reverse("contacts:list")),),
+            ),
+        },
     )
 
 
@@ -176,5 +203,20 @@ def contact_delete(request, pk: int):
     return render(
         request,
         "contacts/contact_confirm_delete.html",
-        {"submission": submission},
+        {
+            "submission": submission,
+            "confirm": {
+                "url": reverse("contacts:delete", args=[pk]),
+                "label": f"Delete submission #{pk}",
+                "cancel_url": reverse("contacts:detail", args=[pk]),
+            },
+            **page_context(
+                f"Delete submission #{pk}?",
+                f"{submission['created_at']} · {submission['name']} ({submission['email']})",
+                trail=(
+                    ("Contact submissions", reverse("contacts:list")),
+                    (f"Submission #{pk}", reverse("contacts:detail", args=[pk])),
+                ),
+            ),
+        },
     )

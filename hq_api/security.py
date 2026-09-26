@@ -2,7 +2,7 @@
 
 Pocket ID mints; HQ only verifies. That asymmetry is the whole design. There is
 no credential table here to leak, no minting UI to guard, and no second answer
-to "who may do this" -- revoking a client is done in the identity provider that
+to "who may do this": revoking a client is done in the identity provider that
 already owns every other credential in the fleet.
 
 The permission keys declared on the Pocket ID API resource are deliberately the
@@ -40,7 +40,7 @@ class ClientReason(Exception):
     """An error carrying a sentence written for the caller.
 
     ``str(exception)`` is not that sentence. It is whatever the exception
-    happens to hold -- a path, a query, a driver's own words -- and returning it
+    happens to hold (a path, a query, a driver's own words) and returning it
     from an API is how internal detail escapes one accident at a time. Static
     analysis reads it as stack-trace exposure for exactly that reason, and is
     right to: the guarantee cannot be "we only raise these types here", because
@@ -138,7 +138,7 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     Note what this does *not* do: widen. A web operator holds every capability
     HQ has, and it would have been one line to hand a verified client the same
     set. The point of routing a Shortcut through an OAuth resource server is
-    that a credential can run one narrow automation and nothing else --
+    that a credential can run one narrow automation and nothing else,
     granting more here would throw that away and leave only the ceremony.
     """
 
@@ -152,10 +152,8 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     # Whichever it is lands in the audit log as the actor, so an import can
     # always be traced back to the credential that caused it.
     #
-    # Refused rather than defaulted. A token carrying none of these used to
-    # become the literal actor "unknown-client", which rode into the audit log
-    # and into the idempotency partition key, where two unrelated credentials
-    # would share one namespace. A verified action nobody can be attributed to
+    # Refused rather than defaulted: a shared placeholder actor would put two
+    # unrelated credentials in one idempotency namespace. A verified action nobody can be attributed to
     # is worse than a rejected one.
     actor = claims.get("client_id") or claims.get("azp") or claims.get("sub")
     if not str(actor or "").strip():

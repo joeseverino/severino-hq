@@ -1,9 +1,7 @@
 """The vault's documentation, brought into HQ as one transaction.
 
-This used to carry an authored topology alongside it, so that HQ's picture of
-the world and the vault's could not disagree. HQ derives that picture now -- from
-what its credentials reach and what it has been told directly -- so there is
-nothing here for a document to say.
+Documentation only. HQ derives its picture of the infrastructure from what its
+credentials reach, so no document describes it.
 """
 
 from __future__ import annotations

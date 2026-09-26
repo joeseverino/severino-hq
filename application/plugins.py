@@ -14,13 +14,12 @@ from django.urls import include, path, reverse
 
 from .ui import STATUS_VALUES, DomainOverview
 
-PLUGIN_API_VERSION = 2
+PLUGIN_API_VERSION = 3
 
-# Every manifest field plugin API 1 used to name a runtime provider. API 2
-# replaced them with the single integration_provider entry point. A wheel that
-# still passes one fails in the manifest constructor, and the constructor names
-# only the first unexpected keyword -- whichever the wheel happened to pass
-# first -- so the loader has to recognise all of them to report the epoch
+# The manifest fields plugin API 1 named runtime providers with; API 2 has the
+# single integration_provider entry point. A wheel that still passes one fails in the manifest constructor, and the constructor names
+# only the first unexpected keyword (whichever the wheel happened to pass
+# first) so the loader has to recognise all of them to report the epoch
 # instead of an unexplained constructor error.
 PLUGIN_API_1_PROVIDER_FIELDS = (
     "attention_provider",
@@ -91,7 +90,7 @@ class PluginManifest:
     # a native or machine client, which needs a 401 it can act on.
     #
     # Deliberately relative. The host joins each one to url_prefix, so a plugin
-    # can only ever say "these paths of mine" -- never /admin/, never another
+    # can only ever say "these paths of mine": never /admin/, never another
     # plugin's mount.
     token_authenticated_routes: tuple[str, ...] = ()
     operator_capabilities: tuple[str, ...] = ()
@@ -281,7 +280,7 @@ def _validate(manifest: PluginManifest, reference: str) -> None:
     somebody auditing it should be able to read the requirements in order. A
     table of rules would be shorter and harder to check.
 
-    Order is load-bearing -- identity first, because every later message names
+    Order is load-bearing: identity first, because every later message names
     the plugin by the id validated there.
     """
 
@@ -471,14 +470,6 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
     return tuple(sections)
 
 
-def plugin_dashboard_cards() -> tuple[dict[str, Any], ...]:
-    # Derived from the grouped form so the flat and grouped views cannot
-    # disagree about what was provided.
-    return tuple(
-        card for section in plugin_dashboard_sections() for card in section["cards"]
-    )
-
-
 def gather_cards(
     sources: Iterable[tuple[str, Callable[[], Iterable[dict[str, Any]]] | None]],
 ) -> tuple[dict[str, Any], ...]:
@@ -560,7 +551,7 @@ def gather_attention(
     """Collect, validate, attribute and order attention items from any sources.
 
     ``sources`` is ``(id, label, provider)`` per contributor, which is
-    all this needs to know -- so the host's own sections and installed
+    all this needs to know, so the host's own sections and installed
     extensions are gathered by one implementation rather than two that could
     drift on what "urgent" means or on which statuses count.
 
@@ -603,10 +594,8 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     render its sibling domains; HQ's own dashboard composes *every* domain and
     calls ``application.domains.domain_attention_items`` instead.
 
-    Takes no exclusions on purpose. An earlier signature let a composer drop a
-    domain here and substitute that domain's `DomainOverview` -- which is a
-    display surface, and truncates. The queue is the one place a `serious` item
-    is guaranteed to appear, so nothing may quietly remove a domain from it.
+    Takes no exclusions: the queue is the one place a `serious` item is
+    guaranteed to appear, so nothing may remove a domain from it.
     A composer that also renders per-domain panels should group these by
     `source_id` rather than fetch the same question from a second channel.
     """

@@ -5,12 +5,12 @@ audit trail of everything the business does. It is meant to be reachable from a
 private network and a VPN, never from the internet.
 
 Whether that is *true* of any given deployment is a property of its DNS, its
-firewall and its router -- none of which this application can see. A new proxy
+firewall and its router: none of which this application can see. A new proxy
 host, a forwarded port, or a container published to the wrong interface would
 each change the answer silently, and HQ would never notice it had begun
 answering strangers. So the application states the rule itself rather than
 inheriting it: requests are served for private ranges, the VPN's range, and the
-loopback address the container healthcheck probes -- and refused, before
+loopback address the container healthcheck probes, and refused, before
 authentication runs, for anywhere else.
 
 The hard part is not the rule. It is knowing who is asking.
@@ -18,15 +18,15 @@ The hard part is not the rule. It is knowing who is asking.
 Behind a reverse proxy every request arrives from the proxy, whose address is
 private and therefore always passes. A check written against `REMOTE_ADDR`
 alone would be decorative: it would approve the proxy, every time, no matter
-who was on the other side of it. The real client is in `X-Forwarded-For` --
+who was on the other side of it. The real client is in `X-Forwarded-For`,
 which any client can also simply send, so believing it unconditionally is worse
 than not checking at all, because it lets an attacker choose the address HQ
 judges them by.
 
 Both failures come from one question: which hops in that header did
 infrastructure write, and which did a stranger? Only the peer that actually
-connected is known to be truthful. So the chain is walked from the right --
-from the hop the trusted proxy observed -- discarding proxies HQ has been told
+connected is known to be truthful. So the chain is walked from the right
+(from the hop the trusted proxy observed) discarding proxies HQ has been told
 about, and stopping at the first address it has not. That address is the
 closest thing to the caller that HQ can prove, and anything further left is
 attacker-controlled text.
@@ -77,6 +77,27 @@ def split_host_port(value: str) -> tuple[str, str]:
         host, _, port = candidate.rpartition(":")
         return host, port
     return candidate, ""
+
+
+def strict_host(value: str) -> str:
+    """The host a Host header names, lowercased with no trailing dot; "" if malformed.
+
+    For boundaries that fail closed: an unclosed bracket, text after one, or a
+    port that is not a number rejects the whole value rather than guessing.
+    """
+
+    candidate = str(value or "").strip().lower()
+    if candidate.startswith("["):
+        closing = candidate.find("]")
+        suffix = candidate[closing + 1 :] if closing != -1 else ""
+        if closing == -1 or (suffix and not (suffix[:1] == ":" and suffix[1:].isdigit())):
+            return ""
+    host, port = split_host_port(candidate)
+    if port and not port.isdigit():
+        return ""
+    if candidate.count(":") == 1 and not port:
+        return ""
+    return host.rstrip(".")
 
 
 def parse_ip(value: str):
@@ -137,7 +158,7 @@ class TrustedNetworkASGI:
     """The same rule, for what is mounted beside Django rather than inside it.
 
     Static assets are served by Starlette, above the Django stack, so the
-    middleware below never sees them -- a request refused everywhere else still
+    middleware below never sees them: a request refused everywhere else still
     collected the stylesheet. Nothing secret is in there, but a boundary with a
     documented exception is one people reason about incorrectly later, and the
     fix is a wrapper rather than a second copy of the rule: the predicate is

@@ -1,8 +1,5 @@
-{% extends "base.html" %}
-{% block title %}{% if form.instance.pk %}Edit{% else %}Upload{% endif %} receipt{% endblock %}
-{% block content %}
-<h1>{% if form.instance.pk %}Edit receipt{% else %}Upload receipt{% endif %}</h1>
-<p class="muted">Files are stored privately. They are not exposed via a public URL — only signed-in users can fetch them.</p>
+{% extends "page.html" %}
+{% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Read due public registry records into Severino HQ
+Documentation=file:///opt/apps/severino-hq/application/public_registry.py
+Wants=network-online.target
+After=network-online.target docker.service severino-hq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec severino-hq python manage.py refresh_public_registry
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

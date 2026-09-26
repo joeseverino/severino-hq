@@ -12,18 +12,16 @@ script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 readonly env_file="${controller_env}"
 readonly mode="${1:-}"
 readonly container="${HQ_CONTAINER:-severino-hq}"
-readonly ssh_dir="${app_dir}/secrets/ssh"
 readonly acme_dir="${app_dir}/secrets/acme"
 readonly app_env="${app_dir}/secrets/severino_hq_env"
-readonly ca_file="/usr/local/share/ca-certificates/severino-labs-root-ca.crt"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "run-controller.sh must run as root." >&2
     exit 1
 fi
 controller_require_environment
-if [ ! -s "${app_env}" ] || [ ! -s "${ca_file}" ]; then
-    echo "Controller application environment or CA bundle is missing." >&2
+if [ ! -s "${app_env}" ]; then
+    echo "Controller application environment is missing." >&2
     exit 1
 fi
 
@@ -31,20 +29,41 @@ install -d -o root -g root -m 0700 "${acme_dir}"
 # The whole tree, every run, and not only the directory. Certbot saves a renewal
 # by copying the previous key's owner onto the new one, and the controller runs
 # as 10001 without CAP_CHOWN, so a single file left with another group fails the
-# save -- after the CA has issued. Declared here, where root owns the step, so
+# save: after the CA has issued. Declared here, where root owns the step, so
 # anything that re-owned the tree in between is put back before it matters.
 # -h: symlinks themselves, never what they point at.
 chown -R -h 10001:10001 "${acme_dir}"
-runtime_app_env="$(mktemp /run/severino-hq-controller-env.XXXXXX)"
-runtime_ssh_dir="$(mktemp -d /run/severino-hq-controller-ssh.XXXXXX)"
-runtime_tailnet="$(mktemp /run/severino-hq-controller-tailnet.XXXXXX)"
-runtime_tailnet_lock="$(mktemp /run/severino-hq-controller-tka.XXXXXX)"
-runtime_firewall="$(mktemp /run/severino-hq-controller-firewall.XXXXXX)"
-trap 'rm -f "${runtime_app_env}" "${runtime_tailnet}" "${runtime_tailnet_lock}" "${runtime_firewall}"; rm -rf "${runtime_ssh_dir}"' \
-    EXIT HUP INT TERM
+# Everything this run hands the container is staged in one directory on the
+# controller's secret mount (the renderer's tmpfs, kept out of swap) and
+# removed when the run ends. A run
+# killed before its trap fired leaves a directory; the next run clears those.
+find "${controller_runtime_dir}" -mindepth 1 -maxdepth 1 -type d -name 'run.*' \
+    -mmin +120 -exec rm -rf {} +
+run_dir="$(mktemp -d "${controller_runtime_dir}/run.XXXXXX")"
+trap 'rm -rf "${run_dir}"' EXIT
+trap 'exit 1' HUP INT TERM
+runtime_app_env="${run_dir}/env"
+runtime_ssh_dir="${run_dir}/ssh"
+# The roots this host added to its own trust store, as one bundle. Public roots
+# are always trusted; these only add to them, and a host with none mounts none.
+ca_file="${run_dir}/ca.pem"
+for root_cert in /usr/local/share/ca-certificates/*.crt; do
+    [ -f "${root_cert}" ] && cat "${root_cert}"
+done > "${ca_file}"
+chmod 0444 "${ca_file}"
+runtime_tailnet="${run_dir}/tailnet.json"
+runtime_tailnet_lock="${run_dir}/tailnet-lock.json"
+runtime_firewall="${run_dir}/firewall.json"
 install -o root -g root -m 0400 "${app_env}" "${runtime_app_env}"
 chown 10001:10001 "${runtime_app_env}"
-cp -a "${ssh_dir}/." "${runtime_ssh_dir}/"
+# The identities refresh-secrets.sh rendered, copied under the shared lock so
+# the run holds one generation even if a refresh replaces it meanwhile.
+install -d -m 0700 "${runtime_ssh_dir}"
+controller_ssh_lock shared
+if [ -d "${controller_runtime_dir}/ssh" ]; then
+    cp -a "${controller_runtime_dir}/ssh/." "${runtime_ssh_dir}/"
+fi
+exec 8>&-
 chown -R 10001:10001 "${runtime_ssh_dir}"
 image="$(docker inspect --format '{{.Config.Image}}' "${container}")"
 data_volume="$(
@@ -63,23 +82,33 @@ set -a
 . "${env_file}"
 set +a
 
-# Labelled so the sweep this container is about to run can tell that one of the
-# containers it finds is itself. Unlabelled, Docker invents a name for it and
-# the machine grows a row called something different every minute.
+# Labelled with a nonce for this run, and handed the same nonce, so the sweep
+# can tell which of the containers it finds is itself. A fixed label is not
+# enough: any container can set it and drop out of the sweep.
+run_nonce="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+if [ -z "${run_nonce}" ]; then
+    echo "Could not generate a run nonce." >&2
+    exit 1
+fi
 set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --no-healthcheck \
     --label severino-hq.role=controller \
+    --label "severino-hq.run=${run_nonce}" \
+    --env "HQ_CONTROLLER_RUN=${run_nonce}" \
     --security-opt no-new-privileges:true \
     --entrypoint python \
     --mount "type=volume,source=${data_volume},target=/data" \
     --mount "type=bind,source=${runtime_app_env},target=/run/secrets/severino_hq_env,readonly" \
-    --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \
     --mount "type=bind,source=${runtime_ssh_dir},target=/run/secrets/controller-ssh,readonly" \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
     --env HQ_IN_PROCESS=1 \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
-    --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
-    --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
+    --env HQ_ACME_DIR=/var/lib/severino-hq/acme
+if [ -s "${ca_file}" ]; then
+    set -- "$@" \
+        --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \
+        --env HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem
+fi
 
 # The 1Password CLI, lent to the controller for the one run. A certificate that
 # records its facts in a password manager reaches it through `op`, a binary
@@ -105,7 +134,7 @@ if op_binary="$(command -v op 2>/dev/null)"; then
 fi
 
 # The tailnet, read from the daemon this machine is already a peer of rather
-# than from Tailscale's API -- so there is no credential for the controller to
+# than from Tailscale's API, so there is no credential for the controller to
 # hold.
 #
 # The answer is fetched here and passed in as a file. The socket itself is not
@@ -155,7 +184,7 @@ fi
 # Distilled here rather than mounted: the answer is one boolean and the rule
 # behind it, where the full ruleset is a map of every way into this machine, and
 # the container asking the question holds every provider credential. Same terms
-# as the tailnet socket above -- root reads, the container receives a reading.
+# as the tailnet socket above: root reads, the container receives a reading.
 #
 # Absent when nft is missing or the table is not there, which is a controller
 # that reports the binding as unobserved. That is the honest answer on a host

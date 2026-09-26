@@ -1,20 +1,5 @@
-{% extends "base.html" %}
-{% block title %}{{ item.title }} · Content{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ item.title }}</h1>
-    <p class="muted">{{ item.get_content_type_display }} · <span class="pill pill-{{ item.status }}">{{ item.get_status_display }}</span></p>
-  </div>
-  <div class="page-actions">
-    {% if item.published_url %}
-      <a class="btn" href="{{ item.published_url }}" target="_blank" rel="noopener noreferrer">↗ Published</a>
-    {% endif %}
-    <a class="btn" href="{% url 'content:edit' item.slug %}">Edit</a>
-    <a class="btn danger" href="{% url 'content:delete' item.slug %}">Delete</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ item.slug }}</code></dd>
   {% if item.topic %}<dt>Description</dt><dd>{{ item.topic }}</dd>{% endif %}
@@ -68,7 +53,7 @@
     </div>
     <div>
       <h3>Documentation</h3>
-      {% if item.related_documentation.all %}<ul>{% for d in item.related_documentation.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+      {% if item.related_documentation.all %}<ul>{% for d in item.related_documentation.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
     </div>
     <div>
       <h3>Expenses</h3>

@@ -7,9 +7,9 @@ repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 # Optional, gitignored, and the difference between the composed pass running
-# and being skipped. It supplies the three values that pass needs -- an
+# and being skipped. It supplies the three values that pass needs (an
 # interpreter with the extensions importable, the path to reach them, and which
-# to enable -- so `./scripts/check.sh` with no arguments runs the whole gate
+# to enable) so `./scripts/check.sh` with no arguments runs the whole gate
 # instead of silently covering less. Nothing in it is committed, which is why
 # the host can be told where the extensions are without naming them in source.
 # See scripts/dev.env.example. Real environment variables still win.
@@ -23,7 +23,7 @@ fi
 # CHECK_PYTHON overrides the interpreter. The composed pass needs one that has
 # the extensions importable, and this repository's own venv deliberately does
 # not: the extensions are private and are never a dependency of the host. The
-# interpreter that has them is whichever venv installed them -- `hq dev` already
+# interpreter that has them is whichever venv installed them: `hq dev` already
 # knows which, and passes it here.
 if [ -n "${CHECK_PYTHON:-}" ]; then
     python=$CHECK_PYTHON
@@ -54,7 +54,7 @@ export SEVERINO_LOG_LEVEL=CRITICAL
 
 # The suite runs three times here, so its cost is the gate's cost. Workers get
 # their own database file rather than the shared in-memory one Django would
-# reach for -- see core/test_runner.py -- which is what makes this safe as well
+# reach for (see core/test_runner.py) which is what makes this safe as well
 # as roughly twice as fast. Set CHECK_PARALLEL=1 to rule it out when a failure
 # looks order- or isolation-dependent.
 parallel=${CHECK_PARALLEL:-auto}
@@ -69,56 +69,25 @@ echo "[check] Django configuration and migration drift"
 echo "[check] Complete test suite"
 "$python" manage.py test --noinput --parallel "$parallel"
 
-# Again with DEBUG off, because production is not DEBUG and neither is the
-# composed image, which runs this same suite as its own admission gate. Some
-# behaviour is chosen by that flag rather than only logged differently by it:
-# plugin admission defaults to on when DEBUG is off, and a suite that only
-# passed with it disabled cleared this gate and CI before failing inside the
-# composition, where the fix costs a rebuild instead of a rerun.
+# Again with DEBUG off, as production and the composed image run it. Some
+# behaviour is chosen by that flag: plugin admission defaults to on without it.
 echo "[check] Complete test suite (DEBUG off, as production runs it)"
-# The host alone, which is what this pass is for -- the composed run is the one
-# below. The extension set is cleared rather than inherited: exported by
-# whoever last started a dev server, it turned this into a half-composed run
-# that then failed on admission, because DEBUG is unset one line up and
-# admission switches itself on with it.
+# The host alone. The extension set is cleared rather than inherited from a dev
+# server's environment; the composed run is the one below.
 env -u DJANGO_DEBUG -u SEVERINO_HQ_PLUGINS \
     DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
     DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
     "$python" manage.py test --noinput --parallel "$parallel"
 
-# And once more with whatever the caller has installed, if anything.
-#
-# Compose is where the host and its extensions first meet, and it runs long
-# after the merge button. Every host test that quietly assumed nothing was
-# installed has passed here, passed CI, and failed there -- most recently a
-# dashboard query budget that is correct for the host alone and cannot be for a
-# page that composes every installed domain. The fix always costs a rebuild
-# rather than a rerun, which is why it feels like the plugin workflow is the
-# problem when the problem is that nothing ran this combination sooner.
-#
-# The set comes from the environment and is never named here: this repository is
-# public and the extensions it composes are not. Supply PYTHONPATH and
-# SEVERINO_HQ_PLUGINS -- `hq dev` already builds both -- and this pass runs.
-# Without them it is skipped, so public CI and a fresh checkout are unaffected.
+# And once more with whatever extensions the caller supplies (PYTHONPATH and
+# SEVERINO_HQ_PLUGINS), so the host and its extensions meet before compose does.
+# Without them it is skipped.
 if [ -n "${SEVERINO_HQ_PLUGINS:-}" ]; then
     echo "[check] Complete test suite (composed with the supplied plugin set)"
-    # Admission off for this pass, and only this pass.
-    #
-    # Admission proves an extension wheel was built and signed by the workflow
-    # that claims it. That is a supply-chain question, it is answered by cosign
-    # during compose, and its evidence is a signed lock file which only compose
-    # produces. Demanded here it cannot be satisfied from a checkout, and it is
-    # not asked at the right moment either.
-    #
-    # Without this the pass below never ran at all: DEBUG is unset one line up,
-    # so admission switched itself on, went looking for that lock, and raised
-    # while `config.settings` was still importing -- before a single test could
-    # execute. A gate whose whole purpose is to catch host-and-extension
-    # problems before the merge button silently caught nothing.
-    #
-    # What this pass is actually for is the other question: does the host still
-    # work with every domain installed. Query budgets, navigation, dashboards.
-    # None of that depends on who signed the wheel.
+    # Admission off for this pass only. It proves a wheel was built and signed
+    # by the workflow that claims it, from a lock file only compose produces;
+    # a checkout cannot satisfy it. This pass asks whether the host still works
+    # with every domain installed.
     env -u DJANGO_DEBUG \
         DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-check-sh-not-a-real-secret}" \
         DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
@@ -146,8 +115,7 @@ else
 fi
 
 # The same two lists CI's lint job uses, from the same file, so this gate covers
-# what that job covers. It previously linted a glob and stopped there, which let
-# a change pass here and fail there -- the one thing a local gate must not do.
+# what that job covers.
 . ./scripts/toolchain.env
 
 echo "[check] Shell syntax"

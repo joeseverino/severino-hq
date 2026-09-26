@@ -1,29 +1,25 @@
-{% extends "base.html" %}
+{% extends "page.html" %}
 {% load humanize %}
-{% block title %}Reports{% endblock %}
-{% block content %}
-<div class="page-head">
-  <h1>Reports &amp; exports</h1>
-  <form method="get" class="inline">
-    <label for="year">Year:</label>
-    <select name="year" id="year" data-submit-on-change>
-      {% for y in available_years %}
-        <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
-      {% endfor %}
-    </select>
-  </form>
-</div>
+{% block page %}
+<form method="get" class="inline">
+  <label for="year">Year:</label>
+  <select name="year" id="year" data-submit-on-change>
+    {% for y in available_years %}
+      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+    {% endfor %}
+  </select>
+</form>
 
 <section class="kpi-grid">
-  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{{ expenses_count }} record{{ expenses_count|pluralize }}</span></div>
-  <div class="kpi"><span class="label">Est. deductible {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate — not tax advice.</span></div>
+  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">${{ expenses_total|floatformat:2|intcomma }}</span><span class="muted">{{ expenses_count|counted:"record" }}</span></div>
+  <div class="kpi"><span class="label">Est. deductible {{ year }}</span><span class="value">${{ expenses_deductible|floatformat:2|intcomma }}</span><span class="muted">Estimate, not tax advice</span></div>
   <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">${{ assets_total|floatformat:2|intcomma }} total</span></div>
   <div class="kpi"><span class="label">Docs needing review</span><span class="value">{{ docs_needing_review_count }}</span></div>
 </section>
 
 <div class="two-col">
   <section>
-    <h2>Expenses by category — {{ year }}</h2>
+    <h2>Expenses by category, {{ year }}</h2>
     {% if expenses_by_category %}
       <div class="table-scroll">
       <table class="data-table">
@@ -39,11 +35,11 @@
   </section>
 
   <section>
-    <h2>Largest expenses — {{ year }}</h2>
+    <h2>Largest expenses, {{ year }}</h2>
     {% if largest_expenses %}
       <ul class="list-rows">
         {% for e in largest_expenses %}
-          <li><a href="{{ e.get_absolute_url }}">{{ e.vendor }} — {{ e.item }}</a> <span class="muted">{{ e.date }} · {{ e.get_category_display }}</span> <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></li>
+          <li><a href="{{ e.get_absolute_url }}">{{ e.vendor }} · {{ e.item }}</a> <span class="muted">{{ e.date }} · {{ e.get_category_display }}</span> <strong>${{ e.total_cost|floatformat:2|intcomma }}</strong></li>
         {% endfor %}
       </ul>
     {% else %}<p class="muted">None.</p>{% endif %}
@@ -52,14 +48,14 @@
   <section>
     <h2>Content by status</h2>
     {% if content_status_counts %}
-      <ul class="list-rows">{% for row in content_status_counts %}<li>{{ row.status }} — <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
+      <ul class="list-rows">{% for row in content_status_counts %}<li>{{ row.status }} <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
     {% else %}<p class="muted">No content.</p>{% endif %}
   </section>
 
   <section>
     <h2>Projects by status</h2>
     {% if project_status_counts %}
-      <ul class="list-rows">{% for row in project_status_counts %}<li>{{ row.status }} — <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
+      <ul class="list-rows">{% for row in project_status_counts %}<li>{{ row.status }} <strong>{{ row.n }}</strong></li>{% endfor %}</ul>
     {% else %}<p class="muted">No projects.</p>{% endif %}
   </section>
 </div>
@@ -69,15 +65,15 @@
   {% if docs_needing_review %}
     <ul class="list-rows">
       {% for d in docs_needing_review %}
-        <li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a> <span class="muted">last reviewed: {{ d.last_reviewed|default:"never" }}</span></li>
+        <li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a> <span class="muted">last reviewed {{ d.last_reviewed|default:"never" }}</span></li>
       {% endfor %}
     </ul>
-  {% else %}<p class="muted">All caught up.</p>{% endif %}
+  {% else %}<p class="muted">No docs need review.</p>{% endif %}
 </section>
 
 <section>
   <h2>Exports</h2>
-  <p class="muted">All exports omit secrets and sensitive doc bodies. Receipt files are never exported.</p>
+  <p class="muted">Exports exclude secrets, sensitive doc bodies, and receipt files.</p>
   <div class="export-grid">
     <a class="btn" href="{% url 'reports:expenses_csv' %}?year={{ year }}">expenses-{{ year }}.csv</a>
     <a class="btn" href="{% url 'reports:assets_csv' %}?year={{ year }}">assets-{{ year }}.csv</a>
@@ -97,7 +93,7 @@
     <ul class="audit-list">
       {% for ev in recent_audit %}
         <li><span class="muted">{{ ev.created_at }}</span> <strong>{{ ev.actor_label }}</strong>
- {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.object_type }}</span>{% endif %}{% if ev.object_repr %} — {{ ev.object_repr }}{% endif %}</li>
+ {{ ev.get_action_display|lower }} {% if ev.object_type %}<span class="muted">{{ ev.type_label|lower }}</span>{% endif %}{% if ev.object_repr %} · {{ ev.object_repr }}{% endif %}</li>
       {% endfor %}
     </ul>
   {% endif %}

@@ -1,0 +1,20 @@
+<form method="post" action="{% url 'dashboard_links' %}" data-live-form>
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{% url 'dashboard' %}">
+  <ul class="ext-choices">
+    {% for choice in external_choices %}
+      <li>
+        <label>
+          <input type="checkbox" name="href" value="{{ choice.href }}"{% if choice.chosen %} checked{% endif %}>
+          <span class="ext-choice-label">{{ choice.label }}</span>
+          <span class="ext-choice-sub muted">{{ choice.sub }}</span>
+        </label>
+      </li>
+    {% endfor %}
+  </ul>
+  <div class="ext-chooser-actions">
+    <button type="submit" class="btn primary">Save</button>
+    <a class="btn" href="{% url 'dashboard' %}" data-live-cancel>Cancel</a>
+    <span class="ext-chooser-status muted" data-live-status role="status"></span>
+  </div>
+</form>

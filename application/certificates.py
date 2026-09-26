@@ -1,12 +1,12 @@
 """Taking a certificate an operator generated elsewhere, and holding it safely.
 
-`cert-gen <service>.homelab` runs on the Mac against an air-gapped CA and prompts
+`cert-gen <service>.home.arpa` runs on the Mac against an air-gapped CA and prompts
 for a passphrase, so HQ cannot issue an internally signed certificate and should
 not pretend to. What it can do is everything after that: install the result
 wherever it belongs, keep it so installing it somewhere else later is a click,
 and say when it is about to stop working.
 
-Only the leaf certificate and its key move -- the same pair that would otherwise
+Only the leaf certificate and its key move: the same pair that would otherwise
 be pasted into a provider's web form by hand. The root CA key stays where it is.
 """
 
@@ -46,40 +46,35 @@ def inspect(fullchain: str, private_key: str) -> dict[str, Any]:
 
     The pairing check is the point. A mismatched pair is accepted by every
     editor and every clipboard and fails only when a browser refuses the
-    handshake -- after deployment, on a service that was working before.
+    handshake: after deployment, on a service that was working before.
     """
 
     try:
         certificate = x509.load_pem_x509_certificate(fullchain.encode())
     except (ValueError, TypeError) as exc:
         raise CertificateError(
-            "That does not parse as a PEM certificate. Paste the contents of "
-            "fullchain.pem."
+            "Not a PEM certificate. Paste the contents of fullchain.pem."
         ) from exc
     try:
         key = serialization.load_pem_private_key(private_key.encode(), password=None)
     except TypeError as exc:
         raise CertificateError(
-            "That private key is passphrase-protected. HQ cannot hold a key it "
-            "has to be prompted for; export it without one."
+            "The private key has a passphrase. Export it without one."
         ) from exc
     except (ValueError, UnsupportedAlgorithm) as exc:
         raise CertificateError(
-            "That does not parse as a PEM private key. Paste the contents of "
-            "the .key file."
+            "Not a PEM private key. Paste the contents of the .key file."
         ) from exc
 
     if key.public_key().public_numbers() != certificate.public_key().public_numbers():
         raise CertificateError(
-            "That private key does not belong to that certificate. Installing "
-            "the pair would break TLS on everything it is deployed to."
+            "The private key does not match the certificate."
         )
 
     expires = certificate.not_valid_after_utc
     if expires <= timezone.now():
         raise CertificateError(
-            f"That certificate expired on {expires:%-d %b %Y}. Generate a new "
-            "one before installing it."
+            f"The certificate expired on {expires:%-d %b %Y}. Upload a current one."
         )
     return {
         "fingerprint_sha256": certificate.fingerprint(hashes.SHA256()).hex(),
@@ -117,8 +112,7 @@ def store_certificate(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     if not secrets.available():
         raise secrets.SecretsUnavailable(
-            "HQ has no secret store key configured, so it will not hold a "
-            "private key. Nothing was stored."
+            "No secret store key is configured. Nothing was stored."
         )
     details = inspect(command.fullchain, command.private_key)
     try:
@@ -139,15 +133,13 @@ def store_certificate(
     )
     # What it covers, written where a failed resolution cannot lose it. Held
     # only on the resolved spec, a certificate whose install target had been
-    # removed would resolve to nothing and so cover nothing -- and the names it
+    # removed would resolve to nothing and so cover nothing, and the names it
     # answers for would read as uncovered because of a fault somewhere else
     # entirely. Read from the artifact, so an upload is what keeps it true.
     resource.spec = {**resource.spec, "domains": details["domains"]}
     # New material is new work, even when it covers exactly what the last one
     # did: a renewal is a different certificate at the same names, and the whole
-    # point of uploading it is to get it installed. Without this the page said
-    # "HQ installs it on the next controller pass" and no pass ever had a reason
-    # to run -- the generation the controller compares against had not moved.
+    # point of uploading it is to get it installed, so the generation moves.
     resource.generation += 1
     resource.desired_fingerprint = desired_fingerprint(
         resource.kind,

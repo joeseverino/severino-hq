@@ -3,22 +3,26 @@
 Separate from the infrastructure views on purpose. The registry answers "which
 declaration is wrong"; this answers "what does this domain say", which is the
 question an operator actually arrives with and the one no per-resource page can
-answer. Both read the same declarations -- there is no second store and no
+answer. Both read the same declarations: there is no second store and no
 second truth, only a second way of slicing the first.
 """
 
 from __future__ import annotations
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views import View
 
 from application.infrastructure import NotFoundError, PolicyError
+from application.pages import PageAction, page_context
+from application.entity_links import entity_link
+from application.relationships import relationships_for
+from application.resource_capabilities import public_dns_enabled, resource_capabilities
 from application.inventory import AdoptCommand, adopt, inventory_state
 from application.security import web_principal
 
@@ -46,8 +50,10 @@ from application.zones import (
     RECORD_KIND,
     ZONE_KIND,
     adopt_zone_records,
+    domain_context,
     zone_catalog,
 )
+from application.ui import counted
 from control_plane.providers import normalized_hostname
 
 
@@ -56,11 +62,11 @@ def _records_lede(zone) -> str:
 
     "0 managed by HQ, 17 not yet" described a backlog that was never work: a
     declared domain takes on its records with it, so anything left is genuinely
-    new -- added at the provider since.
+    new: added at the provider since.
     """
 
     if not zone.managed:
-        return f"{len(zone.records)} published. HQ manages none of them yet."
+        return f"{len(zone.records)} published. None managed."
     if not zone.adoptable:
         # "Managed" conflated two things: that HQ holds a declaration, and that
         # the declaration has been applied. The State column already says which
@@ -71,7 +77,7 @@ def _records_lede(zone) -> str:
     # as a backlog, because it is not work anyone has to do.
     return (
         f"{zone.managed_count} declared in HQ. "
-        f"{len(zone.adoptable)} found since the last sweep, taken on shortly."
+        f"{len(zone.adoptable)} new since the last sweep, adopted on the next one."
     )
 
 
@@ -81,7 +87,7 @@ class ZoneIndexView(LoginRequiredMixin, View):
     A list page is a stop on the way to the page an operator actually wanted;
     the domain tabs already switch between them, so listing them again is a
     click that teaches nothing. Which domain this lands on is the operator's
-    to decide -- the catalog puts pinned domains first, so starring one makes
+    to decide: the catalog puts pinned domains first, so starring one makes
     it the one this opens.
     """
 
@@ -93,7 +99,11 @@ class ZoneIndexView(LoginRequiredMixin, View):
         return render(
             request,
             "control_plane/zone_index.html",
-            {"zones": zones, "inventory": inventory_state()},
+            {
+                "zones": zones,
+                "inventory": inventory_state(),
+                **page_context("Domains", "Cloudflare zones and their records."),
+            },
         )
 
 
@@ -136,6 +146,11 @@ class ZoneMailView(LoginRequiredMixin, View):
                 "spf_defaults": SPF_DEFAULTS,
                 "spf_limit": SPF_LOOKUP_LIMIT,
                 "spf_default": _spf_default(_spf_value(found)),
+                **page_context(
+                    f"Email for {found.zone}",
+                    "MX, SPF, DKIM and DMARC for this domain.",
+                    trail=((found.zone, found.url),),
+                ),
             },
         )
 
@@ -143,7 +158,7 @@ class ZoneMailView(LoginRequiredMixin, View):
         """Write a composed policy back through the record's own use case."""
 
         if record is None or not record.resource_key:
-            messages.error(request, f"No {what} record is declared here yet.")
+            messages.error(request, f"No {what} record declared.")
             return redirect("zones:mail", zone=zone.zone)
         resource = ManagedResource.objects.get(key=record.resource_key)
         try:
@@ -161,7 +176,7 @@ class ZoneMailView(LoginRequiredMixin, View):
             messages.error(request, _readable_error(exc))
             return redirect("zones:mail", zone=zone.zone)
         messages.success(
-            request, f"{what} saved. HQ publishes it within about a minute."
+            request, f"{what} saved. Publishing within a minute."
         )
         return redirect("zones:mail", zone=zone.zone)
 
@@ -216,19 +231,36 @@ class ZonePinView(LoginRequiredMixin, View):
         return redirect(safe_next(request) or reverse("zones:index"))
 
 
+def _pin_action(zone) -> PageAction:
+    """Star a domain from its own head.
+
+    Starring decides which domain `/domains/` opens: the catalog sorts pinned
+    first, and that page goes to the first managed domain.
+    """
+
+    return PageAction(
+        "★ Default" if zone.pinned else "☆ Set as default",
+        reverse("zones:pin", args=[zone.zone]),
+        method="post",
+        title=(
+            "Domains opens here. Click to unstar."
+            if zone.pinned
+            else "Open Domains on this domain."
+        ),
+    )
+
+
 class ZoneDetailView(LoginRequiredMixin, View):
     """One domain: every record in it, and what the zone currently says."""
 
     def get(self, request, zone):
-        # Built once and searched, rather than built to find one and built again
-        # for the switcher. Each build reads every declaration, every stored
-        # sweep and the whole unmanaged diff, so doing it twice doubled the cost
-        # of the page to produce two identical answers.
-        zones = zone_catalog(pinned=pinned(request.user, DOMAIN))
-        wanted = normalized_hostname(zone)
-        found = next((item for item in zones if item.zone == wanted), None)
-        if found is None:
+        return self._page(request, zone)
+
+    def _page(self, request, zone):
+        context = domain_context(zone, pinned=pinned(request.user, DOMAIN))
+        if context is None:
             raise Http404("No such domain.")
+        found, zones = context.zone, context.zones
         return render(
             request,
             "control_plane/zone_detail.html",
@@ -243,24 +275,57 @@ class ZoneDetailView(LoginRequiredMixin, View):
                 # it is, every write below would be refused, and a page full of
                 # buttons that always fail is worse than a page that says so
                 # once.
-                "public_dns_enabled": getattr(
-                    settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
-                ),
+                "public_dns_enabled": public_dns_enabled(),
                 "records_lede": _records_lede(found),
+                "relationships": relationships_for(
+                    f"zone:{found.zone}", principal=web_principal(request.user)
+                ),
+                **page_context(
+                    found.zone,
+                    (
+                        format_html(
+                            'Records published in this domain, through <a href="{}" data-entity="{}">{}</a>.',
+                            *_connection_mention(found.connection_ref),
+                        )
+                        if found.connection_ref
+                        else "Records published in this domain."
+                    ),
+                    actions=(_pin_action(found), *_declaration_actions(found)),
+                ),
             },
         )
+
+
+def _declaration_actions(zone) -> tuple[PageAction, ...]:
+    """Edit and removal for the domain's declaration, which lives on this page."""
+
+    if not zone.resource_key:
+        return ()
+    resource = ManagedResource.objects.filter(key=zone.resource_key).first()
+    if resource is None:
+        return ()
+    capabilities = resource_capabilities(resource)
+    if capabilities.removal_pending:
+        return ()
+    actions = [PageAction("Edit domain", reverse("control_plane:edit", args=[resource.key]))]
+    if capabilities.removal != "unavailable":
+        actions.append(
+            PageAction(
+                "Stop managing" if capabilities.removal == "forget" else "Remove",
+                reverse("control_plane:remove", args=[resource.key]),
+                danger=True,
+            )
+        )
+    return tuple(actions)
 
 
 class ZoneAdoptView(LoginRequiredMixin, View):
     """Take on a domain and everything published in it, exactly as it is.
 
-    One action, because there was never a second decision in it. Asked per
-    record, the page put seventeen Adopt buttons in front of an operator who
-    had just said this domain was theirs, and every one of them had the same
-    answer. The records another system owns are the real exception, and HQ
-    settles that itself: an ACME challenge is working material HQ makes and
+    One action: declaring the domain is the decision. The records another
+    system owns are the exception, and HQ settles that itself: an ACME challenge is working material HQ makes and
     clears up inside an issuance, not desired state, so it is never adopted
-    and never listed -- see ``zones.EPHEMERAL_PREFIXES``.
+    and never listed: see ``zones.EPHEMERAL_PREFIXES``.
     """
 
     def post(self, request, zone):
@@ -284,8 +349,13 @@ class ZoneAdoptView(LoginRequiredMixin, View):
 
         messages.success(
             request,
-            f"{zone} is managed by HQ as “{result['resource']['key']}”, with "
-            f"{adopted} record{'' if adopted == 1 else 's'} exactly as "
-            "configured now. Nothing changed at Cloudflare.",
+            f"{zone} adopted as “{result['resource']['key']}” with "
+            f"{counted(adopted, 'record')}. "
+            "Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)
+
+
+def _connection_mention(ref: str) -> tuple[str, str, str]:
+    link = entity_link("connection", ref)
+    return link.url, link.kind_label, link.label

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import Any
 
@@ -22,13 +22,14 @@ from control_plane.models import (
     WeatherObservation,
 )
 
+from . import readings
 from .cadence import ring_doorbell
-from .machines import machine_catalog
+from .connections import machines_once
 from .security import AuthorizationError, Capability, Principal
 
 
-# Older than this, a reading is refreshed when the dashboard is opened -- and
-# only then, since it costs a trip to a machine.
+# Older than this, opening the dashboard asks for a refresh (a POST from the
+# page), since a reading costs a trip to a machine.
 GLANCE_STALE_AFTER = timedelta(minutes=5)
 
 
@@ -95,9 +96,21 @@ def connection_specs():
 
 @dataclass(frozen=True)
 class DashboardPanelSpec:
+    """What a glance panel is and how its readings are shown.
+
+    ``labels`` renames a reported metric everywhere it is shown; ``short_labels``
+    names it in the compact head. ``alert_metric`` is the metric counted as the
+    panel's alert chip, dropped while it reads zero.
+    """
+
     id: str
     label: str
     empty: str
+    icon: str
+    head_labels: bool = True
+    alert_metric: str = ""
+    labels: tuple[tuple[str, str], ...] = ()
+    short_labels: tuple[tuple[str, str], ...] = ()
 
 
 def dashboard_configuration() -> DashboardConfiguration:
@@ -110,13 +123,29 @@ def panel_specs(
     configuration: DashboardConfiguration | None = None,
 ) -> tuple[DashboardPanelSpec, ...]:
     configuration = configuration or dashboard_configuration()
-    specs = [DashboardPanelSpec("infrastructure", "Machines", "Refresh to read them.")]
+    specs = [
+        DashboardPanelSpec(
+            "infrastructure",
+            configuration.infrastructure_label,
+            "Choose “Show on dashboard” in a machine's settings.",
+            icon="server",
+            short_labels=(
+                ("Container CPU", "CPU"),
+                ("Container memory", "Memory"),
+                ("Docker storage", "Storage"),
+            ),
+        )
+    ]
     if configuration.weather_point:
         specs.append(
             DashboardPanelSpec(
                 "weather",
                 configuration.weather_label,
                 "Refresh to read the National Weather Service.",
+                icon="weather",
+                head_labels=False,
+                alert_metric="Alerts",
+                labels=(("Now", "Conditions"),),
             )
         )
     return tuple(specs)
@@ -136,7 +165,7 @@ def _dashboard_machines() -> tuple[ManagedResource, ...]:
 def _machine_routes(
     resources: tuple[ManagedResource, ...],
 ) -> dict[int, tuple[str, ...]]:
-    catalog = {item.name.lower(): item for item in machine_catalog()}
+    catalog = {item.name.lower(): item for item in machines_once()}
     controller_ids = set(
         ProviderConnection.objects.filter(reachable=True).values_list(
             "controller_id", flat=True
@@ -146,9 +175,10 @@ def _machine_routes(
     for resource in resources:
         name = str(resource.spec.get("name") or resource.key).lower()
         found = catalog.get(name)
-        reached_by = tuple(found.reached_by) if found else ()
-        if reached_by or resource.key in controller_ids:
-            routes[resource.pk] = reached_by
+        # Telemetry is read through a credential that opens the machine.
+        opened_by = tuple(found.opened_by) if found else ()
+        if opened_by or resource.key in controller_ids:
+            routes[resource.pk] = opened_by
     return routes
 
 
@@ -233,97 +263,161 @@ def save_dashboard_settings(
     return {"ok": True}
 
 
+def _panel(
+    spec: DashboardPanelSpec,
+    *,
+    payload: dict[str, Any],
+    observed_at: Any,
+    refreshing: bool,
+    refreshable: bool,
+) -> dict[str, Any]:
+    """One panel as the glance template reads it, from its spec and reading."""
+
+    payload = dict(payload)
+    if spec.alert_metric and payload.get("metrics"):
+        payload["metrics"] = [
+            metric
+            for metric in payload["metrics"]
+            if not (
+                str(metric.get("label", "")).strip().casefold()
+                == spec.alert_metric.casefold()
+                and str(metric.get("value", "")).strip() == "0"
+            )
+        ]
+    return {
+        "id": spec.id,
+        "label": spec.label,
+        "empty": spec.empty,
+        "icon": spec.icon,
+        "head_labels": spec.head_labels,
+        "payload": payload,
+        "observed_at": observed_at,
+        "refreshing": refreshing,
+        "refreshable": refreshable,
+        "readings": tuple(
+            _glance_reading(metric, spec) for metric in payload.get("metrics", [])
+        ),
+    }
+
+
 def dashboard_panels(
     configuration: DashboardConfiguration | None = None,
 ) -> tuple[dict[str, Any], ...]:
     configuration = configuration or dashboard_configuration()
+    specs = {spec.id: spec for spec in panel_specs(configuration)}
     machine_resources = _dashboard_machines()
     routes = _machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
     weather = WeatherObservation.objects.filter(point=point).first() if point else None
+    telemetry = readings.stored_many(
+        readings.machine_telemetry(resource.key) for resource in machine_resources
+    )
     pending = set(
         DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list(
             "panel_id", flat=True
         )
     )
-    panels = [
-        {
-            "id": f"machine-{resource.pk}",
-            "label": (
-                configuration.infrastructure_label
+    panels = []
+    for resource in machine_resources:
+        panel_id = f"machine-{resource.pk}"
+        reading = telemetry.get(readings.machine_telemetry(resource.key))
+        spec = replace(
+            specs["infrastructure"],
+            id=panel_id,
+            label=(
+                specs["infrastructure"].label
                 if len(machine_resources) == 1
                 else str(resource.spec.get("name") or resource.key)
             ),
-            "empty": (
+            empty=(
                 "Refresh to read this machine."
                 if resource.pk in routes
                 else "No controller connection reaches this machine yet."
             ),
-            "payload": (resource.status or {}).get("telemetry") or {},
-            "observed_at": resource.last_observed_at,
-            "refreshing": f"machine-{resource.pk}" in pending,
-            "refreshable": resource.pk in routes,
-        }
-        for resource in machine_resources
-    ]
+        )
+        panels.append(
+            _panel(
+                spec,
+                payload=getattr(reading, "value", None) or {},
+                observed_at=getattr(reading, "observed_at", None),
+                refreshing=panel_id in pending,
+                refreshable=resource.pk in routes,
+            )
+        )
     if not panels:
         panels.append(
-            {
-                "id": "infrastructure",
-                "label": configuration.infrastructure_label,
-                "empty": "Choose “Show on dashboard” in a machine's settings.",
-                "payload": {},
-                "observed_at": None,
-                "refreshing": False,
-                "refreshable": False,
-            }
+            _panel(
+                specs["infrastructure"],
+                payload={},
+                observed_at=None,
+                refreshing=False,
+                refreshable=False,
+            )
         )
-    if configuration.weather_point:
-        weather_payload = dict(weather.payload) if weather else {}
-        if weather_payload.get("metrics"):
-            weather_payload["metrics"] = [
-                metric
-                for metric in weather_payload["metrics"]
-                if not (
-                    str(metric.get("label", "")).strip().casefold() == "alerts"
-                    and str(metric.get("value", "")).strip() == "0"
-                )
-            ]
+    if "weather" in specs:
         panels.append(
-            {
-                "id": "weather",
-                "label": configuration.weather_label,
-                "empty": "Refresh to read the National Weather Service.",
-                "payload": weather_payload,
-                "observed_at": weather.observed_at if weather else None,
-                "refreshing": "weather" in pending,
-                "refreshable": bool(machine_resources),
-            }
+            _panel(
+                specs["weather"],
+                payload=weather.payload if weather else {},
+                observed_at=weather.observed_at if weather else None,
+                refreshing="weather" in pending,
+                refreshable=bool(machine_resources),
+            )
         )
-    cutoff = timezone.now() - GLANCE_STALE_AFTER
-    return tuple(
+    now = timezone.now()
+    cutoff = now - GLANCE_STALE_AFTER
+    outdated_before = now - expected_cadence()
+    shown = tuple(
         {
             **panel,
             "stale": bool(panel["observed_at"] and panel["observed_at"] <= cutoff),
-            "readings": tuple(
-                _glance_reading(metric)
-                for metric in panel["payload"].get("metrics", [])
+            # Past the cadence a refresh is answered within: not a current
+            # reading, so it is shown as of its age.
+            "outdated": bool(
+                panel["observed_at"] and panel["observed_at"] <= outdated_before
             ),
         }
         for panel in panels
     )
+    # Current readings lead; an outdated one steps aside.
+    return tuple(sorted(shown, key=lambda panel: panel["outdated"]))
 
 
-def _glance_reading(metric: dict[str, str]) -> dict[str, Any]:
-    """Compact labels and bounded meters without altering the stored observation."""
+def glance_context(
+    configuration: DashboardConfiguration | None = None,
+    panels: tuple[dict[str, Any], ...] | None = None,
+) -> dict[str, Any]:
+    """What the glance template reads, for the dashboard and its own endpoint."""
 
-    label = metric.get("label", "")
-    display_label = {
-        "Container CPU": "CPU",
-        "Container memory": "Memory",
-        "Docker storage": "Storage",
-        "Now": "Conditions",
-    }.get(label, label)
+    configuration = configuration or dashboard_configuration()
+    panels = dashboard_panels(configuration) if panels is None else panels
+    return {
+        "dashboard_panels": panels,
+        "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
+        "dashboard_glance_settings": configuration,
+    }
+
+
+def expected_cadence() -> timedelta:
+    """How old a glance reading may be and still be current.
+
+    A refresh is asked for when the dashboard opens and answered by the
+    controller's next pass, which the sweep cadence bounds.
+    """
+
+    from .facts import stale_after
+
+    return max(stale_after(), GLANCE_STALE_AFTER)
+
+
+def _glance_reading(
+    metric: dict[str, str], spec: DashboardPanelSpec
+) -> dict[str, Any]:
+    """Display labels and bounded meters without altering the stored observation."""
+
+    reported = metric.get("label", "")
+    label = dict(spec.labels).get(reported, reported)
+    short_label = dict(spec.short_labels).get(reported, label)
     value = str(metric.get("value", ""))
     percent = None
     if value.endswith("%"):
@@ -334,7 +428,13 @@ def _glance_reading(metric: dict[str, str]) -> dict[str, Any]:
         else:
             if 0 <= parsed <= 100:
                 percent = parsed
-    return {**metric, "display_label": display_label, "percent": percent}
+    return {
+        **metric,
+        "label": label,
+        "short_label": short_label,
+        "alert": bool(spec.alert_metric) and reported == spec.alert_metric,
+        "percent": percent,
+    }
 
 
 @transaction.atomic
@@ -368,19 +468,11 @@ def request_stale_panel_refresh(
 ) -> tuple[str, ...]:
     """Ask for the panels that already know they are out of date.
 
-    These readings are expensive -- each one reaches a machine -- so they are
-    taken on request rather than on a schedule. Nothing was making the request:
-    a card went stale, said so in small type, and waited for somebody to
-    notice and press a button. The dashboard is the page you open to find out
-    how things are, so opening it is the request.
+    The dashboard posts this when it opens on a stale reading. Only panels that
+    are stale, refreshable and not already waiting on a refresh are asked for,
+    so repeat views of one stale card ask once.
 
-    Only panels that are already stale, that can be refreshed, and that are not
-    waiting on one: a view is not a reason to re-ask a question that is still
-    outstanding, and repeat views of the same stale card ask once.
-
-    Silent for a principal who cannot ask. Reading a dashboard is not an
-    infrastructure change, and refusing the page because of what it noticed
-    would be a strange way to say so.
+    Silent for a principal who cannot ask: the page still renders.
     """
 
     wanted = tuple(
@@ -493,16 +585,16 @@ def _record_machine_readings(
         if resource is None:
             continue
         matched = True
+        reading_key = readings.machine_telemetry(resource.key)
+        previous = readings.stored(reading_key)
         telemetry, since = _settle(
             _clean_panel(machine_reading),
-            previous=(resource.status or {}).get("telemetry"),
-            previous_at=resource.last_observed_at,
+            previous=previous.value if previous else None,
+            previous_at=previous.observed_at if previous else None,
             now=observed_at,
         )
         telemetry["controller_id"] = controller_id
-        resource.status = {**(resource.status or {}), "telemetry": telemetry}
-        resource.last_observed_at = since
-        resource.save(update_fields=("status", "last_observed_at", "updated_at"))
+        readings.record(reading_key, telemetry, observed_at=since)
         DashboardRefreshRequest.objects.filter(
             panel_id=f"machine-{resource.pk}"
         ).update(completed_at=observed_at)

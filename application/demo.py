@@ -10,7 +10,7 @@ Two rules decide what it may touch, and both exist because a demo that lies
 about the wrong thing is worse than no demo at all.
 
 It substitutes *values*, never *facts*. Whether a credential is connected,
-whether a sweep is failing, whether something needs attention -- those stay
+whether a sweep is failing, whether something needs attention: those stay
 true. An operator showing HQ to somebody should still be looking at their own
 system, and a screenshot of a green board that was actually red is the one
 outcome this must never produce.
@@ -41,7 +41,7 @@ from .money import quantize_money, to_money
 _SHOWING: ContextVar[bool] = ContextVar("hq_demo_showing", default=False)
 
 # Fixed, and not a secret. It exists to keep a stand-in stable across restarts,
-# not to keep the real value hidden -- the real value never reaches these
+# not to keep the real value hidden: the real value never reaches these
 # functions in a form the stand-in is derived from.
 _SALT = "severino-hq/demo/v1"
 
@@ -88,7 +88,7 @@ def amount(value: Any, *, key: str) -> Decimal:
 
     Magnitude is kept because it is the shape rather than the secret: six
     figures replaced by three reads as an empty record, and a page laid out
-    for one is misread as broken. The sign is kept for the same reason -- what
+    for one is misread as broken. The sign is kept for the same reason: what
     is owed must go on reading as owed.
     """
 
@@ -124,7 +124,7 @@ def label(value: Any, *, key: str) -> str:
 # as order-preserving and are not: two records move by different amounts, so a
 # page sorted by date reorders and something due next week can be drawn after
 # something due next year. A single shift moves the calendar, and every
-# relationship in it survives exactly -- which is the only version of this that
+# relationship in it survives exactly, which is the only version of this that
 # a date-sorted page can be shown with.
 _DAY_OFFSET = timedelta(days=int(_fraction("calendar", "day") * 90) - 45)
 
@@ -134,7 +134,7 @@ def day(value: Any, *, key: str = "") -> Any:
 
     Shifted rather than invented so the shape survives: what falls due before
     something else still does, and what is close is still close. Under two
-    months, so urgency reads the same -- a renewal that needed acting on this
+    months, so urgency reads the same: a renewal that needed acting on this
     week must not become one that can wait.
 
     ``key`` is accepted and unused, so a caller reads the same as every other

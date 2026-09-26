@@ -14,13 +14,11 @@ app_name = "zones"
 urlpatterns = [
     path("", zone_views.ZoneIndexView.as_view(), name="index"),
     # <str:> rather than <slug:>, because a domain has dots in it and a slug
-    # does not -- the same reason the service routes use it.
+    # does not: the same reason the service routes use it.
     path("<str:zone>/", zone_views.ZoneDetailView.as_view(), name="detail"),
     path("<str:zone>/adopt/", zone_views.ZoneAdoptView.as_view(), name="adopt"),
     path("<str:zone>/pin/", zone_views.ZonePinView.as_view(), name="pin"),
     path("<str:zone>/mail/", zone_views.ZoneMailView.as_view(), name="mail"),
-    # No route for adopting records. Taking on a domain takes on what is in it,
-    # and every sweep takes on whatever appeared since -- so there is no moment
-    # at which an operator needs to ask for it. Two views and two URLs existed
-    # for a button that turned out to be a question with one answer.
+    # No route for adopting records: taking on a domain takes on what is in it,
+    # and every sweep takes on whatever appeared since.
 ]

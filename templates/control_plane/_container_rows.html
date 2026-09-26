@@ -25,7 +25,7 @@ cannot go missing from the other.
               repeating what the first cell already identifies.
               {% endcomment %}
               {% if container.watcher %}
-                <a href="{% url 'control_plane:detail' container.watcher %}"><strong>{{ container.name }}</strong></a>
+                <strong>{% entity "resource"|entity_of:container.watcher label=container.name %}</strong>
               {% else %}
                 <strong>{{ container.name }}</strong>
               {% endif %}
@@ -37,7 +37,7 @@ cannot go missing from the other.
               {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
             </td>
             <td><code>{{ container.image_label }}</code></td>
-            <td>{% if container.published %}{{ container.published }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{% if container.published %}{{ container.published }}{% else %}{% empty_value %}{% endif %}</td>
             <td>{{ container.status }}</td>
             <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
           </tr>

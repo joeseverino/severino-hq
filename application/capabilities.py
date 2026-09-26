@@ -9,7 +9,10 @@ from typing import Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
+from core.audit import audit_connection
+
 from .labels import human_label
+from .tailnet import TAILNET_KIND
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
 from .contact_submissions import (
@@ -74,6 +77,8 @@ from .projects import (
 from .receipts import ReceiptMetadataCommand, update_receipt
 from .integrations import integration_graph
 from .security import AuthorizationError, Capability, PolicyDenied, Principal
+from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
+from .registry_import import HQImportCommand, execute_hq_import
 from .sync import HQSyncCommand, execute_hq_sync
 
 
@@ -85,7 +90,7 @@ class _UnknownFields(Exception):
     """The payload carries fields the command does not have.
 
     Its own type rather than a ValueError, which the generic handler would turn
-    into "could not be executed" -- leaving a caller who misspelled a field no
+    into "could not be executed": leaving a caller who misspelled a field no
     way to learn which one. It carries Pydantic's ``extra_forbidden`` entries,
     so it is answered exactly as a StrictCommand's own refusal is.
     """
@@ -116,6 +121,23 @@ CORE_CAPABILITY_SPECS = (
         execute_hq_sync,
         subject_resource="documentation",
         label="Sync the vault",
+    ),
+    CapabilitySpec(
+        "hq.import",
+        "Atomically import one document of projects and assets, by slug.",
+        "remote_write",
+        # The capabilities of the upserts it runs, both of them.
+        IMPORT_CAPABILITIES,
+        HQImportCommand,
+        execute_hq_import,
+        subject_resource="projects",
+        execution_notes=(
+            "Validate every record before writing any.",
+            "Upsert each record through project.upsert or asset.upsert, in one transaction.",
+            "Keep a stored derived field that differs, and report it.",
+            "Record one audit event per record and one for the import.",
+        ),
+        label="Import projects and assets",
     ),
     CapabilitySpec(
         "project.create",
@@ -497,7 +519,7 @@ CORE_CAPABILITY_SPECS = (
         "infrastructure.resources",
         target_label="Device key",
         target_help="The tailnet device whose advertised routes to approve.",
-        target_query=(("kind", "tailscale.device"),),
+        target_query=(("kind", TAILNET_KIND),),
         execution_notes=(
             "Read what the device currently advertises and what is already approved.",
             "Queue one approval for the controller; the API call runs outside this request.",
@@ -518,7 +540,7 @@ CORE_CAPABILITY_SPECS = (
         target_help="The resource with a consumer the controller could not reach.",
         # Scoped to what it acts on, not to what it changes. The amendment
         # lands on the tailnet policy, but the thing an operator selects is the
-        # certificate whose consumer went unread -- the same split that keeps
+        # certificate whose consumer went unread: the same split that keeps
         # `certificate.renew` off the tailnet ability.
         target_query=(("kind", CERTIFICATE_KIND),),
         execution_notes=(
@@ -655,10 +677,9 @@ def execute_capability(
     spec = capability_registry().get(name)
     if spec is None:
         return _error("unknown_capability", f"Unknown capability {name!r}.")
-    if spec.target_kind and target is None:
-        return _error("target_required", f"{name} requires a target.")
-    if not spec.target_kind and target is not None:
-        return _error("target_not_allowed", f"{name} does not accept a target.")
+    refused = _target_refusal(spec, name, target)
+    if refused is not None:
+        return refused
 
     try:
         # Authority first, then the payload, then the target. A caller who may
@@ -667,20 +688,9 @@ def execute_capability(
         authorize_capability(spec, principal)
         _refuse_unknown_fields(spec, payload)
         command = TypeAdapter(spec.command_type).validate_python(payload)
-        # Then consent, last of the four, because the other three decide whether
-        # there is anything worth a person's attention. A request that is
-        # unauthorized or malformed is answered here rather than becoming a
-        # decision somebody has to read before finding out it was never valid.
-        decision = decide(spec, principal, payload, target)
-        if decision.rule == Rule.DENY:
-            raise PolicyDenied(f"{name} is refused by {decision.source}.")
-        if decision.rule == Rule.APPROVE:
-            held = hold_for_approval(spec, payload, target, principal=principal)
-            if held is not None:
-                return held
-        elif decision.overrides_a_hold:
-            # Standing policy is the consent; carried where consent travels.
-            principal = replace(principal, approved_by=decision.source)
+        held, principal = _consent(spec, name, payload, target, principal)
+        if held is not None:
+            return held
         return _run(
             spec,
             command,
@@ -724,6 +734,42 @@ def execute_capability(
         return _error("operation_failed", f"{name} could not be executed.")
 
 
+def _target_refusal(
+    spec: CapabilitySpec, name: str, target: str | int | None
+) -> dict[str, Any] | None:
+    """The error for a target the capability requires and lacks, or refuses."""
+
+    if spec.target_kind and target is None:
+        return _error("target_required", f"{name} requires a target.")
+    if not spec.target_kind and target is not None:
+        return _error("target_not_allowed", f"{name} does not accept a target.")
+    return None
+
+
+def _consent(
+    spec: CapabilitySpec,
+    name: str,
+    payload: dict[str, Any],
+    target: str | int | None,
+    principal: Principal,
+) -> tuple[dict[str, Any] | None, Principal]:
+    """``(held, principal)``: a held request's answer, or the principal to run as.
+
+    Asked last, after authority and shape, so only a valid request becomes a
+    decision a person has to read. Raises ``PolicyDenied`` on a deny rule.
+    """
+
+    decision = decide(spec, principal, payload, target)
+    if decision.rule == Rule.DENY:
+        raise PolicyDenied(f"{name} is refused by {decision.source}.")
+    if decision.rule == Rule.APPROVE:
+        return hold_for_approval(spec, payload, target, principal=principal), principal
+    if decision.overrides_a_hold:
+        # Standing policy is the consent; carried where consent travels.
+        return None, replace(principal, approved_by=decision.source)
+    return None, principal
+
+
 def _run(
     spec: CapabilitySpec,
     command: Any,
@@ -732,14 +778,18 @@ def _run(
     target: str | int | None,
     expected_updated_at: str | None,
 ) -> dict[str, Any]:
-    """Bind the target and run the handler. One line, and one place."""
+    """Bind the target and run the handler. One line, and one place.
 
-    return spec.handler(
-        command,
-        principal=principal,
-        expected_updated_at=expected_updated_at,
-        **_target_keyword(spec, target),
-    )
+    A command that names a connection attributes its audit events to it.
+    """
+
+    with audit_connection(getattr(command, "connection_ref", "") or ""):
+        return spec.handler(
+            command,
+            principal=principal,
+            expected_updated_at=expected_updated_at,
+            **_target_keyword(spec, target),
+        )
 
 
 def execute_approved(
@@ -758,7 +808,7 @@ def execute_approved(
 
     Errors are raised rather than projected into an adapter's error shape. The
     caller here is the page a person is standing on, and it reports what went
-    wrong on that page while leaving the request as it was -- which is what the
+    wrong on that page while leaving the request as it was, which is what the
     surrounding transaction guarantees.
     """
 
@@ -771,9 +821,8 @@ def execute_approved(
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:
     """A field the command does not have is an error, not a no-op.
 
-    A caller sending a
-    misspelled field -- or one this capability used to take and no longer does
-    -- got back a success about work it did not ask for.
+    A misspelled or retired field would otherwise return success for work the
+    caller did not ask for.
     """
 
     # CapabilitySpec accepts host dataclasses and plugin StrictCommand models.

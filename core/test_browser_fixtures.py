@@ -84,13 +84,15 @@ def dashboard_html(*, populated=True, contacts=False):
                 {
                     "id": "example.machine",
                     "label": "Example machine",
+                    "icon": "server",
+                    "head_labels": True,
                     "stale": True,
                     "observed_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
                     "payload": {"status": "good", "summary": "Example observation"},
                     "readings": [
                         {
                             "label": "CPU",
-                            "display_label": "CPU",
+                            "short_label": "CPU",
                             "value": "12%",
                             "percent": 12,
                         }

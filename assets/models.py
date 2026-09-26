@@ -67,8 +67,7 @@ class Asset(TimestampedModel):
         default=Decimal("0.00"),
         editable=False,
         help_text=(
-            "Auto-calculated from total_cost × business_use_percentage / 100. "
-            "Estimate only — not tax advice."
+            "total_cost × business_use_percentage / 100. Estimate, not tax advice."
         ),
     )
     payment_method = models.CharField(

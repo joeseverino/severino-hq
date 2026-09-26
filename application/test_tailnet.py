@@ -1,13 +1,13 @@
 """Reachability answers, and the three of them there are.
 
-HQ does not evaluate the policy -- Tailscale does, during the sweep, and what
+HQ does not evaluate the policy: Tailscale does, during the sweep, and what
 is stored is which principals a rule admits. So these fix the reading of that
 answer: who counts as asking, what counts as an answer, and what counts as not
 knowing. The last is the one worth having tests for, because a gap in the sweep
 reported as "not allowed" is a lie that looks exactly like the truth.
 
-Every pair on the operator's own tailnet is currently allowed -- one owner, one
-admin group -- so a refusal cannot be observed there and is built here.
+Every pair on the operator's own tailnet is currently allowed (one owner, one
+admin group) so a refusal cannot be observed there and is built here.
 """
 
 from __future__ import annotations
@@ -187,7 +187,7 @@ class AliasPrincipalTests(TestCase):
         self.assertEqual(verdict.via, ("laptop",))
 
     def test_without_the_alias_the_same_grant_reads_as_a_refusal(self):
-        """What the panel reported before the aliases were joined on."""
+        """Without the alias, the same grant reads as a refusal."""
 
         from application.tailnet import may_reach
 

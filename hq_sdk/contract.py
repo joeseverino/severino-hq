@@ -6,9 +6,9 @@ renamed, a parameter added without a default, a method that went away. Each of
 those is a fleet-wide change, and this repository's suite and code graph both
 report it as safe, because every caller lives in another repository.
 
-``describe()`` walks each export and records its shape -- the parameters a
+``describe()`` walks each export and records its shape (the parameters a
 callable takes, the fields a dataclass or model carries, the members of an
-enum, the public methods a class defines -- and deliberately not annotations or
+enum, the public methods a class defines) and deliberately not annotations or
 docstrings, so the record is identical across the interpreter matrix and moves
 only when the contract does. ``contract.json`` beside this module is the shape
 extensions were built against. A test fails when the two differ, the diff is

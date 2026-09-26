@@ -20,7 +20,7 @@ NOBODY = Principal("nobody", "test", frozenset({Capability.READ}))
 
 # Derived rather than written out. `test_no_tracked_file_names_a_reachable
 # _endpoint` reads every tracked file for addresses, and allows exactly two
-# literals -- so a fixture that spells out a range trips the architecture
+# literals, so a fixture that spells out a range trips the architecture
 # suite even though the range is a well-known public resolver's.
 GLOBAL = "1.1.1.1"
 BLOCK = GLOBAL.rsplit(".", 1)[0]
@@ -82,7 +82,7 @@ class NameLookupTests(SimpleTestCase):
         self.assertIn("10 mx.example.test", values)
 
     def test_every_caa_tag_reads_as_text_rather_than_json(self):
-        """The regression: only `issue` was matched, so `issuewild` leaked JSON.
+        """Every CAA tag (`issue`, `issuewild`, `iodef`) renders as text.
 
         CAA names its tag in the key rather than in a fixed field, so matching
         one tag renders its twin as a raw object beside it.

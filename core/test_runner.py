@@ -6,7 +6,7 @@ as it will in production. Two of Django's assumptions do not hold under that,
 and both concern when and where the file gets copied.
 
 **Copying skips the sidecar.** Django clones with ``shutil.copy`` of the one
-``.sqlite3`` file, but WAL keeps recent pages in ``-wal`` until a checkpoint --
+``.sqlite3`` file, but WAL keeps recent pages in ``-wal`` until a checkpoint,
 after ``migrate``, that is most of the schema. ``setup_databases`` checkpoints
 before cloning.
 
@@ -27,9 +27,11 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import unittest
 
+from django.conf import settings
 from django.db import connections
 from django.test.runner import (
     DiscoverRunner,
@@ -53,8 +55,8 @@ class _CompositionIsolation:
 class _HeldLogs(logging.Handler):
     """One test's log records, kept until the test's outcome is known.
 
-    Many tests exercise a failure on purpose -- a refused token, an audit write
-    that raises -- and the code under test logs it, correctly. Printed as they
+    Many tests exercise a failure on purpose (a refused token, an audit write
+    that raises) and the code under test logs it, correctly. Printed as they
     happen, those records filled the suite's output with warnings and
     tracebacks that were all expected, and a real one could not be told from
     them. Django's ``--buffer`` would hold them, but it refuses ``--parallel``.
@@ -130,7 +132,7 @@ class CompositionRemoteRunner(RemoteTestRunner):
 def _use_the_file_clone(creation, worker_id):
     """Point a worker at the database file that was cloned for it.
 
-    Under ``spawn`` -- the default start method on macOS -- Django copies each
+    Under ``spawn`` (the default start method on macOS) Django copies each
     worker's clone into a shared-cache *in-memory* database. In-memory SQLite
     locks whole tables instead of using WAL, which deadlocks any test whose work
     runs on a background thread against the test that started it, until the
@@ -189,10 +191,28 @@ def _checkpoint(alias: str) -> None:
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
+# The deployment identity the suite runs under, whatever the shell exports: the
+# values CI sets. A developer's `.env.dev` names a real host, and HQ derives its
+# own hostname from it, which changes what pages read.
+NEUTRAL_IDENTITY = {
+    "DJANGO_ALLOWED_HOSTS": "127.0.0.1,testserver",
+    "DJANGO_CSRF_TRUSTED_ORIGINS": "",
+    "SEVERINO_SITE_HOST": "",
+}
+
+
 class SeverinoTestRunner(DiscoverRunner):
     """Django's runner, with parallel workers on checkpointed database files."""
 
     parallel_test_suite = FileClonedParallelSuite
+
+    def setup_test_environment(self, **kwargs):
+        # Environment first, so spawned workers load the same settings.
+        os.environ.update(NEUTRAL_IDENTITY)
+        settings.ALLOWED_HOSTS = ["127.0.0.1", "testserver"]
+        settings.CSRF_TRUSTED_ORIGINS = []
+        settings.SEVERINO_SITE_HOST = ""
+        super().setup_test_environment(**kwargs)
 
     def get_resultclass(self):
         return super().get_resultclass() or CompositionTextResult

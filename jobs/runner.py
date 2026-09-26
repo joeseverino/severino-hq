@@ -2,7 +2,7 @@
 
 A thread rather than a queue: this host is one process against one SQLite
 file, so a broker would add another thing to deploy and to fail. What replaces
-its durability is the row — a job whose process vanished is `lost`, not
+its durability is the row: a job whose process vanished is `lost`, not
 silently absent.
 
 Two things a thread gets wrong are handled here rather than left to callers: a
@@ -120,7 +120,7 @@ def _run(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
     progress = Progress(job)
 
     # One context around everything, entered once, with the job id as the
-    # operation id — so "what did this import change?" is a query.
+    # operation id, so "what did this import change?" is a query.
     #
     # Around the whole try/except, not inside each branch: a
     # `@contextmanager` is a single-use generator, and a second `with` would
@@ -193,7 +193,7 @@ def _counts(result: dict) -> list[Counts]:
     count that was never measured, so anything absent stays absent.
 
     A list because the answer is none or one, and a tuple whose length carries
-    meaning is a record -- which this is not.
+    meaning is a record, which this is not.
     """
     counts = Counts(
         seen=result.get("seen"),
@@ -256,6 +256,6 @@ def reap(kind: str | None = None) -> int:
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(
         state=Job.State.LOST,
-        error="The process running this job stopped without finishing it.",
+        error="Process exited before the job finished.",
         finished_at=ended,
     )

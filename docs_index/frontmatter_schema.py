@@ -6,7 +6,7 @@ which is committed here as ``schema.json``. The manifest importer validates
 against these sets, so HQ and the MCP cannot disagree on what ``hq sync``
 accepts.
 
-Do not hand-edit ``schema.json`` — regenerate it:
+Do not hand-edit ``schema.json``: regenerate it:
 
     severino-vault-mcp schema --json > docs_index/schema.json
 
@@ -31,9 +31,9 @@ SENSITIVITIES: frozenset[str] = frozenset(_data["sensitivities"])
 DOC_ID_PREFIXES: tuple[str, ...] = tuple(_data["doc_id_prefixes"])
 REQUIRED_FIELDS: tuple[str, ...] = tuple(_data["required_fields"])
 # Tasks carry their own lifecycle vocabulary, validated per-doc-type exactly as
-# the MCP does — a task can be "open"/"parked"/"done"/"wontfix", a runbook can't.
+# the MCP does: a task can be "open"/"parked"/"done"/"wontfix", a runbook can't.
 TASK_STATUSES: frozenset[str] = frozenset(_data["task_statuses"])
-# The required fields for a task doc (slimmer than the standard set — a task has
+# The required fields for a task doc (slimmer than the standard set: a task has
 # no system/environment/sensitivity). Surfaced for per-doc-type validation.
 TASK_REQUIRED_FIELDS: tuple[str, ...] = tuple(_data["task_required_fields"])
 

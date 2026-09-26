@@ -6,7 +6,7 @@ KPI block that the MCP and the section panels read. Nothing recomputes a figure
 a section has already answered, so changing what "needs output" means is one
 edit rather than a hunt for every place that counted it.
 
-Cards are the display projection of a reading -- ``{id, label, value, url}``
+Cards are the display projection of a reading: ``{id, label, value, url}``
 plus optional ``detail``, the same shape an extension emits, so the dashboard
 renders host and extension cards through one loop and a new section needs no
 template change to appear.
@@ -33,7 +33,7 @@ from expenses.models import Expense
 from projects.models import Project
 
 from .projection import read_once
-from .services import service_reading
+from .ui import counted
 
 Card = dict[str, Any]
 ZERO_MONEY = Decimal("0.00")
@@ -90,7 +90,7 @@ def projects() -> tuple[Card, ...]:
         value=str(reading["active"]),
         url=reverse("projects:list"),
         detail=(
-            f"{reading['needing_output']} need output"
+            counted(reading["needing_output"], "needs output", "need output")
             if reading["needing_output"]
             else ""
         ),
@@ -206,31 +206,6 @@ def expenses() -> tuple[Card, ...]:
         value=f"${reading['total']:,.2f}",
         url=reverse("expenses:list"),
         detail=f"${reading['deductible']:,.2f} deductible est.",
-    )
-
-
-# ----- Services --------------------------------------------------------------
-#
-# The reading itself lives beside its derivation in ``application.services``.
-# Every other section here reads one table and can state its own figures; a
-# service is a join across three, and splitting the count from the join would
-# put half of one answer in each file.
-
-
-def services() -> tuple[Card, ...]:
-    reading = service_reading()
-    if not reading["total"]:
-        return ()
-    return _card(
-        id="hq.services.total",
-        label="Services",
-        value=str(reading["total"]),
-        url=reverse("control_plane:services"),
-        detail=(
-            f"{reading['incomplete']} incompletely wired"
-            if reading["incomplete"]
-            else ""
-        ),
     )
 
 

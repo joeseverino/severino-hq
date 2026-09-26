@@ -1,0 +1,35 @@
+{% extends "page.html" %}
+{% comment %}
+A list: the toolbar, the table and its empty state, drawn from the view's
+TableListMixin. The header comes from `table.columns`; a page writes only the
+cells of one row in `{% block row %}`, which renders once per row with `row`
+set. `{% block summary %}` sits between the toolbar and the table.
+{% endcomment %}
+{% block page %}
+{% include "partials/_table_toolbar.html" %}
+{% block summary %}{% endblock %}
+<div class="table-scroll">
+  <table class="data-table stacks"{% if table.selectable %} data-selectable-table{% endif %}>
+    <thead>
+      <tr>
+        {% if table.selectable %}<th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% endif %}
+        {% for column in table.columns %}
+          {% if column.sort %}{% table_sort_header column.label column.sort %}{% else %}<th{% if column.css %} class="{{ column.css }}"{% endif %}>{{ column.label }}</th>{% endif %}
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in object_list %}
+        <tr>
+          {% if table.selectable %}<td class="select-column"><input type="checkbox" data-row-select value="{{ row.pk }}" aria-label="Select row"></td>{% endif %}
+          {% block row %}{% endblock %}
+        </tr>
+      {% empty %}
+        <tr class="row-empty"><td colspan="{{ table.columns|length|add:table.selectable }}">{% block empty %}Nothing here yet.{% endblock %}</td></tr>
+      {% endfor %}
+    </tbody>
+    {% block foot %}{% endblock %}
+  </table>
+</div>
+{% include "partials/_pagination.html" %}
+{% endblock %}

@@ -1,10 +1,8 @@
 """Canonical operating snapshot for HQ delivery adapters.
 
 Assembly only. Every figure, row and queue entry below is a section's own
-answer, asked once and named here for transport -- this module imports no
-model and decides no number. It previously queried eight of them directly,
-which meant a change to what a section counts had to be made here as well as
-wherever the section itself counted it.
+answer, asked once and named here for transport: this module imports no
+model and decides no number.
 """
 
 from __future__ import annotations
@@ -24,6 +22,7 @@ from .domains import (
 )
 from .projection import projection_scope
 from .read_models import recent_activity
+from .security import Capability
 from .workflows import serialize_workflow
 
 
@@ -72,18 +71,27 @@ def work_queue() -> list[dict[str, Any]]:
             "action": entry["item"].action,
             "workflow": serialize_workflow(entry["item"].workflow),
             "actions": [asdict(action) for action in entry["item"].actions],
+            "subject": (
+                asdict(subject)
+                if (subject := getattr(entry["item"], "subject", None))
+                else None
+            ),
         }
         for entry in domain_attention_items()
     ]
 
 
-def operating_snapshot() -> dict[str, Any]:
-    """Return the one canonical KPI, work-queue, and activity projection."""
+def operating_snapshot(*, principal) -> dict[str, Any]:
+    """Return the one canonical KPI, work-queue, and activity projection.
+
+    Recent activity is audit data; it is included only for a principal that
+    may read the audit log.
+    """
     with projection_scope():
-        return _operating_snapshot()
+        return _operating_snapshot(principal)
 
 
-def _operating_snapshot() -> dict[str, Any]:
+def _operating_snapshot(principal) -> dict[str, Any]:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
     content = sections.content_reading()
@@ -119,5 +127,9 @@ def _operating_snapshot() -> dict[str, Any]:
         "draft_content": sections.recent_draft_content(),
         "recent_published": sections.recently_published(),
         "docs_needing_review": sections.docs_awaiting_review(),
-        "recent_activity": recent_activity(limit=8)["items"],
+        "recent_activity": (
+            recent_activity(principal=principal, limit=8)["items"]
+            if principal.permits(Capability.READ_AUDIT_LOG)
+            else []
+        ),
     }

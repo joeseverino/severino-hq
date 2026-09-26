@@ -53,7 +53,7 @@ def verify_agent_token(bearer: str):
 # `SEVERINO_API_RESOURCE` is empty, and without a resource to check `aud`
 # against, a token minted for any other API on the same Pocket ID instance
 # would verify here on signature alone. Absent means off, never "accept
-# anything" -- and with no other credential, off means MCP is disabled.
+# anything", and with no other credential, off means MCP is disabled.
 mcp_verifier = verify_agent_token if api_security.is_configured() else None
 
 

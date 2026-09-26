@@ -4,4 +4,8 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 
 [lint]
 # Keep the contract explicit and stable across developer machines and CI.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "C90"]
+
+[lint.mccabe]
+# A function past this many paths is split into named steps.
+max-complexity = 15

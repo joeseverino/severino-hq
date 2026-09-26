@@ -5,7 +5,8 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -22,7 +23,14 @@ from application.documentation import (
 )
 from application.deletion import delete_documentation
 from application.security import web_principal
-from application.tables import TableFilter, TableListMixin, TableSort, TableToggle
+from application.pages import PageAction, PageMixin, page_context, record_trail
+from application.tables import (
+    TableColumn,
+    TableFilter,
+    TableListMixin,
+    TableSort,
+    TableToggle,
+)
 from application.writes import (
     ServiceCreateMixin,
     ServiceDeleteMixin,
@@ -34,12 +42,26 @@ from .importer import ManifestImportError
 from .models import DocumentationRecord
 
 
-class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
+DOCS_TRAIL = ("Documentation index", reverse_lazy("docs_index:list"))
+
+
+class DocsListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
-    context_object_name = "records"
     paginate_by = 25
+    page_title = "Documentation index"
+    page_lede = "Metadata only. Doc bodies stay in the vault."
     table_search_scope = "documentation"
+    table_selectable = True
+    table_columns = (
+        TableColumn("Doc ID", "doc_id"),
+        TableColumn("Title", "title"),
+        TableColumn("Type", "doc_type"),
+        TableColumn("Environment", "environment"),
+        TableColumn("Status", "status"),
+        TableColumn("Sensitivity", "sensitivity"),
+        TableColumn("Last reviewed", "last_reviewed"),
+    )
     table_filters = (
         TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
         TableFilter(
@@ -80,6 +102,12 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
+    def get_page_actions(self):
+        return (
+            PageAction("Import manifest", reverse("docs_index:import")),
+            PageAction("New doc record", reverse("docs_index:create"), primary=True),
+        )
+
     def get_queryset(self):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
@@ -96,7 +124,14 @@ class DocsListView(TableListMixin, LoginRequiredMixin, ListView):
         return self.apply_table_query(qs)
 
 
-class DocsDetailView(LoginRequiredMixin, DetailView):
+class DocsPage(PageMixin):
+    """A page about one doc record, or a new one: its trail runs back to the list."""
+
+    def get_page_trail(self):
+        return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
+
+
+class DocsDetailView(PageMixin, LoginRequiredMixin, DetailView):
     model = DocumentationRecord
     template_name = "docs_index/docs_detail.html"
     slug_field = "doc_id"
@@ -109,6 +144,31 @@ class DocsDetailView(LoginRequiredMixin, DetailView):
         "content_items",
     )
 
+    def get_page_title(self):
+        return f"{self.object.doc_id} · {self.object.title}"
+
+    def get_page_lede(self):
+        record = self.object
+        return format_html(
+            '{} · {} · <span class="pill pill-{}">{}</span> · <span class="pill pill-{}">{}</span>',
+            record.get_doc_type_display(),
+            record.get_environment_display(),
+            record.status,
+            record.get_status_display(),
+            record.sensitivity,
+            record.get_sensitivity_display(),
+        )
+
+    def get_page_trail(self):
+        return (DOCS_TRAIL,)
+
+    def get_page_actions(self):
+        doc_id = self.object.doc_id
+        return (
+            PageAction("Edit", reverse("docs_index:edit", args=[doc_id])),
+            PageAction("Delete", reverse("docs_index:delete", args=[doc_id]), danger=True),
+        )
+
 
 class DocsWrite:
     """What every documentation write shares, whichever direction it goes."""
@@ -120,14 +180,16 @@ class DocsWrite:
     identity_kwarg = "current_doc_id"
 
 
-class DocsCreateView(DocsWrite, ServiceCreateMixin, LoginRequiredMixin, CreateView):
+class DocsCreateView(DocsWrite, DocsPage, ServiceCreateMixin, LoginRequiredMixin, CreateView):
+    page_title = "New doc record"
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
     service = staticmethod(save_documentation)
     command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsUpdateView(DocsWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
+class DocsUpdateView(DocsWrite, DocsPage, ServiceUpdateMixin, LoginRequiredMixin, UpdateView):
+    page_title = "Edit doc record"
     form_class = DocumentationRecordForm
     template_name = "docs_index/docs_form.html"
     slug_field = "doc_id"
@@ -136,7 +198,8 @@ class DocsUpdateView(DocsWrite, ServiceUpdateMixin, LoginRequiredMixin, UpdateVi
     command_from_cleaned_data = staticmethod(documentation_command_from_cleaned_data)
 
 
-class DocsDeleteView(DocsWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
+class DocsDeleteView(DocsWrite, DocsPage, ServiceDeleteMixin, LoginRequiredMixin, DeleteView):
+    page_title = "Delete doc record?"
     template_name = "docs_index/docs_confirm_delete.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
@@ -148,19 +211,37 @@ class DocsDeleteView(DocsWrite, ServiceDeleteMixin, LoginRequiredMixin, DeleteVi
 class ManifestImportView(LoginRequiredMixin, View):
     template_name = "docs_index/import.html"
 
+    def render_form(self, request, form):
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": form,
+                **page_context(
+                    "Import documentation manifest",
+                    format_html(
+                        "Upload a JSON array of doc records, one per vault doc. "
+                        "Schema: <code>{}</code>.",
+                        "docs_index/importer.py",
+                    ),
+                    trail=(DOCS_TRAIL,),
+                ),
+            },
+        )
+
     def get(self, request):
-        return render(request, self.template_name, {"form": ManifestImportForm()})
+        return self.render_form(request, ManifestImportForm())
 
     def post(self, request):
         form = ManifestImportForm(request.POST, request.FILES)
         if not form.is_valid():
-            return render(request, self.template_name, {"form": form})
+            return self.render_form(request, form)
         try:
             raw = form.cleaned_data["manifest_file"].read()
             data = json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError as exc:
             messages.error(request, f"Invalid JSON: {exc}")
-            return render(request, self.template_name, {"form": form})
+            return self.render_form(request, form)
         try:
             result = sync_documentation(
                 data,
@@ -169,10 +250,10 @@ class ManifestImportView(LoginRequiredMixin, View):
             )
         except ManifestImportError as exc:
             messages.error(request, f"Import failed: {exc}")
-            return render(request, self.template_name, {"form": form})
+            return self.render_form(request, form)
         if not result["ok"]:
             messages.error(request, f"Import failed validation: {result['problems']}")
-            return render(request, self.template_name, {"form": form})
+            return self.render_form(request, form)
         stats = result["stats"]
         messages.success(
             request,

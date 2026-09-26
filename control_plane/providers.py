@@ -12,6 +12,9 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Annotated, Any, Callable, Literal, get_args
 
+from django.urls import NoReverseMatch, reverse
+from django.urls.converters import StringConverter
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -20,6 +23,12 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from application.ui import counted
+
+from .consoles import cloudflare_dashboard, tailscale_machine
+from .names import in_zone, normalized_hostname
+from .observations import OBSERVATIONS
 
 
 class ProviderModel(BaseModel):
@@ -33,7 +42,7 @@ class ProviderModel(BaseModel):
         HTML submits a textarea as CRLF and every provider returns LF, so a
         multi-line field saved through a form never again equals the identical
         document read back. Normalised on the way in, so the declaration and
-        the reading are comparable at all -- and asked of every string field
+        the reading are comparable at all, and asked of every string field
         rather than the two that have textareas today. Runs ``after`` because
         a ``before`` validator is not allowed on a discriminated union's
         discriminator, and this one matches every field.
@@ -159,46 +168,44 @@ class TLSDeliveryTargetSpec(ProviderModel):
 
     One kind receives no certificate at all. A password manager is where an
     operator already looks up what a credential is and when it runs out, and a
-    certificate is both of those -- so it is a place a certificate can be
+    certificate is both of those, so it is a place a certificate can be
     *recorded*, reached the same way, declared the same way, and listed in the
     same menu. It carries no material; see ``OnePasswordPublication``.
     """
 
     kind: Literal["npm", "caddy", "cpanel", "onepassword"] = Field(
-        title="What it runs",
-        description="Decides how the certificate is delivered and verified.",
+        title="Type",
+        description="Sets how the certificate is delivered and verified.",
     )
     connection_ref: str = Field(
         min_length=1,
         max_length=160,
         title="Connection",
-        description="The credential HQ reaches this target through.",
+        description="The connection HQ uses to reach this target.",
     )
     name: str = Field(
         min_length=1,
         max_length=160,
-        title="Name it uses there",
+        title="Name at target",
         description=(
-            "What the certificate is called at the target itself. Only the "
-            "certificate below keeps this name; anything else installed here "
-            "is named after itself, so two cannot collide."
+            "The certificate's name on the target. Only the certificate below "
+            "uses it. Others installed here keep their own names."
         ),
     )
     certificate_resource: str = Field(
         default="",
         max_length=160,
-        title="Certificate that owns the name",
+        title="Certificate using this name",
         description=(
-            "Which certificate the name above belongs to. Blank means no "
-            "certificate has claimed it."
+            "The certificate that uses the name above. Blank if none."
         ),
     )
     verify_domains: list[str] = Field(
         default_factory=list,
         title="Check these names",
         description=(
-            "Names HQ connects to here to confirm the certificate really "
-            "arrived. Leave empty to check the ones it covers."
+            "Names HQ connects to here to confirm the certificate arrived. "
+            "Leave empty to check every name it covers."
         ),
     )
     certificate_directory: str = Field(
@@ -206,39 +213,39 @@ class TLSDeliveryTargetSpec(ProviderModel):
         max_length=500,
         title="Certificate directory",
         description=(
-            "Caddy only. Where on the target the certificate and key are written."
+            "Caddy only. The directory the certificate and key are written to."
         ),
     )
     discover_covered_hosts: bool = Field(
         default=False,
         title="Check every proxy host it covers",
         description=(
-            "Nginx Proxy Manager only. Verify against every proxy host whose "
-            "name this certificate covers, rather than only the names above."
+            "Nginx Proxy Manager only. Check every proxy host whose name this "
+            "certificate covers, in addition to the names above."
         ),
     )
     install_domains: list[str] = Field(
         default_factory=list,
         title="Install only on the sites serving these names",
         description=(
-            "Shared hosting only. cPanel holds one certificate per site, and a "
-            "site's aliases serve whatever it holds. Leave empty to install on "
-            "every site that serves a name this certificate is checked at."
+            "cPanel only. cPanel holds one certificate per site, shared by the "
+            "site's aliases. Leave empty to install on every site serving a "
+            "name this certificate is checked at."
         ),
     )
     vault: str = Field(
         default="",
         max_length=160,
         title="Vault",
-        description="1Password only. Which vault holds the item below.",
+        description="1Password only. The vault that holds the item.",
     )
     item: str = Field(
         default="",
         max_length=160,
-        title="Item to write on",
+        title="Item",
         description=(
-            "1Password only. The item HQ records the certificate's facts on. It "
-            "has to exist already; HQ writes fields on it and creates nothing."
+            "1Password only. The item HQ writes the certificate's details to. "
+            "It must already exist. HQ does not create it."
         ),
     )
 
@@ -256,21 +263,21 @@ class TLSDeliveryTargetSpec(ProviderModel):
             if getattr(self, field_name) and self.kind != kind:
                 raise ValueError(
                     f"{TLSDeliveryTargetSpec.model_fields[field_name].title!r} "
-                    f"applies to {kind} targets, and this one is {self.kind}."
+                    f"applies only to {kind} targets. This one is {self.kind}."
                 )
         if self.kind == "caddy" and not self.certificate_directory:
-            raise ValueError("A Caddy target needs the directory to write to.")
+            raise ValueError("A Caddy target needs a certificate directory.")
         if self.kind == "onepassword" and not (self.vault and self.item):
             raise ValueError(
-                "A 1Password target needs the vault and the item to write on."
+                "A 1Password target needs a vault and an item."
             )
         # Nothing is served here, so there is nothing to connect to and check.
         # Refused rather than ignored, for the same reason as the rest: a name
         # typed here would read as verified and never be probed.
         if self.kind == "onepassword" and self.verify_domains:
             raise ValueError(
-                "A 1Password target serves nothing, so there is no name to "
-                "check it at."
+                "A 1Password target serves nothing. Leave the names to check "
+                "empty."
             )
         return self
 
@@ -279,37 +286,32 @@ class TLSCertificateSpec(ProviderModel):
     """One certificate HQ issues, deploys and keeps renewed.
 
     Everything about it is stated here: what it is called, which names it
-    covers, and where it installs. It used to be a reference into an authored
-    document instead, which meant the answer to "what does this cover" lived
-    somewhere HQ could read and not edit -- so adding a name was a file change,
-    a sync and a hope, rather than saving a form.
+    covers, and where it installs. Adding a name is saving the form.
 
-    Titles and descriptions live on the model because the form is generated from
-    it. Left off, every field was labelled by its own variable name, and an
-    operator was asked for a "Renewal window days" rather than a question.
+    Titles and descriptions live on the model because the form is generated
+    from it.
     """
 
     certificate_name: str = Field(
         max_length=160,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
         title="Certificate name",
-        description="Lowercase, no spaces. Names the certificate's own lineage.",
+        description="Lowercase, no spaces.",
     )
     domains: list[str] = Field(
         default_factory=list,
         title="Domains",
         description=(
-            "Wildcards are fine. Each domain has to sit in a Cloudflare zone "
-            "HQ can edit — that is how it proves ownership to Let's Encrypt."
+            "Wildcards are allowed. Each domain must be in a Cloudflare zone "
+            "HQ can edit, for the Let's Encrypt DNS challenge."
         ),
     )
     install_on: list[str] = Field(
         default_factory=list,
         title="Install it on",
         description=(
-            "Where the issued certificate gets deployed. How each target "
-            "receives one is set on the target itself, once, and applies to "
-            "every certificate installed there."
+            "Where the certificate is deployed. Delivery settings are on each "
+            "target."
         ),
     )
 
@@ -319,9 +321,8 @@ class TLSCertificateSpec(ProviderModel):
         le=60,
         title="Renew this many days early",
         description=(
-            "HQ renews on its own; this only decides how far ahead of expiry "
-            "it starts. It also renews immediately if a consumer is found "
-            "serving the wrong certificate."
+            "Days before expiry that renewal starts. HQ also renews at once "
+            "if a consumer serves the wrong certificate."
         ),
     )
 
@@ -357,7 +358,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
     @field_validator("domains")
     @classmethod
     def normalize_domains(cls, domains: list[str]) -> list[str]:
-        normalized = [domain.strip().lower().rstrip(".") for domain in domains]
+        normalized = [normalized_hostname(domain) for domain in domains]
         if any(not domain or " " in domain for domain in normalized):
             raise ValueError("Certificate domains must be non-empty DNS names.")
         if len(normalized) != len(set(normalized)):
@@ -392,16 +393,13 @@ def origin_is_authoritative(provider: "ProviderSpec") -> bool:
 
     Two kinds of provider answer "and then what serves it", and they mean
     different things by it. One that also *answers* for the name states where
-    the name points -- which for a proxied name is the proxy. One that only
+    the name points, which for a proxied name is the proxy. One that only
     routes states where the request ends up. Both are origins; only the second
     is the answer to "what serves this", so the first has to yield wherever both
     are present.
 
-    Stated once, here, because two surfaces rank origins: the service catalogue
-    and the machine board. Ranked differently, a name appears under one machine
-    on its own page and another on the board -- which is precisely the
-    disagreement the shared origin was introduced to end, reintroduced one level
-    up.
+    Stated once, here, because two surfaces rank origins (the service catalogue
+    and the machine board) and must agree.
     """
 
     return provider.answers is None
@@ -411,12 +409,12 @@ def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
     """Whether a set of declared names, wildcards included, answers for one name.
 
     Written for certificates and used by anything that has to ask the same
-    question -- the service view matches a hostname against a certificate's
+    question: the service view matches a hostname against a certificate's
     names exactly this way, and a second implementation of wildcard matching is
     a second chance to get it subtly wrong.
     """
 
-    normalized = domain.lower().rstrip(".")
+    normalized = normalized_hostname(domain)
     if normalized in names:
         return True
     _, separator, parent = normalized.partition(".")
@@ -463,7 +461,7 @@ class PortainerContainerSpec(ProviderModel):
 
     Deliberately identity and nothing else. A container's definition lives in
     whatever compose file created it, which HQ has never seen and must not
-    pretend to own -- declaring one here says "this is mine to watch and to
+    pretend to own: declaring one here says "this is mine to watch and to
     cycle", and reconciliation is locked because there is nothing to converge.
 
     That is what makes it usable at all. Almost nothing running was created by
@@ -476,7 +474,7 @@ class PortainerContainerSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Portainer",
-        description="Which Portainer reaches the machine this runs on.",
+        description="The Portainer that manages this machine.",
     )
     host: str = Field(
         min_length=1,
@@ -488,32 +486,30 @@ class PortainerContainerSpec(ProviderModel):
         min_length=1,
         max_length=200,
         title="Container",
-        description="The container's name, exactly as Docker reports it.",
+        description="The container name, as Docker reports it.",
     )
     on_demand: bool = Field(
         default=False,
         title="Runs on demand",
         description=(
-            "Usually off, and removed when it is. Missing from a sweep is then "
-            "expected rather than a finding."
+            "Usually stopped and removed. A sweep that misses it is not a "
+            "finding."
         ),
     )
     hidden: bool = Field(
         default=False,
-        title="Keep it out of the way",
+        title="Collapse on machine page",
         description=(
-            "Still watched and still controllable -- just folded away on the "
-            "machine's page. For the ones that are always there and never the "
-            "thing you came to look at."
+            "Collapse it on the machine's page. HQ still watches and controls "
+            "it."
         ),
     )
     serves_ports: list[int] = Field(
         default_factory=list,
         title="Answers on",
         description=(
-            "Only for a container sharing the machine's network. Docker "
-            "publishes no ports for those, so HQ cannot see what it answers on "
-            "and cannot tie a proxy to it without being told."
+            "Host-network containers only. Docker reports no ports for them, "
+            "so list the ports here to link a proxy to it."
         ),
     )
 
@@ -521,7 +517,7 @@ class PortainerContainerSpec(ProviderModel):
     @classmethod
     def ports_are_ports(cls, value: list[int]) -> list[int]:
         if any(port < 1 or port > 65535 for port in value):
-            raise ValueError("A port is between 1 and 65535.")
+            raise ValueError("Ports must be between 1 and 65535.")
         return value
 
 
@@ -531,7 +527,7 @@ class TailnetDeviceSpec(ProviderModel):
     The same shape as a watched container: the device joined the tailnet by
     somebody running `tailscale up` on it, and HQ has no business pretending
     otherwise. What it can hold is the handful of decisions about that device
-    which are made once and then quietly forgotten -- and which have no symptom
+    which are made once and then quietly forgotten, and which have no symptom
     until the day they matter.
 
     Named as the tailnet names it. That is often not what HQ calls the machine,
@@ -547,21 +543,20 @@ class TailnetDeviceSpec(ProviderModel):
         default="",
         max_length=160,
         title="Tailscale",
-        description="The credential HQ changes this device through.",
+        description="The connection HQ uses to change this device.",
     )
     name: str = Field(
         min_length=1,
         max_length=200,
         title="Device",
-        description="The device's name, exactly as the tailnet reports it.",
+        description="The device name, as the tailnet reports it.",
     )
     key_expiry_disabled: bool = Field(
         default=False,
-        title="Keep it on the tailnet",
+        title="Disable key expiry",
         description=(
-            "A node key expires on a date set when the device joined, and the "
-            "machine keeps running and simply stops being reachable. Turn this "
-            "on for anything that should not go away on its own."
+            "Disables node key expiry. Without it, the device becomes "
+            "unreachable when its key expires."
         ),
     )
 
@@ -569,7 +564,7 @@ class TailnetDeviceSpec(ProviderModel):
 class TailnetPolicySpec(ProviderModel):
     """The tailnet's access policy, as HQ last read it.
 
-    Not something an operator adds here -- it exists because a tailnet does.
+    Not something an operator adds here: it exists because a tailnet does.
     ``created_from`` keeps it out of the "add a resource" picker for that
     reason: there is exactly one, and it arrived with the credential.
     """
@@ -579,9 +574,8 @@ class TailnetPolicySpec(ProviderModel):
         default="",
         title="Policy",
         description=(
-            "The tailnet's access policy. Saving records what it should be; "
-            "reconciling applies it — and only if it still passes the tests "
-            "written inside it."
+            "The tailnet's access policy. Saving records it. Reconciling "
+            "applies it if the policy's own tests pass."
         ),
     )
 
@@ -590,8 +584,8 @@ class NetworkSpec(ProviderModel):
     """A range of addresses this estate is built on, and what it means.
 
     Declared, because nothing sweeps a network. HQ learns addresses from the
-    things that answer at them -- a container's published port, a device's
-    tailnet address -- and never learns what range they belong to or what that
+    things that answer at them (a container's published port, a device's
+    tailnet address) and never learns what range they belong to or what that
     range implies. An address on the LAN and one on the tailnet are reachable
     by different people, and only the ranges say which is which.
     """
@@ -600,7 +594,7 @@ class NetworkSpec(ProviderModel):
         min_length=1,
         max_length=120,
         title="Name",
-        description="What this range is called when people talk about it.",
+        description="A short name for this range.",
     )
     cidr: str = Field(
         min_length=1,
@@ -612,15 +606,14 @@ class NetworkSpec(ProviderModel):
         default="",
         max_length=64,
         title="Gateway",
-        description="The router for this range, where it has one.",
+        description="The range's router, if it has one.",
     )
     purpose: str = Field(
         default="",
         max_length=300,
-        title="What it is for",
+        title="Purpose",
         description=(
-            "One line. What reaches this range and what that means for what "
-            "lives on it."
+            "One line. What uses this range."
         ),
     )
 
@@ -640,7 +633,7 @@ class CertificateAuthoritySpec(ProviderModel):
     """A certificate authority this estate trusts, and where its key lives.
 
     Not `tls.certificate`: that is a certificate HQ renews and installs. This is
-    the authority a certificate was issued *by* -- including one HQ can never
+    the authority a certificate was issued *by*, including one HQ can never
     reach, because the whole point of an offline root is that nothing can. An
     authority nothing sweeps still has an expiry, and an expiry nobody is
     watching is the failure this records.
@@ -650,34 +643,33 @@ class CertificateAuthoritySpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Authority",
-        description="The issuer name, exactly as it appears in a certificate.",
+        description="The issuer name, as it appears in certificates.",
     )
     covers: str = Field(
         default="",
         max_length=300,
-        title="What it issues",
-        description="One line. Which certificates this authority is behind.",
+        title="Issues",
+        description="One line. The certificates this authority signs.",
     )
     expires_on: str = Field(
         default="",
         max_length=10,
         title="Expires",
-        description="ISO date, e.g. 2036-05-02. Left blank when it does not.",
+        description="ISO date, e.g. 2036-05-02. Blank if it does not expire.",
     )
     key_location: str = Field(
         default="",
         max_length=300,
-        title="Where the key lives",
+        title="Key location",
         description=(
-            "Said plainly, and never the key itself. For an offline root this "
-            "is the whole control."
+            "Where the private key is stored. Never paste the key."
         ),
     )
     issued_with: str = Field(
         default="",
         max_length=160,
         title="Issued with",
-        description="The tool that signs with it, where there is one.",
+        description="The signing tool, if any.",
     )
 
     @field_validator("expires_on")
@@ -698,47 +690,38 @@ class MachineSpec(ProviderModel):
     """A machine HQ should know about, whether or not it can reach one.
 
     Most machines need no declaration: a swept Portainer names the ones it
-    manages, and a connection names what it points at. This is for the rest --
-    the printer, the offline CA, the phone -- and for saying what an address
+    manages, and a connection names what it points at. This is for the rest
+    (the printer, the offline CA, the phone) and for saying what an address
     belongs to, which is the difference between a proxy forwarding to a machine
     and a proxy forwarding into the dark.
     """
 
+    # The machine page's `<str:name>` converter: a name it cannot route to
+    # would be a machine with no page.
     name: str = Field(
         min_length=1,
         max_length=160,
+        pattern=rf"^{StringConverter.regex}$",
         title="Name",
-        description="What this machine is called everywhere else in HQ.",
+        description="The machine's name in HQ. No slashes.",
     )
     role: str = Field(
         default="",
         max_length=200,
-        title="What it is for",
+        title="Purpose",
         description="One line. Shown wherever the machine is listed.",
     )
     addresses: list[str] = Field(
         default_factory=list,
         title="Addresses",
         description=(
-            "Every address that reaches it — LAN, tailnet, public. A resource "
-            "forwarding to one of these is understood to be pointing here. "
-            "Marked ones HQ also sees for itself; the rest exist only here, "
-            "because nothing in the estate reports them."
+            "Every address it answers on: LAN, tailnet, public. Resources "
+            "forwarding to these addresses link to this machine. Marked "
+            "addresses are also observed by HQ."
         ),
     )
 
-    # Three more fields lived here: an operating system, a kind, an SSH alias
-    # and port. All four were blank on every machine in the estate, and only
-    # one thing read any of them -- the readout at the top of the form they
-    # were typed into. Nothing resolved through them, nothing connected with
-    # them, no page decided anything by them.
-    #
-    # The operating system had a source all along: the tailnet reports `os` for
-    # every device it carries. The other three had none and needed none. A
-    # field that is empty everywhere and read by nobody is not an unfilled
-    # field, it is a question HQ was asking for no reason -- and asking it
-    # beside an address that genuinely matters made the whole form look like
-    # guesswork.
+    # No operating system field: the tailnet reports `os` for every device.
 
 
 class PortainerStackEnvVar(ProviderModel):
@@ -751,7 +734,7 @@ class PortainerStackSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Portainer",
-        description="Which Portainer holds the environment this runs in.",
+        description="The Portainer environment this runs in.",
     )
     host: str = Field(
         min_length=1,
@@ -764,22 +747,22 @@ class PortainerStackSpec(ProviderModel):
         max_length=120,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
         title="Stack name",
-        description="Lowercase and hyphenated. Names the compose project.",
+        description="Lowercase and hyphenated. Used as the compose project name.",
     )
     compose: str = Field(
         min_length=1,
         title="Compose file",
-        description="The docker compose definition, exactly as it would be on disk.",
+        description="The docker compose file, as it would be on disk.",
     )
     environment: list[PortainerStackEnvVar] = Field(
         default_factory=list,
         title="Environment",
-        description="Values the compose file reads. Secrets belong in 1Password, not here.",
+        description="Values the compose file reads. Keep secrets in 1Password.",
     )
     hostnames: list[str] = Field(
         default_factory=list,
         title="Serves",
-        description="The names this answers for, if any reach it from outside.",
+        description="Hostnames that reach this stack from outside, if any.",
     )
     port: int | None = Field(
         default=None,
@@ -787,8 +770,8 @@ class PortainerStackSpec(ProviderModel):
         le=65535,
         title="Answers on port",
         description=(
-            "The port on the machine itself. Published ports are read back from "
-            "the running container; a container on the host network has to say."
+            "The port on the machine. Needed only for host-network containers. "
+            "Published ports are read from the running container."
         ),
     )
 
@@ -797,8 +780,8 @@ class UploadedCertificateSpec(ProviderModel):
     """A certificate generated elsewhere, that HQ installs and keeps.
 
     Separate from ``tls.certificate`` because the lifecycle is different, not
-    because the certificate is. This one cannot be renewed by HQ -- the CA that
-    signs it is deliberately air-gapped -- so it has no renewal window and no
+    because the certificate is. This one cannot be renewed by HQ (the CA that
+    signs it is deliberately air-gapped) so it has no renewal window and no
     automatic renew action, and pretending otherwise would put a countdown on a
     thing HQ cannot act on.
     """
@@ -808,20 +791,19 @@ class UploadedCertificateSpec(ProviderModel):
         max_length=160,
         pattern=r"^[a-z0-9][a-z0-9.-]*$",
         title="Name",
-        description="What to call it at the providers it gets installed on.",
+        description="The certificate's name where it is installed.",
     )
     install_on: list[str] = Field(
         min_length=1,
         title="Install it on",
-        description="Where to deploy it. It can be added to more later.",
+        description="Where to deploy it. You can add more later.",
     )
     domains: list[str] = Field(
         default_factory=list,
         title="Names it covers",
         description=(
-            "Read out of the certificate when it is uploaded, and rewritten "
-            "every time a new one is. Narrow it if HQ should treat this as "
-            "covering fewer names than it carries."
+            "Read from the certificate on each upload. Remove names HQ should "
+            "not treat as covered."
         ),
     )
 
@@ -841,8 +823,7 @@ class DNSRecordType:
     expected to answer, whether Cloudflare will proxy it, what the value even
     means, and what stops working when it is removed. Stated once here, those
     differences are read by the service view, the form, the reconciler and the
-    removal page. Spelled inline instead, each of them grew its own tuple of
-    type names and they drifted apart the first time one was extended.
+    removal page.
     """
 
     id: str
@@ -868,23 +849,23 @@ class DNSRecordType:
     # Whether this type states policy or proves ownership rather than sending
     # anything anywhere. A zone's day-to-day question is where traffic goes, and
     # a domain apex answers it under four CAA records and three verification
-    # strings -- so these are listed apart, folded away, rather than first.
+    # strings, so these are listed apart, folded away, rather than first.
     secondary: bool = False
 
 
 DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     DNSRecordType(
         "A",
-        "A — IPv4 address",
+        "A: IPv4 address",
         True,
         "IPv4 address",
         "For example 203.0.113.10.",
         proxyable=True,
-        removal_impact="This name stops resolving, so anything served at it goes dark.",
+        removal_impact="This name stops resolving. Anything served at it goes offline.",
     ),
     DNSRecordType(
         "AAAA",
-        "AAAA — IPv6 address",
+        "AAAA: IPv6 address",
         True,
         "IPv6 address",
         "For example 2001:db8::10.",
@@ -893,28 +874,28 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     ),
     DNSRecordType(
         "CNAME",
-        "CNAME — alias to another name",
+        "CNAME: alias to another name",
         True,
         "Target hostname",
         "The name this one is an alias for.",
         proxyable=True,
-        removal_impact="This name stops resolving, so anything served at it goes dark.",
+        removal_impact="This name stops resolving. Anything served at it goes offline.",
     ),
     DNSRecordType(
         "TXT",
-        "TXT — text record",
+        "TXT: text record",
         False,
         "Text value",
-        "Quoted text. Carries policy such as SPF, or a verification challenge.",
+        "Quoted text, such as SPF policy or a verification challenge.",
         removal_impact=(
-            "If this carries SPF, DMARC or a domain verification, removing it "
-            "weakens mail authentication or un-verifies the domain."
+            "If this is SPF, DMARC or a domain verification, mail "
+            "authentication weakens or the domain loses verification."
         ),
         secondary=True,
     ),
     DNSRecordType(
         "MX",
-        "MX — mail exchanger",
+        "MX: mail exchanger",
         False,
         "Mail server hostname",
         "The host that accepts mail for this domain.",
@@ -922,13 +903,13 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
     ),
     DNSRecordType(
         "CAA",
-        "CAA — permitted certificate authority",
+        "CAA: permitted certificate authority",
         False,
         "CAA value",
-        'Flags, tag and value — for example: 0 issue "letsencrypt.org".',
+        'Flags, tag and value, e.g. 0 issue "letsencrypt.org".',
         removal_impact=(
-            "Removing the last CAA record lets any certificate authority in the "
-            "world issue for this domain."
+            "If this is the last CAA record, any certificate authority can "
+            "issue for this domain."
         ),
         secondary=True,
     ),
@@ -948,10 +929,8 @@ if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
         "added to one and not the other."
     )
 
-# One expression, used to validate a CAA value and to take it apart. Written
-# twice they drifted immediately: the validator accepted a spelling the
-# canonicaliser could not parse, so the value passed the form and then never
-# matched itself at the provider.
+# One expression, used both to validate a CAA value and to take it apart, so a
+# value the form accepts is one the canonicaliser can parse.
 _CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 
@@ -960,13 +939,13 @@ class CloudflareDNSRecordSpec(ProviderModel):
         min_length=1,
         max_length=253,
         title="Zone",
-        description="The domain this record belongs to, e.g. example.com.",
+        description="The record's domain, e.g. example.com.",
     )
     name: str = Field(
         min_length=1,
         max_length=253,
         title="Hostname",
-        description="The full name being published, e.g. app.example.com.",
+        description="The full name, e.g. app.example.com.",
     )
     record_type: DNSRecordTypeId = Field(title="Record type")
     content: str = Field(
@@ -974,9 +953,8 @@ class CloudflareDNSRecordSpec(ProviderModel):
         max_length=2048,
         title="Value",
         description=(
-            "What this record says, and it depends on the type chosen above: "
-            "an IP address for A and AAAA, a hostname for CNAME and MX, quoted "
-            'text for TXT, and for CAA something like 0 issue "letsencrypt.org".'
+            "An IP address for A and AAAA, a hostname for CNAME and MX, quoted "
+            'text for TXT, or for CAA, e.g. 0 issue "letsencrypt.org".'
         ),
     )
     priority: int | None = Field(
@@ -990,11 +968,9 @@ class CloudflareDNSRecordSpec(ProviderModel):
         default=False,
         title="Proxy through Cloudflare",
         description=(
-            "Address records only. On, Cloudflare answers and your address is "
-            "never published — caching, WAF and its certificate in front. Off, "
-            "the record hands out your address and visitors reach it directly. "
-            "Left off by default because it is a real change in who serves the "
-            "name, not a default worth assuming."
+            "A, AAAA and CNAME only. On: Cloudflare answers, hides your address "
+            "and adds caching, WAF and its certificate. Off: visitors reach "
+            "your address directly."
         ),
     )
     ttl: int = Field(
@@ -1002,7 +978,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
         ge=1,
         le=86400,
         title="TTL",
-        description="Seconds resolvers may cache this. 1 means automatic.",
+        description="Seconds resolvers may cache this. 1 is automatic.",
     )
 
     @model_validator(mode="after")
@@ -1040,16 +1016,9 @@ class CloudflareZoneSpec(ProviderModel):
     manage them: a parked domain and a live one look identical to a token, and
     only an operator knows which is which.
 
-    It carries no settings yet. Zone posture -- TLS mode, minimum version, HSTS
-    -- is the natural next field set here, and is deliberately absent until the
-    controller holds a credential that could reconcile it. Declaring desired
-    state nothing can act on is how a control plane starts lying.
-
-    That credential now exists: `cloudflare_api` carries the account surface,
-    zone settings included, beside the DNS token that deliberately does not. So
-    the precondition written here has been met and the field set is the only
-    thing still missing -- and the refusal shown on the page had gone on blaming
-    the token, which explains something that stopped being true.
+    It carries no settings yet. Zone posture (TLS mode, minimum version, HSTS)
+    is read through `cloudflare_api`; declaring and reconciling it is the next
+    field set here.
     """
 
     zone: str = Field(
@@ -1062,7 +1031,7 @@ class CloudflareZoneSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Served by",
-        description="The provider connection that holds this zone.",
+        description="The connection that holds this zone.",
     )
 
 
@@ -1073,20 +1042,19 @@ class NameContext:
     Every field here was worked out somewhere else on the way in: which zones a
     credential may edit, where something already answers this name, which
     certificate already covers it. Passed rather than re-derived, because a form
-    that cannot see them asks for them again -- and a page offering to issue a
+    that cannot see them asks for them again, and a page offering to issue a
     Let's Encrypt certificate for a name in no public zone is not asking, it is
     proposing a failure.
 
     Declared here beside the providers that read it and built in the application
-    layer, which is the half allowed to touch the database. Every field defaults,
-    so a caller that knows nothing yet is a legal caller and providers behave as
-    they did before any of this existed.
+    layer, which is the half allowed to touch the database. Every field
+    defaults, so a caller that knows nothing yet is a legal caller.
     """
 
     hostname: str = ""
     # Zones a connected credential can actually edit, as the controller last
     # reported them. Empty means nothing has swept, not that nothing is
-    # reachable -- so an empty tuple must never be read as a prohibition.
+    # reachable, so an empty tuple must never be read as a prohibition.
     public_zones: tuple[str, ...] = ()
     swept: bool = False
     # Where this name is already served, as "host:port", declared or observed.
@@ -1104,14 +1072,11 @@ class NameContext:
     def public_zone(self) -> str:
         """The reported zone this name falls in, if one does.
 
-        Suffix-matched on label boundaries: "notjseverino.com" is not in
-        "jseverino.com", and a check on plain string endings says it is.
+        Suffix-matched on label boundaries: "notexample.com" is not in
+        "example.com", and a check on plain string endings says it is.
         """
 
-        for zone in self.public_zones:
-            if self.hostname == zone or self.hostname.endswith(f".{zone}"):
-                return zone
-        return ""
+        return next((zone for zone in self.public_zones if in_zone(self.hostname, zone)), "")
 
 
 @dataclass(frozen=True)
@@ -1143,7 +1108,7 @@ class ProviderSpec:
     facet: str = ""
     hostnames: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # Whether this provider *covers* hostnames rather than declaring them.
-    # Declaring brings a service into existence -- something has to name it
+    # Declaring brings a service into existence: something has to name it
     # before it is a thing at all. Covering answers for a set that may include
     # wildcards, so it attaches to services declared elsewhere and never invents
     # one: treated as a declaration, a wildcard certificate would conjure a
@@ -1155,11 +1120,11 @@ class ProviderSpec:
     # The inverse of ``hostnames``: the spec fields that follow from being told
     # a hostname. Onboarding a service asks for the name once and seeds every
     # provider that declares a facet for it, so the operator types it once
-    # rather than once per resource -- and a provider added later joins that
+    # rather than once per resource, and a provider added later joins that
     # flow by saying which of its fields the name fills in.
     seed: Callable[["NameContext"], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
-    # supply -- an uploaded certificate is only a name and a list of targets
+    # supply: an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
     # the same page collects both: asked for separately, creating one produced
     # an empty declaration and a second page to go and find.
@@ -1189,9 +1154,7 @@ class ProviderSpec:
     # ``from_record`` serves two callers with opposite readings of a blank. To
     # adoption it means "say nothing and keep what is there"; to the drift
     # comparison it means "the live record says empty". An NPM proxy host is
-    # the case: NPM holds a numeric certificate id, not an HQ resource key, so
-    # every host that named a certificate compared unequal forever and was
-    # skipped by ``confirm_observed`` while still reading healthy.
+    # the case: NPM holds a numeric certificate id, not an HQ resource key.
     unobservable_fields: tuple[str, ...] = ()
     # Why nothing sweeps this kind, or "" when something does.
     #
@@ -1210,29 +1173,49 @@ class ProviderSpec:
     # declarations that cannot be removed. Stated here rather than discovered
     # at the point somebody tries.
     removal_gap: str = ""
+    # The page a resource of this kind lives on, when it has one of its own.
+    home: Callable[[Any], str] | None = None
+    # The provider console page for a swept record, built only from ids the
+    # record stores. Blank when the record lacks them.
+    console: Callable[[dict[str, Any]], str] | None = None
+    # Whether a record puts its provider in front of the names it carries: a
+    # proxied Cloudflare record. A reading whose ``fronted_by`` names this kind
+    # applies to a name only where this says so.
+    fronts: Callable[[dict[str, Any]], bool] | None = None
+    # From an observed record: the source policy it applies to its names, as a
+    # ``provider_adapters.contracts.IngressPolicy``.
+    ingress_policy: Callable[[dict[str, Any]], Any] | None = None
+    # From an observed record: the certificate it serves its names with, as a
+    # ``provider_adapters.contracts.ServedCertificate``, or None.
+    served_certificate: Callable[[dict[str, Any]], Any] | None = None
+    # Headers a proxy of this kind adds to corroborate the forwarded client
+    # and scheme, in that order.
+    forwarding_headers: tuple[str, str] | tuple[()] = ()
+    # The certificate declaration an ingress serves its names with, by
+    # resource key, or "" when it names none. A covering certificate applies
+    # to a name only where the ingress that serves it names that certificate.
+    certificate: Callable[[dict[str, Any]], str] | None = None
     # One record shaped exactly as this provider's sweep reports them, for the
     # contract tests to rebuild a spec from. It lives beside the provider
     # because a list the tests keep is a list that goes stale.
     sample_record: dict[str, Any] | None = None
+    # Whether a sweep may take on a record it found without asking. None: every
+    # record, the default for any kind whose records only exist because a
+    # connection HQ was given created them. A kind that can also see things
+    # nobody declared anywhere says which of its records are safe to adopt.
+    adopts: Callable[[dict[str, Any]], bool] | None = None
     # What sorts of connection stand behind this, matching what the controller
     # calls them. This is the join between a declaration and the credentials
     # that would carry it out: it tells a form which connections to offer, and
     # the connections page what each one is for.
     #
-    # Plural because one resource routinely needs two unrelated credentials. A
-    # managed certificate is issued through a DNS token and installed over SSH,
-    # and a single field would have had to pick one and be wrong about the
-    # other on the page whose whole job is saying what a credential is for.
+    # Plural because one resource can need two unrelated credentials: a managed
+    # certificate is issued through a DNS token and installed over SSH.
     connection_providers: tuple[str, ...] = ()
-    # Why this provider cannot supply a given name, or "" when it can.
-    #
-    # An offer that cannot work is worse than no offer: a `.homelab` service was
-    # invited to add a Let's Encrypt certificate, which needs a DNS-01 challenge
-    # in a zone no credential holds, so the only way to find out was to declare
-    # it and read the failure a minute later in a job result.
-    #
-    # A sentence rather than a boolean, because the page says why -- and the
-    # provider is the only thing that knows.
+    # Why this provider cannot supply a given name, or "" when it can: a
+    # `.home.arpa` name cannot get a Let's Encrypt certificate, whose DNS-01
+    # challenge needs a zone a credential holds. A sentence rather than a
+    # boolean, because the page says why.
     applies: Callable[["NameContext"], str] | None = None
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
@@ -1251,7 +1234,7 @@ class ProviderSpec:
     from_record: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     # What this resource actually does, as (label, desired, observed) rows.
     # A service page showed "Declared" in the largest type on the card while the
-    # row beneath it held `answer: 10.0.0.10` -- the least useful fact rendered
+    # row beneath it held `answer: 10.0.0.10`: the least useful fact rendered
     # loudest, and the useful one not rendered at all. Desired and observed sit
     # side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
@@ -1269,7 +1252,7 @@ class ProviderSpec:
     #
     # They stop meaning the same thing the moment a provider holds several
     # records for one name. A zone apex routinely carries three TXT records,
-    # four CAA records, two MX records and a CNAME -- nine distinct records, one
+    # four CAA records, two MX records and a CNAME: nine distinct records, one
     # hostname. Identified by hostname they collapse into one, and adoption
     # picks whichever the provider happened to list first. Worse, the types that
     # carry policy rather than address deliberately declare no hostname at all,
@@ -1289,7 +1272,7 @@ class ProviderSpec:
     created_from: str = ""
     # What stops working if this particular resource is removed, in a sentence.
     # Read by the confirmation page, which otherwise asks "are you sure" about a
-    # row of fields -- and the honest answer to that depends entirely on which
+    # row of fields, and the honest answer to that depends entirely on which
     # row it is. Deleting one of four CAA records is housekeeping; deleting the
     # last MX record stops the domain receiving mail.
     removal_note: Callable[[dict[str, Any]], str] | None = None
@@ -1300,14 +1283,12 @@ class ProviderSpec:
     # proxy host and a DNS record all exist somewhere else, so forgetting the
     # row alone would abandon them. A domain is the exception. HQ did not create
     # the zone and deleting it would be absurd; being responsible for it is the
-    # entire content of the declaration, so ceasing to be responsible is the
-    # entire content of removing it. Left as the default, there was no way to
-    # stop managing a domain at all -- removal was refused because the
-    # controller implements no delete, which was true and beside the point.
+    # entire content of the declaration, so removing it is ceasing to be
+    # responsible.
     declaration_only: bool = False
     # Whether other resources resolve against this one. Saving it changes what
     # they mean without touching what they say, so their desired state has to be
-    # recomputed -- otherwise a certificate reports itself in sync against a
+    # recomputed, otherwise a certificate reports itself in sync against a
     # target that moved underneath it.
     resolution_input: bool = False
     # Whether changing this kind needs a person to agree, and not merely a
@@ -1318,29 +1299,26 @@ class ProviderSpec:
     # being acted on. Reconciling a rewrite and rewriting the estate's access
     # policy are the same effect and not remotely the same event, and a rule
     # written on the effect would either wave the second one through or put a
-    # decision in front of a person for every container restart -- at which
+    # decision in front of a person for every container restart: at which
     # point the decision stops being read.
     #
     # A kind flagged here holds changes asked for over any interface that is
-    # not a person at a browser. Nothing about how an operator works changes;
-    # what changes is that a credential on its own is no longer enough.
+    # not a person at a browser: a credential on its own is not enough.
     requires_approval: bool = False
     # The addresses a record makes a name resolve to, where it resolves to an
     # address at all. Declared by the provider because only it knows which of
-    # its fields is the answer -- and read by anything asking who can reach a
+    # its fields is the answer, and read by anything asking who can reach a
     # name, which is a property of the address rather than of the record.
     answers: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # What this declaration holds, as ``(kind, their_field, my_field)``.
     #
     # A domain holds the records published in it, and ceasing to be responsible
-    # for the domain has to release them -- left behind, HQ would keep
+    # for the domain has to release them: left behind, HQ would keep
     # reconciling records in a zone the operator had just said was not its
-    # business. Which resources those are is provider knowledge: stated in the
-    # use case instead, a generic "forget this declaration" path had the string
-    # "cloudflare.dns_record" written into it, and the second provider with
-    # anything inside it would have added an ``elif``.
+    # business. Which resources those are is provider knowledge, so the
+    # generic forget path names no kind.
     contains: tuple[str, str, str] | None = None
-    # ``module:function`` returning ``{field: {value: note}}`` -- which of the
+    # ``module:function`` returning ``{field: {value: note}}``, which of the
     # values already in a field HQ can see without being told. A dotted path for
     # the same reason ``choices`` is one: the answer needs the database, and
     # this module must not.
@@ -1388,18 +1366,16 @@ class ProviderResolutionContext:
         None
     )
     # The key of the resource being resolved, where resolution depends on which
-    # resource is asking -- a target's name belongs to one certificate, and the
+    # resource is asking: a target's name belongs to one certificate, and the
     # rest are named after themselves.
     resource_key: str = ""
     # Every Caddy route HQ declares. A route reconciles by writing the file its
-    # edge imports, and that file is all of them at once -- so one route's
+    # edge imports, and that file is all of them at once, so one route's
     # contract has to carry its siblings, the way a certificate's carries every
     # place it installs.
     #
     # Called rather than passed, because resolution runs for every declaration
-    # on a page and only a route asks this. Read eagerly it was a query per
-    # resource for an answer almost none of them wanted -- which is the cost
-    # the machine board's own test measures and refused.
+    # on a page and only a route asks this.
     caddy_routes: Callable[[], tuple[dict[str, Any], ...]] | None = None
     # ``connection_ref -> hostnames observed landing on that connection's
     # machine``. Passed in for the same reason the targets are: this module
@@ -1407,10 +1383,8 @@ class ProviderResolutionContext:
     # a sweep to find out.
     #
     # Every site that resolves a spec has to supply it, including the one that
-    # fingerprints desired state. Resolution that differs between the two is a
-    # generation that advances every time it is computed -- the certificate
-    # would queue itself forever, each run disagreeing with the last about what
-    # it had asked for.
+    # fingerprints desired state, or the generation advances every time it is
+    # computed.
     names_at: Callable[[str], tuple[str, ...]] | None = None
 
 
@@ -1421,8 +1395,8 @@ def _delivery_target(
         if target.get("connection_ref") == connection_ref:
             return target
     raise ValueError(
-        f"HQ does not know how {connection_ref!r} receives a certificate. "
-        "Add it as a delivery target first."
+        f"{connection_ref!r} is not a certificate target. Add it as one "
+        "first."
     )
 
 
@@ -1440,21 +1414,10 @@ def _consumer_at(
     other certificate installed there is named after itself, or the second
     would land on top of the first.
 
-    Which names to check at that target is derived, not typed. It used to be
-    typed: a proxy discovered its own covered hosts through its API and every
-    other kind of target carried a hand-written list, so a name added to the
-    estate became a verified consumer only if somebody also remembered to add
-    it here. One did not get remembered, and the result was a certificate page
-    listing one name on a host serving two -- while the *service* page for the
-    missing one showed the certificate correctly, because that side asks which
-    names the certificate covers rather than which names were written down.
-
-    Two answers to one question is the whole defect, so this asks the question
-    once: a name is a consumer at this target when the certificate covers it and
-    it is observed landing on that target's machine. Both halves are things HQ
-    already reconciles. The declared list stays and is unioned in, because a
-    target may legitimately serve a name no sweep can see -- it is now an
-    addition to the derivation rather than the entirety of it.
+    Which names to check at that target is derived, not typed: a name is a
+    consumer at this target when the certificate covers it and it is observed
+    landing on that target's machine. The declared list is unioned in, because a
+    target may serve a name no sweep can see.
 
     Derivation only proposes. Each name is still probed at the target and
     matched on fingerprint by the controller, so a name derived wrongly shows up
@@ -1527,10 +1490,10 @@ def _resolve_tls(
         # Said here rather than left to the resolved model, which would report
         # an empty list and not why it is empty. Recording a certificate is not
         # installing one, so a certificate whose only target records it has
-        # nowhere to go -- and nothing HQ could observe to confirm it arrived.
+        # nowhere to go, and nothing HQ could observe to confirm it arrived.
         raise ValueError(
-            f"{authored['certificate_name']} is only recorded, never installed. "
-            "Give it somewhere that serves it as well."
+            f"{authored['certificate_name']} has no install target. Add one "
+            "that serves it."
         )
     return {
         "certificate_name": authored["certificate_name"],
@@ -1554,26 +1517,32 @@ def _resolve_tls(
     }
 
 
+# Delivery target kinds an uploaded certificate cannot go to, and why.
+UPLOADED_CERTIFICATE_REFUSALS: Mapping[str, str] = MappingProxyType(
+    {
+        "cpanel": (
+            "Uploaded certificates cannot be installed on cPanel. It "
+            "rejects certificates signed by a private CA."
+        ),
+        # Publishing records what a reconcile observed about a certificate HQ
+        # issued; an uploaded certificate is not reconciled that way.
+        "onepassword": (
+            "Uploaded certificates cannot be recorded in 1Password. "
+            "Only certificates HQ issues can."
+        ),
+    }
+)
+
+
 def _resolve_uploaded(
     authored: dict[str, Any], context: ProviderResolutionContext
 ) -> dict[str, Any]:
     consumers = []
     for connection_ref in authored["install_on"]:
         target = _delivery_target(connection_ref, context)
-        if target["kind"] == "cpanel":
-            raise ValueError(
-                "A certificate HQ did not issue cannot be installed on shared "
-                "hosting: cPanel will not accept one signed by a private CA."
-            )
-        if target["kind"] == "onepassword":
-            # Publishing reads the facts a reconcile observed -- issuer, expiry,
-            # the fingerprint that was verified at each consumer. An uploaded
-            # certificate is not reconciled that way, so there would be nothing
-            # to publish but the declaration, which HQ already holds.
-            raise ValueError(
-                "A certificate HQ did not issue has no observed facts to "
-                "record, so it cannot be published to a password manager."
-            )
+        refused = UPLOADED_CERTIFICATE_REFUSALS.get(target["kind"])
+        if refused:
+            raise ValueError(refused)
         consumer = _consumer_at(
             target,
             certificate_key=context.resource_key,
@@ -1616,7 +1585,7 @@ def _dns_record_answers(spec: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _dns_record_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
-    # A TXT record carries policy -- an SPF entry, a validation challenge -- not
+    # A TXT record carries policy (an SPF entry, a validation challenge) not
     # a service. Naming one would put a hostname on the board that nothing is
     # expected to serve, and then permanently report it as unserved. The same is
     # true of MX and CAA, which is why the answer comes from the record-type
@@ -1636,8 +1605,8 @@ def _stack_origin(spec: dict[str, Any]) -> str:
 
     ``_locate`` matches a host by id as readily as by address, so a stack says
     which machine it runs on and never repeats that machine's address. A stack
-    with no port answers nothing directly -- it is reached through whatever
-    fronts it -- and returning nothing is the honest form of that.
+    with no port answers nothing directly (it is reached through whatever
+    fronts it) and returning nothing is the honest form of that.
     """
 
     port = spec.get("port")
@@ -1673,7 +1642,7 @@ def _stack_from_record(record: dict[str, Any]) -> dict[str, Any]:
     Adopting takes what is running rather than asking for it again: the stack
     name, the machine, and the published port when the container has one. A
     container on the host network publishes nothing, so its port stays for the
-    operator to supply -- nothing else knows it.
+    operator to supply: nothing else knows it.
     """
 
     return {
@@ -1691,8 +1660,8 @@ def expiry_phrase(stamp: str) -> str:
 
     The raw ISO timestamp is what the provider reports and the wrong thing to
     print. "2026-10-23T22:00:38+00:00" has to be read and subtracted from today
-    before it means anything, and the number it resolves to -- how many days are
-    left -- is the entire reason anyone looks at it.
+    before it means anything, and the number it resolves to (how many days are
+    left) is the entire reason anyone looks at it.
     """
 
     try:
@@ -1703,8 +1672,8 @@ def expiry_phrase(stamp: str) -> str:
         expires = expires.replace(tzinfo=timezone.utc)
     days = math.ceil((expires - datetime.now(timezone.utc)).total_seconds() / 86400)
     if days < 0:
-        return f"{expires:%-d %b %Y} — expired"
-    return f"{expires:%-d %b %Y} · {days} day{'' if days == 1 else 's'}"
+        return f"{expires:%-d %b %Y} · expired"
+    return f"{expires:%-d %b %Y} · {counted(days, 'day')}"
 
 
 def _certificate_readout(
@@ -1724,7 +1693,7 @@ def _certificate_readout(
     )
     # Compact on purpose. This readout is what a *service* page shows beside a
     # hostname, and there the question is whether this name is covered by
-    # something healthy -- not which seven other names share the certificate.
+    # something healthy, not which seven other names share the certificate.
     # The full list belongs on the certificate, where it is now an editable
     # field rather than a paragraph.
     return (
@@ -1738,11 +1707,8 @@ def _dns_record_origin(spec: dict[str, Any]) -> str:
     """Where a record sends the name, when the record itself is the answer.
 
     An internal name is routed by a proxy, so the proxy declares the origin. A
-    public name pointed straight at something -- a CNAME to a Pages site, an A
-    record to a host -- is routed by the record, and nothing else in HQ was
-    saying so: the service page reported "Not routed. Nothing declares where
-    requests for this name are served" about a name whose whole configuration
-    was a statement of exactly that.
+    public name pointed straight at something (a CNAME to a Pages site, an A
+    record to a host) is routed by the record.
 
     Only address types answer. A TXT or CAA record routes nothing.
     """
@@ -1766,10 +1732,8 @@ def _dns_record_value(spec: dict[str, Any]) -> str:
 def _dns_record_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    # Both sides through the same formatter. Compared against the bare
-    # `content`, the desired value -- which states the type, and a priority
-    # when there is one -- could never match what was read back, so every
-    # record reported drift against itself while its own health said Healthy.
+    # Both sides through the same formatter, so desired and read-back values
+    # compare equal.
     observed = _dns_record_value(status) if status.get("content") else ""
     rows = [("Record", _dns_record_value(spec), observed)]
     if spec.get("proxied"):
@@ -1784,7 +1748,7 @@ def _dns_record_from_record(record: dict[str, Any]) -> dict[str, Any]:
     """A Cloudflare record, as the spec that would reproduce it exactly.
 
     Adoption is only safe if the declaration starts out equal to the world, so
-    every field the reconciler sends is captured here -- including the ones an
+    every field the reconciler sends is captured here, including the ones an
     operator would never think to set. ``priority`` is read back only for MX
     because Cloudflare reports 0 for types that do not have one, and storing
     that would fail the spec's own validation on the next edit.
@@ -1809,7 +1773,7 @@ def _dns_record_identity(spec: dict[str, Any]) -> tuple[str, ...]:
     Cloudflare's own record id would be the obvious answer and is the wrong one
     here: a declaration authored in HQ has never had one, so identity has to be
     something both a live record and a freshly typed form can produce. The tuple
-    a zone file would use -- name, type, value -- is that, and it is unique
+    a zone file would use (name, type, value) is that, and it is unique
     because Cloudflare rejects an exact duplicate of all three.
     """
 
@@ -1828,29 +1792,23 @@ def names_a_host(name: str) -> bool:
     A label beginning with an underscore is reserved by RFC 8552 for metadata
     about a domain rather than for a host in it: ``_dmarc``, ``_domainkey``,
     ``_acme-challenge``, ``_sip._tcp``. Nothing is ever served there, and no
-    name of that shape can be a service however it is published.
-
-    The record type alone could not tell. TXT records were excluded because
-    they carry policy, which caught ``_dmarc`` -- and missed
-    ``sig1._domainkey``, a DKIM delegation published as a CNAME. The type said
-    "an address, so a service"; the name says it is a signing key.
+    name of that shape can be a service however it is published. The record
+    type cannot tell: ``sig1._domainkey`` is a DKIM delegation published as a
+    CNAME.
     """
 
     return not any(label.startswith("_") for label in str(name).split("."))
 
 
-def normalized_hostname(name: str) -> str:
-    """One spelling of a DNS name: lowercase, trimmed, no trailing dot.
+def registry_label(kind: str) -> str:
+    """What a registered resource or reading kind is called. Never the identifier."""
 
-    The single implementation. Three modules had their own -- the service view,
-    the domain view and this one -- and they agreed only by coincidence. A name
-    is the join between every surface HQ has: a rewrite, a proxy host, a
-    certificate and a DNS record are authored in four places and will not agree
-    on case or on the trailing dot, and two that differ only in those would
-    appear as separate services with each missing what the other had.
-    """
-
-    return str(name).strip().lower().rstrip(".")
+    provider = PROVIDERS.get(kind)
+    if provider is not None and provider.label:
+        return provider.label
+    if kind in OBSERVATIONS:
+        return OBSERVATIONS[kind].label
+    return "Unregistered kind"
 
 
 def caa_parts(content: str) -> tuple[int, str, str] | None:
@@ -1858,9 +1816,8 @@ def caa_parts(content: str) -> tuple[int, str, str] | None:
 
     Cloudflare returns a CAA record as one formatted string and accepts it only
     as three fields. HQ stores the string, because that is what a zone file shows
-    and what an operator recognises, and splits it here -- once, rather than in
-    the validator, the canonicaliser and the controller separately, which is
-    where the spellings they each accepted began to disagree.
+    and what an operator recognises, and splits it here, once, for the
+    validator, the canonicaliser and the controller.
     """
 
     parsed = re.match(_CAA_VALUE_PARTS, str(content))
@@ -1873,11 +1830,9 @@ def normalized_record_content(record_type: str, content: str) -> str:
     """One spelling of a value, so desired and observed can be compared.
 
     Declared here, beside the record-type registry, and imported by the
-    controller rather than reimplemented there. Two copies of this is not a
-    tidiness problem: identity uses it to decide whether a live record is one HQ
+    controller. Identity uses it to decide whether a live record is one HQ
     already declares, and the reconciler uses it to decide whether that record
-    needs changing. If the two ever disagreed, HQ would adopt a record and then
-    immediately rewrite it.
+    needs changing, so the two must be one function.
 
     Every rule is one Cloudflare imposes, and each is a way for a record to
     report as drifted against itself:
@@ -1891,7 +1846,7 @@ def normalized_record_content(record_type: str, content: str) -> str:
     if record_type == "TXT" and not (value.startswith('"') and value.endswith('"')):
         value = f'"{value}"'
     if record_type in {"CNAME", "MX"}:
-        value = value.lower().rstrip(".")
+        value = normalized_hostname(value)
     if record_type == "CAA":
         parts = caa_parts(value)
         if parts:
@@ -1904,7 +1859,7 @@ def _dns_record_key_hint(spec: dict[str, Any]) -> str:
     """A name an operator would recognise on a list of declarations.
 
     The record type is in it because a name usually has more than one record and
-    "jseverino-com" would collide with itself four times over on a zone apex.
+    "example-com" would collide with itself four times over on a zone apex.
     """
 
     name = normalized_hostname(spec.get("name", ""))
@@ -1931,17 +1886,8 @@ def _zone_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     """What HQ holds about this domain that is not said better elsewhere.
 
-    Five rows used to sit above this one -- a record count, and a summary each
-    of MX, SPF, DMARC and CAA. Every one of them read a `status` key that
-    nothing has ever written, so every zone page in the estate printed five em
-    dashes and called them observations.
-
-    The facts were never missing. HQ sweeps every record in these zones, and
-    `application.zone_insights` already derives exactly those summaries from
-    them for the domain page, which says all of it and more. A readout is handed
-    a spec and a status and no database, so this is the one surface that could
-    not have derived them -- and the answer to that is to stop pretending, not
-    to print a placeholder where the derivation would go.
+    Record summaries (MX, SPF, DMARC, CAA) come from
+    `application.zone_insights` on the domain page; a readout has no database.
     """
 
     del status
@@ -1968,7 +1914,7 @@ def _network_readout(
     return (
         ("Range", "", str(spec.get("cidr", ""))),
         ("Gateway", "", str(spec.get("gateway", "")) or "none"),
-        ("What it is for", "", str(spec.get("purpose", ""))),
+        ("Purpose", "", str(spec.get("purpose", ""))),
     )
 
 
@@ -1982,7 +1928,7 @@ def _authority_readout(
     """What was declared, and how long it has left.
 
     The expiry is the reason this record exists, so it is phrased as the time
-    remaining rather than as the date -- a date ten years out reads as "fine"
+    remaining rather than as the date: a date ten years out reads as "fine"
     at a glance for nine of them.
     """
 
@@ -2005,9 +1951,9 @@ def _authority_readout(
                 else f"{expires} · expired"
             )
     return (
-        ("What it issues", "", str(spec.get("covers", ""))),
+        ("Issues", "", str(spec.get("covers", ""))),
         ("Expires", "", remaining or "does not expire"),
-        ("Where the key lives", "", str(spec.get("key_location", ""))),
+        ("Key location", "", str(spec.get("key_location", ""))),
         ("Issued with", "", str(spec.get("issued_with", ""))),
     )
 
@@ -2019,16 +1965,10 @@ def _machine_key_hint(spec: dict[str, Any]) -> str:
 def _machine_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    """What was declared. Whether it answers is the machine page's to say.
-
-    Four lines shorter than it was, and it says the same amount. The operating
-    system is the tailnet's to report and the machine page reports it; a kind,
-    an SSH alias and a port were blank on every machine and read by this
-    function alone, which is a readout of nothing.
-    """
+    """What was declared. Whether it answers is the machine page's to say."""
 
     return (
-        ("What it is for", "", str(spec.get("role", ""))),
+        ("Purpose", "", str(spec.get("role", ""))),
         ("Addresses", "", ", ".join(spec.get("addresses", ()))),
     )
 
@@ -2050,12 +1990,12 @@ def _delivery_target_readout(
     settings = {
         "caddy": ("Certificate directory", spec.get("certificate_directory", "")),
         "npm": (
-            "Checks every host it covers",
+            "Checks all covered hosts",
             "Yes" if spec.get("discover_covered_hosts") else "No",
         ),
         "cpanel": ("Installs", ", ".join(spec.get("install_domains", ()))),
         "onepassword": (
-            "Records it on",
+            "Recorded in",
             " in ".join(
                 part
                 for part in (spec.get("item", ""), spec.get("vault", ""))
@@ -2065,15 +2005,15 @@ def _delivery_target_readout(
     }.get(str(spec.get("kind", "")))
     # Named first because the list beside this shows only the first row, and
     # the name a certificate goes by at the target is the thing an operator
-    # recognises -- the key already says which connection it is.
+    # recognises: the key already says which connection it is.
     rows = [
-        ("Named there", "", str(spec.get("name", ""))),
-        ("Runs", "", str(spec.get("kind", ""))),
-        ("Reached through", "", str(spec.get("connection_ref", ""))),
+        ("Name at target", "", str(spec.get("name", ""))),
+        ("Type", "", str(spec.get("kind", ""))),
+        ("Connection", "", str(spec.get("connection_ref", ""))),
         (
-            "That name belongs to",
+            "Name used by",
             "",
-            str(spec.get("certificate_resource", "")) or "nothing yet",
+            str(spec.get("certificate_resource", "")) or "none",
         ),
     ]
     if settings and settings[1]:
@@ -2086,7 +2026,7 @@ def _delivery_target_readout(
 def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     # The names come from the certificate itself, which HQ reads when it is
     # uploaded. Nothing is declared here, so before HQ has the artifact this
-    # covers nothing -- which is true.
+    # covers nothing, which is true.
     return tuple(spec.get("domains", ()))
 
 
@@ -2118,7 +2058,7 @@ def _dns_record_seed(context: NameContext) -> dict[str, Any]:
     # correct.
     # The zone a connected credential actually holds, when one does. Falling
     # back to the last two labels, which is right for most names and wrong for
-    # every co.uk -- a guess worth making only when there is nothing better.
+    # every co.uk: a guess worth making only when there is nothing better.
     labels = context.hostname.split(".")
     zone = context.public_zone or (
         ".".join(labels[-2:]) if len(labels) > 2 else context.hostname
@@ -2131,11 +2071,8 @@ def _uploaded_certificate_seed(context: NameContext) -> dict[str, Any]:
 
     Seeding the name is the whole of what a hostname can answer here: which
     machines to install it on is a decision, and the certificate itself arrives
-    as a file on the same page.
-
-    Its existence is the point. Offered nowhere, a `.homelab` service had one
-    certificate option and it was the one that cannot work -- the answer was
-    reachable only by knowing to go to the registry and pick it by hand.
+    as a file on the same page. It is the certificate option a name no public
+    CA will sign (a `.home.arpa` service) can use.
     """
 
     label = re.sub(r"[^a-z0-9.-]+", "-", context.hostname.lower()).strip("-.")
@@ -2148,11 +2085,8 @@ def _container_readout(
     # No "Runs on" row: the card carries the machine as a link, and printing it
     # here as text would say it twice in the same box.
     #
-    # No "State" row either. It read `status["state"]`, which nothing writes for
-    # a container -- a container is confirmed by the sweep, and `confirm_observed`
-    # stores the spec it derived, which is identity and holds no state. So the
-    # row was an em dash on all ten of them, every time. What a container is
-    # doing comes from the sweep and is on the card above, with its uptime.
+    # No "State" row either: what a container is doing comes from the sweep and
+    # is on the card above, with its uptime.
     return (("Container", spec.get("name", ""), status.get("container", "")),)
 
 
@@ -2162,6 +2096,13 @@ def _container_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "host": record.get("host", ""),
         "name": record.get("name", ""),
     }
+
+
+def _container_adopts(record: dict[str, Any]) -> bool:
+    """A container a compose project created is declared in its compose file.
+    One started by hand is declared nowhere, so it waits for a person."""
+
+    return bool(record.get("stack"))
 
 
 def _container_identity(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -2177,14 +2118,14 @@ def _container_key_hint(spec: dict[str, Any]) -> str:
 def _container_removal_note(spec: dict[str, Any]) -> str:
     return (
         f"HQ stops watching {spec.get('name', 'this container')} and can no "
-        "longer start, stop or restart it. The container itself is untouched."
+        "longer start, stop or restart it. The container keeps running."
     )
 
 
 def _public_dns_applies(context: NameContext) -> str:
     """Whether any connected account holds a zone this name could live in.
 
-    A `.homelab` name has no public zone and never will, so offering to publish
+    A `.home.arpa` name has no public zone and never will, so offering to publish
     a record for it proposes a call Cloudflare will refuse. The credential
     already reported which zones it may edit; this is that answer, used.
 
@@ -2202,15 +2143,15 @@ def _managed_certificate_applies(context: NameContext) -> str:
     """Whether Let's Encrypt could issue for this name at all.
 
     Issuance here is DNS-01, which means proving control by writing a record
-    into the name's own zone. No zone, no proof, and no certificate -- a fact
+    into the name's own zone. No zone, no proof, and no certificate: a fact
     knowable now rather than a minute later in a failed job.
     """
 
     if not context.swept or context.public_zone:
         return ""
     return (
-        "Let's Encrypt proves this name by writing a DNS record in its zone, "
-        "and no connected account holds one. Upload a certificate instead."
+        "No connected DNS account holds this name's zone, so Let's Encrypt "
+        "cannot verify it. Upload a certificate instead."
     )
 
 
@@ -2228,19 +2169,8 @@ TAILNET_FACET = "tailnet"
 def _tailnet_device_key_hint(spec: dict[str, Any]) -> str:
     """``<name>-tailnet``, because a machine already answers to ``<name>``.
 
-    A key is unique across every kind, and this asked for the bare device name
-    -- the same string ``_machine_key_hint`` asks for. Two declarations about
-    one machine competed for one key, so whichever was adopted second was filed
-    as ``<name>-2``: a suffix that records nothing except which arrived later,
-    on an estate where the name is what everything else joins on.
-
-    Every other provider that describes an aspect of something already answers
-    this way -- ``<name>-dns``, ``<name>-proxy``, ``<name>-certificate``. This
-    one is the outlier, and the collision was the consequence rather than a
-    quirk of the tailnet.
-
-    Existing keys are migrated rather than left; see the migration that renames
-    them, because a key nobody can explain is worse than a rename nobody enjoys.
+    Keys are unique across kinds; an aspect of something is keyed by its name
+    and the aspect, as ``<name>-dns`` and ``<name>-proxy`` are.
     """
     name = str(spec.get("name", "")).strip()
     return f"{name}-{TAILNET_FACET}" if name else ""
@@ -2251,17 +2181,17 @@ def _tailnet_device_readout(
 ) -> tuple[tuple[str, str, str], ...]:
     """What HQ asked for about this device, beside what the tailnet reports."""
 
-    wanted = "Stays on the tailnet" if spec.get("key_expiry_disabled") else "Expires"
+    wanted = "Never expires" if spec.get("key_expiry_disabled") else "Expires"
     observed = ""
     if status:
         observed = (
-            "Stays on the tailnet"
+            "Never expires"
             if status.get("key_expiry_disabled")
             else expiry_phrase(str(status.get("key_expires", "")))
         )
     return (
         ("Device", "", str(spec.get("name", ""))),
-        ("Reached through", "", str(spec.get("connection_ref", ""))),
+        ("Connection", "", str(spec.get("connection_ref", ""))),
         ("Node key", wanted, observed),
     )
 
@@ -2271,7 +2201,7 @@ def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
 
     Key expiry is read back, not dropped. The daemon reading is described as
     holding "presence and key expiry, which are the two that go wrong quietly",
-    and this mapping kept only the name -- so every device asserted a
+    and this mapping kept only the name, so every device asserted a
     ``key_expiry_disabled`` no sweep ever confirmed, which is the quiet way it
     goes wrong. Absence of an expiry is the setting rather than an unknown
     date, the same reading a reconcile makes.
@@ -2304,11 +2234,21 @@ CONTROLLER_PROVIDER_ADAPTERS = _admitted_controller_adapters()
 _ADMITTED_PROVIDER_DEFINITIONS = _admitted_provider_definitions()
 
 
+def _named_page(route: str, resource, field: str) -> str:
+    value = (resource.spec or {}).get(field)
+    if value:
+        try:
+            return reverse(route, args=[value])
+        except NoReverseMatch:
+            pass
+    return reverse("control_plane:detail", kwargs={"key": resource.key})
+
+
 _PROVIDERS = (
     ProviderSpec(
         "tls.certificate",
-        "Issues a certificate from Let's Encrypt and keeps it renewed and "
-        "installed on everything that serves these names. Nothing to upload.",
+        "Issues a Let's Encrypt certificate, renews it, and installs it "
+        "wherever these names are served.",
         TLSCertificateSpec,
         ResolvedTLSCertificateSpec,
         _resolve_tls,
@@ -2330,8 +2270,8 @@ _PROVIDERS = (
         change_effects=(
             (
                 "domains",
-                "Saving re-issues the certificate and redeploys it everywhere "
-                "it is installed. Takes about a minute.",
+                "Saving reissues the certificate and redeploys it to every "
+                "target. Takes about a minute.",
             ),
         ),
         facet="certificate",
@@ -2340,19 +2280,18 @@ _PROVIDERS = (
         seed=_certificate_seed,
         covers=True,
         unobserved_reason=(
-            "No collector lists certificates. What HQ knows about one "
-            "arrives when an operation issues or installs it, so the "
-            "record ages between operations rather than between sweeps."
+            "No sweep reads certificates. HQ updates this record when it "
+            "issues or installs the certificate."
         ),
         removal_gap=(
-            "Removing the declaration should stop the renewals it drives, and the "
-            "controller has no delete for this yet."
+            "The controller cannot delete certificates yet, so renewals would "
+            "not stop."
         ),
     ),
     ProviderSpec(
         "tls.uploaded_certificate",
-        "Installs a certificate you generated yourself, and keeps it so you can "
-        "add it to another service without regenerating it.",
+        "Installs a certificate you generated elsewhere. HQ keeps a copy so "
+        "you can install it on more targets later.",
         UploadedCertificateSpec,
         ResolvedUploadedCertificateSpec,
         _resolve_uploaded,
@@ -2371,15 +2310,15 @@ _PROVIDERS = (
         covers=True,
         readout=_uploaded_certificate_readout,
         unobserved_reason=(
-            "HQ holds the bytes; where they are installed is observed as "
-            "the certificate."
+            "HQ stores the file. Installs are checked when the certificate "
+            "is reconciled."
         ),
     ),
     _ADMITTED_PROVIDER_DEFINITIONS["npm.proxy_host"],
     ProviderSpec(
         "portainer.stack",
-        "Runs a set of containers on one of your machines. Created in Portainer "
-        "if it is not there yet.",
+        "A set of containers on one machine. HQ creates it in Portainer if "
+        "it does not exist.",
         PortainerStackSpec,
         actions={
             "reconcile": applies(automatic=True),
@@ -2393,8 +2332,8 @@ _PROVIDERS = (
         advanced_fields=("connection_ref", "environment"),
         removal_note=lambda spec: (
             f"{spec.get('name', 'This stack')} stops running on "
-            f"{spec.get('host', 'its machine')}, and anything it serves goes "
-            "with it."
+            f"{spec.get('host', 'its machine')}. Anything it serves goes "
+            "offline."
         ),
         facet="runtime",
         hostnames=_stack_hostnames,
@@ -2412,18 +2351,17 @@ _PROVIDERS = (
         },
         choices="application.provider_choices:container_stack",
         unobserved_reason=(
-            "A stack is observed through the containers it runs, which are swept."
+            "Observed through its containers, which the sweep reads."
         ),
     ),
     ProviderSpec(
         "portainer.container",
-        "A container HQ keeps an eye on and can start, stop or restart. It "
-        "does not define the container -- whatever compose file created it "
-        "still does.",
+        "A container HQ watches and can start, stop or restart. Its compose "
+        "file still defines it.",
         PortainerContainerSpec,
         actions={
             "reconcile": locked(
-                "The container is defined by a compose file HQ has never seen. HQ can watch it and cycle it, not define it."
+                "Defined by a compose file outside HQ. HQ can start, stop and restart it."
             ),
             "restart": applies(),
             "start": applies(),
@@ -2439,10 +2377,12 @@ _PROVIDERS = (
         # place its identity is known.
         readout=_container_readout,
         from_record=_container_from_record,
+        adopts=_container_adopts,
         sample_record={
             "name": "example-web",
             "host": "example-host",
             "connection_ref": "example-portainer",
+            "stack": "example-stack",
         },
         identity=_container_identity,
         key_hint=_container_key_hint,
@@ -2451,29 +2391,19 @@ _PROVIDERS = (
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
         advanced_fields=("hidden", "on_demand", "serves_ports"),
-        # And that is exactly why a sweep can never confirm it. The field
-        # exists for the case Docker publishes nothing, so asking the world to
-        # echo it back asks for the one answer this provider is unable to give.
-        # Declared, so the gap is a known one rather than seven records
-        # reporting an unconfirmed assertion nothing could ever confirm.
+        # So a sweep can never confirm it: the field exists for the case Docker
+        # publishes nothing.
         #
-        # ``hidden`` is here for a different reason and the same outcome. It is
-        # not a fact about the container at all: it decides whether HQ folds the
-        # row away on the machine's page, which is HQ's own bookkeeping in the
-        # same sense as a device's ``connection_ref``. Portainer has never been
-        # told it and Docker has nowhere to keep it, so the sweep cannot report
-        # it and no reconcile could make it agree. Left undeclared, the two
-        # containers that set it asserted a control nothing had checked -- which
-        # is true, permanently, and not a gap anybody can close.
+        # ``hidden`` is HQ's own bookkeeping (whether the machine page folds the
+        # row away); Portainer and Docker have nowhere to keep it.
         unobservable_fields=("serves_ports", "hidden", "on_demand"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
     ProviderSpec(
         "tailscale.device",
-        "Keeps a decision about a machine on your tailnet -- the kind that is "
-        "made once and then has no symptom until the day it matters. It does "
-        "not define the device; running Tailscale on the machine did that.",
+        "Settings HQ keeps for one device on your tailnet, such as key "
+        "expiry.",
         TailnetDeviceSpec,
         actions={
             "reconcile": applies(
@@ -2487,6 +2417,7 @@ _PROVIDERS = (
         },
         label="Tailnet device",
         connection_providers=("tailscale",),
+        console=tailscale_machine,
         readout=_tailnet_device_readout,
         from_record=_tailnet_device_from_record,
         # Carries an expiry, so the round-trip guard has something to check
@@ -2512,19 +2443,19 @@ _PROVIDERS = (
         change_effects=(
             (
                 "key_expiry_disabled",
-                "Saving applies this to the device on the next pass. Turning it "
-                "off gives the device an expiry date again.",
+                "Applied on the next reconcile. Turning it off restores key "
+                "expiry.",
             ),
         ),
         removal_note=lambda spec: (
-            f"HQ stops keeping {spec.get('name', 'this device')} on the tailnet. "
-            "Whatever is set there now stays set; nothing asserts it again."
+            f"HQ stops managing {spec.get('name', 'this device')}. Its current "
+            "settings stay as they are."
         ),
     ),
     ProviderSpec(
         "tailscale.policy",
-        "The tailnet's access policy. HQ reads it, shows what it implies, and "
-        "checks a change against your own tests before applying one.",
+        "The tailnet's access policy. HQ runs the policy's tests before "
+        "applying a change.",
         TailnetPolicySpec,
         actions={
             "reconcile": applies(
@@ -2559,8 +2490,8 @@ _PROVIDERS = (
         change_effects=(
             (
                 "document",
-                "Saving records it. Reconciling applies it to the tailnet, and "
-                "only if it still passes the tests written inside it.",
+                "Saving records it. Reconciling applies it if the policy's own "
+                "tests pass.",
             ),
         ),
         readout=lambda spec, status: (
@@ -2571,13 +2502,12 @@ _PROVIDERS = (
     ),
     ProviderSpec(
         "network",
-        "A range of addresses this estate is built on. HQ learns addresses "
-        "from whatever answers at them and never learns what range they "
-        "belong to, which is what decides who can reach them.",
+        "An address range. HQ uses it to tell which network an address is "
+        "on.",
         NetworkSpec,
         actions={
             "reconcile": locked(
-                "HQ cannot create a subnet. This entry records one so the addresses inside it resolve."
+                "HQ does not create subnets. This entry records one."
             ),
         },
         label="Network",
@@ -2588,22 +2518,21 @@ _PROVIDERS = (
         # things that answer inside one.
         key_hint=_network_key_hint,
         removal_note=lambda spec: (
-            f"{spec.get('name', 'This network')} stops being a range HQ knows. "
-            "Addresses inside it stay, with nothing saying what they are on."
+            f"HQ forgets {spec.get('name', 'this network')}. Addresses in it "
+            "are no longer linked to a network."
         ),
         unobserved_reason=(
-            "A subnet is a statement about addressing rather than a thing that answers."
+            "A range is a record. There is nothing to observe."
         ),
     ),
     ProviderSpec(
         "pki.authority",
-        "A certificate authority this estate trusts. Not a certificate HQ "
-        "renews -- the authority one was issued by, including a root kept "
-        "offline that nothing can reach by design.",
+        "A certificate authority you trust, including an offline root. HQ "
+        "records it and does not renew it.",
         CertificateAuthoritySpec,
         actions={
             "reconcile": locked(
-                "The root is kept offline so nothing can reach it. A controller that could would defeat the point."
+                "The authority is kept offline. HQ does not reach it."
             ),
         },
         label="Certificate authority",
@@ -2612,29 +2541,27 @@ _PROVIDERS = (
         readout=_authority_readout,
         key_hint=_authority_key_hint,
         removal_note=lambda spec: (
-            f"{spec.get('name', 'This authority')} stops being recorded. "
-            "Certificates it issued stay, with nothing saying what signed them."
+            f"HQ forgets {spec.get('name', 'this authority')}. Certificates it "
+            "issued are no longer linked to it."
         ),
         unobserved_reason=(
-            "An offline authority is offline by definition; being "
-            "unreachable is the point of it."
+            "Kept offline. There is nothing to observe."
         ),
     ),
     ProviderSpec(
         "machine",
-        "A machine HQ should list even though nothing sweeps it, and the "
-        "addresses that reach it. Machines behind a Portainer or a credential "
-        "are already known and need no entry here.",
+        "A machine no sweep finds, and its addresses. Machines behind "
+        "Portainer or another connection are listed already.",
         MachineSpec,
         actions={
             "reconcile": locked(
-                "HQ cannot create a machine. This entry records one so the addresses that reach it resolve."
+                "HQ does not create machines. This entry records one."
             ),
         },
         label="Machine",
+        home=lambda resource: _named_page("control_plane:machine", resource, "name"),
         unobserved_reason=(
-            "A reachability probe would answer for the declared addresses. "
-            "None is written, so a printer with an address sits unchecked."
+            "What HQ sees of it comes through its connections, on its machine page."
         ),
         declaration_only=True,
         hostnames=None,
@@ -2643,25 +2570,25 @@ _PROVIDERS = (
         # there is no record to adopt one from. What HQ observes about a machine
         # arrives as containers and connections, which name it in passing.
         key_hint=_machine_key_hint,
-        # Half the addresses on a machine are the only record of it -- nothing
-        # reports the printer on the LAN -- and half repeat what the tailnet
+        # Half the addresses on a machine are the only record of it (nothing
+        # reports the printer on the LAN) and half repeat what the tailnet
         # says. The field has to stay writable for the first kind, and it is
         # also the key that ties HQ's name for a machine to the tailnet's
         # different one, so this marks which is which rather than locking it.
         notes="application.provider_choices:machine_address_notes",
         removal_note=lambda spec: (
-            f"{spec.get('name', 'This machine')} stops being a place in HQ. "
-            "Anything forwarding to its addresses reads as pointing nowhere."
+            f"HQ forgets {spec.get('name', 'this machine')}. Anything "
+            "forwarding to its addresses shows an unknown host."
         ),
     ),
     ProviderSpec(
         "tls.delivery_target",
-        "Somewhere a certificate can be installed, and how it gets there. "
-        "Declaring one is what lets a certificate name it as a place to go.",
+        "A place certificates are installed, and how they get there. "
+        "Certificates can only install on declared targets.",
         TLSDeliveryTargetSpec,
         actions={
             "reconcile": locked(
-                "This describes how a place takes a certificate. The certificates installed there are what get deployed and verified."
+                "Nothing to reconcile. Reconcile the certificates installed here."
             ),
         },
         label="Certificate target",
@@ -2678,12 +2605,11 @@ _PROVIDERS = (
         key_hint=_delivery_target_key_hint,
         choices="application.provider_choices:delivery_target",
         removal_note=lambda spec: (
-            f"Certificates stop being installed on {spec.get('name', 'this target')}, "
-            "and any that name it can no longer be resolved at all."
+            f"Certificates stop being installed on {spec.get('name', 'this target')}. "
+            "Certificates that list it stop resolving."
         ),
         unobserved_reason=(
-            "Nothing reads back how a place takes a certificate. What "
-            "arrives there is observed as the certificate itself."
+            "Nothing to observe. Each certificate reports its own install."
         ),
     ),
     _ADMITTED_PROVIDER_DEFINITIONS["caddy.route"],
@@ -2707,6 +2633,7 @@ _PROVIDERS = (
         answers=_dns_record_answers,
         readout=_dns_record_readout,
         from_record=_dns_record_from_record,
+        fronts=lambda spec: bool(spec.get("proxied")),
         sample_record={
             "zone": "example.com",
             "name": "www.example.com",
@@ -2725,17 +2652,17 @@ _PROVIDERS = (
     ),
     ProviderSpec(
         "cloudflare.zone",
-        "A domain HQ is responsible for. Declaring one is what puts its "
-        "records under HQ's management; the credential can see every zone on "
-        "the account, which is not the same as being asked to manage them.",
+        "A domain HQ manages. Only declared domains have their records "
+        "managed, even if the connection can see more zones.",
         CloudflareZoneSpec,
         actions={
             "reconcile": locked(
-                "A zone declaration records which domains are HQ's business. It "
-                "carries no settings, so there is nothing to converge toward."
+                "A domain has no settings to reconcile."
             ),
         },
         label="Domain",
+        home=lambda resource: _named_page("zones:detail", resource, "zone"),
+        console=lambda record: cloudflare_dashboard(record, str(record.get("zone", ""))),
         connection_providers=("cloudflare_dns",),
         public_effect=True,
         hostnames=None,
@@ -2752,16 +2679,30 @@ _PROVIDERS = (
 
 PROVIDERS = {provider.kind: provider for provider in _PROVIDERS}
 
-# Kinds a controller reports as readings rather than as resources.
-#
-# A provider spec says what HQ can declare, create, reconcile and delete. A
-# host firewall is none of those: HQ can only be told what it currently is, and
-# giving it a spec would put a resource on the board that nothing can act on.
-#
-# Named here so the sweep ingest can tell a reading this HQ understands from a
-# controller running ahead of it -- which is the only thing that guard exists to
-# catch, and which silently discarded this kind until it was listed.
-OBSERVATION_KINDS = frozenset({"host.firewall"})
+
+def resource_home(resource) -> str:
+    """The URL of the page a resource lives on."""
+    provider = PROVIDERS.get(resource.kind)
+    if provider is not None and provider.home is not None:
+        return provider.home(resource)
+    return reverse("control_plane:detail", kwargs={"key": resource.key})
+
+
+def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
+    """``(label, desired, observed)`` as the resource's provider describes it."""
+
+    provider = PROVIDERS.get(resource.kind)
+    if provider is None or provider.readout is None:
+        return ()
+    try:
+        return tuple(provider.readout(resource.spec, resource.status or {}))
+    except (KeyError, TypeError, ValueError):
+        return ()
+
+
+# Kinds a controller reports as readings rather than as resources; see
+# control_plane.observations.
+OBSERVATION_KINDS = frozenset(OBSERVATIONS)
 
 
 @dataclass(frozen=True)
@@ -2771,7 +2712,7 @@ class ObserverAbility:
     Every other ability is derived from a resource kind: a credential exists to
     make some declaration true, so the kind is the record of why it is held.
     A connection that only ever reads has no kind to derive from, and left at
-    that it appears on the connections page holding no authority at all -- which
+    that it appears on the connections page holding no authority at all, which
     reads as a credential nobody can account for rather than as a reader.
 
     So a reader declares its ability here, against the resource it answers for.
@@ -2792,9 +2733,8 @@ _OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
         name="analytics.read",
         label="Site analytics",
         summary=(
-            "Reads what the published site was asked for -- pages, referrers, "
-            "countries, devices, browsers and operating systems -- and the Core "
-            "Web Vitals behind them."
+            "Reads site traffic (pages, referrers, countries, devices, "
+            "browsers, operating systems) and Core Web Vitals."
         ),
         subject_resource="analytics",
     ),
@@ -2835,6 +2775,24 @@ def connection_credential(provider: str) -> str:
     return CONNECTION_CREDENTIALS.get(provider, "")
 
 
+# Each connection provider's name as the page shows it.
+CONNECTION_LABELS: Mapping[str, str] = MappingProxyType(
+    {
+        "cloudflare_api": "Cloudflare API",
+        "cloudflare_dns": "Cloudflare DNS",
+        "onepassword": "1Password",
+        "tailscale": "Tailscale",
+        "adguard": "AdGuard Home",
+        "npm": "Nginx Proxy Manager",
+        "portainer": "Portainer",
+        "ssh": "SSH",
+    }
+)
+
+if set(CONNECTION_LABELS) != set(CONNECTION_CREDENTIALS):
+    raise ValueError("Every connection provider needs a label and a credential model.")
+
+
 # A provider a resource can be reconciled through, or an observer can read
 # through, without a credential model would be reported as "proof undeclared"
 # forever. Refused here, beside the declarations, rather than found on the page.
@@ -2859,15 +2817,26 @@ CERTIFICATE_KIND = "tls.certificate"
 UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"
 CADDY_ROUTE_KIND = "caddy.route"
 CONTAINER_KIND = "portainer.container"
+CONTAINER_STACK_KIND = "portainer.stack"
 DELIVERY_TARGET_KIND = "tls.delivery_target"
 MACHINE_KIND = "machine"
+ZONE_KIND = "cloudflare.zone"
+DNS_RECORD_KIND = "cloudflare.dns_record"
+TAILNET_KIND = "tailscale.device"
+TAILNET_POLICY_KIND = "tailscale.policy"
 
 for _named in (
     CERTIFICATE_KIND,
     UPLOADED_CERTIFICATE_KIND,
+    CADDY_ROUTE_KIND,
     CONTAINER_KIND,
+    CONTAINER_STACK_KIND,
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
+    ZONE_KIND,
+    DNS_RECORD_KIND,
+    TAILNET_KIND,
+    TAILNET_POLICY_KIND,
 ):
     if _named not in PROVIDERS:
         raise ValueError(f"{_named!r} is named as a kind but no provider declares it.")
@@ -2877,16 +2846,9 @@ for _named in (
 def controller_capability_registry() -> ControllerCapabilityRegistry:
     """What the controller may do, assembled from the providers themselves.
 
-    This used to be read from a committed JSON file that had to name every
-    provider exactly once or HQ refused to start -- so declaring a provider
-    meant writing it twice, in two languages, and the check that kept them
-    honest could only ever confirm that a copy was still a copy.
-
-    Nothing was ever in that file which the provider did not already own. A
-    provider knows whether the controller can converge it, whether it should do
-    so unprompted, and why not when not; those are properties of the thing, not
-    of a deployment. HQ is where they are stated now, and there is no longer a
-    second place for them to disagree with.
+    A provider knows whether the controller can converge it, whether it should
+    do so unprompted, and why not when not; those are properties of the thing,
+    not of a deployment.
     """
 
     missing = sorted(
@@ -2914,7 +2876,7 @@ def controller_id() -> str:
 
     Falling back to the machine's own name rather than to a word. This is what
     a sweep files its findings under, so a placeholder would put every container
-    on a host called "controller" -- and both processes that ask run on the host
+    on a host called "controller", and both processes that ask run on the host
     network, so both get the same answer without anything being passed between
     them.
     """
@@ -2950,8 +2912,8 @@ def controller_action_policy(kind: str, action: str) -> tuple[bool, str]:
     if not policy:
         return False, f"The controller does not implement {action!r} for {kind!r}."
     if policy.mode != "apply":
-        return False, policy.reason or "Controller capability is locked."
-    return True, "Controller capability is active."
+        return False, policy.reason or "The controller cannot run this action."
+    return True, "The controller can run this action."
 
 
 def describe_providers() -> dict[str, Any]:
@@ -2970,7 +2932,7 @@ def describe_providers() -> dict[str, Any]:
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,
                 # Said out loud in the contract, so a caller can know before it
-                # calls that this kind waits for a person -- rather than
+                # calls that this kind waits for a person, rather than
                 # discovering it from the answer to a change it has already
                 # asked for.
                 "requires_approval": provider.requires_approval,
@@ -2993,11 +2955,6 @@ def validate_spec(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Unknown infrastructure resource kind {kind!r}.") from exc
     validated = provider.validate(payload)
     return TypeAdapter(provider.spec_type).dump_python(validated, mode="json")
-
-
-def validate_resolved_certificate(payload: dict[str, Any]) -> dict[str, Any]:
-    validated = TypeAdapter(ResolvedTLSCertificateSpec).validate_python(payload)
-    return TypeAdapter(ResolvedTLSCertificateSpec).dump_python(validated, mode="json")
 
 
 def resolve_provider_spec(

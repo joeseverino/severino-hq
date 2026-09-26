@@ -107,6 +107,12 @@ class DestructiveDefaultTests(PolicyTestCase):
 
 
 class SurfaceRuleTests(PolicyTestCase):
+    def setUp(self):
+        super().setUp()
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+
     def test_require_approval_holds_any_capability_and_applies_on_approval(self):
         self.rule(Scope.SURFACE, "mcp", "project.create", Rule.APPROVE)
 
@@ -276,7 +282,7 @@ class PageTests(PolicyTestCase):
     def test_it_shows_both_surfaces_and_every_agent_seen(self):
         page = self.page()
 
-        for text in ("All MCP agents", "All API clients", "example-agent", "granted", "Projects", "Rules set", "Awaiting approval"):
+        for text in ("All MCP agents", "All API clients", "example-agent", "granted", "Projects", "0 rules", "awaiting approval"):
             self.assertContains(page, text)
 
     def test_an_agent_cannot_be_offered_what_pocket_id_did_not_grant(self):
@@ -299,7 +305,7 @@ class PageTests(PolicyTestCase):
 
         self.assertContains(response, "Saved 1 change")
         self.assertEqual(CapabilityRule.objects.get().rule, Rule.APPROVE)
-        self.assertContains(response, "policy-chip rule-approve")
+        self.assertContains(response, "policy-select rule-approve")
         # Deletes are off for MCP in this deployment: the rule is armed for
         # the day they are switched on, and the page says so.
         self.assertContains(response, "is-dormant")

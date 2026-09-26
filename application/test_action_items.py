@@ -13,6 +13,7 @@ from django.utils import timezone
 from core.models import ActionItemRead
 
 from .action_items import FORGET_AFTER, item_key, item_revision, mark, unread_count, with_read_state
+from .security import cli_principal
 from .ui import Insight
 
 ITEM = {
@@ -58,7 +59,7 @@ class IdentityTests(TestCase):
 class HostItemsNameTheirSubjectTests(TestCase):
     def test_every_host_attention_item_carries_a_key(self):
         """Read state follows the key, so a host item without one would fall
-        back to its title -- and several titles carry counts and days-left."""
+        back to its title, and several titles carry counts and days-left."""
 
         import ast
         from pathlib import Path
@@ -133,7 +134,7 @@ class PageTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def test_marking_read_moves_it_below_and_lowers_the_count(self):
-        self.client.post(reverse("action_items_read"), {"key": ITEM["key"], "read": "1"})
+        self.client.post(reverse("action_items_mark_read"), {"key": ITEM["key"]})
 
         page = self.client.get(reverse("action_items"))
 
@@ -142,28 +143,50 @@ class PageTests(TestCase):
         self.assertContains(page, "Read · 1")
         self.assertEqual(self.client.get(reverse("action_item_count")).json(), {"count": 1})
 
-    def test_the_dashboard_counts_and_lists_only_unread(self):
-        self.client.post(reverse("action_items_read"), {"key": ITEM["key"], "read": "1"})
+    def test_the_dashboard_counts_only_unread(self):
+        self.client.post(reverse("action_items_mark_read"), {"key": ITEM["key"]})
 
         with mock.patch("application.dashboard.work_queue", return_value=[ITEM, OTHER]):
             page = self.client.get(reverse("dashboard"))
 
         self.assertEqual(page.context["profile_action_count"], 1)
         self.assertEqual(page.context["action_queue_count"], 1)
-        self.assertEqual([item["label"] for item in page.context["action_queue"]], [OTHER["label"]])
 
     def test_mark_all_read_empties_the_unread_list(self):
         self.client.post(
-            reverse("action_items_read"), {"key": [ITEM["key"], OTHER["key"]], "read": "1"}
+            reverse("action_items_mark_read"), {"key": [ITEM["key"], OTHER["key"]]}
         )
 
         self.assertContains(self.client.get(reverse("action_items")), "Nothing unread.")
 
-    def test_a_malformed_request_changes_nothing(self):
-        response = self.client.post(reverse("action_items_read"), {"key": ITEM["key"]})
+    def test_a_row_button_posts_its_key_to_a_route_that_names_the_state(self):
+        page = self.client.get(reverse("action_items"))
+        self.assertContains(page, f'formaction="{reverse("action_items_mark_read")}"')
 
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(ActionItemRead.objects.exists())
+        self.client.post(reverse("action_items_mark_read"), {"key": ITEM["key"]})
+        self.assertEqual(unread_count([ITEM, OTHER], self.user), 1)
+
+        self.client.post(reverse("action_items_mark_unread"), {"key": ITEM["key"]})
+        self.assertEqual(unread_count([ITEM, OTHER], self.user), 3)
+
+    def test_mark_all_read_is_a_head_action_that_keeps_the_filter(self):
+        page = self.client.get(reverse("action_items"), {"q": "gadget"})
+        self.assertEqual(page.context["page"].actions[0].label, "Mark all read")
+        url = page.context["page"].actions[0].url
+        self.assertEqual(url, f'{reverse("action_items_read_all")}?q=gadget')
+
+        self.client.post(url)
+
+        unread = self.client.get(reverse("action_items")).context["action_items"]
+        self.assertEqual([item["key"] for item in unread], [ITEM["key"]])
+
+
+class RouteTests(TestCase):
+    def test_the_generic_read_route_is_gone(self):
+        from django.urls import NoReverseMatch
+
+        with self.assertRaises(NoReverseMatch):
+            reverse("action_items_read")
 
 
 class ActivityActorTests(TestCase):
@@ -176,7 +199,25 @@ class ActivityActorTests(TestCase):
             action=AuditLog.Action.CREATED, object_type="Approval", metadata={"actor": "example-agent"}
         )
 
-        self.assertEqual(recent_activity(limit=1)["items"][0]["actor"], "example-agent")
+        self.assertEqual(
+            recent_activity(principal=cli_principal(), limit=1)["items"][0]["actor"],
+            "example-agent",
+        )
+
+    def test_the_audit_trail_needs_its_own_capability(self):
+        from core.models import AuditLog
+
+        from .dashboard import operating_snapshot
+        from .read_models import recent_activity
+        from .security import AuthorizationError, Capability, Principal
+
+        AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Approval")
+        reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+
+        with self.assertRaises(AuthorizationError):
+            recent_activity(principal=reader)
+        self.assertEqual(operating_snapshot(principal=reader)["recent_activity"], [])
+        self.assertTrue(operating_snapshot(principal=cli_principal())["recent_activity"])
 
 
 class GlanceSettingsLinkTests(TestCase):
@@ -192,6 +233,6 @@ class ReadableValueTests(TestCase):
     def test_a_timestamp_reads_as_a_date_and_anything_else_is_left_alone(self):
         from core.templatetags.value_tags import readable
 
-        self.assertEqual(readable("2026-09-20T22:08:26.284763+00:00"), "Sep 20, 2026, 5:08 p.m.")
+        self.assertEqual(readable("2026-09-20T22:08:26.284763+00:00"), "9/20/26 5:08 PM")
         self.assertEqual(readable("2d"), "2d")
         self.assertEqual(readable("Tailnet"), "Tailnet")

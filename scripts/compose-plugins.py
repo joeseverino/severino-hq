@@ -6,9 +6,9 @@
                        --out build/composition
 
 Each plugin is verified and admitted independently, producing a canonical
-verified entry. Merging those entries into one lock is Cordon's job -- its lock
-tool already takes repeated --entry, sorts by plugin id and rejects duplicates
--- so this shells out to it instead of reimplementing the lock format. A second
+verified entry. Merging those entries into one lock is Cordon's job (its lock
+tool already takes repeated --entry, sorts by plugin id and rejects duplicates)
+so this shells out to it instead of reimplementing the lock format. A second
 implementation could disagree with the one the runtime validates against, which
 is the failure worth avoiding.
 
@@ -27,6 +27,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+
+# Run as a file, so the repository root is not on the path by itself.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from application.ui import counted  # noqa: E402
 
 CORDON_LOCK = os.environ.get("CORDON_LOCK", "cordon-admission-lock")
 HOST = "severino-hq"
@@ -96,7 +100,7 @@ def main() -> int:
         f"{entry['distribution'].replace('-', '_')}.plugin:plugin"
         for entry in lock["plugins"]
     )
-    print(f"composed {len(lock['plugins'])} plugin(s): {references}")
+    print(f"composed {counted(len(lock['plugins']), 'plugin')}: {references}")
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a", encoding="utf-8") as handle:
             handle.write(f"references={references}\n")

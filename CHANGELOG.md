@@ -1,144 +1,80 @@
 # Changelog
 
-All notable changes to Severino HQ.
-Format roughly follows [Keep a Changelog](https://keepachangelog.com); versions
-follow [SemVer](https://semver.org/) once we publish a tagged release.
+All notable changes to Severino HQ. The format follows
+[Keep a Changelog](https://keepachangelog.com), and versions follow
+[SemVer](https://semver.org/): the plugin API, `hq_sdk`, and the API and MCP
+contracts are the public surface.
 
-## [Unreleased]
+## [1.0.0] - 2026-09-26
+
+HQ derives the estate from its connections. Connect a Cloudflare token and a
+Tailscale credential, and machines, services, domains and the relationships
+between them are read, joined and kept current, with every write going through
+one gated path.
 
 ### Added
 
-- A schema-driven infrastructure control plane shared by the web UI, CLI, and
-  MCP: trusted topology snapshots, typed desired resources, leased operations,
-  provider-safe status, certificate drift/expiry priority signals, and public
-  certificate downloads.
-- A homelab-server controller with declarative capability and connection
-  registries. AdGuard rewrites, Nginx Proxy Manager hosts, and TLS consumer
-  observation are active; certificate renewal and public DNS remain visibly
-  fail-closed until their least-privilege credentials and deployment identities
-  are provisioned.
-- Gated controller deployment from the exact scanned HQ image, including
-  provider preflight, root-only secret projection, systemd scheduling,
-  action-filtered claims, health rollback, and architecture diagrams.
-- Canonical `application/` services shared by web, MCP, and CLI, with project
-  create/update for Projects, Assets, Content, and Expenses plus documentation
-  sync as reference vertical slices.
-- MCP project mutations and fail-closed documentation synchronization, backed
-  by adapter-parity, rollback, concurrency, idempotency, and pruning tests.
-- Typed application principals and capabilities. MCP mutations are disabled by
-  default, with destructive pruning gated separately from ordinary writes.
-- An allowlisted JSON capability registry that derives deterministic JSON
-  Schemas, validation, effects, MCP execution, CLI execution, and parity tests
-  from the typed command declarations.
-- Receipt metadata updates now use the same schema-derived capability system;
-  binary upload remains an authenticated web-only ingress with one shared file
-  size/type policy and no MCP file or path exposure.
-- Documentation metadata CRUD and explicit confirmed deletes now route through
-  the same application services and capability registry. Delete schemas,
-  permissions, effects, validation, MCP execution, and CLI execution derive
-  from one declaration; MCP deletes remain separately fail-closed.
-- Tailnet-only Severino HQ MCP control plane using stateless Streamable HTTP.
-  The initial typed, read-only tools cover projects, assets, expenses, receipt
-  metadata, documentation status, recent activity, and system health.
-- A fail-closed MCP ASGI boundary: direct Tailscale peer enforcement, explicit
-  Host validation, Origin rejection by default, strong bearer authentication,
-  and no trust in forwarded client-address headers.
-- Gated CI/CD pipeline (`.github/workflows/ci.yml`): lint (ruff), tests on
-  Python 3.12/3.13, a `check --deploy` posture gate, `pip-audit`, then a GHCR
-  image build that Trivy scans. On green, a self-hosted runner on the homelab
-  pulls the scanned image and restarts the container — `docker compose pull`
-  instead of an on-box build, so the artifact that deploys is the one that was
-  tested. All actions are SHA-pinned. `docker-compose.yml` takes a
-  `SEVERINO_IMAGE` override for the pull-by-tag deploy.
-- Global HQ search at `/search/`, covering projects, content, docs, assets,
-  expenses, and receipts.
-- `docs_index/schema.json` + `docs_index/frontmatter_schema.py`: the frontmatter
-  enum contract is now single-sourced from the MCP's `schema.py` (emitted via
-  `severino-vault-mcp schema --json`, regenerated with `hq schema`). The
-  manifest importer validates against it instead of model `.choices`, so HQ can
-  no longer reject a value the MCP just wrote. `docs_index/tests.py` guards both
-  the committed JSON (vs the installed MCP) and the model `TextChoices` (vs the
-  schema).
-
-- `audit_registry` management command (`--json`): the read-only Project/Asset
-  registry-orphan audit that `hq validate` used to run as an inline ORM script
-  piped into `manage.py shell` over SSH. Now a real, tested command.
+- Readings: one observation contract (`control_plane/observations/`). A schema
+  is the allowlist for what is stored, each kind has one reader, and a refused
+  read says which permission is missing. Cloudflare (DNS, Pages, D1, Access
+  applications and service tokens, tunnels, edge certificates, zone settings,
+  registrar), Tailscale (devices, DNS, settings, users, policy) and public
+  registries (RDAP, on an hourly timer).
+- A join engine and relation graph: machines, services and domains as nodes,
+  readings as labelled edges. Machine, service and domain pages, the topology,
+  search and the dashboard estate card all read the same graph.
+- Derived facts: machine roles (exit node, tailnet DNS), a machine's own LAN
+  and public addresses from what the whole tailnet reports, HQ's own machine
+  and port, and relationships shown from both ends.
+- Derived resource capabilities: what a page offers follows the controller
+  policy, the resource's state, and whether its connection manages.
+- Onboarding: the connections page shows what each credential can see and
+  which permission would widen it, with scripts that mint least-privilege
+  Cloudflare and Tailscale credentials, and a one-time `hq.import` for what
+  cannot be derived.
+- Machine surfaces for every derived read: estate, action items, machines,
+  domains, relationships, readings, credentials and search are registered once
+  and served by the API, MCP, CLI and SDK.
+- A schema-driven infrastructure control plane shared by the web UI, API, MCP
+  and CLI: typed desired resources, leased operations, drift and expiry
+  signals, and a controller that reconciles through declared capabilities.
+- An approval gate: changes to the most sensitive kinds, asked for by a
+  credential rather than a person at a browser, are held until a person
+  agrees.
+- A plugin host: extensions are admitted as signed wheels and composed into
+  the deployed image; the host names none of them.
 
 ### Changed
 
-- Project and documentation writes now use shared transactional use cases with
-  interface-aware audit metadata.
-- Production serving moved from WSGI/Gunicorn to ASGI/Uvicorn so the Django UI
-  and Streamable HTTP MCP endpoint share one lifecycle.
-- `import_docs_manifest` validation now derives allowed doc_type / environment /
-  status / sensitivity from the shared schema rather than the model's
-  `TextChoices`, closing the latent drift where the MCP accepted `environment:
-  lab` / sensitivity aliases that HQ rejected.
-- Documented the `import_manifest_data` stats dict as the explicit contract the
-  `hq sync` wrapper parses (keys are additive, not to be renamed).
-- Optional Pocket ID / OIDC SSO for HQ. Password login remains available as
-  break-glass; OIDC users must match an allowed email or allowed group.
-- Pocket ID account linking now uses `preferred_username` first and does not
-  require an email claim for users authorized through the `admins` group.
-- HQ keeps PKCE enabled alongside its OIDC client secret; PKCE requirements
-  are relying-party-specific and must not be inferred from Portainer.
-- Dashboard needs-attention queue linking to filtered cleanup views for docs
-  needing review and draft content.
-- Dashboard quick actions for common create/import flows.
-- Relationship health counts on the dashboard.
-- Active navigation state in the main header.
-- Trusted Types across the application. Assigning a string to a DOM sink now
-  throws rather than parsing; one named policy, `hq-fragment`, is the single
-  audited place a same-origin response body becomes markup, and duplicates are
-  refused so injected script cannot mint a second one. Django admin runs
-  without that directive and only that directive.
-- `/csp-report/` records what the browser refused, with a bounded body,
-  truncated fields, and one row per distinct complaint per hour. It is the only
-  way HQ learns that a policy enforced in someone else's browser stopped
-  holding.
-- Two connection layers: whether there is exactly one encrypted way in
-  (HTTPS redirect plus HSTS), and what the page is allowed to run. The protocol
-  panel now names the individual directives the browser was sent, read back
-  from the response it actually received.
+- A record is adopted, reconciled, renewed or removed only through a
+  connection that declares `manages`. HQ enforces this on every write path and
+  the controller enforces it again. "Stop managing" forgets a record without
+  touching the provider.
+- One read projection per page request: the machine catalogue, relation graph
+  and readings are built once and shared.
+- A page GET never writes or calls an outside service. Refreshes are POSTs or
+  timers.
+- Audit events carry the connection they came from; routine probe events
+  expire after 30 days.
+- Serving moved to ASGI/Uvicorn so the web UI and the MCP endpoint share one
+  lifecycle.
 
-### Changed
+### Security
 
-- The trusted-network default is the tailnet and loopback. RFC 1918 is no
-  longer shipped as trusted: a LAN holds printers, televisions and guests, and
-  a host firewall that is the only thing enforcing the rule is one command away
-  from silently admitting all of it. A deployment whose network genuinely is
-  the boundary now says so explicitly.
-- `DJANGO_BEHIND_TLS_PROXY` also turns on the redirect to the canonical HTTPS
-  name, so the plain port HQ binds stops being a second front door. The
-  healthcheck path is exempt; `security.W008` is now silenced only where the
-  redirect is genuinely off.
-- HSTS defaults to a year including subdomains, rather than off pending manual
-  enablement that outlived the reason for it.
-- Session and CSRF cookies carry the `__Host-` prefix wherever they are Secure.
-- `Cross-Origin-Resource-Policy: same-origin` on every response, including the
-  static mount that sits above the Django middleware.
-- The web container runs with a read-only root filesystem, a tmpfs `/tmp`, and
-  a memory limit, alongside the capability and privilege restrictions it
-  already had.
-- The host image and the composed image are cosign-signed by the workflows that
-  build them; the composition verifies the host image before building on it and
-  the deploy verifies the composition before recreating the container.
-- Static assets are never far-future cached in development. The version token
-  hashes the source tree while the mount serves the collected one, so an
-  edit-then-load could pin stale bytes under a fresh URL permanently.
+- Controller requests that carry credentials refuse redirects to another
+  origin and always verify TLS; a refused credential is asked once per sweep.
+- Audit activity requires `READ_AUDIT_LOG` on every surface.
+- An unset OIDC issuer refuses sign-in rather than accepting one.
+- Trusted Types and a strict Content Security Policy; one audited policy turns
+  a response into markup.
+- The trusted network is the tailnet and loopback, never the private LAN.
+- Session and CSRF cookies use the `__Host-` prefix; HSTS is on by default.
+- The web container runs with a read-only root filesystem.
+- Host and composed images are cosign-signed and verified before they run.
 
-- Header layout now uses a fixed desktop grid with a horizontally scrollable
-  nav track, keeping the brand, nav, search, and user controls on one row
-  instead of wrapping into stacked text.
-- Account actions (Admin, Sign out) moved into a dropdown menu under the
-  username, freeing space so the full nav row fits without clipping.
-- Dashboard "needs attention" and "relationship health" panels no longer
-  duplicate counts: needs-attention is the workflow queue, relationship-health
-  is the link/metadata readout.
+## [0.1.0] - 2026-05-16
 
-## [0.1.0] — 2026-05-16
-
-Initial v1 cut: the private operating system for Severino Labs.
+The first cut: a private operations app.
 
 ### Added
 
@@ -150,8 +86,8 @@ Initial v1 cut: the private operating system for Severino Labs.
 - Dashboard with YTD KPIs (expenses total, estimated deductible, active
   projects/assets, draft content, docs needing review, recent activity).
 - CRUD UI for projects, content items, documentation records, assets,
-  expenses, receipts — with search, filter, sort, pagination.
-- Auto-computed `estimated_deductible_amount = total_cost × business_use_pct`
+  expenses, receipts, with search, filter, sort, pagination.
+- Auto-computed `estimated_deductible_amount = total_cost * business_use_pct`
   for assets and expenses.
 - Receipts: random UUID filenames, storage outside app code, no public URL,
   auth-gated streaming download view.
@@ -171,7 +107,7 @@ Initial v1 cut: the private operating system for Severino Labs.
   docker-compose.yml that binds to `127.0.0.1:8000` only, named volumes
   for db / media / exports / staticfiles, `entrypoint.sh` auto-migrate +
   collectstatic.
-- `scripts/backup.sh` — SQLite `VACUUM INTO` snapshot, tarballed with media
+- `scripts/backup.sh`: SQLite `VACUUM INTO` snapshot, tarballed with media
   + exports, optional `age` encryption.
 - Docs: `README`, `docs/DEPLOYMENT.md` (Docker on homelab + systemd/Caddy
   fallback), `docs/SECURITY.md`, `docs/BACKUP.md`, `docs/ROADMAP.md`.
@@ -184,5 +120,4 @@ Initial v1 cut: the private operating system for Severino Labs.
   exports.
 - Receipt files never publicly URL-addressable.
 
-[Unreleased]: https://github.com/joeseverino/severino-hq/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/joeseverino/severino-hq/releases/tag/v0.1.0
+[1.0.0]: https://github.com/joeseverino/severino-hq/releases/tag/v1.0.0

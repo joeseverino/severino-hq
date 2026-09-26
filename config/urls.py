@@ -9,6 +9,7 @@ from django.conf import settings
 
 from core.views import (
     ActionItemCountView,
+    ActionItemReadAllView,
     ActionItemReadView,
     DashboardContactsView,
     ActionItemsView,
@@ -65,7 +66,21 @@ urlpatterns = [
     path(
         "action-items/count/", ActionItemCountView.as_view(), name="action_item_count"
     ),
-    path("action-items/read/", ActionItemReadView.as_view(), name="action_items_read"),
+    path(
+        "action-items/mark-read/",
+        ActionItemReadView.as_view(read=True),
+        name="action_items_mark_read",
+    ),
+    path(
+        "action-items/mark-unread/",
+        ActionItemReadView.as_view(read=False),
+        name="action_items_mark_unread",
+    ),
+    path(
+        "action-items/read-all/",
+        ActionItemReadAllView.as_view(),
+        name="action_items_read_all",
+    ),
     path("dashboard/contacts/", DashboardContactsView.as_view(), name="dashboard_contacts"),
     path("demo/", DemoModeView.as_view(), name="demo_mode"),
     path("agent-access/", AgentAccessView.as_view(), name="agent_access"),

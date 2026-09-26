@@ -1,5 +1,5 @@
 {% comment %}
-Line chart — a measure over time, on an axis fitted to the measure.
+Line chart: a measure over time, on an axis fitted to the measure.
 
   {% include "partials/_line_chart.html" with chart=my_chart %}
 
@@ -33,13 +33,13 @@ a zero-based axis would draw every reading as the same height.
         {% for series in chart.series %}
           {% if series.trend %}<path class="chart-trend chart-line-{{ series.slot }}" d="{{ series.trend }}"></path>{% endif %}
           <path class="chart-line chart-line-{{ series.slot }}" d="{{ series.path }}"></path>
-          {% for point in series.points %}<circle class="chart-dot chart-series-{{ series.slot }}" cx="{{ point.x }}" cy="{{ point.y }}" r="2.5"></circle>{% endfor %}
+          {% if series.dotted %}{% for point in series.points %}<circle class="chart-dot chart-series-{{ series.slot }}" cx="{{ point.x }}" cy="{{ point.y }}" r="2.5"></circle>{% endfor %}{% endif %}
         {% endfor %}
         
         {% comment %}
         Invisible targets, drawn last so they sit above every line. A plotted
         point is three pixels across, which is smaller than a pointer can be
-        aimed -- the tooltip worked and could not be reached. The mark carries
+        aimed: the tooltip worked and could not be reached. The mark carries
         the tip; the dot only has to be visible.
         {% endcomment %}
         {% for series in chart.series %}{% for point in series.points %}<circle class="chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="11" data-tip="{{ point.tooltip }}"></circle>{% endfor %}{% endfor %}

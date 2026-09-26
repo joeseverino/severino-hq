@@ -17,7 +17,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils import formats
+from django.utils import formats, timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
@@ -30,6 +30,7 @@ from application.dashboard import dashboard_highlights, operating_snapshot, work
 from application.glance import (
     dashboard_configuration,
     dashboard_panels,
+    glance_context,
     request_dashboard_refresh,
     request_stale_panel_refresh,
     save_dashboard_settings,
@@ -38,13 +39,10 @@ from application.projection import projection_scope
 from application.plugins import plugin_health
 from application.search import global_search
 from application.security import AuthorizationError, safe_next, web_principal
-from application.tables import TableFilter, TableListMixin, TableSort
-from application.ui import ListRow
+from application.pages import PageAction, PageMixin, page_context
+from application.tables import TableColumn, TableFilter, TableListMixin
+from application.ui import ListRow, counted
 from contacts import inbox
-from contacts.d1 import (
-    D1Error,
-    search_submissions,
-)
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
@@ -55,9 +53,9 @@ class ThrottledLoginView(LoginView):
     """The password form, with a cost attached to guessing at it.
 
     Refused *before* the credentials are checked. Validating first and
-    discarding the result would still answer the attacker's actual question --
-    response timing, and the difference between "no such user" and "locked",
-    both leak whether a guess was close -- and would spend a password hash per
+    discarding the result would still answer the attacker's actual question
+    (response timing, and the difference between "no such user" and "locked",
+    both leak whether a guess was close) and would spend a password hash per
     attempt doing it, which is the expensive operation an attacker wants to
     provoke.
 
@@ -105,7 +103,7 @@ class ThrottledLoginView(LoginView):
 
         if self.sso_only:
             # There is no backend to check it against, so this could only ever
-            # fail -- but failing here means it is never carried further, and
+            # fail, but failing here means it is never carried further, and
             # the attempt is answered the same way whatever was submitted.
             return HttpResponseForbidden("Password sign-in is disabled.")
 
@@ -117,8 +115,7 @@ class ThrottledLoginView(LoginView):
         form.add_error(
             None,
             "Too many failed sign-in attempts. Try again in "
-            f"{state.minutes_remaining} minute"
-            f"{'s' if state.minutes_remaining != 1 else ''}.",
+            f"{counted(state.minutes_remaining, 'minute')}.",
         )
         return self.render_to_response(self.get_context_data(form=form), status=429)
 
@@ -180,8 +177,20 @@ class DashboardLinkChoiceView(LoginRequiredMixin, View):
     somebody decided which shortcuts they want.
     """
 
+    def get(self, request):
+        return render(
+            request,
+            "core/dashboard_links.html",
+            {
+                "external_choices": link_choices(request.user),
+                **page_context(
+                    "Dashboard links",
+                    "Pick the links to show. With none picked, every one HQ can reach is shown.",
+                ),
+            },
+        )
+
     def post(self, request):
-        from application.connections import link_choices
         from application.pins import DASHBOARD_LINK, replace
 
         offered = {item["href"].lower() for item in link_choices(None)}
@@ -205,9 +214,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        with projection_scope():
-            snapshot = operating_snapshot()
-            highlights = dashboard_highlights()
+        snapshot = operating_snapshot(principal=web_principal(self.request.user))
+        highlights = dashboard_highlights()
+        glance = glance_context()
         for project in snapshot["active_projects"]:
             project["updated_at"] = datetime.fromisoformat(project["updated_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
@@ -215,35 +224,32 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 item["updated_at"] = datetime.fromisoformat(item["updated_at"])
                 if item["published_at"]:
                     item["published_at"] = date.fromisoformat(item["published_at"])
-        for record in snapshot["docs_needing_review"]:
-            if record["last_reviewed"]:
-                record["last_reviewed"] = date.fromisoformat(record["last_reviewed"])
-        for event in snapshot["recent_activity"]:
-            event["created_at"] = datetime.fromisoformat(event["created_at"])
-            event["url"] = reverse("core:audit_detail", args=[event["id"]])
-        # No mapping step: every queue entry already carries the link to the
-        # filtered list that shows it, supplied by the domain that raised it.
         # Unread only, as everywhere else the count is shown.
-        action_queue = [
-            item
+        action_queue_count = sum(
+            item["count"]
             for item in read_state.with_read_state(snapshot["priority"], self.request.user)
             if not item["read"]
-        ]
-        action_queue_count = sum(item["count"] for item in action_queue)
+        )
+        hour = timezone.localtime().hour
+        greeting = (
+            "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
+        )
+        if name := self.request.user.first_name:
+            greeting = f"{greeting}, {name}"
 
         # Consoles come from the connections a controller reported. Anything
         # else an operator wants here is a fact about their installation and is
         # named in their environment: an address written into this file is
         # published to everyone who clones it and true for nobody else.
-        external_links, external_curated = outward_links(self.request.user)
+        external_links, _ = outward_links(self.request.user)
         external_choices = link_choices(self.request.user)
         # Projected here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.
         content_rows = [
             ListRow(
                 title=item["title"],
-                detail=item["content_type_label"],
-                meta=formats.date_format(item["updated_at"], "M j"),
+                meta=f"{item['content_type_label']} · "
+                f"{formats.date_format(item['updated_at'], 'M j')}",
                 url=reverse("content:detail", args=[item["slug"]]),
             )
             for item in snapshot["draft_content"]
@@ -260,54 +266,22 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             )
             for item in snapshot["recent_published"]
         ]
-        docs_rows = [
-            ListRow(
-                title=record["title"],
-                detail=record["doc_id"],
-                meta=(
-                    formats.date_format(record["last_reviewed"], "M j")
-                    if record["last_reviewed"]
-                    else "never"
-                ),
-                url=reverse("docs_index:detail", args=[record["doc_id"]]),
-            )
-            for record in snapshot["docs_needing_review"]
-        ]
-        glance_settings = dashboard_configuration()
-        glance_panels = dashboard_panels(glance_settings)
 
         ctx.update(
+            greeting=greeting,
             content_rows=content_rows,
             published_rows=published_rows,
-            docs_rows=docs_rows,
-            unread_contacts_count=snapshot["kpis"]["unread_contacts"],
             active_project_count=snapshot["kpis"]["active_projects"],
             active_projects=snapshot["active_projects"],
-            project_opportunities_count=snapshot["kpis"]["projects_needing_output"],
             external_links=external_links,
             external_choices=external_choices,
-            external_curated=external_curated,
-            draft_content=snapshot["draft_content"],
             draft_content_count=snapshot["kpis"]["draft_content"],
-            published_content_count=snapshot["kpis"]["published_content"],
-            recent_published=snapshot["recent_published"],
-            expenses_ytd_total=snapshot["kpis"]["expenses_total"],
-            expenses_ytd_count=snapshot["kpis"]["expenses_count"],
-            deductible_ytd_total=snapshot["kpis"]["deductible_total"],
-            docs_needing_review=snapshot["docs_needing_review"],
-            docs_needing_review_count=snapshot["kpis"]["docs_needing_review"],
-            recent_audit=snapshot["recent_activity"],
-            action_queue=action_queue,
             action_queue_count=action_queue_count,
-            action_queue_group_count=len(action_queue),
             profile_action_count=action_queue_count,
             show_action_count=True,
-            this_year=snapshot["year"],
             dashboard_cards=highlights["compact"],
             dashboard_highlights=highlights["highlights"],
-            dashboard_panels=glance_panels,
-            dashboard_can_refresh=any(panel["refreshable"] for panel in glance_panels),
-            dashboard_glance_settings=glance_settings,
+            **glance,
         )
         return ctx
 
@@ -316,38 +290,32 @@ class DashboardGlanceView(LoginRequiredMixin, View):
     template_name = "core/_dashboard_glance.html"
 
     def get(self, request):
-        configuration = dashboard_configuration()
-        panels = dashboard_panels(configuration)
-        # A card that knows it is out of date asks to be brought up to date,
-        # so the next controller pass answers it. Opening this page is the
-        # request; nothing else was making one.
-        if request_stale_panel_refresh(
-            panels, principal=web_principal(request.user)
-        ):
-            panels = dashboard_panels(configuration)
-        return render(
-            request,
-            self.template_name,
-            {
-                "dashboard_panels": panels,
-                "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
-                "dashboard_glance_settings": configuration,
-            },
-        )
+        return render(request, self.template_name, glance_context())
 
     def post(self, request):
-        request_dashboard_refresh(principal=web_principal(request.user))
+        """Request a refresh: of every panel, or with ``scope=stale`` of stale ones.
+
+        The page posts the stale request when it opens on a stale reading; the
+        button posts the full one.
+        """
+
+        principal = web_principal(request.user)
+        if request.POST.get("scope") != "stale":
+            request_dashboard_refresh(principal=principal)
+            return render(request, self.template_name, glance_context(), status=202)
         configuration = dashboard_configuration()
         panels = dashboard_panels(configuration)
+        requested = request_stale_panel_refresh(panels, principal=principal)
+        if requested:
+            panels = tuple(
+                {**panel, "refreshing": True} if panel["id"] in requested else panel
+                for panel in panels
+            )
         return render(
             request,
             self.template_name,
-            {
-                "dashboard_panels": panels,
-                "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
-                "dashboard_glance_settings": configuration,
-            },
-            status=202,
+            glance_context(configuration, panels),
+            status=202 if requested else 200,
         )
 
 
@@ -371,33 +339,58 @@ class DashboardGlanceSettingsView(LoginRequiredMixin, View):
         return redirect("dashboard")
 
 
-class ActionItemsView(LoginRequiredMixin, TemplateView):
+ACTION_ITEM_FILTERS = ("q", "status", "source")
+
+
+def _action_items(request, current=None):
+    """Every action item with its read state, and those the request's filters keep."""
+
+    if current is None:
+        with projection_scope():
+            current = work_queue()
+    all_items = read_state.with_read_state(current, request.user)
+    items = read_state.filter_items(
+        all_items,
+        query=request.GET.get("q", ""),
+        status=request.GET.get("status", ""),
+        source=request.GET.get("source", ""),
+    )
+    return all_items, items
+
+
+class ActionItemsView(PageMixin, LoginRequiredMixin, TemplateView):
     """The full human surface for HQ's one composed attention queue."""
 
     template_name = "action_items.html"
+    page_title = "Action items"
+
+    def get_page_actions(self):
+        actions = []
+        if self._unread:
+            actions.append(PageAction("Mark all read", self._mark_all_url(), method="post"))
+        return tuple(actions)
+
+    def _mark_all_url(self) -> str:
+        # The filters travel in the URL, so "all" means all that are shown.
+        shown = self.request.GET.copy()
+        for name in list(shown):
+            if name not in ACTION_ITEM_FILTERS:
+                del shown[name]
+        url = reverse("action_items_read_all")
+        if shown:
+            url = f"{url}?{shown.urlencode()}"
+        return url
 
     def get_context_data(self, **kwargs):
+        all_items, items = _action_items(self.request)
+        self._unread = [item for item in items if not item["read"]]
         context = super().get_context_data(**kwargs)
-        query = self.request.GET.get("q", "").strip().casefold()
         status = self.request.GET.get("status", "").strip()
         source = self.request.GET.get("source", "").strip()
-        with projection_scope():
-            all_items = read_state.with_read_state(work_queue(), self.request.user)
-        items = [
-            item
-            for item in all_items
-            if (not status or item["status"] == status)
-            and (not source or item["source_id"] == source)
-            and (
-                not query
-                or query
-                in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold()
-            )
-        ]
         sources = tuple(
             {item["source_id"]: item["source"] for item in all_items}.items()
         )
-        unread = [item for item in items if not item["read"]]
+        unread = self._unread
         context.update(
             action_items=unread,
             read_action_items=[item for item in items if item["read"]],
@@ -418,7 +411,7 @@ class DemoModeView(LoginRequiredMixin, View):
     POST because it changes what every number on every page means, and a thing
     that can be flipped by following a link can be flipped by an image tag on
     another page. Nothing is written beyond the session, so the audit entry is
-    the only trace it leaves -- and it is recorded because an operator who
+    the only trace it leaves, and it is recorded because an operator who
     forgets the mode is on can screenshot fiction and file it as fact.
     """
 
@@ -433,7 +426,7 @@ class DemoModeView(LoginRequiredMixin, View):
             user=request.user,
         )
         # No message. The switch shows its own state and the header carries a
-        # mark while it is on -- a paragraph on every flip is a third telling
+        # mark while it is on: a paragraph on every flip is a third telling
         # of something already said twice.
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
@@ -453,15 +446,15 @@ class AgentAccessView(LoginRequiredMixin, View):
         return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
-class AgentPolicyView(LoginRequiredMixin, TemplateView):
+class AgentPolicyView(PageMixin, LoginRequiredMixin, TemplateView):
     """Capability policy. Reads from matrix(), writes through apply_changes()."""
 
     template_name = "core/agent_policy.html"
+    page_title = "Agents"
 
     def get_context_data(self, **kwargs):
         from datetime import timedelta
 
-        from django.utils import timezone
 
         from application import capability_policy
         from application.approvals import awaiting_ids
@@ -469,6 +462,25 @@ class AgentPolicyView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["columns"], context["groups"] = capability_policy.matrix()
         context["agents"] = [column for column in context["columns"] if column.identity]
+        # A column whose every settable rule is dormant is off as a whole, and
+        # says so once in its header rather than greying each cell unexplained.
+        # A row's cells are in column order, so a cell's column is its position.
+        settable = [
+            (index, cell)
+            for group in context["groups"]
+            for row in group.rows
+            for index, cell in enumerate(row.cells)
+            if not cell.unavailable
+        ]
+        context["any_dormant"] = any(cell.dormant for _index, cell in settable)
+        context["column_heads"] = [
+            {
+                "column": column,
+                "dormant": any(index == position for index, _cell in settable)
+                and all(cell.dormant for index, cell in settable if index == position),
+            }
+            for position, column in enumerate(context["columns"])
+        ]
         context["rule_count"] = len(capability_policy.rules())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = AuditLog.objects.filter(
@@ -486,7 +498,7 @@ class AgentPolicyView(LoginRequiredMixin, TemplateView):
             messages.error(request, problem)
         if changed:
             messages.success(
-                request, f"Saved {changed} change{'s' if changed != 1 else ''}. Each is in the audit log."
+                request, f"Saved {counted(changed, 'change')}. Each is in the audit log."
             )
         elif not problems:
             messages.info(request, "Nothing changed.")
@@ -497,10 +509,7 @@ class ActionItemCountView(LoginRequiredMixin, View):
     """The unread count for the header, fetched after the page rather than during it."""
 
     def get(self, request):
-        # Made after the page, so reading upstream services again costs no render.
-        inbox.refresh()
-        with projection_scope():
-            count = read_state.unread_count(work_queue(), request.user)
+        count = read_state.unread_count(work_queue(), request.user)
         return JsonResponse({"count": count})
 
 
@@ -508,10 +517,8 @@ class DashboardContactsView(LoginRequiredMixin, View):
     """Recent submissions, fetched by the dashboard after it has rendered."""
 
     def get(self, request):
-        try:
-            submissions = inbox.recent(limit=4)
-        except D1Error:
-            submissions = []
+        # The stored rows, kept by the refresh_contacts_inbox timer.
+        submissions = inbox.recent()
         rows = [
             ListRow(
                 title=submission["name"],
@@ -529,17 +536,21 @@ class DashboardContactsView(LoginRequiredMixin, View):
 
 
 class ActionItemReadView(LoginRequiredMixin, View):
-    """Mark action items read or unread for the signed-in person."""
+    """Mark action items read or unread for the signed-in person.
+
+    Each route names the state in ``read``, so a button posts only the item's
+    key as its own value.
+    """
+
+    read = False
 
     def post(self, request):
-        if request.POST.get("read") not in {"0", "1"}:
-            return HttpResponseBadRequest("read must be 0 or 1.")
         with projection_scope():
             current = work_queue()
         read_state.mark(
             request.user,
             request.POST.getlist("key"),
-            read=request.POST["read"] == "1",
+            read=self.read,
             current=current,
         )
         return redirect(
@@ -547,8 +558,28 @@ class ActionItemReadView(LoginRequiredMixin, View):
         )
 
 
-class SearchView(LoginRequiredMixin, TemplateView):
+class ActionItemReadAllView(LoginRequiredMixin, View):
+    """Mark read every unread item the page's filters (in the query string) show."""
+
+    def post(self, request):
+        with projection_scope():
+            current = work_queue()
+        _, items = _action_items(request, current)
+        read_state.mark(
+            request.user,
+            [item["key"] for item in items if not item["read"]],
+            read=True,
+            current=current,
+        )
+        return redirect(
+            safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items"))
+        )
+
+
+class SearchView(PageMixin, LoginRequiredMixin, TemplateView):
     template_name = "search.html"
+    page_title = "Command Center"
+    page_lede = "Search records, resources, connections, and commands."
     result_limit = 8
     palette_search_limit = 3
     palette_search_total_limit = 12
@@ -574,6 +605,7 @@ class SearchView(LoginRequiredMixin, TemplateView):
         remaining = self.palette_result_limit
         groups = []
         for key, label in (
+            ("estate", "Estate"),
             ("commands", "Commands"),
             ("views", "Topology views"),
             ("resources", "Resources"),
@@ -614,25 +646,25 @@ class SearchView(LoginRequiredMixin, TemplateView):
         total = 0
         principal = web_principal(self.request.user)
         palette_request = self.request.headers.get("X-Command-Center") == "palette"
-        if q and (not palette_request or len(q) >= 2):
-            outcome = global_search(
-                q,
-                principal=principal,
-                limit_per_scope=(
-                    self.palette_search_limit if palette_request else self.result_limit
-                ),
+        # One scope, so records search and discovery share the machine and
+        # connection reads they both make.
+        with projection_scope():
+            if q and (not palette_request or len(q) >= 2):
+                outcome = global_search(
+                    q,
+                    principal=principal,
+                    limit_per_scope=(
+                        self.palette_search_limit if palette_request else self.result_limit
+                    ),
+                )
+                groups = outcome["groups"]
+                total = outcome["total"]
+                if not palette_request:
+                    contacts = inbox.search(q, limit=self.result_limit)
+                    total += len(contacts)
+            discovery = command_center(
+                q, principal=principal, include_live_connections=True
             )
-            groups = outcome["groups"]
-            total = outcome["total"]
-            if not palette_request:
-                try:
-                    contacts = search_submissions(q, limit=self.result_limit)
-                except D1Error:
-                    contacts = []
-                total += len(contacts)
-        discovery = command_center(
-            q, principal=principal, include_live_connections=True
-        )
         palette_groups = self._palette_groups(discovery)
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(
@@ -645,13 +677,16 @@ class SearchView(LoginRequiredMixin, TemplateView):
             groups=groups,
             contacts=contacts,
             total=total,
+            discovered_estate=discovery["estate"],
             discovered_resources=discovery["resources"],
             discovered_commands=discovery["commands"],
             discovered_connections=discovery["connections"],
             discovered_views=discovery["views"],
             discovered_checks=discovery["checks"],
             discovery_total=discovery_total,
-            palette_groups=palette_groups,
+            # The estate leads, above records and the audit log.
+            palette_estate=[group for group in palette_groups if group["key"] == "estate"],
+            palette_groups=[group for group in palette_groups if group["key"] != "estate"],
             palette_search_groups=palette_search_groups,
             palette_count=(
                 sum(len(group["items"]) for group in palette_groups)
@@ -663,29 +698,41 @@ class SearchView(LoginRequiredMixin, TemplateView):
         return ctx
 
 
-class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
+class AuditLogListView(PageMixin, TableListMixin, LoginRequiredMixin, ListView):
     model = AuditLog
     template_name = "core/auditlog_list.html"
     context_object_name = "events"
     paginate_by = 50
+    page_title = "Audit log"
+    page_lede = "Every change, sign-in, export and refusal, newest first."
     table_search_scope = "audit"
+    table_selectable = True
     table_filters = (
         TableFilter("action", "Action", "action", AuditLog.Action.choices),
     )
-    table_sorts = (
-        TableSort("-created_at", "Newest event", "-created_at"),
-        TableSort("created_at", "Oldest event", "created_at"),
-        TableSort("action", "Action", "action"),
-        TableSort("-action", "Action reverse", "-action"),
-        TableSort("object_type", "Object type", "object_type"),
-        TableSort("-object_type", "Object type reverse", "-object_type"),
-        TableSort("user__username", "User A–Z", "user__username"),
-        TableSort("-user__username", "User Z–A", "-user__username"),
-        TableSort("message", "Message A–Z", "message"),
-        TableSort("-message", "Message Z–A", "-message"),
+    table_columns = (
+        TableColumn("When", "created_at", "Oldest event", "Newest event"),
+        TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
+        TableColumn("Action", "action", "Action", "Action reverse"),
+        TableColumn("Object", "object_type", "Object type", "Object type reverse"),
+        TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
     table_default_sort = "-created_at"
     table_search_placeholder = "Search objects, operation IDs, and messages…"
+
+    def get_page_actions(self):
+        from application.approvals import awaiting_ids
+
+        listing = reverse("core:audit_list")
+        awaiting = self._awaiting()
+        return (
+            PageAction("All events", listing, primary=not awaiting),
+            PageAction(
+                f"Awaiting approval · {len(awaiting_ids())}",
+                f"{listing}?awaiting=1",
+                primary=awaiting,
+            ),
+        )
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user")
@@ -700,11 +747,8 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
         return self.apply_table_query(qs)
 
     def get_context_data(self, **kwargs):
-        from application.approvals import awaiting_ids
-
         context = super().get_context_data(**kwargs)
         context["awaiting"] = self._awaiting()
-        context["awaiting_count"] = len(awaiting_ids())
         return context
 
     def _awaiting(self) -> bool:
@@ -713,12 +757,12 @@ class AuditLogListView(TableListMixin, LoginRequiredMixin, ListView):
         return self.request.GET.get("awaiting") == "1"
 
 
-class AuditLogDetailView(LoginRequiredMixin, DetailView):
+class AuditLogDetailView(PageMixin, LoginRequiredMixin, DetailView):
     """One event, in full, and what sits either side of it.
 
     The list can only ever show a line per event. What an audit trail is
-    actually consulted for is the question behind the line -- which field
-    moved, what the value was before, what else the same action touched -- and
+    actually consulted for is the question behind the line (which field
+    moved, what the value was before, what else the same action touched) and
     none of that fits in a row. So every row leads here.
     """
 
@@ -728,6 +772,22 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
 
     def get_queryset(self):
         return AuditLog.objects.select_related("user")
+
+    def held_approval(self):
+        """The approval this event opened, reviewed, if it opened one."""
+
+        if not hasattr(self, "_held_approval"):
+            from application import approvals
+
+            held = approvals.for_audit_event(self.object)
+            self._held_approval = approvals.review(held) if held is not None else None
+        return self._held_approval
+
+    def get_page_title(self):
+        return "Approval" if self.held_approval() is not None else "Audit event"
+
+    def get_page_trail(self):
+        return (("Audit log", reverse("core:audit_list")),)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -747,7 +807,7 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
             if key != "changes"
         }
 
-        # The rest of the same operation -- what `operation_id` is for. One
+        # The rest of the same operation: what `operation_id` is for. One
         # action can touch many rows, and matching them up by timestamp alone
         # is guesswork.
         if event.operation_id:
@@ -765,11 +825,9 @@ class AuditLogDetailView(LoginRequiredMixin, DetailView):
                 .exclude(pk=event.pk)
                 .select_related("user")[:20]
             )
-        from application import approvals
-
-        held = approvals.for_audit_event(event)
-        if held is not None:
-            context["approval"] = approvals.review(held)
+        approval = self.held_approval()
+        if approval is not None:
+            context["approval"] = approval
         return context
 
 
@@ -785,7 +843,7 @@ class ApprovalEntryView(LoginRequiredMixin, View):
         return redirect("core:audit_detail", pk=event.pk)
 
 
-class ConnectionView(LoginRequiredMixin, TemplateView):
+class ConnectionView(PageMixin, LoginRequiredMixin, TemplateView):
     """Why this request was allowed to arrive, layer by layer.
 
     A page rather than only a dialog, for the same reason every other dialog
@@ -795,6 +853,11 @@ class ConnectionView(LoginRequiredMixin, TemplateView):
     """
 
     template_name = "core/connection.html"
+    page_title = "This connection"
+    page_lede = (
+        "Why this request reached HQ, which identities agree, and the evidence "
+        "behind every admission decision."
+    )
 
     def get_context_data(self, **kwargs):
         from application.connection import (
@@ -859,14 +922,13 @@ def csp_report(request):
     directive that is quietly failing looks exactly like a directive that is
     quietly working. This is where it says so.
 
-    Unauthenticated by necessity -- a violation report is sent without
+    Unauthenticated by necessity: a violation report is sent without
     credentials, so requiring a session would silence reports from the sign-in
     page, which is the page where one would matter most. It is still behind
     the network gate, still CSRF-exempt only for a body it never trusts, and
     it answers the same 204 whatever it decides, so nothing here is an oracle.
     """
 
-    from django.utils import timezone
 
     if len(request.body) > _CSP_REPORT_MAX_BYTES:
         return HttpResponse(status=204)
@@ -917,31 +979,46 @@ def csp_report(request):
     return HttpResponse(status=204)
 
 
-class PublicAddressView(LoginRequiredMixin, TemplateView):
-    """What the public internet says about one address, fetched on demand.
+class PublicAddressView(LoginRequiredMixin, View):
+    """What the public internet says about one address, as a fragment.
 
-    A fragment rather than a page, and on demand rather than on render, for a
-    reason the connection page already enforces elsewhere: nothing about
-    locating HQ may put a lookup in the path of drawing it. The operator opens
-    the disclosure, and only then does anything leave this machine.
+    A GET serves what HQ already holds and asks no one. A POST runs the lookup,
+    the same application service the `lookup.address` capability runs, and
+    stores what it finds.
     """
 
     template_name = "core/_public_address.html"
 
-    def get_context_data(self, **kwargs):
+    def get(self, request):
+        from application.lookup import AddressCommand, stored_address
+
+        address = request.GET.get("address", "")
+        return self._render(
+            request,
+            address,
+            lambda principal: stored_address(
+                AddressCommand(address=address), principal=principal
+            ),
+        )
+
+    def post(self, request):
         from application.lookup import AddressCommand, look_up_address
 
-        context = super().get_context_data(**kwargs)
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            return redirect("connection")
+        address = request.POST.get("address", "")
+        return self._render(
+            request,
+            address,
+            lambda principal: look_up_address(
+                AddressCommand(address=address, refresh=True), principal=principal
+            ),
+        )
+
+    def _render(self, request, address, read):
+        context = {"address": address, "reading": None}
         try:
-            # The same application service the `lookup.address` capability
-            # runs. A second path to the same answer is a second place for it
-            # to be subtly different, and this one is a delivery adapter like
-            # the command form and the machine API are.
-            context["reading"] = look_up_address(
-                AddressCommand(address=self.request.GET.get("address", "")),
-                principal=web_principal(self.request.user),
-            )
+            context["reading"] = read(web_principal(request.user))
         except (ValueError, AuthorizationError) as error:
-            context["reading"] = None
             context["failure"] = str(error)
-        return context
+        return render(request, self.template_name, context)

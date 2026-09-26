@@ -1,0 +1,16 @@
+[Unit]
+Description=Read the contact inbox state from D1 into Severino HQ
+Documentation=file:///opt/apps/severino-hq/contacts/inbox.py
+Wants=network-online.target
+After=network-online.target docker.service severino-hq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec severino-hq python manage.py refresh_contacts_inbox
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

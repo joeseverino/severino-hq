@@ -1,9 +1,11 @@
 flowchart LR
-    operator["Joe<br/>browser or shell"]
+    operator["Operator<br/>browser or shell"]
     agent["AI client<br/>MCP"]
+    extension["Extension<br/>hq_sdk"]
 
-    subgraph adapters["Delivery adapters — intentionally thin"]
+    subgraph adapters["Delivery adapters, intentionally thin"]
         web["Web UI<br/>Django views"]
+        api["HTTP API<br/>versioned resources"]
         mcp["HQ MCP<br/>typed tools"]
         cli["hq wrapper<br/>schema-driven MCP client"]
     end
@@ -21,8 +23,11 @@ flowchart LR
     operator --> web
     operator --> cli
     agent --> mcp
+    agent --> api
+    extension --> contract
 
     web --> contract
+    api --> contract
     mcp --> contract
     cli --> mcp
     contract --> policy --> transaction --> db

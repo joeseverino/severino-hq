@@ -2,7 +2,7 @@
 
 The property under test throughout is that a zone holds many records for one
 name. Every provider before this one held exactly one, so "the same hostname"
-and "the same record" meant the same thing everywhere -- and a zone apex with
+and "the same record" meant the same thing everywhere, and a zone apex with
 three TXT records, four CAA records and two MX records is the case that makes
 them different. Getting that wrong does not fail loudly: adoption silently keeps
 one record of nine, and a reconciliation edits whichever the provider happened
@@ -30,6 +30,7 @@ from control_plane.providers import (
     validate_spec,
 )
 
+from .adoption_testing import managing_everything
 from .infrastructure import PolicyError, save_managed_resource, suggest_key
 from .inventory import (
     AdoptCommand,
@@ -43,14 +44,21 @@ from .services import service_catalog, service_or_prospect
 from .zones import (
     adopt_zone_records,
     find_zone,
-    unreachable_zones,
     zone_catalog,
+)
+
+# Every DNS connection these tests name, each managing.
+DNS_CONNECTIONS = tuple(
+    ("cloudflare_dns", ref) for ref in ("cf-example", "cf", "a-dns", "a-dns-account")
 )
 
 # A ceiling, not a measurement. Raised deliberately when a page genuinely
 # needs another read; tripped accidentally when a property starts querying
 # per row.
-DOMAIN_PAGE_QUERY_BUDGET = 20
+# 21: adoption reads which connections manage.
+# 32: the Relationships section reads the relation graph: the machine
+# catalogue, the connection readings and the declarations, once each.
+DOMAIN_PAGE_QUERY_BUDGET = 32
 
 ZONE_KIND = "cloudflare.zone"
 RECORD_KIND = "cloudflare.dns_record"
@@ -104,7 +112,7 @@ class RecordTypeRegistryTests(TestCase):
         """The guard that stops the registry and its Literal drifting apart.
 
         Importing the module already raises if they disagree, so this asserts
-        the invariant rather than the mechanism -- and fails informatively if
+        the invariant rather than the mechanism, and fails informatively if
         someone replaces the import-time check with something laxer.
         """
 
@@ -201,7 +209,7 @@ class IdentityTests(TestCase):
         """Cloudflare returns TXT quoted whichever way it was sent.
 
         Without normalising, a record typed without quotes reports as drifted
-        against itself forever -- HQ sends `v=spf1 ...`, Cloudflare answers
+        against itself forever: HQ sends `v=spf1 ...`, Cloudflare answers
         `"v=spf1 ..."`, and neither is wrong.
         """
 
@@ -240,22 +248,18 @@ class IdentityTests(TestCase):
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class UnmanagedTests(TestCase):
     def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
         sweep()
 
     def test_records_that_serve_nothing_are_still_adoptable(self):
-        """The regression that motivated separating identity from hostnames.
-
-        Identity used to be the hostname, and a record with no hostname reported
-        as having no identity -- so every TXT, MX and CAA record in every zone
-        was invisible to the one screen built to find unmanaged things.
+        """A record with no hostname (TXT, MX, CAA) still has an identity.
         """
 
         found = [item for item in unmanaged() if item.kind == RECORD_KIND]
         self.assertEqual(len(found), len(APEX))
 
     def test_they_do_not_appear_as_services(self):
-        # A DMARC policy is not a service, and filing one under a service whose
-        # name is the empty string is how it used to look.
+        # A DMARC policy is not a service, and is never filed under an empty name.
         hostnames = {service.hostname for service in unmanaged_services()}
         self.assertNotIn("", hostnames)
         self.assertEqual(hostnames, {"example.com"})
@@ -277,6 +281,7 @@ class UnmanagedTests(TestCase):
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class ZoneViewTests(TestCase):
     def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
         sweep(
             records=APEX + [
                 record("_acme-challenge.example.net", "TXT", '"leftover-one"',
@@ -299,9 +304,13 @@ class ZoneViewTests(TestCase):
         self.assertEqual(names[0], "example.net")
 
     def test_a_zone_with_no_caa_says_any_authority_may_issue(self):
+        from .zone_insights import certificates
+
+        card = certificates(find_zone("example.net"))
+        self.assertIn("any authority may issue", card.detail)
+        self.assertFalse(card.concern)
         cards = {i.label: i for i in find_zone("example.net").insights}
-        self.assertIn("any authority may issue", cards["Certificates"].detail)
-        self.assertFalse(cards["Certificates"].concern)
+        self.assertFalse(cards["Security"].concern)
 
     def test_left_over_challenge_records_are_the_one_thing_flagged(self):
         """The single judgement this page makes without a declared policy.
@@ -344,6 +353,9 @@ class PublicDNSPolicyTests(TestCase):
     """
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         self.principal = cli_principal()
 
     def _save(self, kind, spec, key):
@@ -431,7 +443,7 @@ class ProviderSurfaceTests(TestCase):
     def test_a_locked_kind_does_not_promise_to_apply_anything(self):
         """The form told every operator their resource would be applied.
 
-        True of most kinds and false of any whose actions are locked -- which is
+        True of most kinds and false of any whose actions are locked, which is
         exactly the case where knowing that saving changes nothing matters most.
         The capability registry already said so; the page just was not asking.
         """
@@ -441,9 +453,9 @@ class ProviderSurfaceTests(TestCase):
         # Asserted on the promise, not on the sentence explaining its absence.
         # Pinning the wording meant a reason that had gone stale could only be
         # corrected by editing a test that was never about the reason.
-        self.assertNotIn("applies this at the provider", _apply_note(ZONE_KIND))
-        self.assertIn("nothing to converge", _apply_note(ZONE_KIND))
-        self.assertIn("applies this at the provider", _apply_note(RECORD_KIND))
+        self.assertNotIn("Applies at the provider", _apply_note(ZONE_KIND))
+        self.assertIn("no settings to reconcile", _apply_note(ZONE_KIND))
+        self.assertIn("Applies at the provider", _apply_note(RECORD_KIND))
 
     def test_a_zone_declares_no_service_facet(self):
         # A zone is a namespace, not a name that answers. Given a facet it would
@@ -456,7 +468,7 @@ class ProviderSurfaceTests(TestCase):
 class ZoneInsightTests(TestCase):
     """What the domain page says, and why any of it is worth saying.
 
-    The cards it replaced restated DNS records back at the operator -- true,
+    The cards it replaced restated DNS records back at the operator: true,
     already visible in Cloudflare's own dashboard, and no reason to have built
     this. These join the zone to what HQ holds elsewhere.
     """
@@ -476,7 +488,12 @@ class ZoneInsightTests(TestCase):
         )
 
     def _insight(self, zone_name, label):
+        from .zone_insights import certificates
+
         zone = find_zone(zone_name)
+        # The certificate half of the Security card, asked directly.
+        if label == "Certificates":
+            return certificates(zone)
         return next((i for i in zone.insights if i.label == label), None)
 
     def test_a_certificate_covering_the_zone_is_named_and_linked(self):
@@ -529,7 +546,7 @@ class ZoneInsightTests(TestCase):
     def test_an_uploaded_certificate_is_not_cross_checked_against_caa(self):
         """HQ did not choose who signed it, so it cannot predict a renewal.
 
-        Flagging one would assert a fact HQ does not have -- and the operator
+        Flagging one would assert a fact HQ does not have, and the operator
         who uploaded it renews it themselves, by hand, from wherever it came.
         """
 
@@ -547,7 +564,7 @@ class ZoneInsightTests(TestCase):
         """A wildcard covering four domains explained itself with another one.
 
         Listing coverage at all made the card the tallest thing on the page,
-        and on joeseverino.com it opened with three jseverino.com names. What a
+        and on example.test it opened with three example.com names. What a
         certificate covers belongs on the certificate.
         """
 
@@ -570,7 +587,7 @@ class ZoneInsightTests(TestCase):
         """"2 mail servers" was true and useless.
 
         The count of MX records is a redundancy detail; the question is who has
-        the mailbox, and the records already say -- both point at example.net.
+        the mailbox, and the records already say: both point at example.net.
         """
 
         sweep(records=APEX + [
@@ -609,7 +626,7 @@ class ZoneInsightTests(TestCase):
     def test_iodef_is_not_counted_as_an_issuing_authority(self):
         """It names where to report a violation, not who may issue.
 
-        Counted as an issuer, a domain looks restricted to an email address --
+        Counted as an issuer, a domain looks restricted to an email address,
         and a certificate HQ renews would be flagged as doomed when it is fine.
         """
 
@@ -647,10 +664,11 @@ class EphemeralRecordTests(TestCase):
     the rest is not who made it but how long it is meant to last: working
     material inside one operation, rather than desired state HQ holds to.
     Declaring one would have HQ recreating it the moment issuance was finished
-    with it -- HQ fighting itself.
+    with it: HQ fighting itself.
     """
 
     def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
         sweep(records=[
             record("example.com", "A", "203.0.113.1", rid="a1"),
             record("_acme-challenge.example.com", "TXT", '"token-one"', rid="s1"),
@@ -738,6 +756,9 @@ class SelfClosingAdoptionTests(TestCase):
     outstanding work nobody intended to do.
     """
 
+    def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
+
     def _declare_domain(self):
         ManagedResource.objects.create(
             key="example-com",
@@ -761,13 +782,7 @@ class SelfClosingAdoptionTests(TestCase):
         self.assertFalse(find_zone("example.com").adoptable)
 
     def test_a_domain_the_credential_reaches_is_taken_on_with_its_records(self):
-        """Holding a token that can edit the zone is the decision.
-
-        This used to assert the opposite: a zone was seen and left alone until
-        somebody declared it, and every record inside sat listed as reachable
-        and pointedly untaken. That is the opt-in the rest of the sweep had
-        already stopped doing, and it was the last place still doing it.
-        """
+        """Holding a token that can edit the zone is the decision."""
 
         record_sweep(
             {
@@ -850,7 +865,7 @@ class SelfClosingAdoptionTests(TestCase):
 class ServiceFacetOfferTests(TestCase):
     """What a service page offers when a facet is missing.
 
-    It offered the provider's identifier -- "Add cloudflare.dns_record" -- which
+    It offered the provider's identifier ("Add cloudflare.dns_record") which
     names the provider correctly and the offer not at all. Every provider
     already carries the sentence it should have used.
     """
@@ -860,7 +875,7 @@ class ServiceFacetOfferTests(TestCase):
 
         offers = dict(Facet(id="dns", label="DNS").declarable)
 
-        # Reads mid-sentence -- the page renders "Add public DNS record" --
+        # Reads mid-sentence: the page renders "Add public DNS record",
         # with only the first letter lowered, so the acronym survives. Lowering
         # the whole label produced "add public dns record".
         self.assertIn(RECORD_KIND, offers)
@@ -868,9 +883,7 @@ class ServiceFacetOfferTests(TestCase):
         self.assertEqual(offers["adguard.rewrite"], "internal DNS record")
 
     def test_a_certificate_can_be_started_from_a_name_nothing_covers(self):
-        """The old rule -- chosen from what exists, never created here -- was
-        written when every certificate predated HQ owning them. It stops being
-        true the first time a domain arrives that no wildcard covers.
+        """A name no wildcard covers can start a certificate.
 
         Only ever rendered for a facet nothing supplies, so a name already
         covered is never invited to grow a certificate of its own.
@@ -885,11 +898,8 @@ class ServiceFacetOfferTests(TestCase):
     def test_an_uploaded_certificate_is_offered_beside_the_issued_one(self):
         """Both ways of getting a certificate, offered where one is needed.
 
-        It was excluded because it needs material only the operator has -- true,
-        and no longer a reason: the form that creates one collects the file on
-        the same page. Left out, the only certificate offered for a `.homelab`
-        name was the one Let's Encrypt cannot issue, and the option that works
-        was reachable only by knowing to go and find it in the registry.
+        The form that creates one collects the file on the same page, and for a
+        `.home.arpa` name it is the option that works.
         """
 
         from .services import Facet
@@ -912,6 +922,7 @@ class UnrepresentableRecordTests(TestCase):
     """
 
     def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
         ManagedResource.objects.create(
             key="example-com",
             kind=ZONE_KIND,
@@ -954,7 +965,7 @@ class UnrepresentableRecordTests(TestCase):
         """A record HQ cannot manage is still a record in the zone.
 
         Hidden, the page would claim to show what a domain publishes while
-        quietly omitting part of it -- the one thing this surface must never do.
+        quietly omitting part of it: the one thing this surface must never do.
         """
 
         record_sweep(
@@ -991,11 +1002,12 @@ class StopManagingDomainTests(TestCase):
     Removal assumes a declaration describes something HQ made at a provider,
     correctly for a rewrite, a proxy host and a DNS record: forgetting the row
     alone would abandon them. HQ did not create the zone, and deleting it would
-    be absurd -- so removal was refused outright, and there was no way to stop
+    be absurd, so removal was refused outright, and there was no way to stop
     managing a domain at all.
     """
 
     def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
         sweep()
         self.principal = cli_principal()
         self.zone = ManagedResource.objects.create(
@@ -1041,7 +1053,7 @@ class StopManagingDomainTests(TestCase):
 
     def test_the_records_themselves_are_untouched(self):
         """Stepping back changes nothing about the zone. Every record is still
-        published, and the page still shows them -- now as unmanaged."""
+        published, and the page still shows them: now as unmanaged."""
 
         self._remove()
 
@@ -1074,11 +1086,14 @@ class StopManagingDomainTests(TestCase):
 class DomainPageCostTests(TestCase):
     """The page must not cost more as a zone grows.
 
-    A domain view is built from three reads -- the declarations, the last sweep,
-    and the unmanaged diff between them -- and then sliced. Anything that scales
+    A domain view is built from three reads (the declarations, the last sweep,
+    and the unmanaged diff between them) and then sliced. Anything that scales
     with the number of records means a per-row query hiding in a property, which
     is invisible until a zone has two hundred records in it.
     """
+
+    def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
 
     def _zone_with(self, count):
         sweep(records=[
@@ -1136,7 +1151,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
     """Every kind gets a detail card, including ones added after this page.
 
     It carried a hand-written card per kind, reaching into ``spec.forward_host``
-    and ``spec.answer`` -- the one thing nothing outside a provider may do. A
+    and ``spec.answer``: the one thing nothing outside a provider may do. A
     provider added later got no card, because writing one was a step nobody was
     reminded to take.
     """
@@ -1166,14 +1181,20 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         self.assertContains(response, "Public DNS record")
         self.assertContains(response, "203.0.113.1")
 
-    def test_a_domain_describes_itself_too(self):
+    def test_a_domain_lives_on_its_zone_page(self):
         response = self._detail(
             "a-domain", ZONE_KIND,
             {"zone": "example.com", "connection_ref": "cf-example"},
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "cf-example")
+        self.assertRedirects(
+            response, reverse("zones:detail", args=["example.com"]),
+            fetch_redirect_response=False,
+        )
+        page = self.client.get(response.url)
+        self.assertContains(page, "cf-example")
+        self.assertContains(page, reverse("control_plane:edit", args=["a-domain"]))
+        self.assertContains(page, "Stop managing")
 
     def test_the_kinds_that_had_hand_written_cards_still_read_the_same(self):
         response = self._detail(
@@ -1204,7 +1225,7 @@ class ResourcePageAfterWalkthroughTests(TestCase):
     """Fixes for what driving the UI actually surfaced.
 
     Every case here is something that only showed up by adding a service,
-    looking at it, and deleting it — not by reading the code.
+    looking at it, and deleting it, not by reading the code.
     """
 
     def setUp(self):
@@ -1244,8 +1265,7 @@ class ResourcePageAfterWalkthroughTests(TestCase):
         )
 
     def test_a_list_field_is_not_shown_as_a_python_repr(self):
-        """The last thing before a destructive action read
-        ``['private.jseverino.com']`` — brackets, quotes and all."""
+        """The confirmation names the hostname, not a list literal."""
 
         response = self.client.get(
             reverse("control_plane:remove", kwargs={"key": "private-proxy"})
@@ -1255,14 +1275,13 @@ class ResourcePageAfterWalkthroughTests(TestCase):
         self.assertNotContains(response, "[&#x27;private.example.com&#x27;]")
 
     def test_routine_settings_are_folded_away_before_a_deletion(self):
-        """Fifteen rows of mostly defaults buried the four that say what this
-        is. The provider already declares which of its fields are routine."""
+        """Fields the provider declares routine are folded away."""
 
         response = self.client.get(
             reverse("control_plane:remove", kwargs={"key": "private-proxy"})
         )
 
-        self.assertContains(response, "Its other settings")
+        self.assertContains(response, "Other settings")
 
     def test_an_unset_optional_is_not_shown_as_none(self):
         ManagedResource.objects.create(
@@ -1282,8 +1301,8 @@ class ResourcePageAfterWalkthroughTests(TestCase):
         self.assertNotContains(response, "<code>None</code>")
 
     def test_every_provider_says_what_removing_it_costs(self):
-        """Only DNS record types declared this, so deleting a proxy host —
-        which takes a service offline — asked "are you sure" about a table of
+        """Only DNS record types declared this, so deleting a proxy host
+        (which takes a service offline) asked "are you sure" about a table of
         fields and said nothing about the consequence."""
 
         for kind in ("npm.proxy_host", "adguard.rewrite", RECORD_KIND):
@@ -1294,9 +1313,7 @@ class ResourcePageAfterWalkthroughTests(TestCase):
 class PublishAServiceTests(TestCase):
     """Starting from a name, which is the only thing HQ cannot work out.
 
-    Publishing used to begin at the resource picker: choose a kind of thing,
-    type a hostname, save, and only then does a page exist that knows what the
-    name still needs -- so the second resource meant typing the name again.
+    The name is typed once and seeds every resource the service needs.
     """
 
     def setUp(self):
@@ -1321,7 +1338,7 @@ class PublishAServiceTests(TestCase):
         self.assertContains(response, "hostname=new.example.com")
 
     def test_nothing_declared_is_not_reported_as_healthy(self):
-        """A service with no parts read "Wired" -- the most confident statement
+        """A service with no parts read "Wired": the most confident statement
         on a page about something that did not exist."""
 
         service = service_or_prospect("new.example.com")
@@ -1373,6 +1390,9 @@ class PublishAServiceTests(TestCase):
         """Landing on each resource's own page made the next step a navigation
         problem. The service page is the thing being assembled."""
 
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         response = self.client.post(
             reverse("control_plane:create") + "?kind=adguard.rewrite&hostname=new.example.com",
             {
@@ -1391,10 +1411,7 @@ class PublishAServiceTests(TestCase):
 class ExternallyServedNameTests(TestCase):
     """A public record pointing straight at something *is* the routing.
 
-    The page reported "Not routed. Nothing declares where requests for this name
-    are served" about a name whose entire configuration was a statement of
-    exactly that -- because only a proxy host declared an origin, and a name
-    served by Cloudflare Pages has no proxy and never will.
+    A name served by Cloudflare Pages has no proxy and never will.
     """
 
     def _record(self, key, name, rtype, content):
@@ -1507,7 +1524,7 @@ class WhatCountsAsAServiceTests(TestCase):
         """RFC 8552 reserves them for metadata about a domain, not hosts in it.
 
         The record type could not tell: TXT was excluded because it carries
-        policy, which caught _dmarc and missed sig1._domainkey -- a DKIM
+        policy, which caught _dmarc and missed sig1._domainkey: a DKIM
         delegation published as a CNAME, so the type said "an address, and
         therefore a service" while the name says it is a signing key.
         """
@@ -1562,7 +1579,7 @@ class KnownHostTests(TestCase):
     def test_a_recognised_operator_is_named_the_way_people_say_it(self):
         from .known_hosts import operator
 
-        self.assertEqual(operator("jseverino.pages.dev"), "Cloudflare Pages")
+        self.assertEqual(operator("example.pages.dev"), "Cloudflare Pages")
         self.assertEqual(operator("mx01.mail.icloud.com"), "iCloud")
         self.assertEqual(operator("node.example.ts.net"), "Tailscale")
 
@@ -1572,7 +1589,7 @@ class KnownHostTests(TestCase):
         self.assertEqual(operator("srv1.someplace.example"), "someplace.example")
 
     def test_an_address_is_not_chopped_into_a_domain(self):
-        """The last two labels of 198.51.100.72 is "100.72" -- not a domain,
+        """The last two labels of 198.51.100.72 is "100.72", not a domain,
         not an address, and nothing anyone could act on."""
 
         from .known_hosts import operator
@@ -1584,7 +1601,7 @@ class AliasRecordPlacementTests(TestCase):
     """Where an alias's own declaration belongs.
 
     Twice wrong before it was right. Dropped, the CNAME that makes www work
-    appeared on no service page at all -- a real resource, still reconciled,
+    appeared on no service page at all: a real resource, still reconciled,
     invisible. Merged into the target's facets, the two CNAMEs read as two
     records competing for one name: HQ raised "only one of them can be the
     answer" and called a working site Incomplete.
@@ -1640,9 +1657,7 @@ class AliasRecordPlacementTests(TestCase):
 class ExternallyAnsweredFacetTests(TestCase):
     """A facet that cannot apply is not a facet that is missing.
 
-    The page said "Nothing supplies this for jseverino.com" in one card while
-    the card beside it named Cloudflare Pages as what serves it -- and offered
-    to add an NPM proxy in front of a Pages site, which must not have one.
+    A Pages site is never offered an NPM proxy in front of it.
     """
 
     def setUp(self):
@@ -1666,7 +1681,7 @@ class ExternallyAnsweredFacetTests(TestCase):
             f for f in service_or_prospect("example.com").facets if f.id == "proxy"
         )
 
-        # A working arrangement, not a gap -- and said once. Every facet that
+        # A working arrangement, not a gap, and said once. Every facet that
         # routes takes this branch, so a sentence in the card is printed once
         # per card: Runtime and Ingress sat side by side reading the same line,
         # with the origin note under them saying it a third time.
@@ -1702,12 +1717,7 @@ class ExternallyAnsweredFacetTests(TestCase):
 
 
 class NewVerbReadinessTests(TestCase):
-    """What adding a controller verb costs, now that the credential will grow.
-
-    Cache purge, key rotation and zone-setting writes are all verbs HQ does not
-    have yet and will. Each used to mean another view class identical to the two
-    that already existed but for one word.
-    """
+    """A new controller verb needs no new view class."""
 
     def test_one_view_serves_every_verb(self):
         from control_plane import views
@@ -1726,6 +1736,9 @@ class NewVerbReadinessTests(TestCase):
         )
 
     def test_the_routes_carry_the_verb_rather_than_the_class(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(user)
         ManagedResource.objects.create(
@@ -1755,6 +1768,9 @@ class PendingRemovalTests(TestCase):
     """
 
     def setUp(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(user)
         self.resource = ManagedResource.objects.create(
@@ -1787,6 +1803,22 @@ class PendingRemovalTests(TestCase):
 
         self.assertContains(response, "Removal in progress")
         self.assertNotContains(response, ">Reconcile<")
+
+    def test_the_topology_withdraws_them_too(self):
+        from .infrastructure import OperationCommand, request_removal
+        from .topology import derive_topology
+
+        request_removal(
+            OperationCommand(idempotency_key="r1"),
+            principal=cli_principal(),
+            current_key="going",
+        )
+
+        node = next(
+            node for node in derive_topology(principal=cli_principal()).nodes
+            if node.id == "resource:going"
+        )
+        self.assertNotIn("reconcile", {action.name for action in node.actions})
 
     def test_the_report_is_still_reachable(self):
         """The one thing still worth doing: reading what it was."""
@@ -1836,12 +1868,10 @@ class ProxyDecisionTests(TestCase):
 
 
 class ResourceListReadabilityTests(TestCase):
-    """The registry has to survive a zone's worth of records in it.
+    """The resource list stays readable with a zone's worth of records.
 
-    Keys alone said "jseverino-com-caa-2" twenty times over -- names HQ
-    invented, each describing nothing -- and a domain, which has no controller
-    action at all, sat among them reporting "Pending" and "Never observed"
-    forever.
+    Each row says what the record is, not only its key, and a domain (which has
+    no controller action) never reads "Pending" or "Never observed".
     """
 
     def setUp(self):
@@ -1892,7 +1922,7 @@ class LabelAndDensityTests(TestCase):
     """Two things that only show up on a real page with real records in it."""
 
     def test_an_acronym_survives_being_put_mid_sentence(self):
-        """"Add tLS certificate" -- the first letter lowered without looking at
+        """"Add tLS certificate": the first letter lowered without looking at
         the word it belonged to."""
 
         from .services import Facet
@@ -1925,32 +1955,6 @@ class LabelAndDensityTests(TestCase):
 
         self.assertContains(response, "…")
         self.assertNotContains(response, "872342119743452993e40ddb97bc20d0")
-
-
-class CredentialCoverageTests(TestCase):
-    """A domain HQ owns that its credential cannot read is a real gap."""
-
-    def setUp(self):
-        for zone in ("example.com", "example.net"):
-            ManagedResource.objects.create(
-                key=zone.replace(".", "-"), kind=ZONE_KIND, enabled=True,
-                spec={"zone": zone, "connection_ref": "cf"},
-            )
-
-    def test_a_declared_domain_the_token_cannot_reach_is_named(self):
-        self.assertEqual(unreachable_zones(["example.com"]), ("example.net",))
-
-    def test_nothing_is_reported_when_the_token_reaches_them_all(self):
-        self.assertEqual(unreachable_zones(["example.com", "example.net"]), ())
-
-    def test_an_empty_report_is_not_read_as_everything_missing(self):
-        """A controller that reported no zones has told us nothing, not that
-        every domain is gone."""
-
-        self.assertEqual(unreachable_zones([]), ())
-
-    def test_extra_zones_the_credential_can_reach_are_not_a_problem(self):
-        self.assertEqual(unreachable_zones(["example.com", "example.net", "spare.test"]), ())
 
 
 class RecordedResponsibilityTests(TestCase):
@@ -2046,10 +2050,8 @@ class PendingIsNotAFaultTests(TestCase):
 class TLSPostureInsightTests(TestCase):
     """A domain's TLS posture, read through the credential that can see it.
 
-    The DNS token holds records and nothing else, which is why this was blank
-    for as long as it existed -- and why the zone page printed five em dashes
-    under labels promising observations. `cloudflare_api` carries the account
-    surface and had been sitting beside it the whole time.
+    The DNS token holds records and nothing else; `cloudflare_api` carries the
+    account surface.
     """
 
     def _zone(self, posture=None):
@@ -2100,13 +2102,47 @@ class TLSPostureInsightTests(TestCase):
 
         self.assertIsNone(posture(self._zone()))
 
+    def test_a_refused_read_says_so(self):
+        """A read that failed is not a read that found nothing."""
+
+        from .zone_insights import posture
+
+        found = posture(self._zone({"unread": "Cloudflare refused: 403"}))
+
+        self.assertEqual(found.value, "Not readable")
+        self.assertIn("403", found.detail)
+        self.assertTrue(found.concern)
+
+    def test_a_refused_registration_read_says_so(self):
+        from control_plane.models import ProviderInventory
+        from django.utils import timezone
+
+        from .zone_insights import registration
+        from .zones import Zone
+
+        ProviderInventory.objects.update_or_create(
+            kind="cloudflare.zone",
+            defaults={
+                "records": [{"zone": "example.com",
+                             "registration": {"unread": "Cloudflare refused: 403"}}],
+                "observed_at": timezone.now(),
+            },
+        )
+
+        found = registration(Zone(zone="example.com"))
+
+        # A refusal that names no permission is said with the reason kept.
+        self.assertEqual(found.value, "Not read")
+        self.assertFalse(found.concern)
+        self.assertIn("Cloudflare refused: 403", found.note)
+
 
 class DomainRegistrationInsightTests(TestCase):
     """When a domain stops being yours, and whether it renews itself.
 
     The one fact about a domain no other credential here can supply. HQ renews
     the certificate, reconciles the records and serves the names inside it, and
-    none of that survives the registration lapsing -- Cloudflare will serve a
+    none of that survives the registration lapsing: Cloudflare will serve a
     zone perfectly for a domain about to stop being yours.
     """
 
@@ -2156,7 +2192,11 @@ class DomainRegistrationInsightTests(TestCase):
         self.assertFalse(found.concern)
         self.assertIn("Renews itself", found.detail)
 
-    def test_a_domain_the_registrar_did_not_answer_for_says_nothing(self):
+    def test_a_domain_nothing_has_read_says_not_read(self):
         from .zone_insights import registration
 
-        self.assertIsNone(registration(self._zone()))
+        found = registration(self._zone())
+
+        # The card stays, so the domain page keeps its four questions.
+        self.assertEqual(found.value, "Not read")
+        self.assertFalse(found.concern)

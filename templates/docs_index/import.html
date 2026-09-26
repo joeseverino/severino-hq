@@ -1,12 +1,9 @@
-{% extends "base.html" %}
-{% block title %}Import documentation manifest{% endblock %}
-{% block content %}
-<h1>Import documentation manifest</h1>
-<p class="muted">Upload a JSON array of doc records (one entry per Obsidian doc). See <code>docs_index/importer.py</code> for the schema.</p>
+{% extends "page.html" %}
+{% block page %}
 <form method="post" enctype="multipart/form-data" class="form">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the exported manifest here" hint="A JSON array of doc records" %}
+  {% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="JSON array of doc records" %}
   {% for field in form %}{% if field.name != "manifest_file" %}{% include "partials/_form_field.html" %}{% endif %}{% endfor %}
   <div class="form-actions">
     <button type="submit" class="primary">Import</button>

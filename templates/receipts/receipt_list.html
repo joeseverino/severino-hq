@@ -1,39 +1,14 @@
-{% extends "base.html" %}
-{% load humanize table_tags %}
-{% block title %}Receipts{% endblock %}
-{% block content %}
-<div class="page-head">
-  <h1>Receipts</h1>
-  <a class="btn primary" href="{% url 'receipts:create' %}">Upload receipt</a>
-</div>
-<p class="muted">Receipt files are stored privately on disk. They are never publicly accessible — only signed-in users can fetch them through this app.</p>
-
-{% include "partials/_table_toolbar.html" %}
-
-<div class="table-scroll">
-<table class="data-table" data-selectable-table>
-  <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Uploaded" "uploaded_at" "-uploaded_at" %}{% table_sort_header "Vendor" "vendor" "-vendor" %}{% table_sort_header "Date" "date" "-date" %}{% table_sort_header "Amount" "amount" "-amount" %}{% table_sort_header "Filename" "original_filename" "-original_filename" %}<th>Links</th></tr>
-  </thead>
-  <tbody>
-    {% for r in receipts_list %}
-      <tr>
-        <td class="select-column"><input type="checkbox" data-row-select value="{{ r.pk }}" aria-label="Select receipt {{ r.pk }}"></td>
-        <td><a href="{{ r.get_absolute_url }}">{{ r.uploaded_at }}</a></td>
-        <td>{{ r.vendor|default:"—" }}</td>
-        <td>{{ r.date|default:"—" }}</td>
-        <td>${{ r.amount|floatformat:2|intcomma }}</td>
-        <td class="muted">{{ r.original_filename|default:"—" }}</td>
-        <td class="muted">
-          {% if r.related_expense %}<a href="{{ r.related_expense.get_absolute_url }}">expense</a>{% endif %}
-          {% if r.related_asset %}<a href="{{ r.related_asset.get_absolute_url }}">asset</a>{% endif %}
-        </td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="7" class="muted">No receipts yet.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% include "partials/_pagination.html" %}
+{% extends "list_page.html" %}
+{% load humanize %}
+{% block row %}
+  <td><a href="{{ row.get_absolute_url }}">{{ row.uploaded_at }}</a></td>
+  <td>{{ row.vendor|or_empty }}</td>
+  <td>{{ row.date|or_empty }}</td>
+  <td>${{ row.amount|floatformat:2|intcomma }}</td>
+  <td class="muted">{{ row.original_filename|or_empty }}</td>
+  <td class="muted">
+    {% if row.related_expense %}<a href="{{ row.related_expense.get_absolute_url }}">expense</a>{% endif %}
+    {% if row.related_asset %}<a href="{{ row.related_asset.get_absolute_url }}">asset</a>{% endif %}
+  </td>
 {% endblock %}
+{% block empty %}No receipts yet.{% endblock %}

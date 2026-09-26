@@ -52,8 +52,8 @@ def claim_resolution_plan(
         steps.append(
             WorkflowStep(
                 "understand",
-                "Understand the impact",
-                "Inspect the supporting relationships before changing anything.",
+                "Check the impact",
+                "See what depends on it before changing anything.",
                 "available",
                 inspect_actions,
             )
@@ -62,8 +62,8 @@ def claim_resolution_plan(
         steps.append(
             WorkflowStep(
                 "act",
-                "Act through HQ",
-                "Use an authorized workflow already owned by the affected subject.",
+                "Fix it",
+                "Run one of these actions.",
                 "recommended" if remedies else "available",
                 act_actions,
             )
@@ -72,8 +72,8 @@ def claim_resolution_plan(
         steps.append(
             WorkflowStep(
                 "verify",
-                "Verify from fresh facts",
-                "Re-derive the claim; resolution means HQ can no longer prove it.",
+                "Confirm the fix",
+                "Check again. It is resolved when this finding is gone.",
                 "after_action" if remedies else "available",
                 (verification,),
             )
@@ -82,12 +82,12 @@ def claim_resolution_plan(
     identity = claim_identity(namespace, rule, subject, scope)
     return WorkflowPlan(
         id=f"resolve:{identity}",
-        label="Resolution workflow",
+        label="Steps to resolve",
         steps=tuple(steps),
         outcome=WorkflowOutcome(
             "claim_absent",
             identity,
-            "Complete when this claim is absent from a fresh derivation.",
+            "Done when a fresh check no longer finds this.",
         ),
     )
 

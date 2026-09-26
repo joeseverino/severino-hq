@@ -1,16 +1,16 @@
 flowchart TB
-    subgraph private["Extensions — separate repositories, each releasing itself"]
+    subgraph private["Extensions: separate repositories, each releasing itself"]
         direction LR
         a["extension A"]
         b["extension B"]
         c["extension C"]
     end
 
-    subgraph public["This repository — public"]
+    subgraph public["This repository, public"]
         direction LR
         sdk["hq_sdk<br/>the only supported import surface"]
         host["Severino HQ host<br/>application core · adapters · control plane"]
-        example["example_hq_plugin<br/>synthetic — proves the contract in public CI"]
+        example["example_hq_plugin<br/>synthetic, proves the contract in public CI"]
     end
 
     a -->|imports| sdk
@@ -19,7 +19,7 @@ flowchart TB
     example -->|imports| sdk
     sdk -.->|re-exports host primitives| host
 
-    var["COMPOSITION_EXTENSIONS<br/>the installed set — supplied at composition<br/>time, never committed here"]
+    var["COMPOSITION_EXTENSIONS<br/>the installed set, supplied at composition<br/>time, never committed here"]
     compose["compose.yml<br/>assembles and verifies one application"]
     image[("Composed image<br/>host plus admitted extensions")]
 

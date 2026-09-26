@@ -1,20 +1,7 @@
-{% extends "base.html" %}
-{% block title %}Topology{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Topology</h1>
-    <p class="muted">Live relationships derived from what HQ declares, what controllers observe, and what each connection can do.</p>
-  </div>
-  <div class="page-actions">
-    <a class="btn primary" href="{% url 'control_plane:create' %}">Add resource</a>
-    <a class="btn" href="{% url 'control_plane:list' %}">Resources</a>
-    <a class="btn" href="{% url 'control_plane:connections' %}">Connections</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <nav class="topology-lenses" aria-label="Topology views">
-  <a class="scope-chip{% if not active_lens %} is-active{% endif %}" href="{% url 'control_plane:topology' %}"{% if not active_lens %} aria-current="page"{% endif %}>Everything</a>
+  <a class="scope-chip{% if not active_lens %} is-active{% endif %}" href="{% url 'control_plane:topology' %}"{% if not active_lens %} aria-current="page"{% endif %}>All</a>
   {% for lens in topology_lenses %}
     <a class="scope-chip{% if active_lens.name == lens.name %} is-active{% endif %}" href="?lens={{ lens.name|urlencode }}#map" title="{{ lens.summary }}"{% if active_lens.name == lens.name %} aria-current="page"{% endif %}>{{ lens.label }}</a>
   {% endfor %}
@@ -25,9 +12,9 @@
 {% if topology_trace %}
   <section class="topology-trace-bar" id="trace" tabindex="-1" aria-label="Active topology trace">
     <div>
-      <span class="eyebrow">Bounded trace</span>
+      <span class="eyebrow">Trace</span>
       <strong>{{ topology_trace_focus.label }}</strong>
-      <span class="muted">{{ topology_trace.direction }} · {{ topology_trace.depth }} hop{{ topology_trace.depth|pluralize }}</span>
+      <span class="muted">{{ topology_trace.direction }} · {{ topology_trace.depth|counted:"hop" }}</span>
     </div>
     <nav class="topology-trace-controls" aria-label="Trace direction">
       {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
@@ -41,9 +28,9 @@
 {% endif %}
 
 <div class="topology-summary" role="group" aria-label="Topology summary">
-  <span><strong>{{ topology.nodes|length }}</strong> nodes</span>
-  <span><strong>{{ topology.edges|length }}</strong> relationships</span>
-  {% for group in topology_groups %}<span><strong>{{ group.items|length }}</strong> {{ group.label|lower }}</span>{% endfor %}
+  <span><strong>{{ topology.nodes|length|counted:"node" }}</strong></span>
+  <span><strong>{{ topology.edges|length|counted:"relationship" }}</strong></span>
+  {% for group in topology_groups %}<span><strong>{{ group.count }}</strong></span>{% endfor %}
 </div>
 
 <section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
@@ -61,86 +48,78 @@
     <button class="btn ghost compact" type="button" data-topology-reset>Reset focus</button>
   </div>
 
-  <p class="topology-hint muted" aria-live="polite" data-topology-status>Select a node to isolate its immediate relationships. Open it for actions and detail.</p>
+  <p class="topology-hint muted" aria-live="polite" data-topology-status>Select a node to show its direct relationships and details.</p>
 
-  <div class="topology-map" id="map" tabindex="-1">
+  <p class="topology-scroll-hint muted">Lanes scroll sideways.</p>
+  <div class="topology-stage{% if topology_detail %} has-detail{% endif %}" data-topology-stage>
+  <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Topology lanes">
     {% for group in topology_groups %}
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
           <h2 id="topology-{{ group.kind }}">{{ group.label }}</h2>
-          <span class="count" data-topology-count>{{ group.items|length }}</span>
+          <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span>
         </header>
         <div class="topology-node-list">
           {% for item in group.items %}
-            <details
-              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
+            {% comment %}
+              A card names the node and selects it. Its details render once, in
+              the panel beside the lanes, never inside the card.
+            {% endcomment %}
+            <article
+              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}{% if item.node.id == focus_node %} is-selected{% endif %}"
               data-topology-node="{{ item.node.id }}"
               data-topology-node-kind="{{ item.node.kind }}"
               data-topology-neighbors="{{ item.neighbors }}"
               data-topology-search-text="{{ item.node.label }} {{ item.node.subtitle }} {{ item.node.detail }}"
-              name="topology-node"
-              {% if item.node.id == focus_node %}open{% endif %}
+              data-topology-body="{{ item.body_url }}"
             >
-              <summary>
-                <span class="topology-node-title">
-                  {% comment %}
-                    The anchor sits inside the title's strong rather than replacing it:
-                    the title stays the node's name for both the stylesheet and the
-                    status line the explorer writes from it.
-                  {% endcomment %}
-                  <strong>{% if item.node.url %}<a class="topology-node-link" href="{{ item.node.url }}">{{ item.node.label }}</a>{% else %}{{ item.node.label }}{% endif %}</strong>
-                  <small>{{ item.node.subtitle }}</small>
-                </span>
-                <span class="topology-node-degree" title="{{ item.degree }} direct relationship{{ item.degree|pluralize }}">{{ item.degree }}</span>
-              </summary>
-              {% if topology_trace %}
-                {% include "control_plane/_topology_node_body.html" %}
-              {% else %}
-                {% comment %}
-                  Fetched when opened. The link is the same body without script:
-                  it focuses the node, and a focused page draws its bodies.
-                {% endcomment %}
-                <div class="topology-node-body" data-deferred="{{ item.body_url }}">
-                  <a href="{{ item.focus_url }}">Show relationships and actions</a>
-                </div>
-              {% endif %}
-            </details>
+              <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}">
+                <strong>{% if item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}"{% if item.link.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.link.label }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label }}</span>{% endif %}</strong>
+                <small>{{ item.node.subtitle }}</small>
+              </span>
+              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"direct relationship,direct relationships" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"direct relationship,direct relationships" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree }}</span></a>
+            </article>
           {% empty %}
-            <p class="muted">Nothing observed in this layer.</p>
+            <p class="muted">None.</p>
           {% endfor %}
         </div>
       </section>
     {% empty %}
       {% if active_lens %}
-        {% include "partials/_empty_state.html" with message="Nothing currently matches this view." %}
+        {% include "partials/_empty_state.html" with message="Nothing matches this view." %}
       {% else %}
-        {% include "partials/_empty_state.html" with message="Nothing has been declared or observed yet." %}
+        {% include "partials/_empty_state.html" with message="Nothing declared or observed yet." %}
       {% endif %}
     {% endfor %}
   </div>
+  <section class="topology-detail" id="topology-detail" tabindex="-1" aria-label="Node details" aria-live="polite" data-topology-detail="{{ focus_node }}"{% if not topology_detail %} hidden{% endif %}>
+    {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
+  </section>
+  </div>
 </section>
 
-{% if topology_trace %}
-<details class="card topology-relations" id="topology-relations">
-  <summary><strong>Relationship ledger</strong> <span class="muted">Every exact edge behind the explorer</span></summary>
+{% if topology_edges %}
+<section class="card topology-relations" id="topology-relations" aria-labelledby="topology-relations-heading">
+  <header class="topology-relations-head">
+    <h2 id="topology-relations-heading">Relationships in this trace</h2>
+    <span class="muted">{{ topology_edges|length|counted:"relationship" }}</span>
+  </header>
   <div class="table-scroll">
     <table class="data-table stacks">
       <thead><tr><th>From</th><th>Relationship</th><th>To</th><th>State</th></tr></thead>
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td data-label="From"><a href="?focus={{ item.source.id|urlencode }}#trace">{{ item.source.label }}</a><br><code>{{ item.source.kind }}</code></td>
+            <td data-label="From">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span></td>
             <td data-label="Relationship">{{ item.edge.label }}</td>
-            <td data-label="To"><a href="?focus={{ item.target.id|urlencode }}#trace">{{ item.target.label }}</a><br><code>{{ item.target.kind }}</code></td>
+            <td data-label="To">{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label }}</span></td>
             <td data-label="State"><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
           </tr>
-        {% empty %}
-          <tr><td colspan="4" class="muted">Relationships appear when controllers report connections or resources are declared.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-</details>
+</section>
 {% endif %}
 {% endblock %}

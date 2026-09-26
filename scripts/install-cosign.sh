@@ -5,7 +5,7 @@
 # a bad image fails visibly in the workflow, and once inside deploy-image.sh,
 # because the runner is the party the sudoers boundary exists to distrust. The
 # second check is the one that decides, so it cannot use the runner's copy of
-# cosign -- that binary is installed by an Action, into a directory the runner
+# cosign: that binary is installed by an Action, into a directory the runner
 # owns and can rewrite. Root needs its own.
 #
 # Pinned to a version and its published SHA-256. A download root then executes
@@ -21,7 +21,7 @@ readonly version="v3.1.3"
 readonly sha256="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
 # Deliberately beside /usr/local/lib/severino-hq rather than inside it.
 # severino-hq-sync-scripts replaces that whole tree in one swap, with content
-# taken from the image -- so a verifier living there would be deleted and
+# taken from the image, so a verifier living there would be deleted and
 # restored by the very thing it exists to check. It also means a standalone
 # sync leaves no verifier behind, and the next deploy refuses until something
 # puts one back. Outside the swap, it simply persists.

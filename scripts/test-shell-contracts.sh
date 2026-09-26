@@ -2,7 +2,7 @@
 # Properties every shell file in this repository must hold.
 #
 # Each one exists because a specific defect shipped, and each is written to
-# catch the *class* rather than the instance -- a fix for one occurrence is
+# catch the *class* rather than the instance: a fix for one occurrence is
 # worth much less than a gate that refuses the next one.
 
 set -eu
@@ -19,7 +19,7 @@ fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 # 1. A function defined in the shared library must have a caller.
 #
 # An engine function with no call site is not a safety net, it is a comment that
-# looks like code -- and a validator that nothing calls reads exactly like one
+# looks like code, and a validator that nothing calls reads exactly like one
 # that does.
 for lib in scripts/lib/*.sh; do
     [ -f "${lib}" ] || continue
@@ -36,7 +36,7 @@ done
 # 2. Every shell file in the repository must be in SHELL_SOURCES.
 #
 # A file outside the list is neither syntax-checked nor shellchecked, and the
-# ones that drift out are the ones nobody is thinking about -- which included a
+# ones that drift out are the ones nobody is thinking about, which included a
 # script executed as root on every deploy.
 #
 # Membership is decided by a file's interpreter, not by its name. Asking for

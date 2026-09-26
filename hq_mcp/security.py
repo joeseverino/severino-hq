@@ -9,29 +9,10 @@ from collections.abc import Awaitable, Callable, Iterable
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 
+from core.network import strict_host
 from hq_mcp.identity import reset_principal, set_principal
 
 logger = logging.getLogger("severino.mcp")
-
-
-def _normalize_host(value: str) -> str:
-    """Normalize hostname, IPv4, or bracketed IPv6 Host header values."""
-
-    value = value.strip().lower()
-    if value.startswith("["):
-        closing = value.find("]")
-        if closing == -1:
-            return ""
-        suffix = value[closing + 1 :]
-        if suffix and not (suffix.startswith(":") and suffix[1:].isdigit()):
-            return ""
-        return value[1:closing]
-    if value.count(":") == 1:
-        host, port = value.rsplit(":", 1)
-        if not port.isdigit():
-            return ""
-        value = host
-    return value.rstrip(".")
 
 
 class MCPBoundary:
@@ -60,7 +41,7 @@ class MCPBoundary:
         self.allowed_hosts = {
             normalized
             for host in allowed_hosts
-            if (normalized := _normalize_host(host))
+            if (normalized := strict_host(host))
         }
         self.allowed_networks = tuple(
             ipaddress.ip_network(network) for network in allowed_networks
@@ -90,7 +71,7 @@ class MCPBoundary:
             await self._deny(scope, receive, send, 404, "not_found")
             return
 
-        host = _normalize_host(headers.get("host", ""))
+        host = strict_host(headers.get("host", ""))
         if host not in self.allowed_hosts:
             await self._deny(scope, receive, send, 400, "invalid_host")
             return

@@ -37,10 +37,9 @@ def connection_specs():
                 status="good" if token_configured else "neutral",
                 status_label="authenticated" if token_configured else "public access",
                 detail=(
-                    "Token configured; external health is established only when a "
-                    "registered operation runs."
+                    "Token set. Health is checked when an operation runs."
                     if token_configured
-                    else "Registered public repositories use GitHub's anonymous API limits."
+                    else "No token. Uses GitHub's anonymous rate limit."
                 ),
                 endpoint="https://api.github.com",
                 # A personal token is whatever its owner made it, and HQ does
@@ -55,14 +54,14 @@ def connection_specs():
         ConnectionSpec(
             name="hq.github",
             label="GitHub",
-            summary="Repository metadata used by registered HQ projects.",
+            summary="Repository metadata for registered projects.",
             required_capability=Capability.READ,
             instance_provider=instances,
             abilities=(
                 ConnectionAbility(
                     name="github.repository_metadata",
                     label="Refresh repository metadata",
-                    summary="Read the latest push metadata for a registered project.",
+                    summary="Read the last push time for a registered project.",
                     effect="remote_write",
                     # Public repository metadata needs no grant; a token only
                     # lifts the anonymous rate limit.
@@ -79,24 +78,31 @@ def connection_specs():
     )
 
 
-def fetch_last_push(
-    repository_url: str,
-    *,
-    token: str = "",
-    timeout: int = 10,
-) -> datetime | None:
-    parsed = urlparse(repository_url)
+def github_repository(repository_url: str) -> tuple[str, str] | None:
+    """``(owner, repository)`` when the URL names a GitHub repository, else None."""
+
+    parsed = urlparse(str(repository_url or ""))
     parts = [part for part in parsed.path.split("/") if part]
     if (
         parsed.scheme != "https"
         or parsed.hostname not in {"github.com", "www.github.com"}
         or len(parts) != 2
     ):
+        return None
+    owner, repository = parts[0], parts[1].removesuffix(".git")
+    return (owner, repository) if owner and repository else None
+
+
+def fetch_last_push(
+    repository_url: str,
+    *,
+    token: str = "",
+    timeout: int = 10,
+) -> datetime | None:
+    found = github_repository(repository_url)
+    if found is None:
         raise GitHubMetadataError("Project repository URL must identify a GitHub repository.")
-    owner, repository = parts
-    repository = repository.removesuffix(".git")
-    if not owner or not repository:
-        raise GitHubMetadataError("Project repository URL must identify a GitHub repository.")
+    owner, repository = found
 
     request = urllib.request.Request(
         f"https://api.github.com/repos/{owner}/{repository}",

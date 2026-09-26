@@ -27,12 +27,13 @@ from .plugins import (
     plugin_token_authenticated_prefixes,
 )
 from .domains import domain_navigation
+from .pages import page_context
 from .ui import Insight, Kpi, PageNavigation, PageSection
 
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
 # assets are not host source, and the runtime image has neither `.git` nor git
-# itself -- so the scan must not depend on either.
+# itself, so the scan must not depend on either.
 SKIP_DIRECTORIES = frozenset(
     {
         ".claude",
@@ -77,7 +78,7 @@ VALID = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=2,
+    api_version=PLUGIN_API_VERSION,
     integration_provider="example.plugin:integration",
     navigation=(NavigationItem("Notes", "notes:list", "notes", 40),),
     operator_capabilities=("notes.read", "notes.write"),
@@ -144,8 +145,8 @@ class PluginContractTests(TestCase):
         """The host must not know which extensions exist. This proves it does not.
 
         Imports are checked by `hq_sdk.validation`; this checks the other half.
-        A host that merely *mentions* an extension -- in a docstring, a comment,
-        a fixture, a default -- has begun to depend on it, and the properties
+        A host that merely *mentions* an extension (in a docstring, a comment,
+        a fixture, a default) has begun to depend on it, and the properties
         this architecture exists for start to go: install an extension without
         touching the host, run the host with none, release the two apart.
 
@@ -215,7 +216,7 @@ class PluginContractTests(TestCase):
         with env, importer:
             self.assertEqual(installed_plugins(), (VALID,))
             # Into the one bar the host actually renders, beside its own
-            # sections -- not into a plugin-only projection nothing draws.
+            # sections, not into a plugin-only projection nothing draws.
             self.assertLessEqual(set(VALID.navigation), set(domain_navigation()))
             self.assertEqual(
                 plugin_capabilities("operator"),
@@ -372,7 +373,7 @@ class PluginContractTests(TestCase):
             ),
             self.assertRaisesRegex(
                 ImproperlyConfigured,
-                "plugin API 1 provider fields.*capability_provider.*supports 2",
+                f"plugin API 1 provider fields.*capability_provider.*supports {PLUGIN_API_VERSION}",
             ),
         ):
             plugins._load_manifest("example.legacy:plugin")
@@ -400,7 +401,7 @@ class PluginContractTests(TestCase):
                     ),
                     self.assertRaisesRegex(
                         ImproperlyConfigured,
-                        f"plugin API 1 provider fields.*{field}.*supports 2",
+                        f"plugin API 1 provider fields.*{field}.*supports {PLUGIN_API_VERSION}",
                     ),
                 ):
                     plugins._load_manifest("example.legacy:plugin")
@@ -531,7 +532,7 @@ class PluginContractTests(TestCase):
     def test_host_ui_primitives_render_for_installable_plugins(self):
         page_head = render_to_string(
             "partials/_page_head.html",
-            {"title": "Example Notes", "lede": "Shared host interface"},
+            page_context("Example Notes", "Shared host interface"),
         )
         kpis = render_to_string(
             "partials/_kpi_grid.html",
@@ -680,7 +681,7 @@ class AttentionContractTests(TestCase):
             distribution="demo",
             source_repository="owner/demo",
             source_workflow=".github/workflows/admit-plugin.yml",
-            api_version=2,
+            api_version=PLUGIN_API_VERSION,
             integration_provider="demo:integration",
         )
         return PluginManifest(**{**base, **overrides})
@@ -754,8 +755,7 @@ class ComposedPluginTestKitTests(TestCase):
     """The kit itself: a plugin must be able to see a sibling in its own suite.
 
     Per-repo CI loads one extension. Anything that composes across them is
-    therefore only tested alone, which is how an assertion that nothing else is
-    installed passes locally and is wrong in production.
+    otherwise only tested alone.
     """
 
     def tearDown(self):
@@ -822,11 +822,8 @@ class ComposedPluginTestKitTests(TestCase):
     def test_a_rich_domain_still_reaches_the_attention_queue(self):
         """A DomainOverview must not displace its domain's attention items.
 
-        The regression: a composing surface dropped every domain that supplied
-        an overview from the queue and re-read severity off the overview
-        instead. Overviews are a display surface and truncate, so a `serious`
-        item past the cutoff vanished from the one place it was guaranteed to
-        appear -- and the page looked healthier the more a domain reported.
+        Overviews are a display surface and truncate, so a `serious` item must
+        still reach the queue through the domain's attention items.
         """
         from .plugin_testing import sibling
         from .plugins import plugin_attention_items

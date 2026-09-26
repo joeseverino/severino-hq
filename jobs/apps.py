@@ -14,5 +14,5 @@ class JobsConfig(AppConfig):
         # Registered like every other record HQ keeps, so starting a job that
         # reads an operator's archive leaves the same trail as editing a row
         # by hand. Work that happens off the request thread is exactly the
-        # work an audit log is for -- nobody watched it happen.
+        # work an audit log is for: nobody watched it happen.
         register_audit(Job, "Background job")

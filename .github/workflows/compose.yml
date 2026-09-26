@@ -2,32 +2,25 @@ name: Compose and deploy extensions
 
 # Builds the one image production runs: this host plus every admitted
 # extension. Extensions verify and admit themselves, then trigger this; they no
-# longer build or deploy an image of their own. That is the point -- when each
+# longer build or deploy an image of their own. That is the point, when each
 # extension shipped its own image, deploying one replaced the others.
 #
 # Triggered by an extension after a successful admission, or by hand to
 # rebuild the current set (for example after a host release).
 
 on:
-  # After the host image exists, never in parallel with it being built. On a
-  # plain push this raced the build and resolved a tag that was not published
-  # yet.
+  # After the host image exists, never in parallel with it being built.
   #
-  # No branch filter, deliberately. This used to be `branches: [main]`, so the
-  # composition -- the only place this application is assembled the way
-  # production assembles it, DEBUG off and the extensions loaded -- was first
-  # built from a commit that had already been merged. Three failures reached
-  # main that way, each costing a merge and a rebuild to learn something a pull
-  # request could have said. A pull request now composes and verifies; it does
-  # not publish and it does not deploy.
+  # No branch filter: a pull request composes and verifies (DEBUG off, the
+  # extensions loaded, as production assembles it) before merge. It does not
+  # publish and it does not deploy.
   workflow_run:
     workflows: [ci]
     types: [completed]
   # `workflow_run` does not fire for a run that was itself triggered by
-  # `pull_request` -- GitHub declines to let pull-request code start a
+  # `pull_request`: GitHub declines to let pull-request code start a
   # default-branch workflow, which is the right call and also means the
-  # composition cannot be reached that way. Removing the branch filter above
-  # was therefore necessary and not sufficient; this is the trigger that fires.
+  # composition cannot be reached that way; this is the trigger that fires.
   #
   # It starts as soon as the pull request does, so it can outrun the host image
   # it needs. "Resolve the host image" waits for that image rather than
@@ -36,7 +29,7 @@ on:
   pull_request:
     branches: [main]
   # Kept for an extension that is given a credential to announce itself, and
-  # for a hand-sent signal. Nothing sends this today -- which is exactly why
+  # for a hand-sent signal. Nothing sends this today, which is exactly why
   # the schedule below exists, and why this listener alone was worse than
   # useless: it made the pipeline look wired while an extension merge quietly
   # reached nothing.
@@ -48,7 +41,7 @@ on:
   # than waiting a few minutes. So the host asks instead of being told.
   #
   # A scheduled run rebuilds nothing unless the composition's inputs actually
-  # changed -- see "Decide whether anything changed" -- so this costs one cheap
+  # changed (see "Decide whether anything changed") so this costs one cheap
   # resolution per tick and deploys only when there is something to deploy. It
   # also self-heals: any trigger that is ever missed is picked up by the next
   # tick rather than waiting for somebody to notice.
@@ -72,7 +65,7 @@ concurrency:
   # Never two compositions at once *for the same target*: they would race for
   # the same image tag and the deploy that finished second would silently win.
   # Keyed by the branch being composed, so a pull request's composition neither
-  # queues behind main's nor delays it -- they build different tags and only
+  # queues behind main's nor delays it: they build different tags and only
   # one of them can deploy.
   group: composition-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
@@ -83,7 +76,7 @@ env:
   # dispatch, or a hand-run rebuild goes further. Decided once here rather than
   # re-derived at each step, because the two places that must agree about it
   # are the publish step and the deploy job.
-  IS_RELEASE: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+  IS_RELEASE: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main') || github.event_name == 'repository_dispatch' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' }}
   CORDON_COMMIT: a5f2f2d2c11e33abe1be6ab04e5961f3c2f4a739
   PYTHONUNBUFFERED: "1"
 
@@ -119,7 +112,7 @@ jobs:
       - name: Read the composition set
         # A secret, and never interpolated into the script body. Actions
         # expands `${{ … }}` into the text of the step it echoes, and masks only
-        # secret values -- so anything private reaches the log through the
+        # secret values, so anything private reaches the log through the
         # environment or not at all.
         env:
           COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
@@ -141,7 +134,7 @@ jobs:
         # This step prints a count and nothing else, which was enough while it
         # was the only step that mentioned them. It is not: later steps shell
         # out to gh, pip, and Django, and those echo repository names, wheel
-        # filenames, app labels and — when a test fails — table and column
+        # filenames, app labels and (when a test fails) table and column
         # names. This repository is public and so are its logs.
         #
         # Masking once here covers every later step, including output from
@@ -182,11 +175,18 @@ jobs:
         id: host
         env:
           GH_TOKEN: ${{ github.token }}
+          # Dispatch payloads are untrusted input: passed as data, never
+          # interpolated into the script.
+          HOST_REF: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.event.client_payload.host_sha || github.sha }}
         # Derived from the commit being composed, so there is no pin to bump by
         # hand and no way for the composition to be built on a stale host.
         run: |
           set -euo pipefail
-          ref="${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.event.client_payload.host_sha || github.sha }}"
+          if ! [[ "$HOST_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid host ref::The host ref is not a full commit SHA."
+            exit 1
+          fi
+          ref="$HOST_REF"
           image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
           # On a pull request this workflow and the host build start together,
           # so the image may not exist yet. Waited for rather than assumed:
@@ -197,7 +197,7 @@ jobs:
           digest=""
           # Five seconds, not twenty. On a pull request this is waiting for a
           # build that started at the same moment, so the granularity of the
-          # poll is pure overshoot -- on average half the interval, spent after
+          # poll is pure overshoot: on average half the interval, spent after
           # the image is already there.
           for attempt in $(seq 1 240); do
             if digest=$(docker buildx imagetools inspect "$image" \
@@ -210,7 +210,7 @@ jobs:
             # Every two minutes, ask whether there is still a build to wait for.
             # A host build that already failed will never publish, so waiting
             # the full twenty minutes reports a timeout instead of the failure
-            # that caused it -- and holds this branch's composition slot while
+            # that caused it, and holds this branch's composition slot while
             # the corrected commit queues behind it.
             if [ $((attempt % 24)) -eq 0 ]; then
               host_ci=$(gh api \
@@ -246,7 +246,7 @@ jobs:
       - name: Verify the host image was built by this repository
         # Every extension wheel is verified against a declared signer before it
         # is installed. Until this step the image it was installed *into* was
-        # taken on trust -- resolved by a tag derived from a commit, which says
+        # taken on trust: resolved by a tag derived from a commit, which says
         # who *should* have built it and proves nothing about who did.
         #
         # The identity is pinned to this repository's own `ci` workflow, so an
@@ -257,16 +257,23 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # A release composes only onto a host built from main. Anything else
+          # never publishes, so it may also compose onto a pull-request build.
+          if [ "$IS_RELEASE" = true ]; then
+            signer_ref='refs/heads/main$'
+          else
+            signer_ref='refs/(heads/main|pull/[0-9]+/merge)$'
+          fi
           # Retried, because the host build pushes the image and signs it in
           # two steps and this job is watching for the push. On a pull request
           # the two workflows run concurrently, so the manifest can exist for a
-          # few seconds before its signature does -- which is indistinguishable
+          # few seconds before its signature does, which is indistinguishable
           # from an unsigned image on the first attempt and is not one.
           for attempt in $(seq 1 12); do
             if cosign verify \
                  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
                  --certificate-identity-regexp \
-                   "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@refs/" \
+                   "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@${signer_ref}" \
                  "$HOST_IMAGE" > /dev/null 2>&1; then
               echo "host image signature verified"
               exit 0
@@ -290,8 +297,8 @@ jobs:
         # input to "has anything changed?", and it is deliberately the cheapest
         # question that can answer it: a new wheel cannot exist without a new
         # admission run, so an unchanged set of run ids means an unchanged set
-        # of wheels. It can be conservative in one direction only -- a re-run
-        # that produced an identical wheel looks like a change and rebuilds --
+        # of wheels. It can be conservative in one direction only (a re-run
+        # that produced an identical wheel looks like a change and rebuilds)
         # which is the safe direction to be wrong in.
         #
         # Written to a file rather than a step output. An output is read back by
@@ -322,7 +329,7 @@ jobs:
           # Asked here, before anything is downloaded or verified, because the
           # answer is almost always "nothing". Asked after, an idle tick still
           # fetched three wheels, installed a verifier and checked three
-          # signatures against Sigstore -- tens of times a day, to learn that.
+          # signatures against Sigstore: tens of times a day, to learn that.
           # The cost was not the minutes; it was that every one of those was a
           # chance to fail at something nobody was waiting for.
           fingerprint=$(printf '%s\n%s\n%s\n' \
@@ -475,8 +482,8 @@ jobs:
         #
         # Log level raised for the run. At INFO the application writes a line
         # per request, which a suite exercising every composed page turns into
-        # a list of everything the composition serves. Masking is the backstop;
-        # not emitting it is the fix. Failures are unaffected -- the test runner
+        # a list of everything the composition serves. Masking is the backstop.
+        # Failures are unaffected: the test runner
         # reports those itself.
         run: |
           image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
@@ -535,8 +542,8 @@ jobs:
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
       # The artifact production actually runs. Every input to it is now signed
-      # and verified -- the host image by the step near the top of this job,
-      # each extension wheel by its admission bundle -- and this is the output
+      # and verified (the host image by the step near the top of this job,
+      # each extension wheel by its admission bundle) and this is the output
       # those checks were for. Deploy verifies this signature before it
       # recreates the container, so an image pushed to this name by anything
       # other than this workflow cannot become production.
@@ -567,9 +574,12 @@ jobs:
       needs.compose.result == 'success' &&
       needs.compose.outputs.image != '' &&
       ((github.event_name == 'workflow_run' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
         github.event.workflow_run.head_branch == 'main') ||
        github.event_name == 'repository_dispatch' ||
-       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main') ||
        github.event_name == 'schedule')
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. NEVER trigger a self-hosted job from pull_request.
@@ -605,14 +615,12 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Verify the image was composed by this workflow
-        # The last point at which anything can be checked. Everything upstream
-        # of here happens on GitHub's runners; this is the machine in the house
-        # about to run the result, and until now it ran whatever digest it was
-        # handed.
+        # The last point at which anything can be checked: everything upstream
+        # happens on GitHub's runners, and this is the host about to run it.
         #
         # Verified against the identity of this workflow in this repository, so
-        # a digest pushed to the composition name by any other means -- another
-        # workflow, a stolen registry token, a hand `docker push` -- stops here
+        # a digest pushed to the composition name by any other means (another
+        # workflow, a stolen registry token, a hand `docker push`) stops here
         # instead of becoming production. Output is discarded: the certificate
         # payload names the image, and the interesting part is whether this
         # step exits zero.
@@ -624,7 +632,7 @@ jobs:
           cosign verify \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity-regexp \
-              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/" \
+              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
             "$IMAGE" > /dev/null
           echo "composition signature verified"
       - name: Sync deploy checkout

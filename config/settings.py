@@ -25,7 +25,7 @@ from application.plugins import installed_plugin_apps
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Production mounts the 1Password-rendered app env (shell-quoted KEY='value'
-# lines) at this path. Loading it here — not only in the entrypoint — means
+# lines) at this path. Loading it here (not only in the entrypoint) means
 # every process in the container gets it, including `docker compose exec`
 # sessions (hq sync / shell / superuser), which never run the entrypoint.
 # setdefault: real environment variables always win.
@@ -84,13 +84,6 @@ def env_secret(name: str) -> str:
 
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
-# The canonical name of this platform, for anything that leaves it -- a printed
-# page, an exported file, the host a plain-HTTP request is sent back to.
-# Deliberately not derived from the request: a brief printed from a laptop is
-# the same document as one printed from the server, and it should not tell a
-# reader to visit a host they cannot reach.
-SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST", "hq.jseverino.com")
-
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
@@ -112,6 +105,29 @@ ALLOWED_HOSTS = env_list(
 
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
+
+def site_host(origins, hosts) -> str:
+    """The first trusted origin's host, else the first concrete allowed host."""
+    from urllib.parse import urlsplit
+
+    for origin in origins:
+        host = urlsplit(origin).hostname or ""
+        if host and "*" not in host:
+            return host
+    for host in hosts:
+        if host and not host.startswith(".") and "*" not in host:
+            return host
+    return "localhost"
+
+
+# The canonical name of this platform, for anything that leaves it: a printed
+# page, an exported file, the host a plain-HTTP request is sent back to. Not
+# taken from the request: a brief printed from a laptop names the same host as
+# one printed from the server.
+SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST") or site_host(
+    CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS
+)
+
 # Tighter defaults in production. These can be overridden via env if you're
 # behind a TLS-terminating reverse proxy on a Tailscale-only interface.
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
@@ -122,7 +138,7 @@ SESSION_COOKIE_HTTPONLY = True
 # HttpOnly and SameSite all describe a cookie HQ set; none of them stop
 # something at another host under this domain from setting a cookie of the same
 # name that HQ then reads back as its own. A prefixed cookie may only be set
-# over HTTPS, for the exact host, at path `/`, with no Domain -- so a sibling
+# over HTTPS, for the exact host, at path `/`, with no Domain, so a sibling
 # cannot write one at all, and the ambiguity is gone rather than mitigated.
 #
 # Derived from the Secure flag rather than declared, because a browser silently
@@ -133,14 +149,14 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_NAME = "__Host-sessionid" if SESSION_COOKIE_SECURE else "sessionid"
 CSRF_COOKIE_NAME = "__Host-csrftoken" if CSRF_COOKIE_SECURE else "csrftoken"
 # Stated rather than inherited. Django's default is already `Lax`, and `Lax` is
-# the correct answer here -- `Strict` would withhold the session cookie on the
+# the correct answer here: `Strict` would withhold the session cookie on the
 # top-level redirect back from the identity provider, which is sign-in itself.
 # Written down so that reasoning is visible to the next person to consider
 # tightening it, and so the connection page can report a value HQ chose.
 SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
 # How long a signed-in session lasts. Django's default is two weeks, and HQ
-# never spoke to Pocket ID again after `auth.login` -- the group allowlist in
+# never spoke to Pocket ID again after `auth.login`: the group allowlist in
 # `core.oidc.verify_claims` runs at sign-in and nowhere else. Disabling an
 # account or revoking a passkey changed nothing for a fortnight. Absolute
 # rather than sliding: a write per request shows up in the flat-query budgets,
@@ -165,11 +181,11 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 )
 # Preload stays opt-in. It is a submission to a list baked into browsers, is
 # slow to undo, and is meaningless for a name the public internet cannot
-# resolve -- which is deliberately true of this deployment.
+# resolve, which is deliberately true of this deployment.
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
 
 # HQ binds a plain HTTP port, and behind a TLS proxy that port stays reachable
-# by anything that can route to the host -- so the browser UI had two front
+# by anything that can route to the host, so the browser UI had two front
 # doors: the proxied HTTPS name, and the raw port with no TLS, no HSTS, and
 # none of the proxy's own source restrictions.
 #
@@ -186,7 +202,7 @@ SECURE_SSL_REDIRECT = env_bool("DJANGO_BEHIND_TLS_PROXY")
 SECURE_SSL_HOST = SEVERINO_SITE_HOST if SECURE_SSL_REDIRECT else None
 SECURE_REDIRECT_EXEMPT = [r"^health/"]
 
-# W008 fires only where the redirect is genuinely off -- a deployment with no
+# W008 fires only where the redirect is genuinely off: a deployment with no
 # TLS proxy in front of it, which is development. Silenced conditionally rather
 # than always, so `check --deploy --fail-level WARNING` still has an opinion
 # about the production posture instead of being told not to look.
@@ -204,7 +220,7 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
 # a class of bug. With it, assigning a string to `innerHTML`, `outerHTML`,
-# `srcdoc` or a script URL -- or handing one to `DOMParser` -- throws instead of
+# `srcdoc` or a script URL (or handing one to `DOMParser`) throws instead of
 # parsing, so a DOM-based cross-site scripting sink cannot execute even if one
 # is introduced.
 #
@@ -213,11 +229,11 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 # have to turn a response body into markup; `hq-fragment` in `static/js/app.js`
 # is that place and the only one. Because the name is taken and cannot be
 # claimed twice, script that gets onto the page cannot create a policy of its
-# own to reach a sink with -- which is the property that makes a single
+# own to reach a sink with, which is the property that makes a single
 # audited sink worth more than a blanket ban nobody could satisfy.
 #
 # Django admin's bundled jQuery writes HTML through `innerHTML` on every page
-# it renders, so the admin -- and only the admin -- runs the policy below
+# it renders, so the admin (and only the admin) runs the policy below
 # without these two directives.
 SECURE_CSP = {
     "default-src": [CSP.SELF],
@@ -259,14 +275,11 @@ SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool(
 )
 # The tailnet and loopback, and nothing else.
 #
-# The private LAN ranges used to be here too, and they were the whole rule
-# quietly undone. "Reachable from a private network" sounds like a small
-# widening of "reachable from the VPN", but a home LAN is not a trust boundary:
-# it holds a television, a printer, whatever a guest joined, and any of them
-# reaching HQ's port passes a gate whose entire job is to decide who may.
+# Not the private LAN ranges: a home LAN is not a trust boundary. It holds a
+# television, a printer, whatever a guest joined.
 #
-# The tailnet is the boundary this deployment actually maintains -- every peer
-# on it is an enrolled device with a key and a policy -- so it is the one HQ
+# The tailnet is the boundary this deployment actually maintains (every peer
+# on it is an enrolled device with a key and a policy) so it is the one HQ
 # states. Loopback stays because the container healthcheck probes it from
 # inside its own network namespace, and a reverse proxy on the same host
 # reaches HQ there.
@@ -295,7 +308,7 @@ SEVERINO_TRUSTED_NETWORKS = env_list(
 # network namespace, so any peer on the LAN or tailnet can reach the port
 # directly and, if trusted, name whatever address it likes. That address is
 # written into the audit log as the source of a failed sign-in and read back
-# out by the throttle -- so trusting a range corrupts the evidence and the gate
+# out by the throttle, so trusting a range corrupts the evidence and the gate
 # that reads it, together and invisibly.
 #
 # A deployment behind a proxy names that proxy explicitly; see .env.example.
@@ -365,6 +378,7 @@ MIDDLEWARE = [
     "core.middleware.CurrentUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.ProjectionMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -407,6 +421,11 @@ TEMPLATES = [
                 "core.context_processors.connection",
                 "core.context_processors.agent_access",
             ],
+            "builtins": [
+                "core.templatetags.value_tags",
+                "core.templatetags.action_tags",
+                "core.templatetags.table_tags",
+            ],
         },
     },
 ]
@@ -441,7 +460,7 @@ DATABASES = {
             # A file, not the in-memory database Django would otherwise use.
             # In-memory SQLite shares connections through a cache whose
             # locking is not WAL's, so a background job writing during a test
-            # fails with "database table is locked" -- an error production
+            # fails with "database table is locked": an error production
             # cannot produce. A file gives the suite the same journal mode,
             # lock and timeout as the running host, for a couple of seconds.
             #
@@ -454,7 +473,7 @@ DATABASES = {
             # otherwise share the file: `scripts/check.sh` runs concurrently by
             # default, and running it alongside `scripts/ci-local.sh` is the
             # normal way to check work. A shared file makes them fail each other
-            # with a locked table -- a failure that says nothing about the change
+            # with a locked table: a failure that says nothing about the change
             # and costs a while to attribute. Django's parallel workers suffix
             # this name per worker, so they stay distinct within a run too.
             "NAME": os.environ.get(
@@ -513,7 +532,7 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 # The marker matters. Without it, signing out under SSO-only redirects
 # straight back into a still-valid Pocket ID session and signs the operator
-# back in -- a sign-out button that visibly does nothing.
+# back in: a sign-out button that visibly does nothing.
 LOGOUT_REDIRECT_URL = "/accounts/login/?signed_out=1"
 
 # Paths that are public (everything else requires login).
@@ -536,7 +555,7 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
     # A browser reporting a policy violation is not a person signing in. The
     # report is sent without credentials by specification, so requiring a
     # session here would mean HQ never hears about a violation on the one page
-    # where a violation matters most -- the sign-in form. It stays behind the
+    # where a violation matters most: the sign-in form. It stays behind the
     # network gate like everything else, and the view stores nothing it was
     # not sent.
     SEVERINO_CSP_REPORT_PATH,
@@ -585,14 +604,13 @@ SEVERINO_OIDC_ALLOWED_EMAILS = {
 }
 SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 
-OIDC_ISSUER = os.environ.get(
-    "SEVERINO_OIDC_ISSUER", "https://sso.jseverino.com"
-).rstrip("/")
+# Empty rejects every token: no issuer matches it.
+OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "").rstrip("/")
 OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
 # The `email` scope is requested only when an email allowlist is configured.
 # Without it the claim never arrives, so SEVERINO_OIDC_ALLOWED_EMAILS could be
-# set and simply never match -- failing closed, but silently.
+# set and simply never match: failing closed, but silently.
 OIDC_RP_SCOPES = "openid profile groups" + (
     " email" if SEVERINO_OIDC_ALLOWED_EMAILS else ""
 )
@@ -609,7 +627,7 @@ OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
 
 # Machine-client API. HQ verifies access tokens Pocket ID issued for this
 # resource and mints no credential of its own, so there is nothing to revoke
-# here -- revocation is done on the client in Pocket ID.
+# here: revocation is done on the client in Pocket ID.
 #
 # Empty disables the surface fail-closed, and must: without a resource to check
 # `aud` against, a token minted for any other API on the same issuer would
@@ -627,7 +645,7 @@ SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = int(
 if SEVERINO_API_IDEMPOTENCY_TTL_SECONDS < 60:
     raise RuntimeError("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS must be at least 60.")
 
-# Encrypts the few secrets an operator deliberately hands to HQ -- today, the
+# Encrypts the few secrets an operator deliberately hands to HQ: today, the
 # private key of an internally signed certificate that has to reach a proxy.
 # Unset, HQ refuses to hold one rather than storing it in the clear; see
 # core.secrets. Not a provider credential: those stay outside the web container.
@@ -644,7 +662,7 @@ SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 # Whether HQ may queue a repair for a finding on its own. Off by default: the
 # first release of anything that acts unattended should be watched proposing
-# before it is trusted acting. Even on, it only ever queues -- the controller
+# before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
 SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
 SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
@@ -690,6 +708,9 @@ SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = env_int(
 # How long after a request HQ still counts as in use. Long enough to cover
 # reading a page and acting on it without the tab being open throughout.
 SEVERINO_ACTIVE_WINDOW_SECONDS = env_int("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
+# Days routine machine audit events (core.audit.ROUTINE_EVENTS) are kept.
+# Everything else in the audit log is kept indefinitely.
+SEVERINO_AUDIT_ROUTINE_DAYS = env_int("SEVERINO_AUDIT_ROUTINE_DAYS", 30)
 # How often the in-use marker is rewritten. Every request checks it; only the
 # first in each interval writes.
 SEVERINO_ACTIVITY_THROTTLE_SECONDS = env_int("SEVERINO_ACTIVITY_THROTTLE_SECONDS", 60)
@@ -709,11 +730,8 @@ TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "America/Chicago")
 USE_I18N = True
 USE_TZ = True
 
-# Custom formatting to match operator preference: 5/23/26 5:49 PM
-DATE_FORMAT = "n/j/y"
-DATETIME_FORMAT = "n/j/y g:i A"
-SHORT_DATE_FORMAT = "n/j/y"
-SHORT_DATETIME_FORMAT = "n/j/y g:i A"
+# Dates and times as the operator reads them, 5/23/26 5:49 PM, in one module.
+FORMAT_MODULE_PATH = ["config.formats"]
 
 
 # ----- Static & media ----------------------------------------------------------
@@ -732,12 +750,15 @@ STORAGES = {
     },
 }
 
-# Whether WhiteNoise re-reads STATIC_ROOT per request instead of scanning it once
-# at startup. Like TEMPLATE_CACHE above, this is a speed decision that WhiteNoise
-# otherwise infers from DEBUG -- so a deployment with DEBUG off cannot pick up an
-# edited stylesheet without a restart, whatever its reason for having DEBUG off.
-# Off by default; a served request should not stat the filesystem.
-WHITENOISE_AUTOREFRESH = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
+# Serve static files from the source trees, uncached, instead of from the
+# collected STATIC_ROOT, so an edited stylesheet shows on the next reload.
+# A deployment check (hq.E110) refuses it with DEBUG off; a local dev server may
+# run it with DEBUG off. Off by default: a served request should not search the
+# filesystem. Both static paths
+# honour it: the native ASGI mount (core.static) and WhiteNoise, its WSGI
+# fallback.
+STATIC_LIVE = env_bool("DJANGO_WHITENOISE_AUTOREFRESH", default=DEBUG)
+WHITENOISE_AUTOREFRESH = WHITENOISE_USE_FINDERS = STATIC_LIVE
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
@@ -798,14 +819,14 @@ SEVERINO_DOC_REVIEW_INTERVAL_DAYS = int(
 if SEVERINO_DOC_REVIEW_INTERVAL_DAYS < 1:
     raise RuntimeError("SEVERINO_DOC_REVIEW_INTERVAL_DAYS must be at least 1.")
 
-# Cloudflare D1 — the jseverino.com contact-form submissions live in a
-# Cloudflare D1 database, not HQ's SQLite. The contacts app reads/writes it
+# Cloudflare D1: the contact-form submissions live in a Cloudflare D1
+# database, not HQ's SQLite. The contacts app reads/writes it
 # over the D1 HTTP API.
 # Public DNS and reverse-DNS lookups. The one question HQ cannot answer from
 # the inside: a resolver on this network follows the internal rewrites and
 # reports the opposite of what the public internet sees.
 #
-# Unauthenticated by design -- no credential of HQ's travels with a lookup,
+# Unauthenticated by design: no credential of HQ's travels with a lookup,
 # which is what makes it acceptable for the web process to make the call
 # rather than routing it through the controller. Blanking the endpoint
 # disables every lookup surface fail-closed.
@@ -827,6 +848,7 @@ SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
 
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_D1_DATABASE_ID = os.environ.get("CLOUDFLARE_D1_DATABASE_ID", "")
+CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 GITHUB_API_TOKEN = os.environ.get("GITHUB_API_TOKEN", "")
 
@@ -845,15 +867,13 @@ for _d in (
         # a clear error from Django when the resource is actually accessed.
         pass
 
-# ----- Content index (jseverino.com published-writeups pull) -------------------
+# ----- Content index (the public site's published-writeups pull) --------------
 # HQ reflects what is live on the public site, mirroring the GitHub refresh:
 # fetch an already-public JSON index over HTTP, gated by a Cloudflare Access
 # service token. See content/content_sync.py.
-CONTENT_INDEX_URL = os.environ.get(
-    "CONTENT_INDEX_URL", "https://jseverino.com/content-index.json"
-)
-CONTENT_INDEX_PROJECT_SLUG = os.environ.get(
-    "CONTENT_INDEX_PROJECT_SLUG", "jseverino-site"
-)
+# Unset turns the sync off. The project is the one whose public URL serves the
+# index, unless named here.
+CONTENT_INDEX_URL = os.environ.get("CONTENT_INDEX_URL", "")
+CONTENT_INDEX_PROJECT_SLUG = os.environ.get("CONTENT_INDEX_PROJECT_SLUG", "")
 CF_ACCESS_CLIENT_ID = env_secret("CF_ACCESS_CLIENT_ID")
 CF_ACCESS_CLIENT_SECRET = env_secret("CF_ACCESS_CLIENT_SECRET")

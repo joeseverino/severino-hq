@@ -44,6 +44,14 @@ def safe_connection_url(url: str) -> bool:
 
 
 def validate_capability_spec(spec: CapabilitySpec) -> None:
+    _validate_capability_identity(spec)
+    _validate_capability_target(spec)
+    _validate_capability_command(spec)
+    _validate_capability_requirements(spec)
+    _validate_capability_handler(spec)
+
+
+def _validate_capability_identity(spec: CapabilitySpec) -> None:
     if not DOTTED_NAME.fullmatch(spec.name):
         raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
     if not spec.summary.strip():
@@ -56,6 +64,9 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid effect {spec.effect!r}."
         )
+
+
+def _validate_capability_target(spec: CapabilitySpec) -> None:
     if spec.target_kind is not None and spec.target_kind not in TARGET_KINDS:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid target {spec.target_kind!r}."
@@ -81,6 +92,9 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has an invalid execution note."
         )
+
+
+def _validate_capability_command(spec: CapabilitySpec) -> None:
     try:
         schema = command_schema(spec.command_type)
     except Exception as exc:
@@ -96,6 +110,9 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} has invalid target initial fields."
         )
+
+
+def _validate_capability_requirements(spec: CapabilitySpec) -> None:
     if spec.subject_resource is not None and not DOTTED_NAME.fullmatch(
         spec.subject_resource
     ):
@@ -114,9 +131,11 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(
             f"Capability {spec.name!r} repeats a required capability."
         )
+
+
+def _validate_capability_handler(spec: CapabilitySpec) -> None:
     if not callable(spec.handler):
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
-
     kwargs: dict[str, Any] = {"principal": None, "expected_updated_at": None}
     kind = TARGET_KINDS.get(spec.target_kind) if spec.target_kind else None
     if kind:
@@ -147,6 +166,10 @@ def _validate_resource_identity(spec: ResourceSpec) -> None:
         )
 
 
+def _principal_argument(spec: ResourceSpec) -> dict[str, None]:
+    return {"principal": None} if spec.pass_principal else {}
+
+
 def _validate_list_contract(spec: ResourceSpec) -> None:
     if bool(spec.list_handler) != bool(spec.list_query_type):
         raise ImproperlyConfigured(
@@ -163,7 +186,7 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
     if spec.list_handler and spec.list_query_type:
         try:
             values = spec.list_query_type().model_dump()
-            inspect.signature(spec.list_handler).bind(**values)
+            inspect.signature(spec.list_handler).bind(**values, **_principal_argument(spec))
         except (TypeError, ValidationError) as exc:
             raise ImproperlyConfigured(
                 f"Resource {spec.name!r} list handler does not implement its query contract."
@@ -178,7 +201,7 @@ def _validate_detail_contract(spec: ResourceSpec) -> None:
     if not spec.detail_handler:
         return
     try:
-        inspect.signature(spec.detail_handler).bind(None)
+        inspect.signature(spec.detail_handler).bind(None, **_principal_argument(spec))
     except TypeError as exc:
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} detail handler does not accept one identifier."

@@ -19,6 +19,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from application.documentation import sync_documentation
 from application.security import cli_principal
+from application.ui import counted
 from docs_index.importer import (
     ManifestImportError,
     validate_manifest_data,
@@ -36,7 +37,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--no-update",
             action="store_true",
-            help="Do not update existing doc_id records — only create new ones.",
+            help="Only create new doc_id records. Do not update existing ones.",
         )
         parser.add_argument(
             "--report-orphans",
@@ -70,7 +71,7 @@ class Command(BaseCommand):
             ),
         )
 
-    # Read, run, render -- kept apart because they fail differently and change
+    # Read, run, render: kept apart because they fail differently and change
     # for different reasons. Interleaved, the two output formats were stated in
     # two places each and the reporting drowned the control flow.
 
@@ -96,7 +97,7 @@ class Command(BaseCommand):
         elif problems:
             self.stdout.write(
                 self.style.ERROR(
-                    f"{len(problems)} manifest entr(ies) would be rejected:"
+                    f"{counted(len(problems), 'manifest entry', 'manifest entries')} would be rejected:"
                 )
             )
             for problem in problems:
@@ -106,12 +107,13 @@ class Command(BaseCommand):
         else:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Manifest valid: {len(data)} entr(ies) pass schema validation."
+                    f"Manifest valid: {counted(len(data), 'entry passes', 'entries pass')} schema validation."
                 )
             )
         if problems:
             raise CommandError(
-                f"{len(problems)} invalid manifest entr(ies) — not importable."
+                f"{counted(len(problems), 'invalid manifest entry', 'invalid manifest entries')}. "
+                "The manifest is not importable."
             )
 
     def _import(self, data, *, options, report_orphans: bool):
@@ -138,7 +140,7 @@ class Command(BaseCommand):
         verb = "pruned" if pruned else "found"
         self.stdout.write(
             self.style.WARNING(
-                f"Orphans {verb} ({len(orphans)} HQ rows with no manifest entry):"
+                f"Orphans {verb} ({counted(len(orphans), 'HQ row')} with no manifest entry):"
             )
         )
         for doc_id in orphans:
@@ -146,8 +148,8 @@ class Command(BaseCommand):
         if pruned:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Deleted {stats.get('orphans_pruned_records', 0)} row(s) "
-                    f"({stats['orphans_pruned']} DocumentationRecord + cascades)."
+                    f"Deleted {counted(stats.get('orphans_pruned_records', 0), 'row')}: "
+                    f"{counted(stats['orphans_pruned'], 'DocumentationRecord')} and their cascades."
                 )
             )
 
@@ -169,8 +171,13 @@ class Command(BaseCommand):
         if stats.get("content_items_pruned"):
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Pruned {stats['content_items_pruned']} stale mirrored "
-                    "ContentItem row(s)."
+                    "Pruned "
+                    + counted(
+                        stats["content_items_pruned"],
+                        "stale mirrored ContentItem row",
+                        "stale mirrored ContentItem rows",
+                    )
+                    + "."
                 )
             )
 

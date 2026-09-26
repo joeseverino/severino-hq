@@ -7,12 +7,46 @@ from datetime import date, timedelta
 
 from .workflow_contracts import ActionLink, WorkflowPlan
 
-# The one status vocabulary. Every surface that shows state -- dashboard cards,
-# insight panels, extension-provided projections -- draws from this set, so a
+# The one status vocabulary. Every surface that shows state (dashboard cards,
+# insight panels, extension-provided projections) draws from this set, so a
 # state means the same thing and looks the same wherever it is rendered.
 # Reserved: these never double as categorical series colours, and each is always
 # rendered with its own text so state is never carried by colour alone.
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
+
+# What a value that is not there looks like, everywhere: in a template through
+# the built-in `or_empty` filter, in a view model through this constant.
+MISSING = "–"
+
+
+def counted(count: int, one: str, many: str | None = None) -> str:
+    """A count with its words: "1 project needs output", "3 projects need output".
+
+    The phrase is given whole for one and for many, so a noun and its verb agree
+    by construction rather than by a suffix guessed afterwards. ``many`` may be
+    left out only for a single word that takes an "s"; a phrase has a verb, and
+    a verb cannot be pluralized by adding a letter.
+    """
+    if many is None:
+        if " " in one.strip():
+            raise ValueError(f"Give the plural of {one!r}: a phrase has a verb to agree.")
+        many = f"{one}s"
+    return f"{count:,} {one if count == 1 else many}"
+
+
+def ended(text: str) -> str:
+    """``text`` as a sentence: a full stop added unless it already ends in one.
+
+    For sentences that end on a name a registry supplied, which may carry its
+    own period ("Example, Inc.").
+    """
+
+    stripped = str(text or "").rstrip()
+    if not stripped or stripped[-1] in ".!?":
+        return stripped
+    return f"{stripped}."
+
+
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
@@ -44,24 +78,30 @@ def elapsed(stamp: str) -> str:
 
     found = moment(stamp)
     if found is None:
-        return "—"
+        return MISSING
     if found > datetime.now(_tz.utc):
         return "just now"
     return ago(found)
 
 
 def ago(moment) -> str:
-    """How long ago something happened, in the one phrasing HQ uses.
-
-    Two surfaces had grown their own three-line version of this. They agreed by
-    coincidence, which is the state a shared vocabulary is supposed to make
-    impossible -- a page saying "4 hours ago" beside one saying "4 hours old"
-    reads as two different facts.
-    """
+    """How long ago something happened, in the one phrasing HQ uses."""
 
     from django.utils.timesince import timesince
 
-    return f"{timesince(moment)} ago"
+    age = timesince(moment)
+    return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
+
+
+def duration(delta) -> str:
+    """A length of time in the phrasing ``ago`` uses, without the "ago"."""
+
+    from datetime import datetime, timedelta, timezone as _tz
+
+    from django.utils.timesince import timesince
+
+    start = datetime(2000, 1, 1, tzinfo=_tz.utc)
+    return timesince(start, start + max(delta, timedelta(0)))
 
 
 @dataclass(frozen=True)
@@ -136,7 +176,7 @@ class Insight:
     # How many things this insight stands for, when it stands for a countable
     # backlog. ``value`` is a display string and may be a balance or a distance,
     # so a surface that totals a queue cannot infer a quantity from it. Left
-    # unset, the insight counts as the single thing it describes -- which is
+    # unset, the insight counts as the single thing it describes, which is
     # what an alert is.
     magnitude: int | None = None
     # Optional closure loop emitted by any host or plugin domain. The queue and
@@ -147,10 +187,12 @@ class Insight:
     actions: tuple[ActionLink, ...] = ()
     # What this item is about, stable for as long as it is the same matter:
     # "finding:<rule>:<subject>", "approval:<id>". Read state follows it, so it
-    # must not carry anything that changes while the matter stays the same -- a
+    # must not carry anything that changes while the matter stays the same: a
     # count, a days-left figure, a message. Unique within its source. Left empty,
     # the eyebrow and title stand in for it.
     key: str = ""
+    # The thing this item is about, as a link to its own page.
+    subject: ActionLink | None = None
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:
@@ -165,7 +207,7 @@ class ListRow:
     """One line of a compact record list: what it is, and when.
 
     The shape ``partials/_record_list.html`` renders. Surfaces that list recent
-    records -- history panels, queues, "latest N with a way to see the rest" --
+    records: history panels, queues, "latest N with a way to see the rest",
     emit this instead of restating the row markup, so rows align and read the
     same wherever they appear and a change to the row lands everywhere at once.
 
@@ -176,7 +218,7 @@ class ListRow:
     title: str
     # Inline after the title, muted: the one fact that distinguishes this row.
     detail: str = ""
-    # Trailing, right-aligned: usually a date. Kept short -- it is scanned.
+    # Trailing, right-aligned: usually a date. Kept short: it is scanned.
     meta: str = ""
     url: str = ""
     # Leaves HQ. Rendered so the operator knows before they click, and so a
@@ -242,7 +284,7 @@ class CadenceWeek:
     """One period in a "did I do this" strip.
 
     Answers a different question from a chart. A bar says how much; this says
-    whether, week after week, at a glance -- which is what a habit is actually
+    whether, week after week, at a glance, which is what a habit is actually
     judged on. A gap in a row of filled marks is visible in a way a short bar
     beside tall ones is not.
     """
@@ -331,7 +373,7 @@ PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 606.0, 202.0
 # to hold and was given nothing, which put the last gridline, the last bar and
 # the final point hard against the edge of the drawing while the opposite side
 # breathed for 48 units. A chart read as leaning left, and the most recent
-# period -- the one actually being looked at -- was the one with no room
+# period (the one actually being looked at) was the one with no room
 # around it.
 # The same number as the left rather than a smaller one chosen to taste: the
 # end labels are centred on their points, so equal margins are what make the
@@ -348,21 +390,18 @@ PLOT_RIGHT = PLOT_LEFT
 # put in, not a bigger one.
 # Room to the right of the plot for the last category label, which is centred
 # on the last point and so hangs half its width past the axis. Sized for the
-# label at its largest -- a phone scales the whole drawing down, so the type
+# label at its largest: a phone scales the whole drawing down, so the type
 # has to be enlarged in these units to survive it, and the overhang is twice
 # what a desktop needs. Padding rather than a special case for the final
 # label: re-anchoring one label moves it off the point it belongs to.
-# The drawing is only the drawing now. Labels are HTML positioned over it, so
-# the box needs no room for type that is no longer inside it -- and one
-# geometry serves a half-width card and a full-width one alike, because
-# stretching rectangles is not the same as stretching words.
+# The drawing is only the drawing. Labels are HTML positioned over it, so one
+# geometry serves a half-width card and a full-width one alike.
 STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT)
 STANDARD_HEIGHT = 260
 # What an axis label costs, in pixels, at the 11px it is rendered at: roughly
-# six per character, plus a gap before the next one. Used to work out whether a
-# set of labels can fit a narrow card at all -- a count cannot answer that,
-# because "Jan 2026" needs half again what "Jul 6" does, and it was a count
-# that let eight month names through to overlap each other seven times.
+# six per character, plus a gap before the next one. Decides whether a set of
+# labels fits a narrow card: a count cannot, because "Jan 2026" needs half
+# again what "Jul 6" does.
 LABEL_CHAR_PX = 6.0
 LABEL_GAP_PX = 8.0
 # The narrowest card an axis is expected to fill, less the gutter its y-axis
@@ -412,8 +451,8 @@ class PlacedLabel:
     Rendered outside the SVG, so it needs its position as a percentage rather
     than in chart units. Derived by the chart rather than supplied with the
     category, because the share depends on the chart's width and a caller
-    building its own categories -- the mile profile and the route elevation
-    both do -- has no reason to know it. Asked for it, all three forgot, and
+    building its own categories (the mile profile and the route elevation
+    both do) has no reason to know it. Asked for it, all three forgot, and
     every label on those charts stacked at zero.
     """
 
@@ -431,24 +470,14 @@ class ChartRow:
 class Chart:
     """What every chart in HQ is, and the one place its axis is derived.
 
-    A bar chart and a line chart differ in what they draw -- rectangles or a
-    path -- and in nothing else. They share a plot rectangle, a set of ticks, a
+    A bar chart and a line chart differ in what they draw (rectangles or a
+    path) and in nothing else. They share a plot rectangle, a set of ticks, a
     set of categories, the table underneath, and the four derivations that turn
-    those into something a template can position. Held separately, they agreed
-    by inspection: the same `dense`, `gutter`, `axis_x` and `axis_y` were
-    written out twice, and the copies stopped agreeing exactly where you would
-    expect. `plot_right` was added to the bar chart to stop its template
-    hardcoding 702; the line chart's template went on hardcoding 702, 48, 12
-    and 214, because there was no shared thing for the fix to land on.
+    those into something a template can position. The shared part is one class
+    and the difference is the subclass, so a new chart type inherits a correct
+    axis.
 
-    So the shared part is one class and the difference is the subclass. A third
-    chart type inherits a correct axis instead of copying one, which is the
-    only version of this that stays true as the drawing types multiply.
-
-    Keyword-only: every field has a default below the ones that do not, and
-    subclasses add their own required fields after them. Positional
-    construction would make that an ordering puzzle; nothing constructs these
-    positionally, so the puzzle is simply removed.
+    Keyword-only, so subclasses can add required fields after defaulted ones.
     """
 
     title: str
@@ -460,11 +489,7 @@ class Chart:
     empty: bool
     width: int = STANDARD_SVG
     height: int = STANDARD_HEIGHT
-    # The plot's own edges. Carried rather than hardcoded in the template,
-    # which drew gridlines to 702 whatever the chart's own width was. All four
-    # are here because the line chart went on hardcoding the other three after
-    # `plot_right` was introduced for the bar chart, and a constant copied into
-    # a template is a constant that stops agreeing the moment this file moves.
+    # The plot's own edges, carried so no template hardcodes them.
     plot_left: float = PLOT_LEFT
     plot_right: float = PLOT_LEFT + PLOT_WIDTH
     plot_top: float = PLOT_TOP
@@ -477,7 +502,7 @@ class Chart:
         Measured, not counted: the width they need is the sum of what each one
         costs, and that is knowable here because the text is here. How much
         room they actually get is knowable only to the browser, so this says
-        its half -- these labels want more than a narrow card has -- and a
+        its half (these labels want more than a narrow card has) and a
         container query says the other half, whether the card they landed in
         is that narrow.
         """
@@ -551,10 +576,18 @@ class LineSeries:
     # question, and nowhere else.
     trend: str = ""
 
+    # Past this many points a dot on each reads as a beaded line rather than
+    # as readings; the line carries the shape and the hover targets the values.
+    DOT_LIMIT = 24
+
+    @property
+    def dotted(self) -> bool:
+        return len(self.points) <= self.DOT_LIMIT
+
 
 @dataclass(frozen=True)
 class LineMark:
-    """A vertical rule at a date -- the day something began."""
+    """A vertical rule at a date: the day something began."""
 
     x: float
     label: str
@@ -565,8 +598,8 @@ class LineChart(Chart):
     """A measure over time, on an axis fitted to the measure.
 
     Not a bar chart with the bars removed. `stacked_bar_chart` is zero-based by
-    contract, which is right for quantities that add up -- minutes trained,
-    volume lifted -- and wrong for anything that varies around a level. Every
+    contract, which is right for quantities that add up (minutes trained,
+    volume lifted) and wrong for anything that varies around a level. Every
     mile of a run sits between 140 and 160 bpm, and drawn from zero those are
     identical bars: the chart says nothing changed, which is the opposite of
     what the numbers say. This axis is fitted to the data's own range, so the
@@ -619,7 +652,7 @@ def line_chart(
     slots = [item[2] for item in cleaned]
     if len(set(slots)) != len(slots):
         # The slot is the colour. Two series sharing one draws a legend with
-        # the same swatch twice and two indistinguishable lines under it --
+        # the same swatch twice and two indistinguishable lines under it,
         # a chart that looks finished and cannot be read. Caught here because
         # it is invisible in the data and only shows up on the rendered page.
         raise ValueError(
@@ -706,7 +739,7 @@ def line_chart(
     while cursor <= last_day:
         stamps.append(cursor)
         cursor += timedelta(days=step)
-    # The last day is always labelled -- it is the one an eye goes to -- but
+    # The last day is always labelled (it is the one an eye goes to) but
     # stepping from the first rarely lands on it, so the step before it can
     # fall a couple of days short and the two labels print on top of each
     # other. Whichever of the pair is not the last day gives way.
@@ -787,7 +820,7 @@ class CalendarDay:
 
     `slots` are ChartSeries slot numbers, so a filled dot takes the same colour
     as that series' band in the chart beside it. The shared vocabulary is the
-    point -- "green is strength" has to mean the same thing in both, or reading
+    point: "green is strength" has to mean the same thing in both, or reading
     them together is worse than reading either alone.
     """
 
@@ -819,7 +852,7 @@ class ActivityCalendar:
     """Plan against execution, day by day, laid out as weeks.
 
     A chart answers how much and a cadence strip answers whether, per week.
-    This answers *when* -- which days the plan asks for, which were kept, and
+    This answers *when*, which days the plan asks for, which were kept, and
     which were not. None of that survives aggregation into a weekly bar: four
     sessions crammed into a weekend and four spread across the week produce
     the same bar and are not the same training.
@@ -833,7 +866,7 @@ class ActivityCalendar:
     # reader to infer the month from the date numbers, which they cannot do
     # when the grid spans two.
     period_label: str = ""
-    # Paging. Blank means this surface does not offer it -- a composed overview
+    # Paging. Blank means this surface does not offer it: a composed overview
     # shows the current period and links to the domain for the rest.
     previous_url: str = ""
     next_url: str = ""
@@ -861,7 +894,7 @@ class ActivityCalendar:
 
     @property
     def kept(self) -> str:
-        """Planned days kept, as "n/m" -- blank when nothing has come due.
+        """Planned days kept, as "n/m": blank when nothing has come due.
 
         Counts only days the plan asked for and whose day has passed. Unplanned
         training is real work and shows as a filled dot, but crediting it here
@@ -882,7 +915,7 @@ class ActivityCalendar:
 class PlannedDay:
     """One weekday in a recurring plan.
 
-    Several things can be scheduled on the same day -- a run and a lift -- so
+    Several things can be scheduled on the same day (a run and a lift) so
     marks are a tuple of ChartSeries slots rather than one flag. `note` names
     what the day is for when the dot alone does not say it.
     """
@@ -910,7 +943,7 @@ class WeekPlan:
 
     Distinct from an ActivityCalendar, which records what happened on real
     dates. This is the commitment those dates get judged against, and it is
-    worth stating on its own -- a plan that lives only in the operator's head
+    worth stating on its own: a plan that lives only in the operator's head
     cannot be compared to anything.
     """
 
@@ -934,11 +967,8 @@ class DomainOverview:
     Deliberately carries no insights. A domain says "this needs a decision"
     through `PluginIntegration.attention` and nowhere else, because that channel is
     complete and severity-ordered by the host. An overview is a display
-    surface, and display surfaces truncate -- the first version of this field
-    was populated with `insights[:3]` from a list built in derivation order, so
-    a domain's fourth insight could be `serious` and still never reach the
-    composed queue. Two channels for one question means the quieter one wins
-    silently. There is one channel.
+    surface, and display surfaces truncate, so a serious insight must never
+    depend on one.
     """
 
     description: str
@@ -947,6 +977,9 @@ class DomainOverview:
     charts: tuple[StackedBarChart, ...] = ()
     calendars: tuple[ActivityCalendar, ...] = ()
     timeline: tuple[TimelineItem, ...] = ()
+    # The window every KPI shares, such as "Latest 4 weeks". Said once beside
+    # the domain's name rather than repeated in each label.
+    period: str = ""
 
 
 def stacked_bar_chart(
@@ -1042,7 +1075,7 @@ def stacked_bar_chart(
 
 
 # Round numbers an axis may end on. The coarse (1, 2, 5, 10) set forced a
-# maximum of 57k up to 100k, leaving bars filling barely half the plot height --
+# maximum of 57k up to 100k, leaving bars filling barely half the plot height,
 # the chart read as mostly empty space. These intermediate steps keep the labels
 # round while landing much closer to the data.
 _AXIS_STEPS = (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10)
@@ -1072,7 +1105,7 @@ def _format_fitted_value(value: float, span: float) -> str:
     """An axis label with enough precision for the range it sits in.
 
     The bar chart's formatter drops decimals above ten, which is right for an
-    axis that starts at zero -- its ticks are always far apart. A fitted axis is
+    axis that starts at zero: its ticks are always far apart. A fitted axis is
     not: a pace chart running from 10.6 to 11.8 min/mi has three ticks that all
     round to "11", and an axis reading 11, 11, 12 looks broken and says nothing.
 

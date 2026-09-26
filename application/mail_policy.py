@@ -3,7 +3,7 @@
 SPF and DMARC are policies published as TXT records, and a TXT record is where
 they stop being readable. `v=DMARC1; p=reject; sp=reject; rua=mailto:...` is a
 decision about what happens to forged mail, written in a notation that hides
-which decision was made -- so it gets copied from a blog post once and never
+which decision was made, so it gets copied from a blog post once and never
 looked at again.
 
 The grammar is declared here, once, and everything else derives from it: the
@@ -21,11 +21,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .ui import counted
+
 DMARC_VERSION = "DMARC1"
 SPF_VERSION = "spf1"
 
 # RFC 7208 §4.6.4. Every `include`, `a`, `mx`, `ptr`, `exists` and `redirect`
-# costs a DNS lookup, and a policy needing more than ten is not evaluated --
+# costs a DNS lookup, and a policy needing more than ten is not evaluated,
 # receivers return permerror and the protection silently stops applying.
 SPF_LOOKUP_LIMIT = 10
 SPF_LOOKUP_MECHANISMS = ("include", "a", "mx", "ptr", "exists", "redirect")
@@ -176,7 +178,7 @@ def parse_dmarc(value: str) -> dict[str, str]:
     """A DMARC record as its tags. Unknown tags are kept, never dropped.
 
     Dropping one would mean an editor silently deleting a policy it did not
-    happen to model -- the record is the operator's, not this module's.
+    happen to model: the record is the operator's, not this module's.
     """
 
     tags: dict[str, str] = {}
@@ -335,7 +337,7 @@ class MailSection:
 
 @dataclass(frozen=True)
 class MailOverview:
-    """Receiving, sending, signing, enforcing -- in the order mail flows."""
+    """Receiving, sending, signing, enforcing: in the order mail flows."""
 
     zone: str
     sections: tuple[MailSection, ...]
@@ -397,7 +399,7 @@ def mail_overview(zone) -> MailOverview:
                 else "Nobody"
             ),
             detail=(
-                f"{len(mx)} mail server{'s' if len(mx) != 1 else ''}, tried in priority order."
+                f"{counted(len(mx), 'mail server', 'mail servers')}, tried in priority order."
                 if mx
                 else "No MX record, so mail sent to this domain is not delivered anywhere."
             ),
@@ -409,7 +411,7 @@ def mail_overview(zone) -> MailOverview:
             label="Sending",
             question="Who is allowed to send as this domain?",
             answer=(
-                f"{len(spf.terms)} rule{'s' if len(spf.terms) != 1 else ''}"
+                counted(len(spf.terms), "rule")
                 if spf and spf.valid
                 else "Anyone"
             ),
@@ -432,7 +434,7 @@ def mail_overview(zone) -> MailOverview:
             label="Signing",
             question="What proves a message really came from here?",
             answer=(
-                f"{len(dkim)} key{'s' if len(dkim) != 1 else ''}"
+                counted(len(dkim), "key")
                 if dkim
                 else "Nothing"
             ),

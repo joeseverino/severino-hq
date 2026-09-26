@@ -10,6 +10,7 @@ from django.test import TestCase
 from application.capabilities import capability_registry
 from application.command_targets import capability_target_options
 from application.security import Capability, Principal
+from application.ui import MISSING
 from control_plane.models import ManagedResource
 from core.models import AuditLog
 from hq_api.models import IdempotencyRecord
@@ -94,7 +95,7 @@ class CommandViewTests(TestCase):
         self.assertContains(response, 'type="hidden" name="idempotency_key"')
         self.assertNotContains(response, ">Idempotency Key<")
         self.assertContains(
-            response, "1 eligible target from HQ's authorized local catalog"
+            response, "1 target available"
         )
         self.assertContains(response, "certificate.renew → request_certificate_renewal")
         self.assertContains(response, "provider work runs outside this page request")
@@ -143,7 +144,7 @@ class CommandViewTests(TestCase):
         )
         self.assertNotContains(response, '<option value="example-zone">')
         self.assertContains(
-            response, "1 eligible target from HQ's authorized local catalog"
+            response, "1 target available"
         )
 
     def test_update_hydrates_the_selected_resource_and_concurrency_guard(self):
@@ -200,7 +201,7 @@ class CommandViewTests(TestCase):
         )
 
         self.assertContains(response, f'href="{source}"')
-        self.assertContains(response, "Return to previous workflow")
+        self.assertContains(response, f'href="{source}">Back</a>')
 
     def test_a_command_never_returns_to_an_external_site(self):
         response = self.client.get(
@@ -218,7 +219,7 @@ class CommandViewTests(TestCase):
 
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second.status_code, 200)
-        self.assertContains(second, "Safely replayed")
+        self.assertContains(second, '<span class="scope-chip">Replayed</span>')
         self.assertEqual(Project.objects.filter(slug="safe-retry").count(), 1)
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
 
@@ -320,7 +321,7 @@ class CommandResultProjectionTests(TestCase):
         table = response.context["result_table"]
         self.assertEqual(table["label"], "answers")
         self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
-        self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", "—"))
+        self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
         self.assertContains(response, "<th>type</th>")
         self.assertContains(response, "answers · 2")
         self.assertContains(response, "Ran once")
@@ -345,6 +346,6 @@ class CommandResultProjectionTests(TestCase):
             {"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]}
         )
 
-        self.assertEqual(facts, (("count", "2"), ("note", "—")))
+        self.assertEqual(facts, (("count", "2"), ("note", MISSING)))
         self.assertEqual(table["columns"], ("b", "a", "c"))
-        self.assertEqual(table["rows"], (("1", "2", "—"), ("—", "—", "3")))
+        self.assertEqual(table["rows"], (("1", "2", MISSING), (MISSING, MISSING, "3")))

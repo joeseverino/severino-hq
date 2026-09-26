@@ -1,24 +1,8 @@
-{% extends "base.html" %}
+{% extends "page.html" %}
 {% load humanize %}
-{% block title %}Receipt · {{ receipt.vendor|default:"upload" }}{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ receipt.vendor|default:"Receipt" }}</h1>
-    <p class="muted">{{ receipt.original_filename|default:"file" }} · uploaded {{ receipt.uploaded_at }}</p>
-  </div>
-  <div class="page-actions">
-    {% if not receipt.related_expense and not receipt.related_asset %}
-      <a class="btn primary" href="{% url 'receipts:match' receipt.pk %}">Link to expense</a>
-    {% endif %}
-    <a class="btn" href="{% url 'receipts:file' receipt.pk %}">Download file</a>
-    <a class="btn" href="{% url 'receipts:edit' receipt.pk %}">Edit</a>
-    <a class="btn danger" href="{% url 'receipts:delete' receipt.pk %}">Delete</a>
-  </div>
-</div>
-
+{% block page %}
 <dl class="kv">
-  <dt>Date</dt><dd>{{ receipt.date|default:"—" }}</dd>
+  <dt>Date</dt><dd>{{ receipt.date|or_empty }}</dd>
   <dt>Amount</dt><dd>${{ receipt.amount|floatformat:2|intcomma }}</dd>
   {% if receipt.content_type %}<dt>Content type</dt><dd><code>{{ receipt.content_type }}</code></dd>{% endif %}
   {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|filesizeformat }}</dd>{% endif %}

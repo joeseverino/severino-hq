@@ -1,24 +1,12 @@
-{% extends "base.html" %}
-{% block title %}{{ record.doc_id }} · Docs{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ record.doc_id }} — {{ record.title }}</h1>
-    <p class="muted">{{ record.get_doc_type_display }} · {{ record.get_environment_display }} · <span class="pill pill-{{ record.status }}">{{ record.get_status_display }}</span> · <span class="pill pill-{{ record.sensitivity }}">{{ record.get_sensitivity_display }}</span></p>
-  </div>
-  <div class="page-actions">
-    <a class="btn" href="{% url 'docs_index:edit' record.doc_id %}">Edit</a>
-    <a class="btn danger" href="{% url 'docs_index:delete' record.doc_id %}">Delete</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <dl class="kv">
   {% if record.system_service %}<dt>System / service</dt><dd>{{ record.system_service }}</dd>{% endif %}
   {% if record.obsidian_path %}<dt>Obsidian path</dt><dd><code>{{ record.obsidian_path }}</code></dd>{% endif %}
   {% if record.github_path %}<dt>GitHub path</dt><dd><code>{{ record.github_path }}</code></dd>{% endif %}
   {% if record.external_url %}<dt>External URL</dt><dd><a href="{{ record.external_url }}" rel="noopener noreferrer">{{ record.external_url }}</a></dd>{% endif %}
   <dt>Last reviewed</dt><dd>{{ record.last_reviewed|default:"never" }}</dd>
-  <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public / internal){% else %}<strong>No</strong> — sensitive or restricted{% endif %}</dd>
+  <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public / internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
 </dl>
 
 {% if record.notes %}<h2>Index notes</h2><p>{{ record.notes|linebreaksbr }}</p>{% endif %}
@@ -36,7 +24,7 @@
     </div>
     <div>
       <h3>Expenses</h3>
-      {% if record.related_expenses.all %}<ul>{% for e in record.related_expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} — {{ e.item }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
+      {% if record.related_expenses.all %}<ul>{% for e in record.related_expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} · {{ e.item }}</a></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}
     </div>
     <div>
       <h3>Content items</h3>

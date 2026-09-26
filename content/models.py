@@ -101,14 +101,14 @@ class ContentItem(TimestampedModel):
 #
 # ContentItem holds both halves of what the site publishes: the structural
 # pages that make it navigable, and the editorial work that is the reason to
-# visit. Those are different jobs -- a page is written once and maintained, a
-# writeup is published and then measured -- so they are read on different
+# visit. Those are different jobs (a page is written once and maintained, a
+# writeup is published and then measured) so they are read on different
 # screens, and the traffic each earns means a different thing.
 #
 # Declared as the smaller half and derived as its complement, so the partition
 # is total by construction. A type added to the enum and not named here becomes
 # a writeup, which is the safe default: it appears in a section rather than
-# vanishing from both. Nothing downstream re-states this split -- the two views,
+# vanishing from both. Nothing downstream re-states this split: the two views,
 # the analytics join and the nav all read it from here.
 PAGE_TYPES = frozenset({ContentItem.Type.PAGE, ContentItem.Type.SERVICE_PAGE})
 WRITEUP_TYPES = frozenset(ContentItem.Type) - PAGE_TYPES

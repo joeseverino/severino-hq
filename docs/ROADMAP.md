@@ -1,4 +1,4 @@
-# Severino HQ — roadmap
+# Severino HQ: roadmap
 
 ## v1 boundaries (current)
 
@@ -10,26 +10,26 @@ Severino HQ v1 deliberately does **not** include:
 - payroll, inventory management
 - a WordPress plugin, public webhooks, public AI chat
 
-The goal of v1 is to build the private operating system — the link graph —
+The goal of v1 is to build the private operating system: the link graph,
 that everything later will sit on top of.
 
 ## v2 candidates
 
 Roughly in the order they're most likely to land.
 
-### Knowledge router — shipped as [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
+### Knowledge router: shipped as [`severino-vault-mcp`](https://github.com/joeseverino/severino-vault-mcp)
 
 The highest-leverage v2 idea has since shipped as its own repo: a local stdio
 MCP server that reads the Obsidian vault frontmatter, the docs manifest, and
 HQ's relationship-aware JSON exports, and answers questions like "what runbook
-covers AdGuard?" or "what assets relate to project Y?" — behind a sensitivity
+covers AdGuard?" or "what assets relate to project Y?": behind a sensitivity
 gate that withholds secret-adjacent runbook bodies. HQ supplied the
 prerequisites that made it possible: stable `doc_id`s/slugs, AI-readable
 exports, and the frontmatter schema (`docs_index/schema.json`) the MCP and HQ
 now both validate against. The MCP runs locally on the Mac; git-crypt keys
 never go on the server.
 
-### HQ typed control plane — registry-driven execution shipped
+### HQ typed control plane: registry-driven execution shipped
 
 HQ now serves a stateless Streamable HTTP MCP endpoint directly over Tailscale.
 Its reads and narrow mutations come from the same resource and capability
@@ -51,7 +51,7 @@ generic model access.
 ### Public integrations
 
 - WordPress content **pull** (read-only): mirror `published_url` /
-  `wordpress_post_id` from jseverino.com so the content pipeline shows
+  `wordpress_post_id` from example.com so the content pipeline shows
   ground truth.
 - WordPress bridge plugin (optional, later): outbound webhooks from
   Severino HQ so publishing a content item can flip the WP status.
@@ -72,7 +72,6 @@ generic model access.
 ### Quality-of-life
 
 - Saved filters / pinned views on each list page.
-- Diff-style audit log entries (snapshot before/after).
 - "Quick-link" UI when creating an asset from a receipt or an expense.
 
 ## Anti-goals (probably won't ever build)

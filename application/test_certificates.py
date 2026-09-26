@@ -1,7 +1,7 @@
 """Holding a certificate an operator generated elsewhere.
 
 This is the one secret HQ keeps on purpose, against a codebase that otherwise
-refuses to hold any -- so the guarantees are worth asserting rather than
+refuses to hold any, so the guarantees are worth asserting rather than
 assuming: encrypted at rest, refused outright when there is nowhere safe to put
 it, never in a serializer, and checked before it is trusted.
 """
@@ -74,13 +74,13 @@ class InspectionTests(TestCase):
         """The failure this exists to catch.
 
         A mismatched pair is accepted by every editor and every clipboard, and
-        fails when a browser refuses the handshake -- after deployment, on a
+        fails when a browser refuses the handshake: after deployment, on a
         service that was working a minute earlier.
         """
         fullchain, _ = a_certificate("one.example.test")
         _, other_key = a_certificate("two.example.test")
 
-        with self.assertRaisesRegex(CertificateError, "does not belong"):
+        with self.assertRaisesRegex(CertificateError, "does not match the certificate"):
             inspect(fullchain, other_key)
 
     def test_an_expired_certificate_is_refused(self):
@@ -102,7 +102,7 @@ class StorageTests(TestCase):
             kind="tls.uploaded_certificate",
             spec={
                 "certificate_name": "newhost.example.test",
-                "install_on": ["homelab-npm"],
+                "install_on": ["example-npm"],
             },
         )
         self.fullchain, self.private_key = a_certificate()
@@ -195,7 +195,7 @@ class FailClosedTests(TestCase):
         resource = ManagedResource.objects.create(
             key="newhost-cert",
             kind="tls.uploaded_certificate",
-            spec={"certificate_name": "n", "install_on": ["homelab-npm"]},
+            spec={"certificate_name": "n", "install_on": ["example-npm"]},
         )
         fullchain, private_key = a_certificate()
 
@@ -228,7 +228,7 @@ class CoverageTests(TestCase):
     """A certificate HQ was given covers the names it carries.
 
     It covered nothing at all, so every private name it answered for read as
-    "no declared certificate covers it" -- permanently, on the service page and
+    "no declared certificate covers it": permanently, on the service page and
     in the attention queue. That is the whole reason this kind exists: for a
     name no public authority will issue for, an internally signed certificate is
     the only possible answer.
@@ -236,10 +236,10 @@ class CoverageTests(TestCase):
 
     def setUp(self):
         self.resource = ManagedResource.objects.create(
-            key="homelab-wildcard",
+            key="example-wildcard",
             kind="tls.uploaded_certificate",
             spec={
-                "certificate_name": "homelab-wildcard",
+                "certificate_name": "example-wildcard",
                 "install_on": ["a-proxy"],
             },
         )
@@ -344,4 +344,4 @@ class CoverageTests(TestCase):
             ]
         )
 
-        self.assertIn("homelab-wildcard", offered)
+        self.assertIn("example-wildcard", offered)

@@ -14,7 +14,7 @@ trap 'rm -rf "${fixture_dir}"' EXIT HUP INT TERM
 
 failures=0
 
-# A registry with projections only -- no connections. This is the shape the
+# A registry with projections only: no connections. This is the shape the
 # repository should end up carrying.
 cat >"${fixture_dir}/projections-only.json" <<'JSON'
 {
@@ -170,9 +170,8 @@ write_op '[{"id":"item-1"}]' '{"fields":[
 check_empty "unrelated vault item is skipped" "${fixture_dir}/projections-only.json" 0
 
 # 9. No script may still read a registry key the registry no longer has. The
-#    renderer is covered by the cases above; every other script that reads this
-#    file is not, and one of them recomputing from `.connections` failed at
-#    deploy time rather than here.
+#    renderer is covered by the cases above; this covers every other script
+#    that reads the file.
 for script in "${script_dir}"/*.sh "${script_dir}"/lib/*.sh \
               "${script_dir}"/../deploy/targets/*; do
     [ -f "${script}" ] || continue

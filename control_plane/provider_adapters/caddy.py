@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ..names import normalized_hostname
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
@@ -43,7 +44,7 @@ def routes(config: dict[str, Any], connection_ref: str) -> list[dict[str, Any]]:
     for server in servers.values():
         for route in (server or {}).get("routes") or ():
             hosts = [
-                str(host).strip().lower().rstrip(".")
+                normalized_hostname(host)
                 for match in (route or {}).get("match") or ()
                 for host in (match or {}).get("host") or ()
                 if str(host).strip()
@@ -69,7 +70,7 @@ def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
     Declared where anything declares it. Asking every SSH connection and
     keeping whichever answered means identifying a Caddy host by trying to use
     it as one, and a connection that is not a Caddy host is asked again on
-    every sweep -- forever, since nothing about the answer changes. Against a
+    every sweep: forever, since nothing about the answer changes. Against a
     machine somebody else operates that is a failed login every couple of
     minutes, which is a cost paid at their end.
 
@@ -186,7 +187,7 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
             max_length=160,
             title="Caddy",
             description=(
-                "The credential that reaches the host this route is served from."
+                "The connection to the host that serves this route."
             ),
         )
         domain: str = Field(
@@ -200,7 +201,7 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
             max_length=253,
             title="Hands off to",
             description=(
-                "Where Caddy sends the request -- a container and port, usually."
+                "Where Caddy sends the request, usually a container and port."
             ),
         )
 
@@ -220,7 +221,7 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
 
     definition = provider_spec(
         "caddy.route",
-        "A name an edge Caddy serves, and where it hands the request on.",
+        "A hostname an edge Caddy serves, and where it sends requests.",
         CaddyRouteSpec,
         ResolvedCaddyRouteSpec,
         _resolve,
@@ -257,9 +258,8 @@ def build_adapter(*, provider_model, provider_spec, applies, normalized_hostname
             "upstream": "app:8080",
         },
         removal_gap=(
-            "Removing the declaration must take the route with it -- forgetting "
-            "it would leave the edge serving a route nothing points at. The "
-            "controller has no delete for this yet."
+            "The controller cannot delete Caddy routes yet, so the edge would "
+            "keep serving it."
         ),
     )
     return ControllerIntegrationAdapter(

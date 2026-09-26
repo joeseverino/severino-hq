@@ -1,6 +1,7 @@
 """Declarative list and table primitives."""
 
 from application.tables import (
+    TableColumn,
     TableFilter,
     TableListMixin,
     TableSort,
@@ -8,4 +9,11 @@ from application.tables import (
     TableTotal,
 )
 
-__all__ = ["TableFilter", "TableListMixin", "TableSort", "TableToggle", "TableTotal"]
+__all__ = [
+    "TableColumn",
+    "TableFilter",
+    "TableListMixin",
+    "TableSort",
+    "TableToggle",
+    "TableTotal",
+]

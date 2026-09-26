@@ -29,13 +29,14 @@ from analytics.contracts import (
 )
 from analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from content.models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
+from control_plane.names import normalized_hostname
 
 from .cadence import sweep_interval
 from .security import Capability, Principal
 
 # The window the analytics page opens on. A day, because the question that
 # brings someone to this page is "what is happening", and a four-week average is
-# the wrong shape for it -- yesterday's spike disappears into it entirely.
+# the wrong shape for it: yesterday's spike disappears into it entirely.
 DEFAULT_WINDOW_DAYS = 1
 
 # What a content section means by "views". Deliberately not the above: a
@@ -44,28 +45,15 @@ DEFAULT_WINDOW_DAYS = 1
 CONTENT_TRAFFIC_DAYS = 28
 
 # What a whole host means by "recent". A week, so a quiet Tuesday does not read
-# as a site nobody visits -- long enough to be a shape, short enough to still be
+# as a site nobody visits: long enough to be a shape, short enough to still be
 # news. Deliberately not CONTENT_TRAFFIC_DAYS: a writeup earns its traffic over
 # months, a host is either serving this week or it is not.
 #
 # One constant, because the service page and the topology graph must answer the
 # same question the same way. Two sevens in two modules agree only until someone
 # changes one, and then the page and the graph disagree with nothing to show for
-# it -- see ``test_the_page_and_the_graph_share_one_window``.
+# it: see ``test_the_page_and_the_graph_share_one_window``.
 HOST_TRAFFIC_DAYS = 7
-
-
-def normalize_host(value: str) -> str:
-    """The one spelling of a hostname HQ compares by.
-
-    The join between analytics and the rest of HQ is the name itself, so the
-    rule that decides whether two names are the same name has to be one rule.
-    Written out per caller it drifts silently: a reading stored lowercase never
-    matches a service asked for in mixed case, and the page simply shows no
-    traffic rather than an error anyone would investigate.
-    """
-
-    return value.strip().rstrip(".").lower()
 
 
 def location_of(url: str) -> tuple[str, str]:
@@ -79,7 +67,7 @@ def location_of(url: str) -> tuple[str, str]:
     if not url:
         return "", ""
     parsed = urlparse(url.strip())
-    host = normalize_host(parsed.hostname or "")
+    host = normalized_hostname(parsed.hostname or "")
     return host, parsed.path or "/"
 
 
@@ -111,8 +99,8 @@ def record_analytics(
     having happened because the window moved past it. Only days inside the
     reported window are touched.
 
-    Idempotent by construction: the grain is unique, so re-running a sweep --
-    or replaying an older one -- restates a day rather than doubling it.
+    Idempotent by construction: the grain is unique, so re-running a sweep
+    (or replaying an older one) restates a day rather than doubling it.
     """
 
     # The same capability every controller report carries. Analytics arrives by
@@ -124,7 +112,7 @@ def record_analytics(
     recorded = {"sites": 0, "coverage": 0, "rows": 0, "vitals": 0}
     for entry in sites:
         site_tag = str(entry.get("site_tag", "")).strip()
-        host = normalize_host(str(entry.get("host", "")))
+        host = normalized_hostname(str(entry.get("host", "")))
         connection_ref = str(entry.get("connection_ref", ""))[:100]
         if not site_tag or not host:
             continue
@@ -220,9 +208,7 @@ def _window(days: int) -> tuple[date, date]:
     """The requested number of completed days, ending yesterday.
 
     The provider deliberately excludes today because a partial day reads as a
-    collapse every morning. Readers use the same boundary; previously the
-    controller emitted yesterday while the default one-day view asked only for
-    today, making valid traffic look like zero.
+    collapse every morning. Readers use the same boundary.
     """
 
     return completed_window(days)
@@ -364,7 +350,7 @@ def traffic_for_hosts(
 
     The host-grain sibling of :func:`_traffic_for_locations`. A service in HQ
     *is* a hostname, and an observed connection target is one too, so a host is
-    the key the rest of HQ already identifies these things by -- no new
+    the key the rest of HQ already identifies these things by: no new
     identifier, and no table joining one to the other.
 
     Summed over the path dimension rather than across every dimension, for the
@@ -372,7 +358,7 @@ def traffic_for_hosts(
     adding them all would count each visit six times.
     """
 
-    hosts = {normalize_host(host) for host in hosts if host and host.strip()}
+    hosts = {normalized_hostname(host) for host in hosts if host and host.strip()}
     if not hosts:
         return {}
     start, end = _window(days)
@@ -409,13 +395,13 @@ def attach_host_traffic(
     """Give each item carrying a hostname what that host earned.
 
     Annotates in place and asks once for the whole page, exactly as
-    :func:`attach_traffic` does for published content -- the N+1 is the thing
+    :func:`attach_traffic` does for published content: the N+1 is the thing
     worth avoiding, not the extra column.
 
     ``pageviews`` is None where nothing was measured, which a template can tell
     from a real zero: one means nobody visited, the other means nobody looked.
     A host HQ knows about but Cloudflare never saw is the second case, and it
-    is the more interesting one -- it is a site nothing is measuring.
+    is the more interesting one: it is a site nothing is measuring.
     """
 
     items = list(items)
@@ -424,7 +410,7 @@ def attach_host_traffic(
     hosts = {str(getattr(item, attribute, "") or "") for item in items}
     traffic = traffic_for_hosts(hosts, days=days)
     for item in items:
-        host = normalize_host(str(getattr(item, attribute, "") or ""))
+        host = normalized_hostname(str(getattr(item, attribute, "") or ""))
         measured = traffic.get(host)
         item.pageviews = measured["pageviews"] if measured else None
         item.visits = measured["visits"] if measured else None
@@ -487,7 +473,7 @@ def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
 
     Annotates in place rather than returning rows, so a list already paginated
     and sorted by the table engine keeps both. The join is one query for the
-    whole page regardless of how many items are on it -- the alternative,
+    whole page regardless of how many items are on it: the alternative,
     asking per row, is the N+1 the frontend bar exists to prevent.
 
     ``pageviews`` is None where nothing was measured, which a template can tell
@@ -642,7 +628,7 @@ def site_totals(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
 
 
 # Windows an operator can ask for, with what to call each. A fixed set rather
-# than a free number because the question is always "now, or this quarter" --
+# than a free number because the question is always "now, or this quarter",
 # an arbitrary day count is a filter nobody tunes and every surface has to
 # validate. A day is spelled "24 hours" because that is what it answers.
 #

@@ -2,7 +2,7 @@
 
 The thing a declaration describes lives at a provider. Dropping the row alone
 would abandon the rewrite or proxy host with nothing left pointing at it, and
-that orphan cannot be found again through HQ -- which is the failure this whole
+that orphan cannot be found again through HQ, which is the failure this whole
 verb exists to prevent.
 """
 
@@ -31,6 +31,12 @@ def a_rewrite(**overrides) -> ManagedResource:
 
 
 class RemovalRequestTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+
     def test_requesting_removal_queues_work_and_keeps_the_row(self):
         """The declaration outlives the request, because the record still exists.
 
@@ -72,10 +78,8 @@ class RemovalRequestTests(TestCase):
         declares no such action must be refused here rather than queued for a
         worker that would find no handler for it.
 
-        The example has moved twice as the registry grew -- a public DNS record
-        gained a delete, and a domain turned out not to need one, because
-        removing it ends a responsibility rather than destroying anything. What
-        is being tested has not moved.
+        A domain needs no delete: removing it ends a responsibility rather than
+        destroying anything.
         """
 
         ManagedResource.objects.create(
@@ -111,6 +115,12 @@ class RemovalRequestTests(TestCase):
 
 class RemovalReportTests(TestCase):
     """HQ forgets the declaration only once the provider is confirmed clear."""
+    def setUp(self):
+        super().setUp()
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
+
 
     def _claimed_removal(self) -> tuple[ManagedResource, dict]:
         resource = a_rewrite()
@@ -197,16 +207,35 @@ class RemovalWebTests(TestCase):
         self.client.force_login(self.user)
         a_rewrite()
 
+    def test_through_an_observing_connection_it_forgets_and_deletes_nothing(self):
+        from application.adoption_testing import connection
+
+        connection("adguard", manages=False)
+        response = self.client.post(
+            reverse("control_plane:remove", kwargs={"key": "app-dns"}),
+            {"reason": "Retired."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(OperationRequest.objects.exists())
+        self.assertFalse(ManagedResource.objects.filter(key="app-dns").exists())
+
     def test_the_page_asks_before_doing_anything(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         response = self.client.get(
             reverse("control_plane:remove", kwargs={"key": "app-dns"})
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "not just HQ")
+        self.assertContains(response, "deletes this at the provider")
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_confirming_queues_removal_without_dropping_the_row(self):
+        from application.adoption_testing import managing_everything
+
+        managing_everything()
         response = self.client.post(
             reverse("control_plane:remove", kwargs={"key": "app-dns"}),
             {"reason": "Retired."},

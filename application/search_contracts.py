@@ -10,7 +10,7 @@ from typing import Any
 def search_lines(value: Any) -> Iterator[str]:
     """One readable line per leaf of a field value, whatever shape it has.
 
-    A body is read by the index and by a person -- the snippet under a result
+    A body is read by the index and by a person: the snippet under a result
     is cut straight out of it. ``str()`` on a ``JSONField`` served neither: it
     rendered Python (``{'key_expiry_disabled': False}``), and the punctuation
     carrying the meaning is the punctuation the tokenizer discards, so the key
@@ -51,6 +51,8 @@ class SearchDefinition:
     title_field: str = ""
     badge_field: str = ""
     timestamp_field: str = "updated_at"
+    # A property holding readable text for the result; blank uses the indexed body.
+    snippet_field: str = ""
 
     def object_id(self, instance) -> str:
         return str(getattr(instance, self.identifier_field))
@@ -74,3 +76,13 @@ class SearchDefinition:
 
     def timestamp(self, instance):
         return getattr(instance, self.timestamp_field, None)
+
+    def snippet_text(self, instance) -> str:
+        """What a result shows under its title, or "" to cut it from the body."""
+
+        if not self.snippet_field:
+            return ""
+        return " ".join(str(getattr(instance, self.snippet_field, "") or "").split())
+
+    def url(self, instance) -> str:
+        return instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else ""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -34,7 +34,9 @@ from application.idempotency import (
     validate_key,
 )
 from application.integrations import integration_graph
+from application.pages import PageAction, page_context
 from application.security import AuthorizationError, safe_next, web_principal
+from application.ui import MISSING
 
 
 def _json_value(value):
@@ -52,7 +54,7 @@ _SCALAR = (str, int, float, bool, type(None))
 
 def _cell(value) -> str:
     if value is None:
-        return "—"
+        return MISSING
     if isinstance(value, bool):
         return "yes" if value else "no"
     return str(value)
@@ -61,9 +63,8 @@ def _cell(value) -> str:
 def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
     """The facts a result states, and the one list it carries, if any.
 
-    A result is a machine contract, and the page showed it as one: a JSON block
-    a person had to read. Most results are a handful of scalar facts and at most
-    one list of flat records -- resolver answers, matched rows -- so those become
+    A result is a machine contract; a person reads it as facts. Most results are a handful of scalar facts and at most
+    one list of flat records (resolver answers, matched rows) so those become
     a definition list and a table, and the JSON stays behind a disclosure for
     whoever is checking HQ against another tool.
 
@@ -167,7 +168,19 @@ class CommandView(LoginRequiredMixin, View):
             for item in self.spec.required_capabilities
         )
         facts, table = _result_projection(result["payload"]) if result else ((), None)
+        resource_url = route_url(resource.web_route) if resource else ""
+        search = reverse("search")
+        actions = []
+        if resource_url:
+            actions.append(PageAction(f"Open {resource.label}", resource_url))
+        actions.append(PageAction("All commands", f"{search}?q={quote(self.spec.name)}"))
         return {
+            **page_context(
+                self.spec.title,
+                self.spec.summary,
+                actions=actions,
+                trail=(("Command Center", search),),
+            ),
             "command": self.spec,
             "command_label": self.spec.title,
             "effect_label": self.spec.effect.replace("_", " "),
@@ -182,7 +195,7 @@ class CommandView(LoginRequiredMixin, View):
             ),
             "return_url": safe_next(self.request),
             "schema_json": json.dumps(schema, indent=2, sort_keys=True),
-            "resource_url": route_url(resource.web_route) if resource else "",
+            "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "handler_name": self.spec.handler.__name__,
             "required_capabilities": required_capabilities,

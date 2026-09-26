@@ -196,7 +196,7 @@ class ConnectionExecutionTests(TestCase):
         self.assertIsNotNone(action)
         self.assertEqual(action.name, "manage")
         self.assertEqual(action.label, "Review access")
-        self.assertIn("1 required provider scope is missing", action.reason)
+        self.assertIn("Missing 1 required provider scope.", action.reason)
 
     def test_a_command_link_requires_scope_evidence_and_hq_authority(self):
         base = _finance_spec()
@@ -386,37 +386,40 @@ class ConnectionRegistrationTests(TestCase):
         self.assertEqual(discovered["connections"], ())
 
     def test_core_connection_describes_every_tailscale_ability(self):
+        from control_plane.observations import OBSERVATIONS
+
         core = next(
             item
             for item in describe_connections()["connections"]
             if item["name"] == "infrastructure.controllers"
         )
+        tailscale = [
+            ability
+            for ability in core["abilities"]
+            if ability["name"].startswith("tailscale.")
+        ]
+        changes = [ability for ability in tailscale if ability["effect"] != "read"]
 
         self.assertEqual(
-            {
-                ability["name"]
-                for ability in core["abilities"]
-                if ability["name"].startswith("tailscale.")
-            },
+            {ability["name"] for ability in changes},
             {"tailscale.device", "tailscale.policy"},
         )
         self.assertTrue(
             all(
                 ability["subject_resource"] == "infrastructure.resources"
-                for ability in core["abilities"]
-                if ability["name"].startswith("tailscale.")
+                for ability in changes
             )
         )
         self.assertEqual(
-            {
-                ability["name"]: ability["governs_kinds"]
-                for ability in core["abilities"]
-                if ability["name"].startswith("tailscale.")
-            },
+            {ability["name"]: ability["governs_kinds"] for ability in changes},
             {
                 "tailscale.device": ["tailscale.device"],
                 "tailscale.policy": ["tailscale.policy"],
             },
+        )
+        self.assertEqual(
+            {ability["name"] for ability in tailscale if ability["effect"] == "read"},
+            {kind for kind, spec in OBSERVATIONS.items() if spec.provider == "tailscale"},
         )
 
     def test_invalid_governed_resource_kinds_fail_at_composition(self):
@@ -592,9 +595,8 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Capital One")
         self.assertContains(response, "Sync transactions")
         self.assertContains(response, "Scope missing")
-        self.assertContains(response, "Secrets in Example Vault")
-        self.assertContains(response, "Security posture")
-        self.assertContains(response, "Security controls and proof")
+        self.assertContains(response, "Secret store: Example Vault")
+        self.assertContains(response, "Security controls")
         self.assertContains(response, "External edge")
 
     def test_a_plugin_unclassified_kind_does_not_trigger_controller_prose(self):

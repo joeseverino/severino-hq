@@ -1,28 +1,10 @@
-{% extends "base.html" %}
-{% block title %}{{ project.name }} · Projects{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ project.name }}</h1>
-    <p class="muted">{{ project.get_category_display }} · <span class="pill pill-{{ project.status }}">{{ project.get_status_display }}</span></p>
-  </div>
-  <div class="page-actions">
-    {% if project.repository_url and "github.com" in project.repository_url %}
-      <form action="{% url 'projects:refresh' project.slug %}" method="post" class="inline">
-        {% csrf_token %}
-        <button type="submit" class="btn">Refresh</button>
-      </form>
-    {% endif %}
-    <a class="btn" href="{% url 'projects:edit' project.slug %}">Edit</a>
-    <a class="btn danger" href="{% url 'projects:delete' project.slug %}">Delete</a>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 <dl class="kv">
   <dt>Slug</dt><dd><code>{{ project.slug }}</code></dd>
   {% if project.repository_url %}<dt>Repository</dt><dd><a href="{{ project.repository_url }}" rel="noopener noreferrer">{{ project.repository_url }}</a></dd>{% endif %}
   {% if project.last_push_at %}<dt>Last push</dt><dd><strong>{{ project.last_push_at }}</strong></dd>{% endif %}
-  {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a>{% if service_url %} · <a href="{{ service_url }}">What serves it &rarr;</a>{% endif %}</dd>{% endif %}
+  {% if project.public_url %}<dt>Public URL</dt><dd><a href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url }}</a>{% if service_url %} · <a href="{{ service_url }}">Service &rarr;</a>{% endif %}</dd>{% endif %}
   {% if project.tech_list %}<dt>Technologies</dt><dd>{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</dd>{% endif %}
   <dt>Created</dt><dd class="muted">{{ project.created_at }}</dd>
   <dt>Updated</dt><dd class="muted">{{ project.updated_at }}</dd>
@@ -51,13 +33,13 @@
     <div>
       <h3>Documentation</h3>
       {% if project.documentation_records.all %}
-        <ul>{% for d in project.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} — {{ d.title }}</a></li>{% endfor %}</ul>
+        <ul>{% for d in project.documentation_records.all %}<li><a href="{{ d.get_absolute_url }}">{{ d.doc_id }} · {{ d.title }}</a></li>{% endfor %}</ul>
       {% else %}<p class="muted">None.</p>{% endif %}
     </div>
     <div>
       <h3>Expenses</h3>
       {% if project.expenses.all %}
-        <ul>{% for e in project.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} — {{ e.item }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>
+        <ul>{% for e in project.expenses.all %}<li><a href="{{ e.get_absolute_url }}">{{ e.date }} {{ e.vendor }} · {{ e.item }}</a> <span class="muted">${{ e.total_cost }}</span></li>{% endfor %}</ul>
       {% else %}<p class="muted">None.</p>{% endif %}
     </div>
   </div>

@@ -1,5 +1,5 @@
 {
-  "api_version": 2,
+  "api_version": 3,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -17,7 +17,8 @@
           "FAILED",
           "SETTINGS_CHANGED",
           "VIEWED",
-          "DENIED"
+          "DENIED",
+          "OBSERVED"
         ]
       },
       "Counts": {
@@ -132,7 +133,8 @@
           "metadata=",
           "facets=",
           "user=",
-          "required="
+          "required=",
+          "connection="
         ]
       },
       "record_operation": {
@@ -154,7 +156,8 @@
           "type_label",
           "*",
           "redact=",
-          "observation="
+          "observation=",
+          "connection="
         ]
       }
     },
@@ -341,7 +344,8 @@
           "targets=",
           "dependencies=",
           "facts=",
-          "controller_id="
+          "controller_id=",
+          "connection_ref="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -539,6 +543,97 @@
         ]
       }
     },
+    "pages": {
+      "Page": {
+        "bases": [],
+        "constructor": [
+          "title",
+          "lede=",
+          "actions=",
+          "navigation=",
+          "trail="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PageAction": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "url",
+          "method=",
+          "primary=",
+          "danger=",
+          "modal=",
+          "value=",
+          "title=",
+          "disabled="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "css": {
+            "kind": "property"
+          }
+        }
+      },
+      "PageMixin": {
+        "bases": [],
+        "constructor": [],
+        "kind": "class",
+        "members": {
+          "get_context_data": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "**kwargs"
+            ]
+          },
+          "get_page_actions": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_page_lede": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_page_navigation": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_page_title": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_page_trail": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
+      "page_context": {
+        "kind": "function",
+        "parameters": [
+          "title",
+          "lede=",
+          "*",
+          "actions=",
+          "navigation=",
+          "trail="
+        ]
+      }
+    },
     "plugin": {
       "NavigationItem": {
         "bases": [],
@@ -642,7 +737,8 @@
           "identifier_type=",
           "not_found_errors=",
           "search=",
-          "web_route="
+          "web_route=",
+          "pass_principal="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -688,7 +784,8 @@
           "label=",
           "title_field=",
           "badge_field=",
-          "timestamp_field="
+          "timestamp_field=",
+          "snippet_field="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -714,6 +811,13 @@
               "instance"
             ]
           },
+          "snippet_text": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
+          },
           "timestamp": {
             "kind": "method",
             "parameters": [
@@ -727,11 +831,38 @@
               "self",
               "instance"
             ]
+          },
+          "url": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "instance"
+            ]
           }
         }
       }
     },
     "tables": {
+      "TableColumn": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "sort=",
+          "ascending_label=",
+          "descending_label=",
+          "css="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "sorts": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
       "TableFilter": {
         "bases": [],
         "constructor": [
@@ -1013,7 +1144,8 @@
           "kpis",
           "charts=",
           "calendars=",
-          "timeline="
+          "timeline=",
+          "period="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1032,7 +1164,8 @@
           "magnitude=",
           "workflow=",
           "actions=",
-          "key="
+          "key=",
+          "subject="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1078,6 +1211,10 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "MISSING": {
+        "kind": "value",
+        "type": "str"
       },
       "PageNavigation": {
         "bases": [],
@@ -1192,6 +1329,14 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "counted": {
+        "kind": "function",
+        "parameters": [
+          "count",
+          "one",
+          "many="
+        ]
       },
       "line_chart": {
         "kind": "function",
@@ -1427,6 +1572,13 @@
             "parameters": [
               "self",
               "form"
+            ]
+          },
+          "get_context_data": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "**kwargs"
             ]
           }
         }

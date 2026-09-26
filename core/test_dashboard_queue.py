@@ -77,7 +77,7 @@ class DashboardQueueTests(TestCase):
             queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST"
         )
 
-    def test_full_queue_renders_workflows_while_dashboard_stays_compact(self):
+    def test_full_queue_renders_workflows_while_dashboard_only_counts(self):
         from control_plane.models import DashboardRefreshRequest
 
         with patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")):
@@ -92,35 +92,21 @@ class DashboardQueueTests(TestCase):
                             response, 'action="/dashboard/glance/" method="post"'
                         )
                         self.assertContains(response, 'name="csrfmiddlewaretoken"')
+                        self.assertContains(response, "Serious</span>")
+                        self.assertTemplateUsed(response, "partials/_work_queue.html")
                     else:
-                        self.assertNotContains(response, "Resolution workflow")
+                        # The dashboard counts the queue and links to it.
+                        self.assertNotContains(response, "Steps to resolve")
                         self.assertNotContains(response, "Reconcile the bill")
-                    self.assertContains(response, "Serious</span>")
+                        self.assertContains(response, 'href="/action-items/"')
                     self.assertNotContains(response, "An interesting observation")
                     self.assertNotContains(response, 'href=""')
-                    self.assertTemplateUsed(response, "partials/_work_queue.html")
         self.assertFalse(DashboardRefreshRequest.objects.exists())
 
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
         self.assertContains(response, "Check the reading")
         self.assertNotContains(response, "A service needs you")
-
-    def test_dashboard_places_metrics_before_compact_queue(self):
-        with (
-            patch("contacts.d1.query", side_effect=AssertionError("a page render called D1")),
-            patch(
-                "core.views.dashboard_highlights",
-                return_value={
-                    "highlights": [],
-                    "compact": [{"label": "Example count", "value": 3, "url": "/"}],
-                },
-            ),
-        ):
-            html = self.client.get("/").content.decode()
-        self.assertLess(
-            html.index('aria-label="Across HQ"'), html.index("Needs attention")
-        )
 
     def test_anonymous_reader_cannot_open_either_queue(self):
         self.client.logout()

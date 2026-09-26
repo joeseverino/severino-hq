@@ -32,11 +32,15 @@ def _run(case) -> str:
     result = CompositionTextResult(io.StringIO(), descriptions=False, verbosity=0)
     root = logging.getLogger()
     handlers = list(root.handlers)
+    # The sample's own level, so the run's SEVERINO_LOG_LEVEL cannot filter it.
+    level = logger.level
+    logger.setLevel(logging.DEBUG)
     try:
         with redirect_stderr(captured):
             unittest.defaultTestLoader.loadTestsFromTestCase(case).run(result)
     finally:
         root.handlers = handlers
+        logger.setLevel(level)
     return captured.getvalue()
 
 

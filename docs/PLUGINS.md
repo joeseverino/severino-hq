@@ -144,8 +144,8 @@ start builds in this public one is a worse trade than a few minutes of latency.
 So the host asks rather than being told: **the composition workflow runs on a
 schedule and rebuilds only when its inputs changed.**
 
-What a composition is made of — host image digest, plugin wheel digests, and the
-admission policy — is hashed into a fingerprint and published as a
+What a composition is made of (host image digest, plugin wheel digests, and the
+admission policy) is hashed into a fingerprint and published as a
 `composition:fp-…` tag beside the image. A scheduled run whose fingerprint is
 already published stops before building, so a tick with nothing to do costs one
 resolution and deploys nothing. The registry holds that state because it already
@@ -164,14 +164,14 @@ immediately instead of waiting for the next tick.
 The workflow also listens for a `repository_dispatch` of type
 `extension-admitted`, for a plugin that is ever given a credential to announce
 itself. **Nothing sends it today.** It is kept because the schedule makes it
-safe to have an unused fast path — a missed signal is picked up on the next tick
+safe to have an unused fast path: a missed signal is picked up on the next tick
 rather than leaving production a release behind.
 
 The composition workflow is the only path to production. It verifies each
 signature itself, against the identity built from the declared repository and
 workflow, so a plugin cannot widen who may sign for it by editing its own
 repository. Entries are merged into one lock by Cordon's lock tool, which
-already accepts several entries — the host does not reimplement it.
+already accepts several entries: the host does not reimplement it.
 `SEVERINO_HQ_PLUGINS` is derived from the merged lock, because the enabled and
 approved inventories must be identical or the host refuses to start.
 
@@ -206,7 +206,7 @@ against its signed lock. Public tests use synthetic extensions, while the
 assembled private image runs the real suites together.
 
 This boundary also prevents premature abstractions. Code moves into HQ only
-when it is genuinely host policy or a reusable primitive—authorization,
+when it is genuinely host policy or a reusable primitive: authorization,
 capability execution, audit attribution, table behavior, UI vocabulary,
 composition, or testing infrastructure. Domain-specific calculations stay in
 their private package even if the host is their only current consumer.
@@ -244,8 +244,9 @@ duplicate resources, and duplicate search scopes at composition startup. API,
 MCP, and global search then derive their surfaces from that spec. A standalone
 search projection, when it cannot belong to a resource, is emitted from the
 same `PluginIntegration.search` callable rather than another manifest hook.
-Set `web_route` to the resource's list route to make it directly reachable from
-the Command Center. It must reverse without arguments; HQ checks that contract
+Set `pass_principal=True` when the answer depends on what the caller may see;
+both handlers then also receive `principal=`. Set `web_route` to the resource's
+list route to make it directly reachable from the Command Center. It must reverse without arguments; HQ checks that contract
 at startup and renders plain discovery text as a fail-safe if checks were
 bypassed. A capability may set `subject_resource` to that resource's name; HQ
 then connects the operation to its domain in both machine discovery and the
@@ -285,7 +286,7 @@ only local paths and explicit HTTP(S) URLs. Import these contracts and
 and raw provider inventory are deliberately host-only.
 
 Treat this provider as part of adding any external API, token, consent, or
-keyless data gateway—not as optional Connections-page decoration. The owning
+keyless data gateway, not as optional Connections-page decoration. The owning
 package emits the connection and maps every useful operation to its registered
 capability or resource. This keeps new gateways self-describing and makes their
 relationships and processes immediately available to Command Center, API, MCP,
@@ -360,7 +361,7 @@ contract failure.
 Wrap a `.data-table` in `.table-scroll`; HQ preserves horizontal scrolling and
 keeps its headings visible through long result sets. The enhancement is visual
 only and inert, so the real table remains the single semantic and interactive
-source—including sorting, selection, and assistive-technology navigation.
+source, including sorting, selection, and assistive-technology navigation.
 
 Dense pages expose their information architecture with
 `PageNavigation((PageSection("overview", "Overview"), ...))`, include
@@ -372,7 +373,7 @@ may change; section IDs are durable links.
 ## Routes that authenticate themselves
 
 `token_authenticated_routes` names paths under a plugin's own `url_prefix` that
-carry their own request authentication — a bearer token, a signed body — rather
+carry their own request authentication (a bearer token, a signed body) rather
 than the session cookie. They are exempted from the session login **redirect**,
 not from authentication.
 

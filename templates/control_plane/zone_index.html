@@ -1,37 +1,34 @@
-{% extends "base.html" %}
-{% block title %}Domains{% endblock %}
-{% block content %}
-{% include "partials/_page_head.html" with title="Domains" lede="The domains HQ can see, and what it publishes in them." %}
-
+{% extends "page.html" %}
+{% block page %}
 {% comment %}
-This page only renders while no domain is managed -- once one is, there is
+This page only renders while no domain is managed: once one is, there is
 somewhere to go and going there beats listing it. So the copy speaks to the
 one situation it is ever seen in.
 {% endcomment %}
 {% if zones %}
   <p class="page-lede">
-    HQ is not managing any domain yet. These are the zones the Cloudflare
-    credential can see. Managing one records what HQ is responsible for; it
-    changes nothing at Cloudflare.
+    No domain is managed yet. These zones are visible to the Cloudflare
+    credential. Managing one changes nothing at Cloudflare.
   </p>
   <div class="control-summary">
     {% for zone in zones %}
       <div class="control-metric">
         <span class="control-label">{{ zone.zone }}</span>
-        <strong>{{ zone.records|length }} record{{ zone.records|length|pluralize }}</strong>
+        <strong>{{ zone.records|length|counted:"record" }}</strong>
         <span class="readout">
-          <a class="subtle-link" href="{{ zone.url }}">See what it publishes &rarr;</a>
+          <a class="subtle-link" href="{{ zone.url }}">View records &rarr;</a>
         </span>
-        <form method="post" action="{% url 'zones:adopt' zone.zone %}">
-          {% csrf_token %}
-          <input type="hidden" name="token" value="{{ zone.adopt_token }}">
-          <button type="submit" class="primary">Manage this domain</button>
-        </form>
+        {% if zone.adopt_token %}
+          {% url 'zones:adopt' zone.zone as adopt_url %}
+          {% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}
+        {% elif zone.observed_only %}
+          <span class="readout muted">Observed only</span>
+        {% endif %}
       </div>
     {% endfor %}
   </div>
 {% else %}
-  {% include "partials/_empty_state.html" with message="No domains have been seen yet. The controller reports what the Cloudflare credential can reach on its next sweep." %}
+  {% include "partials/_empty_state.html" with message="No domains yet. The next sweep lists the zones the Cloudflare credential can reach." %}
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" %}

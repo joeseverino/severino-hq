@@ -16,7 +16,7 @@ from .security import AuthorizationError, Capability, Principal
 
 MAX_SEARCH_RESULTS = 5000
 # Precise relevance ordering only matters for results a human will actually
-# scan. Ranking every match would compile one CASE branch per id — thousands
+# scan. Ranking every match would compile one CASE branch per id: thousands
 # of bound parameters per query for ordering nobody sees past the first pages.
 RELEVANCE_WINDOW = 500
 
@@ -82,11 +82,8 @@ def apply_search(
     if not head_ids:
         # Annotated even though it is empty, because what this function
         # promises its caller is a queryset that can be ordered by relevance,
-        # and that promise cannot hold only when there are results. The bare
-        # `.none()` this used to return made every list page in HQ answer 500
-        # to any search that matched nothing -- a misspelt vendor, a doc that
-        # was never written -- since `order_by("_search_rank")` resolves the
-        # name against the model whether or not a row will ever be built.
+        # and that promise holds for an empty result too: `order_by("_search_rank")`
+        # resolves the name against the model whether or not a row is built.
         return queryset.none().annotate(
             _search_rank=Value(RELEVANCE_WINDOW, output_field=IntegerField())
         )
@@ -121,7 +118,21 @@ def apply_search(
 
 def _fallback_snippet(definition: SearchDefinition, instance, query: str) -> SnippetParts:
     """Portable snippet: a window around the first matched term, term marked."""
-    body = definition.body(instance).replace("\n", " ")
+    return _marked(definition.body(instance), query)
+
+
+def _snippet(
+    definition: SearchDefinition, instance, query: str, indexed: SnippetParts | None
+) -> SnippetParts:
+    """The record's own readable text when it has some, else the index's snippet."""
+    text = definition.snippet_text(instance)
+    if text:
+        return _marked(text, query)
+    return indexed if indexed is not None else _fallback_snippet(definition, instance, query)
+
+
+def _marked(text: str, query: str) -> SnippetParts:
+    body = text.replace("\n", " ")
     lowered = body.lower()
     for term in query.split()[:8]:
         position = lowered.find(term.lower())
@@ -198,6 +209,13 @@ def global_search(
     """Relevance-ranked, snippeted results across every scope the principal
     may search. Scopes the principal lacks (e.g. the audit log for a
     least-privilege adapter) are omitted entirely, not shown empty."""
+    from .projection import projection_scope
+
+    with projection_scope():
+        return _global_search(query, principal=principal, limit_per_scope=limit_per_scope)
+
+
+def _global_search(query: str, *, principal: Principal, limit_per_scope: int) -> dict:
     groups = []
     total = 0
     for scope, definition in BY_SCOPE.items():
@@ -212,20 +230,14 @@ def global_search(
             record = records.get(object_id)
             if record is None:
                 continue
-            if snippet is None:
-                snippet = _fallback_snippet(definition, record, query)
             items.append(
                 {
                     "id": object_id,
                     "title": definition.title(record),
                     "badge": definition.badge(record),
-                    "url": (
-                        record.get_absolute_url()
-                        if hasattr(record, "get_absolute_url")
-                        else ""
-                    ),
+                    "url": definition.url(record),
                     "timestamp": definition.timestamp(record),
-                    "snippet": snippet,
+                    "snippet": _snippet(definition, record, query, snippet),
                 }
             )
         groups.append(
@@ -253,8 +265,7 @@ def search_records(
         record = records.get(object_id)
         if record is None:
             continue
-        if snippet is None:
-            snippet = _fallback_snippet(definition, record, query)
+        snippet = _snippet(definition, record, query, snippet)
         items.append(
             {
                 "id": object_id,

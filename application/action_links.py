@@ -18,6 +18,7 @@ from django.urls import NoReverseMatch, reverse
 from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .workflow_contracts import ActionLink
+from .ui import counted
 
 
 class ConnectionLinkSpec(Protocol):
@@ -87,7 +88,7 @@ def capability_action_link(
         effect,
         command_url,
         capability=name,
-        reason="Required connection scopes and HQ authority are both confirmed.",
+        reason="Connection scopes and permissions confirmed.",
     )
 
 
@@ -127,14 +128,14 @@ def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
             "Show in topology",
             "read",
             focus_url,
-            reason="The relationships that support this finding.",
+            reason="What this finding is based on.",
         ),
         ActionLink(
             "impact",
             "Trace impact",
             "read",
             impact_url,
-            reason="The downstream nodes reachable from this subject.",
+            reason="Everything downstream of it.",
         ),
     )
 
@@ -166,7 +167,7 @@ def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink
         "Show relationships",
         "read",
         url,
-        reason="Derived targets, dependencies, abilities, and governed resources.",
+        reason="Its targets, dependencies, abilities and resources.",
     )
 
 
@@ -188,15 +189,14 @@ def recommend_connection_action(
     if missing_scope_count:
         label = "Review access"
         reason = (
-            f"{missing_scope_count} required provider "
-            f"scope{'s are' if missing_scope_count != 1 else ' is'} missing."
+            f"Missing {counted(missing_scope_count, 'required provider scope', 'required provider scopes')}."
         )
     elif unhealthy:
         label = "Inspect issue"
-        reason = "The latest cached connection observation needs attention."
+        reason = "The last reading of this connection is unhealthy."
     elif unknown_scope_count:
         label = "Verify access"
-        reason = "The provider did not report enough scope evidence to decide."
+        reason = "The provider did not report its scopes."
     else:
         return actions
 

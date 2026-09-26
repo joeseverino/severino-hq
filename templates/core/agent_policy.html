@@ -1,33 +1,31 @@
-{% extends "base.html" %}{% load humanize %}
-{% block title %}Agents{% endblock %}
-{% block content %}
-{% include "partials/_page_head.html" with title="Agents" %}
-
-<section class="card">
-  <dl class="finding-evidence policy-status">
-    <div>
-      <dt>Access</dt>
-      <dd>
-        <form action="{% url 'agent_access' %}" method="post">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
-          {% if agents_paused %}<span class="pill pill-denied">Paused</span>{% else %}<span class="pill pill-active">Running</span>{% endif %}
-          <button type="submit" class="btn compact">{% if agents_paused %}Resume{% else %}Pause all{% endif %}</button>
-        </form>
-      </dd>
+{% extends "page.html" %}
+{% block page %}
+<section class="card agent-state{% if agents_paused %} is-paused{% endif %}">
+  <div class="agent-state-main">
+    <span class="agent-state-dot" aria-hidden="true"></span>
+    <div class="agent-state-copy">
+      <h2>{% if agents_paused %}Agents are paused{% else %}Agents are running{% endif %}</h2>
+      <p>{% if agents_paused %}No agent can act through HQ until you resume.{% else %}Agents act within the rules below.{% endif %}</p>
     </div>
-    <div><dt>Rules set</dt><dd><strong>{{ rule_count }}</strong></dd></div>
-    <div><dt>Awaiting approval</dt><dd><a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong></a></dd></div>
-    <div><dt>Refused · 24h</dt><dd><a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong></a></dd></div>
-  </dl>
+    {% url 'agent_access' as agent_access_url %}
+    {% if agents_paused %}
+      {% post_button "Resume" agent_access_url name="paused" value="0" css="btn primary" %}
+    {% else %}
+      {% post_button "Pause all" agent_access_url name="paused" value="1" %}
+    {% endif %}
+  </div>
+  <p class="agent-state-facts">
+    <span><strong>{{ rule_count|counted:"rule" }}</strong> set</span>
+    <a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> awaiting approval</a>
+    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in 24h</a>
+    {% if any_dormant %}<span class="policy-dormant-note">Faded rules are off on this server until MCP allows them.</span>{% endif %}
+  </p>
   {% if agents %}
     <ul class="policy-agents">
       {% for agent in agents %}
         <li>
           <span class="policy-agent-name">{{ agent.label }}</span>
-          <span class="muted">{{ agent.detail }} · {{ agent.identity.granted|length }} granted in Pocket ID</span>
-          <span class="muted">Seen {{ agent.identity.last_seen|naturaltime }}</span>
+          <span class="muted">{{ agent.detail }} · {{ agent.identity.granted|length }} granted in Pocket ID · seen {{ agent.identity.last_seen|ago }}</span>
         </li>
       {% endfor %}
     </ul>
@@ -36,47 +34,34 @@
   {% endif %}
 </section>
 
+{% comment %}
+One table per group, every rule visible: a column per surface and per agent,
+so a rule is read and changed where it sits rather than behind a disclosure.
+{% endcomment %}
 <form method="post" class="policy">
   {% csrf_token %}
   {% for group in groups %}
-    <section class="card policy-group">
-      <h2 class="policy-group-title">{{ group.label }}</h2>
-      {% for row in group.rows %}
-        <details class="policy-row">
-          <summary>
-            <span class="policy-summary">
-              <span class="policy-name">{{ row.label }}</span>
-              <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>
-              <span class="policy-state">
-                {% for cell in row.overrides %}
-                  <span class="policy-chip rule-{{ cell.rule }}">{{ cell.column }} · {{ cell.rule_label }}</span>
-                {% empty %}
-                  {% if row.default != "Allow" %}<span class="muted">{{ row.default }}</span>{% endif %}
-                {% endfor %}
-              </span>
-              <span class="policy-chevron" aria-hidden="true"></span>
-            </span>
-          </summary>
-          <div class="policy-panel">
-            <div class="policy-tier">
-              <p class="policy-tier-title">Everyone</p>
-              {% for cell in row.everyone %}
-                {% include "core/_policy_setting.html" %}
-              {% endfor %}
-            </div>
-            <div class="policy-tier">
-              <p class="policy-tier-title">Each agent <span class="muted">· can only be stricter</span></p>
-              {% for cell in row.agents %}
-                {% include "core/_policy_setting.html" %}
-              {% empty %}
-                <p class="muted policy-none">No agent has connected yet.</p>
-              {% endfor %}
-            </div>
-          </div>
-        </details>
-      {% endfor %}
-    </section>
+    <div class="table-scroll">
+      <table class="data-table policy-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ group.label }}</th>
+            <th scope="col">Default</th>
+            {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off on this server</span>{% endif %}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.rows %}
+            <tr>
+              <th scope="row">{{ row.label }} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span></th>
+              <td class="policy-default">{{ row.default }}</td>
+              {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% endfor %}
-  <div class="policy-save"><button type="submit" class="btn primary">Save changes</button></div>
+  <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>
 </form>
 {% endblock %}

@@ -229,7 +229,7 @@ def documentation_status() -> dict[str, Any]:
 
 def recent_activity(*, limit: int = 25) -> dict[str, Any]:
     """Return recent HQ audit events without their free-form metadata payloads."""
-    return read_models.recent_activity(limit=limit)
+    return read_models.recent_activity(principal=current_principal(), limit=limit)
 
 
 def system_health() -> dict[str, Any]:
@@ -239,4 +239,4 @@ def system_health() -> dict[str, Any]:
 
 def dashboard_snapshot() -> dict[str, Any]:
     """Return HQ's canonical KPI, priority queue, and recent activity snapshot."""
-    return operating_snapshot()
+    return operating_snapshot(principal=current_principal())

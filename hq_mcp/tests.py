@@ -409,7 +409,7 @@ class MCPBoundaryTests(TestCase):
         self.assertEqual(status, 404)
 
     def test_rejects_invalid_host(self):
-        status, body = self._request(host="hq.jseverino.com")
+        status, body = self._request(host="hq.example.com")
 
         self.assertEqual(status, 400)
         self.assertEqual(body["error"], "invalid_host")
@@ -767,7 +767,7 @@ class TheCallerReachesTheToolTests(TestCase):
             seen["actor"] = principal.actor
             return {"connections": []}
 
-        # A fresh manager for this run -- FastMCP's can be started only once --
+        # A fresh manager for this run: FastMCP's can be started only once,
         # and the original put back, so nothing here leaks into another test.
         original_manager = mcp._session_manager
         mcp._session_manager = None
@@ -790,7 +790,7 @@ class TheCallerReachesTheToolTests(TestCase):
         # rather than Starlette's TestClient: that one now wants a second HTTP
         # client installed, and a test is no reason to ship one. The session
         # manager is entered first and by hand, which is all an app lifespan
-        # does, so its task group still exists before any caller is bound --
+        # does, so its task group still exists before any caller is bound,
         # the order that makes a lost context observable.
         async def call():
             transport = httpx.ASGITransport(app=application, client=("100.64.0.10", 50000))

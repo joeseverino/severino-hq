@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 import httpx
 from starlette.middleware.gzip import GZipMiddleware
 from core.network import TrustedNetworkASGI
@@ -55,6 +55,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(django_route.path, "")
         self.assertIsInstance(django_route.app, GZipMiddleware)
 
+    @override_settings(STATIC_LIVE=False)
     def test_versioned_static_assets_are_compressed_and_immutable(self):
         async def request(root):
             app = GZipMiddleware(CachedStaticFiles(directory=root), minimum_size=500)
@@ -289,7 +290,7 @@ class StyleContractTests(SimpleTestCase):
         Nine hundred lines had collected outside the layers, and the effect
         compounds: a component written there cannot be overridden from
         `components`, so the only available fix is to write the next rule
-        outside the layers too -- a responsive rule nothing could reach,
+        outside the layers too: a responsive rule nothing could reach,
         answered by another rule nothing could reach.
 
         Checked by brace depth rather than by parsing CSS: at depth zero the
@@ -311,14 +312,14 @@ class StyleContractTests(SimpleTestCase):
     def test_font_size_comes_from_the_type_scale(self):
         """Three hundred declarations had drifted across twenty sizes.
 
-        Thirteen of them sat inside a six-pixel band in half-pixel steps --
+        Thirteen of them sat inside a six-pixel band in half-pixel steps,
         13px and 13.5px used fifty-three and thirty-four times, which is not a
         distinction anyone can see or intended to make. A size is now one of
         the scale's steps or it is drift.
 
         `em` is exempt and stays exempt. It means "relative to whatever this
-        sits in" -- a unit suffix shrinking beside its number, a glyph tracking
-        its label -- which is a different statement from choosing a step, and
+        sits in" (a unit suffix shrinking beside its number, a glyph tracking
+        its label) which is a different statement from choosing a step, and
         one an absolute scale cannot make.
         """
 
@@ -336,15 +337,15 @@ class StyleContractTests(SimpleTestCase):
         """A value that is on the scale must say so.
 
         Eight hundred spacing declarations had spread across twenty-nine
-        values -- every integer from one to eighteen. The even rungs are now
+        values: every integer from one to eighteen. The even rungs are now
         `--space-*`; this stops one being written back as a literal, which is
         how the ladder came apart the first time.
 
         Odd values are still literals and are deliberately not failed here.
         Rounding padding by a pixel is visible in a dense table in a way that
         moving type by half a pixel is not, so each is being looked at rather
-        than swept. `1px` is exempt for good: it is a hairline rule -- the grid
-        lines in `.sweep-grid` are a 1px gap over a coloured background -- and
+        than swept. `1px` is exempt for good: it is a hairline rule (the grid
+        lines in `.sweep-grid` are a 1px gap over a coloured background) and
         not a space at all.
         """
 
@@ -374,8 +375,8 @@ class StyleContractTests(SimpleTestCase):
         """One status, one set of colours, named once.
 
         The same seven fill/ink/border trios were written out in hex across
-        pills, messages, connection ticks and worth readouts -- five families
-        that knew nothing about each other -- so `published`, `reachable` and
+        pills, messages, connection ticks and worth readouts (five families
+        that knew nothing about each other) so `published`, `reachable` and
         `success` were three different greens. Components now read `--tone-*`
         and only the token block names a colour.
 
@@ -418,7 +419,7 @@ class StyleContractTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[1]
         # Bound before the attempt: skipTest raises, so the loop below is
-        # unreachable when git is absent -- but that is a fact about skipTest,
+        # unreachable when git is absent, but that is a fact about skipTest,
         # not one visible here.
         tracked: list[str] = []
         try:
@@ -447,7 +448,7 @@ class StyleContractTests(SimpleTestCase):
             r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|"
             r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
             r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
-            r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|"
+            r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|192\.0\.0\.|"
             r"1\.1\.1\.1|8\.8\.8\.8)"
         )
         address = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
@@ -456,8 +457,8 @@ class StyleContractTests(SimpleTestCase):
         # short stand-ins, and failing on those would teach people to weaken
         # the check rather than fix a leak.
         host_key = re.compile(r"ssh-(?:ed25519|rsa) AAAA[A-Za-z0-9+/]{32,}")
-        # A hostname under the deployment's own private zone. Not secret --
-        # nothing outside the network resolves it -- but it names one
+        # A hostname under the deployment's own private zone. Not secret
+        # (nothing outside the network resolves it) but it names one
         # installation's topology, and a public repository holds the shape
         # rather than the deployment. `example` and `invalid` are reserved for
         # writing about hostnames, which is what a fixture is doing.
@@ -465,6 +466,25 @@ class StyleContractTests(SimpleTestCase):
             r"\b[a-z0-9-]+\.(?!example\b|invalid\b|test\b|localhost\b)"
             r"(?:homelab|lan|internal|local)\b"
         )
+        # Names a checkout's own deployment goes by, one per line, kept in
+        # .git/info where nothing is tracked or pushed. Absent, only the
+        # generic patterns above apply.
+        terms_file = Path(
+            subprocess.run(
+                ["git", "rev-parse", "--git-path", "info/deployment-terms"],
+                cwd=root, capture_output=True, text=True, check=True,
+            ).stdout.strip()
+        )
+        if not terms_file.is_absolute():
+            terms_file = root / terms_file
+        try:
+            terms = tuple(
+                line.strip().lower()
+                for line in terms_file.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            )
+        except OSError:
+            terms = ()
         # Lockfiles and pinned action SHAs are hashes, not hosts.
         skip = ("package-lock.json", "requirements.txt", ".github/")
 
@@ -489,6 +509,10 @@ class StyleContractTests(SimpleTestCase):
                 findings.append(f"{name}: ssh host key")
             for candidate in sorted(set(private_host.findall(text))):
                 findings.append(f"{name}: {candidate}")
+            lowered = text.lower()
+            for index, term in enumerate(terms):
+                if term in lowered:
+                    findings.append(f"{name}: deployment term #{index + 1}")
 
         self.assertEqual(findings, [], f"reachable endpoints in tracked files: {findings}")
 
@@ -498,8 +522,8 @@ class StyleContractTests(SimpleTestCase):
         A full-page capture taken while checking a rendered page was once
         committed to the root of this repository and referenced by nothing.
         This repository is public, so a capture of any internal page is
-        published the moment it is pushed -- carrying whatever happened to be
-        on screen -- and force-pushing afterwards does not unpublish it.
+        published the moment it is pushed (carrying whatever happened to be
+        on screen) and force-pushing afterwards does not unpublish it.
 
         Images are diagrams, documentation captures, or icons, and each of
         those has a home. Anything outside them is something that arrived by
@@ -507,9 +531,9 @@ class StyleContractTests(SimpleTestCase):
 
         The question is what is *committed*, not what is on the disk, so it is
         asked of git rather than of the filesystem. A working tree holds plenty
-        of images that are nobody's business -- the Playwright MCP writes
+        of images that are nobody's business (the Playwright MCP writes
         captures to `.playwright-mcp/`, which is ignored and therefore already
-        safe -- and a walk of the disk would either report those or need a
+        safe) and a walk of the disk would either report those or need a
         hand-maintained list of directories to skip. Tracked files are exactly
         the ones that can be pushed.
         """
@@ -519,13 +543,13 @@ class StyleContractTests(SimpleTestCase):
         allowed = ("docs/diagrams/", "docs/images/", "static/img/")
         suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
         # This suite also runs inside the composed image, which is the source
-        # tree without the checkout that produced it -- no .git, and no git
+        # tree without the checkout that produced it: no .git, and no git
         # binary either. There is nothing to guard there: what is in the image
         # is already decided, and this asks what would be pushed. So it is
         # skipped rather than failed, and still runs everywhere the answer can
         # change.
         # Bound before the attempt: skipTest raises, so the read below is
-        # unreachable when git is absent -- but that is a fact about skipTest,
+        # unreachable when git is absent, but that is a fact about skipTest,
         # not one visible in this function, and reading a name that only some
         # branches assign is worth not writing either way.
         tracked: list[str] = []
@@ -598,8 +622,8 @@ class StyleContractTests(SimpleTestCase):
         """A floor wider than the column it lives in is only ever a scrollbar.
 
         `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width chart card
-        offers roughly 284-446px. Every floor ever set here -- 620px, then
-        480px -- was above that range, so it could not protect a narrow plot;
+        offers roughly 284-446px. Every floor ever set here (620px, then
+        480px) was above that range, so it could not protect a narrow plot;
         it could only guarantee that every chart on the page scrolled at once.
         Label collision is handled by `Chart.dense` and a container query,
         which measure the labels and the card rather than guessing at a width.
@@ -673,7 +697,7 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
 
     An extension once invented a class name for a card it rendered; nothing
     errored and nothing was styled. The partials are the host's published UI
-    contract, so anything they name has to exist here -- otherwise the first
+    contract, so anything they name has to exist here, otherwise the first
     surface to adopt a primitive is the one that discovers it is unstyled.
     """
 
@@ -757,7 +781,7 @@ class PageTitleTests(SimpleTestCase):
         self.assertEqual(
             offenders,
             [],
-            "base.html appends the site name -- a page block names only itself",
+            "base.html appends the site name: a page block names only itself",
         )
 
     def test_every_page_names_itself(self):
@@ -781,7 +805,7 @@ class WorkflowSecrecyTests(SimpleTestCase):
 
     Actions expands ``${{ … }}`` into the text of the step it then echoes, so a
     value interpolated into a script body is printed in full before the step
-    runs -- ahead of anything the job does later to conceal it. Passed through
+    runs: ahead of anything the job does later to conceal it. Passed through
     ``env:`` it is a shell variable the echo never sees, and a secret is masked
     on top of that.
     """
@@ -829,7 +853,7 @@ class WorkflowSecrecyTests(SimpleTestCase):
         self.assertEqual(
             sorted(offenders),
             [],
-            "pass it through env: instead — a script body is echoed verbatim",
+            "pass it through env, instead: a script body is echoed verbatim",
         )
 
     def test_the_composition_set_is_read_from_a_secret(self):
@@ -871,7 +895,7 @@ class AssertionPrecisionTests(SimpleTestCase):
             # anything installed into one. Matching the single literal ".venv"
             # missed a sibling `.venv312` holding the 3.12 half of the CI matrix,
             # and this test then reported Django's own `testcases.py` as three
-            # offenders -- a failure about the machine rather than the change.
+            # offenders: a failure about the machine rather than the change.
             if any(
                 part == "venv" or part.startswith(".venv") or part == "site-packages"
                 for part in path.parts
@@ -893,7 +917,250 @@ class AssertionPrecisionTests(SimpleTestCase):
                 if name == "assertFalse":
                     better = "the negated form of " + better
                 offenders.append(
-                    f"{path.relative_to(root)}:{node.lineno} — use {better}"
+                    f"{path.relative_to(root)}:{node.lineno}: use {better}"
                 )
 
         self.assertEqual(offenders, [])
+
+
+class CountedTests(SimpleTestCase):
+    """One way to say how many, so a noun and its verb agree."""
+
+    def test_the_phrase_agrees_for_one_and_for_many(self):
+        from application.ui import counted
+
+        self.assertEqual(counted(1, "needs output", "need output"), "1 needs output")
+        self.assertEqual(counted(3, "needs output", "need output"), "3 need output")
+        self.assertEqual(counted(0, "change"), "0 changes")
+        self.assertEqual(counted(1200, "change"), "1,200 changes")
+
+    def test_a_phrase_without_its_plural_is_refused(self):
+        from application.ui import counted
+
+        with self.assertRaises(ValueError):
+            counted(2, "needs output")
+
+    def test_the_template_filter_is_the_same_rule(self):
+        from django.template import Context, Template
+
+        rendered = Template('{{ n|counted:"thing needs you,things need you" }}').render(
+            Context({"n": 1})
+        )
+        self.assertEqual(rendered, "1 thing needs you")
+
+
+class PostButtonTests(SimpleTestCase):
+    """A post_button submits the one shared form, so it needs none of its own."""
+
+    def render(self, source, **context):
+        from django.template import Context, Template
+
+        return Template(source).render(Context(context))
+
+    def test_it_targets_the_shared_form_with_its_own_action(self):
+        html = self.render('{% post_button "Move up" "/things/7/" value="up" title="Move up" %}')
+        self.assertIn('form="hq-post"', html)
+        self.assertIn('formaction="/things/7/"', html)
+        self.assertIn('name="action" value="up"', html)
+        self.assertIn('aria-label="Move up"', html)
+        self.assertNotIn("disabled", html)
+
+    def test_it_can_be_disabled(self):
+        html = self.render('{% post_button "Refresh" "/sync/" disabled=True %}')
+        self.assertIn(" disabled>", html)
+
+    def test_its_label_is_escaped(self):
+        html = self.render("{% post_button label '/x/' %}", label="<b>")
+        self.assertIn("&lt;b&gt;", html)
+
+
+class OnePrimitiveTests(SimpleTestCase):
+    """Questions asked in many places are answered by one function."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+    # Modules another pass routes through the primitives.
+    PENDING: set[str] = set()
+
+    def sources(self, *packages):
+        for package in packages:
+            for path in sorted((self.ROOT / package).rglob("*.py")):
+                relative = path.relative_to(self.ROOT).as_posix()
+                if path.name.startswith("test") or relative in self.PENDING:
+                    continue
+                yield relative, path.read_text(encoding="utf-8")
+
+    def test_hostnames_are_spelled_by_normalized_hostname(self):
+        import re
+
+        inline = re.compile(r'lower\(\)\s*\.rstrip\("\."\)|rstrip\("\."\)\s*\.lower\(\)')
+        found = [
+            relative
+            for relative, text in self.sources("application", "control_plane", "core")
+            if relative != "control_plane/names.py" and inline.search(text)
+        ]
+        self.assertEqual(found, [])
+
+    def test_zone_membership_is_asked_of_in_zone(self):
+        import re
+
+        inline = re.compile(r'endswith\(f"\.\{')
+        found = [
+            relative
+            for relative, text in self.sources("application", "control_plane", "core")
+            if relative != "control_plane/names.py" and inline.search(text)
+        ]
+        self.assertEqual(found, [])
+
+    def test_templates_say_ages_through_the_ago_filter(self):
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if "|timesince }} ago" in path.read_text(encoding="utf-8")
+            or "|timesince %}" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(found, [])
+
+    def test_templates_name_entities_through_the_entity_tag(self):
+        import re
+
+        # A button to a page (Cancel, Edit) is an action, not a mention.
+        mention = re.compile(
+            r'<a href="\{% url \'(control_plane:(detail|machine|service)|zones:detail|'
+            r'projects:detail)\''
+        )
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if mention.search(path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(found, [])
+
+    def test_entity_pages_are_addressed_by_entity_link(self):
+        import re
+
+        page = re.compile(
+            r'reverse\(\s*"(control_plane:machine|control_plane:service|zones:detail|'
+            r'projects:detail|control_plane:detail)"'
+        )
+        found = [
+            relative
+            for relative, text in self.sources("application")
+            if relative != "application/entity_links.py"
+            and not relative.endswith("views.py")
+            and page.search(text)
+        ]
+        self.assertEqual(found, [])
+
+
+class CognitiveComplexityTests(SimpleTestCase):
+    """No function asks a reader to hold more than twenty units of nesting.
+
+    The score is the codebase-memory graph's ``cognitive`` property: +1 plus the
+    nesting depth for each if, elif, loop, with, try, except and match. An elif
+    or else body sits one level deeper than its if. Boolean operators,
+    ternaries, comprehensions and nested functions add nothing.
+    """
+
+    LIMIT = 20
+    ROOT = Path(__file__).resolve().parent.parent
+    NESTING = (
+        ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith,
+        ast.Try, ast.TryStar, ast.ExceptHandler, ast.Match,
+    )
+    # Functions over the limit when this test landed. Entries are only ever removed.
+    COMPLEXITY_DEBT: dict[str, int] = {
+        "content.content_sync.sync_content_index": 21,
+        "control_plane.views.InfrastructureDetailView.get_context_data": 22,
+        "control_plane.views.ResourceFormView.post": 22,
+        "controller_runtime.providers.approve_tailnet_routes": 22,
+        "controller_runtime.providers.reconcile_tailnet_policy": 23,
+        "controller_runtime.providers.reconcile_tls": 27,
+        "hq_sdk.contract.drift": 21,
+        "hq_sdk.validation.unsupported_hq_imports": 22,
+    }
+
+    @classmethod
+    def score(cls, function) -> int:
+        def block(nodes, nesting):
+            return sum(walk(node, nesting) for node in nodes)
+
+        def walk(node, nesting):
+            if isinstance(node, ast.If):
+                total = 1 + nesting + walk(node.test, nesting)
+                total += block(node.body, nesting + 1)
+                rest = node.orelse
+                # An elif shares its if's column; an if inside an else does not.
+                while (
+                    len(rest) == 1
+                    and isinstance(rest[0], ast.If)
+                    and rest[0].col_offset == node.col_offset
+                ):
+                    branch = rest[0]
+                    total += 2 + nesting + walk(branch.test, nesting + 1)
+                    total += block(branch.body, nesting + 2)
+                    rest = branch.orelse
+                return total + block(rest, nesting + 1)
+            children = ast.iter_child_nodes(node)
+            if isinstance(node, cls.NESTING):
+                return 1 + nesting + block(children, nesting + 1)
+            return block(children, nesting)
+
+        return block(function.body, 0)
+
+    def functions(self, tree, prefix):
+        for node in ast.iter_child_nodes(tree):
+            name = f"{prefix}.{getattr(node, 'name', '')}"
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                yield name, self.score(node)
+            elif isinstance(node, ast.ClassDef):
+                yield from self.functions(node, name)
+
+    def scores(self) -> dict[str, int]:
+        found = {}
+        for package in sorted(self.ROOT.glob("*/__init__.py")):
+            for path in sorted(package.parent.rglob("*.py")):
+                relative = path.relative_to(self.ROOT)
+                if path.name.startswith("test") or {"tests", "migrations"} & set(
+                    relative.parts
+                ):
+                    continue
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                module = ".".join(relative.with_suffix("").parts)
+                found.update(self.functions(tree, module))
+        return found
+
+    def test_the_score_weighs_nesting(self):
+        source = (
+            "def f(a):\n"
+            "    for x in a:\n"          # +1
+            "        if x and a:\n"      # +2
+            "            pass\n"
+            "        elif x:\n"          # +3
+            "            pass\n"
+            "        else:\n"
+            "            with x:\n"      # +3
+            "                pass\n"
+            "    return [y for y in a if y] or None\n"
+        )
+        function = ast.parse(source).body[0]
+        self.assertEqual(self.score(function), 9)
+
+    def test_no_function_exceeds_the_limit(self):
+        over = {
+            name: score
+            for name, score in self.scores().items()
+            if score > self.LIMIT and name not in self.COMPLEXITY_DEBT
+        }
+        self.assertEqual(over, {}, "split these into named steps")
+
+    def test_complexity_debt_only_shrinks(self):
+        scores = self.scores()
+        changed = {
+            name: (debt, scores.get(name))
+            for name, debt in self.COMPLEXITY_DEBT.items()
+            if scores.get(name, 0) != debt or scores.get(name, 0) <= self.LIMIT
+        }
+        # Equality ratchets: a lower score is written down, a higher one fails.
+        self.assertEqual(
+            changed, {}, "set each entry to its score, or drop it once within the limit"
+        )

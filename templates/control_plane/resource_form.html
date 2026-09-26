@@ -1,13 +1,5 @@
-{% extends "base.html" %}
-{% block title %}{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %}{% endblock %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>{% if resource %}Edit {{ resource.key }}{% else %}Add {{ label }}{% endif %}</h1>
-    <p class="page-lede">{{ summary }}</p>
-  </div>
-</div>
-
+{% extends "page.html" %}
+{% block page %}
 {% comment %}
 Every field below is generated from the provider's pydantic model, and that same
 model validates the submission. Nothing here knows what kind of resource this is.
@@ -21,13 +13,13 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% comment %}
   What the thing already is, before what can be changed about it. Read from the
   provider's own readout, so this is the same description the resource page and
-  the service page give -- not a second one written here.
+  the service page give, not a second one written here.
   {% endcomment %}
   {% if facts %}
     <dl class="kv compact form-facts">
       {% for label, desired, observed in facts %}
         <dt>{{ label }}</dt>
-        <dd><code>{{ observed|default:desired|default:"—" }}</code></dd>
+        <dd><code>{{ observed|default:desired|or_empty }}</code></dd>
       {% endfor %}
     </dl>
   {% endif %}
@@ -48,7 +40,7 @@ model validates the submission. Nothing here knows what kind of resource this is
 
   The tuning knobs are offered when creating as well as when editing, which they
   were not: a field that is optional to the model can still be required by it in
-  combination -- an MX record must carry a priority -- and hiding those on the
+  combination (an MX record must carry a priority) and hiding those on the
   create form made such a record impossible to add. The operator chose the type,
   submitted, and was told about a field the page had never shown them.
 
@@ -68,7 +60,7 @@ model validates the submission. Nothing here knows what kind of resource this is
               <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
               Show on dashboard
             </label>
-            <span class="help">Use this machine's observed CPU, memory, and storage in the dashboard page head.</span>
+            <span class="help">Show this machine's CPU, memory and storage in the dashboard header.</span>
           </div>
         {% endif %}
       {% endif %}
@@ -79,7 +71,7 @@ model validates the submission. Nothing here knows what kind of resource this is
     <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>
     {% comment %}
     Back where the operator started. Cancelling out of "add a record" landed on
-    the resource registry -- a different page, in a different section, listing
+    the resource registry: a different page, in a different section, listing
     something other than what they were looking at a moment ago.
     {% endcomment %}
     <a class="btn" href="{{ cancel_url }}">Cancel</a>
@@ -88,7 +80,7 @@ model validates the submission. Nothing here knows what kind of resource this is
 
 {% comment %}
 Said by the capability registry rather than by this page. Stated here as a flat
-promise, it was false for every kind whose actions are locked -- which is the
+promise, it was false for every kind whose actions are locked, which is the
 one case where an operator most needs to know that saving changes nothing.
 {% endcomment %}
 <p class="muted">{{ apply_note }}</p>

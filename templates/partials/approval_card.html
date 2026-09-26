@@ -3,11 +3,11 @@
   <header class="approval-head">
     <h2><code>{{ entry.held.requested_actor }}</code> wants to run <span class="approval-what">{{ entry.title }}</span>{% if entry.held.target %} on {% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.held.target }}</a>{% else %}<code>{{ entry.held.target }}</code>{% endif %}{% endif %}</h2>
     <p class="muted">
-      {{ entry.held.requested_interface|upper }} · asked {{ entry.held.created_at|naturaltime }}
+      {{ entry.held.requested_interface|upper }} · asked {{ entry.held.created_at|ago }}
       {% if entry.held.state == 'pending' %}
         · lapses {{ entry.held.expires_at|naturaltime }}
       {% else %}
-        · <strong>{{ entry.held.get_state_display }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|naturaltime }}{% endif %}
+        · <strong>{{ entry.held.get_state_display }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
       {% endif %}
     </p>
     {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason }}</blockquote>{% endif %}
@@ -23,8 +23,8 @@
           {% for row in entry.preview.rows %}
             <tr>
               <th><code>{{ row.path }}</code></th>
-              {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before }}{% else %}<span class="muted">—</span>{% endif %}</td>{% endif %}
-              <td>{% if row.after %}{{ row.after }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
+              <td>{% if row.after %}{{ row.after }}{% else %}{% empty_value %}{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

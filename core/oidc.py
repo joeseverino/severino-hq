@@ -29,7 +29,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         `mozilla_django_oidc` decodes with `verify_aud: False` and passes no
         issuer, so every RS256 token signed by a key in the provider's JWKS
-        verifies here -- including one minted for a different client. HQ's own
+        verifies here, including one minted for a different client. HQ's own
         machine API already pins both; this is the browser path meeting it.
         """
 
@@ -42,7 +42,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         if len(allowed) > 1 and payload.get("azp") != client_id:
             raise SuspiciousOperation("The ID token was authorized for another party.")
         issuer = getattr(settings, "OIDC_ISSUER", "")
-        if issuer and payload.get("iss") != issuer:
+        if not issuer or payload.get("iss") != issuer:
             raise SuspiciousOperation("The ID token came from another issuer.")
         return payload
 

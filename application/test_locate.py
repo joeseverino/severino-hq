@@ -1,14 +1,14 @@
-"""Turning an address into a machine, and the four ways that used to disagree.
+"""Turning an address into a machine, the same way on every page.
 
-Every surface that draws a line between two things HQ knows -- a proxy and the
+Every surface that draws a line between two things HQ knows (a proxy and the
 box it forwards to, a credential and the machine it opens, a service and where
-it runs -- is asking one question. It was answered in four places, and the four
+it runs) is asking one question. It was answered in four places, and the four
 did not agree: one handled loopback, one consulted credentials, one read only
 declarations, one intersected sets of strings. So the same address named a
 machine on one page and nothing on the next.
 
-These are the cases that used to come out differently depending on which page
-asked, plus the ones the shared parser exists for.
+These are the cases that must come out the same whichever page asks, plus
+the ones the shared parser exists for.
 """
 
 from __future__ import annotations
@@ -120,11 +120,10 @@ class NamespaceTests(TestCase):
         )
 
     def test_a_credential_named_like_an_address_does_not_claim_it(self):
-        """The realistic version, and the one that was wrong.
+        """A connection's ref is a name, never an address.
 
-        A connection's ref is a name. Filed into the same map as addresses it
-        took ownership of the machine that actually answers there, so a proxy
-        forwarding to that address was reported under a credential.
+        A proxy forwarding to that address is filed under the machine that
+        answers there, not under the credential.
         """
 
         a_connection("10.0.0.5", "cloudflare_dns", endpoint="https://api.example")
@@ -178,10 +177,8 @@ class ForwardingAddressTests(TestCase):
 class OneMachineOneRowTests(TestCase):
     """A declared machine and the credential that opens it are one machine.
 
-    Aliasing compared a connection's endpoint against container sweeps and
-    nothing else, so a machine HQ had been told about and the SSH item reaching
-    it sat side by side as two rows -- the declaration holding the role and the
-    address, the credential holding everything served from there.
+    The declaration (role, address) and the SSH item reaching it fold into one
+    row.
     """
 
     def setUp(self):
@@ -201,7 +198,7 @@ class OneMachineOneRowTests(TestCase):
         self.assertEqual(self.catalog()[0].aliases, ("example-shell",))
 
     def test_what_is_served_from_there_is_filed_under_the_same_machine(self):
-        """The board and the service page used to name different machines."""
+        """The board and the service page name the same machine."""
 
         from .machines import machine
 
@@ -315,8 +312,8 @@ class ProxyPageTests(TestCase):
 class EvidenceTests(TestCase):
     """The index resolves what it was handed, and never goes looking.
 
-    Which is what lets the connection panel -- rendered on every page, having
-    already read the declarations -- use the same resolver as the machine board
+    Which is what lets the connection panel (rendered on every page, having
+    already read the declarations) use the same resolver as the machine board
     without paying the board's queries.
     """
 

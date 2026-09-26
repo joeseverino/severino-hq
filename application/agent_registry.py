@@ -16,6 +16,7 @@ from core.audit import record_event
 from core.models import AgentIdentity, AuditLog
 
 from .security import Principal
+from .ui import counted
 
 logger = logging.getLogger("severino.agents")
 
@@ -60,7 +61,7 @@ def _observe(principal: Principal) -> None:
                 type_label=AUDIT_LABEL,
                 message=(
                     f"First seen: {principal.actor}, over {principal.interface}, "
-                    f"granted {len(granted)} permission{'s' if len(granted) != 1 else ''}"
+                    f"granted {counted(len(granted), 'permission')}"
                 ),
                 metadata={"actor": principal.actor, "interface": principal.interface},
             )

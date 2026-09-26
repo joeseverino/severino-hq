@@ -1,36 +1,10 @@
-{% extends "base.html" %}{% load table_tags %}
-{% block title %}Projects{% endblock %}
-{% block content %}
-<div class="page-head">
-  <h1>Projects &amp; Labs</h1>
-  <a class="btn primary" href="{% url 'projects:create' %}">New project</a>
-</div>
-
-{% include "partials/_table_toolbar.html" %}
-
-<div class="table-scroll">
-<table class="data-table" data-selectable-table>
-  <thead>
-    <tr><th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% table_sort_header "Name" "name" "-name" %}{% table_sort_header "Category" "category" "-category" %}{% table_sort_header "Status" "status" "-status" %}{% table_sort_header "Tech" "technologies_used" "-technologies_used" %}{% table_sort_header "Updated" "updated_at" "-updated_at" %}<th></th></tr>
-  </thead>
-  <tbody>
-    {% for p in projects %}
-      <tr>
-        <td class="select-column"><input type="checkbox" data-row-select value="{{ p.slug }}" aria-label="Select {{ p.name }}"></td>
-        <td><a href="{{ p.get_absolute_url }}"><strong>{{ p.name }}</strong></a><br><span class="muted">{{ p.slug }}</span></td>
-        <td>{{ p.get_category_display }}</td>
-        <td><span class="pill pill-{{ p.status }}">{{ p.get_status_display }}</span></td>
-        <td class="muted">{{ p.technologies_used|truncatechars:60 }}</td>
-        <td class="muted">{{ p.updated_at }}</td>
-        <td class="row-actions">
-          <a href="{% url 'projects:edit' p.slug %}">Edit</a>
-        </td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="7" class="muted">No projects yet. <a href="{% url 'projects:create' %}">Create one</a>.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% include "partials/_pagination.html" %}
+{% extends "list_page.html" %}
+{% block row %}
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.name }}</strong></a><br><span class="muted">{{ row.slug }}</span></td>
+  <td>{{ row.get_category_display }}</td>
+  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
+  <td class="muted">{{ row.technologies_used|truncatechars:60 }}</td>
+  <td class="muted">{{ row.updated_at }}</td>
+  <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">Edit</a></td>
 {% endblock %}
+{% block empty %}No projects yet. <a href="{% url 'projects:create' %}">New project</a>{% endblock %}

@@ -1,8 +1,8 @@
 """The access boundary, asserted rather than assumed.
 
-Every test here fails closed. The properties they pin -- every route
+Every test here fails closed. The properties they pin: every route
 authenticates, sign-in is rate limited, a forwarded header is believed only
-from a declared proxy, an upload cannot choose its response type -- are ones
+from a declared proxy, an upload cannot choose its response type, are ones
 whose loss is invisible in review of the change that causes it.
 """
 
@@ -32,12 +32,12 @@ class ClientAddressTests(SimpleTestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=["127.0.0.0/8", "::1/128"])
     def test_the_shipped_default_does_not_believe_the_lan(self):
-        """The regression guard for a whole-range default.
+        """The default trusts only loopback, never a whole range.
 
         HQ binds the host network namespace, so a LAN or tailnet peer can reach
         the port without passing the proxy. Trusting the range let any of them
         name the address written into the audit log as the source of a failed
-        sign-in -- the same rows the throttle reads back.
+        sign-in: the same rows the throttle reads back.
         """
 
         request = _FakeRequest("10.9.9.9", forwarded="203.0.113.9")
@@ -119,11 +119,11 @@ class TrustedNetworkTests(TestCase):
             self.assertNotIn(leak, body)
 
     def test_the_private_lan_is_not_the_boundary(self):
-        """The regression this default exists to prevent.
+        """The private LAN is not a trust boundary.
 
         A home LAN holds a television, a printer, and whatever a guest joined.
         Trusting those ranges reads like a small widening of "reachable from
-        the VPN" and is actually the whole rule undone -- so it is asserted
+        the VPN" and is actually the whole rule undone, so it is asserted
         here rather than left to whoever next edits the list.
         """
 
@@ -370,7 +370,7 @@ class RouteExposureTests(SimpleTestCase):
                 "/api/",  # bearer-token authenticated, tested above
                 # A browser reporting a refused policy sends no credentials,
                 # so requiring a session here would silence the reports that
-                # matter most -- the ones from the sign-in page. It stores
+                # matter most: the ones from the sign-in page. It stores
                 # nothing it was not sent and answers 204 either way.
                 "/csp-report/",
             },
@@ -480,9 +480,9 @@ class ReceiptUploadHardeningTests(TestCase):
 
 
 class StaticCachingTests(SimpleTestCase):
-    """Far-future caching is a production property, not a development one."""
+    """Far-future caching is a production property, not a live-serving one."""
 
-    def _cache_control(self, *, debug, versioned):
+    def _cache_control(self, *, live, versioned):
         import asyncio
         from unittest.mock import patch
 
@@ -497,7 +497,7 @@ class StaticCachingTests(SimpleTestCase):
         files = CachedStaticFiles(directory=".", check_dir=False)
         scope = {"query_string": b"v=abc" if versioned else b""}
         with (
-            override_settings(DEBUG=debug),
+            override_settings(STATIC_LIVE=live),
             patch.object(
                 CachedStaticFiles.__bases__[0],
                 "get_response",
@@ -509,11 +509,11 @@ class StaticCachingTests(SimpleTestCase):
 
     def test_production_pins_a_versioned_asset_forever(self):
         self.assertEqual(
-            self._cache_control(debug=False, versioned=True),
+            self._cache_control(live=False, versioned=True),
             "public, max-age=31536000, immutable",
         )
 
-    def test_development_never_pins_anything(self):
+    def test_serving_live_never_pins_anything(self):
         """The trap this closes cost an hour to find once.
 
         The version token hashes the source tree; this mount serves the
@@ -527,8 +527,25 @@ class StaticCachingTests(SimpleTestCase):
         for versioned in (True, False):
             with self.subTest(versioned=versioned):
                 self.assertEqual(
-                    self._cache_control(debug=True, versioned=versioned), "no-cache"
+                    self._cache_control(live=True, versioned=versioned), "no-cache"
                 )
+
+    def test_serving_live_reads_the_source_tree_not_the_collected_one(self):
+        import tempfile
+        from pathlib import Path
+
+        from core.static import CachedStaticFiles
+
+        with tempfile.TemporaryDirectory() as collected, tempfile.TemporaryDirectory() as source:
+            (Path(collected) / "app.css").write_text("collected")
+            (Path(source) / "app.css").write_text("edited")
+            files = CachedStaticFiles(directory=collected)
+            for live, expected in ((True, source), (False, collected)):
+                with self.subTest(live=live), override_settings(
+                    STATIC_LIVE=live, STATICFILES_DIRS=[source]
+                ):
+                    path, _ = files.lookup_path("app.css")
+                    self.assertEqual(Path(path).parent.resolve(), Path(expected).resolve())
 
 
 def _returns(value):
@@ -587,7 +604,7 @@ class ResponseHeaderTests(TestCase):
         SEVERINO_TRUSTED_PROXIES=[PROXY],
         # Who may reach HQ is a different question from whose word HQ takes
         # about the scheme, and this test is about the second. With the gate
-        # on, neither request would get far enough to have an answer -- the
+        # on, neither request would get far enough to have an answer: the
         # gate has its own tests above, and this one would silently become an
         # assertion about them instead.
         SEVERINO_ENFORCE_TRUSTED_NETWORK=False,
@@ -664,7 +681,7 @@ class BrowserBoundaryTests(TestCase):
 
         The directive costs nothing while no script assigns a string to a DOM
         sink, which is exactly why it would be dropped without anyone noticing
-        -- and the day it is dropped is the day a sink can be introduced with
+        and the day it is dropped is the day a sink can be introduced with
         no browser objecting.
         """
 
@@ -681,9 +698,7 @@ class BrowserBoundaryTests(TestCase):
     def test_only_the_shared_helper_turns_a_string_into_markup(self):
         """The directive is worth exactly as much as this stays true.
 
-        Five call sites used to build a `DOMParser` each. Any one of them
-        added back is a second sink, and the policy would still say the same
-        reassuring thing in the header.
+        Any second `DOMParser` is a second sink the policy header cannot see.
         """
 
         from pathlib import Path
@@ -727,7 +742,7 @@ class BrowserBoundaryTests(TestCase):
 
         Admin's bundled jQuery writes HTML through `innerHTML`, so it cannot
         run under Trusted Types. The relaxation is allowed to remove that and
-        nothing else -- a second directive quietly joining it would make the
+        nothing else: a second directive quietly joining it would make the
         admin a hole in a policy the rest of the application still advertises.
         """
 
@@ -894,8 +909,7 @@ class CanonicalEntryTests(TestCase):
         """It probes the raw port from inside its own network namespace.
 
         The one caller for whom plain HTTP is the correct request. Redirecting
-        it would make the container permanently unhealthy, which is how this
-        redirect was left off in the first place.
+        it would make the container permanently unhealthy.
         """
 
         response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")

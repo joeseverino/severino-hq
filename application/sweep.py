@@ -3,7 +3,7 @@
 Two steps that must happen together and belong to different owners.
 `inventory` knows how to store a sweep; `zones` knows which of the records in
 it fall inside a domain HQ has been made responsible for. Neither is the right
-place to know about the other -- when `inventory` reached up into `zones` for
+place to know about the other, when `inventory` reached up into `zones` for
 the adoption step the two imported each other, which is the kind of knot that
 tightens every time something is added to either side.
 
@@ -37,28 +37,24 @@ def record_sweep(
     result = record_inventory(
         payload, principal=principal, controller_id=controller_id
     )
-    # Deliberately after the sweep is stored: adoption reads each spec back out
-    # of the records just recorded, so every declaration it writes starts equal
-    # to what the controller actually found and the first reconcile is a no-op.
+    # After the sweep is stored: adoption reads each spec back out of the
+    # records just recorded, so every declaration it writes starts equal to
+    # what the controller found and the first reconcile is a no-op.
     #
-    # Everything a credential reached, whatever kind it is. If HQ can see it,
-    # HQ manages it: the decision was made when the credential was added, and
-    # asking again per record is a question whose answer is always yes.
-    # Listing the kinds here meant a provider added later stayed unadopted
-    # until somebody remembered to add it to this line.
+    # Only what a connection that manages reached. A connection that only
+    # observes adopts nothing, and a record an operator stopped managing stays
+    # out. See ``application.adoption``.
     adopted: list[str] = []
     for kind in _adoptable_kinds():
         adopted += adopt_discovered(kind, principal=principal)["adopted"]
     # Records last, and separately, because they are the one kind whose
     # adoption is scoped by something other than the credential: a record
     # belongs to a domain, so `zones` takes the ones inside domains HQ holds.
-    # Run after the loop above so a zone adopted moments ago already counts --
+    # Run after the loop above so a zone adopted moments ago already counts,
     # otherwise its records would wait a whole sweep for no reason.
     adopted += adopt_discovered_records(principal=principal)["adopted"]
-    # And everything already declared that the sweep just found unchanged. A
-    # sweep is HQ going and looking; until now only a reconcile wrote that
-    # down, so a declaration nothing had touched reported "never reported"
-    # forever.
+    # And everything already declared that the sweep just found unchanged, so
+    # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)
     return {**result, "adopted": adopted, "confirmed": confirmed}
 
@@ -75,8 +71,5 @@ def _adoptable_kinds() -> tuple[str, ...]:
     from .zones import RECORD_KIND
 
     # Everything except records, which `zones` adopts by domain rather than one
-    # at a time. Domains themselves are in: a token that can edit a zone is the
-    # decision that HQ manages it, and holding that back left records visibly
-    # reachable and pointedly untouched, waiting for somebody to click the
-    # domain they already owned.
+    # at a time. Domains are in, through a connection that manages.
     return tuple(sorted({item.kind for item in unmanaged()} - {RECORD_KIND}))

@@ -2,7 +2,7 @@
 
 Single sign-on through Pocket ID is how a person signs in. The password form
 stays as the break-glass path for the day the identity provider is the thing
-that is broken -- which means it is also the one credential in the fleet that
+that is broken, which means it is also the one credential in the fleet that
 can be attacked by simply trying, over and over, as fast as the network allows.
 Everything else in HQ verifies a signature; this verifies a guess.
 
@@ -10,7 +10,7 @@ Note what is *not* introduced here: a second place that knows about failed
 logins. `user_login_failed` is already recorded to the audit log, because an
 operator has always needed to see attempts against their own account. A
 counter table beside it would hold the same fact twice and let the two disagree
--- the throttle silent because its rows were pruned, the audit log showing an
+the throttle silent because its rows were pruned, the audit log showing an
 attack the whole time. Deriving the lockout from the audit trail means the
 evidence and the enforcement cannot come apart: whatever the log shows is
 exactly what the gate acted on.

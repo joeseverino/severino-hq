@@ -3,7 +3,7 @@
 #
 # The deploy checkout at /opt/apps/severino-hq is writable by an unprivileged
 # account. Three units run out of it as root, so anything able to write that
-# tree chooses what root runs on the next timer tick -- privilege escalation by
+# tree chooses what root runs on the next timer tick: privilege escalation by
 # file write, with no exploit needed.
 #
 # The fix is two halves and this installs the second. `severino-hq-sync-scripts`
@@ -14,21 +14,14 @@
 #
 # Idempotent: it installs the same files every time and reloads once. Those
 # files are the `10-root-owned-exec.conf` drop-ins shipped in deploy/systemd,
-# which install-controller.sh also installs on every deploy -- this is the first
-# bring-up, before any deploy has run. It used to generate its own copies, and
-# two sources for one file is one more way for the host and the repository to
-# disagree about what it says.
+# which install-controller.sh also installs on every deploy: this is the first
+# bring-up, before any deploy has run.
 #
 #   scripts/fix-root-ownership.sh            # install
 #   scripts/fix-root-ownership.sh --remove   # undo, until the next deploy
 #
 # The next deploy reinstalls what the repository ships, so a lasting undo is
 # deleting the drop-in from deploy/systemd.
-#
-# This script used to exist only as a comment. Each drop-in said it had been
-# installed by a file of this name, and no such file was in the repository, in
-# the image, or anywhere on the host -- so the one instruction for undoing or
-# reproducing the change named something nobody could find.
 
 set -eu
 
@@ -42,7 +35,7 @@ script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 
 [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
 [ -d "${LIB}" ] || {
-    echo "${LIB} does not exist -- run severino-hq-sync-scripts first" >&2
+    echo "${LIB} does not exist: run severino-hq-sync-scripts first" >&2
     exit 1
 }
 
@@ -92,7 +85,7 @@ done
 systemctl daemon-reload
 
 # Say what systemd resolved, not what was written. A drop-in that does not
-# apply -- wrong directory, wrong unit name, a typo in the section header --
+# apply: wrong directory, wrong unit name, a typo in the section header,
 # leaves the file on disk looking correct while the unit still runs the old
 # command, which is the one failure this cannot afford to report as success.
 for f in ${dropins}; do

@@ -99,7 +99,7 @@ def listing(model, serialize, *, search: tuple[str, ...], status=None, query=Non
     """One list read: an optional status, an optional text match, one page.
 
     Written out per domain this was four functions differing only in the model,
-    the serializer and which fields a search looks at -- and the graph flagged
+    the serializer and which fields a search looks at, and the graph flagged
     every pair. The fields differ because a person searches an asset by vendor
     and a project by the technologies it uses; nothing else about the read does.
     """
@@ -124,7 +124,7 @@ def addressable(model, serialize, slug: str, *, label: str, missing) -> dict[str
 
     ``missing`` is the exception class to raise. Passed in rather than imported
     because each domain declares its own ``NotFoundError`` and its callers
-    catch that one by name -- and because this module stays free of domain
+    catch that one by name, and because this module stays free of domain
     imports on purpose, per the note at the top.
     """
 

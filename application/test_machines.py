@@ -1,8 +1,8 @@
 """Machines, and where each one's facts come from.
 
-Observation first: a machine is here because something reported it -- a
-credential that reaches it, a container running on it, a service served from it
--- so adding a VPS is registering it somewhere rather than entering it here.
+Observation first: a machine is here because something reported it (a
+credential that reaches it, a container running on it, a service served from it)
+so adding a VPS is registering it somewhere rather than entering it here.
 
 A declaration is the other half, for what nothing can sweep: a printer, an
 offline CA, a phone. It carries what the machine is for and the addresses that
@@ -199,9 +199,7 @@ class MachinePageTests(TestCase):
 class DeclaredMachineTests(TestCase):
     """A machine HQ was told about shows what it was told.
 
-    The page printed a role that came from a declaration, said nothing declared
-    the machine, and left the address blank while the same declaration carried
-    two. Three statements about one record, disagreeing.
+    Its role, its declaration and its addresses all come from that one record.
     """
 
     def setUp(self):
@@ -232,19 +230,16 @@ class DeclaredMachineTests(TestCase):
         self.assertEqual(self.machine().address, "10.0.0.5")
 
     def test_it_projects_telemetry_from_the_same_declaration(self):
-        from control_plane.models import ManagedResource
         from django.utils import timezone
 
+        from application import readings
+
         observed = timezone.now()
-        declared = ManagedResource.objects.get(key="a-laptop")
-        declared.status = {
-            "telemetry": {
-                "status": "good",
-                "metrics": [{"label": "CPU", "value": "8%"}],
-            }
-        }
-        declared.last_observed_at = observed
-        declared.save(update_fields=("status", "last_observed_at", "updated_at"))
+        readings.record(
+            readings.machine_telemetry("a-laptop"),
+            {"status": "good", "metrics": [{"label": "CPU", "value": "8%"}]},
+            observed_at=observed,
+        )
 
         found = self.machine()
 
@@ -378,7 +373,7 @@ class TailnetPresenceTests(TestCase):
     def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
         """The silent failure. `--advertise-routes` succeeds, the machine
         reports the route for as long as it runs, and the coordination server
-        hands it to nobody -- so a subnet route can be configured, documented,
+        hands it to nobody, so a subnet route can be configured, documented,
         believed, and dead, with every side of it reporting success."""
 
         from .machines import tailnet_presence
@@ -526,7 +521,7 @@ class OneMachineManyNamesTests(TestCase):
     """A tailnet calls a machine whatever its owner typed into it years ago.
 
     That is rarely the name HQ uses, so without a join the board grows a second
-    row for a machine it already had -- with the presence on one row and every
+    row for a machine it already had: with the presence on one row and every
     other fact on the other.
     """
 
@@ -585,7 +580,7 @@ class WhoeverSweptTests(TestCase):
     Portainer calls its own environment "local", and a controller filling that
     in has nothing to offer but its own hostname. Run the sweep from a laptop
     and every container on the Docker host is reported as running on the
-    laptop -- a machine that has never run any of them.
+    laptop: a machine that has never run any of them.
     """
 
     def setUp(self):
@@ -669,7 +664,7 @@ class WhoeverSweptTests(TestCase):
             reverse("control_plane:machine", kwargs={"name": "a-laptop"})
         )
 
-        self.assertContains(response, "Nothing HQ holds opens this.")
+        self.assertContains(response, "No credential reaches this machine.")
         self.assertNotContains(response, "reported by something else")
 
 
@@ -721,7 +716,7 @@ class ReadingThisOnTheMachineTests(TestCase):
 class ObservedAddressAnnotationTests(TestCase):
     """A field that records two unrelated things should say which is which.
 
-    Half a machine's addresses are the only record there is -- nothing in the
+    Half a machine's addresses are the only record there is: nothing in the
     estate reports the printer on the LAN. The rest repeat what the tailnet
     says on every sweep, and are also the key that ties HQ's name for a machine
     to the tailnet's, which calls the same laptop something else. Locking the
@@ -788,7 +783,7 @@ class ObservedAddressAnnotationTests(TestCase):
     def test_an_observed_address_is_not_offered_for_removal(self):
         """HQ holds it whether or not this field does.
 
-        Offering to remove it was offering to delete a fact -- and until the
+        Offering to remove it was offering to delete a fact, and until the
         tailnet's addresses reached the index, removing one silently broke the
         resolution it looked redundant to.
         """
@@ -879,3 +874,172 @@ class IdentifierIsFixedTests(TestCase):
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.key, "a-box")
         self.assertEqual(self.resource.spec["role"], "A renamed purpose")
+
+
+class OneStateTests(TestCase):
+    """An offline device reads as offline; the connection is named elsewhere."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="state-operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+        a_connection("example-tailnet", "tailscale")
+
+    def device(self, *, online):
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [
+                    {
+                        "name": "example-host",
+                        "online": online,
+                        "addresses": ["100.64.0.7"],
+                        "connection_ref": "example-tailnet",
+                    }
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def test_an_offline_device_reads_as_offline_only(self):
+        self.device(online=False)
+
+        found = machine("example-host")
+        listing = self.client.get(reverse("control_plane:machines"))
+        page = self.client.get(
+            reverse("control_plane:machine", kwargs={"name": "example-host"})
+        )
+
+        self.assertEqual(found.state, ("offline", "unreachable"))
+        for response in (listing, page):
+            with self.subTest(page=response.request["PATH_INFO"]):
+                self.assertContains(response, ">offline<")
+                self.assertNotContains(response, ">reachable<")
+                self.assertNotContains(response, ">down<")
+                self.assertContains(response, "<code>example-tailnet</code>")
+
+    def test_an_online_device_reads_as_online(self):
+        self.device(online=True)
+
+        self.assertEqual(machine("example-host").state, ("online", "reachable"))
+
+    def test_without_presence_the_connection_answer_decides(self):
+        a_connection("example-ssh", "ssh", endpoint="192.0.2.8:22", reachable=False)
+
+        found = machine("example-ssh")
+
+        self.assertEqual(found.state, ("not answering", "unreachable"))
+        self.assertEqual(found.unanswered, ("example-ssh",))
+
+    def test_a_connection_that_did_not_answer_is_marked_where_it_is_named(self):
+        a_connection("example-ssh", "ssh", endpoint="192.0.2.8:22", reachable=False)
+
+        listing = self.client.get(reverse("control_plane:machines"))
+
+        self.assertContains(listing, "<code>example-ssh</code></a> <span class=\"muted\">not answering</span>")
+
+    def test_nothing_reaching_it_says_so(self):
+        containers({"name": "probe", "host": "somewhere", "state": "running"})
+
+        self.assertEqual(machine("somewhere").state, ("no credential", "unprobed"))
+
+
+class DeclareFromWhatHQKnowsTests(TestCase):
+    """"Declare machine" opens a form holding the name and addresses HQ has."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="declare-operator", password="not-a-real-password"
+        )
+        self.client.force_login(self.user)
+        ProviderInventory.objects.update_or_create(
+            kind="tailscale.device",
+            defaults={
+                "records": [
+                    {
+                        "name": "example-host",
+                        "online": True,
+                        "addresses": ["100.64.0.7"],
+                    }
+                ],
+                "observed_at": timezone.now(),
+            },
+        )
+
+    def page(self):
+        return self.client.get(
+            reverse("control_plane:machine", kwargs={"name": "example-host"})
+        )
+
+    def action(self, response, label):
+        from urllib.parse import parse_qs, urlsplit
+
+        (found,) = [
+            action for action in response.context["page"].actions if action.label == label
+        ]
+        return parse_qs(urlsplit(found.url).query)
+
+    def test_the_action_is_seeded(self):
+        query = self.action(self.page(), "Declare machine")
+
+        self.assertEqual(query["kind"], ["machine"])
+        self.assertEqual(query["name"], ["example-host"])
+        self.assertEqual(query["addresses"], ["100.64.0.7"])
+        self.assertEqual(
+            query["next"],
+            [reverse("control_plane:machine", kwargs={"name": "example-host"})],
+        )
+
+    def test_the_form_opens_holding_the_seed(self):
+        from urllib.parse import urlencode
+
+        response = self.client.get(
+            reverse("control_plane:create")
+            + "?"
+            + urlencode(
+                {"kind": "machine", "name": "example-host", "addresses": ["100.64.0.7", "192.0.2.7"]},
+                doseq=True,
+            )
+        )
+
+        form = response.context["spec"]
+        self.assertEqual(form.initial["name"], "example-host")
+        self.assertEqual(form.initial["addresses"], ["100.64.0.7", "192.0.2.7"])
+
+    def test_a_device_declaration_offers_machine_details_instead(self):
+        ManagedResource.objects.create(
+            key="example-host-tailnet",
+            kind="tailscale.device",
+            spec={"name": "example-host"},
+        )
+
+        response = self.page()
+        labels = [action.label for action in response.context["page"].actions]
+
+        self.assertIn("Add machine details", labels)
+        self.assertNotIn("Declare machine", labels)
+        self.assertEqual(self.action(response, "Add machine details")["name"], ["example-host"])
+
+    def test_saving_it_returns_to_the_machine_it_now_declares(self):
+        from urllib.parse import urlencode
+
+        query = urlencode(
+            {
+                "kind": "machine",
+                "next": reverse("control_plane:machine", kwargs={"name": "example-host"}),
+            }
+        )
+        response = self.client.post(
+            reverse("control_plane:create") + "?" + query,
+            {"kind": "machine", "name": "example-host", "addresses": ["100.64.0.7"]},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("control_plane:machine", kwargs={"name": "example-host"}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(machine("example-host").declaration, "example-host")
+        labels = [action.label for action in self.page().context["page"].actions]
+        self.assertIn("Edit machine", labels)

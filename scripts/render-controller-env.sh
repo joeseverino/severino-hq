@@ -3,8 +3,8 @@
 # variables. Secret values are written only to stdout; callers must redirect to
 # a root-owned 0600 temporary file.
 #
-# The vault is the inventory. An item declares what it is -- `connection_ref`,
-# `projection`, `env_prefix` -- and this reads them, so adding a provider
+# The vault is the inventory. An item declares what it is: `connection_ref`,
+# `projection`, `env_prefix`, and this reads them, so adding a provider
 # connection is creating an item and touches no file here. The registry holds
 # only the projections: the shapes a connection can take, which are generic.
 #

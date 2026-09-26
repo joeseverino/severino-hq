@@ -3,10 +3,10 @@
 The MCP's schema.py is canonical; HQ commits its JSON emission as schema.json
 and validates the manifest against it. These tests make divergence fail loudly:
 
-- ``test_model_choices_cover_canonical_schema`` — the DocumentationRecord choice
+- ``test_model_choices_cover_canonical_schema``: the DocumentationRecord choice
   members (HQ's symbolic API + admin labels) must cover exactly the canonical
   value sets. Runs everywhere; catches a model that lags the schema.
-- ``test_committed_schema_matches_mcp`` — the committed schema.json must equal
+- ``test_committed_schema_matches_mcp``: the committed schema.json must equal
   the installed MCP's current emission. Skipped where the MCP CLI isn't present
   (e.g. HQ's own container/CI); enforced on the dev machine and tools CI, where
   schema changes are actually authored.
@@ -59,7 +59,7 @@ class ModelChoicesMatchSchemaTests(SimpleTestCase):
 
     def test_status_field_covers_both_doc_and_task_statuses(self):
         # The status field holds either a standard doc status or a task lifecycle
-        # status, so its choices must cover the union — otherwise admin/ModelForm
+        # status, so its choices must cover the union, otherwise admin/ModelForm
         # rejects a task's "open"/"done" that the importer legitimately writes.
         self.assertEqual(
             _values(DocumentationRecord.TaskStatus.choices),
@@ -87,7 +87,7 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
         )
         if proc.returncode != 0:
             self.skipTest(
-                "installed severino-vault-mcp predates `schema` — run "
+                "installed severino-vault-mcp predates `schema`: run "
                 "`site reinstall-mcp`"
             )
         emitted = json.loads(proc.stdout)

@@ -1,0 +1,18 @@
+{% comment %}
+What one connection's credential can see, folded into its row. Readings are
+per provider, so two connections of one provider show the same list.
+{% endcomment %}
+<details class="connection-sight">
+  <summary>Can see <small class="muted">{% for count, label in sight.tally %}{{ count }} {{ label|lower }}{% if not forloop.last %} · {% endif %}{% endfor %}</small></summary>
+  <ul>
+    {% for item in sight.sights %}
+      <li class="connection-sight-{{ item.state }}">
+        <strong>{{ item.label }}</strong>
+        <span class="connection-sight-state">{{ item.state_label }}</span>
+        {% if item.state == "readable" %}<span class="muted">{{ item.records|counted:"record,records" }} · {{ item.observed_at|ago }}</span>
+        {% elif item.remedy %}<span>{{ item.remedy }}.{% if item.error %} <span class="muted">{{ item.error }}</span>{% endif %}</span>
+        {% elif item.error %}<span class="muted">{{ item.error }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</details>

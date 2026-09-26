@@ -4,7 +4,7 @@ Exports: CSV per entity, plus a year-summary in JSON and Markdown.
 The Markdown export is designed to be AI-readable; the JSON export uses stable
 internal IDs/slugs so a future MCP can reason about relationships.
 
-No secrets, no sensitive doc bodies, no receipt file contents — by design.
+No secrets, no sensitive doc bodies, no receipt file contents: by design.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from content.models import ContentItem
 from docs_index.models import DocumentationRecord
 from expenses.models import Expense
 from projects.models import Project
+from application.ui import MISSING
 
 
 # ---------- CSV ----------------------------------------------------------------
@@ -263,8 +264,8 @@ def year_summary(year: int) -> dict:
         "generated_at": timezone.now().isoformat(),
         "year": year,
         "disclaimer": (
-            "Estimated deductible amounts are calculated from business-use "
-            "percentages you entered. This is NOT tax advice."
+            "Estimated deductible = cost × business-use %. Estimate, not tax "
+            "advice."
         ),
         "totals": {
             "expenses_count": expenses.count(),
@@ -312,114 +313,112 @@ def year_summary_json(year: int) -> str:
     return json.dumps(year_summary(year), indent=2, sort_keys=False)
 
 
+def _section(title, rows, line, empty, intro=()) -> list[str]:
+    """One markdown section: a heading, a line per row, or the empty note."""
+
+    body = [line(row) for row in rows] or [empty]
+    return [f"## {title}", "", *intro, *body, ""]
+
+
+def _totals_section(totals) -> list[str]:
+    return [
+        "## Totals",
+        "",
+        f"- Expenses: {totals['expenses_count']} records · "
+        f"${totals['expenses_total']} total, "
+        f"${totals['expenses_deductible_total']} estimated deductible",
+        f"- Assets purchased this year: {totals['assets_count']} · "
+        f"${totals['assets_total']} total, "
+        f"${totals['assets_deductible_total']} estimated deductible",
+        "",
+    ]
+
+
+def _category_line(row) -> str:
+    return f"- **{row['category']}** ${row['total']} (${row['deductible']} deductible)"
+
+
+def _expense_line(row) -> str:
+    return (
+        f"- {row['date'] or MISSING} · {row['vendor']} · {row['item']} "
+        f"(`{row['category']}`) **${row['total_cost']}**"
+    )
+
+
+def _project_line(p) -> str:
+    techs = ", ".join(p["technologies"]) if p["technologies"] else MISSING
+    return f"- **{p['name']}** (`{p['slug']}`, {p['category']}, {p['status']}) · {techs}"
+
+
+def _content_line(c) -> str:
+    bits = [f"`{c['type']}`", c["status"]]
+    if c["published_at"]:
+        bits.append(f"published {c['published_at']}")
+    if c["related_projects"]:
+        bits.append("projects=" + ",".join(c["related_projects"]))
+    if c["related_documentation"]:
+        bits.append("docs=" + ",".join(c["related_documentation"]))
+    return f"- **{c['title']}** (`{c['slug']}`) · {' · '.join(bits)}"
+
+
+def _documentation_line(d) -> str:
+    bits = [
+        f"`{d['type']}`", d["environment"], d["status"],
+        f"sensitivity={d['sensitivity']}",
+    ]
+    if d["obsidian_path"]:
+        bits.append(f"obsidian=`{d['obsidian_path']}`")
+    if d["github_path"]:
+        bits.append(f"github=`{d['github_path']}`")
+    if d["last_reviewed"]:
+        bits.append(f"reviewed {d['last_reviewed']}")
+    return f"- **{d['doc_id']}** · {d['title']} · {' · '.join(bits)}"
+
+
+def _asset_line(a) -> str:
+    return (
+        f"- **{a['item_name']}** (`{a['slug']}`, {a['category']}, "
+        f"{a['status']}) · ${a['total_cost']} on {a['purchase_date'] or MISSING} "
+        f"({a['business_use_percentage']}% business, "
+        f"${a['estimated_deductible_amount']} deductible)"
+    )
+
+
+RECORD_HOMES = [
+    "## Where records live",
+    "",
+    "- Public website pages/writeups → ContentItem.published_url + related documentation",
+    "- Runbooks & infra detail → DocumentationRecord.obsidian_path (Obsidian vault)",
+    "- Source repos → Project.repository_url / DocumentationRecord.github_path",
+    "- Receipts → Severino HQ only (sign-in required, never exported)",
+    "",
+]
+
+
 def year_summary_markdown(year: int) -> str:
     data = year_summary(year)
-    lines: list[str] = []
-    add = lines.append
-
-    add(f"# Severino HQ year summary — {year}")
-    add("")
-    add(f"_Generated: {data['generated_at']}_")
-    add("")
-    add(f"> {data['disclaimer']}")
-    add("")
-
-    totals = data["totals"]
-    add("## Totals")
-    add("")
-    add(f"- Expenses: {totals['expenses_count']} records — "
-        f"${totals['expenses_total']} total, "
-        f"${totals['expenses_deductible_total']} estimated deductible")
-    add(f"- Assets purchased this year: {totals['assets_count']} — "
-        f"${totals['assets_total']} total, "
-        f"${totals['assets_deductible_total']} estimated deductible")
-    add("")
-
-    add("## Expenses by category")
-    add("")
-    if not data["expenses_by_category"]:
-        add("_No expenses recorded._")
-    else:
-        for row in data["expenses_by_category"]:
-            add(f"- **{row['category']}** — ${row['total']} "
-                f"(${row['deductible']} deductible)")
-    add("")
-
-    add("## Largest expenses")
-    add("")
-    if not data["largest_expenses"]:
-        add("_No expenses recorded._")
-    else:
-        for row in data["largest_expenses"]:
-            add(
-                f"- {row['date'] or '—'} · {row['vendor']} · {row['item']} "
-                f"(`{row['category']}`) — **${row['total_cost']}**"
-            )
-    add("")
-
-    add("## Projects")
-    add("")
-    for p in data["projects"]:
-        techs = ", ".join(p["technologies"]) if p["technologies"] else "—"
-        add(f"- **{p['name']}** (`{p['slug']}`, {p['category']}, {p['status']}) — {techs}")
-    if not data["projects"]:
-        add("_No projects recorded._")
-    add("")
-
-    add("## Content")
-    add("")
-    for c in data["content"]:
-        bits = [f"`{c['type']}`", c["status"]]
-        if c["published_at"]:
-            bits.append(f"published {c['published_at']}")
-        if c["related_projects"]:
-            bits.append("projects=" + ",".join(c["related_projects"]))
-        if c["related_documentation"]:
-            bits.append("docs=" + ",".join(c["related_documentation"]))
-        add(f"- **{c['title']}** (`{c['slug']}`) — {' · '.join(bits)}")
-    if not data["content"]:
-        add("_No content items recorded._")
-    add("")
-
-    add("## Documentation index")
-    add("")
-    add("_The Obsidian vault is the source of truth. These are pointers only._")
-    add("")
-    for d in data["documentation"]:
-        bits = [
-            f"`{d['type']}`", d["environment"], d["status"],
-            f"sensitivity={d['sensitivity']}",
-        ]
-        if d["obsidian_path"]:
-            bits.append(f"obsidian=`{d['obsidian_path']}`")
-        if d["github_path"]:
-            bits.append(f"github=`{d['github_path']}`")
-        if d["last_reviewed"]:
-            bits.append(f"reviewed {d['last_reviewed']}")
-        add(f"- **{d['doc_id']}** — {d['title']} · {' · '.join(bits)}")
-    if not data["documentation"]:
-        add("_No documentation records._")
-    add("")
-
-    add("## Assets purchased this year")
-    add("")
-    for a in data["assets"]:
-        add(
-            f"- **{a['item_name']}** (`{a['slug']}`, {a['category']}, "
-            f"{a['status']}) — ${a['total_cost']} on {a['purchase_date'] or '—'} "
-            f"({a['business_use_percentage']}% business — "
-            f"${a['estimated_deductible_amount']} deductible)"
-        )
-    if not data["assets"]:
-        add("_No assets purchased this year._")
-    add("")
-
-    add("## Source of truth — quick map for future MCP")
-    add("")
-    add("- Public website pages/writeups → ContentItem.published_url + related documentation")
-    add("- Runbooks & infra detail → DocumentationRecord.obsidian_path (Obsidian vault)")
-    add("- Source repos → Project.repository_url / DocumentationRecord.github_path")
-    add("- Receipts → Severino HQ only (auth-protected, never exported)")
-    add("")
-
+    no_expenses = "_No expenses recorded._"
+    lines = [
+        f"# Severino HQ year summary {year}",
+        "",
+        f"_Generated: {data['generated_at']}_",
+        "",
+        f"> {data['disclaimer']}",
+        "",
+        *_totals_section(data["totals"]),
+        *_section("Expenses by category", data["expenses_by_category"],
+                  _category_line, no_expenses),
+        *_section("Largest expenses", data["largest_expenses"],
+                  _expense_line, no_expenses),
+        *_section("Projects", data["projects"], _project_line,
+                  "_No projects recorded._"),
+        *_section("Content", data["content"], _content_line,
+                  "_No content items recorded._"),
+        *_section("Documentation index", data["documentation"], _documentation_line,
+                  "_No documentation records._",
+                  intro=("_Pointers only. Doc bodies stay in the vault._", "")),
+        *_section("Assets purchased this year", data["assets"], _asset_line,
+                  "_No assets purchased this year._"),
+        *RECORD_HOMES,
+    ]
     return "\n".join(lines)

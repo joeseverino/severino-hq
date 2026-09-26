@@ -119,8 +119,8 @@ def _with_material(resource: dict[str, Any]) -> dict[str, Any]:
 def _post(action: str, controller_id: str, payload: Any) -> None:
     """Tell HQ one thing this controller found, before doing anything about it.
 
-    Best effort on purpose. These are conveniences -- they power the pages that
-    list what exists and what HQ can reach -- and neither must ever be the reason
+    Best effort on purpose. These are conveniences (they power the pages that
+    list what exists and what HQ can reach) and neither must ever be the reason
     an operation the operator actually asked for goes unclaimed. A provider that
     is down already reports itself unreachable inside its own sweep; this catch
     is for the bridge, so a failure to record cannot take out the pass.
@@ -136,11 +136,11 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
         )
     except (BridgeError, ProviderError, OSError, ValueError) as exc:
         # Swallowed, but not silently: stdout is the run's JSON result and is
-        # parsed, so this is logged -- the controller's logger, whose plain
+        # parsed, so this is logged: the controller's logger, whose plain
         # message lands on stderr and in the journal. A sweep that
         # quietly stopped reporting would leave the pages it feeds looking
         # settled while going stale, which is the failure worth noticing.
-        # The type, not the message -- a provider error can name a host or a
+        # The type, not the message: a provider error can name a host or a
         # path, and this line is the one that gets copied into a paste.
         logger.warning(
             "%s report skipped: %s",
@@ -186,7 +186,7 @@ def _report_findings(controller_id: str) -> None:
 
     Cadence is HQ's to decide, because HQ is where the observations are: it
     records when each provider was last swept and how stale that may be. This
-    asks and executes, the same split as claim, schedule and report -- so the
+    asks and executes, the same split as claim, schedule and report, so the
     interval is a setting rather than a timer, and the timer is free to fire as
     often as applying work needs.
 
@@ -232,7 +232,7 @@ def _report_findings(controller_id: str) -> None:
         except (ProviderError, OSError, ValueError) as exc:
             # Its own guard, like connections above. Analytics is the one
             # reading here that leaves the network HQ controls, so it is also
-            # the one most able to be slow or refused -- and a page-view count
+            # the one most able to be slow or refused, and a page-view count
             # is never a reason for a sweep of the estate to end early.
             logger.warning(
                 "analytics sweep skipped: %s",
@@ -386,7 +386,7 @@ def main() -> int:
     finally:
         # At the end of the pass, whichever way it ended. A pass that failed is
         # the one whose unfinished work is most worth reporting, and most of
-        # that work happens after the sweep -- so this cannot ride along with
+        # that work happens after the sweep, so this cannot ride along with
         # it. Plan mode reports nothing: it writes nothing anywhere else
         # either, and a preflight is not an observation of the estate.
         if options.apply:

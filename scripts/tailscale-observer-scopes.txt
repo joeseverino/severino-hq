@@ -1,0 +1,10 @@
+# Read scopes for HQ's tailscale observer client, one per line. The requires of
+# every Tailscale reading plus control_plane.credential_reads; a test keeps them
+# equal.
+devices:core:read
+devices:routes:read
+dns:read
+feature_settings:read
+policy_file:read
+services:read
+users:read

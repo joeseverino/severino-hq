@@ -102,7 +102,7 @@ class Principal:
         The question `require` answers by raising. Both exist because callers
         divide cleanly in two: a handler enforcing authority wants the
         exception, and a surface deciding whether to draw a control wants a
-        boolean -- and a surface that has to catch an exception to render a
+        boolean, and a surface that has to catch an exception to render a
         menu ends up catching it in more places than it should.
         """
 
@@ -163,7 +163,7 @@ def mcp_principal() -> Principal:
     # is the one write an operator wants routinely and in isolation. Bundled
     # with the rest it could only be granted by also handing the service
     # account write access to expenses, receipts, projects, assets and content
-    # -- so in practice it stayed off and the index silently fell behind.
+    # so in practice it stayed off and the index silently fell behind.
     if getattr(settings, "SEVERINO_MCP_ENABLE_DOC_SYNC", False):
         capabilities.add(Capability.SYNC_DOCUMENTATION)
     if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False):
@@ -204,7 +204,7 @@ def mcp_principal() -> Principal:
     if getattr(settings, "SEVERINO_MCP_ENABLE_CERT_RENEWAL", False):
         capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
     # A read, but an outbound one. It leaves the tailnet, spends somebody
-    # else's rate limit, and tells a third party what HQ was asked about --
+    # else's rate limit, and tells a third party what HQ was asked about,
     # none of which a baseline read does, and none of which an unattended
     # caller should start doing because a capability was folded into READ.
     if getattr(settings, "SEVERINO_MCP_ENABLE_LOOKUP", False):
@@ -218,7 +218,7 @@ def safe_next(request, *, fallback: str = "", scope: str = "") -> str:
     Shared rather than repeated: the same "go back where I came from" appears
     on forms, on toggles and on anything else that returns somewhere, and each
     one written separately is one more chance to redirect wherever a query
-    string says. Checked in one place, every caller gets the check -- adapters
+    string says. Checked in one place, every caller gets the check: adapters
     and plugins alike, which is why it sits beside the principals rather than
     in whichever app happened to need it first.
 

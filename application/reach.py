@@ -8,7 +8,7 @@ something anybody has to record.
 
 It matters because the answer is invisible from every page that shows it today.
 A rewrite pointing at a LAN address and one pointing at a tailnet address look
-identical -- same provider, same health, same green tick -- and differ only in
+identical (same provider, same health, same green tick) and differ only in
 who is able to reach the thing on the other side.
 """
 
@@ -30,6 +30,54 @@ PRIVATE = (
     ip_network("::1/128"),
     ip_network("fc00::/7"),
 )
+# Reserved for documentation. Nothing answers at one: a name pointed there is
+# parked.
+DOCUMENTATION = (
+    ip_network("192.0.2.0/24"),
+    ip_network("198.51.100.0/24"),
+    ip_network("203.0.113.0/24"),
+    ip_network("2001:db8::/32"),
+)
+# The same ranges, fixed: `DOCUMENTATION` is what fixtures narrow.
+_DOCUMENTATION_RANGES = DOCUMENTATION
+
+
+def is_public(address: str) -> bool:
+    """Whether an address is reachable from the internet: not private, tailnet,
+    loopback, link-local or documentation."""
+
+    try:
+        found = ip_address(str(address or "").strip())
+    except ValueError:
+        return False
+    if found.is_link_local or found.is_multicast or found.is_unspecified or found.is_reserved:
+        return False
+    # Special-purpose ranges (192.0.0.0/24 and the like) are not the internet.
+    # The documentation ranges are left to `is_documentation`, which fixtures use.
+    if not found.is_global and not any(found in network for network in _DOCUMENTATION_RANGES):
+        return False
+    return network_of(str(found)) == "public" and not is_documentation(str(found))
+
+
+def public_label(address: str) -> str:
+    """How a public address is shown and counted: itself, or for IPv6 its /64,
+    which privacy addresses rotate inside. "" for anything that is not an address."""
+
+    try:
+        found = ip_address(str(address or "").strip())
+    except ValueError:
+        return ""
+    if found.version == 6:
+        return str(ip_network(f"{found}/64", strict=False))
+    return str(found)
+
+
+def is_documentation(address: str) -> bool:
+    try:
+        found = ip_address(str(address or "").strip())
+    except ValueError:
+        return False
+    return any(found in network for network in DOCUMENTATION)
 
 
 @dataclass(frozen=True)

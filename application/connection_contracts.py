@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 #           it needs in ``required_scopes`` and HQ checks them against what the
 #           instance reports
 #   coarse  the credential is the whole account and the provider offers nothing
-#           narrower -- a login key, an admin token; evidence exists, least
+#           narrower: a login key, an admin token; evidence exists, least
 #           privilege does not
 #   none    keyless; there is no credential, so there is no grant to prove
 #
@@ -104,6 +104,8 @@ class ConnectionInstance:
     # controller; when present it gives topology a real edge instead of asking
     # a rendered label to carry identity.
     controller_id: str = ""
+    # The ref audit events name this connection by, or blank.
+    connection_ref: str = ""
 
 
 @dataclass(frozen=True)

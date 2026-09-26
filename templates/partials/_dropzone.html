@@ -1,12 +1,12 @@
 {% comment %}
-Dropzone — a file field that also accepts a drop.
+Dropzone: a file field that also accepts a drop.
 
   {% include "partials/_dropzone.html" with field=form.files title="Drop exports here"
      hint="CSV or JSON · several at once" %}
 
 The real <input type="file"> covers the zone, so clicking anywhere opens the
 picker and a browser drop lands on the input natively. JavaScript only adds the
-drag highlight and the list of chosen files -- with it unavailable the field
+drag highlight and the list of chosen files: with it unavailable the field
 still selects, validates, and submits.
 {% endcomment %}
 <div class="field{% if field.errors %} has-errors{% endif %}">

@@ -25,8 +25,9 @@ from control_plane.providers import (
 from control_plane.desired_state import advance_dependents, desired_fingerprint
 from core.audit import operation_context
 
+from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
-from .projection import page_size
+from .projection import page_size, read_once
 from .cadence import ring_doorbell
 from .security import Capability, Principal
 
@@ -71,26 +72,34 @@ def list_managed_resources(
     return {"items": items, "count": len(items)}
 
 
+def enabled_resources() -> tuple[ManagedResource, ...]:
+    """Every enabled declaration, read once per projection and shared."""
+
+    return read_once(
+        "infrastructure.enabled_resources",
+        lambda: tuple(ManagedResource.objects.filter(enabled=True)),
+    )
+
+
 def _declared(*kinds: str) -> dict[str, tuple[dict[str, Any], ...]]:
     """The specs of several declaration kinds, in one read.
 
     Read once and passed down rather than looked up per resource: a projection
-    resolving fifty declarations wants one query, not fifty -- and asking for
+    resolving fifty declarations wants one query, not fifty, and asking for
     two kinds separately is two queries for one page's worth of context.
     """
 
     found: dict[str, list[dict[str, Any]]] = {kind: [] for kind in kinds}
-    for kind, spec in ManagedResource.objects.filter(
-        kind__in=kinds, enabled=True
-    ).values_list("kind", "spec"):
-        found[kind].append(spec)
+    for resource in enabled_resources():
+        if resource.kind in found:
+            found[resource.kind].append(resource.spec)
     return {kind: tuple(specs) for kind, specs in found.items()}
 
 
 def context_for_resolution() -> tuple[
     tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]
 ]:
-    """``(machines, delivery targets)`` -- everything resolution reads, once."""
+    """``(machines, delivery targets)``: everything resolution reads, once."""
 
     declared = _declared(MACHINE_KIND, DELIVERY_TARGET_KIND)
     return declared[MACHINE_KIND], declared[DELIVERY_TARGET_KIND]
@@ -133,7 +142,7 @@ class _NamesByConnection:
 def declared_machines() -> tuple[dict[str, Any], ...]:
     """Machines HQ has been told about, with the addresses that reach them.
 
-    Most machines need no declaration -- a Portainer names the ones it manages,
+    Most machines need no declaration: a Portainer names the ones it manages,
     a credential names what it points at. These are the rest, and they are what
     turns a forwarding address into somewhere with a name.
     """
@@ -147,14 +156,14 @@ def resolved_spec(
     """The spec as a controller would see it, falling back to the authored one.
 
     A certificate names where it installs; the settings each of those places
-    needs live on the place. Where resolution cannot happen -- a target that no
-    longer exists -- the authored spec stands in and the certificate covers
+    needs live on the place. Where resolution cannot happen (a target that no
+    longer exists) the authored spec stands in and the certificate covers
     nothing. That surfaces as an uncovered name, which is exactly true: HQ
     cannot demonstrate that anything covers it.
 
     One implementation. The service view and the domain view each had their own,
     and a projection that resolved a spec differently from the one beside it
-    would disagree about which names a certificate covers -- while both claimed
+    would disagree about which names a certificate covers, while both claimed
     to be reading the same declaration.
     """
 
@@ -181,7 +190,7 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
     One implementation, because there were three: the create form derived a key
     one way, adoption another, and the onboarding flow a third. They agreed
     while every provider had one record per hostname and diverged the moment one
-    did not -- the form suggesting a key built from a hostname that a TXT record
+    did not: the form suggesting a key built from a hostname that a TXT record
     does not have.
 
     The provider says what to call its own records. The hostname and facet are
@@ -198,12 +207,12 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
         hostnames = provider.hostnames(spec) if provider.hostnames else ()
         hint = f"{hostnames[0]}-{provider.facet or kind}" if hostnames else kind
     # Dots become separators before slugify sees them. Left alone, slugify
-    # deletes them, and "app.example.com" suggests the key "appexamplecom" --
+    # deletes them, and "app.example.com" suggests the key "appexamplecom",
     # a permanent, unreadable name for the sake of one substitution.
     base = slugify(hint.replace(".", "-"))[:180] or slugify(kind)
     if not ManagedResource.objects.filter(key=base).exists():
         return base
-    # Several records for one name is normal -- a zone apex has nine -- and
+    # Several records for one name is normal (a zone apex has nine) and
     # stopping to ask for a name that is merely taken is not worth the
     # interruption.
     for suffix in range(2, 100):
@@ -279,10 +288,10 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
                 "reason": condition.get("reason", ""),
                 "message": condition.get("message", ""),
             }
-    # A declaration that records only a responsibility has nothing to converge,
-    # so "not reported" describes something that is never going to happen.
-    provider = PROVIDERS.get(resource.kind)
-    if provider is not None and provider.declaration_only:
+    # Nothing converges this kind, so "not reported" would never change.
+    from .resource_capabilities import kind_converges
+
+    if not kind_converges(resource.kind):
         return {
             "state": "declared",
             "label": "Recorded",
@@ -291,7 +300,7 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
         }
     # HQ has asked for something the controller has not confirmed yet. That is
     # the normal state of a resource between being declared and being applied,
-    # not a fault -- the model already says so by carrying two generations.
+    # not a fault: the model already says so by carrying two generations.
     if resource.observed_generation != resource.generation:
         return {
             "state": "pending",
@@ -343,19 +352,17 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
 
     if operation.state == OperationRequest.State.QUEUED:
         headline = "Waiting for the controller"
-        guidance = (
-            "HQ will claim this automatically; no manual server action is needed."
-        )
+        guidance = "The controller picks this up automatically."
     elif operation.state == OperationRequest.State.CLAIMED:
-        headline = "Controller is applying and verifying the change"
-        guidance = "The operation is leased; wait for verification before retrying."
+        headline = "Controller is applying the change"
+        guidance = "Wait for it to finish before retrying."
     elif operation.state == OperationRequest.State.FAILED:
         headline = (
             (condition or {}).get("message") or message or "Provider operation failed"
         )
         guidance = (
-            "Review the affected targets and provider reason, correct the canonical "
-            "desired state or provider access, then reconcile again."
+            "Check the affected targets and the provider reason. Fix the "
+            "declaration or the provider access, then reconcile again."
         )
     else:
         headline = message or "Operation completed successfully"
@@ -421,7 +428,7 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
             "spec": spec,
             # What the provider was last seen holding for this resource. A
             # provider finds its own record by hostname, so renaming one is
-            # only possible for a controller that knows the previous name --
+            # only possible for a controller that knows the previous name,
             # without this it searches for the new name, does not find it, and
             # creates a second record beside the one it meant to move.
             "observed": serialize_public_status(resource.status),
@@ -436,7 +443,7 @@ def _can_change_the_public_internet(kind: str) -> bool:
     mistake is immediately everybody's problem. It is not a reason to refuse
     every resource that happens to be publicly visible: a domain declaration
     records which zones HQ is responsible for and has no reconcile a controller
-    could run -- gating it prevented the operator from saying what HQ owns while
+    could run: gating it prevented the operator from saying what HQ owns while
     preventing no change to anything.
 
     So the question is not "is this public" but "could the controller act on
@@ -462,7 +469,7 @@ def save_managed_resource(
     below, and only that: an adopted record asserts exactly what the provider
     already holds, so reconciling it changes nothing. The switch exists to stop
     HQ changing public DNS, and refusing to *write down* a record that is
-    already published stopped nothing -- it left every public record listed as
+    already published stopped nothing: it left every public record listed as
     unadopted, on a deployment that had deliberately said "do not change these"
     and was then told it could not describe them either.
     """
@@ -488,11 +495,14 @@ def save_managed_resource(
         and not getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
     ):
         raise PolicyError(
-            "Changing public DNS is switched off in this deployment. Set "
-            "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS to allow it, or save "
-            "this resource disabled to record the declaration without acting "
-            "on it."
+            "Public DNS changes are off. Set "
+            "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS to allow them, or save "
+            "this resource disabled."
         )
+    # An authored or edited declaration is one HQ would act on; its connection
+    # must manage. An adopted spec restates what the provider holds.
+    if command.enabled and not copied_from_live and observes_only(command.kind, validated_spec):
+        raise PolicyError(OBSERVES_ONLY)
 
     operation = (
         "infrastructure.resource.create"
@@ -579,10 +589,12 @@ def _queue_operation(
 ) -> dict[str, Any]:
     if require_enabled and not resource.enabled:
         raise PolicyError(f"Managed resource {resource.key!r} is disabled.")
+    if observes_only(resource.kind, resource.spec):
+        raise PolicyError(OBSERVES_ONLY)
     # Nothing enters the queue for a gated kind without a person behind it. The
-    # controller's own automatic work does not pass through here -- it writes its
+    # controller's own automatic work does not pass through here (it writes its
     # rows directly, as itself, converging toward a declaration somebody has
-    # already agreed to -- so this refuses exactly the case it is about: a
+    # already agreed to) so this refuses exactly the case it is about: a
     # credential asking for the world to be changed.
     gap = consent_gap(resource.kind, principal=principal)
     if gap:
@@ -644,11 +656,10 @@ def request_reconcile(
     del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
-    provider = PROVIDERS[resource.kind]
-    if provider.public_effect and not getattr(
-        settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
-    ):
-        raise PolicyError("Public DNS reconciliation is disabled.")
+    from .resource_capabilities import public_dns_enabled
+
+    if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
+        raise PolicyError("Public DNS changes are off on this server.")
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
@@ -689,20 +700,20 @@ def _contained_keys(resource: ManagedResource) -> list[str]:
 def _forget_declaration(
     resource: ManagedResource, command: OperationCommand, *, principal: Principal
 ) -> dict[str, Any]:
-    """Stop being responsible for something HQ never created.
+    """Stop being responsible for something without touching the provider.
 
-    Nothing is queued and nothing is deleted at the provider, because there is
-    nothing there that HQ made. A domain exists whether or not HQ has heard of
-    it; the declaration only ever recorded that HQ was made responsible for it,
-    so removing the declaration is the whole of the operation.
+    For a declaration-only kind (a domain) and for anything whose connection
+    only observes. Nothing is queued and nothing is deleted at the provider.
 
     The declarations *inside* it go too. Left behind, HQ would keep reconciling
-    records in a domain it is no longer responsible for -- still writing to a
+    records in a domain it is no longer responsible for: still writing to a
     zone the operator had just said was not its business, which is the one
     outcome this has to avoid. They are forgotten rather than deleted: the
     records stay exactly as they are at the provider, which is what stepping
     back means.
     """
+
+    from .adoption import keep_out_declaration
 
     with operation_context(
         interface=principal.interface,
@@ -713,12 +724,12 @@ def _forget_declaration(
         ManagedResource.objects.filter(key__in=contained).delete()
         key = resource.key
         kind = resource.kind
+        # The next sweep would adopt it again. The operator's choice is kept
+        # until they manage it again.
+        keep_out_declaration(kind, resource.spec, principal=principal)
         resource.delete()
-        # Removing one is as much a change to what others resolve to as editing
-        # one, and the two paths reached the same end by different code. Left
-        # out here, a certificate installed on a target that had just been
-        # removed kept its old fingerprint and went on reporting itself in sync
-        # while resolving to nothing installable.
+        # Removing one changes what others resolve to as much as editing one,
+        # so dependents advance here too.
         provider = PROVIDERS.get(kind)
         if provider is not None and provider.resolution_input:
             advance_dependents(delivery_targets())
@@ -743,8 +754,8 @@ def request_lifecycle(
     """Ask the controller to start, stop or restart what a declaration names.
 
     Not reconciliation. Cycling a container does not move the world toward a
-    declaration -- it is a thing asked for once, about something already exactly
-    as declared -- so it neither bumps the generation nor waits on one.
+    declaration (it is a thing asked for once, about something already exactly
+    as declared) so it neither bumps the generation nor waits on one.
 
     Which verbs exist is the capability registry's to say, so a controller that
     does not implement one refuses here rather than queueing work nothing will
@@ -773,7 +784,7 @@ def request_removal(
 
     Deliberately not a plain row delete. The record lives at a provider, not in
     HQ, so forgetting the declaration would abandon the rewrite or proxy host
-    rather than remove it -- and nothing would be left pointing at the orphan.
+    rather than remove it, and nothing would be left pointing at the orphan.
     HQ drops its own row only once a controller reports the provider is clear.
 
     Removal is queued even for a disabled resource: disabling stops HQ
@@ -784,7 +795,10 @@ def request_removal(
     del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
-    if PROVIDERS[resource.kind].declaration_only:
+    # HQ deletes at the provider only through a connection that manages.
+    if PROVIDERS[resource.kind].declaration_only or observes_only(
+        resource.kind, resource.spec
+    ):
         return _forget_declaration(resource, command, principal=principal)
     allowed, explanation = controller_action_policy(
         resource.kind, OperationRequest.Action.DELETE
@@ -838,11 +852,11 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
     whole_days_left = max(0, math.ceil(days_left))
     renewal_window = resource.spec.get("renewal_window_days", 30)
     if days_left <= renewal_window:
-        return True, f"Certificate has {whole_days_left} days remaining."
+        return True, f"{whole_days_left} days remaining."
     return (
         False,
-        f"Renewal opens at {renewal_window} days; "
-        f"certificate has {whole_days_left} days remaining.",
+        f"{whole_days_left} days remaining. Renewal opens at "
+        f"{renewal_window} days.",
     )
 
 
@@ -859,7 +873,7 @@ def request_route_approval(
     The remedy the "advertises routes nothing approved" finding names. HQ does
     not choose the routes: the machine has already said what it offers, and
     this is the consent that turns that offer into something the tailnet hands
-    out. Which is why it is never automatic -- approving a route is a decision
+    out. Which is why it is never automatic: approving a route is a decision
     to trust that machine with traffic for those addresses.
     """
 
@@ -889,8 +903,8 @@ def request_reach_allow(
     """Open the path a reading proved is shut, where the tailnet is what shut it.
 
     Given a resource, never a policy. Which path to open is re-derived here
-    from what the controller observed -- the address and port it could not
-    reach -- so a caller cannot name one. The only change this can ever produce
+    from what the controller observed (the address and port it could not
+    reach) so a caller cannot name one. The only change this can ever produce
     is the one an observation already justified.
 
     The amendment is written to the policy declaration through the ordinary
@@ -915,8 +929,8 @@ def request_reach_allow(
     watcher = observer(known)
     if watcher is None:
         raise PolicyError(
-            "No device in the last sweep reports being the one HQ observes "
-            "from, so there is no source to write a grant for."
+            "No device in the last sweep is marked as the observer. There is "
+            "no source to grant from."
         )
 
     shut: list[tuple[str, int]] = []
@@ -935,13 +949,13 @@ def request_reach_allow(
             shut.append((target.name, port))
     if not shut:
         raise PolicyError(
-            "Nothing this resource could not reach is refused by the tailnet "
-            "policy, so opening a path would not be the fix."
+            "The tailnet policy does not block any unreachable target. A new "
+            "grant will not fix this."
         )
 
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
     if policy is None:
-        raise PolicyError("HQ holds no tailnet policy to amend.")
+        raise PolicyError("No tailnet policy is declared.")
 
     document = str(policy.spec.get("document", ""))
     moved: list[str] = []
@@ -952,7 +966,7 @@ def request_reach_allow(
         if amended:
             document, _ = amended, moved.append(summary)
     if not moved:
-        raise PolicyError("The tailnet policy already admits every path needed.")
+        raise PolicyError("The tailnet policy already allows every needed path.")
 
     return save_managed_resource(
         ManagedResourceCommand(

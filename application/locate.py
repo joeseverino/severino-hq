@@ -5,7 +5,7 @@ forwarding address resolved against declarations and connections; the machine
 board resolved the same address against containers and connections but not
 loopback; a form resolved it against declarations alone; the connection panel
 intersected address sets. So one address named a machine on one page, named a
-different machine on the next, and named nothing on the third -- and each
+different machine on the next, and named nothing on the third, and each
 answer was defensible in isolation, which is what made the disagreement so hard
 to see.
 
@@ -24,8 +24,8 @@ machine's address quietly takes ownership of it. Both are recorded, neither can
 shadow the other, and a caller says which kind of thing it is holding.
 
 **One parser.** ``https://host/``, ``host:port``, ``[::1]:8000`` and a bare
-IPv6 address are all endpoints, and reading them with ``rpartition(":")`` --
-which five call sites did -- splits ``2001:db8::1`` into ``2001:db8:`` and
+IPv6 address are all endpoints, and reading them with ``rpartition(":")``
+(which five call sites did) splits ``2001:db8::1`` into ``2001:db8:`` and
 ``1``. The one place that has always got this right is ``core.network``, which
 does it for the trusted-proxy gate; this reads endpoints through it.
 """
@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from control_plane.names import normalized_hostname
 from core.network import split_host_port
 
 
@@ -46,7 +47,7 @@ def split_endpoint(value: Any) -> tuple[str, str]:
     A URL, a ``host:port``, a bracketed IPv6 endpoint and a bare address are
     all things HQ is handed as "where this is", by proxies, daemons, container
     runtimes and people. Either half may be empty: a DNS answer carries no
-    port, and that absence is load-bearing -- it is how HQ tells a record
+    port, and that absence is load-bearing: it is how HQ tells a record
     pointing somewhere else on the internet from an ingress forwarding inside
     the network.
     """
@@ -92,8 +93,8 @@ def join_endpoint(host: str, port: str) -> str:
 def points_at_host(endpoint: Any) -> bool:
     """Whether this endpoint names a host rather than a URL.
 
-    The distinction is what tells a connection that opens a shell somewhere --
-    which *is* a machine -- from a connection that talks to a service running
+    The distinction is what tells a connection that opens a shell somewhere
+    (which *is* a machine) from a connection that talks to a service running
     on one. Written out longhand at five call sites, it was five chances to
     write it slightly differently.
     """
@@ -112,7 +113,7 @@ class Machines:
 
     They are separate because they collide. A machine may legitimately be
     *named* ``10.0.0.5`` while a different machine *answers at* ``10.0.0.5``,
-    and a single dictionary keeps whichever was written last -- silently, and
+    and a single dictionary keeps whichever was written last: silently, and
     differently depending on query order.
     """
 
@@ -132,8 +133,8 @@ class Machines:
     def at(self, endpoint: Any) -> str:
         """The machine answering at this address, if HQ knows of one.
 
-        The address namespace only. A caller holding an address -- a tailnet
-        record, a forwarding target, a connection endpoint -- must not match a
+        The address namespace only. A caller holding an address (a tailnet
+        record, a forwarding target, a connection endpoint) must not match a
         machine because its *name* happens to be that string.
         """
 
@@ -144,7 +145,7 @@ class Machines:
 
         An origin is genuinely either: a stack declares the machine it runs on
         by name, and a proxy forwards to an address. So both namespaces are
-        consulted -- the name first, because a name is HQ's own vocabulary and
+        consulted: the name first, because a name is HQ's own vocabulary and
         an exact hit in it was somebody's deliberate act, while an address hit
         is an inference from a declaration made elsewhere.
 
@@ -160,7 +161,7 @@ class Machines:
     def address_for(self, name: Any) -> str:
         """Where the network reaches the machine called this.
 
-        The inverse question, and the same index answers it -- which is the
+        The inverse question, and the same index answers it, which is the
         point: a page that turns a name into an address and a page that turns
         an address into a name cannot disagree about the pair.
         """
@@ -184,7 +185,7 @@ def index_of(
     implementation without either paying for the other's queries.
 
     Precedence is declaration, then what a sweep found, then what a credential
-    points at -- most deliberate first. A machine HQ was told about owns its
+    points at: most deliberate first. A machine HQ was told about owns its
     address even when a container sweep and an SSH credential also mention it,
     which is what keeps one machine from becoming three rows.
     """
@@ -227,8 +228,8 @@ def index_of(
             record(ref, endpoint)
             continue
         # A URL is a service running on a machine rather than the machine. The
-        # address still reaches it -- which is how a proxy forwarding at a
-        # host HQ holds a credential for stops reading as "unknown host" --
+        # address still reaches it (which is how a proxy forwarding at a
+        # host HQ holds a credential for stops reading as "unknown host")
         # but the ref is the credential's name, not the machine's, so it never
         # enters the name namespace.
         address = host_of(endpoint)
@@ -249,11 +250,12 @@ def container_hosts() -> dict[str, str]:
     machine.
     """
 
-    from control_plane.models import ProviderInventory
     from control_plane.providers import CONTAINER_KIND
 
+    from .facts import snapshots_of
+
     found: dict[str, str] = {}
-    for snapshot in ProviderInventory.objects.filter(kind=CONTAINER_KIND):
+    for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records:
             host = str(record.get("host", "") or "")
             address = str(record.get("host_address", "") or "")
@@ -283,7 +285,7 @@ def _record_observed_answers(
     if not answered:
         return
     for name in names:
-        label = str(name or "").strip().lower().rstrip(".")
+        label = normalized_hostname(name)
         if label:
             found.setdefault(label, set()).update(answered)
 
@@ -294,7 +296,7 @@ def observed_answers() -> dict[str, tuple[str, ...]]:
     Observed rather than declared, because of what the callers do with it. A
     record HQ has written down but not yet applied is an intention, and a
     certificate that counted intentions as evidence would report consumers no
-    request has ever reached -- the opposite of the problem this is here to fix.
+    request has ever reached: the opposite of the problem this is here to fix.
 
     Driven by the provider registry rather than by a list of DNS kinds. A
     provider that can read its own records back and can say what a record
@@ -326,7 +328,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
     The join everything below it already had the halves of: a sweep says which
     names answer at which address, a credential says which address it opens, and
     this index says which of those addresses are the same machine. Nothing new is
-    recorded -- the fact was derivable from three things HQ reconciles, and was
+    recorded: the fact was derivable from three things HQ reconciles, and was
     being typed into a list by hand instead.
 
     Both sides are placed through the one index rather than compared as strings,
@@ -354,7 +356,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
         addressed by name at its own credential rather than at the box: the
         index deliberately files a URL endpoint under the connection's ref, so
         that a proxy forwarding somewhere HQ holds a credential for stops
-        reading as an unknown host -- which is right there and circular here.
+        reading as an unknown host, which is right there and circular here.
         Resolved that way, a connection reached by name and the names answering
         at that host's address were two different machines, and nothing was ever
         derived for it.
@@ -367,7 +369,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
         host = host_of(endpoint)
         if not host:
             return ""
-        for address in answers.get(host.lower().rstrip("."), ()):
+        for address in answers.get(normalized_hostname(host), ()):
             placed = index.resolve(address) or host_of(address)
             if placed:
                 return placed
@@ -390,12 +392,11 @@ def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machi
     otherwise pay for them twice.
     """
 
-    from control_plane.models import ProviderConnection
-
+    from .connections import connection_rows
     from .infrastructure import declared_machines
 
     return index_of(
         declared=declared_machines() if declared is None else declared,
         hosts=container_hosts(),
-        connections=tuple(ProviderConnection.objects.all()),
+        connections=connection_rows(),
     )

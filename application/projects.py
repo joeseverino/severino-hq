@@ -150,7 +150,7 @@ def refresh_project(
                     action=AuditLog.Action.UPDATED,
                     obj=project,
                     type_label="Project",
-                    message="Synchronized the published content index.",
+                    message="Synced the content index.",
                     metadata=stats,
                 )
             result["content"] = {"ok": True, **stats}

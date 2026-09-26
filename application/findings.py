@@ -5,7 +5,7 @@ arriving without being asked, and that difference is the whole of this module.
 
 The bug it was written for looked like nothing at all. A provider blanked a
 field it declared, so a declaration compared unequal to the world forever, so
-the sweep correctly refused to call it observed -- and the resource went on
+the sweep correctly refused to call it observed, and the resource went on
 reporting the condition its last reconcile wrote. Health said healthy. The
 declared and observed revisions matched, so nothing queued a reconcile. The one
 fact that moved was ``last_observed_at`` falling behind its siblings, and
@@ -16,7 +16,7 @@ So the rules here are deliberately not about certificates or proxies. They are
 about the shapes a silence can take: observed later than everything of its own
 kind, never observed at all, asked for but never confirmed, reconciled again
 and again against a world that keeps disagreeing. Each is derivable from the
-projection alone -- kinds, edges, two revisions, an age, a reason -- which is
+projection alone (kinds, edges, two revisions, an age, a reason) which is
 why an extension gets them without the host learning what it is.
 
 Three properties hold and are tested:
@@ -28,7 +28,7 @@ cannot change the estate.
 
 A remedy is a reference, never a route. It names a capability already in the
 registry and a target, and it copies that capability's effect and required
-permissions rather than restating them -- so a capability that becomes
+permissions rather than restating them, so a capability that becomes
 destructive tomorrow is reported as destructive tomorrow. Executing one is a
 call to the capability the caller was always going to call.
 
@@ -39,25 +39,30 @@ capability sees the finding and the evidence and no remedy at all.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone
+from ipaddress import ip_network
 from typing import Any, Callable
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.utils import timezone
 
-from control_plane.providers import PROVIDERS
+from control_plane.providers import CONTAINER_KIND, PROVIDERS
 
 from .action_links import ActionLink, action_with_return, topology_investigation_links
 from .integrations import IntegrationGraph, integration_graph
+from .reach import TAILNET
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
 from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .topology import (
     _STALE_AFTER,
+    JOINED_KINDS,
     Topology,
     TopologyNode,
     derive_topology,
 )
+from .ui import counted, duration
 from .workflows import (
     WorkflowPlan,
     claim_identity,
@@ -76,8 +81,8 @@ from .workflows import (
 #
 # Multiplied against the *slowest* interval HQ is willing to sweep at, not the
 # one currently in force. Reading the live value made this threshold swing with
-# the thing it watches -- minutes while somebody was on the page, half a day
-# once nobody was -- so it was by turns too tight to trust and too loose to
+# the thing it watches (minutes while somebody was on the page, half a day
+# once nobody was) so it was by turns too tight to trust and too loose to
 # help. A fixed ceiling is at least a number that can be reasoned about.
 #
 # It is still a statement about sweeps, not about liveness: nothing here can
@@ -90,7 +95,7 @@ _CLAIM_NAMESPACE = "infrastructure.finding"
 
 @dataclass(frozen=True)
 class Remedy:
-    """An existing capability, named -- never a new way to change anything."""
+    """An existing capability, named: never a new way to change anything."""
 
     capability: str
     target: str
@@ -225,7 +230,7 @@ def _estate(topology: Topology) -> _Estate:
     latest: dict[str, datetime] = {}
     for node in topology.nodes:
         moment = _parse(node.observed_at)
-        if moment is None or not node.kind_key:
+        if moment is None or not node.kind_key or node.kind in JOINED_KINDS:
             continue
         observed[node.id] = moment
         newest = latest.get(node.kind_key)
@@ -251,17 +256,6 @@ def _estate(topology: Topology) -> _Estate:
     )
 
 
-def _ago(delta: timedelta) -> str:
-    seconds = int(delta.total_seconds())
-    if seconds < 90:
-        return f"{seconds}s"
-    if seconds < 5400:
-        return f"{seconds // 60}m"
-    if seconds < 172800:
-        return f"{seconds // 3600}h"
-    return f"{seconds // 86400}d"
-
-
 def _open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
     """Amend the policy, and look again once it is amended.
 
@@ -275,7 +269,7 @@ def _open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
         Remedy(
             capability="tailnet.reach.allow",
             target=node.label,
-            label="Open the path",
+            label="Allow the path",
             effect="infrastructure_change",
         ),
         *_reconcile(node),
@@ -303,7 +297,7 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
     """Observed materially later than everything else of its own kind.
 
     A sweep confirms everything it matches in one pass and writes one timestamp,
-    so siblings land together. One left behind was not slow, it was skipped --
+    so siblings land together. One left behind was not slow, it was skipped,
     and being skipped is invisible in every other surface, because the thing
     keeps whatever it last said about itself.
     """
@@ -326,30 +320,87 @@ def _skipped_by_a_sweep(estate: _Estate) -> tuple[Finding, ...]:
             Finding(
                 rule="skipped-by-a-sweep",
                 subject=node.id,
-                title=f"{node.label} was missing from the last sweep",
+                title=f"{node.label} was not in the last sweep",
                 severity="serious",
                 explanation=(
-                    f"The last sweep found {siblings - 1} other {node.subtitle.lower()} "
-                    f"records but not this one, and it was last seen {_ago(behind)} "
-                    "before them. What HQ shows for it is from then. "
+                    f"Last seen {duration(behind)} before "
                     + (
-                        "If it only runs now and then, mark it on demand. "
-                        if node.kind_key == "portainer.container"
-                        else ""
+                        f"the one other {node.subtitle.lower()} record. "
+                        if siblings == 2
+                        else f"the other {siblings - 1} {node.subtitle.lower()} records. "
                     )
-                    + "If it is gone, remove it."
+                    + (
+                        "Mark it on demand if it only runs sometimes, or remove it."
+                        if node.kind_key == CONTAINER_KIND
+                        else "Reconcile it, or remove it if it is gone."
+                    )
                 ),
                 evidence=(
-                    ("Last observed", node.observed_at),
+                    ("Last seen", node.observed_at),
                     ("Newest of this kind", newest.isoformat()),
-                    ("Behind by", _ago(behind)),
-                    ("Records of this kind observed", str(siblings)),
-                    ("Condition reason", node.reason or "none"),
+                    ("Behind by", duration(behind)),
+                    ("Records of this kind seen", str(siblings)),
+                    ("Reason", node.reason or "none"),
                 ),
                 remedies=_skipped_remedies(node),
             )
         )
     return tuple(found)
+
+
+def _unrecognised_containers(estate: _Estate) -> tuple[Finding, ...]:
+    """A container a sweep found that no compose project declares.
+
+    Every container that belongs on a machine is created by a compose project,
+    and HQ takes those on by itself. Anything else was started by hand or by
+    something HQ does not know, so it is reported rather than adopted: a
+    container nobody declared must never look like one somebody did.
+    """
+
+    from django.urls import NoReverseMatch, reverse
+
+    from .inventory import record_token
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        for key, value in node.facts:
+            if key != "unrecognised-container":
+                continue
+            name, _, host = value.rpartition("@")
+            try:
+                adopt_url = reverse(
+                    "control_plane:adopt_record",
+                    args=[
+                        CONTAINER_KIND,
+                        record_token(CONTAINER_KIND, (host, name)),
+                    ],
+                )
+            except NoReverseMatch:
+                adopt_url = ""
+            found.append(
+                Finding(
+                    rule="unrecognised-container",
+                    subject=node.id,
+                    title=f"Unrecognised container {name} on {node.label}",
+                    severity="serious",
+                    explanation=(
+                        "No compose project started it, so HQ has not taken it on. "
+                        "Adopt it if you started it. Otherwise find what did and remove it."
+                    ),
+                    evidence=(("Container", name), ("Machine", node.label)),
+                    remedies=(
+                        Remedy(
+                            capability="infrastructure.resource.create",
+                            target=name,
+                            label="Adopt it",
+                            effect="HQ starts watching it like any other container.",
+                            url=adopt_url,
+                            method="POST",
+                        ),
+                    ),
+                )
+            )
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
@@ -366,12 +417,12 @@ def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
         label="Review removal",
         effect="",
     )
-    if node.kind_key == "portainer.container":
+    if node.kind_key == CONTAINER_KIND:
         return (
             Remedy(
                 capability="infrastructure.resource.update",
                 target=node.label,
-                label="Mark it on demand",
+                label="Mark on demand",
                 effect="",
             ),
             remove,
@@ -389,7 +440,7 @@ def _is_observable(kind_key: str) -> bool:
 
     This rule measures against the sweep interval, so it only means anything
     for a kind a sweep visits. A certificate is observed when an operation
-    issues or installs it, which is nothing like every sixty seconds -- judged
+    issues or installs it, which is nothing like every sixty seconds: judged
     on that cadence it is permanently overdue and no sweep or reconcile can
     ever settle it. Its real risk, expiry, is reported where it belongs.
 
@@ -407,7 +458,7 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
 
     The sibling comparison above cannot see this: a kind with one record has
     nothing to be behind, and a kind where every record is equally stale looks
-    perfectly consistent. Ship the two together or the hole is still open --
+    perfectly consistent. Ship the two together or the hole is still open,
     and this one is deliberately blunt, an absolute clock against the interval
     HQ itself declares, because that is the only thing left to compare against.
     """
@@ -429,17 +480,17 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
                 rule="kind-never-swept",
                 subject="",
                 scope=kind_key,
-                title=f"Nothing has observed {kind_key} for {_ago(silent)}",
+                title=f"No {kind_key} record seen for {duration(silent)}",
                 severity="serious",
                 explanation=(
-                    "Every record of this kind is equally stale, so the gap is "
-                    "in the sweep rather than in any one declaration. Whatever "
-                    "these records currently report is that old."
+                    f"Every record of this kind is at least {duration(silent)} old, "
+                    "so the sweep is not reaching it. Request a fresh sweep, and "
+                    "check its connection if nothing changes."
                 ),
                 evidence=(
-                    ("Newest observation", newest.isoformat()),
-                    ("Silent for", _ago(silent)),
-                    ("Sweep interval", _ago(sweep_interval())),
+                    ("Last seen", newest.isoformat()),
+                    ("Not seen for", duration(silent)),
+                    ("Sweep interval", duration(sweep_interval())),
                 ),
                 remedies=(
                     Remedy(
@@ -452,7 +503,7 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
             )
         )
     # A kind with no observation at all has no newest to be behind, so the loop
-    # above cannot see it -- and left alone it becomes one finding per record.
+    # above cannot see it, and left alone it becomes one finding per record.
     # Against a real estate that was three hundred and twenty claims saying the
     # same thing once each, which is how a queue stops being read. Said once
     # about the kind, it is one line and the same information.
@@ -464,21 +515,20 @@ def _kind_never_swept(estate: _Estate) -> tuple[Finding, ...]:
                 rule="kind-never-swept",
                 subject="",
                 scope=kind_key,
-                title=f"Nothing has ever observed {kind_key}",
+                title=f"No {kind_key} record has ever been seen",
                 severity="serious",
                 explanation=(
-                    "No record of this kind has ever been confirmed, so the "
-                    "gap is in reaching the kind at all rather than in any one "
-                    "declaration. Everything these records report is the "
-                    "declaration talking about itself."
+                    "The sweep has never reached this kind, so its records show "
+                    "only what was declared. Request a fresh sweep, and check its "
+                    "connection if nothing changes."
                 ),
                 evidence=(
-                    ("Newest observation", "never"),
+                    ("Last seen", "never"),
                     (
                         "Records of this kind",
                         str(estate.declared_counts.get(kind_key, 0)),
                     ),
-                    ("Sweep interval", _ago(sweep_interval())),
+                    ("Sweep interval", duration(sweep_interval())),
                 ),
                 remedies=(
                     Remedy(
@@ -515,21 +565,16 @@ def _controller_sweep_stale(estate: _Estate) -> tuple[Finding, ...]:
         Finding(
             rule="controller-sweep-stale",
             subject=controller,
-            title=f"{by_id[controller].label} stopped confirming {len(kinds)} kinds",
+            title=f"{by_id[controller].label} stopped reporting {len(kinds)} kinds",
             severity="serious",
             explanation=(
-                "These kinds became stale behind connections carried by the same "
-                "controller. HQ has correlated the downstream symptoms into one "
-                "upstream failure; inspect that connection once, then trace every "
-                "affected declaration from here."
+                "Every stale kind goes through this controller. Check the "
+                "controller and its connections first."
             ),
             evidence=(
                 ("Affected kinds", ", ".join(sorted(kinds))),
-                ("Shared cause", by_id[controller].label),
-                (
-                    "What HQ can do",
-                    "wake its controller, open its connections, and trace the affected estate",
-                ),
+                ("Controller", by_id[controller].label),
+                ("Next", "check its connections"),
             ),
             remedies=(
                 Remedy(
@@ -563,13 +608,12 @@ def _reporting_a_fault(estate: _Estate) -> tuple[Finding, ...]:
             title=f"{node.label} reports {node.status_label or node.status}",
             severity="serious" if node.status == "serious" else "attention",
             explanation=(
-                "The resource itself is reporting this, so it is a fault now "
-                "rather than a disagreement about what was asked for. The "
-                "detail below is the provider's own words."
+                "The resource reports this itself, and a declared change is not "
+                "applied yet. The detail is the provider's message."
             ),
             evidence=(
                 ("Status", node.status_label or node.status),
-                ("Condition reason", node.reason or "none"),
+                ("Reason", node.reason or "none"),
                 ("Detail", node.detail or "none"),
                 ("Declared revision", str(node.declared_revision)),
                 ("Observed revision", str(node.observed_revision)),
@@ -590,7 +634,7 @@ def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
     """Converged on paper, disagreeing in practice.
 
     The two revisions match, so everything that asks "has anything changed?"
-    answers no and nothing is queued -- while the status says otherwise. That
+    answers no and nothing is queued, while the status says otherwise. That
     combination means the reconcile already ran against this exact declaration
     and the world still disagrees, so running it again will not help. This is
     the one shape where the declaration itself is the suspect.
@@ -600,20 +644,18 @@ def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
         Finding(
             rule="reconciled-but-still-wrong",
             subject=node.id,
-            title=f"{node.label} keeps disagreeing after reconciling",
+            title=f"{node.label} is still wrong after reconciling",
             severity="serious",
             explanation=(
-                "The declared and observed revisions match, so nothing will "
-                "queue another attempt, and the status is still not good. A "
-                "reconcile has already been tried against this exact "
-                "declaration, which points at the declaration rather than at "
-                "the convergence."
+                "Declared and observed revisions match and the status is still "
+                f"{node.status_label or node.status}. HQ will not retry. "
+                "Check the declaration."
             ),
             evidence=(
                 ("Status", node.status_label or node.status),
                 ("Declared revision", str(node.declared_revision)),
                 ("Observed revision", str(node.observed_revision)),
-                ("Condition reason", node.reason or "none"),
+                ("Reason", node.reason or "none"),
                 ("Detail", node.detail or "none"),
             ),
             # Reconciling again is the one thing already known not to work, so
@@ -622,7 +664,7 @@ def _reconciled_but_still_wrong(estate: _Estate) -> tuple[Finding, ...]:
                 Remedy(
                     capability="infrastructure.resource.update",
                     target=node.label,
-                    label="Edit the declaration",
+                    label="Edit declaration",
                     effect="",
                 ),
             ),
@@ -640,7 +682,7 @@ def _never_observed(estate: _Estate) -> tuple[Finding, ...]:
     """Declared, governed by something that could look, and never looked at.
 
     Gated twice on purpose. An inbound ``governs`` edge, because a resource
-    nothing governs is uncovered rather than skipped -- a different finding with
+    nothing governs is uncovered rather than skipped: a different finding with
     a different answer. And an observed sibling, because without one the whole
     kind is unreached and that belongs to ``kind-never-swept``, said once.
     """
@@ -649,14 +691,14 @@ def _never_observed(estate: _Estate) -> tuple[Finding, ...]:
         Finding(
             rule="never-observed",
             subject=node.id,
-            title=f"{node.label} has never been observed",
+            title=f"{node.label} has never been seen",
             severity="attention",
             explanation=(
-                "HQ can check this kind and has never checked this one, so what "
-                "it shows is only what was declared."
+                "Other records of this kind have been seen, this one never. "
+                "HQ shows only what was declared."
             ),
             evidence=(
-                ("Last observed", "never"),
+                ("Last seen", "never"),
                 ("Declared revision", str(node.declared_revision)),
                 ("Observed revision", str(node.observed_revision)),
             ),
@@ -679,7 +721,7 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
     """Observed, and still asserting things the observation never confirmed.
 
     Drift is judged only across fields both sides carry, so a field the reading
-    omits is not agreed -- it is unjudged. A record can therefore be confirmed,
+    omits is not agreed: it is unjudged. A record can therefore be confirmed,
     read healthy, and be asserting a control nothing has ever checked.
 
     That is not a hypothetical: the two proxy hosts that carried this estate's
@@ -693,22 +735,19 @@ def _weakly_verified(estate: _Estate) -> tuple[Finding, ...]:
             rule="weakly-verified",
             subject=node.id,
             title=(
-                f"{node.label} asserts {len(node.unconfirmed_fields)} "
-                f"unconfirmed field"
-                f"{'s' if len(node.unconfirmed_fields) != 1 else ''}"
+                f"{node.label} has "
+                f"{counted(len(node.unconfirmed_fields), 'unconfirmed field', 'unconfirmed fields')}"
             ),
             severity="attention",
             explanation=(
-                "The last observation confirmed this record but said nothing "
-                "about these fields, and drift is only judged where both sides "
-                "speak. Whatever they assert has not been checked. Either the "
-                "provider should report them, or it should declare that it "
-                "cannot so the gap is a known one."
+                "The last sweep confirmed this record but not these fields, so "
+                "their values are unchecked. Make the provider report them, or "
+                "declare that it cannot."
             ),
             evidence=(
                 ("Unconfirmed", ", ".join(node.unconfirmed_fields)),
-                ("Last observed", node.observed_at),
-                ("Condition reason", node.reason or "none"),
+                ("Last seen", node.observed_at),
+                ("Reason", node.reason or "none"),
             ),
             remedies=_reconcile(node),
         )
@@ -731,7 +770,7 @@ def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
 
     Restricted to observed targets on purpose. A declaration is a statement of
     intent and may name something not serving anything yet, but a target is a
-    name a live connection said it *reaches* -- so it is answering, and nothing
+    name a live connection said it *reaches*, so it is answering, and nothing
     is counting.
 
     Gated on a measured sibling, the same way a skipped record is judged against
@@ -758,13 +797,11 @@ def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
         Finding(
             rule="reached-but-unmeasured",
             subject=node.id,
-            title=f"{node.label} is reachable and unmeasured",
+            title=f"{node.label} has no traffic measurement",
             severity="attention",
             explanation=(
-                "A live connection reports reaching this name, and other names "
-                "on the same connection do report traffic. Nothing here says the "
-                "site is idle -- it says nobody is counting, so a drop in use "
-                "would look exactly like a steady one."
+                "Other names on the same connection report traffic. This one "
+                "does not. Add it to analytics."
             ),
             evidence=(
                 (
@@ -775,15 +812,19 @@ def _reached_but_unmeasured(estate: _Estate) -> tuple[Finding, ...]:
                         else "a connection"
                     ),
                 ),
-                ("Measured", "nothing reports traffic for this name"),
+                ("Traffic", "not measured"),
             ),
         )
         for node in estate.nodes()
-        if node.kind == "target"
+        if node.kind in _REACHED_KINDS
         and node.pageviews is None
         and node.id in reached_by
         and measured_peers.get(reached_by[node.id])
     )
+
+
+# Node kinds a connection reaches by name: a target, or the estate node it folded into.
+_REACHED_KINDS = frozenset({"target", "service", "zone"})
 
 
 def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
@@ -791,14 +832,14 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
 
     The one fact about a domain no other credential here can see, and the only
     one that takes everything else with it. HQ renews the certificate,
-    reconciles the records and serves every name inside the zone -- and none of
+    reconciles the records and serves every name inside the zone, and none of
     it survives the registration lapsing. Cloudflare will serve that zone
     perfectly for a domain about to stop being yours.
 
     Both halves are the rule. An expiry alone fires on every domain every year
     and is a calendar, not a finding; an expiry with auto-renew off is an outage
     with a countdown. The registrar knows the second, which is why the sweep
-    reads the registrar rather than RDAP -- RDAP is public and free and can only
+    reads the registrar rather than RDAP: RDAP is public and free and can only
     ever answer the half that means nothing on its own.
 
     Ninety days, matching the window a certificate gets: long enough to act on a
@@ -827,11 +868,9 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
                 title=f"{domain} expires in {days} days and will not renew",
                 severity="serious" if days <= 30 else "attention",
                 explanation=(
-                    f"{domain} runs out on {expires.date().isoformat()} and "
-                    "auto-renew is off at the registrar. Everything HQ does for "
-                    "this domain -- the records, the certificate, every name "
-                    "served inside it -- stops the day it lapses, and nothing "
-                    "else here would notice."
+                    f"On {expires.date().isoformat()} its "
+                    "records, certificate and every name under it stop working. "
+                    "Renew it or turn on auto-renew at the registrar."
                 ),
                 evidence=(
                     ("Expires", expires.date().isoformat()),
@@ -841,6 +880,12 @@ def _registration_lapsing(estate: _Estate) -> tuple[Finding, ...]:
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _fact_values(node, key: str) -> tuple[str, ...]:
+    """The non-empty values a node carries under one fact key."""
+
+    return tuple(value for fact, value in node.facts if fact == key and value)
 
 
 def _perimeter_open(estate: _Estate) -> tuple[Finding, ...]:
@@ -855,9 +900,7 @@ def _perimeter_open(estate: _Estate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        ports = tuple(
-            value for key, value in node.facts if key == "answers-publicly" and value
-        )
+        ports = _fact_values(node, "answers-publicly")
         if not ports:
             continue
         found.append(
@@ -870,11 +913,8 @@ def _perimeter_open(estate: _Estate) -> tuple[Finding, ...]:
                 ),
                 severity="serious",
                 explanation=(
-                    "These were dialled from outside the tailnet and they "
-                    "answered. Everything behind them is published to anyone "
-                    "who scans for it, and nothing else here would say so: "
-                    "the machine is reachable over the tailnet either way, so "
-                    "every other reading looks exactly as it should."
+                    "A probe from outside the tailnet got an answer, so anything "
+                    "behind these ports is public. Close them at the firewall."
                 ),
                 evidence=tuple(("Answers publicly", port) for port in ports),
             )
@@ -907,12 +947,105 @@ def _firewall_stopped(estate: _Estate) -> tuple[Finding, ...]:
                 title=f"{node.label} is not running its firewall",
                 severity="serious",
                 explanation=(
-                    "The machine reports its firewall unit as "
-                    f"{state}. Whatever those rules say, nothing is applying "
-                    "them, and the machine will keep answering every request "
-                    "it receives until somebody starts it."
+                    f"The firewall unit is {state}, so its rules are not "
+                    "applied. Start the unit."
                 ),
                 evidence=(("Firewall unit", state),),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _connection_not_answering(estate: _Estate) -> tuple[Finding, ...]:
+    """A connection whose last probe got no answer, or whose credential is refused."""
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        refusal = next(
+            (value for key, value in node.facts if key == "credential-refused"), None
+        )
+        refused = refusal is not None
+        if node.status != "serious" and not refused:
+            continue
+        reason = refusal or node.detail
+        found.append(
+            Finding(
+                rule="connection-not-answering",
+                subject=node.id,
+                title=(
+                    f"{node.label}'s credential is refused"
+                    if refused
+                    else f"{node.label} is not answering"
+                ),
+                severity="attention",
+                explanation=(
+                    (f"{reason.rstrip('.')}. " if reason else "")
+                    + (
+                        "The provider refuses the credential, so HQ reads nothing "
+                        "through it until it is replaced."
+                        if refused
+                        else "HQ reads nothing through it until it answers, so what "
+                        "it reaches may be out of date."
+                    )
+                ),
+                evidence=(
+                    ("State", "Refused" if refused else node.status_label or "Unreachable"),
+                    *((("Last observed", node.observed_at),) if node.observed_at else ()),
+                ),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+def _devices_join_without_approval(estate: _Estate) -> tuple[Finding, ...]:
+    """Device approval is off: any valid auth key adds a device with no review."""
+
+    return tuple(
+        Finding(
+            rule="devices-join-without-approval",
+            subject=node.id,
+            title="New devices join the tailnet without approval",
+            severity="attention",
+            explanation=(
+                "Any valid auth key adds a device with no review. Turn on device "
+                "approval in the tailnet settings."
+            ),
+            evidence=(("Device approval", "Off"),),
+        )
+        for node in estate.nodes()
+        if node.kind == "connection"
+        and any(key == "devices-join-unapproved" for key, _ in node.facts)
+    )
+
+
+def _empty_group_granted(estate: _Estate) -> tuple[Finding, ...]:
+    """A group with no members that a grant or shell rule still names."""
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        empty = _fact_values(node, "empty-group-granted")
+        if not empty:
+            continue
+        found.append(
+            Finding(
+                rule="empty-group-granted",
+                subject=node.id,
+                title=(
+                    f"{empty[0]} has no members but is still granted access"
+                    if len(empty) == 1
+                    else f"{counted(len(empty), 'group has', 'groups have')} no "
+                    "members but are still granted access"
+                ),
+                severity="neutral",
+                explanation=(
+                    "A grant naming an empty group admits nobody. Remove the group "
+                    "from the policy, or add the members it was meant for."
+                ),
+                evidence=tuple(("Empty group", name) for name in empty),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -935,9 +1068,7 @@ def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        unfinished = tuple(
-            value for key, value in node.facts if key == "Could not finish" and value
-        )
+        unfinished = _fact_values(node, "work-unfinished")
         if not unfinished:
             continue
         found.append(
@@ -945,17 +1076,15 @@ def _work_that_keeps_failing(estate: _Estate) -> tuple[Finding, ...]:
                 rule="work-that-keeps-failing",
                 subject=node.id,
                 title=(
-                    f"{node.label} answers, and {len(unfinished)} "
-                    f"thing{'' if len(unfinished) == 1 else 's'} sent through "
-                    "it did not finish"
+                    f"{node.label} is reachable, but "
+                    f"{counted(len(unfinished), 'task through it', 'tasks through it')} "
+                    "did not finish"
                 ),
                 severity="attention",
                 explanation=(
-                    "The credential opens this and the last pass could not "
-                    "finish work that went through it. Nothing else reports "
-                    "this: the failures are caught where the work is sent, so "
-                    "they never become an operation, and they will repeat on "
-                    "every pass until the cause is removed."
+                    "The credential works, but the last pass could not finish "
+                    "this work. It retries every pass and never shows up as an "
+                    "operation. Check the controller log for the cause."
                 ),
                 evidence=tuple(("Could not finish", item) for item in unfinished),
             )
@@ -980,18 +1109,14 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
 
     found: list[Finding] = []
     for node in estate.nodes():
-        names = tuple(
-            value for key, value in node.facts if key == "unreachable" and value
-        )
+        names = _fact_values(node, "unreachable")
         if not names:
             continue
         # The tailnet refusing the path is a different claim from the consumer
         # being down, and only one of them has a fix worth offering. Present,
         # the policy was asked and said no; absent, it said yes or was never
         # swept, and neither is a reason to send anybody at an access policy.
-        refused = tuple(
-            value for key, value in node.facts if key == "path-denied" and value
-        )
+        refused = _fact_values(node, "path-denied")
         found.append(
             Finding(
                 rule="unreachable-consumer",
@@ -1003,20 +1128,19 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
                 ),
                 severity="serious",
                 explanation=(
-                    "The last reading reached every other consumer and they "
-                    "agree. This one answered nothing, so what it is serving "
-                    "now is unknown -- including whether it is still the "
-                    "certificate this resource thinks it installed."
+                    "The last reading reached every other consumer. This one "
+                    "did not answer, so HQ cannot tell which certificate it "
+                    "serves."
                     + (
-                        " The tailnet policy refuses the path, so looking "
-                        "again will not help until a grant admits it."
+                        " The tailnet policy blocks the path. Allow it, then "
+                        "reconcile."
                         if refused
                         else ""
                     )
                 ),
                 evidence=(
                     *(("Not read", name) for name in names),
-                    *(("Refused by the tailnet", path) for path in refused),
+                    *(("Blocked by tailnet policy", path) for path in refused),
                 ),
                 remedies=_open_the_path(node) if refused else _reconcile(node),
             )
@@ -1024,28 +1148,130 @@ def _unreachable_consumer(estate: _Estate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _tailnet_dns_off_tailnet(estate: _Estate) -> tuple[Finding, ...]:
+    """A tailnet resolver that is not the address of any tailnet device.
+
+    Clients then reach it through a subnet router or the internet, and it sees
+    one source address for all of them rather than each device.
+    """
+
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        resolvers = tuple(
+            value
+            for key, value in node.facts
+            if key == "tailnet-dns-off-tailnet" and value
+        )
+        if not resolvers:
+            continue
+        found.append(
+            Finding(
+                rule="tailnet-dns-off-tailnet",
+                subject=node.id,
+                title=(
+                    f"{counted(len(resolvers), 'tailnet nameserver is', 'tailnet nameservers are')} "
+                    f"off the tailnet: {', '.join(resolvers)}"
+                ),
+                severity="attention",
+                explanation=(
+                    "No tailnet device has this address, so clients query it "
+                    "through a subnet router or the internet and it sees one "
+                    "source address instead of each device. Set the tailnet "
+                    "nameserver to the DNS server's tailnet address."
+                ),
+                evidence=tuple(("Nameserver", resolver) for resolver in resolvers),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
+_TAILNET_RANGE = TAILNET[0]
+
+
+def _trusted_wider_than_tailnet(estate: _Estate) -> tuple[Finding, ...]:
+    """Trusted networks admit the whole Tailscale IPv4 range; the tailnet uses less.
+
+    Informational. Trust is configuration, and HQ never narrows it itself.
+    """
+
+    wide = []
+    for cidr in settings.SEVERINO_TRUSTED_NETWORKS:
+        try:
+            network = ip_network(str(cidr).strip(), strict=False)
+        except ValueError:
+            continue
+        if network.version == 4 and network.supernet_of(_TAILNET_RANGE):
+            wide.append(str(network))
+    if not wide:
+        return ()
+    found: list[Finding] = []
+    for node in estate.nodes():
+        if node.kind != "connection":
+            continue
+        addresses = tuple(v for k, v in node.facts if k == "tailnet-address" and v)
+        routes = tuple(v for k, v in node.facts if k == "tailnet-route" and v)
+        if not addresses:
+            continue
+        uses = counted(len(addresses), "device address", "device addresses")
+        if routes:
+            uses += f" and {counted(len(routes), 'subnet route', 'subnet routes')}"
+        found.append(
+            Finding(
+                rule="trusted-wider-than-tailnet",
+                subject=node.id,
+                title=f"HQ trusts all of {_TAILNET_RANGE}; the tailnet uses {uses}",
+                severity="neutral",
+                explanation=(
+                    "SEVERINO_TRUSTED_NETWORKS admits every address in the range. "
+                    "Narrowing it to what the tailnet uses is an operator's "
+                    "decision; HQ does not change it."
+                ),
+                evidence=(
+                    *(("Trusted", network) for network in wide),
+                    *(("Device address", address) for address in addresses),
+                    *(("Subnet route", route) for route in routes),
+                ),
+            )
+        )
+    return tuple(sorted(found, key=lambda finding: finding.title))
+
+
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
+        "unrecognised-container",
+        "A container no compose project declares",
+        "serious",
+        _unrecognised_containers,
+    ),
+    FindingRule(
         "perimeter-open",
-        "Something answers from the public internet",
+        "Port open to the public internet",
         "serious",
         _perimeter_open,
     ),
     FindingRule(
         "firewall-stopped",
-        "A firewall is configured and not running",
+        "Firewall not running",
         "serious",
         _firewall_stopped,
     ),
     FindingRule(
+        "connection-not-answering",
+        "Connection not answering or refused",
+        "attention",
+        _connection_not_answering,
+    ),
+    FindingRule(
         "work-that-keeps-failing",
-        "A connection answers and its work does not finish",
+        "Work through a connection fails",
         "attention",
         _work_that_keeps_failing,
     ),
     FindingRule(
         "unreachable-consumer",
-        "A consumer could not be read",
+        "Consumer could not be read",
         "serious",
         _unreachable_consumer,
         # Says the same thing with the name of the consumer in it. The generic
@@ -1054,26 +1280,26 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "registration-lapsing",
-        "A domain registration is running out",
+        "Domain registration expiring",
         "serious",
         _registration_lapsing,
     ),
     FindingRule(
         "controller-sweep-stale",
-        "A controller stopped confirming its estate",
+        "Controller stopped reporting",
         "serious",
         _controller_sweep_stale,
         subsumes=("kind-never-swept",),
     ),
     FindingRule(
         "skipped-by-a-sweep",
-        "Not confirmed by the last sweep",
+        "Missing from the last sweep",
         "serious",
         _skipped_by_a_sweep,
     ),
     FindingRule(
         "kind-never-swept",
-        "A whole kind has gone unobserved",
+        "Kind not seen by the sweep",
         "serious",
         _kind_never_swept,
         # When the sweep itself is the fault, every record of the kind looks
@@ -1082,7 +1308,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "reporting-a-fault",
-        "Reporting a fault",
+        "Resource reports a fault",
         "serious",
         _reporting_a_fault,
     ),
@@ -1094,21 +1320,45 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "weakly-verified",
-        "Asserting fields nothing confirmed",
+        "Unconfirmed fields",
         "attention",
         _weakly_verified,
     ),
     FindingRule(
         "never-observed",
-        "Never observed",
+        "Never seen",
         "attention",
         _never_observed,
     ),
     FindingRule(
         "reached-but-unmeasured",
-        "Reachable and unmeasured",
+        "Traffic not measured",
         "attention",
         _reached_but_unmeasured,
+    ),
+    FindingRule(
+        "tailnet-dns-off-tailnet",
+        "Tailnet DNS is not a tailnet address",
+        "attention",
+        _tailnet_dns_off_tailnet,
+    ),
+    FindingRule(
+        "devices-join-without-approval",
+        "New devices join without approval",
+        "attention",
+        _devices_join_without_approval,
+    ),
+    FindingRule(
+        "empty-group-granted",
+        "Empty group still granted access",
+        "neutral",
+        _empty_group_granted,
+    ),
+    FindingRule(
+        "trusted-wider-than-tailnet",
+        "Trusted networks wider than the tailnet",
+        "neutral",
+        _trusted_wider_than_tailnet,
     ),
 )
 
@@ -1209,12 +1459,10 @@ def _resolved(
     verification = (
         ActionLink(
             "verify",
-            "Recheck from current facts",
+            "Check again",
             "read",
             f"{findings_url}?{urlencode({'rule': finding.rule})}",
-            reason=(
-                "HQ re-derives the same rule from the newest authorized topology."
-            ),
+            reason="Runs this check against current data.",
         )
         if findings_url
         else None
@@ -1432,7 +1680,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
 #   - and a cap, because a class-wide condition fires on the whole class at once.
 #
 # HQ forms no opinion about what is safe to run unattended. That judgement is
-# already written down, per kind and per action, in the controller contract --
+# already written down, per kind and per action, in the controller contract,
 # so the only actions considered here are the ones it already declares
 # automatic, and withdrawing one there withdraws it here.
 

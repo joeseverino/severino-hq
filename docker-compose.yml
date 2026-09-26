@@ -1,4 +1,4 @@
-# Severino HQ — homelab Docker Compose.
+# Severino HQ: homelab Docker Compose.
 #
 # Uses host networking so the MCP boundary receives the real socket peer
 # instead of Docker's bridge gateway address. Nginx Proxy Manager reaches the
@@ -7,7 +7,7 @@
 #
 # Volumes:
 #   data/    SQLite DB
-#   media/   Uploaded receipt files (private — never publicly exposed)
+#   media/   Uploaded receipt files (private: never publicly exposed)
 #   exports/ Generated exports
 #   static/  Collected static files
 #
@@ -41,7 +41,7 @@ services:
     # Nothing HQ does at runtime writes to the image. State lives in the four
     # volumes below and the doorbell directory; migrations and collectstatic
     # write into those. A read-only root means an exploited process cannot
-    # leave anything behind for the next boot to run -- the difference between
+    # leave anything behind for the next boot to run: the difference between
     # an incident and a persistent one. The controller is a separate
     # `docker run` from the same image and is unaffected by this.
     read_only: true
@@ -62,7 +62,7 @@ services:
       SEVERINO_DATABASE_PATH: /data/severino.sqlite3
       # Python's tempfile default, on disk. A request body is spooled here
       # whole and a file upload is written here again, so an upload of N bytes
-      # needs 2N of temporary space -- which a RAM-backed /tmp both caps and
+      # needs 2N of temporary space, which a RAM-backed /tmp both caps and
       # charges to mem_limit. /data is already writable and executable to this
       # process, so this adds no location an exploited process lacked. The
       # entrypoint empties it on boot.
@@ -72,8 +72,8 @@ services:
       DJANGO_STATIC_ROOT: /static
       # Provider HTTPS keeps normal public roots and adds the homelab CA.
       HQ_CONTROLLER_CA_FILE: /run/secrets/severino_controller_ca.pem
-      # A file HQ replaces when it queues controller work. It carries nothing --
-      # not what to do, not who asked -- so the host may watch it and start the
+      # A file HQ replaces when it queues controller work. It carries nothing
+      # (not what to do, not who asked) so the host may watch it and start the
       # controller without HQ gaining any way to reach out.
       SEVERINO_CONTROLLER_DOORBELL: /run/severino-hq/controller-doorbell
     volumes:
@@ -82,7 +82,7 @@ services:
       - severino_exports:/exports
       - severino_static:/static
       # Somewhere both sides can see. `/run` is transient by design, which is
-      # right for a doorbell -- a stale one after a reboot would ring for work
+      # right for a doorbell: a stale one after a reboot would ring for work
       # that was claimed before it.
       - type: bind
         source: ${SEVERINO_CONTROLLER_RUN_DIR:-/run/severino-hq}

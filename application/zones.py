@@ -3,24 +3,23 @@
 The services view answers "does this name work". This answers a different
 question that the same declarations already contain: "what does this domain
 actually say". They are not the same question, and neither is a substitute for
-the other -- a DMARC policy, a CAA restriction and an MX record are not services
+the other: a DMARC policy, a CAA restriction and an MX record are not services
 and never appear there, yet getting them wrong is how mail stops arriving and
 how anyone in the world becomes able to obtain a certificate for the domain.
 
 Nothing here is stored. A zone is derived from three things that already exist:
 the domains an operator declared, the records declared inside them, and the last
 controller sweep of what the provider actually holds. There is deliberately no
-Zone model -- a stored copy could disagree with the declarations, and being the
+Zone model: a stored copy could disagree with the declarations, and being the
 thing that cannot disagree is the entire value.
 
 What the page says *about* a zone is contributed rather than listed here: see
 ``ZONE_INSIGHTS`` and ``zone_insights``. Those observations stay descriptions
 rather than drift, because HQ holds a credential that can read and write DNS
 records and nothing else. It cannot change a zone's TLS posture, so it does not
-get to have an opinion about it -- stating "DMARC is monitoring only" is true and
+get to have an opinion about it: stating "DMARC is monitoring only" is true and
 useful, and flagging it as drift would invent a policy the operator never
-declared and that nothing here could enforce, which is how a control plane
-starts lying. The exceptions are the two things that are wrong by their own
+declared and that nothing here could enforce. The exceptions are the two things that are wrong by their own
 definition: a challenge record that outlived its issuance, and a CAA record that
 forbids the authority HQ renews with.
 """
@@ -28,25 +27,26 @@ forbids the authority HQ renews with.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any
 
 from django.db import transaction
 from django.urls import reverse
 
 from control_plane.models import ManagedResource, ProviderInventory
-from control_plane.providers import DNS_RECORD_TYPES_BY_ID, normalized_hostname
+from control_plane.providers import (
+    DNS_RECORD_KIND,
+    DNS_RECORD_TYPES_BY_ID,
+    ZONE_KIND,
+    normalized_hostname,
+)
 
+from .entity_links import entity_link
 from .infrastructure import resource_health
 from .inventory import unmanaged
 from .ui import ListRow
 
-ZONE_KIND = "cloudflare.zone"
-RECORD_KIND = "cloudflare.dns_record"
-
-
-# Shared with the service view and the controller, so a name means the same
-# thing on every surface that joins on one.
-_normalise = normalized_hostname
+RECORD_KIND = DNS_RECORD_KIND
 
 
 # Records HQ creates and deletes inside a single operation, rather than keeps
@@ -58,7 +58,7 @@ _normalise = normalized_hostname
 # up after itself. An ACME challenge is the second. It exists for the seconds
 # an authority takes to verify a request, and declaring one would mean HQ
 # recreating it immediately after the issuance that made it was finished with
-# it -- HQ fighting itself.
+# it: HQ fighting itself.
 #
 # So these are never offered for adoption and never counted as outstanding
 # work. They are also not listed among a zone's records, because a record that
@@ -72,7 +72,7 @@ EPHEMERAL_PREFIXES: tuple[tuple[str, str], ...] = (
 def ephemeral_operation(name: str) -> str:
     """The HQ operation a record belongs to, when it is working material."""
 
-    candidate = _normalise(name)
+    candidate = normalized_hostname(name)
     for prefix, operation in EPHEMERAL_PREFIXES:
         if candidate.startswith(prefix):
             return operation
@@ -94,6 +94,8 @@ class ZoneRecord:
     health: dict[str, str] | None = None
     # Set only when unmanaged, and the handle adoption uses.
     token: str = ""
+    # Unmanaged and read through a connection that only observes.
+    observed_only: bool = False
 
     @property
     def managed(self) -> bool:
@@ -121,7 +123,7 @@ class ZoneRecord:
     def manageable(self) -> bool:
         """Whether HQ's model can express this record at all.
 
-        Cloudflare serves types HQ deliberately does not model -- SRV, NS, PTR,
+        Cloudflare serves types HQ deliberately does not model: SRV, NS, PTR,
         SVCB and more. They are real records in the zone and are listed as such,
         but HQ cannot declare one, so it must never try: adoption runs inside
         the controller sweep, and a spec the model rejects took the whole
@@ -141,11 +143,7 @@ class ZoneRecord:
 
     @property
     def url(self) -> str:
-        return (
-            reverse("control_plane:detail", kwargs={"key": self.resource_key})
-            if self.resource_key
-            else ""
-        )
+        return entity_link("resource", self.resource_key).url
 
     @property
     def edit_url(self) -> str:
@@ -169,9 +167,7 @@ class ZoneRecord:
 
         if not self.declares_service:
             return ""
-        return reverse(
-            "control_plane:service", kwargs={"hostname": _normalise(self.name)}
-        )
+        return entity_link("service", normalized_hostname(self.name)).url
 
 
 @dataclass(frozen=True)
@@ -180,7 +176,7 @@ class ZoneInsight:
 
     ``value`` is the answer and stays short enough to read at a glance, because
     it is set in the card's headline type. Anything needing a sentence goes in
-    ``detail``, the caption -- an explanation in the headline slot rendered as a
+    ``detail``, the caption: an explanation in the headline slot rendered as a
     paragraph of bold text and drowned the cards beside it.
 
     ``url`` is what makes these worth more than the provider's own dashboard. A
@@ -199,11 +195,21 @@ class ZoneInsight:
     # it. ``url`` stays required alongside this and must reach a page that does
     # the same job, so the card still works when the dialog does not open.
     rows: tuple[ListRow, ...] = ()
+    # A short list on the card itself, one record per line.
+    lines: tuple[ListRow, ...] = ()
+    # A muted line under the detail: a reason kept available, not an alarm.
+    note: str = ""
+    # The note's full reason, where the note says it in fewer words.
+    note_title: str = ""
     # Reserved for things that are wrong by their own definition rather than by
-    # a policy nobody declared -- a leftover challenge record is garbage whoever
+    # a policy nobody declared: a leftover challenge record is garbage whoever
     # you ask, and a CAA record that forbids the authority HQ renews with will
     # fail a renewal. A permissive DMARC policy is a choice.
     concern: bool = False
+    # ``(label, links)``: entities the card names, through the link builder.
+    links: tuple[tuple[str, tuple[Any, ...]], ...] = ()
+    # Shown as a notice above the records rather than as a card.
+    notice: bool = False
 
     @property
     def modal_id(self) -> str:
@@ -223,15 +229,17 @@ class ZoneInsight:
 # credential to read them exists, and the template never changes.
 #
 # Late-bound as strings so this module keeps deriving and the contributors can
-# each import whatever they need -- certificates, services -- without this file
+# each import whatever they need (certificates, services) without this file
 # depending on all of it.
+# Four cards, each answering one question: what runs here, how it is secured,
+# its mail, and whether it is still owned. A notice (left-over challenges)
+# renders above the records instead of as a card.
 ZONE_INSIGHTS: tuple[str, ...] = (
     "application.zone_insights:services",
-    "application.zone_insights:certificates",
+    "application.zone_insights:security",
     "application.zone_insights:email",
-    "application.zone_insights:leftover_challenges",
-    "application.zone_insights:posture",
     "application.zone_insights:registration",
+    "application.zone_insights:leftover_challenges",
 )
 
 
@@ -244,8 +252,11 @@ class Zone:
     observed_at: Any = None
     reachable: bool = True
     # Set only while the domain is undeclared, and the handle adoption uses.
+    # Blank when the zone is read through a connection that only observes.
     adopt_token: str = ""
     pinned: bool = False
+    # Undeclared and read through a connection that only observes.
+    observed_only: bool = False
 
     @property
     def managed(self) -> bool:
@@ -253,15 +264,7 @@ class Zone:
 
     @property
     def url(self) -> str:
-        return reverse("zones:detail", kwargs={"zone": self.zone})
-
-    @property
-    def resource_url(self) -> str:
-        return (
-            reverse("control_plane:detail", kwargs={"key": self.resource_key})
-            if self.resource_key
-            else ""
-        )
+        return entity_link("zone", self.zone).url
 
     @property
     def managed_count(self) -> int:
@@ -278,7 +281,10 @@ class Zone:
 
         return tuple(
             record for record in self.records
-            if not record.managed and not record.ephemeral and record.manageable
+            if not record.managed
+            and not record.ephemeral
+            and record.manageable
+            and not record.observed_only
         )
 
     @property
@@ -287,7 +293,7 @@ class Zone:
 
         A challenge record lives for seconds. Listing one invites an operator to
         reason about a row that will not exist by the time they have read it,
-        and the only case that matters -- one that outlived its issuance -- is
+        and the only case that matters (one that outlived its issuance) is
         reported as an insight instead.
         """
 
@@ -306,6 +312,14 @@ class Zone:
         return tuple(record for record in self.listed if record.secondary)
 
     @property
+    def cards(self) -> tuple[ZoneInsight, ...]:
+        return tuple(item for item in self.insights if not item.notice)
+
+    @property
+    def notices(self) -> tuple[ZoneInsight, ...]:
+        return tuple(item for item in self.insights if item.notice)
+
+    @cached_property
     def insights(self) -> tuple[ZoneInsight, ...]:
         """What HQ can say about this domain, asked of each contributor.
 
@@ -323,14 +337,16 @@ class Zone:
                 insight = _import(reference)(self)
             except Exception:  # noqa: BLE001 - one card must not lose the page
                 continue
-            if insight is not None:
+            if isinstance(insight, tuple):
+                found.extend(insight)
+            elif insight is not None:
                 found.append(insight)
         return tuple(found)
 
 
 def _record_of(spec: dict[str, Any], **extra: Any) -> ZoneRecord:
     return ZoneRecord(
-        name=_normalise(str(spec.get("name", ""))),
+        name=normalized_hostname(str(spec.get("name", ""))),
         record_type=str(spec.get("record_type", "")).upper(),
         content=str(spec.get("content", "")),
         priority=spec.get("priority"),
@@ -355,13 +371,21 @@ def _sort_key(record: ZoneRecord) -> tuple:
 def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     """Every domain HQ has been told about, declared or merely seen.
 
-    Undeclared zones are included so that adopting one is possible from the same
-    page that lists them -- a domain that the credential can see but that HQ has
-    no declaration for is precisely the thing an operator needs shown.
+    Undeclared zones are included so one can be adopted from the list. Read
+    once per projection.
     """
 
+    from .projection import read_once
+
+    return read_once(
+        f"zones.catalog:{','.join(sorted(pinned))}", lambda: _zone_catalog(pinned)
+    )
+
+
+def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
+
     declared: dict[str, ManagedResource] = {
-        _normalise(str(resource.spec.get("zone", ""))): resource
+        normalized_hostname(str(resource.spec.get("zone", ""))): resource
         for resource in ManagedResource.objects.filter(kind=ZONE_KIND, enabled=True)
         if resource.spec.get("zone")
     }
@@ -376,22 +400,22 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     seen: dict[str, dict[str, Any]] = {}
     if zone_snapshot:
         for entry in zone_snapshot.records:
-            name = _normalise(str(entry.get("zone", "")))
+            name = normalized_hostname(str(entry.get("zone", "")))
             if name:
                 seen[name] = entry
 
     # One pass over the unmanaged set, shared by the zones and their records.
     # Called twice it would run the whole inventory diff twice for one page.
     pending = list(unmanaged())
-    zone_tokens = {
-        _normalise(str(item.spec.get("zone", ""))): item.token
+    zone_items = {
+        normalized_hostname(str(item.spec.get("zone", ""))): item
         for item in pending
         if item.kind == ZONE_KIND and item.spec.get("zone")
     }
 
     by_zone: dict[str, list[ZoneRecord]] = {}
     for resource in ManagedResource.objects.filter(kind=RECORD_KIND, enabled=True):
-        zone = _normalise(str(resource.spec.get("zone", "")))
+        zone = normalized_hostname(str(resource.spec.get("zone", "")))
         if not zone:
             continue
         by_zone.setdefault(zone, []).append(
@@ -404,15 +428,18 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     for item in pending:
         if item.kind != RECORD_KIND:
             continue
-        zone = _normalise(str(item.spec.get("zone", "")))
+        zone = normalized_hostname(str(item.spec.get("zone", "")))
         if not zone:
             continue
-        by_zone.setdefault(zone, []).append(_record_of(item.spec, token=item.token))
+        by_zone.setdefault(zone, []).append(
+            _record_of(item.spec, token=item.token, observed_only=item.observed_only)
+        )
 
     record_snapshot = snapshots.get(RECORD_KIND)
     zones = []
-    for name in sorted(set(declared) | set(seen) | set(by_zone)):
+    for name in zone_names():
         resource = declared.get(name)
+        item = None if resource else zone_items.get(name)
         zones.append(
             Zone(
                 zone=name,
@@ -424,8 +451,9 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
                 records=tuple(sorted(by_zone.get(name, []), key=_sort_key)),
                 observed_at=record_snapshot.observed_at if record_snapshot else None,
                 reachable=record_snapshot.reachable if record_snapshot else True,
-                adopt_token="" if resource else zone_tokens.get(name, ""),
+                adopt_token=item.token if item and not item.observed_only else "",
                 pinned=name in pinned,
+                observed_only=bool(item and item.observed_only),
             )
         )
     # Pinned first, then alphabetical within each half. Sorted here rather than
@@ -434,35 +462,94 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     return tuple(sorted(zones, key=lambda zone: (not zone.pinned, zone.zone)))
 
 
-def unreachable_zones(reachable: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    """Domains HQ is responsible for that a credential cannot actually read.
+def zone_reads(resources=None) -> tuple[tuple[str, ...], dict[str, list[Any]]]:
+    """Every domain HQ knows, and when a reachable zone sweep read each one.
 
-    The controller reports what its token reaches; HQ knows which domains it
-    has been made responsible for. Neither side can answer this alone, and the
-    comparison used to be a literal list of one deployment's domains compiled
-    into the controller -- so adding a domain meant editing the controller, and
-    a different installation failed preflight over domains it had never heard
-    of.
+    A domain is declared, swept, or holds a declared or swept record. The one
+    answer the domains page, the API and the estate count list.
     """
 
-    seen = {str(name).strip().lower() for name in reachable}
-    if not seen:
-        return ()
-    return tuple(
-        sorted(
-            _normalise(str(resource.spec.get("zone", "")))
-            for resource in ManagedResource.objects.filter(
-                kind=ZONE_KIND, enabled=True
-            )
-            if resource.spec.get("zone")
-            and _normalise(str(resource.spec["zone"])) not in seen
-        )
-    )
+    from .infrastructure import enabled_resources
+
+    names = {
+        normalized_hostname((resource.spec or {}).get("zone"))
+        for resource in (enabled_resources() if resources is None else resources)
+        if resource.kind in (ZONE_KIND, RECORD_KIND)
+    }
+    read = _swept_zones(names)
+    names.update(_swept_record_zones())
+    return tuple(sorted(name for name in names if name)), read
+
+
+def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
+    """Add every swept zone to ``names``; when a reachable sweep read each."""
+
+    from control_plane.providers import PROVIDERS
+
+    from .facts import snapshots_of
+
+    read: dict[str, list[Any]] = {}
+    zones = PROVIDERS[ZONE_KIND]
+    for snapshot in snapshots_of(ZONE_KIND):
+        for record in snapshot.records:
+            try:
+                found = tuple(
+                    normalized_hostname(name)
+                    for name in zones.identity(zones.from_record(record))
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            names.update(found)
+            if snapshot.reachable:
+                for name in found:
+                    read.setdefault(name, []).append(snapshot.observed_at)
+    return read
+
+
+def _swept_record_zones() -> set[str]:
+    """The zone of every swept record."""
+
+    from control_plane.providers import PROVIDERS
+
+    from .facts import snapshots_of
+
+    records = PROVIDERS[RECORD_KIND]
+    found = set()
+    for snapshot in snapshots_of(RECORD_KIND):
+        for record in snapshot.records:
+            try:
+                found.add(normalized_hostname(records.from_record(record).get("zone")))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return found
+
+
+def zone_names() -> tuple[str, ...]:
+    """Every domain HQ knows. See ``zone_reads``."""
+
+    return zone_reads()[0]
+
+
+@dataclass(frozen=True)
+class DomainContext:
+    """One domain's page: the domain, and every domain for the switcher."""
+
+    zone: Zone
+    zones: tuple[Zone, ...]
+
+
+def domain_context(zone: str, *, pinned: frozenset[str] = frozenset()) -> DomainContext | None:
+    """The domain named ``zone`` out of one catalogue build, or None."""
+
+    zones = zone_catalog(pinned=pinned)
+    wanted = normalized_hostname(zone)
+    found = next((item for item in zones if item.zone == wanted), None)
+    return DomainContext(found, zones) if found is not None else None
 
 
 def find_zone(zone: str) -> Zone | None:
-    wanted = _normalise(zone)
-    return next((item for item in zone_catalog() if item.zone == wanted), None)
+    context = domain_context(zone)
+    return context.zone if context is not None else None
 
 
 @transaction.atomic
@@ -473,8 +560,8 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
     state that closes itself within a minute rather than a chore on a screen.
 
     There was never a decision in it. Declaring a domain is the decision, and
-    it is made once; asking again per record -- seventeen times on a working
-    zone, and again for every record added at the provider afterwards --
+    it is made once; asking again per record (seventeen times on a working
+    zone, and again for every record added at the provider afterwards)
     presented a question whose answer is always yes, and left a page reporting
     outstanding work that nobody intended to do.
 
@@ -483,7 +570,8 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
     first reconciliation changes nothing. What this cannot do is decide that a
     record should not exist. Removing one stays deliberate and manual.
 
-    Working material is skipped -- see ``EPHEMERAL_PREFIXES``.
+    Working material is skipped (``EPHEMERAL_PREFIXES``), and so are records
+    read through a connection that only observes: see ``application.adoption``.
     """
 
     from django.core.exceptions import ValidationError
@@ -500,7 +588,7 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
             # Recording what a provider holds must not depend on being allowed
             # to declare it. A deployment with public DNS switched off, or a
             # record whose live shape HQ's model cannot express, leaves the
-            # sweep itself intact -- losing the whole inventory because one
+            # sweep itself intact: losing the whole inventory because one
             # record could not be adopted would be a far worse trade.
             #
             # ValueError is not redundant beside Django's ValidationError:
@@ -517,7 +605,7 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
 
     Offered because the alternative is real: a working zone has dozens of
     records and adopting them one at a time is dozens of round trips to say the
-    same thing. Atomic for the same reason ``adopt_service`` is -- a half
+    same thing. Atomic for the same reason ``adopt_service`` is: a half
     adopted zone is harder to reason about than an unadopted one, because the
     gap looks like a missing record rather than an unfinished action.
 
@@ -531,11 +619,11 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
 
     found = find_zone(zone)
     if found is None:
-        raise NotFoundError(f"No domain called {zone!r} has been seen.")
+        raise NotFoundError(f"No domain named {zone!r}.")
     pending = list(found.adoptable)
     if not pending:
         raise NotFoundError(
-            f"Every record in {found.zone} is already managed by HQ."
+            f"All records in {found.zone} are already managed."
         )
     adopted = [
         adopt(
@@ -551,7 +639,7 @@ def public_answers_for(hostname: str) -> tuple[str, ...]:
 
     Read from the zones HQ actually manages rather than by resolving the name.
     A resolver on the same machine as HQ is inside every boundary this is meant
-    to describe -- it would follow the internal rewrite and report that a
+    to describe: it would follow the internal rewrite and report that a
     private name resolves, which is the opposite of the question being asked.
 
     An empty answer means no zone HQ manages publishes this name. That is not
