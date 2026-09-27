@@ -284,3 +284,30 @@ class RegistrationTests(SimpleTestCase):
 
         self.assertEqual(list(apps), ["hq"])
         self.assertEqual(apps["hq"]["permissions"], wanted)
+
+
+class PipelineReportTests(SimpleTestCase):
+    """The workflows post the same check, and mark the same comment, as HQ."""
+
+    def read(self, *parts):
+        from pathlib import Path
+
+        return Path(__file__).resolve().parents[2].joinpath(*parts).read_text()
+
+    def test_every_stage_is_one_check_by_one_name(self):
+        for text in (self.read(".github", "workflows", "compose.yml"),
+                     self.read(".github", "actions", "admit-plugin", "action.yml")):
+            self.assertIn(f'name="{github.CHECK_NAME}"', text)
+
+    def test_the_host_comment_carries_hqs_marker(self):
+        marker = github._MARKER.split("{sha}")[0]
+
+        self.assertIn(f'marker="{marker}$COMMIT', self.read(".github", "workflows", "compose.yml"))
+
+    def test_hqs_key_never_reaches_the_homelab_runner(self):
+        import re
+
+        compose = self.read(".github", "workflows", "compose.yml")
+        deploy = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", compose, re.S).group(1)
+
+        self.assertNotIn("HQ_APP_KEY", deploy)

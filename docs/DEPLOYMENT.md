@@ -367,10 +367,22 @@ An extension merge deploys too, without anything being run by hand or anything
 polling. Its admission dispatches the composition (see
 [`PLUGINS.md`](PLUGINS.md#composition)), the deploy waits for your approval, and
 when HQ boots on the new image it asks the controller to read `github.delivery`.
-With a GitHub App connection that manages it (below), the controller reports on
-the extension's commit as a **Severino HQ · production** check (waiting for its
-composition, waiting for deploy approval, then live) and leaves one comment on
-the merged pull request. HQ starts nothing: its app cannot start a workflow.
+Every change carries one **Severino HQ · production** check, posted as HQ's app
+by whatever just did the work, and the check's details link to the run that
+holds the deployment and your approval:
+
+- a host commit: Compose posts *Waiting for approval* once it has published the
+  image, and a last job posts *Live in production* or *Not deployed* (not
+  approved, cancelled, or rolled back) whatever the deploy did, then comments
+  once on the merged pull request. That job runs on a hosted runner, so HQ's
+  key never reaches the homelab one.
+- an extension commit: its admission posts *Waiting for its composition and
+  approval* in its own repository, and HQ's controller marks it live once
+  production runs that commit, when its connection manages `github.delivery`,
+  with one comment on the merged pull request.
+
+What they say is public: the commit, the stage, the published image and the
+run. No machine and no extension is named in this repository.
 
 #### Continuous delivery through HQ's GitHub App
 

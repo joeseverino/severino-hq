@@ -96,6 +96,10 @@ jobs:
       id-token: write
     outputs:
       image: ${{ steps.publish.outputs.image }}
+      # HQ's check on the host commit, when this composition will deploy, and
+      # that commit.
+      check: ${{ steps.check.outputs.id }}
+      commit: ${{ steps.host.outputs.sha }}
     steps:
       - name: Check out host
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,6 +224,7 @@ jobs:
             exit 1
           fi
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "sha=$ref" >> "$GITHUB_OUTPUT"
           echo "host image: ${image%:*}@$digest"
 
       # Installed once for the whole job: the host image is verified with it
@@ -665,6 +670,39 @@ jobs:
           IMAGE: ${{ steps.publish.outputs.image }}
         run: cosign sign --yes "$IMAGE"
 
+      # HQ's check on the commit this composes, as HQ's app: the same check
+      # an extension's commit carries, so every change says where it is on
+      # its way to production. It names only public things (the commit, the
+      # published image, this run), never a machine or an extension.
+      - name: Mint a token for HQ's check on this commit
+        id: report
+        if: env.IS_RELEASE == 'true' && steps.publish.outputs.image != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+
+      - name: Say on the commit that it waits for approval
+        id: check
+        if: steps.report.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.report.outputs.token }}
+          HEAD_SHA: ${{ steps.host.outputs.sha }}
+          IMAGE: ${{ steps.publish.outputs.image }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name="Severino HQ · production" -f head_sha="$HEAD_SHA" \
+            -f status=queued -f details_url="$RUN_URL" \
+            -f "output[title]=Waiting for approval" \
+            -f "output[summary]=Composed as \`$IMAGE\`. The deploy waits for approval in the production environment." \
+            --jq .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
   deploy:
     name: Deploy composition
     needs: compose
@@ -782,3 +820,62 @@ jobs:
       - name: Remove the registry credential
         if: always()
         run: rm -f "$HOME/.docker/config.json"
+
+  report:
+    name: Report on the commit
+    needs: [compose, deploy]
+    # Whatever the deploy did, the check says so: live, or not deployed and
+    # why. On a hosted runner, so HQ's key never reaches the homelab one.
+    if: always() && needs.compose.outputs.check != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Mint a token for HQ's check and comment
+        id: report
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-pull-requests: write
+
+      - name: Say where the commit ended up
+        env:
+          GH_TOKEN: ${{ steps.report.outputs.token }}
+          CHECK: ${{ needs.compose.outputs.check }}
+          COMMIT: ${{ needs.compose.outputs.commit }}
+          IMAGE: ${{ needs.compose.outputs.image }}
+          RESULT: ${{ needs.deploy.result }}
+        run: |
+          set -euo pipefail
+          case "$RESULT" in
+            success)
+              conclusion=success title="Live in production"
+              summary="Production runs \`$IMAGE\`, and it passed its health check." ;;
+            cancelled)
+              conclusion=cancelled title="Not deployed"
+              summary="The deploy was cancelled. Production still runs the previous image." ;;
+            *)
+              conclusion=failure title="Not deployed"
+              summary="The deploy was not approved, or failed its health check and was rolled back. Production still runs the previous image. See the run." ;;
+          esac
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$CHECK" \
+            -f status=completed -f conclusion="$conclusion" \
+            -f "output[title]=$title" -f "output[summary]=$summary" >/dev/null
+          [ "$RESULT" = success ] || exit 0
+          # One comment on the merged pull request, the first time its commit
+          # is live; the marker is the one HQ uses on an extension's.
+          pull=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/pulls" \
+                   --jq '[.[] | select(.merged_at)][0].number // empty')
+          [ -n "$pull" ] || exit 0
+          marker="<!-- severino-hq-delivery:$COMMIT -->"
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$pull/comments?per_page=100" \
+               --jq '.[].body' | grep -qF "$marker"; then
+            exit 0
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$pull/comments" \
+            -f body="$marker
+          Live in production: \`$IMAGE\`." >/dev/null
