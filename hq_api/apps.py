@@ -6,7 +6,7 @@ class HQAPIConfig(AppConfig):
     name = "hq_api"
     verbose_name = "HQ machine API"
 
-    def ready(self):
+    def ready(self) -> None:
         # Register the composed capability-contract check after every model has
         # loaded. ``migrate`` and deployment checks then reject a bad extension
         # before the server accepts its first request.

@@ -27,11 +27,23 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     left out only for a single word that takes an "s"; a phrase has a verb, and
     a verb cannot be pluralized by adding a letter.
     """
+    one, many = counted_forms(one, many)
+    return f"{count:,} {one if count == 1 else many}"
+
+
+def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
+    """The singular and plural ``counted`` says, or ValueError when they cannot agree.
+
+    The one rule, shared by ``counted`` at render time and by the system check
+    that reads every literal phrase before anything renders.
+    """
+    if not one.strip():
+        raise ValueError("A count needs the words it counts.")
     if many is None:
         if " " in one.strip():
             raise ValueError(f"Give the plural of {one!r}: a phrase has a verb to agree.")
         many = f"{one}s"
-    return f"{count:,} {one if count == 1 else many}"
+    return one, many
 
 
 def ended(text: str) -> str:

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import math
 import os
 import re
-from collections.abc import Mapping, Set as AbstractSet
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -26,8 +25,9 @@ from pydantic import (
 
 from application.ui import counted
 
+from .attribution import unattributed_kinds
 from .consoles import cloudflare_dashboard, tailscale_machine
-from .names import in_zone, normalized_hostname
+from .names import certificate_covers, in_zone, normalized_hostname
 from .observations import OBSERVATIONS
 
 
@@ -403,22 +403,6 @@ def origin_is_authoritative(provider: "ProviderSpec") -> bool:
     """
 
     return provider.answers is None
-
-
-def certificate_covers(domain: str, names: AbstractSet[str]) -> bool:
-    """Whether a set of declared names, wildcards included, answers for one name.
-
-    Written for certificates and used by anything that has to ask the same
-    question: the service view matches a hostname against a certificate's
-    names exactly this way, and a second implementation of wildcard matching is
-    a second chance to get it subtly wrong.
-    """
-
-    normalized = normalized_hostname(domain)
-    if normalized in names:
-        return True
-    _, separator, parent = normalized.partition(".")
-    return bool(separator and f"*.{parent}" in names)
 
 
 # The facets a service is assembled from, in the order a request meets them: a
@@ -1670,7 +1654,9 @@ def expiry_phrase(stamp: str) -> str:
         return stamp or ""
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
-    days = math.ceil((expires - datetime.now(timezone.utc)).total_seconds() / 86400)
+    from application.expiry import days_until
+
+    days = days_until(expires)
     if days < 0:
         return f"{expires:%-d %b %Y} · expired"
     return f"{expires:%-d %b %Y} · {counted(days, 'day')}"
@@ -1936,12 +1922,11 @@ def _authority_readout(
     expires = str(spec.get("expires_on", ""))
     remaining = ""
     if expires:
-        from datetime import date
+        from application.expiry import days_until
+        from application.ui import moment
 
-        try:
-            days = (date.fromisoformat(expires) - date.today()).days
-        except ValueError:
-            days = None
+        when = moment(expires)
+        days = days_until(when) if when is not None else None
         if days is not None:
             remaining = (
                 f"{expires} · {days // 365} years away"
@@ -2807,6 +2792,13 @@ if _unmodelled:
     raise ValueError(
         "Connection providers without a credential model: "
         f"{', '.join(_unmodelled)}."
+    )
+
+
+if _unattributed := unattributed_kinds(OBSERVATIONS, _PROVIDERS):
+    raise ValueError(
+        "Kinds read through a per-connection provider must name connection_ref: "
+        f"{', '.join(_unattributed)}."
     )
 
 

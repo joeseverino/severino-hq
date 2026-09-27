@@ -2,10 +2,8 @@
 # The systemd files this repository ships, derived in one place.
 #
 # The installer that puts them on the host and the check that says whether the
-# host still has them must agree on what "them" is. Each once had its own idea:
-# the installer a list written by hand, the check three unit names. Neither saw
-# the files added after it was written, so those reached the host once or never
-# and their drift was reported by nothing.
+# host still has them agree on what "them" is by asking these functions; no list
+# is kept anywhere, so a file added to deploy/systemd is in both at once.
 
 # Print, relative to $1 and sorted, every file under it that systemd would read:
 # a unit file at the top level, or a `.conf` drop-in one directory down. That is

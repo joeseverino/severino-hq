@@ -1162,8 +1162,7 @@ class InfrastructureViewsTests(TestCase):
         ):
             response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, "Actions")
-        self.assertContains(response, "Open connections")
+        self.assertContains(response, '<a class="subtle-link" href="/connections/">Open connections</a>')
         self.assertContains(response, 'href="/topology/?trace"')
         self.assertContains(response, "Trace impact")
 

@@ -198,6 +198,9 @@ NEUTRAL_IDENTITY = {
     "DJANGO_ALLOWED_HOSTS": "127.0.0.1,testserver",
     "DJANGO_CSRF_TRUSTED_ORIGINS": "",
     "SEVERINO_SITE_HOST": "",
+    # Arrivals are recorded only by the tests that ask for it, so no other
+    # test's query count depends on which request came first.
+    "SEVERINO_REQUEST_PATH_SECONDS": "0",
 }
 
 
@@ -212,6 +215,7 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.ALLOWED_HOSTS = ["127.0.0.1", "testserver"]
         settings.CSRF_TRUSTED_ORIGINS = []
         settings.SEVERINO_SITE_HOST = ""
+        settings.SEVERINO_REQUEST_PATH_SECONDS = 0
         super().setup_test_environment(**kwargs)
 
     def get_resultclass(self):

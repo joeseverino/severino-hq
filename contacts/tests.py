@@ -285,22 +285,10 @@ def _db(name, uuid, account="a" * 32):
 
 
 @override_settings(
-    CLOUDFLARE_ACCOUNT_ID="",
-    CLOUDFLARE_D1_DATABASE_ID="",
     CLOUDFLARE_D1_DATABASE_NAME="",
     CLOUDFLARE_API_TOKEN="",
 )
 class D1DerivationTests(TestCase):
-    def test_settings_win_over_the_reading(self):
-        _databases(_db("contacts", "uuid-1"))
-        with override_settings(
-            CLOUDFLARE_ACCOUNT_ID="b" * 32, CLOUDFLARE_D1_DATABASE_ID="uuid-set"
-        ):
-            target = d1.database()
-
-        self.assertEqual((target.account, target.database), ("b" * 32, "uuid-set"))
-        self.assertEqual(target.source, "settings")
-
     def test_the_only_database_is_derived(self):
         _databases(_db("contacts", "uuid-1"))
 
@@ -316,23 +304,25 @@ class D1DerivationTests(TestCase):
         with override_settings(CLOUDFLARE_D1_DATABASE_NAME="other"):
             self.assertEqual(d1.database().database, "uuid-2")
 
-    def test_a_set_database_id_derives_only_the_account(self):
-        _databases(_db("contacts", "uuid-1"), _db("other", "uuid-2", account="c" * 32))
-
-        with override_settings(CLOUDFLARE_D1_DATABASE_ID="uuid-2"):
-            target = d1.database()
-
-        self.assertEqual((target.account, target.database), ("c" * 32, "uuid-2"))
-
     def test_several_databases_and_no_name_is_an_error_naming_the_setting(self):
         _databases(_db("contacts", "uuid-1"), _db("other", "uuid-2"))
 
         with self.assertRaisesMessage(d1.D1Error, "CLOUDFLARE_D1_DATABASE_NAME"):
             d1.database()
 
-    def test_no_reading_is_an_error_naming_the_settings(self):
-        with self.assertRaisesMessage(d1.D1Error, "CLOUDFLARE_D1_DATABASE_ID"):
+    def test_no_reading_is_an_error_naming_the_permission(self):
+        with self.assertRaisesMessage(d1.D1Error, "needs D1 Read"):
             d1.database()
+
+    def test_configured_ids_are_not_read(self):
+        _databases(_db("contacts", "uuid-1"))
+
+        with override_settings(
+            CLOUDFLARE_ACCOUNT_ID="b" * 32, CLOUDFLARE_D1_DATABASE_ID="uuid-set"
+        ):
+            target = d1.database()
+
+        self.assertEqual((target.account, target.database), ("a" * 32, "uuid-1"))
 
     def test_a_name_that_matches_nothing_is_an_error(self):
         _databases(_db("contacts", "uuid-1"))
@@ -350,3 +340,20 @@ class D1DerivationTests(TestCase):
 
         self.assertEqual(instance.status, "attention")
         self.assertIn("CLOUDFLARE_D1_DATABASE_NAME", instance.detail)
+
+
+class D1WriterPermissionTests(TestCase):
+    def test_the_contacts_token_is_minted_with_d1_write_only(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        lines = [
+            line.strip()
+            for line in (
+                Path(settings.BASE_DIR) / "scripts" / "cloudflare-d1-writer-permissions.txt"
+            ).read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+        self.assertEqual(lines, ["D1 Write (account)"])

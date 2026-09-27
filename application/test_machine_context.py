@@ -188,7 +188,16 @@ class RegistryTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_identity", "_names", "_activity"],
+            [
+                "_identity",
+                "_names",
+                "_environments",
+                "_projects",
+                "_networks",
+                "_data",
+                "_images",
+                "_activity",
+            ],
         )
 
     def test_a_section_with_nothing_to_say_does_not_appear(self):

@@ -69,7 +69,8 @@ def connection_specs():
                 status="good",
                 status_label="configured",
                 detail=(
-                    "Account, database, and token known. Health is checked when an "
+                    "Account and database from the cloudflare_api connection's "
+                    "readings; this token only writes. Health is checked when an "
                     "operation runs."
                 ),
                 endpoint=(
@@ -144,7 +145,7 @@ D1_KIND = "cloudflare.d1_database"
 class D1Target:
     account: str
     database: str
-    # "settings", or the reading the missing part was derived from.
+    # The reading the target was derived from.
     source: str
 
 
@@ -153,18 +154,13 @@ def _setting(name: str) -> str:
 
 
 def database() -> D1Target:
-    """The account and database HQ queries.
+    """The account and database HQ queries, from the ``cloudflare.d1_database`` reading.
 
-    Settings win. Whatever they leave out is derived from the stored
-    ``cloudflare.d1_database`` reading: the database the settings name by id or
-    by ``CLOUDFLARE_D1_DATABASE_NAME``, or the only one. More than one candidate
-    is an error, never a choice.
+    The cloudflare_api connection reads the account's databases; this picks the
+    only one, or the one ``CLOUDFLARE_D1_DATABASE_NAME`` names. More than one
+    candidate is an error, never a choice. The account and id are never
+    configured: a second copy of what the reading says is one that can disagree.
     """
-
-    account = _setting("CLOUDFLARE_ACCOUNT_ID")
-    database_id = _setting("CLOUDFLARE_D1_DATABASE_ID")
-    if account and database_id:
-        return D1Target(account, database_id, "settings")
 
     from control_plane.models import ProviderInventory
 
@@ -175,39 +171,22 @@ def database() -> D1Target:
         for record in (snapshot.records if snapshot else [])
         if isinstance(record, dict) and record.get("uuid") and record.get("account_id")
     ]
-    if account:
-        candidates = [r for r in candidates if r["account_id"] == account]
-    if database_id:
-        candidates = [r for r in candidates if r["uuid"] == database_id]
-    elif name:
+    if name:
         candidates = [r for r in candidates if r.get("name") == name]
 
     if len(candidates) == 1:
         found = candidates[0]
-        return D1Target(
-            account or str(found["account_id"]),
-            database_id or str(found["uuid"]),
-            f"{D1_KIND} reading",
-        )
+        return D1Target(str(found["account_id"]), str(found["uuid"]), f"{D1_KIND} reading")
     if not candidates:
-        qualifier = (
-            f" id {database_id!r}"
-            if database_id
-            else f" name {name!r}"
-            if name
-            else ""
-        )
+        qualifier = f" name {name!r}" if name else ""
         raise D1Error(
             f"Cloudflare D1 is not configured: no stored {D1_KIND} reading "
-            f"matches{qualifier}. Set CLOUDFLARE_ACCOUNT_ID and "
-            "CLOUDFLARE_D1_DATABASE_ID, or give the cloudflare_api connection "
-            "D1 Read."
+            f"matches{qualifier}. The cloudflare_api connection needs D1 Read."
         )
     names = ", ".join(sorted(str(r.get("name", "")) for r in candidates))
     raise D1Error(
         f"Cloudflare D1 is ambiguous: {counted(len(candidates), 'database')} "
-        f"match ({names}). Set CLOUDFLARE_D1_DATABASE_NAME or "
-        "CLOUDFLARE_D1_DATABASE_ID."
+        f"match ({names}). Set CLOUDFLARE_D1_DATABASE_NAME."
     )
 
 

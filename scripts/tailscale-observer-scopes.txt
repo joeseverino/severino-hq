@@ -5,6 +5,7 @@ devices:core:read
 devices:routes:read
 dns:read
 feature_settings:read
+networking_settings:read
 policy_file:read
 services:read
 users:read

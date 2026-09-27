@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 
 def _dns_title(record) -> str:
@@ -34,13 +34,20 @@ class TailnetSettingsRecord(ObservationRecord):
     devices_key_duration_days: int | None = None
     devices_auto_updates_on: bool | None = None
     users_approval_on: bool | None = None
-    network_flow_logging_on: bool | None = None
     regional_routing_on: bool | None = None
     posture_identity_collection_on: bool | None = None
     https_enabled: bool | None = None
     acls_externally_managed_on: bool | None = None
-    # Settings the credential could not see, and the scope each needs.
-    unread: str = ""
+
+
+# Settings a scope other than feature_settings:read governs, by Tailscale's own
+# key, each a part: Tailscale nulls one the credential may not see.
+SETTING_PARTS = {
+    "httpsEnabled": ReadingPart("https", "HTTPS certificates setting", ("networking_settings:read",)),
+    "aclsExternallyManagedOn": ReadingPart(
+        "acl_management", "Policy file management setting", ("policy_file:read",)
+    ),
+}
 
 
 # Personal data, stored for the estate view: who holds access to the tailnet
@@ -78,7 +85,11 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "tailscale",
         "Tailnet settings",
         TailnetSettingsRecord,
-        requires=("feature_settings:read",),
+        requires=(
+            "feature_settings:read",
+            *(name for part in SETTING_PARTS.values() for name in part.requires),
+        ),
+        parts=tuple(SETTING_PARTS.values()),
         title=lambda record: "Tailnet settings",
         relation="Governed by",
     ),

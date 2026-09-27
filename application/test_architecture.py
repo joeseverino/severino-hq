@@ -189,29 +189,32 @@ class StyleContractTests(SimpleTestCase):
             css,
         )
 
-    def test_a_table_cell_is_never_given_a_flex_or_grid_display(self):
-        """`display: flex` on a td or th drops it out of table layout.
+    def test_a_table_part_is_never_given_a_block_flex_or_grid_display(self):
+        """`display: flex` or `block` on a table part drops it out of table layout.
 
         The row then stacks into a single narrow column, and a colspan header
         collapses to one column's width. Neither fails loudly and both read as
         a styling nudge, so this reads the classes the templates actually put
-        on cells and rejects the declaration there. Lay out a div inside the
-        cell instead.
+        on table parts and rejects the declaration there. Lay out a div inside
+        the cell instead. On a phone a wide table scrolls sideways in its
+        `.table-scroll`; it does not stack into cards.
         """
 
         import re
 
         root = Path(__file__).resolve().parents[1]
+        parts = {"table", "thead", "tbody", "tfoot", "tr", "td", "th"}
         cell_classes: set[str] = set()
         for template in (root / "templates").rglob("*.html"):
             for attrs in re.findall(
-                r"<(?:td|th)\b([^>]*)>", template.read_text(encoding="utf-8")
+                r"<(?:table|thead|tbody|tfoot|tr|td|th)\b([^>]*)>",
+                template.read_text(encoding="utf-8"),
             ):
                 found = re.search(r'class="([^"{}]*)"', attrs)
                 if found:
                     cell_classes.update(found.group(1).split())
 
-        boxes = {"flex", "grid", "inline-flex", "inline-grid"}
+        boxes = {"block", "flex", "grid", "inline-flex", "inline-grid"}
         offences = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
@@ -224,20 +227,21 @@ class StyleContractTests(SimpleTestCase):
                 # The subject is the rightmost compound selector: what the rule
                 # actually styles, rather than what it is scoped by.
                 trimmed = part.strip()
-                # `.stacks` is the sanctioned opt-out: below 640px that variant
-                # deliberately abandons table layout for stacked cards, with
-                # cells opting in through data-label.
-                if not trimmed or ".stacks" in trimmed:
+                if not trimmed:
                     continue
                 subject = trimmed.split()[-1].split(">")[-1].strip()
                 # An element qualifier settles it either way: `span.x` cannot
-                # match a cell however `.x` is used elsewhere, and `td.x` always
-                # does. Only an unqualified class has to be judged by where the
-                # templates put it.
+                # match a table part however `.x` is used elsewhere, and `td.x`
+                # always does. Only an unqualified class has to be judged by
+                # where the templates put it.
                 qualifier = re.match(r"^([A-Za-z][\w-]*)", subject)
-                if qualifier and qualifier.group(1) not in {"td", "th"}:
+                if qualifier and qualifier.group(1) not in parts:
                     continue
                 names = set(re.findall(r"\.([A-Za-z0-9_-]+)", subject))
+                # `block` is common on spans that share a class with a cell
+                # (`.muted`), so it is judged only where a table part is named.
+                if declared.group(1) == "block" and not qualifier:
+                    continue
                 if qualifier or names & cell_classes:
                     offences.append(f"{trimmed} sets display: {declared.group(1)}")
 
@@ -1067,17 +1071,6 @@ class CognitiveComplexityTests(SimpleTestCase):
         ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith,
         ast.Try, ast.TryStar, ast.ExceptHandler, ast.Match,
     )
-    # Functions over the limit when this test landed. Entries are only ever removed.
-    COMPLEXITY_DEBT: dict[str, int] = {
-        "content.content_sync.sync_content_index": 21,
-        "control_plane.views.InfrastructureDetailView.get_context_data": 22,
-        "control_plane.views.ResourceFormView.post": 22,
-        "controller_runtime.providers.approve_tailnet_routes": 22,
-        "controller_runtime.providers.reconcile_tailnet_policy": 23,
-        "controller_runtime.providers.reconcile_tls": 27,
-        "hq_sdk.contract.drift": 21,
-        "hq_sdk.validation.unsupported_hq_imports": 22,
-    }
 
     @classmethod
     def score(cls, function) -> int:
@@ -1146,21 +1139,10 @@ class CognitiveComplexityTests(SimpleTestCase):
         self.assertEqual(self.score(function), 9)
 
     def test_no_function_exceeds_the_limit(self):
+        # No allowance list: a function over the limit is split, never excused.
         over = {
             name: score
             for name, score in self.scores().items()
-            if score > self.LIMIT and name not in self.COMPLEXITY_DEBT
+            if score > self.LIMIT
         }
         self.assertEqual(over, {}, "split these into named steps")
-
-    def test_complexity_debt_only_shrinks(self):
-        scores = self.scores()
-        changed = {
-            name: (debt, scores.get(name))
-            for name, debt in self.COMPLEXITY_DEBT.items()
-            if scores.get(name, 0) != debt or scores.get(name, 0) <= self.LIMIT
-        }
-        # Equality ratchets: a lower score is written down, a higher one fails.
-        self.assertEqual(
-            changed, {}, "set each entry to its score, or drop it once within the limit"
-        )

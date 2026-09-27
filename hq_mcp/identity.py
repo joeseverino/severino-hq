@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from typing import Any
 
 from application.security import AuthorizationError, Principal, mcp_principal
 
@@ -17,11 +18,11 @@ _current_principal: contextvars.ContextVar[Principal | None] = contextvars.Conte
 )
 
 
-def set_principal(principal: Principal | None):
+def set_principal(principal: Principal | None) -> contextvars.Token[Principal | None]:
     return _current_principal.set(principal)
 
 
-def reset_principal(token) -> None:
+def reset_principal(token: contextvars.Token[Principal | None]) -> None:
     _current_principal.reset(token)
 
 
@@ -38,7 +39,7 @@ def current_principal() -> Principal:
     return principal
 
 
-def token_principal(claims: dict) -> Principal:
+def token_principal(claims: dict[str, Any]) -> Principal:
     """An agent holding its grant, capped by what this deployment allows MCP."""
 
     from hq_api.security import api_principal

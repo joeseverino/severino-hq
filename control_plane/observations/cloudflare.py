@@ -2,7 +2,8 @@
 
 Each record names only what HQ keeps. Build configuration, environment values,
 SaaS and SCIM settings, client IDs and secrets are never named, so the schema
-drops them. ``unread`` says which part of a record could not be read.
+drops them. A part a reading could not read is declared in its ``parts`` and
+stored as a part refusal, never in a record.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any
 from ..certificate_authorities import authority_name
 from ..consoles import cloudflare_dashboard, cloudflare_zero_trust
 from ..names import normalized_hostname
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 
 def _present(*values: Any) -> tuple[str, ...]:
@@ -48,7 +49,6 @@ class D1DatabaseRecord(ObservationRecord):
     created_at: str = ""
     version: str = ""
     file_size: int | None = None
-    unread: str = ""
 
 
 class AccessPolicyRecord(ObservationRecord):
@@ -82,7 +82,6 @@ class AccessServiceTokenRecord(ObservationRecord):
     created_at: str = ""
     # Applications with a policy whose include rules admit this token.
     apps: tuple[AccessAppRef, ...] = ()
-    unread: str = ""
 
 
 class TunnelIngressRecord(ObservationRecord):
@@ -109,7 +108,6 @@ class TunnelRecord(ObservationRecord):
     config_source: str = ""
     ingress: tuple[TunnelIngressRecord, ...] = ()
     connections: tuple[TunnelConnectionRecord, ...] = ()
-    unread: str = ""
 
 
 class EdgeCertificateRecord(ObservationRecord):
@@ -123,11 +121,50 @@ class EdgeCertificateRecord(ObservationRecord):
     certificate_authority: str = ""
     # The earliest expiry among the pack's certificates.
     expires_on: str = ""
-    unread: str = ""
+
+
+class RedirectRecord(ObservationRecord):
+    connection_ref: str = ""
+    account_id: str = ""
+    zone: str
+    # "rule" for a zone redirect rule, "page_rule" for a forwarding page rule.
+    source: str = ""
+    id: str = ""
+    description: str = ""
+    # The hostnames the rule matches, read from its expression or target.
+    hostnames: tuple[str, ...] = ()
+    # The destination: a static URL, or the expression that builds one.
+    target: str = ""
+    # The host the destination names, when it names one.
+    target_host: str = ""
+    status_code: int | None = None
+    preserve_query_string: bool = False
+    enabled: bool = True
+
+
+def redirect_target(record: Mapping[str, Any]) -> str:
+    """The host a redirect sends its names to, or "" when its target names none."""
+
+    return normalized_hostname(record.get("target_host")) if record.get("enabled", True) else ""
+
+
+def _redirect_title(record: Mapping[str, Any]) -> str:
+    return str(record.get("target_host") or record.get("target") or "")
 
 
 def _ingress_hosts(record: Mapping[str, Any]) -> tuple[str, ...]:
     return _present([entry.get("hostname") for entry in record.get("ingress") or ()])
+
+
+def _tunnel_service(record: Mapping[str, Any], hostname: str) -> str:
+    return next(
+        (
+            str(entry.get("service") or "")
+            for entry in record.get("ingress") or ()
+            if normalized_hostname(entry.get("hostname")) == hostname
+        ),
+        "",
+    )
 
 
 def _origin_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
@@ -149,6 +186,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("name", "")),
         relation="Served by Pages project",
         facet="runtime",
+        names_services=True,
         console=lambda record: cloudflare_dashboard(
             record, "pages", "view", str(record.get("name", ""))
         ),
@@ -159,6 +197,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "D1 database",
         D1DatabaseRecord,
         requires=("D1 Read (account)",),
+        parts=(ReadingPart("file_size", "Database size", ("D1 Read (account)",)),),
         title=lambda record: str(record.get("name", "")),
         relation="Backed by D1 database",
         console=lambda record: cloudflare_dashboard(
@@ -170,6 +209,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Access application",
         AccessAppRecord,
+        short_label="Cloudflare Access",
         requires=("Access: Apps Read (account)", "Access: Policies Read (account)"),
         hostnames=lambda record: _present(
             record.get("domain", "").split("/", 1)[0],
@@ -177,6 +217,8 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         ),
         title=lambda record: str(record.get("name", "")),
         relation="Behind Access",
+        names_services=True,
+        request_header="Cf-Access-Jwt-Assertion",
         console=lambda record: cloudflare_zero_trust(record, "access", "apps"),
     ),
     ObservationSpec(
@@ -184,7 +226,10 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Access service token",
         AccessServiceTokenRecord,
-        requires=("Access: Service Tokens Read (account)",),
+        requires=("Access: Service Tokens Read (account)", "Access: Apps Read (account)"),
+        parts=(
+            ReadingPart("apps", "Applications admitting it", ("Access: Apps Read (account)",)),
+        ),
         title=lambda record: str(record.get("name", "")),
         relation="Admitted by service token",
         expires=lambda record: str(record.get("expires_at", "")),
@@ -195,12 +240,18 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Tunnel",
         TunnelRecord,
         requires=("Cloudflare Tunnel Read (account)",),
+        parts=(
+            ReadingPart("configuration", "Tunnel ingress", ("Cloudflare Tunnel Read (account)",)),
+            ReadingPart("connections", "Tunnel connections", ("Cloudflare Tunnel Read (account)",)),
+        ),
         hostnames=_ingress_hosts,
         addresses=_origin_addresses,
         title=lambda record: str(record.get("name", "")),
         relation="Published through tunnel",
         address_relation="Runs connector for tunnel",
         facet="proxy",
+        names_services=True,
+        upstream=_tunnel_service,
         console=lambda record: cloudflare_zero_trust(record, "networks", "tunnels"),
     ),
     ObservationSpec(
@@ -220,5 +271,30 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         short_label="Edge",
         expires=lambda record: str(record.get("expires_on", "")),
         issuer=lambda record: authority_name(record.get("certificate_authority")),
+    ),
+    ObservationSpec(
+        "cloudflare.redirect",
+        "cloudflare_api",
+        "Redirect",
+        RedirectRecord,
+        requires=(
+            "Zone Read (zone)",
+            "Single Redirect Read (zone)",
+            "Page Rules Read (zone)",
+        ),
+        parts=(
+            ReadingPart("rules", "Redirect rules", ("Single Redirect Read (zone)",)),
+            ReadingPart("page_rules", "Page rules", ("Page Rules Read (zone)",)),
+        ),
+        hostnames=lambda record: (
+            _present(record.get("hostnames") or ()) if record.get("enabled", True) else ()
+        ),
+        title=_redirect_title,
+        relation="Redirects to",
+        names_services=True,
+        redirects_to=redirect_target,
+        console=lambda record: cloudflare_dashboard(
+            record, str(record.get("zone", "")), "rules", "redirect-rules"
+        ),
     ),
 )

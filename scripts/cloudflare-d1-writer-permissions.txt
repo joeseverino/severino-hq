@@ -1,0 +1,5 @@
+# Write permission for HQ's contact inbox token, one per line as
+# "<permission group name> (<account|zone>)". Reads come from the cloudflare_api
+# observer; this token only writes submissions. Run the mint script with
+# --list-groups to confirm the name if Cloudflare renames it.
+D1 Write (account)

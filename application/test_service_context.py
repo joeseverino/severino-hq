@@ -151,7 +151,7 @@ class PageTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_delivery", "_activity", "_traffic"],
+            ["_delivery", "_access", "_activity", "_traffic"],
         )
 
     def test_service_section_ids_share_the_page_navigation_contract(self):

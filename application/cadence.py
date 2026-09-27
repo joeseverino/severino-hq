@@ -26,23 +26,32 @@ replayed, the worst it can cause is a controller run that finds nothing to do.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 import os
 import tempfile
 import time
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from control_plane.models import ProviderConnection, ProviderInventory
+from control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 
 from .security import Capability, Principal
 
 
 @dataclass(frozen=True)
 class ControllerSweepCommand:
-    """A deliberate wake-up request; the controller still decides what is due."""
+    """A wake-up request; with a subject, that subject is read on the next pull.
+
+    ``connection_ref`` forces every kind its credential reads, ``kind`` one
+    kind, ``every_connection`` the whole sweep. At most one of the three.
+    """
+
+    connection_ref: str = ""
+    kind: str = ""
+    every_connection: bool = False
 
 
 def _seconds(name: str, fallback: int) -> int:
@@ -155,43 +164,199 @@ def carried_connections(controller_id: str) -> list[str]:
 def sweep_due(controller_id: str = "") -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
-    The oldest sweep decides. The reason rides along because a controller that
-    stopped sweeping and one that was told not to look identical from outside,
-    and only one of them is a fault.
+    The oldest sweep decides, unless an operator asked for a read: a pending
+    ``ReadRequest`` makes the sweep due whatever the cadence says. The reason
+    rides along because a controller that stopped sweeping and one that was
+    told not to look identical from outside, and only one of them is a fault.
 
     `carry` names the connections the sweep should report as they last were
-    rather than probe; see `carried_connections`.
+    rather than probe; see `carried_connections`. A forced connection is never
+    carried. `only_kinds`, when not empty, is every kind the sweep reads: set
+    when the cadence is not due and every pending request names its kinds.
     """
 
-    carry = carried_connections(controller_id) if controller_id else []
+    forced = forced_reads()
+    forced_refs = {read.connection_ref for read in forced if read.connection_ref}
+    carry = (
+        [ref for ref in carried_connections(controller_id) if ref not in forced_refs]
+        if controller_id
+        else []
+    )
     interval = sweep_interval()
     oldest = (
         ProviderInventory.objects.order_by("observed_at")
         .values_list("observed_at", flat=True)
         .first()
     )
+    verdict: dict[str, object] = {
+        "ok": True,
+        "interval_seconds": int(interval.total_seconds()),
+        "carry": carry,
+        "forced": [read.as_dict() for read in forced],
+        "only_kinds": [],
+    }
     if oldest is None:
-        return {
-            "ok": True,
-            "due": True,
-            "reason": "Nothing has been swept yet.",
-            "interval_seconds": int(interval.total_seconds()),
-            "carry": carry,
-        }
+        return {**verdict, "due": True, "reason": "Nothing has been swept yet."}
     age = timezone.now() - oldest
     due = age >= interval
+    reason = (
+        f"Oldest sweep is {int(age.total_seconds())}s old; "
+        f"{'due' if due else 'not due'} at {int(interval.total_seconds())}s."
+    )
+    if not due and forced:
+        reason += f" Read now asked for {', '.join(read.subject for read in forced)}."
+        if all(read.kinds is not None for read in forced):
+            verdict["only_kinds"] = sorted(
+                {kind for read in forced for kind in read.kinds or ()}
+            )
     return {
-        "ok": True,
-        "due": due,
-        "reason": (
-            f"Oldest sweep is {int(age.total_seconds())}s old; "
-            f"{'due' if due else 'not due'} at "
-            f"{int(interval.total_seconds())}s."
-        ),
-        "interval_seconds": int(interval.total_seconds()),
+        **verdict,
+        "due": due or bool(forced),
+        "reason": reason,
         "age_seconds": int(age.total_seconds()),
-        "carry": carry,
     }
+
+
+# ----- Read now ---------------------------------------------------------------
+
+
+def read_request_lifetime() -> timedelta:
+    """How long an unanswered read request keeps forcing sweeps."""
+
+    return timedelta(seconds=_seconds("SEVERINO_READ_REQUEST_SECONDS", 15 * 60))
+
+
+@dataclass(frozen=True)
+class ForcedRead:
+    """One pending read request and the kinds it forces; ``None`` is every kind."""
+
+    connection_ref: str
+    kind: str
+    requested_at: datetime
+    kinds: tuple[str, ...] | None
+
+    @property
+    def subject(self) -> str:
+        return self.connection_ref or self.kind or "every connection"
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "connection_ref": self.connection_ref,
+            "kind": self.kind,
+            "requested_at": self.requested_at.isoformat(),
+            "kinds": list(self.kinds) if self.kinds is not None else None,
+        }
+
+
+def connection_providers(connection_ref: str) -> tuple[str, ...]:
+    """The providers a connection ref is reported as, by any controller."""
+
+    return tuple(
+        sorted(
+            set(
+                ProviderConnection.objects.filter(connection_ref=connection_ref)
+                .exclude(provider="")
+                .values_list("provider", flat=True)
+            )
+        )
+    )
+
+
+def _forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
+    from .credential_sight import fed_kinds
+
+    if kind:
+        return (kind,)
+    if connection_ref:
+        return tuple(
+            dict.fromkeys(
+                found
+                for provider in connection_providers(connection_ref)
+                for found in fed_kinds(provider)
+            )
+        )
+    return None
+
+
+def _answered(
+    read: ForcedRead, stored: dict[str, datetime], probed: dict[str, datetime]
+) -> bool:
+    """Whether everything ``read`` forces was stored after it was asked for."""
+
+    asked = read.requested_at
+    if read.connection_ref and probed.get(read.connection_ref, asked) <= asked:
+        return False
+    if read.kinds is None:
+        # Every kind: answered once something was stored and all of it is newer.
+        return bool(stored) and min(stored.values()) > asked
+    return all(stored.get(kind, asked) > asked for kind in read.kinds)
+
+
+def forced_reads() -> tuple[ForcedRead, ...]:
+    """Read requests not yet answered and not yet expired, oldest first."""
+
+    since = timezone.now() - read_request_lifetime()
+    requests = tuple(
+        ReadRequest.objects.filter(requested_at__gte=since).order_by("requested_at")
+    )
+    if not requests:
+        return ()
+    stored = dict(ProviderInventory.objects.values_list("kind", "updated_at"))
+    probed: dict[str, datetime] = {}
+    for ref, observed_at in ProviderConnection.objects.values_list(
+        "connection_ref", "observed_at"
+    ):
+        probed[ref] = max(observed_at, probed.get(ref, observed_at))
+    reads = (
+        ForcedRead(
+            request.connection_ref,
+            request.kind,
+            request.requested_at,
+            _forced_kinds(request.connection_ref, request.kind),
+        )
+        for request in requests
+    )
+    return tuple(read for read in reads if not _answered(read, stored, probed))
+
+
+def settle_read_requests() -> int:
+    """Forget read requests that were answered or expired; how many went."""
+
+    pending = {(read.connection_ref, read.kind) for read in forced_reads()}
+    settled = [
+        request.pk
+        for request in ReadRequest.objects.all()
+        if (request.connection_ref, request.kind) not in pending
+    ]
+    ReadRequest.objects.filter(pk__in=settled).delete()
+    return len(settled)
+
+
+def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
+    """``(connection_ref, kind)`` the command forces, or None for a bare wake-up.
+
+    Fails closed: a ref no controller reported, or a kind HQ does not store.
+    """
+
+    from control_plane.observations import OBSERVATIONS
+    from control_plane.providers import PROVIDERS
+
+    ref = command.connection_ref.strip()
+    kind = command.kind.strip()
+    named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
+    if command.every_connection:
+        named.append("every_connection")
+    if len(named) > 1:
+        raise ValidationError(
+            {field: "Name one of connection_ref, kind or every_connection." for field in named}
+        )
+    if ref and not connection_providers(ref):
+        raise ValidationError(
+            {"connection_ref": ValidationError("No such connection.", code="invalid_choice")}
+        )
+    if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
+        raise ValidationError({"kind": ValidationError("No such kind.", code="invalid_choice")})
+    return (ref, kind) if named else None
 
 
 def ring_doorbell() -> bool:
@@ -215,13 +380,19 @@ def request_controller_sweep(
     principal: Principal,
     expected_updated_at: str | None = None,
 ) -> dict[str, object]:
-    """Wake the pull-based controller and explain the cadence it will apply."""
+    """Wake the pull-based controller; with a subject, have it read that now."""
 
-    del command, expected_updated_at
+    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    subject = _read_subject(command)
     # An operator asking for fresh state makes HQ active before policy is read,
     # so the active cadence (not the twelve-hour idle economy) decides the sweep.
     note_activity()
+    if subject is not None:
+        ref, kind = subject
+        ReadRequest.objects.update_or_create(
+            connection_ref=ref, kind=kind, defaults={"requested_at": timezone.now()}
+        )
     verdict = sweep_due()
     if not ring_doorbell():
         raise ValueError("The controller doorbell could not be reached.")
@@ -230,12 +401,27 @@ def request_controller_sweep(
         "requested": True,
         "due": verdict["due"],
         "reason": verdict["reason"],
-        "message": (
-            "The controller was notified and will pull work now."
-            if verdict["due"]
-            else "The controller was notified; the current observation is already fresh."
-        ),
+        "read_now": _read_label(subject),
+        "message": _sweep_message(subject, bool(verdict["due"])),
     }
+
+
+def _read_label(subject: tuple[str, str] | None) -> str:
+    if subject is None:
+        return ""
+    ref, kind = subject
+    return ref or kind or "every connection"
+
+
+def _sweep_message(subject: tuple[str, str] | None, due: bool) -> str:
+    if subject is not None:
+        return (
+            f"Asked the controller to read {_read_label(subject)} now; "
+            "this page updates when it reports."
+        )
+    if due:
+        return "The controller was notified and will pull work now."
+    return "The controller was notified; the current observation is already fresh."
 
 
 def _touch(path: Path) -> None:

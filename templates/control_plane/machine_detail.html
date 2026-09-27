@@ -51,7 +51,7 @@
   </div>
   <div class="control-metric">
     <span class="control-label">Serves</span>
-    <strong>{{ machine.serves_count }}</strong>
+    <strong>{{ serves_count }}</strong>
     {% comment %}HQ itself is first when it runs here: derived, and not reconciled.{% endcomment %}
     {% for link in serves_links %}
       <span class="readout">{% entity link %}{% if forloop.first and machine.runs_hq %} <span class="muted">{{ hq_label }}</span>{% endif %}</span>
@@ -143,6 +143,12 @@
           <th scope="row">State</th>
           <td>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|slice:":10" }}{% endif %}{% endif %}</td>
         </tr>
+        {% if machine.presence.reached_hq %}
+          <tr>
+            <th scope="row">Last reached HQ</th>
+            <td>{{ machine.presence.reached_hq.phrase|capfirst }}</td>
+          </tr>
+        {% endif %}
         {% comment %}
         Every tailnet reading here is observer-relative, and on this machine
         the observer is the subject. Said once, instead of a peering panel

@@ -1,0 +1,4 @@
+# The optional browser layout gate (core/browser_tests.py): development and CI
+# only, never installed in the host image. Compiled with hashes into
+# requirements-browser.txt, which is installed with --require-hashes.
+playwright==1.63.0

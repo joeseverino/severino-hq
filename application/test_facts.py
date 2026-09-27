@@ -122,17 +122,54 @@ class UnreadableTests(TestCase):
             name: str
 
         spec = ObservationSpec(
-            "example.reading", "example", "Example reading", Named, requires=("Zone Read",)
+            "example.reading", "example", "Example reading", Named, requires=("Zone Read",),
+            hostnames=lambda record: (record.get("name", ""),),
         )
         store("example.reading", reachable=False, error="403 from the provider.")
 
         with mock.patch("application.facts.OBSERVATIONS", registry((spec,))):
-            facts = facts_about(("example-host",), ())
+            facts = facts_about(("host.example.com",), ())
 
         self.assertEqual(len(facts), 1)
         self.assertEqual(facts[0].state, UNREADABLE)
         self.assertIn("403 from the provider.", facts[0].detail)
         self.assertIn("Zone Read", facts[0].detail)
+
+    def test_a_refused_kind_that_cannot_join_the_subject_says_nothing_about_it(self):
+        """The "Not readable" banner belongs only where the kind could change the page."""
+
+        from .facts import Subject, unreadable_labels
+
+        class Named(ObservationRecord):
+            name: str
+
+        by_name = ObservationSpec(
+            "example.by_name", "example", "By name", Named,
+            hostnames=lambda record: (record.get("name", ""),),
+        )
+        by_address = ObservationSpec(
+            "example.by_address", "example", "By address", Named,
+            addresses=lambda record: (record.get("name", ""),),
+        )
+        joins_nothing = ObservationSpec("example.nothing", "example", "Nothing", Named)
+        for spec in (by_name, by_address, joins_nothing):
+            store(spec.kind, reachable=False, error="refused")
+
+        with mock.patch(
+            "application.facts.OBSERVATIONS", registry((by_name, by_address, joins_nothing))
+        ):
+            service = unreadable_labels(Subject.of(hostnames=("app.example.com",)))
+            address = unreadable_labels(Subject.of(addresses=("192.0.2.10",)))
+            every = unreadable_labels()
+            facts = facts_about((), ("192.0.2.10",))
+
+        self.assertIn("By name", service)
+        self.assertNotIn("By address", service)
+        self.assertNotIn("Nothing", service)
+        self.assertIn("By address", address)
+        self.assertNotIn("By name", address)
+        self.assertEqual({"By name", "By address", "Nothing"} - set(every), set())
+        self.assertEqual({f.label for f in facts if f.state == UNREADABLE}, {"By address"})
 
     def test_an_unreachable_inventory_kind_is_not_silence(self):
         kind, _other = dns_kinds()

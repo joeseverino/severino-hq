@@ -149,6 +149,19 @@ privileged pull-based controller apply the same cadence contract it always
 uses. The web/API process receives no provider authority, and callers receive
 the due decision that made the request meaningful.
 
+With a subject it is "read now": `connection_ref` forces every kind that
+connection's credential reads (derived from the observation registry through
+its provider), `kind` forces one kind, and `every_connection` forces the whole
+sweep. At most one. An unknown ref or kind is `invalid_input`; it needs
+`manage_infrastructure`. The request is stored as a `ReadRequest`, audited
+against its connection, and makes the controller's `sweep-due` answer due
+whatever the cadence says; when only requests make it due, `only_kinds` names
+every kind the controller reads. A request is answered once each forced reading
+is stored after it, and stops forcing after `SEVERINO_READ_REQUEST_SECONDS`.
+The web form is `POST /infrastructure/connections/read/`; a GET is refused. A
+finding whose evidence is a reading offers "Read now and check again" as its
+verification; one no reading involves offers "Check again".
+
 Each serialized finding may include a domain-neutral `workflow`: ordered steps
 whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
 outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
@@ -177,16 +190,26 @@ the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
 | Machine catalogue, roles, HQ's own machine | Machines | `machines` | yes | yes | yes | yes |
 | Domains, their services and registration | Domains | `domains` | yes | yes | yes | yes |
 | Services and their facets | Services | `services` | yes | yes | yes | yes |
+| Request path per hostname (`paths.path_to`) | Service page, connections | `paths` (`get <hostname>`), inside `services` get | yes | yes | yes | yes |
+| How the calling request reached HQ (`request_path.request_path`) | This connection | `request.path` (the caller's own request; empty, saying why, without one) | yes | yes | no | no |
 | `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
 | Readings, schema-filtered (`control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
 | Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
 | Credential sight | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
+| Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach (network, machine, tailnet peering), last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) | yes | yes | yes | yes |
+| Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` | yes | yes | yes | yes |
 | Estate and record search (command center) | Search | `search` | yes | yes | yes | yes |
 | Topology and impact trace | Topology | `/topology/`, `get_topology` | yes | yes | yes | no |
 | Findings | Findings | `/findings/`, `get_findings` | yes | yes | yes | no |
 | Connections | Connections | `/connections/`, `list_connections` | yes | yes | yes | no |
 | Registry import | none | `hq.import` capability | yes | yes | yes | yes |
 | Public registry refresh | none | `manage.py refresh_public_registry` | no | no | yes | no |
+
+`connection.standing` returns the estate half of the connections page. The
+page also shows how the request being answered reached HQ (network admission,
+transport, proxy identity and the caller's first hop); a read has no such
+request, so its `request` is null. Everything else is the same object the page
+renders, and a parity test holds the two equal.
 
 Readings leave only through their schema: `ObservationSpec.admitted` drops any
 field the record model does not name. Node ids are the topology's:

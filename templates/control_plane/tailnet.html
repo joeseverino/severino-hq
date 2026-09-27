@@ -1,33 +1,33 @@
 {% extends "page.html" %}
 {% load nav_tags %}
 {% block page %}
-{% if policy.known %}
+{% if tailnet.known %}
   <div class="control-summary">
     <div class="control-metric">
       <span class="control-label">Grants</span>
-      <strong>{{ policy.grants|length }}</strong>
+      <strong>{{ tailnet.policy.grants|length }}</strong>
     </div>
     <div class="control-metric">
       <span class="control-label">Groups</span>
-      <strong>{{ policy.groups|length }}</strong>
+      <strong>{{ tailnet.policy.groups|length }}</strong>
     </div>
     <div class="control-metric">
       <span class="control-label">Tags</span>
-      <strong>{{ policy.tags|length }}</strong>
+      <strong>{{ tailnet.policy.tags|length }}</strong>
     </div>
     <div class="control-metric">
       <span class="control-label">Policy tests</span>
-      <strong>{{ policy.tests|length }}</strong>
+      <strong>{{ tailnet.policy.tests|length }}</strong>
     </div>
   </div>
 
-  {% if policy.facts %}
+  {% if tailnet.settings %}
     <h2>Settings</h2>
     <div class="table-scroll">
       <table class="data-table compact-table">
         <tbody>
-          {% for label, addresses, value in fact_rows %}
-            <tr><th scope="row">{{ label }}</th><td>{% if addresses %}{% include "control_plane/_policy_names.html" with names=addresses %}{% else %}{{ value }}{% endif %}</td></tr>
+          {% for setting in tailnet.settings %}
+            <tr><th scope="row">{{ setting.label }}</th><td>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -41,11 +41,11 @@
     <table class="data-table">
       <thead><tr><th>From</th><th>To</th><th>On</th></tr></thead>
       <tbody>
-        {% for grant, sources, destinations in grant_rows %}
+        {% for grant in tailnet.grants %}
           <tr>
-            <td>{% include "control_plane/_policy_names.html" with names=sources %}</td>
-            <td>{% include "control_plane/_policy_names.html" with names=destinations %}</td>
-            <td><span class="code-list">{% for ip, name in grant.ports %}<code>{{ ip }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
+            <td>{% include "control_plane/_policy_names.html" with names=grant.sources %}</td>
+            <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
+            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>
@@ -57,18 +57,18 @@
     <table class="data-table">
       <thead><tr><th>Name</th><th>Members</th><th>Devices</th></tr></thead>
       <tbody>
-        {% for group in policy.groups %}
+        {% for group in tailnet.policy.groups %}
           <tr>
             <td><code>{{ group.name }}</code></td>
             <td>{{ group.members|join:", " }}</td>
             <td></td>
           </tr>
         {% endfor %}
-        {% for tag in policy.tags %}
+        {% for row in tailnet.tags %}
           <tr>
-            <td><code>{{ tag.name }}</code></td>
-            <td><span class="muted">owned by</span> {{ tag.owners|join:", " }}</td>
-            <td>{% with carried=tag_devices|dictkey:tag.name %}{% for link in carried %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% empty_value %}{% endfor %}{% endwith %}</td>
+            <td><code>{{ row.tag.name }}</code></td>
+            <td><span class="muted">owned by</span> {{ row.tag.owners|join:", " }}</td>
+            <td>{% for link in row.devices %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -86,13 +86,13 @@
   Shown only when there are any: a heading over an empty table says a feature is
   broken when it is simply unused.
   {% endcomment %}
-  {% if policy.services %}
+  {% if tailnet.policy.services %}
     <h2>Services</h2>
     <div class="table-scroll">
       <table class="data-table">
         <thead><tr><th>Service</th><th>Answers at</th><th>Ports</th><th>Note</th></tr></thead>
         <tbody>
-          {% for service in policy.services %}
+          {% for service in tailnet.policy.services %}
             <tr>
               <td><code>{{ service.name }}</code></td>
               <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
@@ -105,7 +105,7 @@
     </div>
   {% endif %}
 
-  {% if policy.ssh_rules %}
+  {% if tailnet.ssh_rules %}
     {% comment %}
     Grants of a different kind, and the grants table above shows none of them
     because they live under their own key in the policy. "Check" means the
@@ -117,12 +117,12 @@
       <table class="data-table">
         <thead><tr><th>From</th><th>To</th><th>As</th><th>Re-authenticate</th></tr></thead>
         <tbody>
-          {% for rule, sources, destinations in ssh_rows %}
+          {% for row in tailnet.ssh_rules %}
             <tr>
-              <td>{% include "control_plane/_policy_names.html" with names=sources %}</td>
-              <td>{% include "control_plane/_policy_names.html" with names=destinations %}</td>
-              <td>{% for user in rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-              <td>{% if rule.action == "check" %}Yes{% elif rule.action == "accept" %}<strong>No</strong>{% else %}{{ rule.action }}{% endif %}</td>
+              <td>{% include "control_plane/_policy_names.html" with names=row.sources %}</td>
+              <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
+              <td>{% for user in row.rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action }}{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -130,13 +130,13 @@
     </div>
   {% endif %}
 
-  {% if policy.app_connectors %}
+  {% if tailnet.policy.app_connectors %}
     <h2>App connectors</h2>
     <div class="table-scroll">
       <table class="data-table">
         <thead><tr><th>Name</th><th>Routed by</th><th>For</th></tr></thead>
         <tbody>
-          {% for connector in policy.app_connectors %}
+          {% for connector in tailnet.policy.app_connectors %}
             <tr>
               <td><code>{{ connector.name }}</code></td>
               <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>

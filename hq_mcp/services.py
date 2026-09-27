@@ -33,18 +33,6 @@ class NotFoundError(ValueError):
     """A requested HQ object does not exist."""
 
 
-def _write(service, command, **kwargs):
-    """Invoke one application mutation as the authenticated MCP caller.
-
-    Who that is depends on which credential the boundary accepted: a named
-    agent when a Pocket ID token was presented, the shared service account when
-    the legacy bearer was. Either way it is resolved per request rather than
-    per deployment, which is what puts an agent's own name in the audit log.
-    """
-
-    return service(command, principal=current_principal(), **kwargs)
-
-
 def describe_capabilities() -> dict[str, Any]:
     """Describe every JSON-executable HQ capability and its canonical schema."""
 
@@ -197,12 +185,12 @@ def get_managed_resource(key: str) -> dict[str, Any]:
 
 
 def list_services() -> dict[str, Any]:
-    """List every declared hostname with the state of its DNS, ingress and TLS."""
+    """List every service hostname, HQ's own and observed ones marked, with its wiring."""
     return list_resource("services")
 
 
 def get_service(hostname: str) -> dict[str, Any]:
-    """Get one hostname with the resources behind each part of its wiring."""
+    """Get one hostname with the resources behind its wiring and its request path."""
     return get_resource("services", hostname)
 
 

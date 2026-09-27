@@ -860,26 +860,15 @@ class ConnectionView(PageMixin, LoginRequiredMixin, TemplateView):
     )
 
     def get_context_data(self, **kwargs):
-        from application.connection import (
-            addresses_of,
-            addresses_of_hq,
-            connection as describe,
-            headers_of,
-            hops_of,
-        )
-        from application.connection_security import observed_request_controls
+        from application.request_path import request_path
 
         context = super().get_context_data(**kwargs)
         # Provider observations are cached facts. The request explanation may
         # derive from them, but opening the panel never probes NPM or handles a
         # credential.
-        edge, firewall = observed_request_controls(self.request.get_host())
-        found = describe(self.request, edge=edge, firewall=firewall)
-        context["connection"] = found
-        context["addresses"] = addresses_of(found)
-        context["hq_addresses"] = addresses_of_hq(found)
-        context["hops"] = hops_of(self.request)
-        context["headers"] = headers_of(self.request)
+        found = request_path(self.request)
+        context["request_path"] = found
+        context["connection"] = found.connection
         return context
 
 

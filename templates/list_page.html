@@ -9,7 +9,7 @@ set. `{% block summary %}` sits between the toolbar and the table.
 {% include "partials/_table_toolbar.html" %}
 {% block summary %}{% endblock %}
 <div class="table-scroll">
-  <table class="data-table stacks"{% if table.selectable %} data-selectable-table{% endif %}>
+  <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}>
     <thead>
       <tr>
         {% if table.selectable %}<th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% endif %}

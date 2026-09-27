@@ -1,5 +1,9 @@
 """Conformance helpers for plugin test suites."""
 
+from __future__ import annotations
+
+from django.db.models import Manager
+
 from application.demo import demo_scope
 from application.plugin_testing import (
     ComposedPluginTestCase,
@@ -10,7 +14,7 @@ from core.models import AuditLog
 from hq_sdk.validation import unsupported_hq_imports
 
 
-def audit_writer():
+def audit_writer() -> Manager[AuditLog]:
     """The manager audit rows are written through, for tests that break it.
 
     ``hq_sdk.audit`` deliberately withholds the host's audit model: an

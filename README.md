@@ -1,7 +1,7 @@
 # Severino HQ
 
 [![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
+&nbsp;![coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
 A self-hosted operations hub that derives its picture of your infrastructure
@@ -298,6 +298,20 @@ and everything the pipeline will check is one more:
 ./scripts/ci-local.sh
 ```
 
+Whether a change is ready to release is one command whose exit 0 means ready:
+
+```bash
+./scripts/preflight.sh
+```
+
+It runs both of the above with nothing skippable, then checks the deploy host
+read-only over SSH (`SEVERINO_HQ_DEPLOY_HOST`).
+
+`ci-local.sh` includes the code scanning gates: CodeQL with the suite
+`codeql.yml` runs and OpenSSF Scorecard's file-based checks, at the versions
+`scripts/toolchain.env` pins (fetched on first use by
+`scripts/install-scan-tools.sh`), so an alert is reported here before a push.
+
 Both read an optional, gitignored `.env.dev` for the things only your machine
 knows, which interpreter has the extensions importable, where their sources
 are, and which to enable. Copy [`scripts/dev.env.example`](scripts/dev.env.example)
@@ -305,27 +319,54 @@ and fill it in. Without it both commands still run, but quietly cover less:
 `check.sh` skips the composed pass, which is the one that catches what public
 CI cannot, because the host and its extensions first meet there.
 
-Browser layout regressions are an optional development gate, separate from
-production dependencies:
+Browser layout regressions are a gate of their own. CI runs them in the
+`browser` job and `ci-local.sh` always does (with `CI_LOCAL_REQUIRE_ALL=1` a
+missing Playwright fails the run); in `check.sh` they are opt-in. Playwright is
+a development dependency, pinned by hash and never installed in the image:
 
 ```bash
-.venv/bin/python -m pip install -r requirements-browser.txt
+.venv/bin/python -m pip install --require-hashes -r requirements-browser.txt
 .venv/bin/python -m playwright install chromium
 DJANGO_DEBUG=true .venv/bin/python manage.py test core.browser_tests --parallel=1
 # Or include browser checks in the full gate:
 CHECK_BROWSER=1 ./scripts/check.sh
 ```
 
-The suite renders the real dashboard templates and stylesheet with synthetic
-`example.*` contributors, without database access or integration requests.
-It checks paired-card alignment, sidebar independence, 320/390/768px layouts,
-and the host without overview contributors. JavaScript is disabled to protect
-the server-rendered baseline. Failures save synthetic viewport screenshots to
-an OS temporary directory, never private-account snapshots or tracked baselines.
+The suite renders the dashboard, service, connections, machine, topology and
+project list pages through their real views over a synthetic `example.*`
+estate, then loads them with every request answered in process. At 320, 390,
+768 and 1280px it checks that stylesheets load, nothing escapes the page
+sideways (with disclosures open too), tables scroll inside their own container
+rather than stacking, stretched grid rows end together, siblings never overlap,
+and the structural rules of `scripts/layout-audit.js` hold. JavaScript is
+disabled to protect the server-rendered baseline. Failures save a synthetic
+screenshot to an OS temporary directory. `core/test_browser_selectors.py`, in
+the normal suite, fails when a selector the gate or the audit uses names
+nothing a template renders, so a redesign cannot leave the gate waiting for an
+element that no longer exists.
 Set `HQ_BROWSER_ENGINE=webkit` or `firefox` after installing that engine to run
 the same assertions there. An existing Edge installation can be selected with
 `HQ_BROWSER_CHANNEL=msedge` instead of downloading Chromium. See the
 [Playwright browser documentation](https://playwright.dev/python/docs/browsers).
+
+The Django Debug Toolbar is a development layer, pinned by hash in
+`requirements-dev.txt` and never installed in the image (`ci-local.sh` and CI's
+container job both prove the built image cannot import it). It is on only when
+`DJANGO_DEBUG` is on, `SEVERINO_DEBUG_TOOLBAR=1` is set, the package is
+importable, and the suite is not running:
+
+```bash
+.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
+SEVERINO_DEBUG_TOOLBAR=1 ./scripts/dev.sh
+```
+
+It shows to loopback clients; behind a proxy, name the proxy's address in
+`SEVERINO_DEBUG_TOOLBAR_IPS` (comma separated). The toolbar's scripts carry the
+response's CSP nonce, so `script-src` stays as production sends it. Its panels
+insert fetched HTML through `innerHTML`, which Trusted Types refuses, so while
+it is on the two Trusted Types directives are dropped
+(`config/devtools.py`). Nothing else in the policy changes, and with the flag
+off (always, in production) the policy is the full one.
 
 ```bash
 # 1. Clone & enter

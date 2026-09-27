@@ -20,6 +20,7 @@ from control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
 
 from .facts import Subject, readings
 from .inventory import inventory_state
+from .inventory_testing import store
 from .projection import projection_scope
 from .security import Capability, Principal, cli_principal
 from .services import service_catalog
@@ -34,17 +35,13 @@ SOON = (timezone.now() + timedelta(days=40)).isoformat()
 LATER = (timezone.now() + timedelta(days=80)).isoformat()
 
 
-def store(kind, *records, reachable=True, connected=True, error="", age=timedelta(0)):
-    ProviderInventory.objects.update_or_create(
-        kind=kind,
-        defaults={
-            "records": list(records),
-            "reachable": reachable,
-            "connected": connected,
-            "error": error,
-            "observed_at": timezone.now() - age,
-            "controller_id": "example-controller",
-        },
+def refused_registration(reason, refusal=""):
+    """The zone sweep with its registration part refused on every zone."""
+
+    store(
+        ZONE_KIND,
+        {"zone": "example.com", "connection_ref": CLOUDFLARE, "registration": {}},
+        refused_parts=[{"part": "registration", "refusal": refusal, "reason": reason}],
     )
 
 
@@ -246,11 +243,7 @@ class DomainCardTests(TestCase):
 
 class RegistrationFallbackTests(TestCase):
     def setUp(self):
-        store(
-            ZONE_KIND,
-            {"zone": "example.com", "connection_ref": CLOUDFLARE,
-             "registration": {"unread": "Authentication error"}},
-        )
+        refused_registration("Authentication error", "permission")
         self.zone = find_zone("example.com")
 
     def test_the_public_registry_gives_the_expiry_and_auto_renew_is_unknown(self):
@@ -276,12 +269,7 @@ class RegistrationFallbackTests(TestCase):
         self.assertNotIn("..", card.detail)
 
     def test_a_refused_permission_names_it_and_keeps_the_reason_in_the_title(self):
-        store(
-            ZONE_KIND,
-            {"zone": "example.com", "connection_ref": CLOUDFLARE,
-             "registration": {"unread": "Cloudflare refused the request: Forbidden",
-                              "refusal": "permission"}},
-        )
+        refused_registration("Cloudflare refused the request: Forbidden", "permission")
         store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar",
                             "expires_at": LATER, "read_at": timezone.now().isoformat()})
         user = get_user_model().objects.create_user("operator", password="x" * 20)
@@ -297,12 +285,7 @@ class RegistrationFallbackTests(TestCase):
         )
 
     def test_a_refused_credential_still_says_so(self):
-        store(
-            ZONE_KIND,
-            {"zone": "example.com", "connection_ref": CLOUDFLARE,
-             "registration": {"unread": "Cloudflare refused the request: Invalid API Token",
-                              "refusal": "credential"}},
-        )
+        refused_registration("Cloudflare refused the request: Invalid API Token", "credential")
         store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar",
                             "expires_at": LATER, "read_at": timezone.now().isoformat()})
 
@@ -354,7 +337,7 @@ class ServiceColumnTests(TestCase):
         with mock.patch("application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),)):
             origin = self.services()["hosted.example.com"].origin
 
-            self.assertEqual(origin.headline, "Example Hosting")
+            self.assertEqual(origin.headline, "Address held by Example Hosting")
 
     def test_the_certificate_cell_is_one_line_per_kind(self):
         declare_record("multi", "multi.example.com", "A", "192.0.2.5")
@@ -381,8 +364,18 @@ class ServiceColumnTests(TestCase):
             response,
             'Edge <span class="muted">· Google Trust Services, Let&#x27;s Encrypt, unknown_ca</span>',
         )
-        self.assertContains(response, "earliest expires")
+        self.assertContains(response, "expires")
         self.assertNotContains(response, "Edge certificate lets_encrypt")
+
+    def test_an_unproxied_name_never_reads_edge(self):
+        declare_record("plain", "plain.example.com", "A", "192.0.2.6")
+        store("cloudflare.dns_record", proxied("plain.example.com", "A", "192.0.2.6", on=False))
+        store("cloudflare.edge_certificate", {**EDGE[0], "hosts": ["*.example.com"]})
+
+        response = self.client.get(reverse("control_plane:services"))
+        row = response.content.decode().split("plain.example.com", 2)[2].split("</tr>", 1)[0]
+
+        self.assertNotIn("Edge", row)
 
     def test_the_service_page_names_the_issuer(self):
         store(

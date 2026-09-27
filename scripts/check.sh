@@ -59,6 +59,17 @@ export SEVERINO_LOG_LEVEL=CRITICAL
 # looks order- or isolation-dependent.
 parallel=${CHECK_PARALLEL:-auto}
 
+echo "[check] No sync-conflict copies"
+# File sync services leave "name 2.ext" beside a file that changed quickly.
+# A copy is imported, collected as a test or installed as a unit like the
+# original, so any one in the tree, tracked or not, fails here.
+copies="$(git ls-files --cached --others --exclude-standard | grep -E ' [0-9]+(\.[^/]*)?$' || true)"
+if [ -n "${copies}" ]; then
+    echo "Sync-conflict copies in the tree; delete them:" >&2
+    printf '  %s\n' "${copies}" >&2
+    exit 1
+fi
+
 echo "[check] Python syntax and lint"
 "$ruff" check .
 
@@ -81,7 +92,7 @@ env -u DJANGO_DEBUG -u SEVERINO_HQ_PLUGINS \
 
 # And once more with whatever extensions the caller supplies (PYTHONPATH and
 # SEVERINO_HQ_PLUGINS), so the host and its extensions meet before compose does.
-# Without them it is skipped.
+# Skipped when they are absent, unless CHECK_REQUIRE_COMPOSED=1 (scripts/preflight.sh).
 if [ -n "${SEVERINO_HQ_PLUGINS:-}" ]; then
     echo "[check] Complete test suite (composed with the supplied plugin set)"
     # Admission off for this pass only. It proves a wheel was built and signed
@@ -93,15 +104,24 @@ if [ -n "${SEVERINO_HQ_PLUGINS:-}" ]; then
         DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-testserver}" \
         SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0 \
         "$python" manage.py test --noinput --parallel "$parallel"
+elif [ "${CHECK_REQUIRE_COMPOSED:-0}" = "1" ]; then
+    echo "[check] Composed suite required and SEVERINO_HQ_PLUGINS is unset (see scripts/dev.env.example)" >&2
+    exit 1
 else
     echo "[check] Composed suite skipped (no SEVERINO_HQ_PLUGINS supplied)"
 fi
 
+# Optional here because it needs Playwright and Chromium; scripts/ci-local.sh
+# and CI always run it.
 if [ "${CHECK_BROWSER:-0}" = "1" ]; then
     echo "[check] Browser layout regressions (synthetic host fixtures)"
+    if ! "$python" -c "import playwright" 2>/dev/null; then
+        echo "[check] Playwright is not installed. Run: $python -m pip install --require-hashes -r requirements-browser.txt && $python -m playwright install chromium" >&2
+        exit 1
+    fi
     env -u SEVERINO_HQ_PLUGINS "$python" manage.py test core.browser_tests --noinput --parallel 1
 else
-    echo "[check] Browser layout checks skipped (set CHECK_BROWSER=1 to enable)"
+    echo "[check] Browser layout checks skipped (set CHECK_BROWSER=1; ci-local.sh always runs them)"
 fi
 
 echo "[check] Patch integrity"

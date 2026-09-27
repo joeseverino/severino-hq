@@ -1,0 +1,10 @@
+#!/bin/sh
+# A fake systemctl for the shell suites: the Actions runner units, one per
+# line, and the account the first runs as.
+# shellcheck disable=SC2086  # the unit list is meant to split
+case "$1" in
+    list-units) printf '%s\n' ${TEST_RUNNER_UNITS-actions.runner.example-hq.example-host.service} \
+        | awk 'NF { print $1 " loaded active running Example runner" }' ;;
+    show) printf '%s\n' "${TEST_ACCOUNT}" ;;
+    *) exit 64 ;;
+esac

@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import Field
 
+from ..observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
+from . import adguard_readings
 from .contracts import (
     ControllerIntegrationAdapter,
     ProviderError,
@@ -146,19 +148,33 @@ def delete(
 
 
 def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-    base_url = _url(runtime)
-    records = runtime.request(
-        f"{base_url}/control/rewrite/list", headers=_headers(runtime)
-    )
+    """Every connection's rewrites, each carrying the connection that holds it."""
+
     return [
         {
+            "connection_ref": ref,
             "domain": item["domain"],
             "answer": item["answer"],
             "enabled": item.get("enabled", True),
         }
-        for item in records
+        for ref in runtime.connection_refs("adguard") or ("",)
+        for item in adguard_readings.rewrites(runtime, _url, _headers, ref)
         if item.get("domain") and item.get("answer")
     ]
+
+
+def _reader(read):
+    def reader(runtime: ProviderRuntime) -> list[dict[str, Any]]:
+        return read(runtime, _url, _headers)
+
+    return reader
+
+
+READINGS = {
+    CLIENT_KIND: _reader(adguard_readings.read_clients),
+    QUERY_KIND: _reader(adguard_readings.read_query_summary),
+    DNS_KIND: _reader(adguard_readings.read_dns),
+}
 
 
 def probe(runtime: ProviderRuntime, connection_ref: str) -> dict[str, Any]:
@@ -245,4 +261,5 @@ def build_adapter(*, provider_model, provider_spec, applies):
             (definition.kind, "reconcile"): reconcile,
             (definition.kind, "delete"): delete,
         },
+        readings=READINGS,
     )

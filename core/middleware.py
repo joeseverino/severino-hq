@@ -18,10 +18,12 @@ from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
 from django.urls import resolve, Resolver404
 
+from application.arrivals import note as note_arrival
 from application.cadence import note_activity
 from application.demo import demo_scope
 
 import core.logging as request_logging
+from application import request_context
 
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
@@ -87,7 +89,9 @@ class RequestContextMiddleware:
         # healthy.
         if not _is_health_probe(request):
             note_activity()
+            note_arrival(request)
         token = request_logging.set_request_id(request_id)
+        bound = request_context.bind(request)
         started = monotonic()
         try:
             response = self.get_response(request)
@@ -128,6 +132,7 @@ class RequestContextMiddleware:
                 )
             return response
         finally:
+            request_context.unbind(bound)
             request_logging.reset_request_id(token)
 
 

@@ -11,7 +11,7 @@ operation HQ asked for and nothing else runs.
                        predate `deploy`
 
 Why sites and not names. cPanel installs a certificate on a *site* (a virtual
-host), and every alias of that site -- `www.`, `mail.`, a parked domain --
+host), and every alias of that site (`www.`, `mail.`, a parked domain)
 serves whatever that site holds. Installing against one name and verifying
 another is how a renewal can install successfully and still fail: the name that
 was checked belongs to a site nobody installed on. `sites` lets the controller

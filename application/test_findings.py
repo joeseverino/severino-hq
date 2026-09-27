@@ -1493,6 +1493,79 @@ class TailnetClaimTests(TestCase):
         )
         self.assertEqual(finding.remedies, ())
 
+    @override_settings(
+        SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "::1/128", *map(str, TAILNET)]
+    )
+    def test_both_families_are_narrowed_to_device_hosts_and_loopback_is_kept(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        (finding,) = self._findings(
+            _trusted_wider_than_tailnet,
+            ("tailnet-address", "fd7a:115c:a1e0::2"),
+            ("tailnet-address", "100.64.0.1"),
+            ("tailnet-address", "fd7a:115c:a1e0::1"),
+            ("tailnet-route", "192.0.2.0/24"),
+        )
+
+        self.assertIn(f"{TAILNET[0]}, {TAILNET[1]}", finding.title)
+        self.assertIn("3 device addresses and 1 subnet route", finding.title)
+        self.assertEqual(
+            finding.steps[0].command,
+            "SEVERINO_TRUSTED_NETWORKS=127.0.0.0/8,::1/128,100.64.0.1/32,"
+            "fd7a:115c:a1e0::1/128,fd7a:115c:a1e0::2/128,192.0.2.0/24",
+        )
+        self.assertNotIn(str(TAILNET[1]), finding.steps[0].command)
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=["::1/128", str(TAILNET[1])])
+    def test_only_the_wide_family_is_narrowed(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        (finding,) = self._findings(
+            _trusted_wider_than_tailnet,
+            ("tailnet-address", "100.64.0.1"),
+            ("tailnet-address", "fd7a:115c:a1e0::1"),
+        )
+
+        self.assertIn("1 device address", finding.title)
+        self.assertEqual(
+            finding.steps[0].command,
+            "SEVERINO_TRUSTED_NETWORKS=::1/128,fd7a:115c:a1e0::1/128",
+        )
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=[*map(str, TAILNET)])
+    def test_a_wide_range_no_device_address_falls_in_is_kept_whole(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        (finding,) = self._findings(
+            _trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1")
+        )
+
+        self.assertEqual(
+            finding.steps[0].command,
+            f"SEVERINO_TRUSTED_NETWORKS={TAILNET[1]},100.64.0.1/32",
+        )
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=["::1/128", "fd7a:115c:a1e0::1/128"])
+    def test_ipv6_trust_already_narrowed_claims_nothing(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        self.assertEqual(
+            self._findings(
+                _trusted_wider_than_tailnet, ("tailnet-address", "fd7a:115c:a1e0::1")
+            ),
+            (),
+        )
+
+    @override_settings(SEVERINO_TRUSTED_NETWORKS=["not a network", str(TAILNET[0])])
+    def test_an_invalid_trusted_entry_is_skipped_not_raised(self):
+        from application.findings import _trusted_wider_than_tailnet
+
+        (finding,) = self._findings(
+            _trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1")
+        )
+
+        self.assertTrue(finding.steps[0].command.endswith("100.64.0.1/32"))
+
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "100.64.0.1/32"])
     def test_trust_already_narrowed_claims_nothing(self):
         from application.findings import _trusted_wider_than_tailnet
@@ -1547,6 +1620,7 @@ class TailnetFactTests(TestCase):
         self.assertIn(("tailnet-dns-off-tailnet", "192.0.2.53"), facts)
         self.assertNotIn(("tailnet-dns-off-tailnet", "100.64.0.53"), facts)
         self.assertIn(("tailnet-address", "100.64.0.53"), facts)
+        self.assertIn(("tailnet-address", "fd7a:115c:a1e0::35"), facts)
         self.assertIn(("tailnet-route", "192.0.2.0/24"), facts)
         self.assertNotIn(("tailnet-route", "0.0.0.0/0"), facts)
         self.assertNotIn(("tailnet-route", "::/0"), facts)

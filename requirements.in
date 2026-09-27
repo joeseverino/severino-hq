@@ -19,3 +19,6 @@ PyJWT>=2.13,<3
 # because the composed image runs the suite in parallel as its own admission
 # gate, and that gate's failures have to be readable too.
 tblib>=3,<4
+# The first password hasher (PASSWORD_HASHERS). A native extension: the image
+# build and the suite run inside it prove it installs and hashes there.
+argon2-cffi>=25.1,<26

@@ -9,7 +9,7 @@
     "'repository' and 'workflow' are the trust declaration: the host verifies",
     "each signature against the identity built from them, so an extension cannot",
     "widen who may sign for it by editing its own repository. Listing an",
-    "extension grants nothing on its own -- each is still admitted independently,",
+    "extension grants nothing on its own; each is still admitted independently,",
     "and the host refuses to boot unless the lock inventory exactly matches the",
     "enabled set.",
     "",

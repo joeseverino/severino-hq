@@ -595,7 +595,7 @@ document.addEventListener(
 );
 
 // At-a-glance readings are refreshed on request. The button posts a refresh of
-// every panel; opening the page on a stale reading posts one for the stale
+// every panel; opening the page on a due reading posts one for the due
 // panels only. Either way the current reading stays up, marked as refreshing,
 // and this follows the controller's answer in place until it lands, the page
 // is hidden, or a few minutes pass. Reading the glance never requests anything.
@@ -618,7 +618,7 @@ const hqBindDashboardGlance = (root) => {
     return current;
   };
 
-  // Only a refresh someone asked for spins the button; the one a stale reading
+  // Only a refresh someone asked for spins the button; the one a due reading
   // starts on load shows on the panel's own dot.
   const follow = async (firstResponse, { asked = false } = {}) => {
     let current = root;
@@ -662,7 +662,7 @@ const hqBindDashboardGlance = (root) => {
     follow(() => post({}), { asked: true });
   });
 
-  if (root.querySelector(".glance-panel.is-stale")) {
+  if (root.querySelector(".glance-panel.is-due")) {
     // Opening the page is not a request to stay signed in.
     follow(() => post({ scope: "stale" }, { renewSession: false }));
   }
@@ -1239,7 +1239,10 @@ document.addEventListener("click", (event) => {
   );
   if (!control) return;
   event.preventDefault();
-  control.open = true;
+  // A control sits inside its hop's disclosure: open the way down to it.
+  for (let up = control; up && up !== panel; up = up.parentElement) {
+    if (up.tagName === "DETAILS") up.open = true;
+  }
   control.querySelector("summary")?.focus({ preventScroll: true });
   control.scrollIntoView({ block: "center" });
 });
@@ -1255,21 +1258,6 @@ document.addEventListener("toggle", (event) => {
   const panel = disclosure.closest("[data-connection-panel]");
   if (panel) hqShowResponseHeaders(panel);
 }, true);
-
-// A stacked table labels each cell from its column header, so no page writes
-// data-label by hand. A cell that already has one, or spans columns, is left.
-document.querySelectorAll("table.stacks").forEach((table) => {
-  const labels = [...table.querySelectorAll("thead th")].map((th) =>
-    th.textContent.replace(/[\u2191\u2193\u2195]\uFE0E?/g, "").trim(),
-  );
-  table.querySelectorAll("tbody tr").forEach((row) => {
-    [...row.children].forEach((cell, index) => {
-      if (cell.tagName === "TD" && cell.colSpan === 1 && !cell.dataset.label && labels[index]) {
-        cell.dataset.label = labels[index];
-      }
-    });
-  });
-});
 
 // A pinned save bar offers to save only once there is something to save.
 document.querySelectorAll("form:has(.save-bar)").forEach((form) => {

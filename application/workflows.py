@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
@@ -73,7 +73,7 @@ def claim_resolution_plan(
             WorkflowStep(
                 "verify",
                 "Confirm the fix",
-                "Check again. It is resolved when this finding is gone.",
+                f"{verification.label}. It is resolved when this finding is gone.",
                 "after_action" if remedies else "available",
                 (verification,),
             )
@@ -96,3 +96,34 @@ def serialize_workflow(plan: WorkflowPlan | None):
     """JSON-safe contract shared by API and MCP finding adapters."""
 
     return asdict(plan) if plan is not None else None
+
+
+@dataclass(frozen=True)
+class WorkflowLayout:
+    """A plan as a card shows it: the gated remedies lead as the fix, and the
+    rest is one line of links."""
+
+    fix: tuple[ActionLink, ...] = ()
+    impact: tuple[ActionLink, ...] = ()
+    related: tuple[ActionLink, ...] = ()
+    confirm: tuple[ActionLink, ...] = ()
+
+    @property
+    def links(self) -> bool:
+        return bool(self.impact or self.related or self.confirm)
+
+
+def workflow_layout(plan: WorkflowPlan | None) -> WorkflowLayout:
+    """Split a plan's actions by what they are: the recommended remedies, what
+    to check first, other places to look, and how to confirm."""
+
+    if plan is None:
+        return WorkflowLayout()
+    phases = {step.phase: step.actions for step in plan.steps}
+    act = phases.get("act", ())
+    return WorkflowLayout(
+        fix=tuple(action for action in act if action.recommended),
+        impact=phases.get("understand", ()),
+        related=tuple(action for action in act if not action.recommended),
+        confirm=phases.get("verify", ()),
+    )

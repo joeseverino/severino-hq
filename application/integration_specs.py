@@ -46,7 +46,7 @@ class CapabilitySpec:
     effect: str
     required_capability: Capability | str | tuple[Capability | str, ...]
     command_type: type
-    handler: Callable
+    handler: Callable[..., dict[str, Any]]
     target_kind: str | None = None
     subject_resource: str | None = None
     target_label: str = ""
@@ -81,9 +81,11 @@ class ResourceSpec:
     label: str
     summary: str
     required_capability: Capability | str | tuple[Capability | str, ...]
-    list_handler: Callable[..., dict[str, Any]] | None = None
+    # Handlers may come from an extension, so their result is checked at the
+    # call (application.resources) rather than trusted from the annotation.
+    list_handler: Callable[..., object] | None = None
     list_query_type: type[BaseModel] | None = None
-    detail_handler: Callable[[Any], dict[str, Any]] | None = None
+    detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
     identifier_type: type = str
     not_found_errors: tuple[type[Exception], ...] = ()

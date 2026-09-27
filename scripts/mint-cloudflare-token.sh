@@ -11,6 +11,9 @@
 # secret once, so a token minted without printing it could never be used.
 # With --print-secret it creates the token, reports its id and expiry on
 # stderr, and writes only the secret to stdout for piping into a store.
+# With --store op://<vault>/<item>/<field> it checks the item carries the field,
+# creates the token, and writes the secret into that field through `op`; the
+# secret reaches no argument, file or output.
 
 set -eu
 
@@ -26,6 +29,7 @@ usage: mint-cloudflare-token.sh --account ACCOUNT_ID [options]
   --permissions FILE  permission list (default: beside this script)
   --list-groups       print permission group names and scopes, then exit
   --print-secret      create the token and write its secret to stdout
+  --store REF         create the token and store it at op://<vault>/<item>/<field>
 
 environment:
   CLOUDFLARE_BOOTSTRAP_TOKEN  token allowed to create API tokens (required)
@@ -46,6 +50,7 @@ ips=""
 permissions="${script_dir}/cloudflare-observer-permissions.txt"
 list_groups=0
 print_secret=0
+store=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -58,10 +63,18 @@ while [ "$#" -gt 0 ]; do
         --permissions) [ "$#" -ge 2 ] || usage; permissions="$2"; shift 2 ;;
         --list-groups) list_groups=1; shift ;;
         --print-secret) print_secret=1; shift ;;
+        --store) [ "$#" -ge 2 ] || usage; store="$2"; shift 2 ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
 done
+
+if [ -n "${store}" ]; then
+    [ "${print_secret}" -eq 0 ] || die "--store and --print-secret are exclusive."
+    # shellcheck source=scripts/lib/op-store.sh
+    . "${script_dir}/lib/op-store.sh"
+    op_store_parse "${store}"
+fi
 
 [ -n "${CLOUDFLARE_BOOTSTRAP_TOKEN:-}" ] \
     || die "Set CLOUDFLARE_BOOTSTRAP_TOKEN to a token that may create API tokens."
@@ -169,7 +182,9 @@ if jq -e 'has("error")' >/dev/null <"${work}/body"; then
     die "$(jq -r .error <"${work}/body")"
 fi
 
-if [ "${print_secret}" -eq 0 ]; then
+if [ -n "${store}" ]; then
+    op_store_check "${op_vault}" "${op_item}" "${op_field}"
+elif [ "${print_secret}" -eq 0 ]; then
     jq -r '"Would create \(.name), expiring \(.expires_on), with "
         + "\([.policies[].permission_groups[]] | length) permission groups"
         + (if .condition then ", from \(.condition["request.ip"].in | join(", "))" else "" end)
@@ -179,11 +194,23 @@ if [ "${print_secret}" -eq 0 ]; then
     exit 0
 fi
 
-cf POST /user/tokens "${work}/body" >"${work}/response"
-succeeded "the new token"
+# The answer carries the secret, so it stays in memory rather than in ${work}.
+created="$(cf POST /user/tokens "${work}/body")"
+if ! printf '%s' "${created}" | jq -e 'type == "object" and .success == true' >/dev/null; then
+    reason="$(printf '%s' "${created}" | jq -r '[.errors[]?.message] | join("; ")' 2>/dev/null || true)"
+    die "Cloudflare refused the new token: ${reason:-unreadable response}"
+fi
 
-id="$(jq -r '.result.id // empty' <"${work}/response")"
+id="$(printf '%s' "${created}" | jq -r '.result.id // empty')"
 [ -n "${id}" ] || die "Cloudflare returned no token id."
 echo "Token id: ${id}" >&2
-echo "Expires: $(jq -r '.result.expires_on // "never"' <"${work}/response")" >&2
-jq -er '.result.value' <"${work}/response"
+echo "Expires: $(printf '%s' "${created}" | jq -r '.result.expires_on // "never"')" >&2
+if [ -n "${store}" ]; then
+    printf '%s' "${created}" | jq -e --arg field "${op_field}" \
+        '{($field): .result.value} | select(.[$field] | type == "string" and length > 0)' \
+        | op_store_write "${op_vault}" "${op_item}" \
+        || die "Token ${id} was created but not stored. Delete it under API Tokens and run this again."
+    echo "Stored in ${op_item} (${op_vault}); the controller reads it on its next render." >&2
+    exit 0
+fi
+printf '%s' "${created}" | jq -er '.result.value'

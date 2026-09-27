@@ -105,6 +105,30 @@ the installer removes the old runtime credential before granting the web UID
 doorbell ownership. Retired disk copies and backups require separate cleanup
 and credential rotation.
 
+## Minting observer credentials
+
+HQ holds no credential that can create tokens. When a connection lacks a
+permission, is refused, or nears expiry, its row and finding show one command
+for the operator's machine, for example:
+
+```sh
+CLOUDFLARE_BOOTSTRAP_TOKEN='op://Operator Vault/Cloudflare bootstrap/credential' \
+  op run -- ./scripts/mint-cloudflare-token.sh --account 0123abcd \
+  --store 'op://Example Vault/exampleitem01/credential'
+```
+
+`op run` resolves the bootstrap reference (Touch ID); the script checks the
+connection item carries the field, mints a token with every permission in
+`scripts/cloudflare-observer-permissions.txt`, and pipes the secret into
+`op item edit` as the item's JSON template. The secret reaches no argument,
+file or output. The controller reads it on its next render.
+
+The command is derived: the account from the readings, the vault and item from
+the renderer (`<PREFIX>_STORE_VAULT`, `<PREFIX>_STORE_ITEM`), and the bootstrap
+from the connection item's optional `bootstrap` field, an `op://<vault>/<item>`
+reference shaped like the connection. The renderer refuses a bootstrap in the
+vault it reads, because a reader of that vault could then mint.
+
 ## Why it is built this way
 
 `scripts/lib/secrets.sh` is deliberately terse. These are the constraints behind

@@ -1,36 +1,106 @@
 {% extends "page.html" %}
 {% load nav_tags %}
 {% block page %}
-<p class="muted">
-  {% if read_only %}<span class="pill">Read-only</span>{% else %}<span class="pill pill-{{ service.status }}">{{ service.status_label }}</span>{% endif %}
-  {% comment %}
-  Named here rather than given rows of their own. A CNAME to a name HQ
-  already serves is the same service reached another way, and listed
-  separately it appeared on the board with its own health, its own
-  certificate and its own "not routed", describing something that is not
-  separate from anything.
-  {% endcomment %}
-  {% if service.aliases %}&middot; Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
-  {% if service.project_link %}&middot; Published by {% entity service.project_link %}{% endif %}
-  {% if service.reach.label %}
-    &middot;
-    <span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}"
-          title="{{ service.reach.detail }}">{{ service.reach.label }}</span>
-  {% endif %}
-</p>
-
 <section id="overview" class="page-section" aria-label="Overview" data-page-section>
-
 {% comment %}
-Faults, not health. Each is a statement about how two declarations relate, so no
-single resource page can show it, which is the reason this page exists. Rendered
-through the host's own row primitive from Service.fault_rows, so the markup is
-not restated here.
+The summary first: what it is, where it runs, whether it is healthy, and the
+path in one line with the certificate a client sees. Each value comes from
+application.service_context.service_summary, walked from the readings.
 {% endcomment %}
+<div class="control-summary service-summary">
+  {% for item in summary %}
+    <div class="control-metric">
+      <span class="control-label">{{ item.label }}</span>
+      {% if item.pill %}
+        <strong><span class="pill pill-{{ item.tone }}">{{ item.value }}</span></strong>
+      {% elif item.hops %}
+        <strong>{% for hop in item.hops %}{% if hop.link and hop.link.url and hop.step != "dns" and hop.step != "edge" and hop.step != "ingress" %}{% entity hop.link label=hop.short %}{% else %}{{ hop.short }}{% endif %}{% if not forloop.last %} → {% endif %}{% endfor %}</strong>
+      {% else %}
+        <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value }}{% endif %}</strong>
+      {% endif %}
+      {% if item.detail %}<span class="readout">{{ item.detail }}</span>{% endif %}
+    </div>
+  {% endfor %}
+</div>
+<p class="muted">
+  {% if read_only %}<span class="pill">Read-only</span> &middot; {% endif %}
+  {% if service.aliases %}Also at {% for alias in service.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %} &middot; {% endif %}
+  {% if service.project_link %}Published by {% entity service.project_link %} &middot; {% endif %}
+  {% if service.reach.label %}<span class="pill pill-{% if service.reach.tailnet_only %}reachable{% else %}unprobed{% endif %}" title="{{ service.reach.detail }}">{{ service.reach.label }}</span>{% endif %}
+</p>
 {% if service.faults %}
   {% include "partials/_record_list.html" with rows=service.fault_rows label="Wiring faults" %}
 {% endif %}
+</section>
 
+<section id="path" class="page-section" data-page-section>
+<h2>Path</h2>
+{% for route in service.path.routes %}
+  <h3 class="section-heading">Via {{ route.via }}</h3>
+  {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
+  <details class="control-diagnostics">
+    <summary>Hop by hop</summary>
+    <div class="table-scroll">
+      <table class="data-table compact-table">
+        <thead><tr><th>Hop</th><th>What</th><th>Certificate</th><th>Read from</th></tr></thead>
+        <tbody>
+          {% for hop in route.hops %}
+            <tr>
+              <td>{{ hop.label }}</td>
+              <td>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% else %}{% empty_value %}{% endif %}{% if hop.detail %} <span class="muted">· {{ hop.detail }}</span>{% endif %}{% for relation, link in hop.overlays %}<br><span class="muted">{{ relation }}</span> {% entity link %}{% endfor %}{% if hop.unread %}<br><span class="muted">{{ hop.unread|capfirst }}</span>{% endif %}</td>
+              <td>{% if hop.certificate %}{{ hop.certificate.line }}{% else %}{% empty_value %}{% endif %}</td>
+              <td>{% if hop.source %}{{ hop.source.phrase }}{% if hop.source.observed_at %} <span class="muted">· {{ hop.source.observed_at|ago }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+{% empty %}
+  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  {% for hop in service.path.observed %}
+    <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase }}{% if hop.source.observed_at %} · {{ hop.source.observed_at|ago }}{% endif %}</span>{% endif %}</p>
+  {% endfor %}
+{% endfor %}
+</section>
+
+<section id="impact" class="page-section" data-page-section>
+<h2>Impact</h2>
+<div class="table-scroll">
+  <table class="data-table compact-table">
+    <thead><tr><th>Depends on</th><th>What</th><th>If it changes</th></tr></thead>
+    <tbody>
+      {% for part in depends_on %}
+        <tr>
+          <td>{{ part.label }}</td>
+          <td>{% if part.link and part.link.url %}{% entity part.link %}{% else %}{{ part.name }}{% endif %}</td>
+          <td>{{ part.consequence }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3">{% empty_value %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if depended_on_by %}
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <thead><tr><th>Depended on by</th><th>Name</th></tr></thead>
+      <tbody>
+        {% for dependent in depended_on_by %}
+          <tr>
+            <td>{{ dependent.relation }}</td>
+            <td>{% if dependent.link and dependent.link.url %}{% entity dependent.link %}{% else %}{{ dependent.name }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+</section>
+
+<section id="parts" class="page-section" aria-label="Parts" data-page-section>
+<h2>Parts</h2>
 <div class="control-summary">
   {% comment %}
   The headline is the value, not the word "Declared". Each row comes from the
@@ -113,7 +183,7 @@ not restated here.
         {% for kind, label in facet.declarable %}
           <span class="readout">No {{ label }} needed.</span>
         {% endfor %}
-        {% if facet.id == runtime_facet %}
+        {% if facet.id == runtime_facet and not service.provider_answers %}
           <span class="readout">Served by <strong>{{ service.origin.headline }}</strong> from <code>{{ service.origin.address }}</code></span>
         {% endif %}
       {% elif facet.observed %}
@@ -211,7 +281,7 @@ What serves the name is in Relationships. Two things are said here because no
 card can say them: the name points at a documentation address where nothing
 answers, or at an address no known machine holds.
 {% endcomment %}
-{% if service.origin.parked %}
+{% if service.origin.parked and not service.provider_answers %}
   <p class="control-origin">Parked. The name resolves to <code>{{ service.origin.address }}</code>, where nothing answers.</p>
 {% elif service.origin and not service.origin.external and not service.origin.known %}
   <p class="control-origin">

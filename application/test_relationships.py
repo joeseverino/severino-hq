@@ -17,7 +17,7 @@ from control_plane.observations import OBSERVATIONS
 from control_plane.providers import PROVIDERS
 
 from .entity_links import NODE_KINDS, entity_link, kind_label
-from .facts import Subject, readings
+from .facts import Subject, readings, unreadable_labels
 from .projection import projection_scope
 from .relationships import relationships_for
 from .security import Capability, Principal
@@ -571,3 +571,76 @@ class DomainCardTests(TestCase):
         response = self.client.get(reverse("zones:detail", args=["example.net"]))
 
         self.assertContains(response, "2 records, checked")
+
+
+class MachineServesAgreesTests(TestCase):
+    """A machine page's Serves header and its Relationships panel are one query."""
+
+    def test_the_header_lists_every_name_the_panel_serves(self):
+        from types import SimpleNamespace
+
+        from .machine_context import serves_links
+        from .relationships import RelationGroup, Relationship, Relationships
+
+        panel = Relationships(
+            node_id="machine:example-edge",
+            groups=(
+                RelationGroup(
+                    RELATIONS["runs_on"].inverse,
+                    10,
+                    tuple(
+                        Relationship(entity_link("service", name))
+                        for name in ("a.example.com", "b.example.net", "c.example.org")
+                    ),
+                ),
+            ),
+        )
+        machine = SimpleNamespace(hostnames=("a.example.com",), runs_hq=False, roles=())
+
+        self.assertEqual(
+            [link.label for link in serves_links(machine, panel)],
+            list(panel.labels(RELATIONS["runs_on"].inverse)),
+        )
+
+    @SITE
+    def test_the_page_header_and_panel_agree(self):
+        declare("example-host", "192.0.2.44")
+        login(self.client)
+
+        with own("192.0.2.44"):
+            response = self.client.get(
+                reverse("control_plane:machine", args=["example-host"])
+            )
+            with projection_scope():
+                panel = relationships_for("machine:example-host", principal=READER)
+
+        body = response.content.decode()
+        header = body.split('<span class="control-label">Serves</span>', 1)[1].split(
+            "</div>", 1
+        )[0]
+        for name in panel.labels(RELATIONS["runs_on"].inverse):
+            self.assertIn(name, header)
+        self.assertIn(f"<strong>{len(panel.labels('Serves'))}</strong>", header)
+
+
+class UnreadableScopeTests(TestCase):
+    def test_a_refused_hostname_reading_is_named_on_a_service_and_not_elsewhere(self):
+        kind = next(
+            kind for kind, spec in OBSERVATIONS.items()
+            if spec.joins_hostnames and not spec.joins_addresses
+        )
+        store(kind, reachable=False, error="refused")
+        connected("example-ssh", "ssh")
+        declare("example-host", "192.0.2.44")
+
+        with projection_scope():
+            graph = relation_graph(principal=READER)
+            nodes = {node.kind: node.id for node in graph.topology.nodes}
+            label = OBSERVATIONS[kind].label
+            machine = relationships_for("machine:example-host", principal=READER)
+            connection = relationships_for(nodes["connection"], principal=READER)
+
+        self.assertNotIn(label, connection.unreadable)
+        self.assertFalse(graph.subjects["machine:example-host"].dns_names)
+        self.assertNotIn(label, machine.unreadable)
+        self.assertIn(label, unreadable_labels())

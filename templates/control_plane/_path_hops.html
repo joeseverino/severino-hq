@@ -1,0 +1,14 @@
+{% comment %}
+One route as a strip of hops, from application.paths. Shared by the service
+page and the connections page. A hop HQ could not read says why.
+{% endcomment %}
+<ol class="request-path" aria-label="{{ label }}">
+  {% for hop in route.hops %}{% if hop.step != "upstream" %}
+    <li class="{% if hop.unread or hop.certificate.unread %}is-unknown{% endif %}">
+      <span>{{ hop.label }}</span>
+      <strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}</strong>
+      {% if hop.certificate %}<small>{{ hop.certificate.line }}</small>{% endif %}
+      {% if hop.unread %}<small>{{ hop.unread|capfirst }}</small>{% endif %}
+    </li>
+  {% endif %}{% endfor %}
+</ol>

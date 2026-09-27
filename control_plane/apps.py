@@ -10,7 +10,13 @@ class ControlPlaneConfig(AppConfig):
         from application.approvals import AUDIT_LABEL as APPROVAL_AUDIT_LABEL
         from core.audit import register_audit
 
-        from .models import ApprovalRequest, ManagedResource, NotManaged, OperationRequest
+        from .models import (
+            ApprovalRequest,
+            ManagedResource,
+            NotManaged,
+            OperationRequest,
+            ReadRequest,
+        )
 
         register_audit(
             ManagedResource,
@@ -29,6 +35,10 @@ class ControlPlaneConfig(AppConfig):
         register_audit(NotManaged, "Not managed")
         # Who asked for a held change, who agreed to it and when.
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL)
+        # Who asked for a connection to be read now, and when.
+        register_audit(
+            ReadRequest, "Read request", connection=lambda request: request.connection_ref
+        )
 
 
 def _resource_connection(resource) -> str:

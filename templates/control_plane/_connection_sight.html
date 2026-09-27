@@ -1,6 +1,6 @@
 {% comment %}
-What one connection's credential can see, folded into its row. Readings are
-per provider, so two connections of one provider show the same list.
+What one connection's credential can see, folded into its row. A reading that
+names the connection it was read through is counted only there.
 {% endcomment %}
 <details class="connection-sight">
   <summary>Can see <small class="muted">{% for count, label in sight.tally %}{{ count }} {{ label|lower }}{% if not forloop.last %} · {% endif %}{% endfor %}</small></summary>
@@ -9,9 +9,11 @@ per provider, so two connections of one provider show the same list.
       <li class="connection-sight-{{ item.state }}">
         <strong>{{ item.label }}</strong>
         <span class="connection-sight-state">{{ item.state_label }}</span>
-        {% if item.state == "readable" %}<span class="muted">{{ item.records|counted:"record,records" }} · {{ item.observed_at|ago }}</span>
-        {% elif item.remedy %}<span>{{ item.remedy }}.{% if item.error %} <span class="muted">{{ item.error }}</span>{% endif %}</span>
-        {% elif item.error %}<span class="muted">{{ item.error }}</span>{% endif %}
+        {% if item.state == "readable" or item.state == "partial" %}<span class="muted">{{ item.records|counted:"record,records" }} · {{ item.observed_at|ago }}</span>{% endif %}
+        {% if item.state != "readable" %}
+          {% if item.remedy %}<span>{{ item.remedy }}.{% if item.error %} <span class="muted">{{ item.error }}</span>{% endif %}</span>
+          {% elif item.error %}<span class="muted">{{ item.error }}</span>{% endif %}
+        {% endif %}
       </li>
     {% endfor %}
   </ul>

@@ -23,7 +23,8 @@ whose age does not match its neighbours.
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
 no grid, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
-records.
+records. Each state is worded by `credential_sight.standing`: refused, unreadable,
+or out of date.
 {% endcomment %}
 {% if inventory %}
   {% if only_kind %}
@@ -34,7 +35,7 @@ records.
             {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}, checked
             {{ snapshot.observed_at|ago }}
           {% else %}
-            unreachable ({{ snapshot.error }})
+            {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}
@@ -44,16 +45,16 @@ records.
       <h2 class="section-heading">Provider readings</h2>
       <div class="sweep-grid">
         {% for snapshot in inventory %}
-          <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% endif %}">
+          <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
             <span class="sweep-label">{{ snapshot.label }}</span>
             {% if snapshot.reachable %}
               <span class="sweep-count">{{ snapshot.count }}</span>
-              <span class="sweep-age">
-                {{ snapshot.observed_at|ago }}
+              <span class="sweep-age"{% if snapshot.refused_parts %} title="{{ snapshot.refused_parts|join:'; ' }}"{% endif %}>
+                {% if snapshot.state == "stale" or snapshot.state == "partial" %}{{ snapshot.state_label }} · {% endif %}{{ snapshot.observed_at|ago }}
               </span>
             {% else %}
               <span class="sweep-count">{% empty_value %}</span>
-              <span class="sweep-age" title="{{ snapshot.error }}">unreachable</span>
+              <span class="sweep-age" title="{{ snapshot.error }}">{{ snapshot.state_label }}</span>
             {% endif %}
           </div>
         {% endfor %}

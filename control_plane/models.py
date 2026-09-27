@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from control_plane.provider_adapters.contracts import REFUSALS
+from control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 from core.models import TimestampedModel
 
 
@@ -93,6 +93,9 @@ class ProviderInventory(TimestampedModel):
     refusal = models.CharField(
         max_length=16, blank=True, choices=[(value, value) for value in REFUSALS]
     )
+    # Parts of the kind the last read could not read while the rest read, as
+    # ``control_plane.reading_parts.clean_refused_parts`` stores them.
+    refused_parts = models.JSONField(default=list, blank=True)
     observed_at = models.DateTimeField()
     controller_id = models.CharField(max_length=160, blank=True)
 
@@ -137,6 +140,12 @@ class ProviderConnection(TimestampedModel):
     # look like an outage every time the page loaded.
     probed = models.BooleanField(default=True)
     detail = models.CharField(max_length=500, blank=True)
+    # Why the last probe failed: a refusal, the address answering as something
+    # other than the API, or no answer. Blank when it answered or the cause is
+    # unknown.
+    failure = models.CharField(
+        max_length=16, blank=True, choices=[(value, value) for value in FAILURES]
+    )
     # Whether the connection's item declares that HQ manages through it. False
     # means it only observes, and nothing it reads is adopted.
     manages = models.BooleanField(default=False)
@@ -150,7 +159,17 @@ class ProviderConnection(TimestampedModel):
     # at the start, because most work happens after the sweep and a failure
     # recorded before it ran would describe the pass before.
     failing_steps = models.JSONField(default=list, blank=True)
+    # When the credential stops working, where the provider says so.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    # Where the credential is kept, as references: ``vault`` and ``item`` it
+    # was rendered from, and the ``bootstrap`` item that may mint a replacement.
+    # Never a value; ``application.credential_mint`` builds the fix from these.
+    store = models.JSONField(default=dict, blank=True)
+    # When it was last probed. An SSH connection is probed on its own slower
+    # clock and carried between probes, so this can trail ``reported_at``.
     observed_at = models.DateTimeField()
+    # When a controller last reported it, carried or probed.
+    reported_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("provider", "connection_ref")
@@ -196,6 +215,29 @@ class DashboardRefreshRequest(TimestampedModel):
     panel_id = models.SlugField(max_length=80, unique=True)
     requested_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class ReadRequest(TimestampedModel):
+    """An operator asking for one connection, one kind, or everything read now.
+
+    Blank ``connection_ref`` and ``kind`` is every connection. Answered once
+    every reading it forces was stored after ``requested_at``; see
+    ``application.cadence``.
+    """
+
+    connection_ref = models.CharField(max_length=160, blank=True)
+    kind = models.CharField(max_length=64, blank=True)
+    requested_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("connection_ref", "kind"), name="one_read_request_per_subject"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Read {self.connection_ref or self.kind or 'every connection'} now"
 
 
 class DashboardConfiguration(TimestampedModel):

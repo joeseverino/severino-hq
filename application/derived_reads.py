@@ -327,6 +327,145 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
     }
 
 
+# ----- Paths ------------------------------------------------------------------
+
+
+def _source(source: Any) -> dict[str, Any] | None:
+    if source is None:
+        return None
+    return {
+        "kind": source.kind,
+        "label": source.label,
+        "connection": source.connection,
+        "observed_at": _moment(source.observed_at),
+        "declared": source.declared,
+    }
+
+
+def _certificate(certificate: Any) -> dict[str, Any] | None:
+    if certificate is None:
+        return None
+    return {
+        "role": certificate.role,
+        "name": certificate.name,
+        "issuer": certificate.issuer,
+        "expiry": certificate.expiry,
+        "source": _source(certificate.source),
+        "unread": certificate.unread,
+    }
+
+
+def serialize_hop(hop: Any) -> dict[str, Any]:
+    """One hop as every adapter returns it; a hop walked for a request adds
+    what the request showed there and the layers decided there."""
+
+    found = {
+        "step": hop.step,
+        "label": hop.label,
+        "name": hop.name,
+        "link": _link(hop.link),
+        "detail": hop.detail,
+        "source": _source(hop.source),
+        "certificate": _certificate(hop.certificate),
+        "unread": hop.unread,
+        "overlays": [
+            {"relation": relation, "link": _link(link)} for relation, link in hop.overlays
+        ],
+    }
+    if hop.check is None:
+        return found
+    return {
+        **found,
+        "check": {
+            "state": hop.check.state,
+            "label": hop.check.label,
+            "detail": hop.check.detail,
+            "step": hop.check.step,
+        },
+        "evidence": [
+            {"label": item.label, "value": item.value, "detail": item.detail, "role": item.role}
+            for item in hop.evidence
+        ],
+        "layers": [serialize_layer(layer) for layer in hop.layers],
+    }
+
+
+def serialize_layer(layer: Any) -> dict[str, Any]:
+    return {
+        "id": layer.id,
+        "label": layer.label,
+        "state": layer.state,
+        "detail": layer.detail,
+        "evidence": layer.evidence,
+        "boundary": layer.boundary,
+        "mechanism": layer.mechanism,
+        "rules": list(layer.rules),
+    }
+
+
+def serialize_path(path: Any) -> dict[str, Any]:
+    """A request path as every adapter returns it."""
+
+    return {
+        "hostname": path.hostname,
+        "line": path.line,
+        "redirects_to": path.redirects_to,
+        "machine": path.machine,
+        "unread": list(path.gaps),
+        "observed": [
+            {
+                "relation": hop.label,
+                "name": hop.name,
+                "link": _link(hop.link),
+                "detail": hop.detail,
+                "source": _source(hop.source),
+            }
+            for hop in path.observed
+        ],
+        "routes": [
+            {
+                "via": route.via,
+                "port": route.port,
+                "line": route.line,
+                "hops": [serialize_hop(hop) for hop in route.hops],
+            }
+            for route in path.routes
+        ],
+    }
+
+
+def get_path(hostname: str) -> dict[str, Any]:
+    """The request path to one hostname, hop by hop, as the service page walks it."""
+
+    from control_plane.names import is_hostname
+
+    from .paths import path_to
+
+    if not is_hostname(hostname):
+        raise NotFoundError(hostname)
+    wanted = normalized_hostname(hostname)
+    with projection_scope():
+        return serialize_path(path_to(wanted))
+
+
+def list_request_path() -> dict[str, Any]:
+    """How the calling request reached HQ, as the connection page shows it."""
+
+    from . import request_context
+    from .request_path import request_path, serialize_request_path
+
+    request = request_context.current()
+    if request is None:
+        return {
+            **_collection([]),
+            "unread": ["not read: request, because this caller made no HTTP request to describe"],
+        }
+    from .hq_self import serving
+
+    with projection_scope(seed=serving(request)):
+        return serialize_request_path(request_path(request))
+
+
 # ----- Readings ---------------------------------------------------------------
 
 
@@ -334,7 +473,7 @@ def _reading(kind: str, row: ProviderInventory | None) -> dict[str, Any]:
     from .credential_sight import sight
 
     spec = OBSERVATIONS[kind]
-    seen = sight(kind, spec.label, "reading", row, requires=", ".join(spec.requires))
+    seen = sight(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
     return {
         "kind": kind,
         "label": spec.label,
@@ -386,7 +525,7 @@ def get_reading(kind: str) -> dict[str, Any]:
 # ----- Credentials ------------------------------------------------------------
 
 
-def _provider_sight(found: Any) -> dict[str, Any]:
+def serialize_provider_sight(found: Any) -> dict[str, Any]:
     return {
         "provider": found.provider,
         "label": found.label,
@@ -410,7 +549,7 @@ def list_credentials() -> dict[str, Any]:
 
     from .credential_sight import credential_sight
 
-    return _collection([_provider_sight(found) for found in credential_sight()])
+    return _collection([serialize_provider_sight(found) for found in credential_sight()])
 
 
 def get_credential(provider: str) -> dict[str, Any]:
@@ -419,7 +558,7 @@ def get_credential(provider: str) -> dict[str, Any]:
     found = next((item for item in credential_sight() if item.provider == provider), None)
     if found is None:
         raise NotFoundError(provider)
-    return _provider_sight(found)
+    return serialize_provider_sight(found)
 
 
 # ----- Search -----------------------------------------------------------------

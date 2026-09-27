@@ -1,0 +1,10 @@
+# Structural baseline for scripts/structural-bar.sh. A near-duplicate pair
+# outside tests, and the four largest source files with their line counts.
+# Pairs only leave; a file's count only shrinks. Rewrite with --record.
+similar application/assets.py::serialize_asset <> application/projects.py::serialize_project
+similar core/management/commands/seed_demo.py::_seed_content <> core/management/commands/seed_demo.py::_seed_docs
+similar reports/exports.py::documentation_csv <> reports/exports.py::projects_csv
+largest application/services.py 1979
+largest control_plane/views.py 2195
+largest control_plane/providers.py 2965
+largest controller_runtime/providers.py 5904

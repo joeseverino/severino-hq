@@ -346,6 +346,8 @@ class ConnectionRegistrationTests(TestCase):
                 # reason `certificate.renew` does not: the ability names what
                 # the credential reaches, and the command names what it acts on.
                 "tailnet.routes.approve",
+                # Scoped to the policy kind, which the same credential reads.
+                "tailnet.policy.remove_empty_groups",
             },
         )
         self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)

@@ -135,7 +135,7 @@ class ProjectRefreshView(LoginRequiredMixin, View):
         if content and content["ok"]:
             messages.success(
                 request,
-                f"Synced {counted(content['total'], 'content item')} "
+                f"Synced {counted(content['total'], 'content item', 'content items')} "
                 f"({content['created']} new, {content['updated']} updated).",
             )
         elif content:

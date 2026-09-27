@@ -146,6 +146,62 @@ class RecordingTests(TestCase):
         self.assertEqual(state[0]["label"], "Internal DNS record")
 
 
+class ReadingStandingTests(TestCase):
+    """Each provider reading worded from one vocabulary: credential sight's
+    states, and freshness's once a readable one is out of date."""
+
+    def row(self, kind, **fields):
+        ProviderInventory.objects.create(
+            kind=kind, records=[A_REWRITE], observed_at=timezone.now(), **fields
+        )
+
+    def states(self):
+        return {item["kind"]: item["state_label"] for item in inventory_state()}
+
+    def test_refused_unreadable_stale_and_current_read_differently(self):
+        from datetime import timedelta
+
+        from control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
+
+        self.row("adguard.rewrite")
+        self.row("npm.proxy_host", reachable=False, error="The address answered with a web page.")
+        self.row("cloudflare.access_app", reachable=False, refusal=CREDENTIAL_REFUSAL,
+                 error="Invalid API Token")
+        self.row("caddy.route")
+        ProviderInventory.objects.filter(kind="caddy.route").update(
+            observed_at=timezone.now() - timedelta(days=30)
+        )
+
+        self.assertEqual(
+            self.states(),
+            {
+                "adguard.rewrite": "Readable",
+                "npm.proxy_host": "Unreadable",
+                "cloudflare.access_app": "Refused",
+                "caddy.route": "Out of date",
+            },
+        )
+
+    def test_the_page_names_the_state_never_a_generic_unreachable(self):
+        self.row("npm.proxy_host", reachable=False, error="The address answered with a web page.")
+        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("control_plane:services"))
+
+        self.assertContains(
+            response,
+            '<span class="sweep-age" title="The address answered with a web page.">Unreadable</span>',
+            html=False,
+        )
+        self.assertNotContains(response, ">unreachable<")
+
+    def test_a_kind_no_connection_reads_is_not_listed(self):
+        self.row("npm.proxy_host", connected=False, reachable=False)
+
+        self.assertNotIn("npm.proxy_host", self.states())
+
+
 class UnmanagedTests(TestCase):
     def setUp(self):
         record_inventory(

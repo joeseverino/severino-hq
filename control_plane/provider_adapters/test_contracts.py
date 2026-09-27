@@ -71,3 +71,44 @@ class ControllerProviderAdapterContractTests(TestCase):
 
         with self.assertRaisesRegex(ValueError, "Duplicate controller adapter"):
             compile_controller_adapters((adapter, adapter), mock.Mock())
+
+
+class FailureTests(TestCase):
+    """Why a read failed, classified where it failed."""
+
+    def test_each_cause_is_classified(self):
+        import urllib.error
+
+        from control_plane.provider_adapters.contracts import (
+            ADDRESS_FAILURE,
+            CREDENTIAL_REFUSAL,
+            NETWORK_FAILURE,
+            PERMISSION_REFUSAL,
+            ProviderError,
+            failure_of,
+        )
+
+        url = "https://api.example.com"
+        cases = (
+            (ProviderError("web page", failure=ADDRESS_FAILURE), ADDRESS_FAILURE),
+            (ProviderError("refused", refusal=CREDENTIAL_REFUSAL), CREDENTIAL_REFUSAL),
+            (urllib.error.HTTPError(url, 401, "", {}, None), CREDENTIAL_REFUSAL),
+            (urllib.error.HTTPError(url, 403, "", {}, None), PERMISSION_REFUSAL),
+            (urllib.error.HTTPError(url, 502, "", {}, None), ""),
+            (urllib.error.URLError("no route"), NETWORK_FAILURE),
+            (TimeoutError(), NETWORK_FAILURE),
+            (ConnectionRefusedError(), NETWORK_FAILURE),
+            (ValueError("bad"), ""),
+            (ProviderError("unclassified"), ""),
+        )
+        for exc, expected in cases:
+            with self.subTest(exc=repr(exc)):
+                self.assertEqual(failure_of(exc), expected)
+            if isinstance(exc, urllib.error.HTTPError):
+                exc.close()
+
+    def test_an_unknown_failure_is_refused(self):
+        from control_plane.provider_adapters.contracts import ProviderError
+
+        with self.assertRaises(ValueError):
+            ProviderError("x", failure="gremlins")

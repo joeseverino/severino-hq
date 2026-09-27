@@ -13,6 +13,8 @@ AUTHORITIES = MappingProxyType(
         "digicert": "DigiCert",
         "google": "Google Trust Services",
         "lets_encrypt": "Let's Encrypt",
+        # Nginx Proxy Manager's code for a certificate it issued.
+        "letsencrypt": "Let's Encrypt",
         "sectigo": "Sectigo",
         "ssl_com": "SSL.com",
     }

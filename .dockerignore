@@ -27,3 +27,4 @@ Dockerfile
 # rather than from the deploy checkout, which deployment has to be able to
 # write to. severino-hq-sync-scripts copies it out of the running image.
 .dockerignore
+.mypy_cache/

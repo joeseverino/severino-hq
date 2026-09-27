@@ -30,6 +30,7 @@ alphabetical is the order and there is nothing to move.
                 {% post_button "★" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
               {% endif %}
               <strong>{% entity "service"|entity_of:service.hostname %}</strong>
+              {% if service.is_hq %}<span class="pill">HQ</span>{% endif %}
               {% if reorderable %}
                 <span class="pin-move">
                   {% url 'control_plane:service_move' service.hostname as move_url %}
@@ -46,14 +47,24 @@ alphabetical is the order and there is nothing to move.
           {% for facet in service.facets %}
             {% if facet.id != runtime_facet %}
               <td>
-                {% comment %}Declarations first, then one line per kind of reading.{% endcomment %}
+                {% comment %}
+                Declarations first. The certificate is the one the path presents
+                to a client (the edge's for a proxied name, the proxy's for a
+                tailnet name); every other facet adds one line per kind of reading.
+                {% endcomment %}
                 {% for claim in facet.claims %}
-                  {% entity claim.link code=True %}{% if not forloop.last or facet.readings %}<br>{% endif %}
+                  {% entity claim.link code=True %}{% if not forloop.last or facet.readings or facet.id == certificate_facet %}<br>{% endif %}
                 {% endfor %}
-                {% for line in facet.reading_lines %}
-                  <span title="{{ line.hint }}">{{ line.label }}{% if line.detail %} <span class="muted">· {{ line.detail }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
-                {% endfor %}
-                {% if not facet.claims and not facet.readings %}{% empty_value %}{% endif %}
+                {% if facet.id == certificate_facet %}
+                  {% with certificate=service.path.certificate %}
+                    {% if certificate %}<span title="{{ certificate.line }}">{{ certificate.role }}{% if certificate.name or certificate.issuer %} <span class="muted">· {% firstof certificate.issuer certificate.name %}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
+                  {% endwith %}
+                {% else %}
+                  {% for line in facet.reading_lines %}
+                    <span title="{{ line.hint }}">{{ line.label }}{% if line.detail %} <span class="muted">· {{ line.detail }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
+                  {% endfor %}
+                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}<span class="muted">No record</span>{% else %}{% empty_value %}{% endif %}{% endif %}
+                {% endif %}
               </td>
             {% endif %}
           {% endfor %}
@@ -65,17 +76,25 @@ alphabetical is the order and there is nothing to move.
           behind it is what the name links to.
           {% endcomment %}
           <td>
-            {% if service.origin %}
+            {% if service.is_observed and service.path.observed %}
+              {% for hop in service.path.observed %}{% entity hop.link label=hop.source.short %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            {% elif service.path.redirects_to %}
+              Redirects to {% entity "service"|entity_of:service.path.redirects_to %}
+            {% elif service.path.ends_at.step == "origin" %}
+              {{ service.path.ends_at.label }}{% if service.path.ends_at.unread %} <span class="muted">· redirect not read</span>{% endif %}
+            {% elif service.origin %}
               {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}<a href="{{ claim.url }}">{{ service.origin.headline }}</a>{% endif %}{% empty %}{{ service.origin.headline }}{% endfor %}{% endif %}{% endfor %}
               {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier }}</span>{% endif %}
             {% elif service.served_by %}
               {{ service.served_by|join:" · " }}
+            {% elif service.path.machine %}
+              {% entity "machine"|entity_of:service.path.machine %}
             {% else %}
               {% empty_value %}
             {% endif %}
           </td>
           {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-          <td><span class="pill pill-{{ service.status }}">{{ service.status_label }}</span></td>
+          <td><span class="pill pill-{{ service.status }}"{% if service.health.detail %} title="{{ service.health.detail }}"{% endif %}>{{ service.status_label }}</span></td>
         </tr>
       {% empty %}
         <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:4 }}{% else %}{{ facets|length|add:3 }}{% endif %}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>

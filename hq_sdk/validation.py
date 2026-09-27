@@ -67,28 +67,38 @@ def _host_packages() -> frozenset[str]:
 HOST_INTERNAL_PACKAGES = _FLOOR | _host_packages()
 
 
+def _imported_modules(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+    """The absolute module names one import statement names."""
+
+    if isinstance(node, ast.ImportFrom):
+        return (node.module,) if node.module else ()
+    return tuple(alias.name for alias in node.names)
+
+
+def _file_violations(source_path: Path, root: Path) -> list[str]:
+    """Each host-internal import in one file; an unreadable file is one itself."""
+
+    relative = source_path.relative_to(root)
+    try:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as exc:
+        return [f"{relative}:1: {exc}"]
+    return [
+        f"{relative}:{node.lineno}: {module}"
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for module in _imported_modules(node)
+        if module.partition(".")[0] in HOST_INTERNAL_PACKAGES
+    ]
+
+
 def unsupported_hq_imports(source_root: str | Path) -> list[str]:
     """Return stable ``path:line: module`` violations for host-internal imports."""
 
     root = Path(source_root).resolve()
     violations: list[str] = []
     for source_path in sorted(root.rglob("*.py")):
-        try:
-            tree = ast.parse(source_path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError) as exc:
-            violations.append(f"{source_path.relative_to(root)}:1: {exc}")
-            continue
-        for node in ast.walk(tree):
-            modules: tuple[str, ...] = ()
-            if isinstance(node, ast.ImportFrom) and node.module:
-                modules = (node.module,)
-            elif isinstance(node, ast.Import):
-                modules = tuple(alias.name for alias in node.names)
-            for module in modules:
-                if module.partition(".")[0] in HOST_INTERNAL_PACKAGES:
-                    violations.append(
-                        f"{source_path.relative_to(root)}:{node.lineno}: {module}"
-                    )
+        violations.extend(_file_violations(source_path, root))
     return sorted(set(violations))
 
 

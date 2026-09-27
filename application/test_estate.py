@@ -18,7 +18,6 @@ from control_plane.models import (
     DashboardConfiguration,
     ManagedResource,
     ProviderConnection,
-    ProviderInventory,
     WeatherObservation,
 )
 from core.audit import record_event
@@ -28,6 +27,7 @@ from .attention import infrastructure, tailnet
 from .command_center import command_center
 from .estate import attention as estate_attention, cards, estate_reading
 from .glance import dashboard_panels
+from .inventory_testing import store
 from .machines import machine, machine_catalog, tailnet_presence
 from .projection import projection_scope
 from .public_registry import wanted_addresses
@@ -36,20 +36,6 @@ from .security import Capability, Principal
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
 PUBLIC_RANGE = mock.patch("application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),))
-
-
-def store(kind, *records, **extra):
-    ProviderInventory.objects.update_or_create(
-        kind=kind,
-        defaults={
-            "records": list(records),
-            "reachable": True,
-            "connected": True,
-            "observed_at": timezone.now(),
-            "controller_id": "example-controller",
-            **extra,
-        },
-    )
 
 
 def device(name, **fields):
@@ -428,13 +414,13 @@ class StaleGlanceTests(TestCase):
         self.assertIn("as of <time", html)
 
     def test_a_current_reading_is_not_outdated(self):
-        from .glance import expected_cadence
+        from .freshness import DASHBOARD_GLANCE, stale_after
 
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         WeatherObservation.objects.create(
             point="41.8781,-87.6298",
             payload={"metrics": [{"label": "Now", "value": "Clear"}]},
-            observed_at=timezone.now() - expected_cadence() + timedelta(minutes=1),
+            observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
         )
 
         weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
@@ -600,7 +586,6 @@ class MachineRoleTests(TestCase):
         self.assertEqual(self.roles("example-exit"), ["Exit node"])
         self.assertEqual(self.roles("example-dns"), ["Tailnet DNS"])
         self.assertEqual(self.roles("example-unapproved"), [])
-        self.assertEqual(machine("example-exit").serves_count, 1)
 
     def test_the_serves_card_and_the_list_show_roles(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)

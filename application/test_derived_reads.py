@@ -35,11 +35,13 @@ LISTS = {
     "readings": {},
     "credentials": {},
     "search": {"query": "example"},
+    "request.path": {},
 }
 DETAILS = {
     "machines": "example-host-0",
     "domains": "example.com",
     "relationships": "service:s0.example.com",
+    "paths": "s0.example.com",
     "readings": "cloudflare.pages_project",
     "credentials": "cloudflare_api",
 }
@@ -88,9 +90,10 @@ class ApplicationTests(TestCase):
             [item["name"] for item in machines["items"]], ["example-host-0", "example-host-1"]
         )
         self.assertEqual(domains["items"][0]["name"], "example.com")
+        # The Pages project's custom domain is a service nothing declares: observed.
         self.assertEqual(
             sorted(item["hostname"] for item in domains["items"][0]["services"]),
-            ["s0.example.com", "s1.example.com"],
+            ["example.com", "s0.example.com", "s1.example.com"],
         )
 
     def test_relationships_are_the_page_answer(self):

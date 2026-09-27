@@ -64,6 +64,25 @@ def capability_action_link(
 ) -> ActionLink | None:
     """Link to a command only when its canonical contract permits ``principal``."""
 
+    if _permitted_spec(name, principal) is None:
+        return None
+    try:
+        command_url = reverse("command", kwargs={"name": name})
+    except NoReverseMatch:
+        return None
+    return ActionLink(
+        "command",
+        label,
+        effect,
+        command_url,
+        capability=name,
+        reason="Connection scopes and permissions confirmed.",
+    )
+
+
+def _permitted_spec(name: str, principal: Principal):
+    """The capability's spec when ``principal`` may run it, else None."""
+
     if not name:
         return None
     # Imported here because capabilities compose plugin specs, which themselves
@@ -78,18 +97,62 @@ def capability_action_link(
         authorize_capability(spec, principal)
     except AuthorizationError:
         return None
-    try:
-        command_url = reverse("command", kwargs={"name": name})
-    except NoReverseMatch:
+    return spec
+
+
+READ_NOW_CAPABILITY = "infrastructure.controller.refresh"
+
+
+def read_now_link(
+    principal: Principal,
+    *,
+    connection_ref: str = "",
+    kind: str = "",
+    every_connection: bool = False,
+    label: str = "Read now",
+) -> ActionLink | None:
+    """A POST asking the controller to read a connection, a kind or everything now.
+
+    None when ``principal`` may not ask. The subject rides in the URL so every
+    renderer posts the same request.
+    """
+
+    spec = _permitted_spec(READ_NOW_CAPABILITY, principal)
+    destination = route_url("control_plane:read_now")
+    if spec is None or not destination:
         return None
+    params = {
+        key: value
+        for key, value in (
+            ("connection_ref", connection_ref),
+            ("kind", kind),
+            ("every_connection", "1" if every_connection else ""),
+        )
+        if value
+    }
     return ActionLink(
-        "command",
+        "read_now",
         label,
-        effect,
-        command_url,
-        capability=name,
-        reason="Connection scopes and permissions confirmed.",
+        spec.effect,
+        f"{destination}?{urlencode(params)}" if params else destination,
+        method="POST",
+        capability=READ_NOW_CAPABILITY,
+        target=connection_ref or kind,
+        reason="The controller reads it on its next pull.",
     )
+
+
+def read_now_payload(values) -> dict[str, object]:
+    """The command ``read_now_link``'s URL, or a form, asks for: the inverse."""
+
+    payload: dict[str, object] = {
+        key: str(values.get(key, "")).strip()
+        for key in ("connection_ref", "kind")
+        if str(values.get(key, "")).strip()
+    }
+    if values.get("every_connection") == "1":
+        payload["every_connection"] = True
+    return payload
 
 
 def topology_url(

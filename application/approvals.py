@@ -87,7 +87,15 @@ class ApprovalError(ValueError):
 
 
 class TooManyPendingApprovals(ApprovalError):
-    """One actor is holding more outstanding requests than it may."""
+    """One actor is holding more outstanding requests than it may.
+
+    `reason` is written for the caller, so an adapter returns it rather than
+    the exception's string form.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass(frozen=True)

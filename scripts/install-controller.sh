@@ -6,31 +6,39 @@ set -eu
 readonly lib_dir="/usr/local/lib/severino-hq"
 readonly unit_dir="${lib_dir}/deploy/systemd"
 readonly systemd_dir="/etc/systemd/system"
-script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-# shellcheck source=scripts/lib/controller-env.sh
-. "${script_dir}/lib/controller-env.sh"
-# shellcheck source=scripts/lib/systemd-units.sh
-. "${script_dir}/lib/systemd-units.sh"
 readonly private_log_dir="/var/log/severino-hq"
 readonly private_run="${lib_dir}/scripts/run-private.sh"
+readonly sync_program="/usr/local/sbin/severino-hq-sync-scripts"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "install-controller.sh must run as root." >&2
     exit 1
 fi
 
-# The units below run as root out of /usr/local/lib/severino-hq rather than out
-# of this checkout: what root runs should not be writable by what deploys.
-# Refresh that tree from the image now running, before anything starts, so a
-# deploy shipping new scripts does not leave root executing the previous ones.
-#
-# Hard failure rather than a fallback: the units name that path, so a host
-# without the tree would fail to start them anyway, and failing here says why.
-if [ ! -x /usr/local/sbin/severino-hq-sync-scripts ]; then
-    echo "severino-hq-sync-scripts is missing: run fix-root-ownership.sh --apply on this host first." >&2
+# The units below run as root out of the root-owned tree, not out of the
+# checkout: what root runs is not writable by what deploys. The tree is
+# refreshed from the running image first, and then this script re-executes the
+# synced copy of itself, so every step after the sync is the release's own.
+# SEVERINO_HQ_INSTALLER_SYNCED marks the synced run; the deploy sets it after
+# running the image's own sync.
+if [ -z "${SEVERINO_HQ_INSTALLER_SYNCED:-}" ]; then
+    if [ ! -x "${sync_program}" ]; then
+        echo "${sync_program} is missing: run fix-root-ownership.sh on this host first." >&2
+        exit 1
+    fi
+    "${sync_program}"
+    SEVERINO_HQ_INSTALLER_SYNCED=1 exec sh "${lib_dir}/scripts/install-controller.sh" "$@"
+fi
+if [ "${script_dir}" != "${lib_dir}/scripts" ]; then
+    echo "A synced install runs from ${lib_dir}/scripts, not ${script_dir}." >&2
     exit 1
 fi
-/usr/local/sbin/severino-hq-sync-scripts
+
+# shellcheck source=scripts/lib/controller-env.sh
+. "${script_dir}/lib/controller-env.sh"
+# shellcheck source=scripts/lib/systemd-units.sh
+. "${script_dir}/lib/systemd-units.sh"
 
 # The verifier the *next* deploy will check this repository's signature with,
 # refreshed by the same mechanism and from the same tree as the script that uses

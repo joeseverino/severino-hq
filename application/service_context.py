@@ -211,10 +211,101 @@ def _traffic(service, project) -> ServiceSection | None:
     )
 
 
+# ----- Summary ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SummaryItem:
+    """One line of a service's summary: a label, a value, and what backs it."""
+
+    label: str
+    value: str
+    link: "EntityLink | None" = None
+    detail: str = ""
+    tone: str = ""
+    # Shown as a pill in ``tone``: a state never carried by colour alone.
+    pill: bool = False
+    # The one-line path's hops, each named through its link.
+    hops: tuple = ()
+
+
+def service_summary(service) -> tuple[SummaryItem, ...]:
+    """What it is, where it runs, whether it is healthy, and its path in one line."""
+
+    path = service.path
+    certificate = path.certificate
+    return (
+        SummaryItem("What it is", _what(service)),
+        _where(service, path),
+        SummaryItem(
+            "Health",
+            service.health.label,
+            detail=service.health.detail,
+            tone=service.health.state,
+            pill=True,
+        ),
+        SummaryItem(
+            "Path",
+            path.line or MISSING,
+            detail=certificate.line if certificate else (path.gaps[0] if path.gaps else ""),
+            hops=path.primary.line_hops if path.primary else (),
+        ),
+    )
+
+
+def _what(service) -> str:
+    if service.is_hq:
+        return "HQ's own service"
+    if service.is_observed:
+        seen = ", ".join(
+            dict.fromkeys(
+                f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name
+                for hop in service.path.observed
+            )
+        )
+        return f"Observed through {seen}; nothing declares it" if seen else "Observed"
+    if service.declared_claims:
+        return "Declared service"
+    return "Nothing declared yet"
+
+
+def _where(service, path) -> SummaryItem:
+    """Where a request for the name ends: another name, a reading, a machine, or unknown."""
+
+    end = path.ends_at
+    if path.redirects_to:
+        return SummaryItem(
+            "Where it runs",
+            f"Redirects to {path.redirects_to}",
+            entity_link("service", path.redirects_to),
+        )
+    if end is not None and end.step in ("served", "external", "origin", "hq"):
+        return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, end.detail)
+    if path.machine:
+        container = next(
+            (hop.name for route in path.routes for hop in route.hops if hop.step == "container"),
+            "",
+        )
+        return SummaryItem(
+            "Where it runs",
+            path.machine,
+            entity_link("machine", path.machine),
+            f"Container {container}" if container else "",
+        )
+    return SummaryItem("Where it runs", MISSING, detail=path.gaps[0] if path.gaps else "")
+
+
 # The list of sections, stated once. A section that has nothing to say returns
 # nothing and does not appear, so the page grows a band only when HQ has one.
+def _access(service, project) -> ServiceSection | None:
+    from .npm_sections import access
+
+    return access(service, project)
+
+
 SECTIONS: tuple[Callable[[object, object], ServiceSection | None], ...] = (
     _delivery,
+    _access,
     _activity,
     _traffic,
 )

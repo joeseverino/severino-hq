@@ -163,11 +163,12 @@ class FacetVisibilityTests(TestCase):
         self.assertContains(response, facet.not_visible)
 
     def test_a_connection_that_does_not_read_it_is_named(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-dns", controller_id="example-controller",
-            provider="cloudflare_api", reachable=True, probed=True,
-            observed_at=timezone.now(),
-        )
+        for ref, provider in (("example-dns", "cloudflare_api"), ("example-npm", "npm")):
+            ProviderConnection.objects.create(
+                connection_ref=ref, controller_id="example-controller",
+                provider=provider, reachable=True, probed=True,
+                observed_at=timezone.now(),
+            )
 
         note = self.facet("certificate").not_visible
 

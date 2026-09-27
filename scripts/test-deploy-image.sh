@@ -15,7 +15,8 @@ readonly app_dir="${work_dir}/app"
 readonly lib_dir="${work_dir}/lib"
 readonly log_file="${work_dir}/calls.log"
 readonly run_dir="${work_dir}/run"
-mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts" "${run_dir}"
+readonly sbin_dir="${work_dir}/sbin"
+mkdir -p "${bin_dir}" "${app_dir}/scripts" "${lib_dir}/scripts" "${run_dir}" "${sbin_dir}"
 
 # A digest-pinned reference under a test prefix. The script accepts only its own
 # composition by default, so the prefix is overridden rather than the guard
@@ -46,8 +47,11 @@ if [ "$1" = "create" ]; then
 fi
 if [ "$1" = "cp" ]; then
     echo "docker $*" >>"${TEST_LOG}"
-    [ "$2" = "test-compose-container:/app/docker-compose.yml" ] || exit 1
-    cat "${TEST_IMAGE_COMPOSE}" >"$3"
+    case "$2" in
+        test-compose-container:/app/docker-compose.yml) cat "${TEST_IMAGE_COMPOSE}" >"$3" ;;
+        test-compose-container:/app/scripts/severino-hq-sync-scripts) cat "${TEST_IMAGE_SYNC}" >"$3" ;;
+        *) exit 1 ;;
+    esac
     exit 0
 fi
 if [ "$1" = "compose" ]; then
@@ -86,6 +90,7 @@ EOF
 
 cat >"${bin_dir}/install" <<'EOF'
 #!/bin/sh
+echo "install $*" >>"${TEST_LOG}"
 exit 0
 EOF
 
@@ -112,16 +117,33 @@ cat >"${bin_dir}/sleep" <<'EOF'
 exit 0
 EOF
 
-# Controller activation fails unless a case says otherwise, which is what drives
-# the rollback path. Like the real one, it refreshes the lib tree (compose file
-# included) from the image now running.
-cat >"${lib_dir}/scripts/install-controller.sh" <<'EOF'
+# The running release's installer. The deploy never runs it: the new image's
+# sync replaces it before anything is installed.
+previous_installer() {
+    cat >"${lib_dir}/scripts/install-controller.sh" <<'EOF'
 #!/bin/sh
-printf 'updated scripts\n' >"${SEVERINO_HQ_LIB_DIR}/version"
-cp "${TEST_IMAGE_COMPOSE}" "${SEVERINO_HQ_LIB_DIR}/docker-compose.yml"
-exit "${TEST_CONTROLLER_FAIL:-1}"
+echo "previous installer" >>"${TEST_LOG}"
+exit 1
 EOF
+}
+previous_installer
 printf 'previous scripts\n' >"${lib_dir}/version"
+printf 'previous sync\n' >"${sbin_dir}/severino-hq-sync-scripts"
+
+# The sync program the new image ships. Like the real one, it refreshes the lib
+# tree (compose file included) from the image now running, which brings the
+# release's own installer. Controller activation fails unless a case says
+# otherwise, which is what drives the rollback path.
+readonly image_sync="${work_dir}/image-sync"
+cat >"${image_sync}" <<'EOF'
+#!/bin/sh
+echo "release sync" >>"${TEST_LOG}"
+printf 'updated scripts\n' >"${SEVERINO_HQ_LIB_DIR}/version"
+: >"${SEVERINO_HQ_LIB_DIR}/only-in-the-release"
+cp "${TEST_IMAGE_COMPOSE}" "${SEVERINO_HQ_LIB_DIR}/docker-compose.yml"
+printf '#!/bin/sh\necho "release installer SYNCED=${SEVERINO_HQ_INSTALLER_SYNCED:-}" >>"${TEST_LOG}"\nexit "${TEST_CONTROLLER_FAIL:-1}"\n' \
+    >"${SEVERINO_HQ_LIB_DIR}/scripts/install-controller.sh"
+EOF
 
 # The running release's compose file, and the one the new image carries.
 printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
@@ -143,11 +165,13 @@ deploy() {
         TEST_PULL_FAIL="${1}" \
         SEVERINO_HQ_APP_DIR="${app_dir}" \
         SEVERINO_HQ_LIB_DIR="${lib_dir}" \
+        SEVERINO_HQ_SBIN_DIR="${sbin_dir}" \
         SEVERINO_HQ_RUN_DIR="${run_dir}" \
         SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
         SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
         TEST_VERIFY_FAIL="${TEST_VERIFY_FAIL:-0}" \
         TEST_IMAGE_COMPOSE="${image_compose}" \
+        TEST_IMAGE_SYNC="${image_sync}" \
         "${repo_dir}/scripts/deploy-image.sh" "${2:-${good_image}}" </dev/null
 }
 
@@ -166,8 +190,8 @@ assert_staging_cleaned() {
 }
 
 # The new release is started under the compose file its own image carries, not
-# the previous release's copy in the lib tree, which is only refreshed after
-# the health check, so using it made every compose change land one deploy late.
+# the previous release's copy in the lib tree, which is refreshed only after
+# the health check.
 assert_new_compose_applied() {
     if ! grep " up -d " "${log_file}" \
         | grep "image=${good_image} " | grep -q "compose=next compose$"; then
@@ -220,11 +244,37 @@ if grep -q "docker create" "${log_file}"; then
     exit 1
 fi
 
-# A failed controller activation rolls back the image and restores timer state.
+# The release installs itself: the image's sync runs, is installed as the
+# host's, and the installer that runs is the synced one. The previous release's
+# installer never runs.
+assert_release_installed_itself() {
+    grep -q "^release sync$" "${log_file}" || {
+        echo "The new image's sync program did not run." >&2; exit 1; }
+    grep -q "^install -o root -g root -m 0755 ${run_dir}/severino-hq-compose\.[^ ]*/sync ${sbin_dir}/severino-hq-sync-scripts$" \
+        "${log_file}" || { echo "The image's sync program was not installed." >&2; exit 1; }
+    grep -q "^release installer SYNCED=1$" "${log_file}" || {
+        echo "The synced installer did not run." >&2; exit 1; }
+    if grep -q "^previous installer$" "${log_file}"; then
+        echo "The previous release's installer ran after the sync." >&2
+        exit 1
+    fi
+}
+
+# A failed controller activation rolls back the image and restores timer state,
+# the root tree exactly as it was, and the previous sync program.
 run_failure 0
+assert_release_installed_itself
 grep -q "image=registry.example/hq/composition@sha256:previous" "${log_file}"
 grep -qx 'previous scripts' "${lib_dir}/version"
 grep -qx 'previous compose' "${lib_dir}/docker-compose.yml"
+if [ -e "${lib_dir}/only-in-the-release" ]; then
+    echo "Rollback left the new release's files in the root tree." >&2
+    exit 1
+fi
+grep -q '"previous installer"' "${lib_dir}/scripts/install-controller.sh" || {
+    echo "Rollback did not restore the previous installer." >&2; exit 1; }
+grep -q "^install -o root -g root -m 0755 ${run_dir}/severino-hq-compose\.[^ ]*/sync.previous ${sbin_dir}/severino-hq-sync-scripts$" \
+    "${log_file}" || { echo "Rollback did not restore the previous sync program." >&2; exit 1; }
 if find "${run_dir}" -name 'severino-hq-scripts.*' | grep -q .; then
     echo "Controller rollback snapshot was not cleaned up." >&2
     exit 1
@@ -244,6 +294,7 @@ if ! deploy 0 >/dev/null; then
 fi
 unset TEST_CONTROLLER_FAIL
 assert_new_compose_applied
+assert_release_installed_itself
 assert_staging_cleaned
 if [ "$(grep -c " up -d " "${log_file}")" -ne 1 ]; then
     echo "A healthy deploy recreated the container more than once." >&2
@@ -252,6 +303,8 @@ fi
 grep -qx 'next compose' "${lib_dir}/docker-compose.yml"
 printf 'previous compose\n' >"${lib_dir}/docker-compose.yml"
 printf 'previous scripts\n' >"${lib_dir}/version"
+previous_installer
+rm -f "${lib_dir}/only-in-the-release"
 
 # A failed health check restores the prior compose file with the prior image,
 # and never reaches controller activation, so the lib tree is untouched.
@@ -329,10 +382,12 @@ printf 'x-access-token\nsecret-token-value\n' | PATH="${bin_dir}:${PATH}" \
     TEST_PULL_FAIL=1 \
     SEVERINO_HQ_APP_DIR="${app_dir}" \
     SEVERINO_HQ_LIB_DIR="${lib_dir}" \
+    SEVERINO_HQ_SBIN_DIR="${sbin_dir}" \
     SEVERINO_HQ_RUN_DIR="${run_dir}" \
     SEVERINO_HQ_VERIFIER_DIR="${verifier_dir}" \
     SEVERINO_HQ_IMAGE_PREFIX="${test_prefix}" \
     TEST_IMAGE_COMPOSE="${image_compose}" \
+    TEST_IMAGE_SYNC="${image_sync}" \
     "${repo_dir}/scripts/deploy-image.sh" "${good_image}" >/dev/null 2>&1 || true
 if grep -q "docker login" "${log_file}"; then
     echo "The deploy still logs in, which writes the token to root's home." >&2

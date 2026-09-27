@@ -2054,7 +2054,7 @@ class TLSPostureInsightTests(TestCase):
     account surface.
     """
 
-    def _zone(self, posture=None):
+    def _zone(self, posture=None, refused_parts=()):
         from django.utils import timezone
         from control_plane.models import ProviderInventory
         from .zones import Zone
@@ -2064,7 +2064,11 @@ class TLSPostureInsightTests(TestCase):
             record["posture"] = posture
         ProviderInventory.objects.update_or_create(
             kind="cloudflare.zone",
-            defaults={"records": [record], "observed_at": timezone.now()},
+            defaults={
+                "records": [record],
+                "observed_at": timezone.now(),
+                "refused_parts": list(refused_parts),
+            },
         )
         return Zone(zone="example.com", connection_ref="a-dns")
 
@@ -2107,11 +2111,36 @@ class TLSPostureInsightTests(TestCase):
 
         from .zone_insights import posture
 
-        found = posture(self._zone({"unread": "Cloudflare refused: 403"}))
+        found = posture(self._zone({}, [
+            {"part": "posture", "refusal": "", "reason": "Cloudflare refused: 403",
+             "scope": "example.com"},
+        ]))
 
         self.assertEqual(found.value, "Not readable")
         self.assertIn("403", found.detail)
         self.assertTrue(found.concern)
+
+    def test_a_missing_permission_names_it(self):
+        from .zone_insights import posture
+
+        found = posture(self._zone({}, [
+            {"part": "posture", "refusal": "permission", "reason": "Authentication error",
+             "scope": "example.com"},
+        ]))
+
+        self.assertEqual(
+            found.detail, "Zone TLS posture not read: missing Zone Settings Read (zone)."
+        )
+
+    def test_a_refusal_on_another_zone_is_not_this_ones(self):
+        from .zone_insights import posture
+
+        found = posture(self._zone({"ssl": "strict"}, [
+            {"part": "posture", "refusal": "", "reason": "Cloudflare refused: 403",
+             "scope": "example.net"},
+        ]))
+
+        self.assertEqual(found.value, "Full (strict)")
 
     def test_a_refused_registration_read_says_so(self):
         from control_plane.models import ProviderInventory
@@ -2123,8 +2152,9 @@ class TLSPostureInsightTests(TestCase):
         ProviderInventory.objects.update_or_create(
             kind="cloudflare.zone",
             defaults={
-                "records": [{"zone": "example.com",
-                             "registration": {"unread": "Cloudflare refused: 403"}}],
+                "records": [{"zone": "example.com", "registration": {}}],
+                "refused_parts": [{"part": "registration", "refusal": "",
+                                   "reason": "Cloudflare refused: 403", "scope": ""}],
                 "observed_at": timezone.now(),
             },
         )

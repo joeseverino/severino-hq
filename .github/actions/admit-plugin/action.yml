@@ -16,8 +16,8 @@ description: >-
 # unchanged. A `workflow_call` job does not: it would be signed as
 # severino-hq/.github/workflows/<whatever>.yml, every extension would share one
 # signer identity, and the signature would stop proving which repository built
-# the wheel. That is the exact widening composition/extensions.json exists to
-# prevent, so the signing steps live here, in an action, on purpose.
+# the wheel. composition/extensions.json exists to prevent that widening, so
+# the signing steps live here, in an action.
 #
 # Everything that does not sign lives in ../../workflows/plugin-checks.yml.
 
@@ -30,14 +30,6 @@ inputs:
       Installable distribution name. Also names the retained run artifact, and
       must equal the manifest's declared distribution.
     required: true
-  hq-commit:
-    description: >-
-      Immutable 40-character host commit this admission is built against. A tag
-      or branch is rejected. Leave empty (which is what an extension with no
-      HQ_COMMIT variable passes) and the host's current main is resolved to
-      its own commit and used, so the admission still records an exact one.
-    required: false
-    default: ""
   workflow-path:
     description: >-
       Path of the CALLING workflow file inside the calling repository. This is
@@ -55,37 +47,20 @@ runs:
       id: host
       shell: bash
       env:
-        HQ_COMMIT: ${{ inputs.hq-commit }}
         HOST_REPOSITORY: ${{ github.action_repository }}
         GH_TOKEN: ${{ github.token }}
       run: |
-        # Pinning to an exact host commit is the point: the wheel is built
-        # against that source and the admission records which. What was not
-        # the point was requiring the *caller* to supply it, because the
-        # supported configuration is to have no HQ_COMMIT variable at all,
-        # deleting it is the documented fix when an extension goes stale. The
-        # checks job already handled that with `vars.HQ_COMMIT || 'main'`; this
-        # one did not, so every extension with the correct configuration failed
-        # its first step with an empty string and no message.
-        #
-        # Resolved here rather than in each caller, so the three extensions do
-        # not each carry a copy of it, and so an empty value still produces an
-        # immutable admission rather than a branch name.
+        # An admission is built against host main, resolved here to one exact
+        # commit so the admission records which. A change that needs an
+        # unreleased host lands as coordinated branches, verified together
+        # before either merges, never as a pin.
         set -euo pipefail
-        if [[ -n "$HQ_COMMIT" ]]; then
-          if [[ ! "$HQ_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::hq-commit must be a 40-character commit sha, not a tag or branch."
-            exit 1
-          fi
-          resolved="$HQ_COMMIT"
-        else
-          resolved="$(gh api "repos/${HOST_REPOSITORY}/commits/main" --jq .sha)"
-          if [[ ! "$resolved" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Could not resolve ${HOST_REPOSITORY} main to a commit."
-            exit 1
-          fi
-          echo "Building against ${HOST_REPOSITORY} main at ${resolved}."
+        resolved="$(gh api "repos/${HOST_REPOSITORY}/commits/main" --jq .sha)"
+        if [[ ! "$resolved" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::Could not resolve ${HOST_REPOSITORY} main to a commit."
+          exit 1
         fi
+        echo "Building against ${HOST_REPOSITORY} main at ${resolved}."
         echo "sha=${resolved}" >> "$GITHUB_OUTPUT"
 
     - name: Check out the plugin
@@ -148,10 +123,8 @@ runs:
       shell: bash
       run: |
         # The host refuses a wheel whose approval names a different plugin API
-        # version than its manifest declares, so the approval must say what
-        # the pinned host actually speaks. Read from that checkout rather than
-        # a literal here: a literal is what stayed at 1 when the host moved
-        # to 2, and every admission was refused at composition.
+        # version than its manifest declares, so the approval says what the
+        # checked-out host speaks, read from that checkout.
         set -euo pipefail
         version="$(python - <<'PY'
         import pathlib, re, sys

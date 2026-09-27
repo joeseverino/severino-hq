@@ -59,6 +59,25 @@ class SdkContractTests(SimpleTestCase):
                 ["invalid.py:1: application.capabilities", "invalid.py:2: core.audit"],
             )
 
+    def test_the_import_boundary_reads_every_form_and_every_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "deep.py").write_text(
+                "import os, jobs.runner\n"
+                "from hq_sdk import ui\n"
+                "from . import sibling\n"
+                "def f():\n"
+                "    from core import audit; from core import audit\n",
+                encoding="utf-8",
+            )
+            (root / "broken.py").write_text("def (:\n", encoding="utf-8")
+
+            found = unsupported_hq_imports(root)
+
+        self.assertEqual(found[1:], ["pkg/deep.py:1: jobs.runner", "pkg/deep.py:5: core"])
+        self.assertTrue(found[0].startswith("broken.py:1: "))
+
     def test_capability_spec_is_available_from_the_sdk(self):
         from hq_sdk.capabilities import CapabilitySpec as SdkCapabilitySpec
 
@@ -209,6 +228,26 @@ class SdkShapeTests(SimpleTestCase):
         self.assertTrue(differences[0].startswith("~ hq_sdk.capabilities.execute_capability: parameters:"))
         self.assertEqual(differences[1], "+ hq_sdk.ui.Brand")
         self.assertEqual(differences[2], "- hq_sdk.web.safe_next")
+
+    def test_versions_and_whole_modules_are_named_too(self):
+        from hq_sdk.contract import drift
+
+        committed = {
+            "api_version": 1,
+            "sdk_version": "1.0",
+            "modules": {"gone": {"a": {}}, "kept": {"x": {"kind": "value"}}},
+        }
+        current = {
+            "api_version": 2,
+            "sdk_version": "1.0",
+            "modules": {"kept": {"x": {"kind": "value"}}, "new": {"b": {}, "a": {}}},
+        }
+
+        self.assertEqual(
+            drift(committed, current),
+            ["api_version: 1 -> 2", "- hq_sdk.gone", "+ hq_sdk.new: a, b"],
+        )
+        self.assertEqual(drift(committed, committed), [])
 
     def test_parameters_are_recorded_without_annotations(self):
         """Annotations render differently across interpreters; names and defaults do not."""

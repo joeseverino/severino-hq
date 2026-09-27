@@ -1,9 +1,8 @@
-# Severino HQ — homelab container image.
+# Severino HQ: homelab container image.
 # Multi-stage: build wheel deps, then a slim runtime as a non-root user.
 
-ARG PYTHON_VERSION=3.12-slim-bookworm
-
-FROM python:${PYTHON_VERSION} AS build
+# Both stages pin the base by digest; Dependabot bumps it on these lines.
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS build
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
@@ -15,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --require-hashes --prefix=/install -r requirements.txt
 
 
-FROM python:${PYTHON_VERSION} AS runtime
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -44,6 +43,8 @@ COPY --from=build /install /usr/local
 
 WORKDIR /app
 COPY . /app
+# What severino-hq-sync-scripts verifies the root-run tree against on the host.
+RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 
 # Mounted volumes; create empty so the container can boot before a host mount.
 RUN mkdir -p /data /media /exports /static \

@@ -10,6 +10,7 @@ from pydantic import Field
 from core.network import split_host_port
 
 from ..names import normalized_hostname
+from . import npm_readings
 from .contracts import (
     ControllerIntegrationAdapter,
     IngressPolicy,
@@ -98,7 +99,7 @@ def token(runtime: ProviderRuntime, base_url: str, connection_ref: str = "") -> 
     return runtime.snapshot_value(("npm-token", base_url, prefix), exchange)
 
 
-def _session(runtime: ProviderRuntime, connection_ref: str = ""):
+def session(runtime: ProviderRuntime, connection_ref: str = ""):
     base_url = url(runtime, connection_ref)
     return base_url, {
         "Authorization": f"Bearer {token(runtime, base_url, connection_ref)}"
@@ -112,7 +113,7 @@ def reconcile(
     apply: bool = True,
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
-    base_url, headers = _session(runtime)
+    base_url, headers = session(runtime)
     hosts = runtime.request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
     matches = [
@@ -202,7 +203,7 @@ def delete(
     observed: dict[str, Any] | None = None,
 ) -> ProviderResult:
     del observed
-    base_url, headers = _session(runtime)
+    base_url, headers = session(runtime)
     hosts = runtime.request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     domains = sorted(spec["domain_names"])
     matches = [
@@ -279,7 +280,7 @@ def _certificates(runtime: ProviderRuntime, base_url: str, headers: dict[str, st
 
 
 def inventory(runtime: ProviderRuntime) -> list[dict[str, Any]]:
-    base_url, headers = _session(runtime)
+    base_url, headers = session(runtime)
     records = runtime.request(f"{base_url}/nginx/proxy-hosts", headers=headers)
     policies = _access_policies(runtime, base_url, headers)
     certificates = _certificates(runtime, base_url, headers)
@@ -491,4 +492,5 @@ def build_adapter(*, provider_model, provider_spec, applies):
             (definition.kind, "reconcile"): reconcile,
             (definition.kind, "delete"): delete,
         },
+        readings=npm_readings.READINGS,
     )

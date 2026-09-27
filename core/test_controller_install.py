@@ -132,6 +132,41 @@ echo preflight >>"$TEST_ROOT/calls"
         self.assertFalse(self.unit.exists())
         self.assertFalse(self.dropin.exists())
 
+    def test_the_synced_release_runs_every_step_after_the_sync(self):
+        # The sync installs the next release: a different installer, and no
+        # install-cosign.sh. Nothing of the previous installer may run after it.
+        next_release = self.root / "next-install-controller.sh"
+        next_release.write_text(
+            '#!/bin/sh\necho "next release $SEVERINO_HQ_INSTALLER_SYNCED $*" >>"$TEST_ROOT/calls"\n'
+        )
+        self.stub(self.bin / "severino-hq-sync-scripts", f"""
+echo sync >>"$TEST_ROOT/calls"
+cp "{next_release}" "{self.installer}"
+rm -f "{self.lib}/scripts/install-cosign.sh"
+""")
+        result = subprocess.run(["sh", str(self.installer), "--example"], env=self.env,
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.log.read_text().splitlines(), ["sync", "next release 1 --example"])
+
+    def test_a_synced_run_outside_the_root_tree_is_refused(self):
+        stray = self.root / "checkout/scripts/install-controller.sh"
+        stray.parent.mkdir(parents=True)
+        shutil.copy(self.installer, stray)
+        result = subprocess.run(["sh", str(stray)],
+                                env={**self.env, "SEVERINO_HQ_INSTALLER_SYNCED": "1"},
+                                capture_output=True, text=True, timeout=15)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("A synced install runs from", result.stderr)
+        self.assertFalse(self.log.exists())
+
+    def test_a_host_without_the_sync_program_is_refused(self):
+        (self.bin / "severino-hq-sync-scripts").unlink()
+        result = self.run_installer()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fix-root-ownership.sh", result.stderr)
+        self.assertFalse(self.log.exists())
+
     def shipped(self):
         """What systemd would read from the shipped tree, walked independently."""
         tree = self.lib / "deploy/systemd"

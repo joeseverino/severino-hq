@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.utils.http import url_has_allowed_host_and_scheme
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
+    from django.http import HttpRequest
 
 
 class Capability(StrEnum):
@@ -125,13 +131,13 @@ class Principal:
             )
 
 
-def _operator_capabilities():
+def _operator_capabilities() -> frozenset[Capability | str]:
     from .plugins import plugin_capabilities
 
     return OPERATOR_CAPABILITIES | plugin_capabilities("operator")
 
 
-def web_principal(user) -> Principal:
+def web_principal(user: AbstractBaseUser | AnonymousUser) -> Principal:
     if not getattr(user, "is_authenticated", False):
         raise AuthorizationError("An authenticated web operator is required.")
     return Principal(user.get_username(), "web", _operator_capabilities())
@@ -157,7 +163,7 @@ def mcp_principal() -> Principal:
 
     from .plugins import plugin_capabilities
 
-    capabilities = {Capability.READ}
+    capabilities: set[Capability | str] = {Capability.READ}
     capabilities.update(plugin_capabilities("mcp_read"))
     # Mirroring the vault's documentation index is gated on its own, because it
     # is the one write an operator wants routinely and in isolation. Bundled
@@ -212,7 +218,7 @@ def mcp_principal() -> Principal:
     return Principal("mcp-service-account", "mcp", frozenset(capabilities))
 
 
-def safe_next(request, *, fallback: str = "", scope: str = "") -> str:
+def safe_next(request: HttpRequest, *, fallback: str = "", scope: str = "") -> str:
     """A caller-supplied destination, but only if it points back at us.
 
     Shared rather than repeated: the same "go back where I came from" appears

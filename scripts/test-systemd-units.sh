@@ -1,12 +1,7 @@
 #!/bin/sh
 # The systemd files the repository ships, and the check that the host still has
-# them.
-#
-# The installer once named its units by hand. Four shipped files were not on the
-# list and the drop-ins stopped receiving changes, and the daily drift check
-# compared scripts but never unit files, so the host ran stale units with every
-# check green. These cases hold the set to one derivation and the check to
-# byte equality, so neither half can quietly narrow again.
+# them. These cases hold the set to one derivation and the check to byte
+# equality, so neither half can narrow.
 
 set -eu
 
@@ -44,19 +39,29 @@ fi
 lib="${fixture}/lib"
 etc="${fixture}/etc"
 bin="${fixture}/bin"
-mkdir -p "${lib}/scripts/lib" "${lib}/deploy" "${etc}" "${bin}"
-cp -R deploy/systemd "${lib}/deploy/systemd"
-cp scripts/lib/systemd-units.sh "${lib}/scripts/lib/"
+sbin="${fixture}/sbin"
+app="${fixture}/app"
+mkdir -p "${lib}" "${etc}" "${bin}" "${sbin}" "${app}/.git"
+cp -R scripts config deploy docker-compose.yml "${lib}/"
+find "${lib}" -name __pycache__ -prune -exec rm -rf {} +
+sh scripts/root-tree-manifest.sh "${lib}" >"${lib}/root-tree.sha256"
+cp scripts/severino-hq-sync-scripts "${sbin}/"
 # Relocate fixed host paths in the test copy, not in the production interface.
+checker="${fixture}/severino-hq-check-scripts"
 sed -e "s|/usr/local/lib/severino-hq|${lib}|g" \
     -e "s|/etc/systemd/system|${etc}|g" \
-    scripts/severino-hq-check-scripts >"${lib}/scripts/severino-hq-check-scripts"
+    -e "s|/usr/local/sbin|${sbin}|g" \
+    -e "s|/opt/apps/severino-hq|${app}|g" \
+    scripts/severino-hq-check-scripts >"${checker}"
 printf 'image sha256:test\n' >"${lib}/.source"
 printf '#!/bin/sh\necho sha256:test\n' >"${bin}/docker"
 chmod 0755 "${bin}/docker"
+cp scripts/fixtures/systemctl "${bin}/systemctl"
+TEST_ACCOUNT="$(id -un)"
+export TEST_ACCOUNT
 
 check() {
-    PATH="${bin}:${PATH}" sh "${lib}/scripts/severino-hq-check-scripts" \
+    PATH="${bin}:${PATH}" sh "${checker}" \
         >"${fixture}/out" 2>"${fixture}/err"
 }
 

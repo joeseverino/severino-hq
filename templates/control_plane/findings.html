@@ -23,11 +23,6 @@
           <span class="pill pill-{{ entry.finding.severity }}">{{ entry.finding.severity }}</span>
           <h2>{{ entry.finding.title }}</h2>
         </div>
-        {% if entry.investigations and not entry.workflow %}
-          <div class="finding-actions">
-            {% for action in entry.investigations %}<a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
-          </div>
-        {% endif %}
       </div>
       <p>{{ entry.finding.explanation }}</p>
       {% if entry.finding.evidence %}
@@ -35,22 +30,31 @@
           {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value|readable }}</dd></div>{% endfor %}
         </dl>
       {% endif %}
-      {% if entry.workflow %}
-        {% include "partials/_resolution_workflow.html" with workflow=entry.workflow %}
-      {% elif entry.offers or entry.remedies %}
-        <div class="finding-offers">
-          <strong>Actions</strong>
+      {% comment %}
+      The finding's own fix leads: its operator steps, then any gated remedy.
+      What to check first, other places to look and how to confirm follow as
+      one line of links (application.workflows.workflow_layout).
+      {% endcomment %}
+      <div class="finding-fix">
+        {% for step in entry.finding.steps %}{% include "partials/_operator_step.html" %}{% endfor %}
+        {% if entry.layout.fix %}
           <div class="finding-actions">
-            {% for action in entry.offers %}<a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
-            {% for action in entry.remedies %}
+            {% for action in entry.layout.fix %}
               {% if action.method == "POST" %}
                 {% post_button action.label action.url css="btn compact primary" %}
               {% else %}
-                <a class="btn compact" href="{{ action.url }}">{{ action.label }}</a>
+                <a class="btn compact primary" href="{{ action.url }}">{{ action.label }}</a>
               {% endif %}
             {% endfor %}
           </div>
-        </div>
+        {% endif %}
+      </div>
+      {% if entry.layout.links %}
+        <p class="finding-links">
+          {% if entry.layout.impact %}<span class="finding-links-group"><span class="muted">Impact</span> {% for action in entry.layout.impact %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if entry.layout.related %}<span class="finding-links-group"><span class="muted">See</span> {% for action in entry.layout.related %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if entry.layout.confirm %}<span class="finding-links-group"><span class="muted">Confirm</span> {% for action in entry.layout.confirm %}{% if action.method == "POST" %}{% post_button action.label action.url css="btn compact" title=action.reason %}{% else %}<a class="subtle-link" href="{{ action.url }}" title="{{ action.reason }}">{{ action.label }}</a>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+        </p>
       {% endif %}
     </article>
   {% empty %}

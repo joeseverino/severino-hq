@@ -12,7 +12,8 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 from core.audit import audit_connection
 
 from .labels import human_label
-from .tailnet import TAILNET_KIND
+from .policy_fixes import request_empty_groups_removal
+from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 from .assets import AssetCommand, save_asset, upsert_asset
 from .content import ContentCommand, save_content
 from .contact_submissions import (
@@ -552,6 +553,27 @@ CORE_CAPABILITY_SPECS = (
         label="Allow tailnet reach",
     ),
     CapabilitySpec(
+        "tailnet.policy.remove_empty_groups",
+        "Remove the groups with no members that the tailnet policy still grants.",
+        "infrastructure_change",
+        Capability.MANAGE_INFRASTRUCTURE,
+        OperationCommand,
+        request_empty_groups_removal,
+        "key",
+        "infrastructure.resources",
+        target_label="Policy key",
+        target_help="The tailnet policy declaration to amend.",
+        target_query=(("kind", TAILNET_POLICY_KIND),),
+        execution_notes=(
+            "Read the declared policy and find the groups with no members that a rule names.",
+            "Refuse when such a group is named anywhere else, since removing it would "
+            "change what the policy means.",
+            "Strike them from their rules, dropping a rule left admitting nobody, and "
+            "propose the amended policy through the gated policy kind.",
+        ),
+        label="Remove empty groups",
+    ),
+    CapabilitySpec(
         "certificate.renew",
         "Request certificate renewal when policy allows it.",
         "infrastructure_change",
@@ -687,7 +709,7 @@ def execute_capability(
         # what shape of target it would have taken.
         authorize_capability(spec, principal)
         _refuse_unknown_fields(spec, payload)
-        command = TypeAdapter(spec.command_type).validate_python(payload)
+        command: Any = TypeAdapter(spec.command_type).validate_python(payload)
         held, principal = _consent(spec, name, payload, target, principal)
         if held is not None:
             return held
@@ -713,7 +735,7 @@ def execute_capability(
             capability=name,
             reason="too_many_pending_approvals",
         )
-        return _error("too_many_pending_approvals", str(exc))
+        return _error("too_many_pending_approvals", exc.reason)
     except AuthorizationError as exc:
         # The one refusal point for every adapter.
         record_denial(
@@ -812,7 +834,7 @@ def execute_approved(
     surrounding transaction guarantees.
     """
 
-    command = TypeAdapter(spec.command_type).validate_python(payload)
+    command: Any = TypeAdapter(spec.command_type).validate_python(payload)
     return _run(
         spec, command, principal=principal, target=target, expected_updated_at=None
     )

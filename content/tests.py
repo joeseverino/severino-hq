@@ -90,6 +90,39 @@ class ContentSyncTests(TestCase):
         # Manual classification is preserved: sync sets content_type on create only.
         self.assertEqual(item.content_type, ContentItem.Type.CASE_STUDY)
 
+    def test_entries_without_a_slug_are_skipped_and_blanks_are_derived(self):
+        payload = {
+            "items": [
+                "not an entry",
+                {"slug": "  ", "title": "No slug"},
+                {
+                    "slug": " bare ",
+                    "description": "  " + "d" * 200,
+                    "technologies": ["a", "", None, "b"],
+                    "published_at": "not a date",
+                },
+            ]
+        }
+
+        stats = sync_content_index(payload=payload)
+
+        self.assertEqual(stats, {"created": 1, "updated": 0, "total": 1, "project": "example-site"})
+        item = ContentItem.objects.get()
+        self.assertEqual(item.slug, "bare")
+        self.assertEqual(item.title, "bare")
+        self.assertEqual(item.topic, "d" * 160)
+        self.assertEqual(item.tags, "a, b")
+        self.assertEqual(item.published_url, "")
+        self.assertIsNone(item.published_at)
+        self.assertEqual(item.content_type, ContentItem.Type.LAB_WRITEUP)
+
+    @override_settings(CONTENT_INDEX_PROJECT_SLUG="missing-project")
+    def test_no_project_relates_nothing(self):
+        stats = sync_content_index(payload=_payload())
+
+        self.assertIsNone(stats["project"])
+        self.assertFalse(ContentItem.objects.filter(related_projects__isnull=False).exists())
+
     def test_missing_items_list_raises(self):
         with self.assertRaises(ContentSyncError):
             sync_content_index(payload={"nope": True})
