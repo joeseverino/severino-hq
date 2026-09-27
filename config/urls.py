@@ -125,3 +125,10 @@ urlpatterns = [
 ]
 
 urlpatterns.extend(plugin_urlpatterns())
+
+# Development only; see config/devtools.py. Imported here, behind the setting,
+# because the package is absent from the host image.
+if settings.SEVERINO_DEBUG_TOOLBAR:
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
+    urlpatterns.extend(debug_toolbar_urls())

@@ -20,7 +20,18 @@ from pathlib import Path
 
 from django.utils.csp import CSP
 
-from application.plugins import installed_plugin_apps
+from importlib import import_module
+
+from config.devtools import (
+    DEBUG_TOOLBAR_APP,
+    DEBUG_TOOLBAR_MIDDLEWARE,
+    debug_toolbar_enabled,
+    without_trusted_types,
+)
+
+# The plugin registry is loaded by name: settings is imported by everything, and
+# a static import here would put it inside the application's own import cycle.
+installed_plugin_apps = import_module("application.plugins").installed_plugin_apps
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -259,11 +270,7 @@ SECURE_CSP = {
 # The admin, minus the directive its bundled jQuery cannot satisfy. Spelled as
 # a derivation rather than a second literal policy, so tightening the real one
 # cannot leave a stale copy behind serving the admin a weaker boundary.
-SEVERINO_ADMIN_CSP = {
-    key: value
-    for key, value in SECURE_CSP.items()
-    if key not in {"require-trusted-types-for", "trusted-types"}
-}
+SEVERINO_ADMIN_CSP = without_trusted_types(SECURE_CSP)
 
 # ----- Who may reach HQ at all ------------------------------------------------
 
@@ -491,7 +498,8 @@ TEST_RUNNER = "core.test_runner.SeverinoTestRunner"
 # Under test, a warning from this codebase and any leaked resource fail the run.
 # Here rather than in the runner because settings are what every parallel
 # worker imports on start. See config/warning_policy.py.
-if sys.argv[1:2] == ["test"]:
+RUNNING_TESTS = sys.argv[1:2] == ["test"]
+if RUNNING_TESTS:
     from config.warning_policy import enforce as _enforce_warning_policy
 
     _enforce_warning_policy(BASE_DIR)
@@ -515,6 +523,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # ----- Auth --------------------------------------------------------------------
+
+# Argon2 hashes every new password. The rest verify a stored hash in an older
+# format, and Django re-hashes it with Argon2 at the next successful sign-in.
+PASSWORD_HASHERS = [
+    "core.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -714,6 +732,9 @@ SEVERINO_AUDIT_ROUTINE_DAYS = env_int("SEVERINO_AUDIT_ROUTINE_DAYS", 30)
 # How often the in-use marker is rewritten. Every request checks it; only the
 # first in each interval writes.
 SEVERINO_ACTIVITY_THROTTLE_SECONDS = env_int("SEVERINO_ACTIVITY_THROTTLE_SECONDS", 60)
+# How often each source's arrival is written to HQ's request-path reading, per
+# process. Every request is counted in memory; 0 records nothing.
+SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
 # watch; the in-use marker is read only by HQ and defaults beside the database.
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
@@ -846,8 +867,6 @@ SEVERINO_RDAP_ENDPOINT = os.environ.get("SEVERINO_RDAP_ENDPOINT", "https://rdap.
 # third party is a decision a deployment makes, not a default.
 SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
 
-CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-CLOUDFLARE_D1_DATABASE_ID = os.environ.get("CLOUDFLARE_D1_DATABASE_ID", "")
 CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 GITHUB_API_TOKEN = os.environ.get("GITHUB_API_TOKEN", "")
@@ -877,3 +896,30 @@ CONTENT_INDEX_URL = os.environ.get("CONTENT_INDEX_URL", "")
 CONTENT_INDEX_PROJECT_SLUG = os.environ.get("CONTENT_INDEX_PROJECT_SLUG", "")
 CF_ACCESS_CLIENT_ID = env_secret("CF_ACCESS_CLIENT_ID")
 CF_ACCESS_CLIENT_SECRET = env_secret("CF_ACCESS_CLIENT_SECRET")
+
+
+# ----- Development only: Django Debug Toolbar ---------------------------------
+
+# See config/devtools.py. Installed from requirements-dev.txt, which the image
+# never installs; enabled only with DEBUG on and the flag set, outside the suite.
+SEVERINO_DEBUG_TOOLBAR = debug_toolbar_enabled(
+    debug=DEBUG,
+    requested=env_bool("SEVERINO_DEBUG_TOOLBAR"),
+    testing=RUNNING_TESTS,
+)
+if SEVERINO_DEBUG_TOOLBAR:
+    INSTALLED_APPS.append(DEBUG_TOOLBAR_APP)
+    # Inside the policy middleware, so the nonce on the toolbar's scripts is the
+    # one the header states.
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index("core.middleware.AdminPolicyMiddleware") + 1,
+        DEBUG_TOOLBAR_MIDDLEWARE,
+    )
+    SECURE_CSP = without_trusted_types(SECURE_CSP)
+# Who sees the toolbar: loopback, unless a developer behind a proxy names more.
+# Empty, Django's default, whenever it is off.
+INTERNAL_IPS = (
+    env_list("SEVERINO_DEBUG_TOOLBAR_IPS", ["127.0.0.1", "::1"])
+    if SEVERINO_DEBUG_TOOLBAR
+    else []
+)

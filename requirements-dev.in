@@ -1,0 +1,5 @@
+# Development-only layers: installed by a developer or the dev tooling, never in
+# the host image (the container gate proves it). Compiled with hashes into
+# requirements-dev.txt against requirements.txt, so a shared dependency keeps
+# the host's pin. Install with --require-hashes.
+django-debug-toolbar==8.0.0
