@@ -482,14 +482,7 @@ class PortainerContainerSpec(ProviderModel):
             "finding."
         ),
     )
-    holds_docker_socket: bool = Field(
-        default=False,
-        title="Holds the Docker socket",
-        description=(
-            "Its job is the socket: a socket proxy or a management agent. The "
-            "socket stays on its page but is never an action item."
-        ),
-    )
+    holds_docker_socket: bool = Field(default=False, title="Holds the Docker socket", description="Its job is the socket: a socket proxy or an agent. Listed, never an action item.")
     hidden: bool = Field(
         default=False,
         title="Collapse on machine page",
