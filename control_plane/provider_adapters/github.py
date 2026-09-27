@@ -8,8 +8,14 @@ never acted on twice.
 
 GitHub holds the record of what happened. A check run on each admitted commit
 is the delivery's status where the change was made, and the compose run that
-carries it is found by time rather than remembered, so a scheduled run and a
-dispatched one are the same thing to HQ.
+carries it is found by time rather than remembered.
+
+HQ starts nothing here. An extension's admission dispatches the composition
+itself, the moment it has signed a wheel (the host's ``admit-plugin`` action),
+and the deploy waits for a person. HQ reports: each stage on the extension's
+commit, and one comment on its merged pull request once production runs it,
+read when HQ boots on a new image and whenever it sweeps while in use. The
+controller never asks its app for a token that can start a workflow.
 """
 
 from __future__ import annotations
@@ -21,10 +27,15 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from . import github_app
+from . import github_app, github_readings
 from .contracts import ControllerIntegrationAdapter, ProviderResult, ProviderRuntime
 
 KIND = "github.delivery"
+# What reporting delivery writes: a check run on each extension commit, and one
+# comment on its merged pull request. With ``github_readings.READ`` and the
+# admission's Actions write, this is every permission HQ's app is registered
+# with (``deploy/github-apps.json``).
+REPORTS = {"checks": "write", "pull_requests": "write"}
 CHECK_NAME = "Severino HQ · production"
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
@@ -241,7 +252,14 @@ def _report(extension: Extension, spec: Mapping[str, Any], image: str) -> dict[s
     body = {"details_url": details, "external_id": str((run or {}).get("id", ""))}
     status = str((run or {}).get("status", ""))
     if run is None:
-        return {**body, "status": "queued", "output": {"title": "Composition requested", "summary": extension.stage}}
+        return {
+            **body,
+            "status": "queued",
+            "output": {
+                "title": "Waiting for its composition",
+                "summary": "Its admission starts the composition. If that admission failed, re-run it.",
+            },
+        }
     if status == "waiting":
         return {**body, "status": "in_progress", "output": {"title": "Waiting for deploy approval", "summary": extension.stage}}
     if status == "queued":
@@ -262,7 +280,7 @@ def _sha(extension: Extension) -> str:
 
 def _upsert_check(runtime: ProviderRuntime, extension: Extension, report: dict[str, Any]) -> None:
     owner, repo = github_app.repository(extension.repository)
-    grant = {"repositories": (extension.repository,), "permissions": {"checks": "write"}}
+    grant = {"repositories": (extension.repository,), "permissions": {"checks": REPORTS["checks"]}}
     existing = _check_run(runtime, extension.repository, _sha(extension))
     if existing and existing.get("id"):
         github_app.call(
@@ -311,29 +329,8 @@ def _announce(runtime: ProviderRuntime, extension: Extension, image: str) -> Non
             f"`{image or 'the composed image'}`."
         },
         repositories=(extension.repository,),
-        permissions={"pull_requests": "write"},
+        permissions={"pull_requests": REPORTS["pull_requests"]},
     )
-
-
-def _dispatch(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    """Start the composition; the run GitHub answers with, when it names one."""
-
-    owner, repo = github_app.repository(spec["repository"])
-    answer = github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/actions/workflows/{_basename(spec['workflow'])}/dispatches",
-        method="POST",
-        # The host repository is public: the reason names no extension.
-        payload={
-            "ref": spec["branch"],
-            "inputs": {"reason": "An admitted extension is not in production."},
-        },
-        repositories=(spec["repository"],),
-        permissions={"actions": "write"},
-    )
-    if isinstance(answer, Mapping) and answer.get("workflow_run_id"):
-        return {"id": answer["workflow_run_id"], "status": "queued", "html_url": answer.get("html_url", "")}
-    return None
 
 
 def reconcile(
@@ -346,16 +343,8 @@ def reconcile(
     del observed
     extensions = delivery(runtime, spec)
     image = str(runtime.composition().get("image") or "")
-    start = any(item.behind and item.run is None for item in extensions)
     reporting = [item for item in extensions if item.behind or item.unreported]
     if apply:
-        if start:
-            started = _dispatch(runtime, spec)
-            if started is not None:
-                reporting = [
-                    replace(item, run=started) if item.behind and item.run is None else item
-                    for item in reporting
-                ]
         for item in reporting:
             _upsert_check(runtime, item, _report(item, spec, image))
             if not item.behind:
@@ -382,14 +371,14 @@ def reconcile(
                 "Ready",
                 True,
                 "Delivering" if reporting else "Current",
-                "Composition started." if start else status["production"] + ".",
+                status["production"] + ".",
             )
         ]
     return ProviderResult(
-        changed=bool(start or reporting),
+        changed=bool(reporting),
         status=status,
         conditions=conditions,
-        message="Composition started." if start else "Delivery reported.",
+        message="Delivery reported.",
     )
 
 
@@ -463,6 +452,7 @@ def build_adapter(*, provider_model, provider_spec, applies):
     return ControllerIntegrationAdapter(
         definitions=(definition,),
         inventory={KIND: inventory},
+        readings=github_readings.READINGS,
         connection_probes={github_app.PROVIDER: probe},
         actions={(KIND, "reconcile"): reconcile},
     )

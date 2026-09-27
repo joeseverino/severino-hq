@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Read public registry records that are due and store them as readings."
 
     def add_arguments(self, parser):
-        parser.add_argument("--force", action="store_true", help="Ignore the hourly throttle.")
+        parser.add_argument("--force", action="store_true", help="Read every subject again, whatever its age, except what a digest carries.")
 
     def handle(self, *args, **options):
         result = refresh(principal=cli_principal(), force=options["force"])

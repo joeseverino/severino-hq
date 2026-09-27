@@ -58,7 +58,22 @@ def record_sweep(
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)
     settle_read_requests()
+    _ring_for_new_images(payload)
     return {**result, "adopted": adopted, "confirmed": confirmed}
+
+
+def _ring_for_new_images(payload: dict[str, Any]) -> None:
+    """Ring the registry doorbell, once the sweep is stored, when it found an
+    image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
+
+    from control_plane.observations.portainer import IMAGE_KIND
+    from control_plane.providers import CONTAINER_KIND
+
+    from .cadence import ring_registry_doorbell
+    from .public_registry import registry_due
+
+    if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
+        transaction.on_commit(ring_registry_doorbell)
 
 
 def _adoptable_kinds() -> tuple[str, ...]:

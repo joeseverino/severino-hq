@@ -14,7 +14,8 @@
 {% endcomment %}
 {% for section in sections %}
 <section id="{{ section.id }}" class="page-section" data-page-section>
-  <h2>{{ section.label }}</h2>
+  <h2>{{ section.label }}{% if section.folded %} <span class="heading-aside">{{ section.records|length }}</span>{% endif %}</h2>
+  {% if section.folded %}<details class="control-diagnostics"><summary>Show all</summary>{% endif %}
   <div class="table-scroll">
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
@@ -39,6 +40,7 @@
       </tbody>
     </table>
   </div>
+  {% if section.folded %}</details>{% endif %}
   {% for label, text in section.readouts %}
     <details class="section-readout">
       <summary>{{ label }}</summary>

@@ -58,6 +58,7 @@ from control_plane.providers import (
 from control_plane.connection_kinds import CONNECTION_LABELS
 from projects.models import Project
 
+from .containers import Running, container_watchers
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Readings, Subject, readings as stored_readings
 from .infrastructure import (
@@ -362,119 +363,6 @@ class Facet:
         if "degraded" in states:
             return "serious"
         return "attention" if states - {"healthy"} else "good"
-
-
-@dataclass(frozen=True)
-class Running:
-    """A container a controller last saw, described as a person would read it.
-
-    Built from the sweep rather than from a declaration, so every field here is
-    something that was true at ``observed_at`` and may not be now. The page says
-    when, because a container list with no timestamp invites being read as live.
-    """
-
-    name: str
-    host: str
-    stack: str
-    image: str
-    state: str
-    status: str
-    ports: tuple[int, ...]
-    network_mode: str
-    host_address: str
-    portainer_managed: bool
-    connection_ref: str
-    observed_at: Any
-    # The declaration already watching this, when one is. A field rather than a
-    # lookup, because a page renders a table of these and a property would be a
-    # query per row, and every row asks the same question of the same table.
-    watcher: str = ""
-    # Folded away on the machine's page. Still watched, still controllable,
-    # this is about where it sits, not about whether HQ can act on it.
-    hidden: bool = False
-
-    @classmethod
-    def of(
-        cls,
-        record: dict[str, Any],
-        observed_at: Any,
-        watchers: dict[tuple[str, str], tuple[str, bool]] | None = None,
-    ) -> "Running":
-        host = str(record.get("host", ""))
-        name = str(record.get("name", ""))
-        return cls(
-            name=name,
-            host=host,
-            stack=str(record.get("stack", "")),
-            image=str(record.get("image", "")),
-            state=str(record.get("state", "")),
-            status=str(record.get("status", "")),
-            ports=tuple(
-                int(port) for port in record.get("ports") or () if str(port).isdigit()
-            ),
-            network_mode=str(record.get("network_mode", "")),
-            host_address=str(record.get("host_address", "")),
-            portainer_managed=bool(record.get("portainer_managed")),
-            connection_ref=str(record.get("connection_ref", "")),
-            observed_at=observed_at,
-            watcher=(watchers or {}).get((host, name), ("", False))[0],
-            hidden=(watchers or {}).get((host, name), ("", False))[1],
-        )
-
-    @property
-    def healthy(self) -> bool:
-        return self.state == "running"
-
-    @property
-    def published(self) -> str:
-        """The ports this publishes, or why that cannot be answered.
-
-        A host-network container binds the machine's ports directly and Docker
-        reports none for it, so an empty list means "not knowable from here"
-        rather than "publishes nothing".
-        """
-
-        if self.ports:
-            return ", ".join(str(port) for port in self.ports)
-        if self.network_mode == "host":
-            return "on the host network"
-        return ""
-
-    @property
-    def token(self) -> str:
-        """The handle adoption looks this record up by."""
-
-        from .inventory import record_token
-
-        return record_token(CONTAINER_KIND, (self.host, self.name))
-
-    @property
-    def verbs(self) -> tuple[str, ...]:
-        """What it makes sense to ask of a container in this state.
-
-        Offering all three always means offering Start to something already
-        running, whose only outcome is Docker answering "already started" a
-        minute later in a job result. The state is right here; the buttons
-        should read it.
-        """
-
-        return ("stop", "restart") if self.healthy else ("start",)
-
-    @property
-    def image_label(self) -> str:
-        """The image, short enough to read in a card.
-
-        A digest-pinned image is a seventy-character line whose last twelve
-        characters are the only part that distinguishes two of them, and printed
-        whole it pushed every other fact on the card out of view. The repository
-        and the head of the digest is what an operator compares.
-        """
-
-        repository, marker, digest = self.image.partition("@")
-        if not marker:
-            return self.image
-        _, _, hexadecimal = digest.partition(":")
-        return f"{repository}@{hexadecimal[:12]}"
 
 
 @dataclass(frozen=True)
@@ -1164,6 +1052,33 @@ def alias_target(hostname: str) -> str:
     return aliases.get(wanted, "")
 
 
+def _serves(hostname: str, names, claim: "Claim", served_with: frozenset[str]) -> bool:
+    """Whether a certificate that covers the name is the one it is served with.
+
+    Where the ingress names the certificate it serves, only that one applies;
+    covering the name is not serving it.
+    """
+
+    return certificate_covers(hostname, names) and (
+        not served_with or claim.resource_key in served_with
+    )
+
+
+def certificates_serving(hostname: str) -> tuple[str, ...]:
+    """The declared certificates a name is served with, by key. Read once per projection."""
+
+    wanted = normalized_hostname(hostname)
+    _, covering, _, _, _, _, _, _, served_with = _declarations()
+    named = served_with.get(wanted, frozenset())
+    return tuple(
+        dict.fromkeys(
+            claim.resource_key
+            for facet_id, names, claim in covering
+            if facet_id == CERTIFICATE_FACET and _serves(wanted, names, claim, named)
+        )
+    )
+
+
 def service_or_prospect(hostname: str) -> Service:
     """The service for this name, or the empty shape of one not declared yet.
 
@@ -1392,11 +1307,7 @@ def _assemble(
             + tuple(
                 claim
                 for covered_facet, names, claim in covering
-                if covered_facet == facet_id
-                and certificate_covers(hostname, names)
-                # Where the ingress names the certificate it serves, only
-                # that one applies; covering the name is not serving it.
-                and (not served_with or claim.resource_key in served_with)
+                if covered_facet == facet_id and _serves(hostname, names, claim, served_with)
             ),
             observed=_observed(facet_id, origin),
             machine=(
@@ -1449,25 +1360,6 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
 # The provider whose inventory records are containers. Named once, here, because
 # the runtime card is the one surface that has to know which sweep to read; every
 # other reference to it in this module goes through this.
-
-
-def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
-    """Which declaration watches which container, and whether it is folded away.
-
-    Keyed on the identity the provider uses, so a container declared in HQ and
-    the same container found by a sweep are recognised as one thing. Both facts
-    come back together because a page rendering a table of containers asks both
-    of every row, and asking twice is two queries for one join.
-    """
-
-    return {
-        (resource.spec.get("host", ""), resource.spec.get("name", "")): (
-            resource.key,
-            bool(resource.spec.get("hidden")),
-        )
-        for resource in enabled_resources()
-        if resource.kind == CONTAINER_KIND
-    }
 
 
 def _observed(facet_id: str, origin: Origin | None) -> "Running | None":

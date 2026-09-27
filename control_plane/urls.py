@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from .container_views import ContainerListView
 from .models import OperationRequest
 
 app_name = "control_plane"
@@ -63,6 +64,7 @@ urlpatterns = [
         views.AdoptRecordView.as_view(),
         name="adopt_record",
     ),
+    path("containers/", ContainerListView.as_view(), name="containers"),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),
     path("<slug:key>/edit/", views.ResourceFormView.as_view(), name="edit"),
     path("<slug:key>/remove/", views.ResourceRemoveView.as_view(), name="remove"),

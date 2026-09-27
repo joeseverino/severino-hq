@@ -579,6 +579,12 @@ LOGIN_EXEMPT_PATH_PREFIXES = (
     SEVERINO_CSP_REPORT_PATH,
 )
 
+# The commit this build is, and the repository it came from: stamped into the
+# image by CI (and set from the checkout by the dev stack). Empty for a build
+# that did not say, which HQ reports as unknown rather than guessing.
+SEVERINO_HQ_SOURCE = os.environ.get("SEVERINO_HQ_SOURCE", "").rstrip("/")
+SEVERINO_HQ_REVISION = os.environ.get("SEVERINO_HQ_REVISION", "")
+
 # Pocket ID / OIDC SSO is how a person signs in.
 SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
 
@@ -638,6 +644,9 @@ OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
 OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
+# Where a sign-in that did not finish lands: the login page, told to stop and
+# say why rather than going straight back to the provider in a loop.
+LOGIN_REDIRECT_URL_FAILURE = "/accounts/login/?sso_failed=1"
 OIDC_USE_PKCE = True
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
@@ -738,6 +747,7 @@ SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
 # watch; the in-use marker is read only by HQ and defaults beside the database.
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
+SEVERINO_REGISTRY_DOORBELL = os.environ.get("SEVERINO_REGISTRY_DOORBELL", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
 
 # Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's

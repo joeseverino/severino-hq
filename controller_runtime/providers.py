@@ -26,6 +26,7 @@ from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from application.expiry import days_until
+from application.labels import human_bytes as _human_bytes
 from application.ui import MISSING
 from control_plane.providers import (
     CERTIFICATE_KIND,
@@ -5236,19 +5237,6 @@ def _probe_portainer(connection_ref: str) -> dict[str, Any]:
             for item in reachable
         ),
     }
-
-
-def _human_bytes(value: int | float) -> str:
-    amount = max(0.0, float(value))
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if amount < 1024 or unit == "TB":
-            return (
-                f"{amount:.0f} {unit}"
-                if unit in {"B", "KB", "MB"}
-                else f"{amount:.1f} {unit}"
-            )
-        amount /= 1024
-    return "0 B"
 
 
 def _container_cpu_percent(stats: dict[str, Any]) -> float:

@@ -28,6 +28,7 @@ from . import (
     assets,
     connection_context,
     contact_submissions,
+    container_reads,
     derived_reads,
     infrastructure,
     projects,
@@ -355,6 +356,33 @@ CORE_RESOURCE_SPECS = (
         "name",
         not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:machines",
+    ),
+    ResourceSpec(
+        "containers",
+        "Containers",
+        "Every running container: what it runs and whether that is current and safe, "
+        "how it is run, and its posture against the container standard.",
+        Capability.READ,
+        container_reads.list_containers,
+        BoundedQuery,
+        container_reads.get_container,
+        "address",
+        not_found_errors=(container_reads.NotFoundError,),
+        web_route="control_plane:containers",
+    ),
+    ResourceSpec(
+        "upgrades",
+        "Upgrades",
+        "Every running container something newer is published for: the target by digest, "
+        "what it fixes, its data and how it would be verified, every reason it cannot go "
+        "ahead yet, and the steps an upgrade would take. Read-only.",
+        Capability.READ,
+        container_reads.list_upgrades,
+        BoundedQuery,
+        container_reads.get_upgrade,
+        "address",
+        not_found_errors=(container_reads.NotFoundError,),
+        web_route="control_plane:containers",
     ),
     ResourceSpec(
         "domains",

@@ -4,8 +4,8 @@ from django.http import Http404
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
-from django.utils.html import format_html
 from django.views.generic import (
+    TemplateView,
     CreateView,
     DeleteView,
     DetailView,
@@ -172,17 +172,31 @@ class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
         # is published and HQ manages that name, so the two are one thing seen
         # from either side, and only one side led anywhere.
         context["service_url"] = service_url_for(self.object.public_url)
+        from application.github_estate import repository_for
+
+        context["github"] = repository_for(self.object.repository_url)
+        if context["github"] is not None:
+            from application.github_posture import posture_of
+
+            context["posture"] = posture_of(context["github"])
+        from application.pages import PageBadge
+
+        # Its state beside its name, as a service shows its reach; the category
+        # leads the one line under it.
+        context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
         return context
 
     def get_page_title(self):
         return self.object.name
 
     def get_page_lede(self):
-        return format_html(
-            '{} · <span class="pill pill-{}">{}</span>',
-            self.object.get_category_display(),
-            self.object.status,
-            self.object.get_status_display(),
+        """The one line under the name, inside the head beside its actions."""
+
+        from django.template.loader import render_to_string
+
+        return render_to_string(
+            "projects/_project_meta.html",
+            {"project": self.object, "service_url": service_url_for(self.object.public_url)},
         )
 
     def get_page_trail(self):
@@ -250,3 +264,123 @@ class ProjectDeleteView(
     success_url = reverse_lazy("projects:list")
     context_object_name = "project"
     service = staticmethod(delete_project)
+
+
+class WatchingView(PageMixin, LoginRequiredMixin, TemplateView):
+    """Your GitHub profile and what you watch there. Yours: the account your
+    sign-in claims, so nobody reads a login HQ was merely told about."""
+
+    template_name = "projects/watching.html"
+    page_title = "Watching"
+
+    @property
+    def login(self) -> str:
+        from application.linked_accounts import GITHUB, linked_login
+
+        return linked_login(self.request.user, GITHUB)
+
+    def get_page_lede(self) -> str:
+        return "What you star on GitHub, with each project's latest release and security advisories."
+
+    def get_page_actions(self) -> tuple[PageAction, ...]:
+        if not self.login:
+            return ()
+        return (PageAction("Refresh", reverse("watching_refresh"), method="post"),)
+
+    def get_context_data(self, **kwargs):
+        from application.github_profile import profile
+
+        context = super().get_context_data(**kwargs)
+        context["login"] = self.login
+        context["profile"] = profile(self.login)
+        context["app_repositories"] = self.app_repositories
+        return context
+
+    @property
+    def app_repositories(self):
+        """The repositories this account owns that HQ's GitHub App reads: a
+        second proof the account is yours, from GitHub rather than the sign-in."""
+
+        from application.github_estate import repositories
+
+        owner = self.login.lower()
+        from projects.models import Project
+
+        from application.github_public import github_repository
+
+        # The HQ project each repository is, when one names it, so a row links there.
+        projects = {
+            "/".join(parts).lower(): project
+            for project in Project.objects.exclude(repository_url="")
+            if (parts := github_repository(project.repository_url))
+        }
+        return [
+            {"repo": repo, "project": projects.get(repo.name.lower())}
+            for repo in sorted(
+                (repo for name, repo in repositories().items() if name.split("/", 1)[0].lower() == owner),
+                key=lambda repo: repo.name,
+            )
+        ]
+
+
+class WatchingRefreshView(LoginRequiredMixin, View):
+    def post(self, request):
+        from application.github_profile import GitHubReadError, refresh
+        from application.linked_accounts import GITHUB, linked_login
+        from application.security import AuthorizationError
+
+        login = linked_login(request.user, GITHUB)
+        if not login:
+            messages.error(request, "Your sign-in names no GitHub account.")
+            return redirect("watching")
+        try:
+            refresh(login, principal=web_principal(request.user), force=True)
+        except AuthorizationError:
+            messages.error(request, "You may not read from GitHub.")
+        except GitHubReadError as exc:
+            messages.warning(request, str(exc))
+        else:
+            messages.success(request, f"Read @{login} from GitHub.")
+        return redirect("watching")
+
+
+class PostureView(PageMixin, LoginRequiredMixin, TemplateView):
+    """Every repository the GitHub App reads, against the standard it is held to.
+
+    Led by what is not met, because that is what the page is for; a check met
+    everywhere is one line at the end, and a repository is one row however
+    many checks there are.
+    """
+
+    template_name = "projects/posture.html"
+    page_title = "Posture"
+
+    def get_page_lede(self) -> str:
+        return "Every repository against your standard: the private one, and the public one on top of it."
+
+    def get_context_data(self, **kwargs):
+        from application.github_posture import STANDARD, postures
+        from application.standards import MET, UNMET
+
+        context = super().get_context_data(**kwargs)
+        found = sorted(postures(), key=lambda item: (not item.unmet, item.subject.private, item.subject.name))
+        projects = {
+            "/".join(parts): project
+            for project in Project.objects.exclude(repository_url="")
+            if (parts := github_repository(project.repository_url))
+        }
+        context["repositories"] = [{"posture": item, "project": projects.get(item.subject.name)} for item in found]
+        unmet = []
+        everywhere = []
+        for check in STANDARD:
+            states = [(item.subject, item.state_of(check.id)) for item in found]
+            held = [state for _, state in states if state]
+            failing = [repo for repo, state in states if state == UNMET]
+            if failing:
+                unmet.append({"check": check, "repos": failing, "of": len(held)})
+            elif held and all(state == MET for state in held):
+                everywhere.append(check)
+        unmet.sort(key=lambda item: not item["check"].serious)
+        context["unmet"] = unmet
+        context["everywhere"] = everywhere
+        return context

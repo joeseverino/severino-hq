@@ -30,6 +30,7 @@ from django.utils.csp import CSP
 
 from core.network import client_ip, is_trusted_proxy, split_host_port
 
+from .labels import human_bytes
 from . import tailnet
 from .reach import network_of, on_link_networks
 from .ui import MISSING, counted, moment
@@ -508,7 +509,7 @@ class Connection:
     def carried(self) -> str:
         if self.presence is None:
             return ""
-        return f"{_bytes(self.presence.rx_bytes)} in · {_bytes(self.presence.tx_bytes)} out"
+        return f"{human_bytes(self.presence.rx_bytes)} in · {human_bytes(self.presence.tx_bytes)} out"
 
     @property
     def peer_keys(self) -> tuple[tuple[str, str], ...]:
@@ -1903,12 +1904,3 @@ def headers_of(request) -> tuple[Header, ...]:
     # Acted on first, then deliberately declined, then everything else.
     order = {"read": 0, "declined": 1, "ignored": 2}
     return tuple(sorted(found, key=lambda header: order[header.state]))
-
-
-def _bytes(count: int) -> str:
-    size = float(count or 0)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"

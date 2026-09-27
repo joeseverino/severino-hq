@@ -33,6 +33,8 @@ class EntityLink:
     kind_label: str = ""
     # Shown on hover: the other names one link stands for.
     title: str = ""
+    # What a reading's record is, in a few words, beside its name.
+    detail: str = ""
 
     def __str__(self) -> str:
         return self.label
@@ -134,6 +136,7 @@ def entity_link(
             external=bool(url),
             kind=kind,
             kind_label=spec.label,
+            detail=spec.describe(record) if record else "",
         )
     provider = PROVIDERS.get(kind)
     if provider is not None:

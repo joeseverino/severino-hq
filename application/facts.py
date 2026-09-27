@@ -77,12 +77,14 @@ class Fact:
 class Subject:
     """The join keys of whatever the facts are about, normalized once.
 
-    ``zones`` names every hostname under each zone, the zone included.
+    ``zones`` names every hostname under each zone, the zone included;
+    ``containers`` each container it is, by ``container_key``.
     """
 
     hostnames: frozenset[str]
     addresses: frozenset[str]
     zones: frozenset[str] = frozenset()
+    containers: frozenset[str] = frozenset()
 
     @classmethod
     def of(
@@ -90,8 +92,10 @@ class Subject:
         hostnames: Iterable[str] = (),
         addresses: Iterable[str] = (),
         zones: Iterable[str] = (),
+        containers: Iterable[str] = (),
     ) -> "Subject":
         return cls(
+            containers=frozenset(key for key in containers if key),
             hostnames=frozenset(
                 name for name in (normalized_hostname(str(h)) for h in hostnames) if name
             ),
@@ -104,7 +108,7 @@ class Subject:
         )
 
     def __bool__(self) -> bool:
-        return bool(self.hostnames or self.addresses or self.zones)
+        return bool(self.hostnames or self.addresses or self.zones or self.containers)
 
     @property
     def dns_names(self) -> frozenset[str]:
@@ -142,6 +146,7 @@ class Joined:
     controller_id: str = ""
     hostnames: tuple[str, ...] = ()
     addresses: tuple[str, ...] = ()
+    containers: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -157,11 +162,15 @@ class Joined:
 
     @property
     def by_address(self) -> bool:
-        return not self.hostnames
+        return bool(self.addresses) and not self.hostnames
+
+    @property
+    def by_container(self) -> bool:
+        return bool(self.containers) and not self.hostnames and not self.addresses
 
     @property
     def relation(self) -> str:
-        return self.spec.relation_to(by_address=self.by_address)
+        return self.spec.relation_to(by_address=self.by_address, by_container=self.by_container)
 
     @property
     def title(self) -> str:
@@ -220,6 +229,7 @@ class _Entry:
     connection_ref: str
     hostnames: tuple[str, ...]
     addresses: tuple[str, ...]
+    containers: tuple[str, ...] = ()
 
 
 class Readings:
@@ -237,11 +247,14 @@ class Readings:
         self._fronted_by: dict[str, frozenset[str]] = {}
         self._by_name: dict[str, list[int]] = {}
         self._by_address: dict[str, list[int]] = {}
+        self._by_container: dict[str, list[int]] = {}
         for index, entry in enumerate(self._entries):
             for name in entry.hostnames:
                 self._by_name.setdefault(name, []).append(index)
             for address in entry.addresses:
                 self._by_address.setdefault(address, []).append(index)
+            for container in entry.containers:
+                self._by_container.setdefault(container, []).append(index)
 
     def about(
         self,
@@ -266,6 +279,8 @@ class Readings:
                     found.update(indexes)
         for address in subject.addresses:
             found.update(self._by_address.get(address, ()))
+        for container in subject.containers:
+            found.update(self._by_container.get(container, ()))
         joined = []
         for index in sorted(found):
             entry = self._entries[index]
@@ -281,7 +296,8 @@ class Readings:
             addresses = tuple(
                 address for address in entry.addresses if address in subject.addresses
             )
-            if not (names or addresses):
+            containers = tuple(key for key in entry.containers if key in subject.containers)
+            if not (names or addresses or containers):
                 continue
             joined.append(
                 Joined(
@@ -292,6 +308,7 @@ class Readings:
                     controller_id=str(getattr(entry.snapshot, "controller_id", "") or ""),
                     hostnames=names,
                     addresses=addresses,
+                    containers=containers,
                 )
             )
         return tuple(joined)
@@ -395,6 +412,7 @@ def readings() -> Readings:
                                     if address
                                 )
                             ),
+                            containers=tuple(dict.fromkeys(spec.containers(record))),
                         )
                     )
         return Readings(entries, unread, fronted_names)
@@ -929,7 +947,7 @@ def _record_keys(provider, record) -> tuple[tuple[str, ...], tuple[str, ...], st
 
 
 def _container_facts(subject: Subject) -> Iterator[Fact]:
-    from .services import Running
+    from .containers import Running
 
     provider = PROVIDERS[CONTAINER_KIND]
     label = provider.label or CONTAINER_KIND

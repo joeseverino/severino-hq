@@ -44,6 +44,21 @@ def record(name, record_type, content, *, proxied=True, zone="example.com"):
             "proxied": proxied, "ttl": 1, "connection_ref": "example-dns"}
 
 
+def declare_certificate(key="example-wildcard", *, matches=True):
+    """A certificate HQ installed for app.example.com, as its status records it."""
+
+    return ManagedResource.objects.create(
+        key=key, kind="tls.certificate",
+        spec={"certificate_name": "example", "domains": ["*.example.com"]},
+        status={
+            "issuer": "Example CA", "not_after": EXPIRES,
+            "consumers": [{"domain": "app.example.com", "consumer_kind": "npm",
+                           "fingerprint_sha256": "ab" * 32, "matches_expected": matches}],
+        },
+        last_observed_at=timezone.now(),
+    )
+
+
 def estate():
     """A proxied name, a tailnet name, a Pages site and a redirecting apex."""
 
@@ -134,6 +149,65 @@ class PathTests(TestCase):
         self.assertEqual(certificate.issuer, "Let's Encrypt")
         self.assertEqual(path.primary.line,
                          "Internal DNS record → Tailnet → lab-1 → Proxy host → app")
+
+    def test_a_declared_certificate_is_shown_as_hq_knows_it_and_attested(self):
+        # NPM names HQ's upload by its own label with no authority; HQ knows better.
+        declare_certificate()
+
+        certificate = self.walk("app.example.com").certificate
+
+        self.assertEqual(
+            (certificate.name, certificate.issuer, certificate.record),
+            ("example-wildcard", "Example CA", "example-wildcard"),
+        )
+        self.assertEqual(certificate.link.url, reverse("control_plane:detail", args=["example-wildcard"]))
+        self.assertTrue(certificate.line.startswith("Served certificate example-wildcard · Example CA, expires"))
+        self.assertIn("Verified: serves abababababab…, the certificate HQ installed", certificate.attestation)
+
+    def test_a_name_serving_another_certificate_is_not_shown_as_the_declared_one(self):
+        declare_certificate(matches=False)
+
+        certificate = self.walk("app.example.com").certificate
+
+        self.assertEqual(certificate.name, "")
+        self.assertEqual(certificate.attestation, "")
+        self.assertEqual(
+            certificate.line,
+            "Not verified: app.example.com serves a certificate other than example-wildcard",
+        )
+
+    def test_a_container_hop_says_what_is_running_and_links_its_commit(self):
+        from .paths import _running_facts
+
+        facts = _running_facts({
+            "status": "Up 3 days (healthy)",
+            "revision": "0123456789abcdef",
+            "source": "https://github.com/example/app/",
+        })
+
+        # The uptime alone: the health check is the verdict's evidence, said
+        # once in the band.
+        self.assertEqual(facts, (
+            ("Up 3 days", ""),
+            ("0123456", "https://github.com/example/app/commit/0123456789abcdef"),
+        ))
+        # A source that is not a web address is not made into a link.
+        self.assertEqual(_running_facts({"revision": "0123456789abcdef", "source": "git@x:y"}),
+                         (("0123456", ""),))
+
+    def test_only_the_certificate_the_ingress_names_serves_the_name(self):
+        from .services import certificates_serving
+
+        declare_certificate("example-wildcard")
+        declare_certificate("example-other")
+        ManagedResource.objects.create(
+            key="app-proxy", kind="npm.proxy_host",
+            spec={"domain_names": ["app.example.com"], "forward_scheme": "http",
+                  "forward_host": "127.0.0.1", "forward_port": 8000,
+                  "certificate_resource": "example-other"},
+        )
+
+        self.assertEqual(certificates_serving("app.example.com"), ("example-other",))
 
     def test_a_pages_site_ends_at_its_project(self):
         path = self.walk("example.com")
@@ -338,25 +412,38 @@ class ServicePageTests(TestCase):
         page = response.content.decode()
 
         summary = {item.label: item for item in response.context["summary"]}
-        self.assertEqual(
-            summary["Path"].value, "Internal DNS record → Tailnet → lab-1 → Proxy host → app"
-        )
-        self.assertEqual(summary["Where it runs"].value, "lab-1")
+        # The path is drawn once, in its own section, not repeated as a card.
+        self.assertNotIn("Path", summary)
+        # Where it runs is the path's to say, hop by hop, not a tile above it.
+        self.assertNotIn("Where it runs", summary)
+        self.assertIn('/infrastructure/machines/lab-1/', page)
+        # Health first; "What it is" only when it says more than "declared".
+        self.assertNotIn("What it is", summary)
         order = [page.index(text) for text in (
-            ">What it is<", ">Where it runs<", ">Health<", 'control-label">Path<',
-            'id="path"', 'id="impact"', 'id="parts"',
+            ">Health<", ">Certificate<",
+            'id="path"',
         )]
         self.assertEqual(order, sorted(order))
         self.assertIn("Served certificate example wildcard · Let&#x27;s Encrypt", page)
         self.assertIn("Requests stop reaching what it forwards to.", page)
+
+    def test_the_served_certificate_is_a_verified_lock_with_a_short_tip(self):
+        declare_certificate()
+
+        page = self.page("app.example.com")
+
+        # Not a link of its own: the hop's name beside it already is one.
+        self.assertIn('<span class="cert-mark" tabindex="0" data-tip="Verified\nexample-wildcard · Example CA', page)
+        self.assertIn('data-tip-host="app.example.com"', page)
 
     def test_a_redirecting_apex_is_not_parked_and_its_target_names_it(self):
         page = self.page("example.net")
         self.assertIn("Redirects to example.com", page)
         self.assertNotIn("Parked", page)
 
+        # Said once, where every relation is: under Relationships.
         target = self.page("example.com")
-        self.assertIn("Redirects here", target)
+        self.assertIn("Redirected from", target)
 
     def test_a_hop_nothing_reads_says_why_on_the_page(self):
         ProviderInventory.objects.filter(kind="npm.proxy_host").delete()
@@ -408,14 +495,14 @@ class ObservedNameTests(TestCase):
         page = response.content.decode()
         summary = {item.label: item for item in response.context["summary"]}
 
-        self.assertEqual(summary["Path"].detail, "No public DNS record names this host.")
+        self.assertIn("No public DNS record names this host.", page)
         self.assertEqual(summary["Health"].value, "Observed")
         self.assertEqual(summary["Health"].detail, "Behind Access · No DNS record")
         self.assertEqual(
             summary["What it is"].value,
             "Observed through Access application Admin; nothing declares it",
         )
-        section = page[page.index('id="path"'):page.index('id="impact"')]
+        section = page[page.index('id="path"'):page.index('id="parts"')]
         self.assertLess(section.index("No public DNS record"), section.index("Not read: Internal"))
         self.assertIn("Behind Access:", section)
 

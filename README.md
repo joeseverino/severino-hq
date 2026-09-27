@@ -273,11 +273,11 @@ What the box actually runs is one **composed** image: that scanned host plus
 every admitted extension, assembled and verified as a single application by
 [`.github/workflows/compose.yml`](.github/workflows/compose.yml). Extensions
 verify and admit themselves in their own repositories and publish signed
-bundles; they never build or deploy an image, and they cannot trigger the host.
-The composition runs on a schedule instead and rebuilds only when its inputs
-(host image, wheel digests, admission policy) actually change, so an extension
-release reaches production on its own without either repository holding a
-credential for the other. See [`docs/PLUGINS.md`](docs/PLUGINS.md#composition).
+bundles; they never build or deploy an image. An admission starts the
+composition itself, through an app whose only permission is to start a workflow
+here, so an extension release reaches production with nothing polling for it,
+and still only after a person approves the deploy. See
+[`docs/PLUGINS.md`](docs/PLUGINS.md#composition).
 
 ---
 

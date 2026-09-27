@@ -26,5 +26,10 @@ python manage.py migrate --noinput
 echo "[severino-hq] collecting static files…"
 python manage.py collectstatic --noinput
 
+# A new image is the moment production changes what it runs, so delivery is
+# read now rather than found later. Best effort: nothing about serving may
+# wait on the controller.
+python manage.py request_delivery_read || echo "[severino-hq] delivery read not requested"
+
 echo "[severino-hq] starting: $*"
 exec "$@"

@@ -88,7 +88,7 @@ four domains behind a click and then need a second one to go anywhere.
 {% endfor %}
 
 <div class="section-head">
-  <h2>Records</h2>
+  <h2>Records <span class="heading-aside">{{ records_lede }} · {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
@@ -97,7 +97,6 @@ four domains behind a click and then need a second one to go anywhere.
     <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
   {% endif %}
 </div>
-<p class="muted">{{ records_lede }}</p>
 
 {% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled %}
 
@@ -114,8 +113,6 @@ zone at the top of the page.
   </details>
 {% endif %}
 
-{% comment %}The domain's own record count, with the sweep's age.{% endcomment %}
-{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind count=zone.records|length %}
 
 {% comment %}What the domain relates to. Access and other overlays rank last.{% endcomment %}
 {% include "partials/_relationships.html" %}

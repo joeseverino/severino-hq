@@ -6,11 +6,18 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
 
+import logging
+
+import requests
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
+
+logger = logging.getLogger("severino.auth")
 
 
 TAILSCALE_PRINCIPAL_CLAIM = "tailscale_principal"
 TAILSCALE_PRINCIPAL_SESSION_KEY = "oidc_tailscale_principal"
+# Why the last sign-in did not finish, for the page it lands on.
+SSO_FAILURE_SESSION_KEY = "oidc_failure"
 
 
 def _tailscale_principal(payload) -> str:
@@ -23,6 +30,35 @@ def _tailscale_principal(payload) -> str:
 
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
+
+    def authenticate(self, request, **kwargs):
+        """A provider that refuses the exchange is a failed sign-in, not a crash.
+
+        The library raises out of ``authenticate()`` when the token endpoint
+        answers an error, which Django turned into a 500. And the failure URL
+        is the login page, which with single sign-on only goes straight back to
+        the provider, so it has to be told why it stopped (``sso_failed``).
+        """
+
+        try:
+            return super().authenticate(request, **kwargs)
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            reason = (
+                "Pocket ID refused HQ's client credentials: the client secret HQ "
+                "holds is not the one Pocket ID issued for this client."
+                if status in (400, 401)
+                else "HQ could not reach Pocket ID to finish signing in."
+            )
+            logger.warning(reason, extra={"event": "auth.sso.exchange_failed", "status": status})
+            from core.audit import record_event
+            from core.models import AuditLog
+
+            record_event(action=AuditLog.Action.DENIED, type_label="Sign-in", message=reason)
+            session = getattr(request, "session", None)
+            if session is not None:
+                session[SSO_FAILURE_SESSION_KEY] = reason
+            return None
 
     def verify_token(self, token, **kwargs):
         """Check who the token was minted for, which the library does not.
@@ -50,6 +86,9 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         user = super().get_or_create_user(access_token, id_token, payload)
         if user is None:
             return None
+        from application.linked_accounts import record_claimed_accounts
+
+        record_claimed_accounts(user, payload)
         session = getattr(getattr(self, "request", None), "session", None)
         if session is not None:
             principal = _tailscale_principal(payload)

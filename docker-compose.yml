@@ -76,6 +76,8 @@ services:
       # (not what to do, not who asked) so the host may watch it and start the
       # controller without HQ gaining any way to reach out.
       SEVERINO_CONTROLLER_DOORBELL: /run/severino-hq/controller-doorbell
+      # The same, for an image or digest a sweep found that HQ has not read.
+      SEVERINO_REGISTRY_DOORBELL: /run/severino-hq/registry-doorbell
     volumes:
       - severino_data:/data
       - severino_media:/media

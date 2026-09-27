@@ -158,6 +158,38 @@ def token(
     return runtime.snapshot_value(key, load)
 
 
+def installation_repositories(runtime: ProviderRuntime, connection_ref: str = "") -> tuple[str, ...]:
+    """Every repository the App's installations cover, as ``owner/name``.
+
+    The installation's own list: choosing repositories on GitHub is what
+    decides what HQ reads. Each is asked for under a token that can read
+    metadata and nothing else.
+    """
+
+    def load() -> tuple[str, ...]:
+        found: list[str] = []
+        for installed in as_app(runtime, "/app/installations", connection_ref=connection_ref) or ():
+            if not isinstance(installed, Mapping) or not isinstance(installed.get("id"), int):
+                continue
+            answer = as_app(
+                runtime,
+                f"/app/installations/{installed['id']}/access_tokens",
+                method="POST",
+                payload={"permissions": {"metadata": "read"}},
+                connection_ref=connection_ref,
+            )
+            minted = answer.get("token") if isinstance(answer, Mapping) else None
+            if not isinstance(minted, str) or not minted:
+                raise ProviderError("GitHub did not issue an installation token.")
+            listed = runtime.request(f"{API}/installation/repositories?per_page=100", headers=_headers(minted))
+            for repo in (listed or {}).get("repositories") or ():
+                if isinstance(repo, Mapping) and isinstance(repo.get("full_name"), str):
+                    found.append(repo["full_name"])
+        return tuple(sorted(set(found)))
+
+    return runtime.snapshot_value(("github_app.repositories", connection_ref), load)
+
+
 def call(
     runtime: ProviderRuntime,
     path: str,

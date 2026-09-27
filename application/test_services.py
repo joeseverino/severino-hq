@@ -333,10 +333,12 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        # Where it runs is in Relationships, not a sentence under the cards.
+        # Where it runs is a row of the path's parts, not a sentence under the
+        # cards, and said once: Relationships leaves it to that row.
         self.assertNotContains(response, "The name resolves to")
         self.assertNotContains(response, "Ingress forwards to")
-        self.assertContains(response, '<th scope="rowgroup" rowspan="1">Runs on</th>')
+        self.assertContains(response, '<td>Machine</td>')
+        self.assertNotContains(response, '<th scope="rowgroup" rowspan="1">Runs on</th>')
 
     def test_a_proxied_name_still_says_its_ingress_forwards(self):
         healthy(
@@ -797,7 +799,8 @@ class OriginNoteTests(TestCase):
     def test_it_is_silent_when_a_facet_already_names_the_container(self):
         from control_plane.providers import NameContext
 
-        from .services import Facet, Origin, Running, Service
+        from .containers import Running
+        from .services import Facet, Origin, Service
 
         running = Running(
             name="probe", host="a-docker-host", stack="probe", image="",

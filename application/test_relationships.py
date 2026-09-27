@@ -96,15 +96,19 @@ class OneEdgeBothEndsTests(TestCase):
             machine = self.client.get(reverse("control_plane:machine", args=["example-host"]))
             service = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
-        self.assertContains(machine, '<th scope="rowgroup" rowspan="1">Serves</th>')
-        self.assertContains(service, '<th scope="rowgroup" rowspan="1">Runs on</th>')
+        # The machine end is "Names it answers", which lists what it serves.
+        self.assertContains(machine, 'href="/infrastructure/services/hq.example.com/"')
+        # The service end is its path, which names the machine hop by hop, and
+        # the trace in the topology sits beside it.
+        self.assertContains(service, 'href="/infrastructure/machines/example-host/"')
         self.assertContains(service, "?focus=service%3Ahq.example.com")
 
     def test_hqs_own_service_is_read_only(self):
         with own("192.0.2.44"):
             response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
-        self.assertContains(response, '<span class="pill">Read-only</span>')
+        # Beside the hostname now, with why on hover.
+        self.assertContains(response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>')
         self.assertContains(response, '<span class="readout-label">Runs on</span>')
         self.assertNotContains(response, "Nothing declared")
         self.assertNotContains(response, "Add container stack")
@@ -246,10 +250,13 @@ class EdgeCertificatePathTests(TestCase):
         tail = self.client.get(reverse("control_plane:service", args=["tail.example.com"]))
         app = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
-        self.assertNotContains(tail, "Covered by edge certificate")
+        self.assertNotContains(tail, "Edge certificate")
         self.assertNotContains(tail, "Google Trust Services")
-        self.assertContains(app, "Covered by edge certificate")
+        # On the path, as the mark after the edge that serves it: said there,
+        # and so not again under Relationships.
+        self.assertContains(app, "Edge certificate")
         self.assertContains(app, "Google Trust Services")
+        self.assertNotContains(app, "Covered by edge certificate")
 
 
 def wildcard(key):
@@ -457,7 +464,9 @@ class NoUnlinkedNamesTests(TestCase):
         service = self.client.get(reverse("control_plane:service", args=["s0.example.com"]))
         domain = self.client.get(reverse("zones:detail", args=["example.com"]))
 
-        self.assertContains(machine, "Reached through</th>")
+        # What reaches it is the band's to say; Relationships leaves it there.
+        self.assertContains(machine, "Reached through")
+        self.assertNotContains(machine, "Reached through</th>")
         self.assertContains(service, "Behind Access</th>")
         self.assertContains(
             domain,
@@ -570,7 +579,8 @@ class DomainCardTests(TestCase):
 
         response = self.client.get(reverse("zones:detail", args=["example.net"]))
 
-        self.assertContains(response, "2 records, checked")
+        # The domain's own count, not the sweep's total, beside the heading.
+        self.assertRegex(response.content.decode(), r"Records <span class=\"heading-aside\">2 (published|records)[^<]*·\s+checked")
 
 
 class MachineServesAgreesTests(TestCase):
@@ -615,12 +625,14 @@ class MachineServesAgreesTests(TestCase):
                 panel = relationships_for("machine:example-host", principal=READER)
 
         body = response.content.decode()
-        header = body.split('<span class="control-label">Serves</span>', 1)[1].split(
+        from .ui import counted
+
+        header = body.split('<span class="band-label">Answers for</span>', 1)[1].split(
             "</div>", 1
         )[0]
         for name in panel.labels(RELATIONS["runs_on"].inverse):
             self.assertIn(name, header)
-        self.assertIn(f"<strong>{len(panel.labels('Serves'))}</strong>", header)
+        self.assertIn(f"<strong>{counted(len(panel.labels('Serves')), 'name')}</strong>", header)
 
 
 class UnreadableScopeTests(TestCase):

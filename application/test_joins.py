@@ -203,7 +203,7 @@ class DomainCardTests(TestCase):
         page = response.content.decode()
 
         # In Relationships, after the records; not among the cards.
-        self.assertLess(page.index("<h2>Records</h2>"), page.index("Behind Access</th>"))
+        self.assertLess(page.index("<h2>Records "), page.index("Behind Access</th>"))
         self.assertNotIn('aria-label="Access application"', page)
 
     def test_issuers_are_named_by_the_authority_registry(self):
@@ -236,7 +236,8 @@ class DomainCardTests(TestCase):
 
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
-        self.assertContains(response, "2 edge")
+        # The count lives in the Security card's one line of facts now.
+        self.assertContains(response, "2 certificates")
         self.assertContains(response, "example-site")
         self.assertContains(response, 'class="control-summary control-summary-four"')
 
@@ -408,7 +409,10 @@ class ServiceColumnTests(TestCase):
         # sentence under the cards repeating them.
         self.assertContains(response, '<th scope="rowgroup" rowspan="1">Behind Access</th>')
         self.assertContains(response, '<span data-entity="Access application">Admin</span>')
-        self.assertContains(response, "Covered by edge certificate</th>")
+        # The edge certificate is on the path, as the edge's mark, and so not
+        # said again under Relationships.
+        self.assertContains(response, "Edge certificate")
+        self.assertNotContains(response, "Covered by edge certificate</th>")
         self.assertNotContains(response, "Behind Access: ")
 
     def test_provider_readings_use_labels_and_hide_what_is_not_connected(self):
@@ -636,13 +640,16 @@ class PublicRegistryRefreshTests(TestCase):
         self.refresh(addresses=("203.0.113.7",), domains=(),
                      allocations=refused, registrations=refused)
 
-    def test_a_fresh_record_is_not_read_again(self):
+    def test_a_fresh_record_is_read_again_only_when_forced(self):
         self.refresh(addresses=("203.0.113.7",), domains=(),
                      allocations=self.allocation, registrations=self.registration)
         refused = mock.Mock(side_effect=AssertionError("looked up again"))
+        again = mock.Mock(return_value={})
 
-        self.refresh(addresses=("203.0.113.7",), domains=(),
-                     allocations=refused, registrations=refused, force=True)
+        self.refresh(addresses=("203.0.113.7",), domains=(), allocations=refused, registrations=refused)
+        self.refresh(addresses=("203.0.113.7",), domains=(), allocations=again, registrations=refused, force=True)
+
+        again.assert_called_once_with("203.0.113.7")
 
     def test_no_record_is_said_on_the_record(self):
         def missing(address):

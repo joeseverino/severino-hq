@@ -256,6 +256,16 @@ def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
     return public_status
 
 
+# Each declared-resource health state as the tone every page draws it in.
+RESOURCE_TONES = {
+    "healthy": "good",
+    "declared": "good",
+    "pending": "attention",
+    "drifted": "serious",
+    "degraded": "serious",
+}
+
+
 def resource_health(resource: ManagedResource) -> dict[str, str]:
     active = {
         condition.get("type"): condition

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
 from datetime import datetime
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.urls import reverse
 
+from application.github_public import GitHubReadError, get, github_repository
 from application.connection_contracts import (
     ConnectionAbility,
     ConnectionInstance,
@@ -78,49 +75,21 @@ def connection_specs():
     )
 
 
-def github_repository(repository_url: str) -> tuple[str, str] | None:
-    """``(owner, repository)`` when the URL names a GitHub repository, else None."""
-
-    parsed = urlparse(str(repository_url or ""))
-    parts = [part for part in parsed.path.split("/") if part]
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname not in {"github.com", "www.github.com"}
-        or len(parts) != 2
-    ):
-        return None
-    owner, repository = parts[0], parts[1].removesuffix(".git")
-    return (owner, repository) if owner and repository else None
-
-
 def fetch_last_push(
     repository_url: str,
     *,
     token: str = "",
     timeout: int = 10,
 ) -> datetime | None:
+    del timeout  # the shared reader's timeout; kept so callers need not change
     found = github_repository(repository_url)
     if found is None:
         raise GitHubMetadataError("Project repository URL must identify a GitHub repository.")
     owner, repository = found
-
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{owner}/{repository}",
-        headers={
-            "Accept": "application/vnd.github.v3+json",
-            **({"Authorization": f"Bearer {token}"} if token else {}),
-        },
-    )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode())
-    except urllib.error.HTTPError as exc:
-        # An HTTPError is the error response itself, socket included. Chained
-        # below it would stay open until the GitHubMetadataError was collected.
-        exc.close()
-        raise GitHubMetadataError(f"GitHub API returned HTTP {exc.code}.") from exc
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
-        raise GitHubMetadataError(f"Could not fetch GitHub metadata: {exc}") from exc
+        payload = get(f"/repos/{owner}/{repository}", token=token)
+    except GitHubReadError as exc:
+        raise GitHubMetadataError(str(exc)) from exc
 
     pushed_at = payload.get("pushed_at")
     if not pushed_at:

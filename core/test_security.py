@@ -251,6 +251,17 @@ class SingleSignOnOnlyTests(TestCase):
 
         self.assertIsNone(authenticate(username="joe", password="correct-horse"))
 
+    def test_a_failed_sign_in_stops_and_says_why_instead_of_looping(self):
+        session = self.client.session
+        session["oidc_failure"] = "Pocket ID refused HQ's client credentials."
+        session.save()
+
+        response = self.client.get("/accounts/login/?sso_failed=1", REMOTE_ADDR="100.64.0.1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pocket ID refused HQ&#x27;s client credentials.")
+        self.assertContains(response, "Sign in with SSO")
+
     def test_signing_in_goes_straight_to_the_provider(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="100.64.0.1")
         self.assertEqual(response.status_code, 302)

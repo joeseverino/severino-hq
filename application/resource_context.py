@@ -269,3 +269,39 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
         display_consumers=consumers,
         resolution_error=error,
     )
+
+
+@dataclass(frozen=True)
+class ControllerSummary:
+    """What the controller will do for a resource, said once."""
+
+    headline: str
+    tone: str
+    lines: tuple[str, ...]
+    # The reasons already given, so a card beside this one need not repeat them.
+    reasons: frozenset[str]
+
+
+def controller_summary(actions, labels) -> ControllerSummary | None:
+    """``actions``: verb -> allowance. Actions that are off for the same reason
+    are named together, once; and a controller that can do nothing here is
+    "observing only", never "automatic"."""
+
+    if not actions:
+        return None
+    off: dict[str, list[str]] = {}
+    for verb, allowed in actions.items():
+        if not allowed.enabled:
+            off.setdefault(allowed.reason, []).append(labels(verb))
+    lines = tuple(
+        f"{_and(names)} {'is' if len(names) == 1 else 'are'} off: {reason[:1].lower() + reason[1:]}"
+        for reason, names in off.items()
+    )
+    if len(off) and sum(len(names) for names in off.values()) == len(actions):
+        return ControllerSummary("Observing only", "declared", lines, frozenset(off))
+    automatic = any(allowed.automatic for allowed in actions.values())
+    return ControllerSummary("Automatic" if automatic else "On request", "good", lines, frozenset(off))
+
+
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"

@@ -20,8 +20,8 @@ learning anything.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
+from dataclasses import dataclass, replace
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 from django.urls import reverse
@@ -29,7 +29,7 @@ from django.urls import reverse
 from core.models import AuditLog
 from control_plane.names import normalized_hostname
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .entity_links import EntityLink, entity_link
+from .entity_links import EntityLink, entity_link, kind_label
 from .services import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, ago
 
@@ -75,6 +75,11 @@ class ServiceSection:
     readouts: tuple[tuple[str, str], ...] = ()
     # Rendered as a compact table.
     compact: bool = False
+    # The reading kinds whose records it lists, so a page leaves those out of
+    # its Relationships rather than saying them twice.
+    renders: tuple[str, ...] = ()
+    # Reference rather than a glance: shown folded, its size in the heading.
+    folded: bool = False
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
@@ -93,39 +98,6 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
         if section is not None and (section.records or section.actions):
             found.append(section)
     return tuple(found)
-
-
-def _delivery(service, project) -> ServiceSection | None:
-    """Where the code for this comes from, and when it last moved.
-
-    The first place a power-user action belongs: this is the section that knows
-    the repository, so redeploying or opening a run is an entry in ``actions``
-    or another column here rather than a new panel.
-    """
-
-    if project is None:
-        return None
-    return ServiceSection(
-        id="delivery",
-        label="Delivery",
-        columns=("Project", "Repository", "Last push"),
-        records=(
-            (
-                Cell(project.name, entity_link("project", project.slug).url),
-                Cell(
-                    _repository_label(project.repository_url),
-                    project.repository_url,
-                    external=True,
-                )
-                if project.repository_url
-                else Cell(MISSING, muted=True),
-                Cell(
-                    ago(project.last_push_at) if project.last_push_at else MISSING,
-                    muted=not project.last_push_at,
-                ),
-            ),
-        ),
-    )
 
 
 def _repository_label(url: str) -> str:
@@ -225,32 +197,50 @@ class SummaryItem:
     tone: str = ""
     # Shown as a pill in ``tone``: a state never carried by colour alone.
     pill: bool = False
-    # The one-line path's hops, each named through its link.
-    hops: tuple = ()
+    # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
+    icon: str = ""
 
 
 def service_summary(service) -> tuple[SummaryItem, ...]:
-    """What it is, where it runs, whether it is healthy, and its path in one line."""
+    """What it is, where it runs, and whether it is healthy.
 
-    path = service.path
-    certificate = path.certificate
-    return (
-        SummaryItem("What it is", _what(service)),
-        _where(service, path),
-        SummaryItem(
-            "Health",
-            service.health.label,
-            detail=service.health.detail,
-            tone=service.health.state,
-            pill=True,
-        ),
-        SummaryItem(
-            "Path",
-            path.line or MISSING,
-            detail=certificate.line if certificate else (path.gaps[0] if path.gaps else ""),
-            hops=path.primary.line_hops if path.primary else (),
-        ),
+    Not the path: the path section follows at once and draws it hop by hop,
+    so a one-line copy here only said it twice.
+    """
+
+    what = _what(service)
+    return tuple(
+        item
+        for item in (
+            SummaryItem(
+                "Health",
+                service.health.label,
+                detail=_health_detail(service),
+                tone=service.health.state,
+                pill=True,
+                icon="activity",
+            ),
+            # Where it runs only when there is no path to show it: the path
+            # names the machine and the container hop by hop.
+            None if service.path.routes else replace(_where(service, service.path), icon="server"),
+            # Only when it says something: "declared" is true of nearly every
+            # name on the board, and first on the page it told nobody anything.
+            SummaryItem("What it is", what, icon="layers") if what else None,
+            _certificate(service.path),
+            _project(service),
+        )
+        if item is not None
     )
+
+
+def _health_detail(service) -> str:
+    """What the health rests on, and what the container itself says: its
+    uptime and its own health check."""
+
+    # The uptime is the container's card on the path; the health check is the
+    # evidence the verdict rests on.
+    running = service.container
+    return " · ".join(part for part in (running.check if running else "", service.health.detail) if part)
 
 
 def _what(service) -> str:
@@ -264,9 +254,9 @@ def _what(service) -> str:
             )
         )
         return f"Observed through {seen}; nothing declares it" if seen else "Observed"
-    if service.declared_claims:
-        return "Declared service"
-    return "Nothing declared yet"
+    # Declared or not is what Health already says ("Nothing declared"), so
+    # repeating it here would be the same fact twice.
+    return ""
 
 
 def _where(service, path) -> SummaryItem:
@@ -279,6 +269,9 @@ def _where(service, path) -> SummaryItem:
             f"Redirects to {path.redirects_to}",
             entity_link("service", path.redirects_to),
         )
+    if end is not None and end.step == "hq" and path.machine:
+        # HQ's own name ends at HQ; where it runs is the machine HQ is on.
+        return SummaryItem("Where it runs", path.machine, entity_link("machine", path.machine), end.detail)
     if end is not None and end.step in ("served", "external", "origin", "hq"):
         return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, end.detail)
     if path.machine:
@@ -290,9 +283,242 @@ def _where(service, path) -> SummaryItem:
             "Where it runs",
             path.machine,
             entity_link("machine", path.machine),
-            f"Container {container}" if container else "",
+            _container_detail(path.machine, container),
         )
     return SummaryItem("Where it runs", MISSING, detail=path.gaps[0] if path.gaps else "")
+
+
+def _container_detail(machine: str, container: str) -> str:
+    """The container, and whether what it runs is current and safe."""
+
+    if not container:
+        return ""
+    from .containers import standings_on
+
+    standing = standings_on(machine).get(container)
+    return f"Container {container} · {standing.summary}" if standing else f"Container {container}"
+
+
+def _certificate(path) -> SummaryItem | None:
+    """The certificate a client is served, when a hop reads one."""
+
+    certificate = next(
+        (
+            hop.certificate
+            for route in path.routes[:1]
+            for hop in route.hops
+            if hop.certificate is not None and not hop.certificate.unread and hop.certificate.name
+        ),
+        None,
+    )
+    if certificate is None:
+        return None
+    return SummaryItem(
+        "Certificate",
+        certificate.name,
+        certificate.link,
+        " · ".join(part for part in (certificate.issuer, certificate.left) if part),
+        icon="lock",
+    )
+
+
+def _project(service) -> SummaryItem | None:
+    """The project that publishes it: where its code is, when it last moved,
+    and what the GitHub App says is open or not yet deployed."""
+
+    link = service.project_link
+    if link is None:
+        return None
+    from projects.models import Project
+
+    from .github_estate import repository_for
+
+    project = Project.objects.filter(slug=service.project["slug"]).only("repository_url", "last_push_at").first()
+    repo = repository_for(project.repository_url) if project and project.repository_url else None
+    parts = [
+        _repository_detail(repo) or (_repository_label(project.repository_url) if project and project.repository_url else ""),
+        f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
+    ]
+    return SummaryItem(
+        "Project", service.project["name"], link, " · ".join(part for part in parts if part), icon="commit"
+    )
+
+
+def _repository_detail(repo) -> str:
+    if repo is None:
+        return ""
+    from .ui import counted
+
+    head, deployed = (repo.head or {}).get("sha", ""), (repo.production or {}).get("sha", "")
+    parts = [repo.short]
+    if repo.pull_requests:
+        parts.append(counted(len(repo.pull_requests), "open pull request", "open pull requests"))
+    if head and deployed and head != deployed:
+        parts.append(f"{repo.default_branch} is ahead of production")
+    return " · ".join(parts)
+
+
+@dataclass(frozen=True)
+class PartRow:
+    """One part of a service, with everything the page knows about it.
+
+    A hop of the path, joined by its resource to the declaration that supplies
+    it (its health, and where to edit it) and to what changing it would do. A
+    declaration no hop reaches is a row too, with no hop, so nothing the
+    service is made of goes unshown.
+    """
+
+    hop: Any = None
+    claim: Any = None
+    consequence: str = ""
+    # The declaration behind the certificate this hop serves, when HQ holds one.
+    certificate_claim: Any = None
+    # ``(label, pill class)`` from whatever reading covers a hop no declaration
+    # supplies: a machine's presence, the tailnet link, a container's state.
+    observed_health: tuple[str, str] | None = None
+    # Where the hop's value was read, when the hop itself carries none: the
+    # tailnet link is the machine's tailnet device, a forward the proxy's.
+    read_from: Any = None
+    # The hop's detail, unless a neighbouring row says it: a proxy's forward
+    # target is the "Forwards to" row after it, a machine's address the
+    # network row before it.
+    detail: str = ""
+
+    @property
+    def label(self) -> str:
+        return self.hop.label if self.hop is not None else kind_label(self.claim.kind)
+
+    @property
+    def health(self) -> tuple[str, str] | None:
+        if self.claim is not None:
+            from .infrastructure import RESOURCE_TONES
+
+            tone = RESOURCE_TONES.get(self.claim.health["state"], "neutral")
+            return (self.claim.health["label"], _PILL_TONES[tone])
+        return self.observed_health
+
+
+# A tone as the pill that draws it, so a declared part and a read one that
+# are both fine look the same.
+_PILL_TONES = {
+    "good": "pill-reachable",
+    "attention": "pill-attention",
+    "serious": "pill-unreachable",
+    "neutral": "pill-unprobed",
+}
+
+
+def part_rows(service, route) -> tuple[PartRow, ...]:
+    """Each hop of ``route`` joined to its declaration, its health and its
+    consequence, then the declarations no hop reached."""
+
+    from .paths import consequence_of
+
+    claims = {claim.url: claim for claim in service.claims}
+    used: set[str] = set()
+    rows = []
+    for index, hop in enumerate(route.hops):
+        claim = claims.get(hop.link.url) if hop.link and hop.link.url else None
+        certificate = hop.certificate
+        certificate_claim = (
+            claims.get(certificate.link.url) if certificate is not None and certificate.link else None
+        )
+        used.update(item.url for item in (claim, certificate_claim) if item is not None)
+        neighbours = {
+            _shown(item)
+            for item in (route.hops[index - 1] if index else None, route.hops[index + 1] if index + 1 < len(route.hops) else None)
+            if item is not None
+        }
+        rows.append(
+            PartRow(
+                hop=hop,
+                claim=claim,
+                consequence=consequence_of(hop),
+                certificate_claim=certificate_claim,
+                observed_health=None if claim is not None else _observed_health(route.hops, index),
+                read_from=hop.source or _read_from(route.hops, index),
+                detail="" if hop.detail in neighbours else hop.detail,
+            )
+        )
+    rows.extend(PartRow(claim=claim) for url, claim in claims.items() if url not in used)
+    return tuple(rows)
+
+
+def _shown(hop) -> str:
+    """What a hop's row shows as its value: its link's name, else its own."""
+
+    if hop.link is not None and hop.link.url:
+        return hop.link.label
+    return hop.name or hop.detail
+
+
+def _read_from(hops, index: int):
+    """The reading behind a hop that is derived from its neighbour: a tailnet
+    link from the machine's tailnet device, a forward from its proxy."""
+
+    step = hops[index].step
+    if step == "network":
+        after = next((item for item in hops[index + 1 :] if item.step == "machine"), None)
+        return after.source if after is not None else None
+    if step == "upstream":
+        before = next((item for item in reversed(hops[:index]) if item.step == "ingress"), None)
+        return before.source if before is not None else None
+    return None
+
+
+def _observed_health(hops, index: int) -> tuple[str, str] | None:
+    """A hop's health from the reading that covers it, when no declaration does."""
+
+    from .machines import machine
+
+    hop = hops[index]
+    if hop.step == "machine":
+        found = machine(hop.name)
+        return (found.state[0].capitalize(), f"pill-{found.state[1]}") if found else None
+    if hop.step == "network":
+        # The link to the machine the address belongs to: the next machine hop.
+        after = next((item for item in hops[index + 1 :] if item.step == "machine"), None)
+        found = machine(after.name) if after else None
+        if found is not None and found.presence is not None:
+            return ("Connected", "pill-reachable") if found.presence.online else ("Disconnected", "pill-unreachable")
+        return None
+    if hop.step in ("upstream", "container"):
+        # What answers a forward is the container behind it.
+        container = hop if hop.step == "container" else next(
+            (item for item in hops[index + 1 :] if item.step == "container"), None
+        )
+        on = next((item for item in reversed(hops[:index]) if item.step == "machine"), None)
+        found = machine(on.name) if on else None
+        running = next(
+            (item for item in (found.containers if found else ()) if container and item.name == container.name), None
+        )
+        if running is not None:
+            return (running.state.capitalize(), "pill-reachable" if running.healthy else "pill-unreachable")
+    return None
+
+
+def routes_for(service, request) -> tuple:
+    """The routes the page draws: the walked ones, except that on HQ's own name,
+    viewed through that very name, the first is the route this request took,
+    each hop joined to what the request showed (``paths.hq_path``).
+
+    Only then: a request for another name travelled a different path and proves
+    nothing about this one. The evidence itself is the connection page's.
+    """
+
+    from core.network import split_host_port
+    from control_plane.names import normalized_hostname
+
+    from .paths import hq_path
+
+    routes = service.path.routes
+    asked = normalized_hostname(split_host_port(request.get_host())[0])
+    if asked != service.hostname or not routes:
+        return routes
+    walked = hq_path(request)
+    if walked is None or walked.primary is None:
+        return routes
+    return (walked.primary, *routes[1:])
 
 
 # The list of sections, stated once. A section that has nothing to say returns
@@ -304,8 +530,51 @@ def _access(service, project) -> ServiceSection | None:
 
 
 SECTIONS: tuple[Callable[[object, object], ServiceSection | None], ...] = (
-    _delivery,
     _access,
     _activity,
     _traffic,
 )
+
+
+def page_parts(service: Any, request: Any) -> dict[str, Any]:
+    """Each route with its parts, each part joined to its declaration and to
+    what changing it would do: one row per part. With no path to walk (its
+    records unread), what is declared is still the service: listed as parts on
+    no path rather than nowhere."""
+
+    from types import SimpleNamespace
+
+    routes = routes_for(service, request)
+    found: dict[str, Any] = {"routes": routes, "route_parts": [(route, part_rows(service, route)) for route in routes]}
+    if not routes:
+        found["declared_parts"] = part_rows(service, SimpleNamespace(hops=()))
+    return found
+
+
+def missing_facets(service: Any) -> list[Any]:
+    """The parts nothing declares: missing, each with how to add it, or found
+    running and not declared, with what taking it on would mean. What is
+    declared is a row of the parts table."""
+
+    origin = service.origin
+    return [
+        facet
+        for facet in service.facets
+        if not facet.present
+        and (facet.observed or not facet.readings)
+        and not (origin is not None and origin.external and facet.routes)
+    ]
+
+
+def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
+    """Beside the hostname: who can reach it, and whether HQ may change it."""
+
+    from .pages import PageBadge
+
+    reach = service.reach
+    found = []
+    if reach.label:
+        found.append(PageBadge(reach.label, "reachable" if reach.tailnet_only else "unprobed", reach.detail))
+    if own:
+        found.append(PageBadge("Read-only", title="HQ's own name: changed by deploying HQ"))
+    return tuple(found)

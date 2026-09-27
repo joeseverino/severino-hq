@@ -146,37 +146,27 @@ class DeliveryTests(SimpleTestCase):
         self.assertEqual(hub.writes(), [])
         self.assertFalse(result.changed)
 
-    def test_a_new_admission_starts_one_composition_and_queues_its_check(self):
+    def test_an_admission_with_no_composition_yet_is_reported_and_nothing_is_started(self):
         hub = GitHub(admitted=ADMITTED)
 
         result = github.reconcile(hub, dict(SPEC))
 
-        dispatch, check = hub.writes()
-        self.assertEqual(dispatch[1], "/repos/example/host/actions/workflows/compose.yml/dispatches")
+        (check,) = hub.writes()
         self.assertEqual(check[1], "/repos/example/alpha/check-runs")
         self.assertEqual(check[2]["head_sha"], ADMITTED)
         self.assertEqual(check[2]["status"], "queued")
+        self.assertEqual(check[2]["output"]["title"], "Waiting for its composition")
         self.assertIn("no composition has started", result.status["production"])
 
-    def test_the_run_github_starts_is_on_the_check_at_once(self):
-        hub = GitHub(admitted=ADMITTED, dispatched={
-            "workflow_run_id": 123, "html_url": f"https://github.com/{HOST}/actions/runs/123"})
+    def test_hq_never_starts_a_workflow(self):
+        # The admission dispatches the composition itself; HQ only reports,
+        # so its app is never granted Actions write on any repository.
+        for hub in (GitHub(admitted=ADMITTED), GitHub(admitted=ADMITTED, compose_runs=[run("waiting")]),
+                    GitHub(admitted=ADMITTED, compose_runs=[run("completed", "failure")])):
+            github.reconcile(hub, dict(SPEC))
 
-        github.reconcile(hub, dict(SPEC))
-
-        check = hub.writes()[1][2]
-        self.assertEqual(check["details_url"], f"https://github.com/{HOST}/actions/runs/123")
-        self.assertEqual(check["external_id"], "123")
-        self.assertEqual(check["output"]["title"], "Composition queued")
-
-    def test_the_public_dispatch_names_no_extension(self):
-        hub = GitHub(admitted=ADMITTED)
-
-        github.reconcile(hub, dict(SPEC))
-
-        said = json.dumps(hub.writes()[0][2])
-        self.assertNotIn("alpha", said)
-        self.assertNotIn(ADMITTED[:7], said)
+            self.assertFalse(any(path.endswith("/dispatches") for _, path, _ in hub.writes()))
+            self.assertFalse(any(item["permissions"].get("actions") == "write" for item in hub.minted))
 
     def test_each_token_is_minted_for_one_call_alone(self):
         hub = GitHub(admitted=ADMITTED)
@@ -184,11 +174,8 @@ class DeliveryTests(SimpleTestCase):
         github.reconcile(hub, dict(SPEC))
 
         grants = {(tuple(item["repositories"]), tuple(item["permissions"].items())) for item in hub.minted}
-        self.assertIn((("host",), (("actions", "write"),)), grants)
         self.assertIn((("alpha",), (("checks", "write"),)), grants)
         self.assertTrue(all(len(item["permissions"]) == 1 for item in hub.minted))
-        self.assertFalse(any("write" in item["permissions"].values() and "alpha" in item["repositories"]
-                             and "host" in item["repositories"] for item in hub.minted))
 
     def test_a_running_composition_is_reported_not_restarted(self):
         hub = GitHub(admitted=ADMITTED, compose_runs=[run("waiting")],
@@ -208,7 +195,8 @@ class DeliveryTests(SimpleTestCase):
 
         github.reconcile(hub, dict(SPEC))
 
-        self.assertTrue(any(path.endswith("/dispatches") for _, path, _ in hub.writes()))
+        (check,) = hub.writes()
+        self.assertEqual(check[2]["output"]["title"], "Waiting for its composition")
 
     def test_a_failed_composition_is_degraded_and_never_retried(self):
         hub = GitHub(admitted=ADMITTED, compose_runs=[run("completed", "failure")])
@@ -277,3 +265,22 @@ class AppTests(SimpleTestCase):
     def test_a_token_never_spans_two_accounts(self):
         with self.assertRaisesRegex(github_app.ProviderError, "one account"):
             github_app.token(GitHub(), ("one/a", "two/b"), {"actions": "read"})
+
+
+class RegistrationTests(SimpleTestCase):
+    """HQ's one app is registered with exactly what its code and pipeline ask for."""
+
+    def test_the_app_holds_exactly_what_hq_and_its_pipeline_ask_for(self):
+        from pathlib import Path
+
+        from . import github_readings
+
+        wanted = dict(github_readings.READ)
+        for name, level in github.REPORTS.items():
+            wanted[name] = level
+        # An admission starts the host's composition (the admit-plugin action).
+        wanted["actions"] = "write"
+        apps = json.loads((Path(__file__).resolve().parents[2] / "deploy" / "github-apps.json").read_text())["apps"]
+
+        self.assertEqual(list(apps), ["hq"])
+        self.assertEqual(apps["hq"]["permissions"], wanted)

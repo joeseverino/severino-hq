@@ -70,3 +70,11 @@ CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request, sys; \
         sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready/', timeout=3).status == 200 else 1)"
+
+# Which commit this image is, and where it lives, for HQ to read about itself:
+# the same two values the build stamps as OCI labels, which a container shows
+# its host but not its own process. Last, so a new commit rebuilds only this.
+ARG HQ_SOURCE=""
+ARG HQ_REVISION=""
+ENV SEVERINO_HQ_SOURCE=${HQ_SOURCE} \
+    SEVERINO_HQ_REVISION=${HQ_REVISION}

@@ -176,6 +176,15 @@ class CertificateFindingTests(TestCase):
         store("npm.certificate", certificate(in_days(60)))
         self.assertEqual(self.found(), [])
 
+    def test_one_serving_no_name_is_cleanup_not_an_outage(self):
+        store("npm.certificate", certificate(in_days(2)))
+
+        (finding,) = self.found()
+
+        self.assertEqual(finding["severity"], "attention")
+        self.assertIn("serves no name", finding["explanation"])
+        self.assertIn("rather than renew it", finding["explanation"])
+
     def test_a_certificate_with_no_expiry_says_nothing(self):
         store("npm.certificate", certificate("not a date"))
 

@@ -244,8 +244,8 @@
      the data, so the template supplies the number and this file decides what a
      share looks like. Declared here so it is part of the contract. */
   --part: 0%;
-  --shadow-sm: 0 1px 1px rgba(20, 20, 30, .03);
-  --shadow: 0 1px 2px rgba(20, 20, 30, .04), 0 2px 8px rgba(20, 20, 30, .04);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 30, .05), 0 1px 1px rgba(20, 20, 30, .03);
+  --shadow: 0 1px 2px rgba(20, 20, 30, .06), 0 4px 14px rgba(20, 20, 30, .07);
 }
 
 }
@@ -475,7 +475,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
 .pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
-.connection-state-reachable, .connection-state-ready, .connection-state-good {
+.connection-state-reachable, .connection-state-ready, .connection-state-good, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-tint: var(--tone-positive-tint);
@@ -484,7 +484,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 }
 .pill-paused, .pill-editing, .pill-drafting, .pill-researching,
 .pill-internal, .pill-attention, .msg-warning, .notice-attention, .conn-decision-step-unknown,
-.conn-kind-declined, .connection-state-attention, .connection-state-stale {
+.conn-kind-declined, .connection-state-attention, .connection-state-stale, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-tint: var(--tone-caution-tint);
@@ -513,7 +513,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
   --tone-ink: var(--tone-notable-ink);
   --tone-line: var(--tone-notable-line);
 }
-.pill-sensitive, .pill-restricted, .pill-serious, .connection-state-serious {
+.pill-sensitive, .pill-restricted, .pill-serious, .connection-state-serious, .tone-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
@@ -541,7 +541,10 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
    an open modal centres itself with `margin: auto`, which a margin-top here would quietly override. */ .content > * + *:not(dialog){ margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
-h2 { font-size: var(--font-h2); margin: 0 0 var(--space-6); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+/* A section heading reads as a heading: ink, sentence case, a step above body.
+   It was grey tracked capitals, which every label on the page also was, so
+   nothing on a page outranked anything else. */
+h2 { font-size: var(--text-xl); margin: 0 0 var(--space-6); color: var(--ink); font-weight: 650; letter-spacing: -.01em; }
 h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-weight: 600; }
 
 .page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
@@ -699,14 +702,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   border-block-end: 1px solid var(--line);
   backdrop-filter: saturate(160%) blur(8px);
 }
-.page-nav-label {
-  flex: none;
-  color: var(--muted-2);
-  font-size: var(--text-3xs);
-  font-weight: 650;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
+/* Named for screen readers; to the eye a row of section links already says it. */
+.page-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .page-nav-list {
   display: flex;
   align-items: center;
@@ -955,6 +952,32 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    the height of what it contains. */
 .control-metric strong { font-size: var(--text-lg); line-height: 1.35; overflow-wrap: anywhere; }
 .control-metric > span:last-child { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; overflow-wrap: anywhere; }
+/* A summary is one raised band, not a box per fact. Each fact is its label over
+   its value, divided from its neighbours by a hairline; a row that wraps keeps
+   its hairlines because each cell draws its own left and top edge and the band
+   clips whatever falls outside it. A box per fact spread two words across a
+   card and repeated the same border, radius and shadow four times in a row. */
+.control-summary {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.control-summary > .control-metric {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2);
+  padding: var(--space-8) var(--space-9);
+}
+.control-summary > .control-metric > * { flex: none; max-width: 100%; }
 /* A supporting row inside a control metric. Several stack under one headline,
    so they carry their own muted styling rather than relying on the
    :last-child rule above, which dresses exactly one caption and left every
@@ -1211,7 +1234,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-data { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-xs); }
 .section-readout { margin-top: var(--space-3); font-size: var(--text-sm); }
 .section-readout pre { max-height: 18rem; margin-top: var(--space-4); }
-.control-label { color: var(--muted); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 .control-good, .control-healthy { color: var(--ok); }
 .control-warn, .control-degraded, .control-drifted { color: var(--warn); }
 .control-unknown { color: var(--muted); }
@@ -1231,6 +1254,36 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-summary-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .control-summary-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .control-summary-four { grid-template-columns: 1fr; } }
+/* A service's overview: one raised band, not a box per fact. Each fact is its
+   icon tile, then its label over its value; hairlines divide them. Health's
+   tile takes its tone, so the state reads before the word does. */
+.service-band, .fact-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0 0 var(--stack-gap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.band-fact { display: flex; gap: var(--space-6); align-items: flex-start; min-width: 0; padding: var(--space-8) var(--space-9); }
+.band-fact + .band-fact { border-left: 1px solid var(--line-2); }
+.band-icon {
+  display: grid; place-items: center; flex: none;
+  width: 36px; height: 36px; border-radius: var(--radius);
+  background: var(--accent-tint); color: var(--accent-2); font-size: var(--text-3xl);
+}
+.band-fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
+.band-fact > div { display: grid; gap: var(--space-1); min-width: 0; }
+.band-label { color: var(--muted); font-size: var(--text-xs); }
+.band-fact strong { font-size: var(--text-lg); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.band-fact:is(.tone-good, .tone-attention, .tone-serious) strong { color: var(--tone-ink); }
+.band-fact small { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
+.page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
+.page-title-row > h1 { margin: 0; }
+.heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
+.band-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
+@media (max-width: 520px) { .band-fact + .band-fact { border-left: 0; border-top: 1px solid var(--line-2); } }
 /* The origin reads under the facet row rather than as a fifth card in it:
    four is what a name needs to answer, and a fifth wrapped the row. */
 .control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
@@ -1322,6 +1375,12 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    `auto` and offers a scrollbar it has no content for. */
 .table-scroll { overflow-x: auto; overflow-y: clip; -webkit-overflow-scrolling: touch; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
+/* The surface is the scroll box's, not the table's. A box that scrolls clips
+   what overflows it, which included the table's own shadow: every table in HQ
+   drew one nobody could see, and sat flat beside cards that lifted. The box
+   can show its own, so it carries the border, the radius and the shadow. */
+.table-scroll:has(> .data-table) { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* Nothing follows it, so the gap it reserves is dead card. The same is true
    of anything that ends a card: a trailing margin inside a padded box is a
    band of empty card, and it was showing up on every panel that ended in a
@@ -1333,7 +1392,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .table-scroll td { overflow-wrap: break-word; }
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .data-table th, .data-table td { padding: var(--space-4) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
-.data-table thead th { background: var(--surface-2); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.data-table thead th { background: var(--surface-2); font-size: var(--text-xs); color: var(--muted); font-weight: 600; }
 /* A sticky table heading, the way the platform does it.
 
    `overflow-x: auto` on the wrapper makes the browser compute `overflow-y` to
@@ -1659,7 +1718,7 @@ a.kpi:hover { background: var(--surface-2); }
    carrying a single number across the whole page. Sized to its contents, it
    lines up with the tiles above it; past the page width it wraps and fills. */
 
-/* Chart tooltip. Fixed to the viewport and inert to the pointer, so it can
+/* The tooltip: chart marks, and anything else carrying data-tip. Fixed to the viewport and inert to the pointer, so it can
    never sit between the cursor and the mark it is describing. */
 .chart-tip {
   position: fixed;
@@ -1671,8 +1730,9 @@ a.kpi:hover { background: var(--surface-2); }
   color: var(--accent-ink);
   font-size: var(--text-xs);
   font-weight: 500;
-  line-height: 1.35;
-  white-space: nowrap;
+  line-height: 1.45;
+  /* One line for a chart mark; a line per fact where a tip has several. */
+  white-space: pre;
   box-shadow: var(--shadow);
   font-feature-settings: "tnum";
 }
@@ -2881,39 +2941,66 @@ a.discovery-link:hover strong { color: var(--accent); }
   scrollbar-width: thin;
   max-width: 100%;
 }
+/* Each hop a card of its own, raised off the page, joined by an arrow: an icon
+   tile that says what kind of thing it is, then what it is called. */
+.request-path { gap: var(--space-8); padding: var(--space-2) var(--space-2) var(--space-4); }
 .request-path li {
   position: relative;
   display: grid;
-  align-content: center;
-  gap: var(--space-1);
-  flex: 1 0 118px;
-  min-height: 58px;
-  padding: var(--space-4) var(--space-9) var(--space-4) var(--space-6);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--space-5);
+  row-gap: 1px;
+  flex: 1 0 150px;
+  min-height: 60px;
+  padding: var(--space-5) var(--space-6);
   border: 1px solid var(--line);
-  border-right: 0;
+  border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow);
 }
-.request-path li:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.request-path li:last-child { border-right: 1px solid var(--line); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .request-path li::after {
   content: "";
   position: absolute;
-  z-index: 1;
   top: 50%;
-  right: -5px;
-  width: 8px;
-  height: 8px;
+  right: calc(-1 * var(--space-8) + 3px);
+  width: 6px;
+  height: 6px;
   transform: translateY(-50%) rotate(45deg);
-  border-top: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-  background: var(--surface);
+  border-top: 1.5px solid var(--line-strong);
+  border-right: 1.5px solid var(--line-strong);
 }
 .request-path li:last-child::after { display: none; }
-.request-path li > span { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.request-path li > strong { font-size: var(--text-2xs); line-height: 1.25; overflow-wrap: anywhere; }
-.request-path li > small { color: var(--muted); font-size: var(--text-3xs); line-height: 1.35; }
-.request-path li.is-unknown { box-shadow: inset 0 3px 0 var(--muted-2); }
-.request-path li.is-attention { box-shadow: inset 0 3px 0 var(--danger); }
+.request-path .hop-icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: var(--accent-tint);
+  color: var(--accent-2);
+  font-size: var(--text-2xl);
+}
+.request-path .hop-label { color: var(--muted); font-size: var(--text-xs); line-height: 1.3; }
+.request-path li > strong { grid-column: 2; font-size: var(--text-sm); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.request-path li > small.hop-facts { grid-column: 2; margin-top: 0; }
+.request-path li > small { grid-column: 1 / -1; margin-top: var(--space-2); color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
+/* A hop's certificate: a check in a circle after its name, in the name's colour
+   once the controller has verified it, faint until then. */
+.cert-mark { display: inline-flex; margin-left: .35em; font-size: 1.15em; color: var(--accent-2); vertical-align: -.15em; cursor: default; }
+.cert-mark.is-pending { color: var(--muted-2); }
+/* A hop this very request was proven to pass through: a dot in the corner,
+   its reason on hover; the evidence is the connection page's. */
+.hop-proof { position: absolute; top: var(--space-4); right: var(--space-4); width: 8px; height: 8px; border-radius: 50%; }
+.request-path li.is-proven .hop-proof { background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
+.request-path li.is-attention .hop-proof { background: var(--danger); }
+.path-proof-note { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
+.hop-proof-key { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
+.request-path li.is-unknown { box-shadow: inset 0 3px 0 var(--muted-2), var(--shadow); }
+.request-path li.is-unknown .hop-icon { background: var(--line-2); color: var(--muted-2); }
+.request-path li.is-attention { box-shadow: inset 0 3px 0 var(--danger), var(--shadow); }
 .connection-control-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4052,6 +4139,9 @@ textarea.code {
 .conn-decision-step-does-not .conn-tick { background: var(--tone-tint); color: var(--danger); }
 .conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
 .conn-decision-step-unknown .conn-tick { background: var(--tone-tint); color: var(--warn); }
+/* Not met, and not reach: a gap to close, not an exposure. */
+.conn-decision-step-gap { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
+.conn-decision-step-gap .conn-tick { background: var(--tone-tint); color: var(--warn); }
 .conn-related {
   display: flex;
   align-items: center;
@@ -4403,8 +4493,7 @@ textarea.code {
 .sweep-item-stale .sweep-age { color: var(--warn); }
 
 .section-heading {
-  font-size: var(--text-xs); letter-spacing: .07em; text-transform: uppercase;
-  color: var(--muted); margin: var(--space-10) 0 var(--space-5); font-weight: 600;
+  font-size: var(--text-sm); color: var(--muted); margin: var(--space-8) 0 var(--space-5); font-weight: 600;
 }
 .unmanaged > summary { cursor: pointer; font-size: var(--text-sm); color: var(--muted); padding: var(--space-5) 0; }
 .unmanaged > summary:hover { color: var(--ink); }
@@ -4818,4 +4907,150 @@ form[data-clean] .save-bar { display: none; }
 .dash-empty { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .dash-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); padding-top: var(--space-8); border-top: 1px solid var(--line); }
 .dash-links h2 { margin: 0; color: var(--muted-2); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+}
+
+@layer components {
+  /* ----- Watching: your GitHub profile ----------------------------------- */
+  /* One raised band that says whose this is: the avatar, the name, the account,
+     and the counts beside them. */
+  .gh-profile {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6) var(--space-9);
+    margin: 0 0 var(--stack-gap); padding: var(--space-8) var(--space-9);
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .gh-avatar { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-tint); }
+  .gh-identity { flex: 1 1 260px; min-width: 0; }
+  .gh-identity p { margin: 0; }
+  .gh-name { font-size: var(--text-xl); font-weight: 650; }
+  /* A list whose first column is the thing and the rest describe it: the rest
+     shrink to their content, so a status does not float mid-row. */
+  .fit-table td:not(:first-child) { width: 1%; white-space: nowrap; }
+  /* What a repository's settings mean, one row each: a label and a sentence. */
+  /* Four facts, four columns: an auto-fitting grid grew an empty fifth track
+     once the settings row below spanned every column. */
+  .fact-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .fact-band { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .fact-band { grid-template-columns: minmax(0, 1fr); } }
+  /* The band's lower half: the same repository's settings, under a hairline. */
+  .github-facts { grid-column: 1 / -1; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
+  .github-facts > div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--space-6); }
+  .github-facts dt { color: var(--muted); }
+  .github-facts dd { margin: 0; }
+  .github-gap { color: var(--tone-caution-ink, var(--muted)); }
+  @media (max-width: 520px) { .github-facts > div { grid-template-columns: 1fr; gap: var(--space-1); } }
+  /* A repository's lists: one surface, a row per item read left to right. */
+  .github-list { list-style: none; margin: 0 0 var(--space-6); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  .github-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-7); font-size: var(--text-sm); }
+  .github-list li + li { border-top: 1px solid var(--line-2); }
+  /* Short items flow across the width in tiles, rather than a row each that
+     used a third of it. Hairlines between tiles, clipped at the surface. */
+  /* Workflows as chips that wrap like tags: the mark in its colour, the name. */
+  .workflow-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
+  .workflow-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-6); border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); }
+  .workflow-chip .icon { color: var(--muted-2); }
+  .workflow-chip.tone-good .icon { color: var(--ok); }
+  .workflow-chip.tone-serious { border-color: var(--danger); }
+  .workflow-chip.tone-serious .icon { color: var(--danger); }
+  .workflow-chip.tone-attention .icon { color: var(--tone-caution-ink); }
+  .workflow-chip:hover { border-color: var(--line-strong); }
+  .github-mark { display: inline-flex; font-size: 1.15em; color: var(--muted-2); }
+  .github-mark.tone-good { color: var(--ok); }
+  .github-mark.tone-serious { color: var(--danger); }
+  .github-mark.tone-attention { color: var(--tone-caution-ink); }
+  /* What the deploy proved before it ran: its own verification steps. */
+  .github-verified { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--danger); cursor: default; }
+  .github-verified.is-verified { color: var(--ok); }
+  /* The same rows on their own surface, where no band carries them. */
+  .account-facts { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  /* Containers: what needs you, one row per image and version, then the table. */
+  .container-needs { list-style: none; margin: 0 0 var(--space-7); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+  .container-needs > li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); border-left: 3px solid var(--line); }
+  .container-needs > li + li { border-top: 1px solid var(--line-2); }
+  .container-needs > li.is-serious { border-left-color: var(--danger); }
+  .container-needs > li.is-attention, .container-needs > li.is-behind { border-left-color: var(--tone-caution-line); }
+  .container-needs-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
+  .container-needs > li.is-serious .container-needs-icon { color: var(--danger); }
+  .container-needs-body { flex: 1 1 22rem; min-width: 0; }
+  .container-needs-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
+  .container-arrow { color: var(--muted-2); font-weight: 400; }
+  .container-advisories { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
+  .container-needs-where { display: flex; flex-wrap: wrap; gap: var(--space-2); max-width: 100%; }
+  .container-needs-where .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
+  .container-standing { white-space: nowrap; }
+  .container-standing .icon { vertical-align: -0.15em; }
+  .container-standing.is-vulnerable { color: var(--danger); }
+  .container-standing.is-behind { color: var(--tone-caution-ink); }
+  .container-standing.is-current .icon { color: var(--ok); }
+
+  /* A container's upgrade: four facts, then its steps beside what stands in the way. */
+  .upgrade-band { margin-bottom: var(--space-6); }
+  /* Three facts across the band's full width, not three narrow tiles and a gap. */
+  .fact-band.readiness-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 760px) { .fact-band.readiness-band { grid-template-columns: minmax(0, 1fr); } }
+  .upgrade-detail { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-8); }
+  @media (max-width: 760px) { .upgrade-detail { grid-template-columns: minmax(0, 1fr); } }
+  .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+  .upgrade-blockers { font-size: var(--text-sm); }
+  .upgrade-blockers p { margin: 0 0 var(--space-3); }
+  .upgrade-blockers ul { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-2); }
+  .container-facts code { font-size: var(--text-xs); }
+  /* Facts on their own raised surface, as every other section sits. */
+  .boxed-facts { margin: 0 0 var(--space-8); padding: var(--space-5) var(--space-7); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  /* Why not on its own: the band's own bottom row, a line each. */
+  .upgrade-reasons { list-style: none; margin: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .upgrade-reasons li::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
+
+  /* Posture, led by what is not met: a row per gap with the repositories
+     that miss it, then a row per repository with a segment per check. */
+  .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+  .posture-gaps li, .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); }
+  .posture-gaps li + li, .posture-repos li + li { border-top: 1px solid var(--line-2); }
+  .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
+  .posture-gaps li.is-serious { border-left-color: var(--danger); }
+  .posture-gap-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
+  .posture-gaps li.is-serious .posture-gap-icon { color: var(--danger); }
+  .posture-gap-body { flex: 1 1 22rem; min-width: 0; }
+  .posture-gap-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
+  .posture-gap-body p .muted { color: var(--muted-2); }
+  .posture-gap-repos { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
+  .posture-gap-repos .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
+  .posture-repo-name { flex: 0 1 14rem; min-width: 0; display: flex; flex-direction: column; }
+  .posture-repo-name a { font-weight: 600; }
+  .posture-meter { flex: 0 1 auto; min-width: 0; display: flex; gap: var(--space-1); }
+  .posture-access { flex: 1 1 12rem; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
+  .posture-access .icon { color: var(--muted-2); vertical-align: -0.15em; }
+  .posture-access .is-unmet { color: var(--danger); }
+  @media (max-width: 640px) {
+    .posture-access { flex-basis: 100%; }
+  }
+  /* Fixed segments, the shared checks first, so one check sits in the same
+     column on every row and a gap reads straight down the list. */
+  .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: 2px; background: var(--line); cursor: default; }
+  .posture-meter .posture-meter-break { flex: 0 0 var(--space-6); background: none; }
+  .posture-meter .is-met { background: var(--ok); }
+  .posture-meter .is-unmet { background: var(--danger); }
+  .posture-meter span:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .posture-score { flex: 0 0 4.5rem; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .posture-score.is-met { color: var(--ok); }
+  .posture-score.is-unmet { color: var(--danger); }
+  .posture-everywhere { display: flex; gap: var(--space-3); align-items: flex-start; color: var(--muted); font-size: var(--text-sm); }
+  .posture-everywhere .icon { color: var(--ok); flex: none; margin-top: 0.15em; }
+  .posture-everywhere strong { color: var(--ink); }
+
+  /* A project's addresses under its name: one line, dots between. */
+  .project-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
+  .project-meta > * + *::before { content: "·"; margin-right: var(--space-5); color: var(--muted-2); }
+  .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
+  /* An age or a count that reads wrong split across two lines. */
+  .nowrap { white-space: nowrap; }
+  /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
+  .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
+  /* The same mark as a verified certificate: a check in a circle, one colour. */
+  .gh-verified { display: inline-flex; margin-left: var(--space-3); color: var(--accent-2); font-size: .9em; vertical-align: -.1em; cursor: default; }
+  .gh-stats { display: flex; flex-wrap: wrap; gap: var(--space-9); margin: 0; }
+  .gh-stats div { display: grid; gap: var(--space-1); }
+  .gh-stats dt { color: var(--muted); font-size: var(--text-xs); }
+  .gh-stats dd { margin: 0; font-size: var(--text-xl); font-weight: 650; font-feature-settings: "tnum"; }
+  .gh-stats dd a { color: inherit; }
+  .gh-stats dd a:hover { color: var(--accent-2); }
 }

@@ -57,6 +57,15 @@ class PageAction:
 
 
 @dataclass(frozen=True)
+class PageBadge:
+    """A short fact beside a page's title: its reach, that it is read-only."""
+
+    label: str
+    tone: str = ""
+    title: str = ""
+
+
+@dataclass(frozen=True)
 class Page:
     title: str
     lede: str = ""

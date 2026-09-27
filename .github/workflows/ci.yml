@@ -511,6 +511,8 @@ jobs:
           docker build \
             --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=$HEAD_SHA" \
+            --build-arg "HQ_SOURCE=https://github.com/${{ github.repository }}" \
+            --build-arg "HQ_REVISION=$HEAD_SHA" \
             -t "$IMAGE:$TAG" .
           docker push "$IMAGE:$TAG"
           # `latest` follows main and nothing else. A pull request builds an

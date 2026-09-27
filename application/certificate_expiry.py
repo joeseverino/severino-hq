@@ -79,11 +79,16 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                         if days < 0
                         else f"{label} {title} expires {expiry_phrase(stamp)}"
                     ),
-                    severity="serious" if days <= SERIOUS_DAYS else "attention",
+                    # One that serves no name breaks nothing when it lapses: it
+                    # is left over, and the advice is to remove it, not renew it.
+                    severity="serious" if names and days <= SERIOUS_DAYS else "attention",
                     explanation=(
                         "Clients get a certificate error on every name it serves "
                         "once it expires. Renew it where it is held, or find why "
                         "the automatic renewal failed."
+                        if names
+                        else "It serves no name, so nothing breaks when it expires. "
+                        "Delete it where it is held rather than renew it."
                     ),
                     evidence=(
                         ("Certificate", title),

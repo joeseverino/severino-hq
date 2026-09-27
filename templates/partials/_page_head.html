@@ -1,11 +1,17 @@
 {% comment %}
 A page's head, from `page` (application.pages.Page). The only place a head is
 drawn: a page template extends page.html rather than including this.
+`page_badges`, when a view supplies it, is what the thing is, beside its name:
+(label, tone, title) as application.pages.PageBadge. Context rather than a
+Page field, so the SDK's Page is unchanged.
 {% endcomment %}
 <header class="page-head">
   <div>
     {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label }}</a> / {% endfor %}</p>{% endif %}
-    <h1>{{ page.title }}</h1>
+    <div class="page-title-row">
+      <h1>{{ page.title }}</h1>
+      {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label }}</span>{% endfor %}
+    </div>
     {% if page.lede %}<p class="page-lede">{{ page.lede }}</p>{% endif %}
   </div>
   {% if page.actions %}

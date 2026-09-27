@@ -279,3 +279,42 @@ def docs_awaiting_review() -> list[dict[str, Any]]:
         _documentation(record)
         for record in docs_needing_review().order_by("last_reviewed")[:ROW_LIMIT]
     ]
+
+
+# ----- Watching --------------------------------------------------------------
+
+
+def watching() -> tuple[Card, ...]:
+    """What is new in what you watch: advisories published in the last month,
+    else releases. HQ has one operator, so the linked account is theirs; with
+    more than one there is no single "you" and the card stays away."""
+
+    from datetime import timedelta
+
+    from core.models import UpstreamReading
+
+    from .github_profile import KEY_PREFIX, profile
+    from .ui import moment
+
+    # One query whatever is linked: a profile is only ever read for a signed-in
+    # person's own linked account, so its reading names them.
+    keys = list(UpstreamReading.objects.filter(key__startswith=KEY_PREFIX).values_list("key", flat=True)[:2])
+    if len(keys) != 1:
+        return ()
+    found = profile(keys[0].removeprefix(KEY_PREFIX))
+    if found is None:
+        return ()
+    since = timezone.now() - timedelta(days=30)
+
+    def recent(stamp: str) -> bool:
+        when = moment(stamp) if stamp else None
+        return when is not None and when >= since
+
+    advisories = sum(
+        1 for repo in found["watched"] for item in repo["advisories"] if recent(item["published_at"])
+    )
+    releases = sum(1 for repo in found["watched"] if repo["release"] and recent(repo["release"]["published_at"]))
+    # A number and what it counts, like the cards beside it; the rest is the page.
+    if advisories:
+        return _card(id="hq.watching", label="New advisories", value=str(advisories), url=reverse("watching"))
+    return _card(id="hq.watching", label="New releases", value=str(releases), url=reverse("watching"))

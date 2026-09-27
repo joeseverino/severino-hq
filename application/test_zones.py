@@ -312,6 +312,13 @@ class ZoneViewTests(TestCase):
         cards = {i.label: i for i in find_zone("example.net").insights}
         self.assertFalse(cards["Security"].concern)
 
+    def test_the_security_card_is_its_mode_and_one_line_of_facts(self):
+        security = {i.label: i for i in find_zone("example.net").insights}["Security"]
+
+        # A headline, not a sentence: the card sits beside three others.
+        self.assertNotIn("·", security.value)
+        self.assertNotIn(". ", security.detail)
+
     def test_left_over_challenge_records_are_the_one_thing_flagged(self):
         """The single judgement this page makes without a declared policy.
 
@@ -1685,9 +1692,9 @@ class ExternallyAnsweredFacetTests(TestCase):
         # routes takes this branch, so a sentence in the card is printed once
         # per card: Runtime and Ingress sat side by side reading the same line,
         # with the origin note under them saying it a third time.
-        self.assertContains(response, "Not needed")
-        self.assertContains(response, "Served by")
-        self.assertEqual(response.content.count(b"Served by"), 1)
+        # Not needed is not missing: no gap is listed for the routing part.
+        self.assertNotIn("proxy", [facet.id for facet in response.context["missing_facets"]])
+        self.assertLessEqual(response.content.count(b"Served by"), 1)
         # Asserted on the facet rather than on the page, because the
         # certificate facet says the same sentence for its own good reason.
         self.assertFalse(ingress.present)
@@ -2221,6 +2228,22 @@ class DomainRegistrationInsightTests(TestCase):
 
         self.assertFalse(found.concern)
         self.assertIn("Renews itself", found.detail)
+
+    def test_it_names_the_registrar_that_reported_it(self):
+        from .zone_insights import registration
+
+        renews = registration(self._zone(
+            {"expires_at": self._soon(200), "auto_renew": True, "registrar": "Example Registrar"}
+        ))
+        manual = registration(self._zone(
+            {"expires_at": self._soon(200), "auto_renew": False, "registrar": "Example Registrar"}
+        ))
+
+        self.assertEqual(renews.detail, "Renews itself through Example Registrar.")
+        self.assertEqual(
+            manual.detail,
+            "Auto-renew is off at Example Registrar, so this has to be renewed by hand.",
+        )
 
     def test_a_domain_nothing_has_read_says_not_read(self):
         from .zone_insights import registration

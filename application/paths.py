@@ -30,7 +30,6 @@ from control_plane.observations import OBSERVATIONS
 from control_plane.providers import (
     PROVIDERS,
     TAILNET_KIND,
-    certificate_covers,
     expiry_phrase,
 )
 from control_plane.connection_kinds import CONNECTION_LABELS
@@ -91,6 +90,48 @@ class Certificate:
     expiry: str = ""
     source: Source | None = None
     unread: str = ""
+    # The declaration the name is served with, when HQ holds one.
+    record: str = ""
+    # What the controller found the name serving, when it matched what HQ
+    # installed: an attestation, not a declaration.
+    verified_fingerprint: str = ""
+    # The name it is served for, so a browser on that name can add what it saw.
+    serves: str = ""
+    # "87 days left": the expiry as the one number worth reading at a glance.
+    left: str = ""
+
+    @property
+    def link(self) -> EntityLink | None:
+        return entity_link("resource", self.record) if self.record else None
+
+    @property
+    def attestation(self) -> str:
+        """What the controller proved about the certificate, when it proved it."""
+
+        if not self.verified_fingerprint:
+            return ""
+        from .ui import ago
+
+        when = self.source.observed_at if self.source else None
+        checked = f", checked {ago(when)}" if when else ""
+        return (
+            f"Verified: serves {self.verified_fingerprint[:12]}…, "
+            f"the certificate HQ installed{checked}"
+        )
+
+    @property
+    def tip(self) -> str:
+        """The hover card: the verdict, then which certificate, who, how long."""
+
+        verdict = "Verified" if self.attestation else "Not verified yet"
+        facts = " · ".join(part for part in (self.name, self.issuer, self.left) if part)
+        return f"{verdict}\n{facts}" if facts else verdict
+
+    @property
+    def statement(self) -> str:
+        """The line, and what the controller proved about it."""
+
+        return " · ".join(part for part in (self.line, self.attestation) if part)
 
     @property
     def line(self) -> str:
@@ -99,6 +140,25 @@ class Certificate:
         detail = " · ".join(part for part in (self.name, self.issuer) if part)
         text = f"{self.role} certificate {detail}".strip()
         return f"{text}, expires {self.expiry}" if self.expiry else text
+
+
+# What each kind of hop looks like: a name in partials/_icon.html.
+_HOP_ICONS = {
+    "device": "laptop",
+    "dns": "globe",
+    "network": "network",
+    "machine": "server",
+    "origin": "server",
+    "ingress": "proxy",
+    "container": "container",
+    "edge": "cloud",
+    "served": "page",
+    "external": "external",
+    "hq": "home",
+    "alias": "link",
+    "redirect": "redirect",
+    "observed": "eye",
+}
 
 
 @dataclass(frozen=True)
@@ -121,6 +181,12 @@ class Hop:
     evidence: tuple[Any, ...] = ()
     check: Any = None
     layers: tuple[Any, ...] = ()
+    # ``(text, url)`` lines under the name: what a container is running.
+    facts: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def icon(self) -> str:
+        return _HOP_ICONS.get(self.step, "")
 
     @property
     def phrase(self) -> str:
@@ -155,6 +221,15 @@ class Route:
     hops: tuple[Hop, ...]
     # The port a TCP or UDP forward listens on, for a route that is one.
     port: int | None = None
+
+    @property
+    def via_phrase(self) -> str:
+        """``via`` inside a sentence: "internal DNS record", acronyms intact."""
+
+        # An acronym keeps its case: "HQ" stays "HQ", "Internal" becomes "internal".
+        if self.via[1:2].isupper():
+            return self.via
+        return self.via[:1].lower() + self.via[1:]
 
     @property
     def line_hops(self) -> tuple[Hop, ...]:
@@ -261,6 +336,14 @@ class _Row:
     record: Mapping[str, Any]
     spec: Mapping[str, Any]
     source: Source
+    # The declaration this record is, when HQ declares it: a read record and
+    # its declaration are one thing, and the page names and links it as that.
+    declaration: str = ""
+
+    @property
+    def link(self) -> EntityLink | None:
+        key = self.declaration or self.source.declared
+        return entity_link(self.kind, key) if key else None
 
 
 def _kinds(facet: str) -> tuple[str, ...]:
@@ -298,7 +381,15 @@ def _names(provider, spec) -> tuple[str, ...]:
 
 
 def _swept(kind: str) -> dict[str, list[_Row]]:
+    from .inventory import _identity
+
     provider = PROVIDERS[kind]
+    # Matched by identity, the way the inventory decides a record is managed.
+    declared = {
+        _identity(kind, resource.spec): resource.key
+        for resource in enabled_resources()
+        if resource.kind == kind
+    }
     found: dict[str, list[_Row]] = {}
     for snapshot in snapshots_of(kind):
         if not snapshot.reachable or provider.from_record is None:
@@ -309,8 +400,9 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
             except (KeyError, TypeError, ValueError):
                 continue
             source = Source(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
+            declaration = declared.get(_identity(kind, spec), "")
             for name in _names(provider, spec):
-                found.setdefault(name, []).append(_Row(kind, record, spec, source))
+                found.setdefault(name, []).append(_Row(kind, record, spec, source, declaration))
     return found
 
 
@@ -509,7 +601,7 @@ def _from_dns(name: str, row: _Row, depth: int) -> list[Hop]:
             "dns",
             row.source.label,
             f"{record_type} {answer}".strip(),
-            entity_link(row.kind, row.source.declared) if row.source.declared else None,
+            row.link,
             detail="Proxied" if fronted else "",
             source=row.source,
         )
@@ -791,16 +883,40 @@ def _machine_source(name: str) -> Source | None:
     return Source("machine", declared=machine.declaration) if machine.declaration else None
 
 
-def _container_source(name: str, host: str) -> Source | None:
-    """The container reading that reports ``name`` on ``host``."""
+def _container_reading(name: str, host: str) -> tuple[Source | None, tuple[tuple[str, str], ...]]:
+    """The container reading that reports ``name`` on ``host``, and what it says
+    is running: Docker's status, and the commit the image was built from."""
 
     from .services import CONTAINER_KIND
 
     for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records or ():
             if record.get("name") == name and record.get("host") == host:
-                return Source(CONTAINER_KIND, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
-    return None
+                source = Source(CONTAINER_KIND, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
+                return source, _running_facts(record)
+    return None, ()
+
+
+def _running_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """``(text, url)``: how long it has been up, the commit its image was built
+    from (linked where the image names its repository), and whether what it
+    runs is current and safe."""
+
+    from .containers import standing_of, uptime_of
+
+    uptime = uptime_of(str(record.get("status", "") or ""))
+    revision = str(record.get("revision", "") or "")
+    repository = str(record.get("source", "") or "").rstrip("/")
+    facts = [(uptime, "")] if uptime else []
+    if revision:
+        url = f"{repository}/commit/{revision}" if repository.startswith("https://") else ""
+        facts.append((revision[:7], url))
+    image = str(record.get("image", "") or "")
+    if image:
+        # The standing says what the signature said and more: verified before
+        # deploying, a newer release out, or an advisory against this version.
+        facts.append((standing_of(image, str(record.get("host", "")), str(record.get("name", ""))).summary, ""))
+    return tuple(facts)
 
 
 def _whereabouts(build):
@@ -816,8 +932,8 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
             hop = Hop(
                 "ingress",
                 row.source.label,
-                row.source.connection or row.source.label,
-                entity_link(row.kind, row.source.declared) if row.source.declared else None,
+                row.declaration or row.source.declared or row.source.connection or row.source.label,
+                row.link,
                 detail=_answer(row),
                 source=row.source,
                 certificate=_served_certificate(name, row, "Origin" if behind_edge else "Served"),
@@ -833,6 +949,9 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
 
 
 def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
+    declared = _declared_served(name, role)
+    if declared is not None:
+        return declared
     provider = PROVIDERS[row.kind]
     if provider.served_certificate is not None and row.record:
         served = provider.served_certificate(row.record)
@@ -846,10 +965,8 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
                 issuer=authority_name(certificate.get("provider")),
                 expiry=expiry_phrase(str(certificate.get("expires_on", "") or "")),
                 source=row.source,
+                left=_days_left(str(certificate.get("expires_on", "") or "")),
             )
-    declared = _declared_certificate(name)
-    if declared:
-        return Certificate(role, name=declared, source=Source("tls.certificate", declared=declared))
     reason = (
         f"{row.source.label} does not report the certificate it serves"
         if provider.served_certificate is None
@@ -858,14 +975,64 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
     return Certificate(role, unread=f"not read: {role} certificate, because {reason}")
 
 
-def _declared_certificate(name: str) -> str:
-    for resource in enabled_resources():
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or not provider.covers or provider.facet != "certificate":
-            continue
-        if certificate_covers(name, frozenset(_names(provider, resource.spec))):
-            return resource.key
-    return ""
+def _days_left(stamp: str) -> str:
+    from .expiry import days_until
+    from .ui import counted, moment
+
+    when = moment(stamp) if stamp else None
+    if when is None:
+        return ""
+    days = days_until(when)
+    return "expired" if days < 0 else f"{counted(days, 'day')} left"
+
+
+def _declared_served(name: str, role: str) -> Certificate | None:
+    """The certificate HQ declares for the name, as HQ knows it.
+
+    Its issuer and expiry are HQ's own record of what it issued or uploaded,
+    and the controller checks each name it installs for, so whether the name
+    serves it is a reading too. A name that serves something else says so
+    rather than showing the declaration as if it were in place.
+    """
+
+    from .services import certificates_serving
+
+    keys = certificates_serving(name)
+    resource = next((item for item in enabled_resources() if keys and item.key == keys[0]), None)
+    if resource is None:
+        return None
+    status = resource.status or {}
+    source = Source(resource.kind, observed_at=resource.last_observed_at)
+    checked = next(
+        (
+            check
+            for check in status.get("consumers") or ()
+            if isinstance(check, dict) and normalized_hostname(check.get("domain", "")) == name
+        ),
+        None,
+    )
+    if checked is not None and checked.get("matches_expected") is False:
+        return Certificate(
+            role,
+            source=source,
+            unread=f"not verified: {name} serves a certificate other than {resource.key}",
+            record=resource.key,
+        )
+    return Certificate(
+        role,
+        name=resource.key,
+        issuer=str(status.get("issuer", "") or ""),
+        expiry=expiry_phrase(str(status.get("not_after", "") or "")),
+        source=source,
+        record=resource.key,
+        serves=name,
+        left=_days_left(str(status.get("not_after", "") or "")),
+        verified_fingerprint=(
+            str(checked.get("fingerprint_sha256", "") or "")
+            if checked is not None and checked.get("matches_expected") is True
+            else ""
+        ),
+    )
 
 
 def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> list[Hop]:
@@ -890,12 +1057,22 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
             )
         )
     if origin.container:
+        from .containers import container_watchers
+
+        source, running = _container_reading(origin.container, origin.host)
+        # Its page, when a declaration watches it: every other hop names its
+        # page, and the container was the one a click could not reach.
+        watcher = container_watchers().get((origin.host, origin.container), ("", False))[0]
         hops.append(
             Hop(
                 "container",
                 "Container",
                 origin.container,
-                source=_container_source(origin.container, origin.host),
+                # Named as the container, not its declaration's key: the machine
+                # is the hop before it, and the key said it again.
+                entity_link("resource", watcher, label=origin.container) if watcher else None,
+                source=source,
+                facts=running,
             )
         )
     return hops
@@ -980,10 +1157,20 @@ _CONSEQUENCES = {
     "served": "The site stops answering at this name.",
     "ingress": "Requests stop reaching what it forwards to.",
     "machine": "Everything on this path through it stops answering.",
+    # The address a record answers with: move it and the record still points
+    # at the old one.
+    "network": "The record still points at the old address, and the name stops answering.",
+    "upstream": "The proxy forwards to nothing, and requests fail with a bad gateway.",
     "container": "The service stops answering.",
     "hq": "HQ stops answering at this name.",
 }
 _CERTIFICATE_CONSEQUENCE = "Clients see a certificate error once it expires or stops covering the name."
+
+
+def consequence_of(hop: "Hop") -> str:
+    """What changing this hop would do, or "" where nothing depends on it."""
+
+    return _CONSEQUENCES.get(hop.step, "")
 
 
 @dataclass(frozen=True)
@@ -1026,7 +1213,7 @@ def depends_on(path: ServicePath) -> tuple[Dependency, ...]:
                     Dependency(
                         f"{certificate.role} certificate",
                         certificate.name,
-                        None,
+                        certificate.link,
                         _CERTIFICATE_CONSEQUENCE,
                         certificate.source,
                     ),

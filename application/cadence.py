@@ -374,6 +374,43 @@ def ring_doorbell() -> bool:
     return True
 
 
+def ring_registry_doorbell() -> bool:
+    """Tell the host a sweep found an image or digest HQ has not read, so it
+    starts ``refresh_public_registry`` now rather than at the daily floor.
+    Carries nothing, like the controller's."""
+
+    try:
+        _touch(_path("SEVERINO_REGISTRY_DOORBELL", "registry-doorbell"))
+    except OSError:
+        return False
+    return True
+
+
+def request_delivery_read() -> bool:
+    """Ask for a read of ``github.delivery`` as HQ boots on a new image.
+
+    A deploy is the moment production changes which commit of each extension
+    it runs, so it is the moment delivery has something to report: the check
+    run on each commit, and one comment on its merged pull request. Asked for
+    by the boot rather than found by a schedule, and not as a person's
+    activity, so the idle cadence is untouched. Only where delivery is read at
+    all: a request nothing answers would force sweeps until it expired.
+    """
+
+    from control_plane.models import ManagedResource
+
+    kind = "github.delivery"
+    if not (
+        ProviderInventory.objects.filter(kind=kind).exists()
+        or ManagedResource.objects.filter(kind=kind).exists()
+    ):
+        return False
+    ReadRequest.objects.update_or_create(
+        connection_ref="", kind=kind, defaults={"requested_at": timezone.now()}
+    )
+    return ring_doorbell()
+
+
 def request_controller_sweep(
     command: ControllerSweepCommand,
     *,

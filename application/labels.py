@@ -12,3 +12,14 @@ def human_label(name: str) -> str:
 
     words = name.replace(".", " ").replace("_", " ").split()
     return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
+
+
+def human_bytes(value: int | float) -> str:
+    """A byte count as people say it: ``512 B``, ``38 MB``, ``1.7 GB``."""
+
+    amount = max(0.0, float(value or 0))
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if amount < 1024 or unit == "TB":
+            return f"{amount:.0f} {unit}" if unit in {"B", "KB", "MB"} else f"{amount:.1f} {unit}"
+        amount /= 1024
+    return "0 B"

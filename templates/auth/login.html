@@ -17,6 +17,7 @@
   {% endcomment %}
   {% if OIDC_ENABLED %}
     {% if request.GET.signed_out %}<p class="muted">You are signed out.</p>{% endif %}
+    {% if sso_failure %}<div class="msg msg-error" role="alert">{{ sso_failure }}</div>{% endif %}
     <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with SSO</a></p>
   {% else %}
     <form method="post" action="">

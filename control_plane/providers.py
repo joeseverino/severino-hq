@@ -23,6 +23,7 @@ from pydantic import (
     model_validator,
 )
 
+from application.github_public import GitHubRepositoryURL
 from application.ui import counted
 
 from .attribution import unattributed_kinds
@@ -495,6 +496,15 @@ class PortainerContainerSpec(ProviderModel):
         description=(
             "Host-network containers only. Docker reports no ports for them, "
             "so list the ports here to link a proxy to it."
+        ),
+    )
+    source: GitHubRepositoryURL = Field(
+        default="",
+        max_length=300,
+        title="Built from",
+        description=(
+            "The GitHub repository its image is built from, for an image that "
+            "does not say. HQ reads its releases and advisories."
         ),
     )
 
@@ -1666,27 +1676,14 @@ def expiry_phrase(stamp: str) -> str:
 def _certificate_readout(
     spec: dict[str, Any], status: dict[str, Any]
 ) -> tuple[tuple[str, str, str], ...]:
-    consumers = status.get("consumers") or []
-    # The names themselves, not how many of them there are. A count answers a
-    # question nobody asks: "which names does this cover" is the reason to look
-    # at a certificate at all, and "7" is the one reply that cannot be checked.
-    installed = sorted(
-        {
-            str(consumer.get("consumer") or consumer.get("consumer_kind") or "")
-            for consumer in consumers
-            if isinstance(consumer, dict)
-        }
-        - {""}
-    )
     # Compact on purpose. This readout is what a *service* page shows beside a
     # hostname, and there the question is whether this name is covered by
-    # something healthy, not which seven other names share the certificate.
-    # The full list belongs on the certificate, where it is now an editable
-    # field rather than a paragraph.
+    # something healthy: who issued it and when it runs out. Where it is
+    # installed is the certificate's own page's to list; here it made every
+    # card beside it as tall as that list.
     return (
         ("Issuer", "", status.get("issuer", "")),
         ("Expires", "", expiry_phrase(status.get("not_after", ""))),
-        ("Installed on", "", ", ".join(installed)),
     )
 
 
@@ -2022,7 +2019,6 @@ def _uploaded_certificate_readout(
     return (
         ("Name", spec.get("certificate_name", ""), ""),
         ("Expires", "", expiry_phrase(status.get("not_after", ""))),
-        ("Installed on", ", ".join(spec.get("install_on", ())), ""),
     )
 
 
@@ -2377,13 +2373,14 @@ _PROVIDERS = (
         # Ports are behind the disclosure because the answer is usually none:
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
-        advanced_fields=("hidden", "on_demand", "serves_ports"),
+        advanced_fields=("hidden", "on_demand", "serves_ports", "source"),
         # So a sweep can never confirm it: the field exists for the case Docker
         # publishes nothing.
         #
         # ``hidden`` is HQ's own bookkeeping (whether the machine page folds the
-        # row away); Portainer and Docker have nowhere to keep it.
-        unobservable_fields=("serves_ports", "hidden", "on_demand"),
+        # row away); Portainer and Docker have nowhere to keep it. ``source``
+        # is the operator's word for an image that names no repository.
+        unobservable_fields=("serves_ports", "hidden", "on_demand", "source"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),

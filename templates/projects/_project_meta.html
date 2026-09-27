@@ -1,0 +1,2 @@
+{% comment %}The page head's subtitle: what the project is and where it is reached. Slug is the URL; the repository is the GitHub panel's heading.{% endcomment %}
+<span class="project-meta"><span>{{ project.get_category_display }}</span>{% if project.public_url %}<a class="external-link" href="{{ project.public_url }}" rel="noopener noreferrer">{{ project.public_url|cut:"https://" }}</a>{% endif %}{% if service_url %}<a href="{{ service_url }}">Service</a>{% endif %}<span class="muted">Updated {{ project.updated_at|ago_short }}</span></span>

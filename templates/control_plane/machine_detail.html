@@ -29,53 +29,48 @@
       {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
 </p>
 
-<div class="control-summary">
-  <div class="control-metric">
-    <span class="control-label">Reached through</span>
-    <strong>{{ reached_links|length }}</strong>
-    {% comment %}
-    More than one is normal. A machine can be a Portainer environment and an SSH
-    transport at once, and which is in play depends on what is being asked of
-    it, so both are named rather than one being chosen.
-    {% endcomment %}
-    {% for link, unanswered in reached_links %}
-      <span class="readout">{% entity link code=True %}{% if unanswered %} <span class="muted">not answering</span>{% endif %}</span>
-    {% empty %}
-      <span class="readout muted">No credential reaches this machine.{% if not machine.declaration %} Reported by another source.{% endif %}</span>
-    {% endfor %}
-  </div>
-  <div class="control-metric">
-    <span class="control-label">Containers</span>
-    <strong>{% if machine.containers %}{{ machine.running }} of {{ machine.containers|length }}{% elif machine.containers_visible %}None{% else %}Not visible{% endif %}</strong>
-    {% if machine.containers %}<span class="readout muted">running</span>{% elif not machine.containers_visible %}<span class="readout muted">No connection reads containers. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></span>{% endif %}
-  </div>
-  <div class="control-metric">
-    <span class="control-label">Serves</span>
-    <strong>{{ serves_count }}</strong>
-    {% comment %}HQ itself is first when it runs here: derived, and not reconciled.{% endcomment %}
-    {% for link in serves_links %}
-      <span class="readout">{% entity link %}{% if forloop.first and machine.runs_hq %} <span class="muted">{{ hq_label }}</span>{% endif %}</span>
-    {% endfor %}
-    {% for role in machine.roles %}
-      <span class="readout" title="{{ role.detail }}">{{ role.label }}</span>
-    {% endfor %}
-    {% if not serves_links and not machine.roles %}<span class="readout muted">No managed services.</span>{% endif %}
-  </div>
-  {% comment %}
-  Only what the table below does not already show. Every watched container is a
-  row down there, named and linked, so repeating its key here said the same
-  thing twice, and made this the tallest card on the page, stretching three
-  mostly empty ones beside it.
-  {% endcomment %}
-  {% if machine.other_declarations %}
-    <div class="control-metric">
-      <span class="control-label">Also declared here</span>
-      <strong>{{ machine.other_declarations|length }}</strong>
-      {% for link in declaration_links %}
-        <span class="readout">{% entity link code=True %}</span>
-      {% endfor %}
+{% comment %}
+What reaches it, what runs on it and how that stands, and what it answers
+for: each once, the detail below. Whatever it is also declared as is the
+"Declared as" table's to list.
+{% endcomment %}
+<div class="fact-band">
+  <div class="band-fact{% if reached_links|length == 0 %} tone-attention{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="network" %}</span>
+    <div>
+      <span class="band-label">Reached through</span>
+      {% if reached_links %}{% with found=reached_links.0 %}<strong>{% entity found.0 code=True %}</strong>{% endwith %}
+        {% for link, unanswered in reached_links %}{% if not forloop.first or unanswered %}<small>{% if not forloop.first %}{% entity link %}{% endif %}{% if unanswered %} not answering{% endif %}</small>{% endif %}{% endfor %}
+      {% else %}<strong>Nothing</strong><small>No credential reaches this machine.{% if not machine.declaration %} Reported by another source.{% endif %}</small>{% endif %}
     </div>
-  {% endif %}
+  </div>
+  <div class="band-fact{% if container_counts.vulnerable or container_counts.stopped %} tone-serious{% elif container_counts.behind %} tone-attention{% elif machine.containers %} tone-good{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
+    <div>
+      <span class="band-label">Containers</span>
+      {% if machine.containers %}
+        <strong>{{ machine.running }} of {{ machine.containers|length }} running</strong>
+        <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known advisories,have known advisories" }} · {% endif %}{% if container_counts.behind %}{{ container_counts.behind }} behind a newer release{% else %}Each on its newest release{% endif %}</small>
+      {% elif machine.containers_visible %}<strong>None</strong>
+      {% else %}<strong>Not visible</strong><small>No connection reads containers. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></small>{% endif %}
+    </div>
+  </div>
+  <div class="band-fact">
+    <span class="band-icon">{% include "partials/_icon.html" with name="globe" %}</span>
+    <div>
+      <span class="band-label">Answers for</span>
+      <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% elif machine.roles %}{{ machine.roles.0.label }}{% else %}Nothing{% endif %}</strong>
+      <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} {{ hq_label }}{% endif %}{% if not forloop.last or machine.roles %} · {% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}{% if not serves_links and not machine.roles %}No managed services.{% endif %}</small>
+    </div>
+  </div>
+  <div class="band-fact{% if unused_images %} tone-attention{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
+    <div>
+      <span class="band-label">Images</span>
+      {% if unused_images %}<strong>{{ unused_images|length }} unused</strong><small>{{ unused_size }} a prune would reclaim</small>
+      {% else %}<strong>All in use</strong><small>Nothing to reclaim.</small>{% endif %}
+    </div>
+  </div>
 </div>
 
 {% if machine.telemetry.metrics %}

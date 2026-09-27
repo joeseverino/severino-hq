@@ -23,6 +23,7 @@ from ..observations.portainer import (
     ENVIRONMENT_KIND,
     IMAGE_KIND,
     NETWORK_KIND,
+    RUNTIME_KIND,
     STACK_KIND,
     VOLUME_KIND,
 )
@@ -236,6 +237,10 @@ def container_record(
         "stack": stack,
         "working_dir": labels.get("com.docker.compose.project.working_dir", ""),
         "image": container.get("Image", ""),
+        # The image's own identity, which a container inherits as labels: the
+        # repository that builds it and the commit it was built from.
+        "source": labels.get("org.opencontainers.image.source", ""),
+        "revision": labels.get("org.opencontainers.image.revision", ""),
         # How it is attached, because it decides whether the ports below can
         # mean anything. A container on the host network binds the machine's
         # ports directly and Docker reports none for it, so an empty list is
@@ -457,6 +462,76 @@ def _images(api: PortainerReads, at: _Environment) -> Iterator[dict[str, Any]]:
         }
 
 
+# A security option's value can be a whole seccomp profile; only a short one,
+# which names a mode rather than carrying a policy, is kept.
+_SECURITY_OPT_MAX = 64
+
+
+def _runtime(api: PortainerReads, at: _Environment) -> Iterator[dict[str, Any]]:
+    """How each container is run, one inspect per container.
+
+    Built field by field from the inspect document, so nothing it carries
+    besides these (the environment above all) is ever copied out of it.
+    """
+
+    for container in _containers(api, at):
+        identifier = str(container.get("Id", "") or "")
+        if not identifier:
+            continue
+        found = api.docker(at.ref, at.id, f"/containers/{identifier}/json") or {}
+        config = found.get("Config") or {}
+        host = found.get("HostConfig") or {}
+        state = found.get("State") or {}
+        labels = config.get("Labels") or {}
+        yield {
+            "container": _name(container),
+            "stack": str(labels.get(COMPOSE_PROJECT, "") or ""),
+            "service": str(labels.get(COMPOSE_SERVICE, "") or ""),
+            "image_id": str(found.get("Image", "") or ""),
+            "user": str(config.get("User", "") or ""),
+            "privileged": bool(host.get("Privileged")),
+            "read_only_rootfs": bool(host.get("ReadonlyRootfs")),
+            "network_mode": str(host.get("NetworkMode", "") or ""),
+            "pid_mode": str(host.get("PidMode", "") or ""),
+            "ipc_mode": str(host.get("IpcMode", "") or ""),
+            "cap_add": tuple(str(item) for item in host.get("CapAdd") or () if item),
+            "cap_drop": tuple(str(item) for item in host.get("CapDrop") or () if item),
+            "security_opt": tuple(
+                str(item) if len(str(item)) <= _SECURITY_OPT_MAX else str(item).split("=", 1)[0] + "=(profile)"
+                for item in host.get("SecurityOpt") or ()
+                if item
+            ),
+            "devices": tuple(
+                str(item.get("PathOnHost", "") or "") for item in host.get("Devices") or () if isinstance(item, dict)
+            ),
+            "mounts": tuple(
+                {
+                    "type": str(item.get("Type", "") or ""),
+                    "source": str(item.get("Name") if item.get("Type") == "volume" else item.get("Source") or ""),
+                    "destination": str(item.get("Destination", "") or ""),
+                    "read_only": item.get("RW") is False,
+                }
+                for item in found.get("Mounts") or ()
+                if isinstance(item, dict)
+            ),
+            "port_bindings": tuple(
+                {"container_port": str(port), "host_ip": str(bound.get("HostIp", "") or ""), "host_port": str(bound.get("HostPort", "") or "")}
+                for port, bindings in sorted((host.get("PortBindings") or {}).items())
+                for bound in bindings or ()
+                if isinstance(bound, dict)
+            ),
+            "memory_limit": int(host.get("Memory") or 0),
+            "cpu_limit": round(int(host.get("NanoCpus") or 0) / 1e9, 2),
+            "pids_limit": int(host.get("PidsLimit") or 0),
+            "restart_policy": str((host.get("RestartPolicy") or {}).get("Name", "") or ""),
+            "healthcheck": bool((config.get("Healthcheck") or {}).get("Test"))
+            and (config.get("Healthcheck") or {}).get("Test") != ["NONE"],
+            "health": str((state.get("Health") or {}).get("Status", "") or ""),
+            "restart_count": int(found.get("RestartCount") or 0),
+            "started_at": str(state.get("StartedAt", "") or ""),
+        }
+
+
 def _stacks(api: PortainerReads, at: _Environment) -> Iterator[dict[str, Any]]:
     projects: dict[str, dict[str, Any]] = {}
     for container in _containers(api, at):
@@ -507,5 +582,6 @@ READINGS = {
     NETWORK_KIND: _each_in("The network list", _networks),
     VOLUME_KIND: _each_in("The volume list", _volumes),
     IMAGE_KIND: _each_in("The image list", _images),
+    RUNTIME_KIND: _each_in("Each container's inspect", _runtime),
     STACK_KIND: _each_in("The stack list", _stacks),
 }

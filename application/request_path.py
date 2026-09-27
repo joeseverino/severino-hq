@@ -173,7 +173,8 @@ def caller_hop(found: Connection) -> Hop:
     """The device that made the request, as the tailnet reading names it."""
 
     device = found.caller_device
-    link = entity_link("machine", found.machine_name) if found.machine_name else None
+    name = found.machine_name or _catalogued(device.addresses if device is not None else ())
+    link = entity_link("machine", name) if name else None
     if device is None:
         return Hop(
             "device",
@@ -189,7 +190,35 @@ def caller_hop(found: Connection) -> Hop:
         presence.connection_ref if presence is not None else "",
         device.observed_at,
     )
-    return Hop("device", "Device", device.label, link, detail=_whose(found), source=source)
+    # Named as the machine catalogue names it, so one computer reads as one name.
+    return Hop("device", "Device", name or device.label, link, detail=_whose(found), source=source)
+
+
+def _catalogued(addresses) -> str:
+    """The machine the catalogue knows at these addresses.
+
+    The catalogue, not only declarations: the path's machine hop is named from
+    it, so a caller on an undeclared machine (a laptop running HQ) read as two
+    different computers, one named and linked, the other neither.
+    """
+
+    from .connections import machines_once
+
+    wanted = set(addresses)
+    return next((machine.name for machine in machines_once() if wanted & set(machine.addresses)), "")
+
+
+def _proxy_hop(found: Connection) -> Hop | None:
+    """The proxy the request itself proves it passed, when the walked path names none.
+
+    A name nobody has declared a proxy for can still be reached through one;
+    the forwarded request from a trusted peer is the evidence, and leaving the
+    hop out drew the request as going straight from the caller to HQ.
+    """
+
+    if not found.forwarder_name:
+        return None
+    return Hop("ingress", "Proxy", found.forwarder_name, entity_link("machine", found.forwarder_name))
 
 
 def _whose(found: Connection) -> str:
@@ -227,6 +256,9 @@ def joined(walked: ServicePath | None, request, found: Connection | None = None)
     host = split_host_port(request.get_host())[0]
     primary = walked.primary if walked is not None else None
     hops = primary.hops if primary is not None else (_hq_only(host),)
+    if not any(hop.step == "ingress" for hop in hops):
+        proxy = _proxy_hop(found)
+        hops = (proxy, *hops) if proxy is not None else hops
     context = _Context(request, found, host, hops)
     route = Route(
         primary.via if primary is not None else "HQ",

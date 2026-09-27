@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "_comment": "HQ's GitHub App and the permissions it is registered with. A test holds them to exactly what HQ's code and pipeline ask for; scripts/wire-github-app.py puts its key where the pipeline reads it. Nothing personal lives in this file.",
+  "apps": {
+    "hq": {
+      "description": "HQ's one app. The controller reads each repository and reports delivery; an extension's admission starts the host's composition; the composition reads the extensions' admissions. Each use mints a token for only what it does.",
+      "installed_on": "the host repository and every extension repository",
+      "permissions": {
+        "actions": "write",
+        "actions_variables": "read",
+        "administration": "read",
+        "checks": "write",
+        "contents": "read",
+        "deployments": "read",
+        "metadata": "read",
+        "packages": "read",
+        "pull_requests": "write",
+        "secret_scanning_alerts": "read",
+        "security_events": "read",
+        "vulnerability_alerts": "read"
+      }
+    }
+  }
+}

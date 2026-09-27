@@ -48,7 +48,7 @@ from .infrastructure import delivery_targets, resolved_spec
 from .known_hosts import operator, registrable
 
 
-from .ui import ListRow, counted, ended
+from .ui import ListRow, counted, ended, moment
 from .zones import ZONE_KIND, ZoneInsight
 
 # The authority HQ's own certificate provider issues from. Stated here because
@@ -258,28 +258,29 @@ def security(zone) -> ZoneInsight | None:
         [item.expires for item in edge]
         + [str((resource.status or {}).get("not_after", "")) for resource, _ in covering]
     )
-    parts = [tls.value if tls else "TLS not read"]
-    if edge:
-        parts.append(f"{len(edge)} edge")
-    if covering:
-        parts.append(f"{len(covering)} managed")
-    if earliest:
-        parts.append(f"earliest {expiry_phrase(earliest)}")
+    # The mode is the answer; the rest is one line of facts. What each mode
+    # means and who issued each certificate are the certificates' own pages.
+    facts = list(_posture_facts(zone))
+    count = len(edge) + len(covering)
+    if count:
+        certificates_fact = counted(count, "certificate")
+        first = moment(earliest) if earliest else None
+        if first is not None:
+            certificates_fact += f", first expires in {counted(days_until(first), 'day')}"
+        facts.append(certificates_fact)
     stronger = _stronger_elsewhere(zone)
-    detail = [tls.detail] if tls and tls.detail else []
+    concerns = []
     if certificates_card is not None and certificates_card.concern:
-        detail.append(certificates_card.detail)
+        concerns.append(certificates_card.detail)
     if stronger:
-        detail.append(ended(f"Stronger on {stronger}"))
-    issuers = sorted({item.issuer for item in edge if item.issuer})
+        concerns.append(ended(f"Stronger on {stronger}"))
     return ZoneInsight(
         label="Security",
-        value=" · ".join(parts),
-        detail=" ".join(detail),
+        value=tls.value if tls else "TLS not read",
+        detail=" ".join(concerns) or " · ".join(facts),
         url=certificates_card.url if certificates_card is not None else "",
-        note=ended(f"Edge issued by {', '.join(issuers)}") if issuers else (
-            certificates_card.note if certificates_card is not None else ""
-        ),
+        # Only why a part could not be read; a readable edge is in the count.
+        note=certificates_card.note if certificates_card is not None and not edge else "",
         concern=bool(
             (tls and tls.concern)
             or (certificates_card is not None and certificates_card.concern)
@@ -489,6 +490,28 @@ _TLS_MODE = {
 }
 
 
+def _posture_record(zone) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(zone.zone,))):
+        found = dict(record.get("posture") or {})
+    return found
+
+
+def _posture_facts(zone) -> tuple[str, ...]:
+    """The posture beyond its mode, a few words each: "TLS 1.3+", "HTTPS forced"."""
+
+    found = _posture_record(zone)
+    minimum = str(found.get("min_tls_version", "")).strip()
+    return tuple(
+        fact
+        for fact in (
+            f"TLS {minimum}+" if minimum else "",
+            "HTTPS forced" if found.get("always_use_https") == "on" else "",
+        )
+        if fact
+    )
+
+
 def posture(zone) -> ZoneInsight | None:
     """How this domain answers over TLS, as Cloudflare currently holds it.
 
@@ -504,9 +527,7 @@ def posture(zone) -> ZoneInsight | None:
     than no card.
     """
 
-    found: dict[str, str] = {}
-    for _snapshot, record in inventory_about(ZONE_KIND, Subject.of(hostnames=(zone.zone,))):
-        found = dict(record.get("posture") or {})
+    found = _posture_record(zone)
     refused = _zone_part_refused(zone.zone, "posture")
     if refused is not None:
         return ZoneInsight(
@@ -557,13 +578,17 @@ def registration(zone) -> ZoneInsight | None:
         return None
     renews = bool(found.get("auto_renew"))
     days = days_until(when)
+    # The registrar reports its own name beside the dates; say it rather than
+    # "the registrar", which makes the reader go and find out which one.
+    registrar = str(found.get("registrar", "") or "").strip()
     return ZoneInsight(
         label="Registration",
         value=expiry_phrase(when.isoformat()),
         detail=(
-            "Renews itself at the registrar."
+            f"Renews itself through {registrar or 'the registrar'}."
             if renews
-            else "Auto-renew is off, so this has to be renewed by hand."
+            else f"Auto-renew is off{f' at {registrar}' if registrar else ''}, "
+            "so this has to be renewed by hand."
         ),
         # Only when both halves are true. A date alone is a calendar entry.
         concern=days <= 90 and not renews,
