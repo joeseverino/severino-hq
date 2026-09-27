@@ -37,7 +37,19 @@ def supported_capabilities() -> tuple[tuple[str, str], ...]:
     return enabled_controller_actions()
 
 
-def _manage(*args: str) -> dict[str, Any]:
+def _manage(*args: str, payload: Any = None) -> dict[str, Any]:
+    """Run one HQ controller command and return its JSON.
+
+    A payload goes on standard input, never the command line. Linux caps one
+    argument at 128 KiB, and a sweep of every connection passes that as soon
+    as the estate grows, at which point the exec fails and every report is
+    lost at once, with nothing to say why.
+    """
+
+    stdin = None
+    if payload is not None:
+        args = (*args, "--payload", "-")
+        stdin = json.dumps(payload, separators=(",", ":"))
     if os.environ.get("HQ_IN_PROCESS") == "1":
         manage_py = Path(__file__).resolve().parents[1] / "manage.py"
         command = [
@@ -54,6 +66,7 @@ def _manage(*args: str) -> dict[str, Any]:
         command = [
             docker,
             "exec",
+            "-i",
             container,
             "python",
             "manage.py",
@@ -61,11 +74,18 @@ def _manage(*args: str) -> dict[str, Any]:
             *args,
         ]
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            command, input=stdin, check=False, capture_output=True, text=True
+        )
     except OSError as exc:
-        raise BridgeError("HQ controller bridge could not start Docker.") from exc
+        raise BridgeError(
+            f"HQ controller bridge could not start: {exc.strerror or type(exc).__name__}."
+        ) from exc
     if result.returncode:
-        raise BridgeError("HQ controller bridge command failed.")
+        # The command's own last line says why; HQ writes it, so it names a
+        # rule rather than a secret.
+        said = (result.stderr or "").strip().splitlines()[-1:] or [""]
+        raise BridgeError(f"HQ controller bridge command failed: {said[0][:300]}")
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -82,24 +102,19 @@ def _report(
     conditions: list[dict[str, Any]],
     message: str,
 ) -> None:
-    payload = json.dumps(
-        {
-            "success": success,
-            "observed_generation": generation,
-            "status": status,
-            "conditions": conditions,
-            "message": message,
-        },
-        separators=(",", ":"),
-    )
     _manage(
         "report",
         "--controller-id",
         controller_id,
         "--operation",
         operation_id,
-        "--payload",
-        payload,
+        payload={
+            "success": success,
+            "observed_generation": generation,
+            "status": status,
+            "conditions": conditions,
+            "message": message,
+        },
     )
 
 
@@ -127,13 +142,7 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
     """
 
     try:
-        _manage(
-            action,
-            "--controller-id",
-            controller_id,
-            "--payload",
-            json.dumps(payload, separators=(",", ":")),
-        )
+        _manage(action, "--controller-id", controller_id, payload=payload)
     except (BridgeError, ProviderError, OSError, ValueError) as exc:
         # Swallowed, but not silently: stdout is the run's JSON result and is
         # parsed, so this is logged: the controller's logger, whose plain
@@ -141,11 +150,13 @@ def _post(action: str, controller_id: str, payload: Any) -> None:
         # quietly stopped reporting would leave the pages it feeds looking
         # settled while going stale, which is the failure worth noticing.
         # The type, not the message: a provider error can name a host or a
-        # path, and this line is the one that gets copied into a paste.
+        # path, and this line is the one that gets copied into a paste. The
+        # bridge's own reason is the exception: it is HQ's text, and without
+        # it a report that stops arriving says nothing about why.
         logger.warning(
             "%s report skipped: %s",
             action,
-            type(exc).__name__,
+            str(exc) if isinstance(exc, BridgeError) else type(exc).__name__,
             extra={"event": "controller.report.skipped", "action": action},
         )
 
@@ -163,11 +174,7 @@ def _analytics_windows(sites: list[dict[str, str]]) -> list[dict[str, str]]:
     if not identities:
         return []
     try:
-        plan = _manage(
-            "analytics-plan",
-            "--payload",
-            json.dumps(identities, separators=(",", ":")),
-        )
+        plan = _manage("analytics-plan", payload=identities)
     except BridgeError as exc:
         # Three completed days remain a safe degraded mode. The next successful
         # plan derives the missing span again, so a failed read strands nothing.

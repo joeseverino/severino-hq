@@ -432,8 +432,8 @@ def build_adapter(*, provider_model, provider_spec, applies):
 
     definition = provider_spec(
         KIND,
-        "Starts the composition when an extension's latest admission is not in "
-        "production, and reports each stage on the extension's commit.",
+        "Reports each extension's stage on its commit, from admission to "
+        "production, and comments once on its merged pull request.",
         GitHubDeliverySpec,
         actions={"reconcile": applies(automatic=True)},
         label="Continuous delivery",
@@ -453,8 +453,8 @@ def build_adapter(*, provider_model, provider_spec, applies):
         advanced_fields=("workflow", "branch", "production"),
         declaration_only=True,
         removal_note=lambda spec: (
-            "HQ stops starting compositions. The hourly schedule in "
-            f"{spec.get('repository', 'the host repository')} still delivers."
+            "HQ stops reporting on extension commits. Their admissions still "
+            f"start the composition in {spec.get('repository', 'the host repository')}."
         ),
     )
     return ControllerIntegrationAdapter(

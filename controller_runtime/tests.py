@@ -1574,6 +1574,31 @@ class WorkerTests(TestCase):
         self.assertTrue(command[1].endswith("/manage.py"))
         self.assertNotIn("docker", command)
 
+    @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
+    @mock.patch("controller_runtime.worker.subprocess.run")
+    def test_a_payload_goes_on_standard_input_whatever_its_size(self, run):
+        """One argument is capped at 128 KiB; a whole sweep is larger."""
+
+        run.return_value = mock.Mock(returncode=0, stdout='{"ok":true}')
+        sweep = {"example.kind": {"ok": True, "records": [{"name": "x" * 1000}] * 300}}
+
+        worker._manage("inventory", "--controller-id", "test", payload=sweep)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[-2:], ["--payload", "-"])
+        self.assertLess(max(len(part) for part in command), 4096)
+        self.assertEqual(json.loads(run.call_args.kwargs["input"]), sweep)
+
+    @mock.patch.dict("os.environ", {"HQ_IN_PROCESS": "1"}, clear=True)
+    @mock.patch("controller_runtime.worker.subprocess.run")
+    def test_a_failed_bridge_says_why(self, run):
+        run.return_value = mock.Mock(
+            returncode=1, stdout="", stderr="Traceback\nCommandError: Unknown kind.\n"
+        )
+
+        with self.assertRaisesRegex(worker.BridgeError, "Unknown kind"):
+            worker._manage("peek")
+
     @mock.patch("controller_runtime.worker.connections", return_value=[])
     @mock.patch("controller_runtime.worker._manage")
     def test_idle_plan_reports_connections_without_claiming(self, manage, connections):
@@ -1818,7 +1843,7 @@ class WorkerTests(TestCase):
 
         self.assertEqual(worker.run_once("test", apply=True), 1)
 
-        report_payload = json.loads(manage.call_args.args[-1])
+        report_payload = manage.call_args.kwargs["payload"]
         self.assertFalse(report_payload["success"])
         self.assertNotIn("password", json.dumps(report_payload).lower())
 

@@ -992,12 +992,8 @@ class OperationPolicyTests(TestCase):
         )
 
         reported = StringIO()
-        call_command(
-            "infrastructure_controller",
-            "report",
-            controller_id="example-controller",
-            operation=queued["operation"]["id"],
-            payload=json.dumps(
+        # On standard input, as the controller sends it.
+        report = json.dumps(
                 {
                     "success": True,
                     "observed_generation": self.resource.generation,
@@ -1009,9 +1005,16 @@ class OperationPolicyTests(TestCase):
                     ],
                     "message": "All consumers verified.",
                 }
-            ),
-            stdout=reported,
-        )
+            )
+        with patch("sys.stdin", StringIO(report)):
+            call_command(
+                "infrastructure_controller",
+                "report",
+                controller_id="example-controller",
+                operation=queued["operation"]["id"],
+                payload="-",
+                stdout=reported,
+            )
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.observed_generation, self.resource.generation)
         self.assertEqual(
