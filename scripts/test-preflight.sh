@@ -155,7 +155,39 @@ expect 1 "an uncommitted change"
 says "FAILED   committed tree"
 rm "${repo}/uncommitted"
 
-# 4. Each host fault fails the preflight and says what it is.
+# 4. --remote reads GitHub's checks on HEAD instead of running ci-local.
+cat >"${bin}/gh" <<'EOF'
+#!/bin/sh
+echo "gh $*" >>"${TEST_LOG}"
+case "$1" in
+    repo) echo example/host ;;
+    api) printf '%s\n' "${TEST_CHECKS}" ;;
+esac
+EOF
+chmod 0755 "${bin}/gh"
+git_ update-ref refs/remotes/origin/feature HEAD
+export PREFLIGHT_REMOTE_POLL=0 PREFLIGHT_REMOTE_TIMEOUT=0
+export TEST_CHECKS="completed success test
+completed success code scanning"
+expect 0 "every GitHub check passed" --remote
+says "code scanning"
+if grep -q '^ci-local' "${TEST_LOG}"; then fail "--remote still ran ci-local"; fi
+TEST_CHECKS="completed success test
+completed failure structural bar"
+expect 1 "a failed GitHub check" --remote
+TEST_CHECKS="in_progress - test"
+expect 1 "a GitHub check still running when time runs out" --remote
+TEST_CHECKS=""
+expect 1 "no GitHub check at all" --remote
+git_ update-ref -d refs/remotes/origin/feature
+git_ update-ref -d refs/remotes/origin/main
+TEST_CHECKS="completed success test"
+expect 1 "an unpushed HEAD" --remote
+says "HEAD is not pushed"
+git_ update-ref refs/remotes/origin/main HEAD~1
+unset TEST_CHECKS PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT
+
+# 5. Each host fault fails the preflight and says what it is.
 host_fault() { # host_fault <why> <expected output>
     expect 1 "$1"
     says "$2"
@@ -189,7 +221,7 @@ TEST_ACCOUNT="$(id -un)"
 
 expect 0 "the repaired host"
 
-# 5. Every sudo in the host half reads /dev/null: stdin is the script itself.
+# 6. Every sudo in the host half reads /dev/null: stdin is the script itself.
 if grep -nE '(^[[:space:]]*|\$\(|[;&|][[:space:]]*)sudo[[:space:]]' \
     "${repo_dir}/scripts/preflight-host.sh" | grep -v '</dev/null'; then
     fail "a sudo in preflight-host.sh does not read /dev/null"

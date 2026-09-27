@@ -2,10 +2,14 @@
 # The one command whose exit 0 means ready to release.
 #
 #   scripts/preflight.sh               # every gate, the deploy host included
+#   scripts/preflight.sh --remote      # the heavy gates read from GitHub instead
 #   scripts/preflight.sh --skip-host   # local gates only; never exits 0
 #
 # Runs, in order:
-#   1. scripts/ci-local.sh, with every gate required (a gate it cannot run fails)
+#   1. scripts/ci-local.sh, with every gate required (a gate it cannot run fails);
+#      or, with --remote, every check GitHub ran on this exact commit, waited
+#      for and required to pass: the same gates, on GitHub's machines. The
+#      commit must be pushed.
 #   2. scripts/check.sh, with the composed pass required (SEVERINO_HQ_PLUGINS set)
 #   3. scripts/preflight-host.sh on the deploy host over SSH: read-only checks
 #      of the checkout's ownership, the runner's sudo rule, the root-owned
@@ -25,11 +29,14 @@ repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "${repo_root}"
 
 skip_host=0
-case "${1:-}" in
-    "") ;;
-    --skip-host) skip_host=1 ;;
-    *) echo "usage: scripts/preflight.sh [--skip-host]" >&2; exit 2 ;;
-esac
+remote=0
+for argument in "$@"; do
+    case "${argument}" in
+        --skip-host) skip_host=1 ;;
+        --remote) remote=1 ;;
+        *) echo "usage: scripts/preflight.sh [--remote] [--skip-host]" >&2; exit 2 ;;
+    esac
+done
 
 if [ -f .env.dev ]; then
     set -a
@@ -60,7 +67,37 @@ else
     record passed "committed tree at $(git rev-parse --short HEAD)"
 fi
 
-gate "ci-local, every gate required" env CI_LOCAL_REQUIRE_ALL=1 scripts/ci-local.sh
+# Every check GitHub runs on HEAD, once each has finished. None started yet
+# is waiting, not passing; a check that did not succeed is a failure.
+github_gates() {
+    sha="$(git rev-parse HEAD)"
+    if [ -z "$(git branch -r --contains "${sha}" 2>/dev/null)" ]; then
+        echo "HEAD is not pushed, so GitHub has checked nothing of it." >&2
+        return 1
+    fi
+    repository="$(command gh repo view --json nameWithOwner --jq .nameWithOwner)"
+    deadline=$(( $(date +%s) + ${PREFLIGHT_REMOTE_TIMEOUT:-3600} ))
+    while :; do
+        checks="$(command gh api "repos/${repository}/commits/${sha}/check-runs?per_page=100" \
+            --jq '.check_runs[] | "\(.status) \(.conclusion // "-") \(.name)"')"
+        if [ -n "${checks}" ] && ! printf '%s\n' "${checks}" | grep -qv '^completed '; then
+            break
+        fi
+        if [ "$(date +%s)" -ge "${deadline}" ]; then
+            echo "GitHub's checks did not finish in time." >&2
+            return 1
+        fi
+        sleep "${PREFLIGHT_REMOTE_POLL:-30}"
+    done
+    printf '%s\n' "${checks}" | sed 's/^completed /  /'
+    ! printf '%s\n' "${checks}" | grep -Ev '^completed (success|skipped|neutral) ' >/dev/null
+}
+
+if [ "${remote}" -eq 1 ]; then
+    gate "every GitHub check on this commit" github_gates
+else
+    gate "ci-local, every gate required" env CI_LOCAL_REQUIRE_ALL=1 scripts/ci-local.sh
+fi
 gate "check.sh, composed pass required" env CHECK_REQUIRE_COMPOSED=1 scripts/check.sh
 
 # The host half's inputs, derived from this commit and from main.
