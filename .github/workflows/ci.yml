@@ -519,7 +519,7 @@ jobs:
     name: Ready
     needs: [checks, tests, browser, image]
     # The one check the ruleset requires. On a pull request it waits for the
-    # same commit's Composition and CodeQL too, then HQ's app says in one line
+    # same commit's HQ composition and CodeQL too, then HQ's app says in one line
     # whether it is ready to merge, or held, why, and what fixes it. A gate
     # added or removed here never touches the repository's settings.
     if: always()
@@ -527,7 +527,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      # To read this run's and the Composition's jobs, and a failed job's log.
+      # To read this run's, HQ's and CodeQL's jobs, and a failed job's log.
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

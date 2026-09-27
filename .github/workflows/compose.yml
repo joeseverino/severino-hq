@@ -1,6 +1,6 @@
-name: Compose
+name: HQ
 
-# Builds the one image production runs: this host plus every admitted
+# Builds HQ, the one image production runs: this host plus every admitted
 # extension, verified as one application. Extensions verify and admit
 # themselves and build no image of their own, so deploying one never replaces
 # the others.
@@ -76,7 +76,7 @@ env:
 
 jobs:
   compose:
-    name: Composition
+    name: Compose
     # A failed host build must not be composed onto. And a fork's pull request
     # is not composed at all: reading the extensions' admission artifacts needs
     # a secret a fork cannot have, so it would fail on the download step with a

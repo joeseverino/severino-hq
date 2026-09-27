@@ -64,7 +64,7 @@ ci_url="$(gh api "repos/${repo}/actions/runs?head_sha=${COMMIT}&per_page=30" \
 digest="${IMAGE##*@}"
 image_name="${IMAGE%@*}"
 pipeline="[Deploy](${RUN_URL})"
-[ -n "${COMPOSE_URL:-}" ] && pipeline="[Compose](${COMPOSE_URL}) → ${pipeline}"
+[ -n "${COMPOSE_URL:-}" ] && pipeline="[HQ](${COMPOSE_URL}) → ${pipeline}"
 [ -n "${ci_url}" ] && pipeline="[CI](${ci_url}) → ${pipeline}"
 case "${conclusion}" in
   success) outcome="Healthy${took:+ in ${took}}" ;;

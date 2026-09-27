@@ -269,9 +269,9 @@ request and push: Checks (lint, types, lockfiles, workflows, shell, a
 bar and Scorecard), Tests on Python 3.12/3.13/3.14, Browser, and Image (a
 production image that must boot healthy and pass Trivy, then published and
 signed), and **Ready**, the one required check. **CodeQL** runs GitHub's code
-scanning beside it. **Compose**
-([`.github/workflows/compose.yml`](.github/workflows/compose.yml)) assembles
-that host with every admitted extension and verifies them as one application.
+scanning beside it. **HQ**
+([`.github/workflows/compose.yml`](.github/workflows/compose.yml)) builds HQ
+itself: that host with every admitted extension, verified as one application.
 **Deploy** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
 runs only for `main`: it waits for a person's approval, then a **self-hosted
 runner on the homelab** deploys the signed composition with health rollback.

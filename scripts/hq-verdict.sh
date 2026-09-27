@@ -25,10 +25,10 @@ readonly wait_seconds="${VERDICT_WAIT_SECONDS:-2400}"
 rows="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
   --jq '.jobs[] | select(.name != "Ready") | "\(.id)\t\(.name)\t\(.conclusion // "pending")"')"
 
-# The same commit's other workflows, once each has finished: its Composition
-# (only when the pull request is composed) and CodeQL.
+# The same commit's other workflows, once each has finished: HQ, which composes
+# it (only when the pull request is composed), and CodeQL.
 others="CodeQL"
-[ "${COMPOSED:-false}" = true ] && others="Compose CodeQL"
+[ "${COMPOSED:-false}" = true ] && others="HQ CodeQL"
 deadline=$(( $(date +%s) + wait_seconds ))
 for workflow in ${others}; do
   found=""

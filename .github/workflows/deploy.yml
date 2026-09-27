@@ -1,6 +1,6 @@
 name: Deploy
 
-# Production, and nothing else. Runs when Compose has published a composition
+# Production, and nothing else. Runs when HQ has published a composition
 # for a commit on main, or by hand to redeploy or roll back to an exact commit:
 # choose "Run workflow" and give it the commit.
 #
@@ -16,13 +16,13 @@ name: Deploy
 # skipped deploy.
 on:
   workflow_run:
-    workflows: [Compose]
+    workflows: [HQ]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       commit:
-        description: The commit on main to deploy. Blank deploys the newest one Compose published.
+        description: The commit on main to deploy. Blank deploys the newest one HQ published.
         required: false
         default: ""
 

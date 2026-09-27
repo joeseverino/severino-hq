@@ -140,7 +140,7 @@ bundle, and the host composes them, so deploying one never replaces the others.
 A plugin's admission starts the composition itself, and nothing polls for it.
 The last step of the host's `admit-plugin` action mints a token as HQ's
 GitHub App, asking only for Actions write on this repository, and
-dispatches **Compose** with an input that names no
+dispatches **HQ** with an input that names no
 plugin. The token lasts an hour and can do nothing but start a workflow here;
 the app's key is the only credential a plugin repository holds, as a secret on
 an `admission` environment limited to `main`. A deploy
@@ -160,7 +160,7 @@ admission policy) is hashed into a fingerprint and published as a
 `composition:fp-…` tag beside the image. An admission's dispatch whose
 fingerprint is already published (the same commit admitted twice) stops before
 building. Every other trigger rebuilds: a host build, a pull request, and a
-hand-run **Compose** (`workflow_dispatch`), which is how
+hand-run **HQ** (`workflow_dispatch`), which is how
 you rebuild the current set on purpose.
 
 The composition reads the plugins' admissions as the same app, through a token
