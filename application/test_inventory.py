@@ -750,6 +750,77 @@ class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
         self.assertEqual(unmanaged(), ())
 
 
+class ADeletedContainerIsForgottenTests(TestCase):
+    """The listing includes stopped containers, so one missing from it is gone.
+
+    HQ cannot create a container, so a declaration of a deleted one can never be
+    met and would only raise a finding nobody can clear.
+    """
+
+    ELSEWHERE = {**A_COMPOSED_CONTAINER, "name": "b-web", "host": "b-docker-host"}
+
+    def setUp(self):
+        managing_everything(("portainer", "a-portainer"))
+        record_sweep(
+            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, self.ELSEWHERE]}),
+            principal=cli_principal(),
+        )
+
+    def names(self):
+        return {
+            resource.spec.get("name")
+            for resource in ManagedResource.objects.filter(kind="portainer.container")
+        }
+
+    def sweep(self, *records, **report):
+        return record_sweep(
+            {"portainer.container": {"ok": True, "records": list(records), **report}},
+            principal=cli_principal(),
+        )
+
+    def test_one_its_machine_no_longer_lists_is_forgotten(self):
+        kept = {**A_COMPOSED_CONTAINER, "name": "a-db"}
+
+        result = self.sweep(kept, self.ELSEWHERE)
+
+        self.assertNotIn("a-web", self.names())
+        self.assertEqual(len(result["retired"]), 1)
+        self.assertTrue(
+            AuditLog.objects.filter(action=AuditLog.Action.DELETED).exists()
+        )
+
+    def test_a_machine_the_sweep_did_not_list_keeps_its_containers(self):
+        """Unreachable lists nothing, which says nothing about what runs there."""
+
+        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"})
+
+        self.assertIn("b-web", self.names())
+
+    def test_a_refused_or_failed_listing_retires_nothing(self):
+        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, refused_parts=["stacks"])
+        self.assertIn("a-web", self.names())
+        record_sweep(
+            {"portainer.container": {"ok": False, "records": [], "error": "down"}},
+            principal=cli_principal(),
+        )
+        self.assertIn("a-web", self.names())
+
+    def test_one_on_demand_is_kept(self):
+        resource = ManagedResource.objects.get(spec__name="a-web")
+        resource.spec = {**resource.spec, "on_demand": True}
+        resource.save(update_fields=["spec"])
+
+        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, self.ELSEWHERE)
+
+        self.assertIn("a-web", self.names())
+
+    def test_it_is_adopted_again_if_it_returns(self):
+        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, self.ELSEWHERE)
+        self.sweep(A_COMPOSED_CONTAINER, self.ELSEWHERE)
+
+        self.assertIn("a-web", self.names())
+
+
 def _adoptable():
     """Every provider a sweep can rebuild a spec for, with its sample record."""
 

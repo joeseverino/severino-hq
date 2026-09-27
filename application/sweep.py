@@ -25,6 +25,7 @@ from .inventory import (
     adopt_discovered,
     confirm_observed,
     record_inventory,
+    retire_departed,
 )
 from .zones import adopt_discovered_records
 
@@ -57,9 +58,11 @@ def record_sweep(
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)
+    # And the containers the sweep no longer lists at all, which were deleted.
+    retired = retire_departed(payload)
     settle_read_requests()
     _ring_for_new_images(payload)
-    return {**result, "adopted": adopted, "confirmed": confirmed}
+    return {**result, "adopted": adopted, "confirmed": confirmed, "retired": retired}
 
 
 def _ring_for_new_images(payload: dict[str, Any]) -> None:

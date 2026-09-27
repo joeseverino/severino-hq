@@ -1,28 +1,27 @@
 name: Deploy
 
-# Production, and nothing else. Runs when Compose has published HQ
-# for a commit on main, or by hand to redeploy or roll back to an exact commit:
-# choose "Run workflow" and give it the commit.
+# Production, and nothing else. Started by Compose once it has published HQ
+# for a commit on main, handed that commit; or by a person, to redeploy or roll
+# back: choose "Run workflow" and give it the commit.
 #
-#   Resolve  finds the signed composition for the commit, and says on it, as
-#            HQ's app, that it waits for approval
+#   Resolve  finds the signed image for the commit, and says on it, as HQ's
+#            app, that it waits for approval
 #   Deploy   on the self-hosted runner, after a person approves: verify the
 #            signature, recreate, wait for health, roll back if it fails
 #   Report   says on the commit whether it is live, or why not and what fixes
 #            it, and comments once on the merged pull request
 #
-# A pull request never starts this workflow, so no pull request's code ever
-# reaches the self-hosted runner, and a pull request's checks never show a
-# skipped deploy.
+# Only a dispatch starts it, so no pull request, and no run of anything else,
+# can reach the self-hosted runner.
 on:
-  workflow_run:
-    workflows: [Compose]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       commit:
-        description: The commit on main to deploy. Blank deploys the newest one Compose published.
+        description: The commit on main to deploy. Blank deploys main as it is now.
+        required: false
+        default: ""
+      compose_run:
+        description: The Compose run that published it, when Compose started this.
         required: false
         default: ""
 
@@ -36,15 +35,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve
-    # Only a composition of main: a run Compose made for a pull request, or
-    # one that failed, has nothing to deploy.
-    if: >-
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event != 'pull_request' &&
-       github.event.workflow_run.head_repository.full_name == github.repository &&
-       github.event.workflow_run.head_branch == 'main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -62,12 +53,12 @@ jobs:
       - name: Find the signed composition for the commit
         id: find
         env:
-          # A hand-given commit is input: passed as data, never interpolated.
+          # A given commit is input: passed as data, never interpolated.
           ASKED: ${{ inputs.commit }}
-          COMPOSED: ${{ github.event.workflow_run.head_sha || github.sha }}
+          MAIN: ${{ github.sha }}
         run: |
           set -euo pipefail
-          commit="${ASKED:-$COMPOSED}"
+          commit="${ASKED:-$MAIN}"
           if ! [[ "$commit" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error title=Not a commit::Give the full 40-character commit to deploy."
             exit 1
@@ -75,15 +66,8 @@ jobs:
           tag="ghcr.io/${GITHUB_REPOSITORY}/composition:${commit}"
           if ! digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"') \
              || [ -z "$digest" ]; then
-            # Compose publishes nothing when an admission changed nothing, so
-            # there is nothing new to deploy. By hand, a missing image is an
-            # error: that commit was never composed.
-            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-              echo "::error title=Never composed::No composition was published for ${commit:0:12}. Run Compose for it first."
-              exit 1
-            fi
-            echo "Nothing new was published for ${commit:0:12}; nothing to deploy." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "::error title=Never composed::No image of HQ was published for ${commit:0:12}. Run Compose for it first."
+            exit 1
           fi
           echo "image=${tag%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
@@ -242,5 +226,5 @@ jobs:
           RESULT: ${{ needs.deploy.result }}
           THIS_RUN: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMPOSE_URL: ${{ github.event.workflow_run.html_url }}
+          COMPOSE_RUN: ${{ inputs.compose_run }}
         run: scripts/hq-report.sh

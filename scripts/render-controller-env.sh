@@ -29,12 +29,14 @@ jq -e '
         and all(
             to_entries[];
             (.key | test("^[A-Z][A-Z0-9_]*$"))
-            and (.value.source | IN("connection_ref", "url", "field"))
+            and (.value.source | IN("connection_ref", "url", "field", "constant"))
             and (
                 if .value.source == "field" then
                     ([.value.id, .value.label]
                      | map(select(type == "string" and length > 0))
                      | length) == 1
+                elif .value.source == "constant" then
+                    (.value.value | type == "string" and length > 0)
                 else true
                 end
             )
@@ -130,6 +132,14 @@ for item_id in ${item_ids}; do
         case "${source}" in
             connection_ref)
                 value="$(printf %s "${connection_ref}" | jq -Rr '@sh')"
+                ;;
+            # What the projection itself means. A projection only one provider
+            # uses names it, so its items need not repeat it.
+            constant)
+                value="$(
+                    jq -r --arg projection "${projection}" --arg name "${env_name}" \
+                        '.projections[$projection][$name].value | @sh' "${registry}"
+                )"
                 ;;
             url)
                 index="$(

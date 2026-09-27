@@ -286,6 +286,43 @@ def confirm_observed(payload: dict[str, Any]) -> int:
     return confirmed
 
 
+def retire_departed(payload: dict[str, Any]) -> list[str]:
+    """Forget containers a complete listing of their machine no longer holds.
+
+    The listing includes stopped containers, so one missing from it was
+    deleted, not stopped: a one-off ``docker run``, or a compose service
+    renamed. HQ cannot create a container (its compose file defines it), so a
+    declaration of one that is gone can never be met, and keeping it only
+    raises a finding nobody can clear. The sweep that adopts what appears
+    forgets what departs.
+
+    Only machines this sweep listed: an unreachable one lists nothing and
+    retires nothing. A container marked on demand is kept, being declared
+    precisely because it comes and goes. Nothing is kept out, so a container
+    that returns under the same name is adopted again.
+    """
+
+    from control_plane.providers import CONTAINER_KIND
+
+    report = payload.get(CONTAINER_KIND) or {}
+    records = report.get("records") or []
+    if not report.get("ok", True) or report.get("refused_parts") or not records:
+        return []
+    from_record = PROVIDERS[CONTAINER_KIND].from_record
+    if from_record is None:
+        return []
+    listed = {_identity(CONTAINER_KIND, from_record(record)) for record in records}
+    hosts = {identity[0] for identity in listed}
+    retired = []
+    for resource in ManagedResource.objects.filter(kind=CONTAINER_KIND):
+        identity = _identity(CONTAINER_KIND, resource.spec)
+        if identity[0] not in hosts or identity in listed or resource.spec.get("on_demand"):
+            continue
+        retired.append(resource.key)
+        resource.delete()
+    return retired
+
+
 def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | None:
     provider = PROVIDERS[kind]
     if provider.from_record is None:

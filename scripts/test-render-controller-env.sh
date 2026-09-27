@@ -169,6 +169,26 @@ check "the store vault is rendered" "${fixture_dir}/projections-only.json" 0 \
 check "the store item is rendered" "${fixture_dir}/projections-only.json" 0 \
     "EXAMPLE_STORE_ITEM='item-1'"
 
+# 7a. A projection only one provider uses names it, so its items need not.
+cat >"${fixture_dir}/constant.json" <<'JSON'
+{
+  "schema_version": 1,
+  "projections": {
+    "example_app": {
+      "CONNECTION_REF": {"source": "connection_ref"},
+      "PROVIDER": {"source": "constant", "value": "example_app"}
+    }
+  }
+}
+JSON
+write_op '[{"id":"item-1"}]' '{"fields":[
+  {"id":"a","label":"connection_ref","value":"example"},
+  {"id":"b","label":"projection","value":"example_app"},
+  {"id":"c","label":"env_prefix","value":"EXAMPLE"}
+]}'
+check "a constant is rendered from the projection" "${fixture_dir}/constant.json" 0 \
+    "EXAMPLE_PROVIDER='example_app'"
+
 # 7c. A bootstrap reference in another vault is rendered; one in the vault the
 #     controller reads is refused, because the renderer could read it.
 bootstrap_item() { # bootstrap_item REFERENCE

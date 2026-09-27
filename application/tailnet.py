@@ -667,14 +667,20 @@ class _PortNamer:
 def posture_facts() -> tuple[tuple[str, str], ...]:
     """Policy settings worth a finding, as topology facts on the tailnet connection.
 
-    ``devices-join-unapproved`` when device approval is read and off;
-    ``empty-group-granted`` for each group with no members that a grant or
-    shell rule names.
+    ``devices-join-unapproved`` when device approval is read and off, and
+    tailnet lock is not on; ``empty-group-granted`` for each group with no
+    members that a grant or shell rule names.
+
+    Tailnet lock is approval by signature: a new node is filtered out by every
+    peer until a signing key vouches for it, and the coordination server holds
+    none of those keys. That is the stronger of the two, and Tailscale will
+    not run device approval beside it, so asking for approval under lock asks
+    for something that cannot be turned on.
     """
 
     found = policy()
     entries: list[tuple[str, str]] = []
-    if found.settings.get("devicesApprovalOn") is False:
+    if found.settings.get("devicesApprovalOn") is False and not found.lock.get("enabled"):
         entries.append(("devices-join-unapproved", "Off"))
     named = {
         name
