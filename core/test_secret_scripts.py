@@ -284,6 +284,63 @@ esac
         result = self.run_script("refresh-secrets.sh")
         self.assertNotEqual(result.returncode, 0)
 
+    def prepare_signing(self, *, public_from=None):
+        """A GitHub App connection whose signing key item holds an RSA pair."""
+
+        targets = self.prepare_refresh()
+        targets[0].chmod(0o600)
+        keys = self.root / "keys"
+        keys.mkdir()
+        for name in ("app", "other"):
+            subprocess.run(["ssh-keygen", "-q", "-t", "rsa", "-b", "2048", "-m", "PKCS8",
+                            "-N", "", "-f", str(keys / name)], check=True)
+        self.item = {"fields": [
+            {"label": "connection_ref", "value": "github"},
+            {"label": "projection", "value": "github_app"},
+            {"label": "env_prefix", "value": "GITHUB"},
+            {"label": "app_id", "value": "12345"},
+            {"label": "signing_key", "value": "Example app key"},
+        ]}
+        self.write_item()
+        public = keys / f"{public_from or 'app'}.pub"
+        self.stub("op", f'''
+case "$1 $2" in
+    "item list") printf '[{{"id":"example-item"}}]' ;;
+    "item get")
+        if [ "$3" = "example env" ]; then cat "$FIXTURES/app.json"; else cat "$FIXTURES/item.json"; fi ;;
+    "read op://Example Vault/Example app key/private key") cat '{keys / "app"}' ;;
+    "read op://Example Vault/Example app key/public key") cat '{public}' ;;
+    *) exit 1 ;;
+esac
+''')
+        return keys
+
+    def test_a_signing_key_renders_for_openssl_beside_the_identities(self):
+        keys = self.prepare_signing()
+        result = self.run_script("refresh-secrets.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        live = self.runtime / "ssh"
+        self.assertEqual((live / "github.key").read_text(), (keys / "app").read_text())
+        self.assertEqual((live / "github.key").stat().st_mode & 0o777, 0o400)
+        self.assertEqual((live / "github.key.pub").read_text(), (keys / "app.pub").read_text())
+        signed = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(live / "github.key")],
+                                input=b"header.claims", capture_output=True, check=True)
+        self.assertEqual(len(signed.stdout), 256)
+
+    def test_a_signing_key_whose_halves_differ_is_refused(self):
+        self.prepare_signing(public_from="other")
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("do not match", result.stderr)
+        self.assertFalse((self.runtime / "ssh" / "github.key").exists())
+
+    def test_a_signing_key_must_name_an_item_not_a_reference(self):
+        self.prepare_signing()
+        self.item["fields"][-1]["value"] = "op://Elsewhere/key"
+        self.write_item()
+        result = self.run_script("refresh-secrets.sh")
+        self.assertNotEqual(result.returncode, 0)
+
     def controller_contract(self, command):
         return subprocess.run(
             ["sh", "-c", '. "$1"; ' + command, "sh",

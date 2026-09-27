@@ -18,7 +18,8 @@ from control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from control_plane.providers import CONNECTION_CREDENTIALS, CONNECTION_LABELS, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 
 from .connections import _controller_contract
 from .credential_sight import (
@@ -271,7 +272,10 @@ class PerConnectionSightTests(TestCase):
             sight_by_connection({"edge": "ssh", "shared-host": "ssh", "dns": "cloudflare_dns"})
 
     def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
-        from control_plane.attribution import PER_CONNECTION_PROVIDERS, unattributed_kinds
+        from control_plane.attribution import (
+            PER_CONNECTION_PROVIDERS,
+            unattributed_kinds,
+        )
 
         class Unnamed(ObservationRecord):
             record: str

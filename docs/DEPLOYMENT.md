@@ -363,10 +363,47 @@ a self-hosted runner deploys it health-gated with rollback. Production runs the
 composed image (`…/composition:…`), never the host image on its own. Migrations
 and `collectstatic` run on container boot via `entrypoint.sh`.
 
-An extension merge deploys too, without anything being run by hand: the
-composition workflow runs on a schedule and rebuilds when the extension wheel
-digests change. See [`PLUGINS.md`](PLUGINS.md#composition). To deploy an
-extension immediately, run that workflow by hand (`workflow_dispatch`).
+An extension merge deploys too, without anything being run by hand. With a
+GitHub App connection that manages `github.delivery` (below), the controller
+notices a new admission within a minute, dispatches the composition as the app,
+and reports each stage as a **Severino HQ · production** check on the
+extension's commit: queued, waiting for deploy approval, then live once
+production runs that commit, with one comment on the merged pull request. The
+hourly schedule is the backstop for a missed dispatch. See
+[`PLUGINS.md`](PLUGINS.md#composition).
+
+#### Continuous delivery through a GitHub App
+
+Register a GitHub App on your account with no webhook and these repository
+permissions: Actions read and write, Checks read and write, Contents read, Pull
+requests read and write. Install it on the host repository and each extension
+repository. Import its private key into a 1Password **SSH Key** item, then
+create the connection item in the controller vault:
+
+| Field | Value |
+|---|---|
+| `connection_ref` | any name, for example `github` |
+| `projection` | `github_app` |
+| `env_prefix` | `GITHUB` |
+| `app_id` | the App ID |
+| `signing_key` | the SSH Key item's name |
+| `manages` | `1` |
+
+The key is rendered beside the controller's SSH identities and read only by
+openssl, which signs GitHub's JWT; HQ never loads it. Each call mints an
+installation token for its own repositories and permissions, for an hour. The
+dispatch into the host repository carries a fixed input that names no
+extension. The connection's probe shows the key's fingerprint as GitHub lists
+it, so a rotation is: generate a second key on the app, replace the item's key,
+wait for the probe to show the new fingerprint, delete the old key on GitHub.
+Adopt the `github.delivery` record the first sweep finds.
+
+Read before writing. Grant the app only the read half first (Actions, Checks,
+Contents and Pull requests: read) and leave `manages` off the item: the
+connection then observes only, and the sweep reports each extension's admitted
+and running commit and the composition run that carries it, with nothing
+dispatched and nothing written. Once that matches GitHub, raise Actions, Checks
+and Pull requests to write, set `manages` to `1`, and adopt.
 
 > **`hq deploy` is legacy: do not run it.** It predates composition and
 > deploys the *host-only* image, which takes every extension off production

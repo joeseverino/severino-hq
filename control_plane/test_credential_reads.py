@@ -13,7 +13,7 @@ from django.test import SimpleTestCase
 
 from .credential_reads import UNREGISTERED_READS, observer_permissions
 from .observations import OBSERVATIONS
-from .providers import CONNECTION_CREDENTIALS
+from .connection_kinds import CONNECTION_CREDENTIALS
 
 SCRIPTS = Path(settings.BASE_DIR) / "scripts"
 

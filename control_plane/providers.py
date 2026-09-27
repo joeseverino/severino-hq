@@ -28,6 +28,7 @@ from application.ui import counted
 from .attribution import unattributed_kinds
 from .consoles import cloudflare_dashboard, tailscale_machine
 from .names import certificate_covers, in_zone, normalized_hostname
+from .connection_kinds import CONNECTION_CREDENTIALS
 from .observations import OBSERVATIONS
 
 
@@ -2300,6 +2301,7 @@ _PROVIDERS = (
         ),
     ),
     _ADMITTED_PROVIDER_DEFINITIONS["npm.proxy_host"],
+    _ADMITTED_PROVIDER_DEFINITIONS["github.delivery"],
     ProviderSpec(
         "portainer.stack",
         "A set of containers on one machine. HQ creates it in Portainer if "
@@ -2728,54 +2730,6 @@ _OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
 
 def observer_abilities() -> tuple[ObserverAbility, ...]:
     return _OBSERVER_ABILITIES
-
-
-# How each connection provider's credential can be held, declared once beside
-# the providers that name them. The controller reports that a credential reached
-# its endpoint, never what it is allowed to do, so the only honest statement
-# about least privilege is the one the provider's credential model permits: a
-# scoped provider issues narrow tokens whose grants HQ could verify; a coarse
-# one issues a login or an admin token that is the whole account.
-CONNECTION_CREDENTIALS: Mapping[str, str] = MappingProxyType(
-    {
-        "cloudflare_api": "scoped",
-        "cloudflare_dns": "scoped",
-        # A service account token is issued per vault and per permission, so the
-        # one HQ carries can be write access to a single item's vault and
-        # nothing else. That is the property the publishing adapter is built to
-        # deserve rather than to rely on.
-        "onepassword": "scoped",
-        "tailscale": "scoped",
-        "adguard": "coarse",
-        "npm": "coarse",
-        "portainer": "coarse",
-        "ssh": "coarse",
-    }
-)
-
-
-def connection_credential(provider: str) -> str:
-    """The credential model of one connection provider; blank when unnamed."""
-
-    return CONNECTION_CREDENTIALS.get(provider, "")
-
-
-# Each connection provider's name as the page shows it.
-CONNECTION_LABELS: Mapping[str, str] = MappingProxyType(
-    {
-        "cloudflare_api": "Cloudflare API",
-        "cloudflare_dns": "Cloudflare DNS",
-        "onepassword": "1Password",
-        "tailscale": "Tailscale",
-        "adguard": "AdGuard Home",
-        "npm": "Nginx Proxy Manager",
-        "portainer": "Portainer",
-        "ssh": "SSH",
-    }
-)
-
-if set(CONNECTION_LABELS) != set(CONNECTION_CREDENTIALS):
-    raise ValueError("Every connection provider needs a label and a credential model.")
 
 
 # A provider a resource can be reconciled through, or an observer can read

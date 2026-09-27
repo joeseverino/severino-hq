@@ -18,7 +18,8 @@ from django.urls import reverse
 
 from control_plane.names import normalized_hostname
 from control_plane.models import ManagedResource
-from control_plane.providers import CONNECTION_LABELS, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .connections import (

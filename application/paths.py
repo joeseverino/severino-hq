@@ -28,12 +28,12 @@ from control_plane.certificate_authorities import authority_name
 from control_plane.names import is_hostname, normalized_hostname
 from control_plane.observations import OBSERVATIONS
 from control_plane.providers import (
-    CONNECTION_LABELS,
     PROVIDERS,
     TAILNET_KIND,
     certificate_covers,
     expiry_phrase,
 )
+from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined, Subject, readings, snapshots_of

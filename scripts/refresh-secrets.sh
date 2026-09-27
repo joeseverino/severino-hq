@@ -96,7 +96,7 @@ if awk -F '\t' 'NF != 5 { bad = 1 } END { exit !bad }' "${staging}/identities.ts
 fi
 while IFS="${tab}" read -r ref identity host port host_key; do
     case "${ref}" in
-        known_hosts | *.pub)
+        known_hosts | *.pub | *.key)
             echo "Connection ${ref} has a name its identity files would collide with." >&2
             exit 1 ;;
     esac
@@ -139,6 +139,50 @@ while IFS="${tab}" read -r ref identity host port host_key; do
     printf '[%s]:%s %s\n' "${host}" "${port}" "${host_key}" >>"${identities}/known_hosts"
 done <"${staging}/identities.tsv"
 chmod 444 "${identities}/known_hosts"
+
+# Signing keys for connections that authenticate by signature (a GitHub App).
+# Each names an SSH key item in the same vault (`signing_key`); its private half
+# is rendered as PKCS#8 for openssl and read by nothing else, its public half
+# for the fingerprint the provider lists.
+(
+    set -a
+    # shellcheck disable=SC1090  # rendered above, shell-quoted by the renderer
+    . "${temporary}"
+    controller_connection_prefixes "${temporary}" | while IFS= read -r prefix; do
+        eval "signing=\${${prefix}_SIGNING_KEY:-}"
+        [ -n "${signing}" ] || continue
+        eval "printf '%s\t%s\n' \"\${${prefix}_CONNECTION_REF}\" \"\${signing}\""
+    done
+) >"${staging}/signing.tsv"
+if awk -F '\t' 'NF != 2 { bad = 1 } END { exit !bad }' "${staging}/signing.tsv"; then
+    echo "Refusing a signing connection whose fields contain a tab." >&2
+    exit 1
+fi
+while IFS="${tab}" read -r ref signing; do
+    case "${ref}" in
+        '' | .* | */* | known_hosts | *.pub | *.key)
+            echo "Connection ${ref} has an invalid name." >&2
+            exit 1 ;;
+    esac
+    case "${signing}" in
+        '' | */* | op:*)
+            echo "Connection ${ref} names an invalid signing key item." >&2
+            exit 1 ;;
+    esac
+    if [ -e "${identities}/${ref}" ]; then
+        echo "Connection ${ref} declares both an SSH identity and a signing key." >&2
+        exit 1
+    fi
+    op read "op://${vault}/${signing}/private key" </dev/null >"${identities}/${ref}.key"
+    op read "op://${vault}/${signing}/public key" </dev/null >"${identities}/${ref}.key.pub"
+    chmod 400 "${identities}/${ref}.key"
+    chmod 444 "${identities}/${ref}.key.pub"
+    if [ "$(ssh-keygen -y -f "${identities}/${ref}.key" </dev/null | cut -d' ' -f1,2)" != \
+        "$(cut -d' ' -f1,2 "${identities}/${ref}.key.pub")" ]; then
+        echo "Connection ${ref}: the signing key's private and public halves do not match." >&2
+        exit 1
+    fi
+done <"${staging}/signing.tsv"
 # Retrieval and validation complete before any live file is modified. Existing
 # bind mounts require in-place updates; this is not a multi-file transaction.
 rm -f "${mcp_token_file}"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.utils import timezone
 
 from control_plane.models import ProviderConnection
-from control_plane.providers import CONNECTION_CREDENTIALS
+from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 
 
 def connection(

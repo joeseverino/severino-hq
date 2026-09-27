@@ -28,22 +28,22 @@ on:
   pull_request:
     branches: [main]
   # For an extension given a credential to announce itself, and for a
-  # hand-sent signal. Nothing is required to send it: the schedule below is
-  # what picks up an extension merge.
+  # hand-sent signal. Nothing is required to send it: HQ's delivery (below)
+  # is what picks up an extension merge.
   repository_dispatch:
     types: [extension-admitted]
   # An extension's own merge cannot trigger this: sending a signal from one
   # repository to another needs a credential, and giving a private repository a
-  # long-lived token that can start builds in a public one is a worse trade
-  # than waiting a few minutes. So the host asks instead of being told.
+  # long-lived token that can start builds in a public one is a worse trade.
+  # HQ's controller notices a new admission within a minute and dispatches
+  # this workflow as its GitHub App, with a token that can do nothing else and
+  # an input that names no extension (github.delivery).
   #
-  # A scheduled run rebuilds nothing unless the composition's inputs actually
-  # changed (see "Decide whether anything changed") so this costs one cheap
-  # resolution per tick and deploys only when there is something to deploy. It
-  # also self-heals: any trigger that is ever missed is picked up by the next
-  # tick rather than waiting for somebody to notice.
+  # The schedule is the backstop for a missed dispatch. A scheduled run
+  # rebuilds nothing unless the composition's inputs actually changed (see
+  # "Decide whether anything changed"), so a tick costs one cheap resolution.
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       reason:

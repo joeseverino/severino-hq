@@ -45,7 +45,6 @@ from control_plane.models import (
 )
 from control_plane.names import in_zone
 from control_plane.providers import (
-    CONNECTION_LABELS,
     CONTAINER_KIND,
     PROVIDERS,
     NameContext,
@@ -56,6 +55,7 @@ from control_plane.providers import (
     normalized_hostname,
     resource_home,
 )
+from control_plane.connection_kinds import CONNECTION_LABELS
 from projects.models import Project
 
 from .entity_links import EntityLink, entity_link, kind_label
@@ -234,7 +234,7 @@ class Facet:
         """
 
         from control_plane.observations import OBSERVATIONS
-        from control_plane.providers import CONNECTION_LABELS
+        from control_plane.connection_kinds import CONNECTION_LABELS
 
         from .connections import connection_rows
 

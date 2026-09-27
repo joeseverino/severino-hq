@@ -2,6 +2,7 @@
 
 from .adguard import build_adapter as build_adguard_adapter
 from .caddy import build_adapter as build_caddy_adapter
+from .github import build_adapter as build_github_adapter
 from .npm import build_adapter as build_npm_adapter
 from .portainer import build_adapter as build_portainer_adapter
 
@@ -27,6 +28,11 @@ def build_controller_provider_adapters(
             applies=applies,
         ),
         build_portainer_adapter(),
+        build_github_adapter(
+            provider_model=provider_model,
+            provider_spec=provider_spec,
+            applies=applies,
+        ),
     )
 
 

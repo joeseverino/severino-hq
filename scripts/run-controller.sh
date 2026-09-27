@@ -75,6 +75,17 @@ if [ -z "${image}" ] || [ -z "${data_volume}" ]; then
     echo "Could not resolve the deployed image or HQ data volume." >&2
     exit 1
 fi
+# Which repository delivers this image, from its standard OCI source label.
+# Blank for an image built without it; delivery then has nothing to follow.
+source_label="$(docker inspect --format \
+    '{{index .Config.Labels "org.opencontainers.image.source"}}' "${image}" 2>/dev/null || true)"
+case "${source_label}" in
+    https://github.com/*/*) source_repository="${source_label#https://github.com/}" ;;
+    *) source_repository="" ;;
+esac
+case "${source_repository}" in
+    */*/* | *[!A-Za-z0-9_./-]*) source_repository="" ;;
+esac
 
 set -a
 # Values are shell-quoted by render-controller-env.sh.
@@ -103,7 +114,9 @@ set -- run --rm --network host --user 10001:10001 --cap-drop ALL \
     --mount "type=bind,source=${acme_dir},target=/var/lib/severino-hq/acme" \
     --env HQ_IN_PROCESS=1 \
     --env HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh \
-    --env HQ_ACME_DIR=/var/lib/severino-hq/acme
+    --env HQ_ACME_DIR=/var/lib/severino-hq/acme \
+    --env "HQ_CONTROLLER_IMAGE=${image}" \
+    --env "SEVERINO_HQ_SOURCE_REPOSITORY=${source_repository}"
 if [ -s "${ca_file}" ]; then
     set -- "$@" \
         --mount "type=bind,source=${ca_file},target=/run/secrets/severino_controller_ca.pem,readonly" \

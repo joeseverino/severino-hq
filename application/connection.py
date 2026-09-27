@@ -1264,7 +1264,8 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
 
     if not trusted:
         return None
-    from control_plane.providers import CONNECTION_LABELS, PROVIDERS
+    from control_plane.providers import PROVIDERS
+    from control_plane.connection_kinds import CONNECTION_LABELS
 
     declared = next(
         (spec for spec in PROVIDERS.values() if spec.forwarding_headers), None

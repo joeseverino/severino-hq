@@ -11,21 +11,17 @@ class ControllerProviderAdapterContractTests(TestCase):
             CONTROLLER_PROVIDER_ADAPTERS, mock.Mock()
         )
 
-        self.assertEqual(
-            set(registry.definitions),
-            {"adguard.rewrite", "caddy.route", "npm.proxy_host"},
-        )
-        self.assertEqual(
-            set(registry.inventory),
-            {"adguard.rewrite", "caddy.route", "npm.proxy_host"},
-        )
-        self.assertEqual(set(registry.connection_probes), {"adguard", "npm"})
+        kinds = {"adguard.rewrite", "caddy.route", "github.delivery", "npm.proxy_host"}
+        self.assertEqual(set(registry.definitions), kinds)
+        self.assertEqual(set(registry.inventory), kinds)
+        self.assertEqual(set(registry.connection_probes), {"adguard", "github_app", "npm"})
         self.assertEqual(
             set(registry.actions),
             {
                 ("adguard.rewrite", "reconcile"),
                 ("adguard.rewrite", "delete"),
                 ("caddy.route", "reconcile"),
+                ("github.delivery", "reconcile"),
                 ("npm.proxy_host", "reconcile"),
                 ("npm.proxy_host", "delete"),
             },

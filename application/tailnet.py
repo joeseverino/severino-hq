@@ -645,7 +645,7 @@ class _PortNamer:
         self.hq_port = scoped_served_port()
 
     def name(self, port: int, targets) -> str:
-        from control_plane.providers import CONNECTION_LABELS
+        from control_plane.connection_kinds import CONNECTION_LABELS
 
         from .hq_self import site_label
 

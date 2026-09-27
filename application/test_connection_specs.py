@@ -786,11 +786,8 @@ class GrantEvidenceTests(TestCase):
         self.assertNotIn("token", by_ref["a-ssh"])
 
     def test_every_connection_provider_declares_a_credential_model(self):
-        from control_plane.providers import (
-            CONNECTION_CREDENTIALS,
-            PROVIDERS,
-            observer_abilities,
-        )
+        from control_plane.providers import PROVIDERS, observer_abilities
+        from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 
         named = {p for spec in PROVIDERS.values() for p in spec.connection_providers}
         named |= {ability.provider for ability in observer_abilities()}
