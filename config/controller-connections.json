@@ -47,6 +47,29 @@
         "label": "website"
       }
     },
+    "github_app": {
+      "APP_ID": {
+        "source": "field",
+        "label": "app_id"
+      },
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      },
+      "SIGNING_KEY": {
+        "source": "field",
+        "label": "signing_key"
+      }
+    },
     "login": {
       "CONNECTION_REF": {
         "source": "connection_ref"

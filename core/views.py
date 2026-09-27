@@ -85,7 +85,7 @@ class ThrottledLoginView(LoginView):
         the page is shown so leaving is possible.
         """
 
-        if self.sso_only and "signed_out" not in request.GET:
+        if self.sso_only and not {"signed_out", "sso_failed"} & set(request.GET):
             target = reverse("oidc_authentication_init")
             # Checked here even though the provider library checks it again
             # before use. A destination is only carried forward if it points
@@ -96,6 +96,16 @@ class ThrottledLoginView(LoginView):
                 return redirect(f"{target}?next={quote(nxt)}")
             return redirect(target)
         return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        from .oidc import SSO_FAILURE_SESSION_KEY
+
+        context = super().get_context_data(**kwargs)
+        if "sso_failed" in self.request.GET:
+            context["sso_failure"] = self.request.session.pop(
+                SSO_FAILURE_SESSION_KEY, "Signing in did not finish."
+            )
+        return context
 
     def post(self, request, *args, **kwargs):
         from .network import client_ip

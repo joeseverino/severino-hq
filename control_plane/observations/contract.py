@@ -39,6 +39,14 @@ def _none(_record: Mapping[str, Any]) -> tuple[str, ...]:
     return ()
 
 
+def container_key(host: Any, name: Any) -> str:
+    """How a container is named across readings: its machine as the provider
+    names it, and its name there. Neither can hold a slash."""
+
+    machine, container = str(host or "").strip().lower(), str(name or "").strip()
+    return f"{machine}/{container}" if machine and container else ""
+
+
 def _blank(_record: Mapping[str, Any]) -> str:
     return ""
 
@@ -69,16 +77,22 @@ class ObservationSpec:
     # The parts it is read in, each with the subset of ``requires`` it needs,
     # where one part can be refused while the others read.
     parts: tuple[ReadingPart, ...] = ()
-    # Join keys: the hostnames and addresses a record is about.
+    # Join keys: the hostnames and addresses a record is about, and the
+    # containers it names (``container_key``).
     hostnames: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     addresses: Callable[[Mapping[str, Any]], Iterable[str]] = _none
-    # The record's name as a person would say it.
+    containers: Callable[[Mapping[str, Any]], Iterable[str]] = _none
+    # The record's name as a person would say it, and what it is in a few
+    # words beside that name ("bridge · 172.21.0.0/16").
     title: Callable[[Mapping[str, Any]], str] = lambda record: ""
+    describe: Callable[[Mapping[str, Any]], str] = _blank
     # What a record is to the subject it joins, as a short present-tense
     # phrase shown beside its title: "Served by Pages project".
     relation: str = ""
-    # The phrase when the join was through ``addresses``; ``relation`` if blank.
+    # The phrase when the join was through ``addresses``, or through
+    # ``containers``, as the container says it; ``relation`` if blank.
     address_relation: str = ""
+    container_relation: str = ""
     # What a joined record supplies, from ``READING_FACETS``, or blank. A
     # service shows a record under the facet it supplies; "runtime" and
     # "network" name what serves an origin.
@@ -134,9 +148,11 @@ class ObservationSpec:
     def short(self) -> str:
         return self.short_label or self.label
 
-    def relation_to(self, *, by_address: bool) -> str:
-        """The phrase for a record joined by address or by hostname."""
+    def relation_to(self, *, by_address: bool, by_container: bool = False) -> str:
+        """The phrase for a record joined by container, address or hostname."""
 
+        if by_container and self.container_relation:
+            return self.container_relation
         if by_address and self.address_relation:
             return self.address_relation
         return self.relation or self.label

@@ -272,8 +272,15 @@ its phrase from the reading's `relation` and its rank from its facet
 facet (Access) last. Each item is a linked entity, with the connection that
 read it and when.
 
-Two declared containers on a user-defined Docker network (not `bridge`,
-`host` or `none`) have a `talks_to` edge naming the network
+A reading can name containers as well as hostnames and addresses (`containers`
+on its `ObservationSpec`, keyed by `contract.container_key`), and a declared
+container is a subject with that key, so every Docker reading that names one
+(its networks, mounts, image, runtime and compose project) joins to it as it
+joins to its machine, phrased from the container's side (`container_relation`:
+"On network"). A reading may describe a record in a few words (`describe`: a
+network's driver and subnets), shown beside it on every relationship row. Two
+declared containers on a user-defined Docker network (not `bridge`, `host` or
+`none`) also have a `talks_to` edge naming the network
 (`application/docker_estate.py`). The machine page's Docker bands (environment,
 compose projects, networks, where data lives, images) and the service page's
 "Who is allowed" band read the same joined records
@@ -304,11 +311,17 @@ machine answering at its address (`policy_links`).
 RDAP needs no credential, so HQ reads it rather than a controller:
 `registry.address` (who holds a public address) and `registry.domain` (a
 domain's registrar and expiry), in `control_plane/observations/public_registry.py`.
-`application.public_registry.refresh` runs from `manage.py refresh_public_registry`
-on an hourly timer, never from a page: it looks at most once an hour, reads only
-subjects with no record or one older than a day, a bounded number at a time,
-and stores them through the same ingest as a sweep. Each record carries
-`read_at`, which is its age. An unconfigured registry is stored as not
+`application.public_registry.refresh` runs from `manage.py refresh_public_registry`,
+never from a page: the host starts it once a day, and at once when HQ rings
+its doorbell (`/run/severino-hq/registry-doorbell`, watched by
+`severino-hq-public-registry.path`) because a sweep found an image or a digest
+HQ has not read. It reads only subjects that are due, a bounded number at a
+time, and stores them through the same ingest as a sweep, so a run with nothing
+due makes no request. Each reading stands as long as what it reads is slow to
+change (`READ_EVERY`): who holds an address or registers a domain, a week; tags,
+releases and vulnerabilities, a day; a digest's attestations, forever, since a
+digest never changes. A subject that could not be read is retried after an
+hour. Each record carries `read_at`, which is its age. An unconfigured registry is stored as not
 connected; one that cannot be reached, as a refused read.
 
 Address subjects are service origins, declared machine addresses and the
@@ -317,6 +330,119 @@ public addresses a machine's tailnet client reports among its `endpoints`
 holder. The service list names the holder of a public origin address from this
 reading, and the domain page falls back to it for a registration's expiry when
 the registrar is not read. Auto-renew is then unknown, and the page says so.
+
+The same refresh reads what a running container's image is and whether it is
+current, also keyless. `registry.image` is each image a container runs, read
+from its own registry over the OCI distribution API with an anonymous pull
+token (`application.oci_registry`): the tags that carry a version, and the
+build labels naming the repository it is built from. `registry.upstream` is
+each GitHub repository an image names that way, or lives under in `ghcr.io`:
+its recent releases and its published security advisories with their version
+ranges and fixes (`application.github_public`). Upstreams are chosen from the
+images just read, and fewer are read per run, because GitHub's anonymous limit
+is shared with Watching. Every host a registry read touches is named by someone
+else (the image, the registry's token challenge, a redirect to a CDN), so each
+request is HTTPS to a name resolving only to public addresses, a token never
+follows a redirect to another host, and a response is size-capped.
+
+`application.containers` joins them per running container: the version it runs
+(the tag, or the tag its digest was pulled as), newer tags of the same shape
+(`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the advisories whose
+range holds that version, where a stated fix at or below it clears an
+open-ended range and a range that cannot be read is "not known", never "not
+affected". HQ's own image answers from the GitHub App's reading of its
+repository instead: the production deploy and whether it passed its checks.
+The containers page, each container's page and each machine's container table
+show one `Standing`; the action queue holds one item per affected image and
+version, and one for every image with a newer release. The same refresh
+resolves, with a `HEAD` of the manifest, the digest each running tag names now
+and the digest of the newest tag of its shape: what an upgrade would pin, and
+whether a running tag has been rebuilt since it was pulled (`moved_to`). A
+digest that could not be read makes its image due again on the next run.
+
+`registry.digest` is what the publisher attached to each of those digests, read
+once (`application.oci_registry.attestations`, `application.attestations`): the
+in-toto statements BuildKit puts beside a platform's manifest, from which HQ
+keeps the SBOM's package URLs and the SLSA provenance's source, commit, builder
+and base images. Metadata beside the image, never a layer of it: nothing is
+pulled and nothing runs. The statements are the publisher's word and unsigned,
+and the page says "states", not "proves". `registry.vulnerabilities` is those
+packages checked against OSV (`application.osv`), keyless, one batch per
+thousand packages, each vulnerability's detail read once and kept until OSV
+modifies it: the id, the package and version installed, the versions that fix
+it, and a severity where the database gives one.
+
+What an image is built from is known, most trusted first, from the container's
+declaration (`source`, for an image that does not say), the image's label, its
+provenance's stated source, then the GitHub registry it lives in
+(`containers.source_of`); the page says which. The upstream reads follow it.
+An image is vulnerable when an advisory on its source matches its version, or
+when a critical or high vulnerability in its packages has a fix published; an
+unrated or unfixed one is shown, never raised.
+
+`portainer.runtime` is how each container is run, from Docker's inspect through
+Portainer: user, privilege, capabilities, host namespaces, security options,
+devices, mounts, port bindings, limits, restart policy and health check. It is
+built field by field, so the environment, the command line and labels, which
+the inspect document also carries, are never stored. `application.container_standard`
+holds each container to a standard over it (`application.standards`, the same
+primitive as the GitHub posture): reach over the machine (privilege, the Docker
+socket, the host's process namespace, confinement off, a writable system path,
+a machine-level capability) is serious and queued, one item per check naming
+every container that fails it; hardening (a non-root user, no-new-privileges,
+its own network, bound ports, a memory limit, a health check) is shown and not
+queued. `application.supply_chain` holds the image to a second standard on the
+same primitive: pinned to a digest, its source known, its build described, its
+packages listed, no fixable serious vulnerability, no advisory against its
+version, its tag still naming what runs. A check HQ could not read is
+unavailable, never failed.
+
+`application.upgrades` plans an upgrade for every container something newer is
+published for, and changes nothing: the target by digest, the size of the move,
+the advisories and package vulnerabilities it clears or would bring (the two
+digests' OSV readings compared), the writable mounts that would be
+snapshotted, what would verify it (its health check, a request to each name it
+serves), the steps an upgrade would take, and every reason it cannot go ahead
+yet as an id and a reason (`not-declared`, `runtime-unread`, `no-target-digest`,
+`no-apply-path`, `target-affected`, `own-pipeline` for HQ's own image). A
+separate list says what keeps it from applying without a person: what is not
+known about the target (`target-unread`, `no-provenance`, `no-package-list`,
+`not-scanned`), and anything but a vetted patch waits.
+
+Both are registered read resources, so an agent asks what the pages ask:
+`containers` (`machine:container`) and `upgrades` (the same address), through
+the API and the MCP like every other resource.
+
+## GitHub
+
+The controller reads `github.repository` through HQ's GitHub App: one
+installation token per repository, read-only permissions only, minted for each
+read. A record is a repository's head and its checks, open pull requests,
+workflows waiting on an approval, deployments and the steps each ran before
+deploying whose names begin "Verify", branch rules, environments, runners,
+alert counts by severity, admission artifacts, who has access (collaborators,
+deploy keys, the default workflow token, Actions settings), and the names of its
+Actions variables. Each part is refused on its own where the repository's plan
+offers none, and says so.
+
+`application.github_estate` joins a project to its repository by URL and puts
+what waits on a person on the action queue: a deploy held for approval, a
+failing default branch, a deploy that failed its own verification, serious
+alerts, an admission about to lapse.
+
+`application.github_posture` holds every repository to a standard derived from
+the same record: what every repository is held to (only you have access, deploy
+keys read-only and in use, a read-only workflow token that approves nothing,
+actions pinned to a commit, Dependabot security fixes, no Actions variables),
+and, for a public one, what GitHub gives it besides (pull requests required,
+the default branch protected from force pushes and deletion, secret scanning,
+push protection, code scanning). What a plan does not offer is "not
+available", never a failure. The action queue holds one item per check not
+met, naming every repository that misses it.
+
+Watching reads the signed-in person's own GitHub profile and the repositories
+they star from GitHub's public API, credential-free: whose profile is the login
+their sign-in claims (`application.linked_accounts`), never one typed into HQ.
 
 ## Machine roles
 

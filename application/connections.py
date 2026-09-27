@@ -23,12 +23,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from control_plane.models import ProviderConnection
 from control_plane.observations import OBSERVATIONS
-from control_plane.providers import (
-    PROVIDERS,
-    connection_credential,
-    observer_abilities,
-    registry_label,
-)
+from control_plane.providers import PROVIDERS, observer_abilities, registry_label
+from control_plane.connection_kinds import connection_credential
 
 from .contracts import (
     SCOPE_NAME,
@@ -1028,7 +1024,7 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
 
     from urllib.parse import urlsplit
 
-    from control_plane.providers import CONNECTION_LABELS
+    from control_plane.connection_kinds import CONNECTION_LABELS
 
     from .labels import human_label
 

@@ -55,6 +55,32 @@ def ago(value):
 
 
 @register.filter
+def expiry(value):
+    """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
+    from control_plane.providers import expiry_phrase
+
+    return expiry_phrase(str(value or ""))
+
+
+@register.filter
+def posture_state(posture, check_id):
+    """``{{ posture|posture_state:check.id }}``: met, unmet, or unavailable."""
+
+    return posture.state_of(check_id)
+
+
+@register.filter
+def ago_short(value):
+    """One unit of age, for a table column."""
+    from application.ui import ago_short as _ago_short
+    from application.ui import moment
+
+    # A datetime, or an ISO stamp as a provider wrote it, like ``ago``.
+    when = value if isinstance(value, datetime) else moment(str(value or ""))
+    return _ago_short(when) if when else ""
+
+
+@register.filter
 def readable(value):
     """An ISO 8601 timestamp as a person reads one; anything else unchanged."""
 

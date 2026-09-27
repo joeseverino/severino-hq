@@ -251,6 +251,28 @@ class ActionItemRead(models.Model):
         constraints = [models.UniqueConstraint(fields=("user", "key"), name="unique_action_item_read")]
 
 
+class LinkedAccount(models.Model):
+    """An account elsewhere that a person's sign-in says is theirs.
+
+    Written from a verified ID token at each sign-in (``application.linked_accounts``),
+    so it is what the identity provider asserts: a statement, not proof of
+    ownership. Something else HQ reads can confirm it.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="linked_accounts")
+    provider = models.CharField(max_length=40)
+    login = models.CharField(max_length=100)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider}:{self.login}"
+
+
 class UpstreamReading(models.Model):
     """The last value read from a service outside HQ, and when it was read."""
 

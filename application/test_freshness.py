@@ -47,8 +47,12 @@ class FreshnessTests(TestCase):
                 self.assertFalse(found.stale)
                 self.assertNotEqual(found.label, "Out of date")
 
-    def test_a_public_registry_is_read_daily_and_stale_after_two_days(self):
-        self.assertEqual(stale_after("registry.domain"), timedelta(days=2))
+    def test_a_public_registry_reading_stands_as_long_as_what_it_reads_is_slow_to_change(self):
+        self.assertEqual(stale_after("registry.image"), timedelta(days=2))
+        self.assertEqual(stale_after("registry.vulnerabilities"), timedelta(days=2))
+        self.assertEqual(stale_after("registry.domain"), timedelta(days=14))
+        # A digest never changes; its reading is the daily check that every one is held.
+        self.assertEqual(stale_after("registry.digest"), timedelta(days=2))
 
     @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=3600)
     def test_a_swept_kind_is_stale_after_the_slowest_sweep(self):

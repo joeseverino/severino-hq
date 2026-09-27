@@ -26,7 +26,9 @@ from .projection import projection_scope
 
 # The host dashboard (snapshot and highlights, one projection) over ``populate``'s
 # machines, services, zones, readings and connections; empty: HOST_QUERY_BUDGET.
-POPULATED_QUERY_BUDGET = 27
+# 28: the Watching card reads its one profile, a constant query that does not
+# grow with the estate.
+POPULATED_QUERY_BUDGET = 28
 
 
 def _store(kind, records, **extra):

@@ -1,0 +1,57 @@
+{% extends "page.html" %}
+{% comment %}
+Each repository against its standard (application.github_posture), led by
+what is not met. A repository is one row whose meter has a segment per check
+it is held to, so the page grows down as repositories are added, never across.
+A check met everywhere is a word in one closing line.
+{% endcomment %}
+{% block page %}
+{% if repositories %}
+  {% if unmet %}
+    <h2>Not met <span class="heading-aside">{{ unmet|length|counted:"check" }}</span></h2>
+    <ul class="posture-gaps">
+      {% for gap in unmet %}
+        <li class="{% if gap.check.serious %}is-serious{% endif %}">
+          <span class="posture-gap-icon">{% include "partials/_icon.html" with name="x-circle" %}</span>
+          <div class="posture-gap-body">
+            <strong>{{ gap.check.label }}</strong>
+            <p>{{ gap.check.why }} <span class="muted">{{ gap.check.fix }}</span></p>
+          </div>
+          <div class="posture-gap-repos">
+            {% for repo in gap.repos %}<a class="workflow-chip" href="{{ repo.url }}/settings" rel="noopener">{{ repo.short }}</a>{% endfor %}
+            <small class="muted">{{ gap.repos|length }} of {{ gap.of }}</small>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <h2>By repository <span class="heading-aside">{{ repositories|length|counted:"repository,repositories" }}</span></h2>
+  <ul class="posture-repos">
+    {% for row in repositories %}{% with posture=row.posture %}
+      <li>
+        <div class="posture-repo-name">
+          {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short }}</a>{% else %}<a href="{{ posture.subject.url }}" rel="noopener">{{ posture.subject.short }}</a>{% endif %}
+          <small class="muted">{% if posture.subject.private %}Private{% else %}Public{% endif %}</small>
+        </div>
+        <strong class="posture-score {% if posture.unmet %}is-unmet{% else %}is-met{% endif %}">{{ posture.met }} of {{ posture.measured }}</strong>
+        <span class="posture-meter" role="img" aria-label="{{ posture.met }} of {{ posture.measured }} met">
+          {% for result in posture.results %}{% ifchanged result.check.scope %}{% if not forloop.first %}<span class="posture-meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="is-{{ result.state }}" tabindex="0" data-tip="{{ result.check.label }}: {% if result.state == 'met' %}met{% elif result.state == 'unmet' %}not met{% else %}not available on this plan{% endif %}"></span>{% endfor %}
+        </span>
+        {% with access=posture.subject.access %}
+          <span class="posture-access">{% if access %}{% with others=access.collaborators|length|add:-1 %}{% if others > 0 %}<span class="is-unmet">{{ others|counted:"other person has,other people have" }} access</span>{% else %}Only you{% endif %}{% endwith %}
+            · {% for key in access.deploy_keys %}{% include "partials/_icon.html" with name="lock" %} {{ key.title }}{% if not key.read_only %}, <span class="is-unmet">can write</span>{% endif %}, {% if key.last_used %}used {{ key.last_used|ago_short }}{% else %}never used{% endif %}{% if not forloop.last %} · {% endif %}{% empty %}no deploy keys{% endfor %}
+            {% if posture.subject.variables %} · {{ posture.subject.variables|length|counted:"Actions variable,Actions variables" }}: {{ posture.subject.variables|join:", " }}{% endif %}
+          {% else %}Access not read{% endif %}</span>
+        {% endwith %}
+      </li>
+    {% endwith %}{% endfor %}
+  </ul>
+
+  {% if everywhere %}
+    <p class="posture-everywhere">{% include "partials/_icon.html" with name="check-circle" %}<span><strong>Met everywhere:</strong> {% for check in everywhere %}{{ check.label|lower }}{% if not forloop.last %}; {% endif %}{% endfor %}.</span></p>
+  {% endif %}
+{% else %}
+  {% include "partials/_empty_state.html" with message="HQ's GitHub App has not read any repository yet." %}
+{% endif %}
+{% endblock %}

@@ -18,7 +18,8 @@ from django.urls import reverse
 
 from control_plane.names import normalized_hostname
 from control_plane.models import ManagedResource
-from control_plane.providers import CONNECTION_LABELS, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .connections import (
@@ -277,13 +278,9 @@ def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
     if not resource.enabled:
         return "neutral", "Disabled", "This declaration is not reconciled."
     health = resource_health(resource)
-    state = {
-        "healthy": "good",
-        "declared": "good",
-        "pending": "attention",
-        "drifted": "serious",
-        "degraded": "serious",
-    }.get(health["state"], "neutral")
+    from .infrastructure import RESOURCE_TONES
+
+    state = RESOURCE_TONES.get(health["state"], "neutral")
     return state, health["label"], health["message"]
 
 
@@ -894,13 +891,22 @@ def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
 
 
 def _resource_node(resource: ManagedResource) -> TopologyNode:
-    """A declaration as a node: its key, its kind's label, its page."""
+    """A declaration as a node: its name, its kind's label, its page.
 
+    A container is named as itself, with its machine in the subtitle: its
+    key joins the two, and printed as the name it said the machine twice
+    wherever the machine was already the context.
+    """
+
+    from control_plane.providers import CONTAINER_KIND
+
+    name = str((resource.spec or {}).get("name", "") or "") if resource.kind == CONTAINER_KIND else ""
+    host = str((resource.spec or {}).get("host", "") or "") if name else ""
     return TopologyNode(
         id=f"resource:{resource.key}",
         kind="resource",
-        label=resource.key,
-        subtitle=kind_label(resource.kind),
+        label=name or resource.key,
+        subtitle=f"{kind_label(resource.kind)} on {host}" if host else kind_label(resource.kind),
         url=resource.get_absolute_url(),
         kind_key=resource.kind,
     )

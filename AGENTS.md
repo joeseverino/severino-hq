@@ -9,7 +9,9 @@ authoritative for human and agentic development in this public repository.
 2. Read the nearest code and tests before changing an interface.
 3. Run `./scripts/check.sh` before handing work back.
 4. Run `./scripts/ci-local.sh` before pushing.
-5. Run `./scripts/preflight.sh` before calling a change ready.
+5. Run `./scripts/preflight.sh` before calling a change ready. On a small
+   machine, push first and run `./scripts/preflight.sh --remote`: it reads
+   every check GitHub ran on that commit instead of running `ci-local.sh`.
 
 `check.sh` answers "do my changes work?". `ci-local.sh` answers "will the
 pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, the

@@ -17,7 +17,7 @@ from typing import Any
 from control_plane.names import normalized_hostname
 from control_plane.models import ProviderInventory
 from control_plane.observations import OBSERVATIONS
-from control_plane.providers import CONNECTION_LABELS
+from control_plane.connection_kinds import CONNECTION_LABELS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings

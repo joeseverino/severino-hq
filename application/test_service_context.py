@@ -49,37 +49,38 @@ def by_id(service):
     return {section.id: section for section in sections_for(service)}
 
 
-class DeliveryTests(TestCase):
+def project_tile(service):
+    from .service_context import service_summary
+
+    return next((item for item in service_summary(service) if item.label == "Project"), None)
+
+
+class ProjectTileTests(TestCase):
     def test_a_project_publishing_this_name_is_the_project_for_it(self):
         """No column points a service at a project. One says where it is
         published, which is the same statement read the other way."""
 
         a_project()
 
-        self.assertIn("delivery", by_id(a_service()))
+        self.assertEqual(project_tile(a_service()).value, "A Project")
 
     def test_a_project_publishing_a_different_name_is_not(self):
         a_project(public_url="https://elsewhere.example.com")
 
-        self.assertNotIn("delivery", by_id(a_service()))
+        self.assertIsNone(project_tile(a_service()))
 
-    def test_the_project_and_the_repository_are_both_links(self):
+    def test_the_project_links_and_names_its_repository(self):
         a_project(repository_url="https://github.com/example/a-project")
 
-        project, repository, _ = by_id(a_service())["delivery"].records[0]
+        tile = project_tile(a_service())
 
-        self.assertTrue(project.url)
-        self.assertEqual(repository.text, "example/a-project")
-        self.assertEqual(repository.url, "https://github.com/example/a-project")
-        self.assertTrue(repository.external)
+        self.assertTrue(tile.link.url)
+        self.assertIn("example/a-project", tile.detail)
 
-    def test_a_project_without_a_repository_says_so_rather_than_linking(self):
+    def test_a_project_without_a_repository_names_none(self):
         a_project(repository_url="")
 
-        _, repository, _ = by_id(a_service())["delivery"].records[0]
-
-        self.assertEqual(repository.url, "")
-        self.assertTrue(repository.muted)
+        self.assertEqual(project_tile(a_service()).detail, "")
 
 
 class ActivityTests(TestCase):
@@ -120,17 +121,15 @@ class PageTests(TestCase):
                     kwargs={"hostname": "probe.example.com"})
         )
 
-        self.assertContains(response, "Delivery")
+        # The project is a tile of the band, where it was a section of one row.
+        self.assertContains(response, ">Project<")
         self.assertContains(response, "example/a")
         self.assertContains(response, 'aria-label="On this page"')
-        self.assertContains(response, 'href="#delivery"')
-        self.assertContains(response, 'id="delivery"')
+        self.assertNotContains(response, 'id="delivery"')
         service = response.context["service"]
-        self.assertContains(
-            response,
-            f'<span class="pill pill-{service.status}">{service.status_label}</span>',
-            count=1,
-        )
+        # Health once, first in the band, its tile in its tone.
+        self.assertContains(response, f'<div class="band-fact tone-{service.status}">', count=1)
+        self.assertContains(response, f"<strong>{service.status_label}</strong>")
 
     def test_a_service_nothing_else_knows_about_grows_no_bands(self):
         a_service()
@@ -151,7 +150,7 @@ class PageTests(TestCase):
 
         self.assertEqual(
             [resolve.__name__ for resolve in SECTIONS],
-            ["_delivery", "_access", "_activity", "_traffic"],
+            ["_access", "_activity", "_traffic"],
         )
 
     def test_service_section_ids_share_the_page_navigation_contract(self):
@@ -260,3 +259,24 @@ class OneWindowTests(TestCase):
         ).read_text()
         self.assertIn("{{ traffic_window_days|counted", template)
         self.assertNotIn("Traffic · 7 days", template)
+
+
+class PartRowTests(TestCase):
+    def test_every_step_on_a_path_says_what_changing_it_would_do(self):
+        from .paths import Hop, consequence_of
+
+        for step in ("dns", "network", "machine", "ingress", "upstream", "container"):
+            self.assertTrue(consequence_of(Hop(step, "Part", "name")), step)
+
+    def test_declared_and_read_health_share_one_set_of_tones(self):
+        from types import SimpleNamespace
+
+        from .service_context import PartRow
+
+        declared = PartRow(claim=SimpleNamespace(health={"state": "healthy", "label": "Healthy"}, kind="npm.proxy_host"))
+        broken = PartRow(claim=SimpleNamespace(health={"state": "degraded", "label": "Needs attention"}, kind="npm.proxy_host"))
+        read = PartRow(observed_health=("Online", "pill-reachable"))
+
+        self.assertEqual(declared.health, ("Healthy", "pill-reachable"))
+        self.assertEqual(broken.health, ("Needs attention", "pill-unreachable"))
+        self.assertEqual(read.health, ("Online", "pill-reachable"))

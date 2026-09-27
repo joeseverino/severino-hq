@@ -133,7 +133,22 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             dashboard=_provider("application.sections:projects"),
             connections=_provider("projects.github:connection_specs"),
+            # What GitHub holds for a person: a deploy waiting on approval, a
+            # failing default branch, a serious alert, a lapsing admission.
+            # Decisions, not the portfolio's shape, which is why it is here.
+            attention=_provider("application.github_posture:build_attention"),
         ),
+    ),
+    DomainDescriptor(
+        id="hq.watching",
+        label="Watching",
+        navigation=(NavigationItem("Watching", "watching", "", 102, "Build"),),
+        integration=PluginIntegration(dashboard=_provider("application.sections:watching")),
+    ),
+    DomainDescriptor(
+        id="hq.posture",
+        label="Posture",
+        navigation=(NavigationItem("Posture", "posture", "", 103, "Build"),),
     ),
     DomainDescriptor(
         id="hq.docs",
@@ -337,6 +352,19 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+    ),
+    DomainDescriptor(
+        id="hq.containers",
+        label="Containers",
+        # Beside machines, because a container is what a machine is for; the
+        # question here is whether what runs on them is current and safe.
+        navigation=(
+            NavigationItem(
+                "Containers", "control_plane:containers", "control_plane", 132,
+                "Infrastructure",
+            ),
+        ),
+        integration=PluginIntegration(attention=_provider("application.containers:attention")),
     ),
     DomainDescriptor(
         id="hq.tailnet",

@@ -367,6 +367,37 @@ jobs:
         with:
           inputs: requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt
 
+  scorecard:
+    name: scorecard
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Scorecard's action reads only the default branch, so a pull request that
+    # would lower a check is caught here, by the same script a local run uses.
+    # CodeQL is not run again: codeql.yml analyses every pull request, and the
+    # ruleset's code scanning rule holds a merge until it has no alert.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ needs.toolchain.outputs.oldest-python }}
+      - name: Every file-based check at 10
+        env:
+          CHECK_PYTHON: python
+        run: scripts/security-scan.sh scorecard
+
+  structural:
+    name: structural bar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: No new near-duplicate; the largest files did not grow
+        run: |
+          set -eu
+          CODEBASE_MEMORY_BIN="$(scripts/install-scan-tools.sh codebase-memory-mcp)" \
+            scripts/structural-bar.sh
+
   container-pr:
     name: container
     needs: [lint, test, browser, security]
@@ -475,7 +506,15 @@ jobs:
           set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository }}"
           TAG="sha-${HEAD_SHA::12}"
-          docker build -t "$IMAGE:$TAG" .
+          # The source label is the standard OCI one: GHCR links the package to
+          # this repository by it, and the controller reads which repository
+          # delivers it from the image it runs.
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=$HEAD_SHA" \
+            --build-arg "HQ_SOURCE=https://github.com/${{ github.repository }}" \
+            --build-arg "HQ_REVISION=$HEAD_SHA" \
+            -t "$IMAGE:$TAG" .
           docker push "$IMAGE:$TAG"
           # `latest` follows main and nothing else. A pull request builds an
           # image so it can be composed and checked; it does not get to move

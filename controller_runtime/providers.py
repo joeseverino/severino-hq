@@ -26,10 +26,10 @@ from typing import Any, TypeVar, cast
 
 from analytics.contracts import MAX_QUERY_DAYS, completed_window
 from application.expiry import days_until
+from application.labels import human_bytes as _human_bytes
 from application.ui import MISSING
 from control_plane.providers import (
     CERTIFICATE_KIND,
-    CONNECTION_CREDENTIALS,
     PROVIDERS,
     caa_parts,
     certificate_covers,
@@ -39,6 +39,7 @@ from control_plane.providers import (
     normalized_record_content,
     normalized_hostname,
 )
+from control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,
     CREDENTIAL_REFUSAL,
@@ -51,6 +52,7 @@ from control_plane.provider_adapters.contracts import (
     failure_of,
 )
 from control_plane.provider_adapters import npm, onepassword
+from .signing import SigningRuntime
 from control_plane.observations.tailscale import SETTING_PARTS as TAILNET_SETTING_PARTS
 from control_plane.provider_adapters import portainer_readings as portainer
 from control_plane.provider_adapters.parts import (
@@ -4666,7 +4668,7 @@ def _ports_worth_asking() -> tuple[int, ...]:
     return tuple(sorted(found))
 
 
-class _ProviderRuntime:
+class _ProviderRuntime(SigningRuntime):
     """Bind adapters to the controller's narrow, patchable I/O boundary."""
 
     def request(
@@ -5235,19 +5237,6 @@ def _probe_portainer(connection_ref: str) -> dict[str, Any]:
             for item in reachable
         ),
     }
-
-
-def _human_bytes(value: int | float) -> str:
-    amount = max(0.0, float(value))
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if amount < 1024 or unit == "TB":
-            return (
-                f"{amount:.0f} {unit}"
-                if unit in {"B", "KB", "MB"}
-                else f"{amount:.1f} {unit}"
-            )
-        amount /= 1024
-    return "0 B"
 
 
 def _container_cpu_percent(stats: dict[str, Any]) -> float:

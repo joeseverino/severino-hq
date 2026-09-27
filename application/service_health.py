@@ -63,8 +63,11 @@ def _declared(service: Any) -> Health:
     if service.faults:
         return Health(ATTENTION, "Incomplete", faults)
     if ATTENTION in states:
-        return Health(ATTENTION, "Unverified")
-    return Health(GOOD, "Wired")
+        # Which parts, so the word comes with the thing to go and look at.
+        waiting = [facet.label for facet in service.facets if facet.state == ATTENTION]
+        return Health(ATTENTION, "Unverified", f"{', '.join(waiting)} not confirmed yet")
+    # What "healthy" rests on, said: every declared part confirmed.
+    return Health(GOOD, "Healthy", counted(len(service.declared_claims), "part confirmed", "parts confirmed"))
 
 
 def _undeclared(service: Any) -> Health:

@@ -7,6 +7,7 @@ from django.views.generic import RedirectView
 
 from django.conf import settings
 
+from projects.views import PostureView, WatchingRefreshView, WatchingView
 from core.views import (
     ActionItemCountView,
     ActionItemReadAllView,
@@ -111,6 +112,9 @@ urlpatterns = [
     path("projects/", include("projects.urls")),
     path("content/", include("content.urls")),
     path("docs/", include("docs_index.urls")),
+    path("watching/", WatchingView.as_view(), name="watching"),
+    path("watching/refresh/", WatchingRefreshView.as_view(), name="watching_refresh"),
+    path("posture/", PostureView.as_view(), name="posture"),
     path("assets/", include("assets.urls")),
     path("expenses/", include("expenses.urls")),
     path("receipts/", include("receipts.urls")),

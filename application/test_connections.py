@@ -156,6 +156,7 @@ class DerivationTests(TestCase):
                 "adguard",
                 "npm",
                 "cloudflare_dns",
+                "github_app",
                 "onepassword",
                 "portainer",
                 "ssh",

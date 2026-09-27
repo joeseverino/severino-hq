@@ -1,0 +1,32 @@
+{% load nav_tags %}
+{% comment %}
+One row per part of a service (application.service_context.part_rows): what it
+is, its health from its declaration or from the reading that covers it, what
+changing it would do, and where the reading came from. The certificate is a
+mark after the name that serves it, as in the path strip. A declaration no hop
+reaches closes the table, so nothing the name is made of goes unshown.
+{% endcomment %}
+<div class="table-scroll">
+  <table class="data-table compact-table service-parts">
+    <thead><tr><th>Part</th><th>What</th><th>Health</th><th>If it changes</th><th>Read from</th></tr></thead>
+    <tbody>
+      {% for part in parts %}{% with hop=part.hop %}
+        <tr>
+          <td>{{ part.label }}</td>
+          <td>
+            {% if hop %}{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}{% if part.detail %}{% if hop.name or hop.link %} <span class="muted">· {{ part.detail }}</span>{% else %}{{ part.detail }}{% endif %}{% elif not hop.name and not hop.link %}{% empty_value %}{% endif %}{% if hop.certificate.unread %}<br><span class="muted">{{ hop.certificate.line }}</span>{% endif %}{% for relation, link in hop.overlays %}<br><span class="muted">{{ relation }}</span> {% entity link %}{% endfor %}{% if hop.unread %}<br><span class="muted">{{ hop.unread|capfirst }}</span>{% endif %}
+            {% else %}{% entity part.claim.link %}{% for reading in part.claim.readings|slice:":1" %} <span class="muted">· {{ reading.value }}</span>{% endfor %}{% endif %}
+            {% if part.claim and not read_only %} <a class="subtle-link" href="{{ part.claim.edit_url|returning_to:request.get_full_path }}">Edit</a>{% endif %}
+          </td>
+          <td>
+            {% if part.health %}<span class="pill {{ part.health.1 }}">{{ part.health.0 }}</span>{% endif %}
+            {% if part.claim.drifted %}{% for reading in part.claim.readings %}{% if reading.drifted %}<span class="pill pill-serious" tabindex="0" data-tip="{{ reading.label }}: declared {{ reading.desired }}, reads {{ reading.value }}">Drifted</span>{% endif %}{% endfor %}{% endif %}
+            {% if part.certificate_claim and part.certificate_claim.health.state != "healthy" %}<span class="pill control-{{ part.certificate_claim.health.state }}" title="Certificate {{ part.certificate_claim.resource_key }}">Certificate {{ part.certificate_claim.health.label|lower }}</span>{% endif %}
+          </td>
+          <td class="muted">{{ part.consequence }}</td>
+          <td>{% with source=part.read_from %}{% if source.declared %}<span class="muted">Declared, not read</span>{% elif source %}{{ source.label }}{% if source.connection %} via {% entity "connection"|entity_of:source.connection %}{% endif %}{% if source.observed_at %} <span class="muted">· {{ source.observed_at|ago_short }}</span>{% endif %}{% elif not hop %}<span class="muted">Declared; not on the path</span>{% endif %}{% endwith %}</td>
+        </tr>
+      {% endwith %}{% endfor %}
+    </tbody>
+  </table>
+</div>

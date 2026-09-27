@@ -1,0 +1,115 @@
+{% extends "page.html" %}
+{% comment %}
+Every running container (application.containers), led by what needs you. The
+band counts; "Needs you" is each image and version once, however many
+containers run it, with what is newer and what is known against it; the table
+is every container, one row each. Nothing here reads a registry: the public
+refresh does, daily and whenever a sweep finds a new image, and the band says when.
+{% endcomment %}
+{% block page %}
+{% if containers %}
+  <div class="fact-band">
+    <div class="band-fact">
+      <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
+      <div>
+        <span class="band-label">Running</span>
+        <strong>{{ containers|length }}</strong>
+        <small>on {{ machines|counted:"machine" }}</small>
+      </div>
+    </div>
+    <div class="band-fact{% if vulnerable %} tone-serious{% else %} tone-good{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
+      <div>
+        <span class="band-label">Known vulnerabilities</span>
+        <strong>{% if vulnerable %}{{ vulnerable|counted:"version affected,versions affected" }}{% else %}None serious{% endif %}</strong>
+        <small>Checked for {{ matched }} of {{ containers|length }}{% if matched < containers|length %}; the rest publish nothing to check{% endif %}</small>
+      </div>
+    </div>
+    <div class="band-fact{% if behind %} tone-attention{% else %} tone-good{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
+      <div>
+        <span class="band-label">Updates</span>
+        <strong>{% if behind %}{{ behind|counted:"image behind,images behind" }}{% else %}All current{% endif %}</strong>
+        <small>{% if read_at %}Registries read {{ read_at|ago_short }}{% else %}Registries not read yet{% endif %}</small>
+      </div>
+    </div>
+    <div class="band-fact{% if pinned == containers|length %} tone-good{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span>
+      <div>
+        <span class="band-label">Pinned to a digest</span>
+        <strong>{{ pinned }} of {{ containers|length }}</strong>
+        <small>A tag can move; a digest cannot.</small>
+      </div>
+    </div>
+  </div>
+
+  {% if needs %}
+    <h2>Needs you <span class="heading-aside">{{ needs|length|counted:"image" }}</span></h2>
+    <ul class="container-needs">
+      {% for group in needs %}{% with standing=group.standing %}
+        <li class="{% if standing.state == 'vulnerable' %}{% if standing.serious %}is-serious{% else %}is-attention{% endif %}{% else %}is-behind{% endif %}">
+          <span class="container-needs-icon">{% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %}{% else %}{% include "partials/_icon.html" with name="deploy" %}{% endif %}</span>
+          <div class="container-needs-body">
+            <strong><code>{{ standing.label }}</code>{% if standing.newer %} <span class="container-arrow">→</span> {% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest }}</code></a>{% else %}<code>{{ standing.latest }}</code>{% endif %}{% endif %}</strong>
+            <p>
+              {% with plan=group.plan %}{% if plan %}{{ plan.change|capfirst }} · {{ plan.risk }} risk{% if plan.stateful %} · {{ plan.data|length|counted:"mount,mounts" }} to snapshot{% endif %}{% if plan.verified_by %} · verified by {{ plan.verified_by.0 }}{% endif %}{% if plan.fixes %} · clears {{ plan.fixes|length }}{% endif %}{% else %}{{ standing.summary|capfirst }} · no newer release yet{% endif %}{% endwith %}
+              {% if standing.release.published %} · released {{ standing.release.published|ago_short }}{% endif %}
+              {% if standing.moved_to %}<br><span class="github-gap">Its tag <code>{{ standing.tag }}</code> now names a newer build than the one running.</span>{% endif %}
+            </p>
+            {% if standing.advisories or standing.urgent %}
+              <ul class="container-advisories">
+                {% for advisory in standing.advisories %}
+                  <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.summary }}</li>
+                {% endfor %}
+                {% for finding in standing.urgent|slice:":3" %}
+                  <li><span class="pill pill-serious">{{ finding.severity }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> <code>{{ finding.package }}</code> {{ finding.installed }} → {{ finding.fixed|join:", " }}</li>
+                {% endfor %}
+                {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3" }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
+              </ul>
+            {% endif %}
+          </div>
+          <div class="container-needs-where">
+            {% for item in group.containers %}<a class="workflow-chip" href="{{ item.url }}">{{ item.running.name }} <span class="muted">on {{ item.machine.name }}</span></a>{% endfor %}
+          </div>
+        </li>
+      {% endwith %}{% endfor %}
+    </ul>
+  {% endif %}
+
+  <h2>Every container <span class="heading-aside">{{ containers|length }}</span></h2>
+  <div class="table-scroll">
+    <table class="data-table container-table">
+      <thead>
+        <tr>
+          <th>Container</th>
+          <th>Image</th>
+          <th>Standing</th>
+          <th>How it runs</th>
+          <th>Serves</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in containers %}{% with standing=item.standing %}
+          <tr>
+            <td>
+              <strong><a href="{{ item.url }}">{{ item.running.name }}</a></strong>
+              <br><span class="muted">on {% entity item.machine.link %}</span>
+            </td>
+            <td>
+              <code>{{ standing.image.short }}</code>
+              <br><span class="muted">{% if standing.tag %}{{ standing.tag }}{% else %}{{ standing.image.digest|slice:":15" }}{% endif %}{% if standing.pinned %} · <span tabindex="0" data-tip="Pinned to {{ standing.image.digest|slice:':19' }}…">pinned</span>{% else %} · <span tabindex="0" data-tip="Runs whatever the tag pointed to when it was pulled.">floating</span>{% endif %}{% if standing.built %} · built {{ standing.built|ago_short }}{% endif %}</span>
+            </td>
+            {% include "control_plane/_container_standing.html" %}
+            {% with posture=item.posture %}<td>{% if posture.serious %}<span class="pill pill-serious" tabindex="0" data-tip="{% for result in posture.unmet %}{% if result.check.serious %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">Reach over its machine</span>{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.label }}&#10;{% endfor %}">{{ posture.unmet|length|counted:"setting to harden,settings to harden" }}</span>{% elif posture.measured %}<span class="muted">{{ posture.met }} of {{ posture.measured }} met</span>{% else %}{% empty_value %}{% endif %}</td>{% endwith %}
+            <td>{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+            <td>{% if not item.running.healthy %}<span class="pill pill-serious">{{ item.running.state }}</span><br>{% endif %}{{ item.running.uptime|default:item.running.status }}{% if item.running.check %}<br><span class="muted">{{ item.running.check }}</span>{% endif %}</td>
+          </tr>
+        {% endwith %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  {% include "partials/_empty_state.html" with message="No containers yet. They appear after the first sweep of a machine HQ reaches through Portainer." %}
+{% endif %}
+{% endblock %}

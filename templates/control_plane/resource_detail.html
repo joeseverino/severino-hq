@@ -27,6 +27,15 @@ held request writes nothing and queues nothing by design.
   </div>
 {% endif %}
 
+{% comment %}
+A running container is summarised by what it runs rather than by the
+declaration's machinery: the controller's actions are the buttons above, and
+"declared" says nothing a container page is opened to learn.
+{% endcomment %}
+{% if container.standing %}
+  {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit_url=container.edit_url %}
+  {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit_url=container.edit_url %}{% endif %}
+{% else %}
 <div class="control-summary">
   <div class="control-metric">
     <span class="control-label">Configuration</span>
@@ -43,9 +52,9 @@ held request writes nothing and queues nothing by design.
   </div>
   <div class="control-metric">
     <span class="control-label">Controller</span>
-    {% if controller_rows %}
-      <strong class="control-good">{% if controller_automatic %}Automatic{% else %}On request{% endif %}</strong>
-      <span>{% for label, allowed in controller_rows %}{{ label }}{% if not allowed.enabled %} is off: {{ allowed.reason }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>
+    {% if controller %}
+      <strong class="control-{{ controller.tone }}">{{ controller.headline }}</strong>
+      {% for line in controller.lines %}<span>{{ line|capfirst }}</span>{% endfor %}
     {% else %}
       <strong class="control-declared">None</strong>
       <span>The controller takes no action on this kind.</span>
@@ -60,10 +69,11 @@ held request writes nothing and queues nothing by design.
     <div class="control-metric">
       <span class="control-label">Renewal policy</span>
       <strong class="{% if capabilities.actions.renew.enabled %}control-warn{% else %}control-good{% endif %}">{% if capabilities.actions.renew.enabled %}Eligible now{% else %}Not due{% endif %}</strong>
-      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{{ capabilities.actions.renew.reason }}</span>
+      <span>{% if capabilities.actions.renew.automatic %}Renewal begins {% if renewal_at %}{{ renewal_at|date:"F j, Y" }}{% else %}when policy allows{% endif %}. The controller resumes after restarts. {% endif %}{% if capabilities.actions.renew.reason not in controller.reasons %}{{ capabilities.actions.renew.reason }}{% endif %}</span>
     </div>
   {% endif %}
 </div>
+{% endif %}
 
 {% if resolved_spec or resolution_error %}
   {% if resolution_error %}<p class="message error">{{ resolution_error }}</p>{% endif %}
@@ -73,8 +83,7 @@ held request writes nothing and queues nothing by design.
       <dl class="kv compact">
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
         <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not observed" }}</dd>
-        <dt>Expires</dt><dd>{{ resource.status.not_after|default:"Not observed" }}</dd>
-        <dt>Days remaining</dt><dd>{% if days_left != None %}{{ days_left }}{% else %}{% empty_value %}{% endif %}</dd>
+        <dt>Expires</dt><dd>{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not observed{% endif %}</dd>
         <dt>Renewal window</dt><dd>{{ resolved_spec.renewal_window_days|counted:"day" }}</dd>
       </dl>
       <h3>Names</h3>
@@ -159,6 +168,8 @@ held request writes nothing and queues nothing by design.
   The certificate keeps its own section above: renewal, topology and consumers
   are machinery, not a description, and no readout expresses them.
   {% endcomment %}
+  {% comment %}A running container says all of this in its Upgrade and How it runs sections.{% endcomment %}
+  {% if not container.item %}
   <section class="control-card">
     <h2>{{ label }}</h2>
     {% comment %}
@@ -196,11 +207,14 @@ held request writes nothing and queues nothing by design.
     {% endcomment %}
     {% if container %}
       <dl class="kv compact">
-        {% if container.machine %}
+        {% if container.machine and not container.standing %}
           <dt>Runs on</dt>
           <dd>{% entity container.machine.link %}{% if container.machine.role %} <span class="muted">{{ container.machine.role }}</span>{% endif %}</dd>
         {% endif %}
-        {% if container.running %}
+        {% if container.running and container.standing %}
+          {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published }}</dd>{% endif %}
+          <dt>Seen</dt><dd>{{ container.running.observed_at|ago }}</dd>
+        {% elif container.running %}
           <dt>State</dt>
           <dd>
             <span class="pill pill-{% if container.running.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.running.state|default:"unknown" }}</span>
@@ -251,6 +265,7 @@ held request writes nothing and queues nothing by design.
       </details>
     {% endif %}
   </section>
+  {% endif %}
 {% endif %}
 
 {% include "partials/_relationships.html" %}
@@ -279,7 +294,8 @@ one thing worth doing then is reading what it was.
   {% endif %}
 </p>
 
-{% if capabilities.actions or resource.conditions or operations %}
+{% comment %}Only with something to show: an empty table is not a status.{% endcomment %}
+{% if resource.conditions %}
 <h2>Controller conditions</h2>
 {% if resource.conditions %}
   <div class="table-scroll">
@@ -296,6 +312,8 @@ one thing worth doing then is reading what it was.
   <p class="muted">No conditions.</p>
 {% endif %}
 
+{% endif %}
+{% if operations %}
 <h2>Operations</h2>
 <div class="table-scroll">
   <table class="data-table">

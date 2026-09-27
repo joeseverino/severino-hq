@@ -279,7 +279,7 @@ page it falls back to. Nothing here knows which one it is in.
                   <dd>{{ hop.source.phrase }}{% if hop.source.observed_at %} · <time datetime="{{ hop.source.observed_at|date:'c' }}">{{ hop.source.observed_at|date:"M j, Y, g:i a" }}</time>{% endif %}</dd>
                 </dl>
               {% endif %}
-              {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.line }}</p>{% endif %}
+              {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement }}</p>{% endif %}
               {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst }}</p>{% endif %}
               {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation }} {% entity link %}</p>{% endfor %}
               {% if hop.evidence %}

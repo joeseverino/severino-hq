@@ -55,6 +55,7 @@ from application.machine_context import machine_links
 from application.entity_links import NODE_KINDS, entity_link, kind_label, node_link
 from application.relationships import relationships_for
 from application.resource_context import (
+    controller_summary,
     origin_machine,
     readout_rows,
     resource_context,
@@ -81,11 +82,9 @@ from application.topology import (
 )
 from application.hq_self import LABEL as HQ_LABEL, hq_service
 from application.machines import (
-    container_context,
     declaration_seed,
     machine,
 )
-from application.paths import depended_on_by, depends_on
 from application.service_list import listed_service, listed_services
 from application.services import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, whereabouts
 from application.naming import name_context
@@ -97,7 +96,7 @@ from application.provider_forms import (
 )
 from application.security import AuthorizationError, safe_next, web_principal
 from application.machine_context import sections_for as machine_sections
-from application.service_context import sections_for, service_summary
+from application.service_context import missing_facets, page_parts, sections_for, service_badges, service_summary
 from application.pages import PageAction, PageMixin, page_context
 from application.resource_capabilities import (
     LIFECYCLE_VERBS,
@@ -932,10 +931,13 @@ class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
 
     @cached_property
     def relationships(self):
-        return relationships_for(
-            f"service:{self.service.hostname}",
-            principal=web_principal(self.request.user),
-        )
+        from application.page_relations import for_service
+
+        return for_service(self.service, self.sections, principal=web_principal(self.request.user))
+
+    @cached_property
+    def missing_facets(self) -> list:
+        return missing_facets(self.service)
 
     @cached_property
     def sections(self):
@@ -954,17 +956,16 @@ class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
             (
                 PageSection("overview", "Overview"),
                 PageSection("path", "Path"),
-                PageSection("impact", "Impact"),
-                PageSection("parts", "Parts"),
+                *((PageSection("parts", "Not declared"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
                 *(
                     (PageSection("relationships", "Relationships"),)
-                    if self.relationships
+                    if self.relationships.groups
                     else ()
                 ),
                 *(
-                    (PageSection("resources", "Resources"),)
-                    if self.service.claims or self.service.alias_claims
+                    (PageSection("resources", "Other names"),)
+                    if self.service.alias_claims
                     else ()
                 ),
             )
@@ -1023,8 +1024,11 @@ class ServiceDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
         context["summary"] = service_summary(self.service)
-        context["depends_on"] = depends_on(self.service.path)
-        context["depended_on_by"] = depended_on_by(self.service.hostname)
+        context["page_badges"] = service_badges(self.service, own=self.own is not None)
+        context.update(page_parts(self.service, self.request))
+        context["missing_facets"] = self.missing_facets
+        # The trace of this name in the topology, beside the path it draws.
+        context["topology_url"] = self.relationships.focus_url
         context["container_kind"] = CONTAINER_KIND
         context["sections"] = self.sections
         context["relationships"] = self.relationships
@@ -1247,14 +1251,12 @@ class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
         context["sections"] = machine_sections(found)
-        relationships = relationships_for(
-            f"machine:{found.name}", principal=web_principal(self.request.user)
+        from application.page_relations import for_machine
+
+        whole, context["relationships"] = for_machine(
+            found, context["sections"], principal=web_principal(self.request.user)
         )
-        # "Declared as" above names the tailnet device declaration with its kind.
-        if found.route_approval_key:
-            relationships = relationships.without(RELATIONS["on_tailnet"].phrase)
-        context["relationships"] = relationships
-        context.update(machine_links(found, relationships))
+        context.update(machine_links(found, whole))
         # Whether you are reading this on the machine it describes. HQ already
         # judged the caller's address for the network gate, and every machine
         # carries the addresses it answers at, so the page could always have
@@ -1265,8 +1267,12 @@ class MachineDetailView(PageMixin, LoginRequiredMixin, TemplateView):
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
         context["container_kind"] = CONTAINER_KIND
+        from application.containers import on_machine
         from application.machine_context import header_addresses
 
+        # Whether what each container runs is current and safe, as the
+        # containers page says it, and what the machine keeps that nothing runs.
+        context.update(on_machine(found))
         context["header_addresses"] = header_addresses(found)
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
@@ -1766,32 +1772,41 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
 
     @cached_property
     def container(self):
-        """What the sweep knows about a watched container, and nothing otherwise.
-
-        A container declares identity and nothing else, so everything worth
-        opening the page for is a join: which machine that name is, what the
-        container is doing, and which services reach it through the ports it
-        publishes. All three come from the sweep this resource was adopted out
-        of, so none of it is a second opinion about anything.
-        """
+        """What the sweep knows about a watched container, and nothing otherwise."""
 
         if self.object.kind != CONTAINER_KIND:
             return None
-        return container_context(
-            self.object.spec.get("host", ""), self.object.spec.get("name", "")
-        )
+        from .container_views import container_detail
+
+        return container_detail(self.object, self.request)
 
     def get_page_title(self):
+        # A container by its own name: its machine is the trail above it.
+        if self.object.kind == CONTAINER_KIND and self.object.spec.get("name"):
+            return self.object.spec["name"]
         return self.object.key
 
     def get_page_lede(self):
         return kind_label(self.object.kind)
 
     @cached_property
-    def relationships(self):
+    def all_relationships(self):
+        """Every relation, for what the page derives from them (its home)."""
+
         return relationships_for(
             f"resource:{self.object.key}", principal=web_principal(self.request.user)
         )
+
+    @cached_property
+    def relationships(self):
+        """The relations the section shows: less what the page says elsewhere."""
+
+        found = self.all_relationships
+        if self.object.kind == CONTAINER_KIND:
+            from application.page_relations import for_container
+
+            return for_container(found)
+        return found
 
     @cached_property
     def home(self):
@@ -1800,7 +1815,7 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
         return next(
             (
                 item.entity
-                for group in self.relationships.groups
+                for group in self.all_relationships.groups
                 for item in group.items
                 if item.entity.kind in ("machine", "service", "zone")
             ),
@@ -1862,12 +1877,8 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
         context["capabilities"] = capabilities
-        context["controller_rows"] = tuple(
-            (VERB_LABELS.get(verb, verb.replace("-", " ").capitalize()), allowed)
-            for verb, allowed in capabilities.actions.items()
-        )
-        context["controller_automatic"] = any(
-            allowed.automatic for allowed in capabilities.actions.values()
+        context["controller"] = controller_summary(
+            capabilities.actions, lambda verb: VERB_LABELS.get(verb, verb.replace("-", " ").capitalize())
         )
         derived = self.derived
         context["control_health"] = derived.health
@@ -1894,7 +1905,6 @@ class InfrastructureDetailView(PageMixin, LoginRequiredMixin, DetailView):
         )
         context["relationships"] = self.relationships
         context["spec_rows"] = _spec_rows(self.object)
-        context["days_left"] = derived.expiry.days_left if derived.expiry else None
         context["renewal_at"] = derived.expiry.renewal_at if derived.expiry else None
         context["operations"] = [
             operation_summary(operation)

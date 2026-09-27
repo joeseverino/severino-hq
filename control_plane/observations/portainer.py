@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, container_key
 
 PROVIDER = "portainer"
 # The API key acts as its user; the user must be granted each environment.
@@ -25,6 +25,7 @@ NETWORK_KIND = "portainer.network"
 VOLUME_KIND = "portainer.volume"
 IMAGE_KIND = "portainer.image"
 STACK_KIND = "portainer.compose_project"
+RUNTIME_KIND = "portainer.runtime"
 
 # Networks every Docker host has; sharing one says nothing about intent.
 DEFAULT_NETWORKS = frozenset({"bridge", "host", "none"})
@@ -118,12 +119,84 @@ class StackRecord(_OnMachine):
     containers: tuple[str, ...] = ()
 
 
+class RuntimeMount(ObservationRecord):
+    type: str = ""
+    # A host path for a bind, a volume's name for a volume.
+    source: str = ""
+    destination: str = ""
+    read_only: bool = False
+
+
+class PortBinding(ObservationRecord):
+    container_port: str = ""
+    host_ip: str = ""
+    host_port: str = ""
+
+
+class RuntimeRecord(_OnMachine):
+    """How one container is run, from Docker's inspect of it.
+
+    Only what decides what the container can reach or do on its machine. The
+    inspect document also carries the environment, the command line and every
+    label, where secrets live, and none of those is named here, so none can be
+    stored.
+    """
+
+    container: str
+    stack: str = ""
+    service: str = ""
+    image_id: str = ""
+    # As the image or compose sets it: blank or "0"/"root" is root.
+    user: str = ""
+    privileged: bool = False
+    read_only_rootfs: bool = False
+    network_mode: str = ""
+    pid_mode: str = ""
+    ipc_mode: str = ""
+    cap_add: tuple[str, ...] = ()
+    cap_drop: tuple[str, ...] = ()
+    # "no-new-privileges:true", "seccomp=unconfined": the option, never a profile body.
+    security_opt: tuple[str, ...] = ()
+    # Host device paths passed through.
+    devices: tuple[str, ...] = ()
+    mounts: tuple[RuntimeMount, ...] = ()
+    port_bindings: tuple[PortBinding, ...] = ()
+    # Bytes and CPUs; zero is no limit.
+    memory_limit: int = 0
+    cpu_limit: float = 0.0
+    pids_limit: int = 0
+    restart_policy: str = ""
+    # Whether the image or compose declares a health check, and its verdict.
+    healthcheck: bool = False
+    health: str = ""
+    restart_count: int = 0
+    started_at: str = ""
+
+
 def _machine(record: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(value for value in (str(record.get("host_address", "") or ""),) if value)
 
 
 def _host(record: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(value for value in (str(record.get("host", "") or ""),) if value)
+
+
+def _users(field: str, of=lambda item: item):
+    """The containers a record names, each keyed on the record's machine."""
+
+    def keys(record: Mapping[str, Any]) -> tuple[str, ...]:
+        named = record.get(field)
+        items = (named,) if isinstance(named, str) else (named or ())
+        return tuple(key for key in (container_key(record.get("host"), of(item)) for item in items) if key)
+
+    return keys
+
+
+def _network(record: Mapping[str, Any]) -> str:
+    parts = [str(record.get("driver", "") or ""), *(str(subnet) for subnet in record.get("subnets") or ())]
+    if record.get("internal"):
+        parts.append("internal, no route out")
+    return " · ".join(part for part in parts if part)
 
 
 def image_title(record: Mapping[str, Any]) -> str:
@@ -165,6 +238,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         addresses=_machine,
         title=lambda record: str(record.get("name", "")),
         relation="Docker network",
+        describe=_network,
+        containers=_users("containers"),
+        container_relation="On network",
     ),
     ObservationSpec(
         VOLUME_KIND,
@@ -176,6 +252,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         addresses=_machine,
         title=_volume_title,
         relation="Holds data in",
+        containers=_users("used_by", lambda user: user.get("container")),
     ),
     ObservationSpec(
         IMAGE_KIND,
@@ -187,6 +264,20 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         addresses=_machine,
         title=image_title,
         relation="Docker image",
+        containers=_users("containers", lambda user: user.get("container")),
+        container_relation="Runs image",
+    ),
+    ObservationSpec(
+        RUNTIME_KIND,
+        PROVIDER,
+        "Container runtime",
+        RuntimeRecord,
+        requires=(ENVIRONMENT_ACCESS,),
+        hostnames=_host,
+        addresses=_machine,
+        title=lambda record: str(record.get("container", "")),
+        relation="Runs as",
+        containers=_users("container"),
     ),
     ObservationSpec(
         STACK_KIND,
@@ -198,5 +289,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         addresses=_machine,
         title=lambda record: str(record.get("name", "")),
         relation="Compose project",
+        containers=_users("containers"),
+        container_relation="Defined by",
     ),
 )

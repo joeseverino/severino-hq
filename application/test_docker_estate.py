@@ -122,7 +122,8 @@ class GraphTests(TestCase):
         with projection_scope():
             found = relationships_for("resource:lab-web", principal=READER)
 
-        self.assertEqual(found.labels(RELATIONS["talks_to"].inverse), ("lab-db",))
+        # Named as the container: its machine is the context, not its name.
+        self.assertEqual(found.labels(RELATIONS["talks_to"].inverse), ("db",))
 
 
 class FindingTests(TestCase):

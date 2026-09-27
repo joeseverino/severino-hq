@@ -711,10 +711,11 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   });
 });
 
-// Chart tooltips. The SVG <title> element is the browser's own tooltip: it
-// waits a second or two, cannot be styled, and does not follow the pointer,
-// long enough that reading a chart stops feeling like reading. This shows the
-// same text immediately, tracking the cursor.
+// Tooltips, for chart marks and anything else carrying data-tip. The SVG
+// <title> element is the browser's own tooltip: it waits a second or two,
+// cannot be styled, and does not follow the pointer, long enough that reading
+// a chart stops feeling like reading. This shows the same text immediately,
+// tracking the cursor, and beside an element that takes keyboard focus.
 (() => {
   // Pointer devices only, for the same reason the nav menus are. A touch drag
   // across a chart fires pointermove but never pointerleave, so a tooltip
@@ -727,34 +728,59 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   tip.hidden = true;
   document.body.append(tip);
 
-  const place = (event) => {
+  const place = ({ clientX, clientY }) => {
     // Measured after the text is set, so a tooltip near an edge flips to the
     // side with room instead of being clipped by the viewport.
     const { width, height } = tip.getBoundingClientRect();
     const gap = 14;
     const left = Math.min(
-      Math.max(gap, event.clientX + gap),
+      Math.max(gap, clientX + gap),
       window.innerWidth - width - gap,
     );
-    const above = event.clientY - height - gap;
+    const above = clientY - height - gap;
     tip.style.left = `${left}px`;
-    tip.style.top = `${above < gap ? event.clientY + gap : above}px`;
+    tip.style.top = `${above < gap ? clientY + gap : above}px`;
+  };
+
+  // What only this browser knows. A page is served over TLS or not at all, so
+  // on the very name a certificate is served for, this page loading in a
+  // secure context is the browser having trusted that name's certificate.
+  const textOf = (mark) => {
+    const host = mark.dataset.tipHost;
+    const trusted = host && window.isSecureContext && location.hostname === host;
+    if (!trusted) return mark.dataset.tip;
+    const [verdict, ...rest] = mark.dataset.tip.split("\n");
+    return [`${verdict} · trusted by this browser`, ...rest].join("\n");
+  };
+
+  const show = (mark, at) => {
+    const text = textOf(mark);
+    if (tip.textContent !== text) tip.textContent = text;
+    tip.hidden = false;
+    place(at);
   };
 
   // Delegated from the document rather than bound per chart: a calendar that
   // pages to another month is replaced in place, and per-element listeners
   // would have gone with the node it swapped out.
   document.addEventListener("pointermove", (event) => {
-    const mark = event.target.closest("[data-chart] [data-tip]");
+    const mark = event.target.closest("[data-tip]");
     if (!mark) {
-      tip.hidden = true;
+      if (!tip.hidden && !document.activeElement?.matches("[data-tip]")) tip.hidden = true;
       return;
     }
-    if (tip.textContent !== mark.dataset.tip) tip.textContent = mark.dataset.tip;
-    tip.hidden = false;
-    place(event);
+    show(mark, event);
   });
   document.addEventListener("pointerleave", () => {
+    tip.hidden = true;
+  });
+  document.addEventListener("focusin", (event) => {
+    const mark = event.target.closest("[data-tip]");
+    if (!mark) return;
+    const box = mark.getBoundingClientRect();
+    show(mark, { clientX: box.left, clientY: box.top });
+  });
+  document.addEventListener("focusout", () => {
     tip.hidden = true;
   });
 })();

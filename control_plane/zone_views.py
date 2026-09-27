@@ -58,7 +58,7 @@ from control_plane.providers import normalized_hostname
 
 
 def _records_lede(zone) -> str:
-    """One line saying where this domain stands, in the operator's terms.
+    """Where this domain's records stand, as a clause beside the heading.
 
     "0 managed by HQ, 17 not yet" described a backlog that was never work: a
     declared domain takes on its records with it, so anything left is genuinely
@@ -66,18 +66,18 @@ def _records_lede(zone) -> str:
     """
 
     if not zone.managed:
-        return f"{len(zone.records)} published. None managed."
+        return f"{len(zone.records)} published, none managed"
     if not zone.adoptable:
         # "Managed" conflated two things: that HQ holds a declaration, and that
         # the declaration has been applied. The State column already says which
         # records have been observed, so this says the first and only the first.
-        return f"All {zone.managed_count} declared in HQ."
+        return f"{zone.managed_count} records, all declared in HQ"
     # Only ever seen in the gap between a record appearing at the provider and
     # the next sweep taking it on. Phrased as a statement of fact rather than
     # as a backlog, because it is not work anyone has to do.
     return (
-        f"{zone.managed_count} declared in HQ. "
-        f"{len(zone.adoptable)} new since the last sweep, adopted on the next one."
+        f"{zone.managed_count} declared in HQ, "
+        f"{len(zone.adoptable)} new since the last sweep and adopted on the next"
     )
 
 

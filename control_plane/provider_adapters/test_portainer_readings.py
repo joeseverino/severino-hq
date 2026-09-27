@@ -336,3 +336,96 @@ class WiringTests(SimpleTestCase):
         self.assertEqual(len(listed), 1)
         self.assertEqual({item["name"] for item in containers}, {"web", "db", "controller-run"})
         self.assertEqual(request.call_args.kwargs["headers"], {"X-API-Key": "secret"})
+
+
+class ImageIdentityTests(SimpleTestCase):
+    def test_a_container_keeps_the_commit_and_repository_its_image_was_built_from(self):
+        record = portainer.container_record(
+            {
+                "Names": ["/app"],
+                "Image": "ghcr.io/example/app@sha256:" + "a" * 64,
+                "State": "running",
+                "Labels": {
+                    "org.opencontainers.image.source": "https://github.com/example/app",
+                    "org.opencontainers.image.revision": "0123456789abcdef",
+                },
+            },
+            "lab-1",
+            "example-portainer",
+        )
+
+        self.assertEqual(record["source"], "https://github.com/example/app")
+        self.assertEqual(record["revision"], "0123456789abcdef")
+
+    def test_an_image_without_those_labels_says_nothing_rather_than_guessing(self):
+        record = portainer.container_record({"Names": ["/app"], "Image": "app:1"}, "lab-1", "example-portainer")
+
+        self.assertEqual((record["source"], record["revision"]), ("", ""))
+
+
+INSPECT = {
+    "Id": "c" * 64,
+    "Image": "sha256:" + "a" * 64,
+    "RestartCount": 3,
+    "Config": {
+        "User": "",
+        "Env": ["DATABASE_PASSWORD=never stored", "API_TOKEN=never stored"],
+        "Cmd": ["serve", "--token=never stored"],
+        "Labels": {"com.docker.compose.project": "shop", "com.docker.compose.service": "web",
+                   "traefik.basicauth": "never stored"},
+        "Healthcheck": {"Test": ["CMD", "true"]},
+    },
+    "HostConfig": {
+        "Privileged": True,
+        "ReadonlyRootfs": False,
+        "NetworkMode": "host",
+        "PidMode": "host",
+        "CapAdd": ["NET_ADMIN"],
+        "CapDrop": ["ALL"],
+        "SecurityOpt": ["no-new-privileges:true", "seccomp=" + "{" * 200],
+        "Devices": [{"PathOnHost": "/dev/net/tun", "PathInContainer": "/dev/net/tun"}],
+        "PortBindings": {"8080/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}]},
+        "Memory": 268435456,
+        "NanoCpus": 500000000,
+        "RestartPolicy": {"Name": "unless-stopped"},
+    },
+    "State": {"Health": {"Status": "healthy"}, "StartedAt": "2026-09-25T10:00:00Z"},
+    "Mounts": [
+        {"Type": "bind", "Source": "/var/run/docker.sock", "Destination": "/var/run/docker.sock", "RW": False},
+        {"Type": "volume", "Name": "shop_data", "Source": "/var/lib/docker/volumes/shop_data/_data",
+         "Destination": "/data", "RW": True},
+    ],
+}
+
+
+class RuntimeTests(SimpleTestCase):
+    def reads(self):
+        def docker(ref, environment_id, path):
+            if path == "/containers/json?all=1":
+                return [{"Id": "c" * 64, "Names": ["/web"], "Labels": {}}] if environment_id == 1 else []
+            if path == f"/containers/{'c' * 64}/json":
+                return INSPECT
+            raise AssertionError(path)
+
+        return api(docker=docker)
+
+    def test_how_a_container_is_run_is_read_field_by_field(self):
+        (record,) = read(portainer.RUNTIME_KIND, self.reads())
+
+        self.assertEqual(
+            (record["container"], record["stack"], record["service"], record["privileged"],
+             record["network_mode"], record["pid_mode"], record["cap_add"], record["devices"]),
+            ("web", "shop", "web", True, "host", "host", ["NET_ADMIN"], ["/dev/net/tun"]),
+        )
+        self.assertEqual((record["memory_limit"], record["cpu_limit"], record["restart_count"]), (268435456, 0.5, 3))
+        self.assertEqual((record["healthcheck"], record["health"]), (True, "healthy"))
+        self.assertEqual(record["mounts"][0]["source"], "/var/run/docker.sock")
+        self.assertEqual(record["mounts"][1]["source"], "shop_data")
+        # A profile body is never kept; the option that names it is.
+        self.assertEqual(record["security_opt"], ["no-new-privileges:true", "seccomp=(profile)"])
+
+    def test_no_secret_an_inspect_carries_is_ever_stored(self):
+        records = read(portainer.RUNTIME_KIND, self.reads())
+
+        self.assertNotIn("never stored", repr(records))
+        self.assertFalse({"env", "Env", "cmd", "labels"} & set(records[0]))

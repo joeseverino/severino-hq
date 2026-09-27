@@ -272,6 +272,30 @@ class OIDCBackendTests(TestCase):
 
         self.assertNotIn(TAILSCALE_PRINCIPAL_SESSION_KEY, backend.request.session)
 
+    @patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.get_or_create_user")
+    def test_a_sign_in_links_the_github_account_it_claims(self, get_user):
+        user = User.objects.create_user("operator")
+        get_user.return_value = user
+        backend = HQOIDCAuthenticationBackend()
+        backend.request = type("Request", (), {"session": {}})()
+
+        backend.get_or_create_user("access-token", "id-token", {"github": "example-user"})
+
+        self.assertEqual(user.linked_accounts.get(provider="github").login, "example-user")
+
+    @patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.authenticate")
+    def test_a_refused_token_exchange_is_a_failed_sign_in_with_its_reason(self, authenticate):
+        import requests
+
+        refused = requests.Response()
+        refused.status_code = 401
+        authenticate.side_effect = requests.HTTPError("Get Token Error", response=refused)
+        backend = HQOIDCAuthenticationBackend()
+        request = type("Request", (), {"session": {}})()
+
+        self.assertIsNone(backend.authenticate(request))
+        self.assertIn("refused HQ's client credentials", request.session["oidc_failure"])
+
     def test_allows_user_in_allowed_group(self):
         backend = HQOIDCAuthenticationBackend()
 

@@ -152,7 +152,7 @@ class FacetVisibilityTests(TestCase):
             return next(item for item in service.facets if item.id == facet_id)
 
     def test_a_facet_no_connected_kind_supplies_is_not_visible(self):
-        from control_plane.providers import CONNECTION_LABELS
+        from control_plane.connection_kinds import CONNECTION_LABELS
 
         facet = self.facet("certificate")
 

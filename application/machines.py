@@ -19,7 +19,7 @@ from typing import Any
 
 from django.utils.dateparse import parse_datetime
 
-from control_plane.models import ManagedResource, ProviderConnection
+from control_plane.models import ProviderConnection
 
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
 from .locate import Machines, index_of, observed_answers, points_at_host
@@ -30,7 +30,8 @@ from control_plane.providers import (
     origin_is_authoritative,
 )
 
-from .services import CONTAINER_KIND, Running, container_watchers
+from .containers import Running, container_watchers
+from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
 
 
@@ -1000,34 +1001,31 @@ def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
     return found, devices
 
 
-def container_context(host: str, name: str) -> dict[str, object]:
-    """What else a declared container is tied to, and what it is doing.
+def served_by() -> dict[tuple[str, str], set[str]]:
+    """``{(machine, container): hostnames}``: which names each container answers for.
 
-    The services are the inverse of the runtime claim: a service page resolves
-    its origin to a machine and a container, so the containers that answer for a
-    name are exactly the ones some service resolved to. Asked the other way
-    (by matching published ports) a container on the host network answers for
-    nothing, because Docker reports no ports for one.
+    Resolved the same way a service resolves its own origin, but without
+    assembling every service to ask: the board builds facets, health and
+    certificates for each name, and none of that answers this question. Once
+    per projection, so a page listing every container asks it once.
     """
 
+    from .projection import read_once
+
+    return read_once("machines.served_by", _served_by)
+
+
+def _served_by() -> dict[tuple[str, str], set[str]]:
     from control_plane.providers import normalized_hostname
 
-    from .infrastructure import declared_machines
+    from .infrastructure import declared_machines, enabled_resources
     from .services import _locate, whereabouts
 
-    found = machine(host)
-    running = next(
-        (item for item in (found.containers if found else ()) if item.name == name),
-        None,
-    )
-    # Resolved the same way a service resolves its own origin, but without
-    # assembling every service to ask: the board builds facets, health and
-    # certificates for each name, and none of that answers this question.
     machines = declared_machines()
     at = whereabouts(machines)
-    wanted = found.name if found else host
-    serves: set[str] = set()
-    for resource in ManagedResource.objects.filter(enabled=True):
+    found: dict[tuple[str, str], set[str]] = {}
+    # The shared read of every enabled declaration, not a query of its own.
+    for resource in enabled_resources():
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
             continue
@@ -1039,8 +1037,29 @@ def container_context(host: str, name: str) -> dict[str, object]:
         if not origin:
             continue
         located = _locate(origin, machines, at)
-        if located.host == wanted and located.container == name:
-            serves.update(normalized_hostname(item) for item in names)
+        if located.host and located.container:
+            found.setdefault((located.host, located.container), set()).update(
+                name for name in (normalized_hostname(item) for item in names) if name
+            )
+    return found
+
+
+def container_context(host: str, name: str) -> dict[str, object]:
+    """What else a declared container is tied to, and what it is doing.
+
+    The services are the inverse of the runtime claim: a service page resolves
+    its origin to a machine and a container, so the containers that answer for a
+    name are exactly the ones some service resolved to. Asked the other way
+    (by matching published ports) a container on the host network answers for
+    nothing, because Docker reports no ports for one.
+    """
+
+    found = machine(host)
+    running = next(
+        (item for item in (found.containers if found else ()) if item.name == name),
+        None,
+    )
+    serves = served_by().get((found.name if found else host, name), set())
     return {
         "machine": found,
         "running": running,

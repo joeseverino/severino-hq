@@ -201,6 +201,31 @@ class ProviderRuntime(Protocol):
     ) -> bytes:
         raise NotImplementedError
 
+    def composition(self) -> Mapping[str, Any]:
+        """What this controller's image was composed from.
+
+        ``repository`` is the host's own ``owner/name``, ``image`` the running
+        image reference, and ``extensions`` one ``{plugin, source_repository,
+        source_workflow, source_commit}`` per admitted extension, from the lock
+        the image carries. Blank and empty when the image was built without them.
+        """
+
+        raise NotImplementedError
+
+    def sign(self, connection_ref: str, data: bytes) -> bytes:
+        """An RS256 signature over ``data`` by one connection's signing key.
+
+        The key stays in the controller's identity directory and is read by
+        openssl alone; the caller receives the signature and nothing else.
+        """
+
+        raise NotImplementedError
+
+    def signing_public_key(self, connection_ref: str) -> str:
+        """The public half of one connection's signing key, in OpenSSH form."""
+
+        raise NotImplementedError
+
     def run(
         self,
         command: list[str],

@@ -57,7 +57,7 @@ alphabetical is the order and there is nothing to move.
                 {% endfor %}
                 {% if facet.id == certificate_facet %}
                   {% with certificate=service.path.certificate %}
-                    {% if certificate %}<span title="{{ certificate.line }}">{{ certificate.role }}{% if certificate.name or certificate.issuer %} <span class="muted">· {% firstof certificate.issuer certificate.name %}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
+                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role }}{% if certificate.name or certificate.issuer %} <span class="muted">· {% firstof certificate.issuer certificate.name %}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
                   {% endwith %}
                 {% else %}
                   {% for line in facet.reading_lines %}

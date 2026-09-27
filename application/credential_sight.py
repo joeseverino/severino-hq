@@ -23,7 +23,8 @@ from control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from control_plane.providers import CONNECTION_CREDENTIALS, CONNECTION_LABELS, PROVIDERS
+from control_plane.providers import PROVIDERS
+from control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from control_plane.reading_parts import PartRefusal, parts_of, refused_parts
 
 from .labels import human_label

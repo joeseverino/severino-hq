@@ -1,3 +1,4 @@
+{% load nav_tags %}
 {% comment %}
 One table of containers, used for the ones on show and the ones folded
 away. Included twice rather than written twice, so a column added to one
@@ -8,9 +9,9 @@ cannot go missing from the other.
     <tr>
       <th>Container</th>
       <th>Image</th>
+      <th>Standing</th>
       <th>Publishes</th>
       <th>Status</th>
-      <th>State</th>
     </tr>
   </thead>
       <tbody>
@@ -36,10 +37,10 @@ cannot go missing from the other.
               {% endcomment %}
               {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
             </td>
-            <td><code>{{ container.image_label }}</code></td>
+            {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code tabindex="0" data-tip="{{ container.image }}">{{ standing.label }}</code>{% else %}<code>{{ container.image_label }}</code>{% endif %}</td>{% endwith %}
+            {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td>{% endif %}{% endwith %}
             <td>{% if container.published %}{{ container.published }}{% else %}{% empty_value %}{% endif %}</td>
-            <td>{{ container.status }}</td>
-            <td><span class="pill pill-{% if container.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.state|default:"unknown" }}</span></td>
+            <td>{% if not container.healthy %}<span class="pill pill-unreachable">{{ container.state|default:"unknown" }}</span> {% endif %}{{ container.uptime|default:container.status }}{% if container.check %}<br><span class="muted">{{ container.check }}</span>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

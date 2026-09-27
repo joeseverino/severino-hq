@@ -105,6 +105,15 @@ def ago(moment) -> str:
     return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
 
 
+def ago_short(moment) -> str:
+    """``ago`` to one unit, for a column: "5 days ago", not "5 days, 15 hours ago"."""
+
+    from django.utils.timesince import timesince
+
+    age = timesince(moment, depth=1)
+    return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
+
+
 def duration(delta) -> str:
     """A length of time in the phrasing ``ago`` uses, without the "ago"."""
 

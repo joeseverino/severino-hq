@@ -1,0 +1,72 @@
+{% extends "page.html" %}
+{% comment %}
+Your GitHub profile and what you watch there, from application.github_profile.
+Yours because your sign-in names the account; a page that let you type a login
+would be a page about anybody.
+{% endcomment %}
+{% block page %}
+{% if not login %}
+  {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account. Add a github claim with your login to your Pocket ID user, then sign in again." %}
+{% elif not profile %}
+  {% include "partials/_empty_state.html" with message="Not read from GitHub yet. Refresh reads it now." %}
+{% else %}
+  <section class="gh-profile" aria-label="Your GitHub profile">
+    {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
+    <div class="gh-identity">
+      <p class="gh-name">{{ profile.name|default:profile.login }}<span class="gh-verified" tabindex="0" data-tip="Verified by your SSO sign-in&#10;Pocket ID's github claim names @{{ profile.login }}{% if app_repositories %}&#10;And by GitHub: HQ's App is installed on @{{ profile.login }}{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">Verified by your SSO sign-in: Pocket ID's github claim names @{{ profile.login }}</span></span></p>
+      <p><a class="external-link" href="{{ profile.url }}" rel="noopener">@{{ profile.login }}</a>{% if profile.bio %} · {{ profile.bio }}{% endif %}</p>
+    </div>
+    <dl class="gh-stats">
+      <div><dt>Followers</dt><dd><a href="{{ profile.url }}?tab=followers" rel="noopener">{{ profile.followers }}</a></dd></div>
+      <div><dt>Following</dt><dd><a href="{{ profile.url }}?tab=following" rel="noopener">{{ profile.following }}</a></dd></div>
+      <div><dt>Public repos</dt><dd><a href="{{ profile.url }}?tab=repositories" rel="noopener">{{ profile.public_repos }}</a></dd></div>
+      <div><dt>Starred</dt><dd><a href="{{ profile.url }}?tab=stars" rel="noopener">{{ profile.starred }}</a></dd></div>
+    </dl>
+  </section>
+
+  <h2>Starred <span class="heading-aside">newest first · read {{ profile.observed_at|ago }}</span></h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Repository</th><th>Latest release</th><th>Advisories</th><th>Starred</th></tr></thead>
+      <tbody>
+        {% for repo in profile.watched %}
+          <tr>
+            <td>
+              <a class="external-link" href="{{ repo.url }}" rel="noopener"><strong>{{ repo.name }}</strong></a>
+              {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110 }}</div>{% endif %}
+            </td>
+            <td>{% if repo.release %}<a class="external-link" href="{{ repo.release.url }}" rel="noopener">{{ repo.release.tag }}</a>{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            <td>
+              {% for item in repo.advisories|slice:":2" %}
+                <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory" }}</span> <a class="external-link" href="{{ item.url }}" rel="noopener" title="{{ item.summary }}">{{ item.id }}</a>{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
+              {% empty %}{% empty_value %}{% endfor %}
+              {% if repo.advisories|length > 2 %}<a class="muted" href="{{ repo.url }}/security/advisories" rel="noopener">and {{ repo.advisories|length|add:"-2" }} more</a>{% endif %}
+            </td>
+            <td class="nowrap">{% if repo.starred %}{{ repo.starred|ago_short }}{% else %}{% empty_value %}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Account <span class="heading-aside">what @{{ profile.login }} shows publicly, and what HQ reads through it</span></h2>
+  <dl class="github-facts account-facts">
+    {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|date:"F Y" }}</dd></div>{% endif %}
+    {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company }}</dd></div>{% endif %}
+    {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location }}</dd></div>{% endif %}
+    {% if profile.website %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website }}" rel="noopener">{{ profile.website|cut:"https://" }}</a></dd></div>{% endif %}
+    {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social }}</dd></div>{% endif %}
+    <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
+    {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists }}</dd></div>{% endif %}
+    <div><dt>HQ's GitHub App</dt><dd>
+      {% if app_repositories %}
+        Installed, reading {{ app_repositories|length }} of your repositories:
+        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short }}</a>{% else %}<a class="external-link" href="{{ item.repo.url }}" rel="noopener">{{ item.repo.short }}</a>{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+        · <a class="external-link" href="https://github.com/settings/installations" rel="noopener">Manage</a>
+      {% else %}
+        <span class="muted">Not reading any repository this account owns.</span>
+      {% endif %}
+    </dd></div>
+  </dl>
+{% endif %}
+{% endblock %}

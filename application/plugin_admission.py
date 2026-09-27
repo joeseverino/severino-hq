@@ -196,3 +196,19 @@ def enforce_plugin_admission(manifests: tuple[AdmittedPlugin, ...]) -> None:
         _fail("lock inventory does not exactly match enabled plugins")
     for manifest in manifests:
         _agrees_with_approval(manifest, by_id[manifest.id])
+
+
+def admitted_sources() -> tuple[dict[str, str], ...]:
+    """Each admitted extension's plugin, repository, workflow and commit.
+
+    Read from the lock this image carries, already verified at startup; empty
+    where the image carries none.
+    """
+
+    if not os.environ.get("SEVERINO_HQ_PLUGIN_LOCK", "").strip():
+        return ()
+    fields = ("plugin", "source_repository", "source_workflow", "source_commit")
+    return tuple(
+        {field: str(approval.get(field, "")) for field in fields}
+        for approval in _load_lock()
+    )

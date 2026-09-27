@@ -266,9 +266,13 @@ async (page) => {
       add('native-tooltip', { tag: el.tagName.toLowerCase(), title: el.title });
     });
 
-    // A data-tip with no data-chart ancestor never fires at all.
+    // The shared tooltip answers any data-tip on hover and on focus, so a tip
+    // outside a chart is dead only to the keyboard: an element that cannot take
+    // focus never shows it to someone who does not use a pointer. Chart marks
+    // are exempt; the chart's own table carries their values.
+    const focusable = 'a[href], button, input, select, textarea, summary, [tabindex]';
     document.querySelectorAll('[data-tip]').forEach((el) => {
-      if (!el.closest('[data-chart]')) add('dead-tooltip', { tip: el.dataset.tip });
+      if (!el.closest('[data-chart]') && !el.matches(focusable)) add('dead-tooltip', { tip: el.dataset.tip });
     });
 
     // A column whose every cell is empty or an em dash is a heading over

@@ -5,13 +5,18 @@
 
   Expects: `relationships`, a Relationships.
 {% endcomment %}
+{% comment %}
+  The heading only over relations: a page that says every one of them elsewhere
+  keeps what cannot go elsewhere (what could not be read, the raw readings)
+  without a heading over nothing.
+{% endcomment %}
 {% if relationships %}
-<section id="relationships" class="page-section" data-page-section>
+<section{% if relationships.groups %} id="relationships"{% endif %} class="page-section"{% if relationships.groups %} data-page-section{% endif %}>
+  {% if relationships.groups %}
   <div class="section-head">
     <h2>Relationships</h2>
-    {% if relationships.focus_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}
+    {% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See in topology</a>{% endif %}
   </div>
-  {% if relationships.groups %}
   <div class="table-scroll">
     <table class="data-table compact-table relationship-table">
       <tbody>
@@ -19,9 +24,9 @@
           {% for item in group.items %}
             <tr>
               {% if forloop.first %}<th scope="rowgroup" rowspan="{{ group.items|length }}">{{ group.phrase }}</th>{% endif %}
-              <td>{% entity item.entity %}</td>
+              <td>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail }}</span>{% endif %}</td>
               <td class="muted">
-                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}<time datetime="{{ item.observed_at.isoformat }}">read {{ item.observed_at|ago }}</time>{% endif %}
+                {% if item.source %}via {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}<time datetime="{{ item.observed_at.isoformat }}">read {{ item.observed_at|ago_short }}</time>{% endif %}
                 {% if item.stale %}<span class="pill pill-attention">Stale</span>{% endif %}
               </td>
             </tr>

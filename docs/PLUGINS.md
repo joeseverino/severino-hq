@@ -137,34 +137,35 @@ Production runs **one image carrying every admitted plugin**. Plugins do not
 build or deploy images: each verifies and admits itself and publishes its signed
 bundle, and the host composes them, so deploying one never replaces the others.
 
-A plugin cannot trigger the composition. Signalling one repository from another
-needs a credential, and a private repository holding a long-lived token that can
-start builds in this public one is a worse trade than a few minutes of latency.
-So the host asks rather than being told: **the composition workflow runs on a
-schedule and rebuilds only when its inputs changed.**
-
-What a composition is made of (host image digest, plugin wheel digests, and the
-admission policy) is hashed into a fingerprint and published as a
-`composition:fp-…` tag beside the image. A scheduled run whose fingerprint is
-already published stops before building, so a tick with nothing to do costs one
-resolution and deploys nothing. The registry holds that state because it already
-holds the only copy that matters.
+A plugin's admission starts the composition itself, and nothing polls for it.
+The last step of the host's `admit-plugin` action mints a token as HQ's
+GitHub App, asking only for Actions write on this repository, and
+dispatches **Compose and deploy extensions** with an input that names no
+plugin. The token lasts an hour and can do nothing but start a workflow here;
+the app's key is the only credential a plugin repository holds, as a secret on
+an `admission` environment limited to `main`. A deploy
+still waits for a person's approval in the `production` environment, which no
+app can give. A dispatch that fails fails the admission, in red, where it
+happened, so nothing is missed silently and no schedule backs it up.
 
 ```
 merge a plugin → its CI admits the wheel and publishes the bundle
-               → the host's scheduled composition sees new wheel digests
-               → build → verify → scan → publish → deploy
+               → the admission dispatches the host's composition
+               → build → verify → scan → publish → approve → deploy
+               → HQ boots on the new image and reports delivery on the plugin's commit
 ```
 
-Only scheduled runs stop early. Running **Compose and deploy extensions**
-by hand (`workflow_dispatch`) always rebuilds, which is how you deploy a plugin
-immediately instead of waiting for the next tick.
+What a composition is made of (host image digest, plugin wheel digests, and the
+admission policy) is hashed into a fingerprint and published as a
+`composition:fp-…` tag beside the image. An admission's dispatch whose
+fingerprint is already published (the same commit admitted twice) stops before
+building. Every other trigger rebuilds: a host build, a pull request, and a
+hand-run **Compose and deploy extensions** (`workflow_dispatch`), which is how
+you rebuild the current set on purpose.
 
-The workflow also listens for a `repository_dispatch` of type
-`extension-admitted`, for a plugin that is ever given a credential to announce
-itself. **Nothing sends it today.** It is kept because the schedule makes it
-safe to have an unused fast path: a missed signal is picked up on the next tick
-rather than leaving production a release behind.
+The composition reads the plugins' admissions as the same app, through a token
+minted for each run that asks only for Actions and Contents read. There is no
+personal token to renew.
 
 The composition workflow is the only path to production. It verifies each
 signature itself, against the identity built from the declared repository and
@@ -187,9 +188,8 @@ before either merges:
   into a candidate image and runs the composed checks and suite in it. The
   candidate is verify-only: unadmitted wheels, no lock, a local tag, and never
   published, signed or deployed. Extensions without such a branch are reused
-  from their verified admissions. Reading the branches needs
-  `EXTENSION_ARTIFACTS_TOKEN` to have contents read on the extension
-  repositories.
+  from their verified admissions. The app's Contents read covers
+  reading the branches.
 
 Merge the host first; each extension then checks and admits against `main`.
 

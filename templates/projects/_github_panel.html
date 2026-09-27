@@ -1,0 +1,105 @@
+{% comment %}
+A project's repository as the GitHub App reads it (application.github_estate):
+what is at the head, whether it passes, what production runs, what is open.
+The page reads a stored reading; nothing here calls GitHub.
+{% endcomment %}
+<section class="github-panel" aria-labelledby="github-heading">
+  <h2 id="github-heading">GitHub <span class="heading-aside"><a class="external-link" href="{{ repo.url }}" rel="noopener">{{ repo.name }}</a>{% if repo.private %} · private{% endif %}{% if repo.observed_at %} · read {{ repo.observed_at|ago_short }}{% endif %}</span></h2>
+  <div class="fact-band">
+    <div class="band-fact">
+      <span class="band-icon">{% include "partials/_icon.html" with name="commit" %}</span>
+      <div>
+        <span class="band-label">Head of {{ repo.default_branch }}</span>
+        <strong><a class="external-link" href="{{ repo.head.url }}" rel="noopener"><code>{{ repo.head.sha|slice:":7" }}</code></a></strong>
+        <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message }}</small>
+        <small>{% if repo.head.author %}{{ repo.head.author }}{% endif %}{% if repo.head.date %} · {{ repo.head.date|ago_short }}{% endif %}</small>
+      </div>
+    </div>
+    <div class="band-fact{% if repo.checks.state == 'failure' %} tone-serious{% elif repo.checks.state == 'success' %} tone-good{% elif repo.checks.state == 'pending' %} tone-attention{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="check-circle" %}</span>
+      <div>
+        <span class="band-label">Checks</span>
+        <strong>{% if repo.checks.state == 'failure' %}Failing{% elif repo.checks.state == 'pending' %}Running{% elif repo.checks.state == 'success' %}Passing{% else %}None{% endif %}</strong>
+        <small>{% if repo.checks.failing %}{{ repo.checks.failing|join:", " }}{% elif repo.checks.total %}{{ repo.checks.total }} on this commit{% if repo.checks.running %}, {{ repo.checks.running }} still running{% endif %}{% else %}Nothing runs on this commit.{% endif %}</small>
+      </div>
+    </div>
+    <div class="band-fact{% if repo.production.state == 'success' %} tone-good{% elif repo.production.state == 'failure' or repo.production.state == 'error' %} tone-serious{% elif repo.production %} tone-attention{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
+      <div>
+        <span class="band-label">Production</span>
+        {% if repo.production %}
+          <strong>{% if repo.production.url %}<a class="external-link" href="{{ repo.production.url }}" rel="noopener">{{ repo.production.state|capfirst|default:"Deployed" }}</a>{% else %}{{ repo.production.state|capfirst|default:"Deployed" }}{% endif %}</strong>
+          <small><code>{{ repo.production.sha|slice:":7" }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · behind the head{% endif %}</small>
+          {% if repo.production.verified %}<small class="github-verified{% if repo.production_verified %} is-verified{% endif %}" tabindex="0" data-tip="{% for step in repo.production.verified %}{{ step.name }}: {{ step.conclusion|default:'not run' }}{% if not forloop.last %}&#10;{% endif %}{% endfor %}">{% include "partials/_icon.html" with name="check-circle" %}{% if repo.production_verified %}Verified before deploying{% else %}Verification failed{% endif %}</small>{% endif %}
+        {% else %}
+          <strong>None</strong><small>No deployments on GitHub.</small>
+        {% endif %}
+      </div>
+    </div>
+    <div class="band-fact{% if repo.serious_alerts %} tone-serious{% elif repo.open_alerts %} tone-attention{% elif repo.alerts %} tone-good{% endif %}">
+      <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
+      <div>
+        <span class="band-label">Security</span>
+        {% if repo.alerts %}
+          <strong><a class="external-link" href="{{ repo.url }}/security" rel="noopener">{% if repo.open_alerts %}{{ repo.open_alerts }} open{% else %}Clear{% endif %}</a></strong>
+          <small>{% for n, level in repo.severities %}{{ n }} {{ level }}{% if not forloop.last %}, {% endif %}{% empty %}No open alerts.{% endfor %}</small>
+        {% else %}
+          <strong>Not available</strong><small>GitHub offers no alerts for this repository on its plan.</small>
+        {% endif %}
+      </div>
+    </div>
+  {% with rules=repo.rules environment=repo.production_environment %}
+    {% if rules or environment or repo.runners or posture %}
+      <dl class="github-facts">
+        {% if posture.measured %}
+          <div><dt>Posture</dt><dd><a href="{% url 'posture' %}">{{ posture.met }} of {{ posture.measured }} met</a> against your {% if repo.private %}private{% else %}public{% endif %} standard{% if posture.unmet %}<br><span class="github-gap">Not met: {% for result in posture.unmet %}{{ result.check.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd></div>
+        {% endif %}
+        {% if rules %}
+          <div><dt>Rules on {{ repo.default_branch }}</dt><dd>
+            {% if rules.pull_request %}A pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}No pull request{% endif %}
+            and {{ rules.required_checks|length|counted:"required check,required checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", " }}){% endif %}{% if rules.blocks_force_push %} · force-push blocked{% endif %}
+            {% if repo.unrequired_checks %}<br><span class="github-gap">Run on pull requests but not required: {{ repo.unrequired_checks|join:", " }}</span>{% endif %}
+          </dd></div>
+        {% elif "branch_rules" in repo.refused %}
+          <div><dt>Rules on {{ repo.default_branch }}</dt><dd class="muted">Not available on this repository's plan.</dd></div>
+        {% endif %}
+        {% if environment %}
+          <div><dt>Production</dt><dd>{% if environment.reviewers %}Deploys wait for approval from {{ environment.reviewers|join:", " }}{% else %}Deploys without approval{% endif %}{% if environment.wait_minutes %} after {{ environment.wait_minutes }} minutes{% endif %} · from {% if environment.branches == "any" %}any branch{% elif environment.branches == "protected" %}protected branches{% else %}chosen branches{% endif %}</dd></div>
+        {% endif %}
+        {% for runner in repo.runners %}
+          <div><dt>Runner</dt><dd>{% entity "machine"|entity_of:runner.name %} · {{ runner.status }}{% if runner.busy %}, running a job{% else %}, idle{% endif %}</dd></div>
+        {% endfor %}
+      </dl>
+    {% endif %}
+    {% endwith %}
+  </div>
+
+
+  {% comment %}
+  Rows that read left to right, the detail beside the name: a table spread
+  four columns across the page and left the middle of every row empty.
+  {% endcomment %}
+  {% if repo.pull_requests %}
+    <h3 class="section-heading">Open pull requests</h3>
+    <ul class="github-list">
+      {% for pull in repo.pull_requests %}
+        <li>
+          <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
+          <a href="{{ pull.url }}" rel="noopener">{{ pull.title }}</a>
+          <span class="muted">#{{ pull.number }} · {{ pull.author }} · {{ pull.updated_at|ago_short }}</span>
+          {% if pull.draft %}<span class="pill">Draft</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if repo.runs %}
+    <h3 class="section-heading">Workflows</h3>
+    {% comment %}Chips that wrap, not cells: a grid always stranded a last row. Detail on hover.{% endcomment %}
+    <p class="workflow-chips">
+      {% for run in repo.runs %}
+        <a class="workflow-chip{% if run.conclusion == 'success' %} tone-good{% elif run.conclusion == 'failure' or run.conclusion == 'timed_out' %} tone-serious{% elif run.status != 'completed' %} tone-attention{% endif %}" href="{{ run.url }}" rel="noopener" data-tip="{% if run.conclusion %}{{ run.conclusion|capfirst }}{% else %}{{ run.status|capfirst }}{% endif %}&#10;{{ run.branch }} · {{ run.sha|slice:':7' }} · {{ run.created_at|ago_short }}">{% include "partials/_icon.html" with name="check-circle" %}{{ run.name }}<span class="visually-hidden">: {% if run.conclusion %}{{ run.conclusion }}{% else %}{{ run.status }}{% endif %}, {{ run.branch }}, {{ run.created_at|ago_short }}</span></a>
+      {% endfor %}
+    </p>
+  {% endif %}
+</section>

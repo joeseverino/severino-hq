@@ -371,3 +371,34 @@ class CarriedConnectionRecordTests(TestCase):
 
         row = ProviderConnection.objects.get(connection_ref="new-host")
         self.assertFalse(row.probed)
+
+
+class BootTests(TestCase):
+    """A new image asks for delivery to be read; nothing polls for it."""
+
+    def setUp(self):
+        self.settings_override, self.directory = markers()
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+    def test_a_boot_where_delivery_is_read_asks_for_it_and_rings(self):
+        from control_plane.models import ReadRequest
+
+        from .cadence import request_delivery_read
+
+        ProviderInventory.objects.create(kind="github.delivery", records=[], reachable=True, observed_at=timezone.now())
+
+        self.assertTrue(request_delivery_read())
+        self.assertTrue(ReadRequest.objects.filter(kind="github.delivery").exists())
+        self.assertTrue((self.directory / "doorbell").exists())
+        # A boot is not a person using HQ: the idle cadence stands.
+        self.assertFalse(recently_used())
+
+    def test_a_boot_where_delivery_is_not_read_asks_for_nothing(self):
+        from control_plane.models import ReadRequest
+
+        from .cadence import request_delivery_read
+
+        self.assertFalse(request_delivery_read())
+        self.assertFalse(ReadRequest.objects.exists())
+        self.assertFalse((self.directory / "doorbell").exists())

@@ -363,10 +363,51 @@ a self-hosted runner deploys it health-gated with rollback. Production runs the
 composed image (`…/composition:…`), never the host image on its own. Migrations
 and `collectstatic` run on container boot via `entrypoint.sh`.
 
-An extension merge deploys too, without anything being run by hand: the
-composition workflow runs on a schedule and rebuilds when the extension wheel
-digests change. See [`PLUGINS.md`](PLUGINS.md#composition). To deploy an
-extension immediately, run that workflow by hand (`workflow_dispatch`).
+An extension merge deploys too, without anything being run by hand or anything
+polling. Its admission dispatches the composition (see
+[`PLUGINS.md`](PLUGINS.md#composition)), the deploy waits for your approval, and
+when HQ boots on the new image it asks the controller to read `github.delivery`.
+With a GitHub App connection that manages it (below), the controller reports on
+the extension's commit as a **Severino HQ · production** check (waiting for its
+composition, waiting for deploy approval, then live) and leaves one comment on
+the merged pull request. HQ starts nothing: its app cannot start a workflow.
+
+#### Continuous delivery through HQ's GitHub App
+
+One app, registered on your account with no webhook and the permissions in
+`deploy/github-apps.json` (a test holds them to exactly what HQ asks for), and
+installed on the host repository and every extension. Each use mints an
+hour-long token for only what it does:
+
+| Who | Holds the key as | Asks for |
+|---|---|---|
+| the controller | a 1Password SSH Key item, rendered for openssl only | what each read or report needs |
+| an extension's admission | `HQ_APP_KEY` on its `admission` environment, main only | Actions write on this repository: start the composition |
+| the composition | `HQ_APP_KEY` in this repository's Actions secrets | Actions and Contents read: the extensions' admissions |
+
+For the controller, keep the key as an SSH Key item in the controller vault,
+and beside it a connection item with `connection_ref`, `projection: github_app`,
+`env_prefix: GITHUB`, `app_id` and `signing_key` (the SSH Key item's title),
+**without** `manages`. The key is rendered beside the controller's SSH
+identities and read only by openssl, which signs GitHub's JWT; HQ never loads
+it. The connection's probe shows the key's fingerprint as GitHub lists it.
+
+For the pipeline, `scripts/wire-github-app.py` reads the key from 1Password and
+sets `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` on this repository, and on each
+extension creates the `admission` environment (main only) with the same secret
+and variable, through standard input, never a file or a command line. The
+personal `EXTENSION_ARTIFACTS_TOKEN` can then be deleted and revoked, once a
+composition has read with the app. Each extension's `admit-plugin.yml` caller
+names the environment on its admit job and passes both to the host's action.
+
+A rotation: generate a second key on the app, replace the SSH Key item's key,
+run the script again, wait for the probe to show the new fingerprint, delete
+the old key on GitHub.
+
+Read before writing. Until the connection item has `manages: 1`, HQ observes
+only: the sweep reports each extension's admitted and running commit and the
+composition run that carries it, and writes nothing. Once that matches GitHub,
+set `manages` to `1` and adopt the `github.delivery` record.
 
 > **`hq deploy` is legacy: do not run it.** It predates composition and
 > deploys the *host-only* image, which takes every extension off production

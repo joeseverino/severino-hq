@@ -9,6 +9,7 @@
 # Usage:
 #   scripts/install-scan-tools.sh codeql      # the CodeQL bundle CI's action uses
 #   scripts/install-scan-tools.sh scorecard   # the OpenSSF Scorecard CLI
+#   scripts/install-scan-tools.sh codebase-memory-mcp   # the structural bar's code graph
 set -eu
 unset CDPATH
 
@@ -88,8 +89,31 @@ case "${1:-}" in
         fi
         echo "$target/scorecard"
         ;;
+    codebase-memory-mcp)
+        target="$cache/codebase-memory-mcp-$CODEBASE_MEMORY_MCP_VERSION"
+        if [ ! -x "$target/codebase-memory-mcp" ]; then
+            case "$os/$arch" in
+                Darwin/arm64) platform=darwin-arm64 sha256=$CODEBASE_MEMORY_MCP_SHA256_DARWIN_ARM64 ;;
+                Darwin/x86_64) platform=darwin-amd64 sha256=$CODEBASE_MEMORY_MCP_SHA256_DARWIN_AMD64 ;;
+                Linux/x86_64) platform=linux-amd64-portable sha256=$CODEBASE_MEMORY_MCP_SHA256_LINUX_AMD64 ;;
+                Linux/aarch64) platform=linux-arm64-portable sha256=$CODEBASE_MEMORY_MCP_SHA256_LINUX_ARM64 ;;
+                *) echo "No pinned codebase-memory-mcp build for $os/$arch." >&2; exit 2 ;;
+            esac
+            mkdir -p "$cache"
+            staged=$(mktemp -d "$cache/.codebase-memory-mcp.XXXXXX")
+            trap 'rm -rf "$staged"' EXIT HUP INT TERM
+            fetch "https://github.com/DeusData/codebase-memory-mcp/releases/download/v$CODEBASE_MEMORY_MCP_VERSION/codebase-memory-mcp-$platform.tar.gz" \
+                "$sha256" "$staged/codebase-memory-mcp.tar.gz"
+            tar -xzf "$staged/codebase-memory-mcp.tar.gz" -C "$staged" codebase-memory-mcp
+            rm -f "$staged/codebase-memory-mcp.tar.gz"
+            rm -rf "$target"
+            mv "$staged" "$target"
+            trap - EXIT HUP INT TERM
+        fi
+        echo "$target/codebase-memory-mcp"
+        ;;
     *)
-        echo "Usage: $0 codeql|scorecard" >&2
+        echo "Usage: $0 codeql|scorecard|codebase-memory-mcp" >&2
         exit 2
         ;;
 esac

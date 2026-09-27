@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -148,7 +150,15 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
         for item in resource.conditions
     )
     if drifted:
-        return True, "Automatic reconciliation of provider drift.", "drift"
+        # Keyed on what drifted, so a new difference is new work the same day
+        # and the same one is acted on once.
+        said = "|".join(
+            str(item.get("message", ""))
+            for item in resource.conditions
+            if item.get("type") in {"Drifted", "Degraded"}
+        )
+        digest = hashlib.sha256(said.encode()).hexdigest()[:16]
+        return True, "Automatic reconciliation of provider drift.", f"drift-{digest}"
     return False, "", ""
 
 

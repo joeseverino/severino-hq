@@ -320,7 +320,28 @@ def _hosted(nodes, edges, resources, estate: _Estate) -> None:
     """What declares the machine it runs on, and a machine's tailnet device."""
 
     _runs_edges(nodes, edges, resources, estate)
+    _container_subjects(nodes, resources, estate)
     _tailnet_edges(nodes, edges, resources, estate)
+
+
+def _container_subjects(nodes, resources, estate: _Estate) -> None:
+    """A declared container's join key, so every reading that names it (its
+    networks, mounts, image, runtime, compose project) joins to it as it
+    joins to its machine."""
+
+    from control_plane.observations.contract import container_key
+    from control_plane.providers import CONTAINER_KIND
+
+    for resource in resources:
+        node_id = f"resource:{resource.key}"
+        if resource.kind != CONTAINER_KIND or node_id not in nodes:
+            continue
+        spec = resource.spec or {}
+        host = estate.machine(spec.get("host"))
+        names = {spec.get("host"), nodes[host].label if host in nodes else ""}
+        estate.subjects[node_id] = Subject.of(
+            containers=(container_key(name, spec.get("name")) for name in names if name)
+        )
 
 
 def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:

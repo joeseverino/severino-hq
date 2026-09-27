@@ -54,9 +54,9 @@ def cadence(kind: str = "") -> Cadence:
         return Cadence(ssh_probe_interval(), missed=2)
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.read_by == "hq":
-        from .public_registry import REFRESH_AFTER
+        from .public_registry import read_every
 
-        return Cadence(REFRESH_AFTER, missed=2)
+        return Cadence(read_every(kind), missed=2)
     # A controller reads on the sweep, whose slowest interval is the idle one.
     return Cadence(slowest_sweep_interval())
 

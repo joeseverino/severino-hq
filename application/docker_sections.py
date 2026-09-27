@@ -21,6 +21,7 @@ from control_plane.observations.portainer import (
 )
 
 from .docker_estate import IMAGE_BEHIND, image_verdicts
+from .labels import human_bytes
 from .entity_links import entity_link
 from .facts import Subject, readings
 from .service_context import Cell, ServiceSection
@@ -53,6 +54,7 @@ def _environments(machine) -> ServiceSection | None:
         return None
     return ServiceSection(
         id="docker-environment",
+        renders=(ENVIRONMENT_KIND,),
         label="Docker environment",
         columns=("Environment", "Type", "Status", "Agent", "Docker", "Containers", "Read through"),
         records=tuple(
@@ -84,6 +86,8 @@ def _networks(machine) -> ServiceSection | None:
         return None
     return ServiceSection(
         id="docker-networks",
+        renders=(NETWORK_KIND,),
+        folded=True,
         label="Networks",
         columns=("Network", "Driver", "Subnet", "Containers on it"),
         records=tuple(
@@ -116,6 +120,8 @@ def _data(machine) -> ServiceSection | None:
         return None
     return ServiceSection(
         id="docker-data",
+        renders=(VOLUME_KIND,),
+        folded=True,
         label="Where data lives",
         columns=("Mount", "Kind", "On the machine", "Used by", "Project"),
         records=tuple(
@@ -131,34 +137,49 @@ def _data(machine) -> ServiceSection | None:
     )
 
 
-def _image_state(verdicts: Mapping[str, str], record: Mapping[str, Any]) -> Cell:
+def unused_images(machine) -> tuple[Mapping[str, Any], ...]:
+    """Images on the machine no container runs: what a prune would reclaim."""
+
+    return tuple(record for record in _records(machine, IMAGE_KIND) if not record.get("containers"))
+
+
+def _image_state(verdicts: Mapping[str, str], record: Mapping[str, Any]) -> Cell | None:
+    """What needs doing about an image, or None when nothing does."""
+
     if not record.get("containers"):
-        return Cell("unused", muted=True)
+        return Cell("Unused", muted=True)
     if verdicts.get(str(record.get("id", ""))) == IMAGE_BEHIND:
+        # Pulled, and not yet what runs: recreating the container runs it.
         return Cell("Behind its tag")
     if not record.get("tags"):
         return Cell("Untagged")
-    return Cell("Current")
+    return None
 
 
 def _images(machine) -> ServiceSection | None:
+    """Only images that need something. One a container runs at its tag is the
+    containers table's to show, with whether it is current."""
+
     records = sorted(_records(machine, IMAGE_KIND), key=image_title)
-    if not records:
-        return None
     verdicts = {running: fact for fact, _c, _r, running, _t, _s in image_verdicts(records)}
+    rows = [(record, state) for record in records if (state := _image_state(verdicts, record)) is not None]
+    if not rows:
+        return None
     return ServiceSection(
         id="docker-images",
+        # Every image, because the containers table shows those it runs.
+        renders=(IMAGE_KIND,),
         label="Images",
-        columns=("Image", "Id", "Created", "Run by", "State"),
+        columns=("Image", "Id", "Created", "Size", "State"),
         records=tuple(
             (
                 Cell(image_title(record)),
                 Cell(short_id(str(record.get("id", "")))),
                 _text(created.date().isoformat() if (created := moment(record.get("created_at"))) else ""),
-                _names(user.get("container") for user in record.get("containers") or ()),
-                _image_state(verdicts, record),
+                _text(human_bytes(record["size"]) if isinstance(record.get("size"), int) else ""),
+                state,
             )
-            for record in records
+            for record, state in rows
         ),
         compact=True,
     )
@@ -170,6 +191,8 @@ def _projects(machine) -> ServiceSection | None:
         return None
     return ServiceSection(
         id="docker-projects",
+        renders=(STACK_KIND,),
+        folded=True,
         label="Compose projects",
         columns=("Project", "Started by", "Directory", "Containers"),
         records=tuple(
