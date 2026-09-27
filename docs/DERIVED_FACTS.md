@@ -36,14 +36,29 @@ ObservationSpec(
 )
 ```
 
-and read by one function in `controller_runtime/providers.py`, registered beside
-its definition:
+and read by one function registered one of two ways, and no other
+(`controller_runtime/test_reader_registration.py` holds it): a core reader in
+`controller_runtime/providers.py`, registered beside its definition:
 
 ```python
 @reads("cloudflare.pages_project")
 def list_pages_projects() -> list[dict[str, Any]]:
     ...
 ```
+
+or, for an integration with a controller adapter, in the adapter's `readings`
+map (`control_plane/provider_adapters/`), which admits only a registered kind
+read through a connection the integration holds (its definitions' connections,
+or `reads_through` for an integration whose resource kinds the controller core
+still holds). A reading through such a connection is always the adapter's:
+
+```python
+ControllerIntegrationAdapter(..., readings={"adguard.client": read_clients})
+```
+
+A reader iterates the provider's connections (`runtime.connection_refs`) and
+stamps each record with its `connection_ref`, so a reading is attributed to the
+connection that took it.
 
 Rules:
 
@@ -54,8 +69,22 @@ Rules:
 - **A refused read raises.** The sweep stores the kind as unreachable with the
   reason, and the page shows the reason with `requires`. Returning `[]` means
   the provider has none.
-- **A partial read says so.** A record that could not read one part carries
-  `unread: <reason>` for that part rather than an empty value.
+- **A partial read says so, as a part.** A reading read in pieces declares
+  them in `parts` (`ReadingPart(name, label, requires)`, each `requires` a
+  subset of the reading's). A reader that cannot read one calls
+  `refuse_part(part, exc, scope=..., connection_ref=..., address=...)`
+  (`control_plane/provider_adapters/parts.py`); the sweep reports
+  the kind's `refused_parts` beside its records and HQ stores them
+  (`control_plane.reading_parts`). A refused part is never a record or a record
+  field, so a count never includes it. The whole kind on one zone, or on one
+  machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them in `RESOURCE_PARTS` (a zone's
+  TLS posture and registration, the tailnet policy's settings, DNS and
+  services). A refused part reads as **Partly refused** in credential sight,
+  its permissions join the missing-permissions finding and the mint, it is an
+  unreadable fact on every subject it could hide something about, and a path
+  hop that depends on it says "<part> not read: missing <permissions>". The
+  sweep's own result (`kinds`) names each kind's state in the same words,
+  `Not connected` for a kind no connection reads.
 - **Join keys are declared.** `hostnames` and `addresses` are how a reading
   attaches to a machine, a service or a zone. Nothing else parses records to
   join them.
@@ -83,10 +112,64 @@ Rules:
   those two facts off a record; an issuer is named through
   `control_plane.certificate_authorities`. `short_label` is the label under a
   column that already names the facet ("Edge" under Certificate).
+- **A reading can name services and route them.** `names_services` makes each
+  of a record's hostnames a service, marked observed when nothing declares it
+  (a Pages custom domain, an Access application, a tunnel ingress, a redirect).
+  `redirects_to` reads the host a record sends its names to (the
+  `cloudflare.redirect` reading of zone redirect rules and forwarding page
+  rules), which becomes a `redirects_to` edge between the two services.
+  `upstream` reads where a record hands one hostname on (a tunnel's ingress
+  service).
+- **A reading can say something about the connection that took it.** `facts`
+  returns `(key, value)` pairs that land on that connection's topology node (a
+  record naming no connection speaks for every connection of its provider),
+  where a finding rule reads them: AdGuard's filtering being off, a plain
+  upstream, a rewritten name nobody looked up.
 - **One reader per kind, one kind per reader.** The contract tests enforce it
   in both directions. `read_by` is `controller` for a reading a controller
   takes through a credential, and `hq` for one HQ takes itself from a keyless
   public registry (see below).
+
+### The DNS query log
+
+`adguard.query_summary` is the only reading taken from a log of what people do,
+so it is reduced on the controller, in memory, before anything is returned: one
+record per name AdGuard rewrites (the estate's own names), with the count, how
+many were blocked, the distinct clients (the busiest ten kept), when it was last
+seen and the span covered (up to a day, bounded by pages read). A rewritten name
+nobody looked up gets a record with a count of zero. No other queried name, no
+per-query time, answer or upstream leaves the controller, and the schema admits
+nothing else. It joins services by name only, never a device by address, so no
+page lists what one device looks up. An anonymized log keeps the counts and
+refuses the `clients` part; a disabled log is a refused read. A posture
+endpoint `adguard.dns` cannot read is that part refused (`upstreams`,
+`filtering`, `querylog`, `rewrites`), the rest kept.
+
+### Docker and proxy readings
+
+The Portainer credential feeds `portainer.environment` (each environment as a
+machine: type, status, agent and Docker versions), and per reachable
+environment `portainer.network`, `portainer.volume` (named volumes and bind
+mounts, with the containers mounting each), `portainer.image` (tags, digests
+and the containers running each, with the reference each was started from) and
+`portainer.compose_project` (Portainer stacks and compose labels). Each record
+names `host` and `host_address`, so it joins the machine by either. One
+container list per environment feeds all of them within a sweep
+(`control_plane/provider_adapters/portainer_readings.py`, declared by the
+Portainer adapter). An environment that cannot be read is the whole reading
+refused on that machine (`scope` the machine, `address` its address), so it
+shows on that machine's page; every environment refusing raises.
+
+The NPM login feeds `npm.certificate` (joined to the names NPM serves with it,
+not every name it covers), `npm.redirect` (the same `redirects_to` as
+`cloudflare.redirect`, answered at the ingress: `facet` `proxy`),
+`npm.stream`, `npm.access_list` (address rules and login names, never
+passwords) and `npm.dead_host` (`control_plane/provider_adapters/npm_readings.py`,
+declared by the NPM adapter). `requires` names NPM's own permission areas
+(`certificates: view`). A host list the login may not see is a refused part:
+of `npm.certificate` (which names each certificate serves) and of
+`npm.access_list` (which names it guards). A 401 is a refused credential and a
+403 a missing permission (`control_plane/provider_adapters/refusals.py`).
 
 ## Facts about a subject
 
@@ -133,6 +216,47 @@ this once; the machine list, the machine page and the connections page read it.
 
 Each kind's inventory is read once per page, not once per subject.
 
+## Request paths
+
+`paths.path_to(hostname)` walks what a request for a name meets, one route per
+DNS answer that names it: the public record (proxied or not) or the internal
+rewrite, then the provider edge, a redirect, a Pages project or a tunnel, the
+proxy host or Caddy route, and the machine and container behind it. Which kinds
+answer each hop is read from the registries (a provider's `facet`, `origin`,
+`fronts` and `served_certificate`; a reading's `facet`, `fronted_by`,
+`redirects_to` and `upstream`). Each hop names the reading and connection it
+came from; a kind no connection reads falls back to its declarations, marked
+declared. A hop HQ cannot see reads "not read: <kind>, because <reason>".
+
+A redirect reading with the `proxy` facet (NPM) answers at the machine's
+ingress; one with no facet (Cloudflare) at the edge. A `proxy` reading that
+neither redirects nor forwards (an NPM 404 host) ends the path at "Answers 404".
+A reading with `upstream` and no facet (an NPM stream) is a route of its own
+beside the web route, one per forward on the same connection's ingress, with
+its `port`; `depends_on` leaves those routes out, since a second way in is not
+a part the name needs.
+
+The certificate is per hop: a proxied name shows the edge certificate, then the
+origin certificate the proxy behind it serves; a tailnet name shows the
+certificate the proxy serves. A Caddy route states the certificate it serves
+when the edge loads one from a file whose names cover the route (the edge
+target's read-only `certificate` operation hands over the public leaf only), and
+otherwise why it cannot (`ServedCertificate.unread`). A container name an
+ingress forwards to resolves on the ingress's own machine first. HQ's own names end at HQ, with the address and
+port the request reached it on. `paths.hq_path(request)` starts from the
+caller's device and joins each hop to the request (`request_path.joined`): the
+address it came from, the proxy that forwarded it and its own headers, the name
+it asked for, an Access assertion. Each hop is proven, contradicted (a finding
+with its fix) or not shown by the request, and carries the admission layers
+decided there. `request_path.request_path(request)` is the connection page's
+one projection and the `request.path` read. HQ also records which devices
+reached it (`hq.request_path`, read by `request`: per source device, how it
+arrived, last seen and a seven-day count, written at most once per source per
+`SEVERINO_REQUEST_PATH_SECONDS`); machine pages show it. The `paths` read resource returns
+the same path to every adapter, and the service page renders it: a summary, the
+path hop by hop, what it depends on and what depends on it, then the parts and
+raw readings.
+
 ## Relationships
 
 Entity pages are views of one relation graph. `topology.relation_graph` builds
@@ -147,6 +271,19 @@ its phrase from the reading's `relation` and its rank from its facet
 (`READING_RANKS`), so what serves a name comes first and an overlay with no
 facet (Access) last. Each item is a linked entity, with the connection that
 read it and when.
+
+Two declared containers on a user-defined Docker network (not `bridge`,
+`host` or `none`) have a `talks_to` edge naming the network
+(`application/docker_estate.py`). The machine page's Docker bands (environment,
+compose projects, networks, where data lives, images) and the service page's
+"Who is allowed" band read the same joined records
+(`application/docker_sections.py`, `application/npm_sections.py`).
+
+Findings from these readings: `container-image-behind` (the machine's own tag
+now names a different image than the container runs; no registry is asked),
+`container-image-untagged`, and `certificate-expiring` for any
+certificate-facet reading within 21 days of expiry, by `expiry.days_until`,
+on the connection that read it (`application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section from
 it, with "See in topology" (`?focus=<node>`), one "Not readable" line linking
@@ -211,7 +348,8 @@ A controller or target that names one folds into it; anything else a
 connection reaches stays a target. A machine is reached through the
 connections the machine catalogue names. A domain's join keys are every name
 under it. Each reading joined to an estate node is an edge from the connection
-that read it, labelled with the reading's relation, carrying the reading kind,
+that read it (a tailnet device is a subject by its addresses too), labelled
+with the reading's relation, carrying the reading kind,
 its age and each record as a linked entity. It exists only while the reading
 does. A reading HQ takes itself comes from its public registry's node; one
 whose connection no controller reports now comes from a node naming that
@@ -300,7 +438,7 @@ A field a connection starts to derive is added there.
 
 `requires` is a tuple of exact permission names, as the minting scripts use
 them: Cloudflare as `<permission group name> (<account|zone>)`, Tailscale as the
-bare scope name. A part of a reading that needs more names it in `unread`.
+bare scope name. A part of a reading names the subset it needs in `parts`.
 `scripts/cloudflare-observer-permissions.txt` and
 `scripts/tailscale-observer-scopes.txt` hold every reading's `requires` plus
 the reads in `control_plane.credential_reads` that are not readings yet; a test
@@ -318,9 +456,23 @@ reading it feeds and every resource kind a sweep reads. A kind with an
   see <label>"; `credential` when it refused the credential itself (invalid,
   expired, locked out, used from a refused location), and the row says so once
   for the connection.
+- **Partly refused**: read, with a declared part refused; the missing
+  permissions and the parts they would show are named.
 - **Unreadable**: the read failed for another reason, shown with its error.
 - **Not connected**: the controller holds no connection that can read it.
 - **Never swept**.
+
+A readable kind older than its cadence allows reads **Out of date**
+(`application.freshness`). The services page's provider readings use the same
+words, through `credential_sight.standing`.
+
+A connection whose probe fails reports why, as `failure`, classified where the
+request failed (`contracts.failure_of`): `credential` or `permission` (HTTP 401
+or 403, or the provider's own refusal), `address` (the address answered with a
+sign-in page, a web page or a redirect elsewhere, not the API), or `network`
+(nothing answered). The `connection-not-answering` finding's fix follows it: the
+mint command, the item field that holds the direct API address, or the machine
+and route to check.
 
 Providers with no connection are listed once under "Not connected", with the
 readings a connection would let HQ see. Each reading is also listed under the

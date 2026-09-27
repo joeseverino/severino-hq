@@ -135,8 +135,7 @@ deployment.
 
 Production runs **one image carrying every admitted plugin**. Plugins do not
 build or deploy images: each verifies and admits itself and publishes its signed
-bundle, and the host composes them. When a plugin shipped its own image,
-deploying one replaced the others and silently dropped them.
+bundle, and the host composes them, so deploying one never replaces the others.
 
 A plugin cannot trigger the composition. Signalling one repository from another
 needs a credential, and a private repository holding a long-lived token that can
@@ -174,6 +173,25 @@ repository. Entries are merged into one lock by Cordon's lock tool, which
 already accepts several entries: the host does not reimplement it.
 `SEVERINO_HQ_PLUGINS` is derived from the merged lock, because the enabled and
 approved inventories must be identical or the host refuses to start.
+
+### Coordinated changes
+
+A change that needs both the host and an extension (a plugin API bump, say)
+lands as branches with the same name in each repository, verified together
+before either merges:
+
+- An extension pull request's `plugin-checks.yml` resolves the host ref to the
+  host branch of the same name when one exists, and to `main` otherwise. An
+  explicit `hq-ref` input still wins.
+- The host pull request's composition builds each extension's same-named branch
+  into a candidate image and runs the composed checks and suite in it. The
+  candidate is verify-only: unadmitted wheels, no lock, a local tag, and never
+  published, signed or deployed. Extensions without such a branch are reused
+  from their verified admissions. Reading the branches needs
+  `EXTENSION_ARTIFACTS_TOKEN` to have contents read on the extension
+  repositories.
+
+Merge the host first; each extension then checks and admits against `main`.
 
 The declared set lives in a repository variable rather than a committed file:
 this repository is public and the extensions it composes are not.

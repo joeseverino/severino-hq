@@ -5,6 +5,42 @@ All notable changes to Severino HQ. The format follows
 [SemVer](https://semver.org/): the plugin API, `hq_sdk`, and the API and MCP
 contracts are the public surface.
 
+## [Unreleased]
+
+### Added
+
+- Connection credentials: HQ names the permissions a valid credential lacks
+  (from the refused readings' declared `requires`), reads a Cloudflare token's
+  expiry from its probe, and raises `credential-missing-permissions` and
+  `credential-expiring` (30 days ahead) findings. Each offers one operator
+  command, derived from the connection's 1Password item and the readings, that
+  mints a replacement on the operator's machine and stores it in the item. HQ
+  never runs it and holds no credential that can create tokens.
+- `mint-cloudflare-token.sh --store` and `mint-tailscale-client.sh --store
+  --store-id` pipe the new secret into `op item edit`; it reaches no argument,
+  file or output.
+- A connection item may name a `bootstrap` item (`op://<vault>/<item>`, outside
+  the vault the controller reads) holding the credential that mints it.
+
+### Changed
+
+- A Cloudflare "Authentication error" under HTTP 401 is a missing permission
+  when the token still verifies, and a credential that read any kind is never
+  reported as refused outright. Tailscale 403/404 on a scoped read is a missing
+  scope.
+- The contact inbox takes its D1 account and database only from the
+  cloudflare_api connection's `cloudflare.d1_database` reading.
+
+### Upgrade notes
+
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_D1_DATABASE_ID` are no longer read;
+  remove them from the app environment item. `CLOUDFLARE_D1_DATABASE_NAME`
+  still chooses among several databases. `CLOUDFLARE_API_TOKEN` only writes
+  submissions: mint it with `scripts/cloudflare-d1-writer-permissions.txt`.
+- The controller renderer emits `<PREFIX>_STORE_VAULT`, `<PREFIX>_STORE_ITEM`
+  and, when the item names one, `<PREFIX>_BOOTSTRAP`; run the new renderer
+  before the new controller so HQ can derive the mint command.
+
 ## [1.0.0] - 2026-09-26
 
 HQ derives the estate from its connections. Connect a Cloudflare token and a

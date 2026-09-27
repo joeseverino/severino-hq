@@ -9,9 +9,10 @@ authoritative for human and agentic development in this public repository.
 2. Read the nearest code and tests before changing an interface.
 3. Run `./scripts/check.sh` before handing work back.
 4. Run `./scripts/ci-local.sh` before pushing.
+5. Run `./scripts/preflight.sh` before calling a change ready.
 
 `check.sh` answers "do my changes work?". `ci-local.sh` answers "will the
-pipeline accept them?": ruff at the pinned version, the shell gates, the
+pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, the
 Django deployment check, `pip-audit`, the image build, and the suite *inside*
 that image, which is where composition runs it. It prints what it could not
 run rather than implying full coverage. Point it at every interpreter that has
@@ -153,9 +154,18 @@ domain until a genuine shared contract appears.
 Function complexity is part of the gate. Ruff's C901 fails any function whose
 cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
 `application/test_architecture.py` fails any non-test function whose cognitive
-complexity exceeds 20. Its `COMPLEXITY_DEBT` lists the functions that predate
-the limit; an entry only ever shrinks or goes. Split a function into named
-steps rather than adding to that list.
+complexity exceeds 20. There is no allowance list: a function over either
+limit is split into named steps.
+
+The architectural seams are type checked. `python -m mypy` (a gate in
+`ci-local.sh` and CI's lint job) runs mypy with django-stubs over the modules
+`mypy.ini` names: the security, capability, plugin, resource and
+integration-spec contracts, `hq_sdk`, `hq_api` and `hq_mcp`, with every
+function in them fully annotated. It loads `config/settings_typecheck.py`, the
+host's settings without extensions. Fix what it reports rather than silencing
+it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
+it. To widen it, add a module to `files` and to the strict section in
+`mypy.ini` and fix what it finds.
 
 Tests answer "does this behave?". They do not answer "is this still one system?":
 duplication and tangling are green all the way down. Those are graph questions,
@@ -178,6 +188,11 @@ exclude test paths by eye.
 Re-index after a change and re-run them; a result that moved the wrong way is a
 finding whether or not the suite is green.
 
+`scripts/structural-bar.sh` runs the duplicate and largest-file checks as a
+gate (`ci-local.sh` includes it) against `scripts/structural-baseline.txt`. Index
+the checkout you work in before asking the graph anything; a worktree is its
+own checkout.
+
 Confirm a cycle before believing it. Python's `.get()` on a dict resolves to any
 class method named `get`, so view classes turn up in cycles they have nothing to
 do with: read the function and check it really calls into the loop. The same
@@ -192,6 +207,13 @@ this repository's graph will report as safe. Grep the extension checkouts.
 
 ## Definition of done
 
+"Ready" means `./scripts/preflight.sh` exits 0. It runs `ci-local.sh` with
+every gate required, `check.sh` with the composed pass required, and read-only
+checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
+ownership, the runner's sudo rule, the root-owned programs against this commit,
+the installed units and free disk. `--skip-host` runs the local gates only and
+exits 2, never 0.
+
 - The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
@@ -201,6 +223,12 @@ this repository's graph will report as safe. Grep the extension checkouts.
   `CHECK_BROWSER=1 ./scripts/check.sh` (Playwright, set up as the README's
   development section shows). A UI change is also walked in a real browser
   through the workflow it serves, not checked page by page.
+- `./scripts/ci-local.sh` passes before a push, including its code scanning
+  gates (no CodeQL alert and every file-based Scorecard check at 10) and the
+  browser layout gate, which it always runs.
+- A browser check selects markup only through `SELECTORS` in
+  `core/browser_tests.py`; `core/test_browser_selectors.py` holds every one
+  to a template that renders it.
 - The structural bar above did not move the wrong way.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits

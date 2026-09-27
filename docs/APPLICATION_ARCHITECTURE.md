@@ -60,7 +60,19 @@ JSON-safe operating snapshot for KPIs, priority work, recent records, upstream
 state, and activity. The web dashboard renders it, while the authenticated MCP
 exposes it as `dashboard_snapshot`. Infrastructure reads are likewise shared:
 `list_managed_resources` and `get_managed_resource` return public desired state,
-health, and structured operation evidence without provider credentials. A
+health, and structured operation evidence without provider credentials.
+`get_managed_resource` also returns `derived`, from
+`application/resource_context.py`: the same allowed actions, removal mode,
+machines, services, readout and certificate expiry the resource page shows,
+so no adapter derives a fact another cannot return. The tailnet and
+connections pages follow the same pattern: `application/tailnet_context.py` and
+`application/connection_context.py` derive each page once, the view renders
+the projection object and nothing beside it, and the `tailnet` and
+`connection.standing` resources serialize that object. How HQ reaches a
+connection (network, machine, tailnet peering) is `application/connection_reach.py`,
+joined from the endpoint, HQ's DNS readings, the machine catalogue and the
+peering the machine page shows. Days left anywhere come
+from `application/expiry.py`. A
 future REST/OpenAPI adapter can publish these same use cases without moving or
 reimplementing their behavior.
 
@@ -89,7 +101,12 @@ Priority work has one source: every domain's `Insight` provider is composed by
 machine snapshot project that same queue; none owns a parallel inbox. Derived
 topology findings enter through the infrastructure provider and drill into an
 evidence/remedy surface, where remedies remain references to registered
-capabilities rather than a second mutation path.
+capabilities rather than a second mutation path. Every finding rule also
+declares `operator_action`, the exact thing a person does when HQ offers no
+operation or the reader may not run it. A finding carries it as its
+`steps` (`OperatorStep`: a label, a command HQ never runs, notes), or more
+specific steps of its own; the API returns them as `operator_steps` beside the
+remedies.
 
 The flattened queue preserves each insight's `action` and JSON-safe `workflow`
 (or `null`) alongside its existing label, evidence, severity, count, and URL.
@@ -124,7 +141,10 @@ reconstructing query strings. A stale-controller finding also derives the
 registered controller-refresh capability from that same node. Executing it
 rings the existing credential-free doorbell; the privileged controller still
 pulls work and decides what is due, so a natural remediation loop does not
-reverse the trust direction or create a second scheduler. Contextual command
+reverse the trust direction or create a second scheduler. "Read now" is the
+same capability with a subject: a stored `ReadRequest` that HQ's `sweep-due`
+answer turns into the kinds the controller reads next, so the controller still
+pulls and HQ still decides. Contextual command
 links carry a same-origin return path through Command Center's result screen,
 so execution stays on the canonical command spine without losing the workflow
 that proposed it. The resolution-plan primitive itself is domain-neutral and
@@ -645,8 +665,9 @@ prevented an operator recording which domains HQ is responsible for while
 preventing no change to anything at all.
 
 HQ's existing `CLOUDFLARE_API_TOKEN` is application data-plane access for the
-D1-backed contact form. It is never projected into the controller or reused for
-DNS automation. DNS-01 uses the separate least-privilege
+D1-backed contact form: it writes submissions and nothing else, and the account
+and database come from the cloudflare_api observer's D1 reading. It is never
+projected into the controller or reused for DNS automation. DNS-01 uses the separate least-privilege
 `cloudflare-dns-example` connection.
 
 ![Infrastructure control plane](diagrams/infrastructure-control-plane.png)

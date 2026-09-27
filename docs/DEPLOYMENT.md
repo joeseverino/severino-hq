@@ -184,6 +184,24 @@ declared provider in plan mode, and only then enables the apply timer. Missing
 credentials, untrusted TLS, and API failures stop activation. The HQ web
 container never receives the provider environment.
 
+Each release installs itself. Root runs units out of
+`/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `config/`,
+`deploy/` and `docker-compose.yml` taken from the running image. Once the new
+image is healthy, `deploy-image.sh` runs the `severino-hq-sync-scripts` that
+image ships (never the host's copy), which replaces the tree and refuses it
+unless it reproduces `root-tree.sha256` exactly: the manifest the image build
+writes with `scripts/root-tree-manifest.sh`. It then installs that sync program
+at `/usr/local/sbin` and runs the installer it just synced, so every step after
+the sync is the new release's code. Run by hand, `install-controller.sh` syncs
+and re-executes its synced copy the same way. A failed activation restores the
+previous tree and sync program exactly. `fix-root-ownership.sh` is the first
+bring-up, after `sh scripts/severino-hq-sync-scripts --from-checkout`.
+
+The deploy job refuses before its `git pull` when anything under the checkout's
+`.git` is not owned by the runner, and names the `chown` that fixes it. The
+daily `severino-hq-script-drift` check asks the same, and also fails when the
+tree no longer reproduces its manifest or the sync program is not the tree's.
+
 What it installs is every unit and drop-in under `deploy/systemd`, found by
 walking the directory (`scripts/lib/systemd-units.sh`); `*.example` templates
 are copied into place by hand and never installed. Every shipped timer and path
