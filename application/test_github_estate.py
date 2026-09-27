@@ -67,3 +67,20 @@ class VerificationTests(TestCase):
 
         self.assertEqual((item.key, item.status), ("github-unverified:example/alpha", "serious"))
         self.assertIn("Verify the image was signed", item.body)
+
+
+class ProjectPushedTests(TestCase):
+    def test_a_project_with_a_read_repository_says_when_it_was_pushed(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        from projects.models import Project
+
+        store(pushed_at=(timezone.now() - timedelta(minutes=5)).isoformat())
+        project = Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
+        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
+
+        response = self.client.get(reverse("projects:detail", args=[project.slug]))
+
+        self.assertContains(response, "Pushed 5")
+        self.assertNotContains(response, "Updated ")

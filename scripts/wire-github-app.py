@@ -7,11 +7,15 @@
 Reads the app's private key from 1Password and sets, through standard input so
 it never touches a file or a command line:
 
-- on the host repository: the HQ_APP_KEY secret and HQ_APP_CLIENT_ID variable,
-  which the composition uses to read the extensions' admissions
+- on the host repository: the HQ_APP_KEY and HQ_APP_CLIENT_ID secrets, which
+  the composition uses to read the extensions' admissions
 - on each extension: an ``admission`` environment limited to main, holding
-  HQ_APP_KEY, and the HQ_APP_CLIENT_ID variable, which its admission uses to
+  HQ_APP_KEY, and the HQ_APP_CLIENT_ID secret, which its admission uses to
   start the host's composition
+
+Both are secrets, the client ID included: it is not sensitive, but a variable
+is state outside the repository that changes what a build does, which the
+posture standard rejects, and a secret is also kept out of public logs.
 
 Run it again after rotating the key. Everything personal is an argument;
 nothing personal is in this repository. Needs `gh` signed in as the owner of
@@ -77,12 +81,12 @@ def main() -> None:
     key = private_key(args.vault, args.item)
     host = host_repository()
     run(["gh", "secret", "set", "HQ_APP_KEY", "--repo", host], stdin=key)
-    run(["gh", "variable", "set", "HQ_APP_CLIENT_ID", "--repo", host, "--body", args.client_id])
+    run(["gh", "secret", "set", "HQ_APP_CLIENT_ID", "--repo", host], stdin=args.client_id)
     print(f"{host}: HQ_APP_KEY and HQ_APP_CLIENT_ID set.")
     for repository in args.extension:
         environment(repository)
         run(["gh", "secret", "set", "HQ_APP_KEY", "--repo", repository, "--env", ENVIRONMENT], stdin=key)
-        run(["gh", "variable", "set", "HQ_APP_CLIENT_ID", "--repo", repository, "--body", args.client_id])
+        run(["gh", "secret", "set", "HQ_APP_CLIENT_ID", "--repo", repository], stdin=args.client_id)
         print(f"{repository}: {ENVIRONMENT} environment (main only) with HQ_APP_KEY; HQ_APP_CLIENT_ID set.")
 
 

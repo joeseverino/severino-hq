@@ -15,7 +15,7 @@ and MCP read.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import socket
+import re
 from typing import Any
 
 from control_plane.names import is_hostname, normalized_hostname
@@ -600,9 +600,28 @@ def _access_headers(host: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(joined.spec.request_header for joined in about if joined.spec.request_header))
 
 
+_CONTAINER_ID = re.compile(r"/containers/([0-9a-f]{64})/")
+
+
+def own_container_id() -> str:
+    """This process's container, as Docker's short ID, or "" outside one.
+
+    Read from the mounts rather than the hostname: Docker bind-mounts
+    ``/etc/hostname`` from ``/var/lib/docker/containers/<id>/``, and that holds
+    on the host network too, where the hostname is the machine's.
+    """
+
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as mounts:
+            found = _CONTAINER_ID.search(mounts.read())
+    except OSError:
+        return ""
+    return found.group(1)[:12] if found else ""
+
+
 def _container(hop: Hop, context: _Context):
     """Which container answered, from the one thing a process knows about its
-    own: Docker sets its hostname to the container's short ID."""
+    own: the container Docker started it in."""
 
     from .connections import machines_once
 
@@ -614,13 +633,15 @@ def _container(hop: Hop, context: _Context):
     }
     if not known:
         return (), Check(UNPROVEN, "A request cannot show which container answered it.")
-    here = socket.gethostname()
+    here = own_container_id()
+    if not here:
+        return (), Check(UNPROVEN, "HQ is not running in a container it can name.")
     evidence = (
-        Evidence("Answered by", here, "This process's hostname, which Docker sets to its container's ID."),
+        Evidence("Answered by", here, "The container Docker started HQ in, read from its own mounts."),
     )
     if here in known:
         return evidence, Check(
-            PROVEN, f"This request was answered inside {hop.label}: HQ's hostname is its container ID."
+            PROVEN, f"This request was answered inside {hop.label}: HQ runs in that container."
         )
     return evidence, Check(
         UNPROVEN,

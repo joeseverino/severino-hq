@@ -319,6 +319,7 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
         if identity[0] not in hosts or identity in listed or resource.spec.get("on_demand"):
             continue
         retired.append(resource.key)
+        resource.audit_gone = f"Forgot {resource.key}: no longer on its machine"
         resource.delete()
     return retired
 

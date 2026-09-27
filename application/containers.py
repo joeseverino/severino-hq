@@ -202,6 +202,21 @@ class Running:
         return f"{repository}@{hexadecimal[:12]}"
 
 
+def socket_holders() -> frozenset[tuple[str, str]]:
+    """``(machine, container)`` for each container declared to hold the Docker socket."""
+
+    from .infrastructure import enabled_resources
+
+    def load() -> frozenset[tuple[str, str]]:
+        return frozenset(
+            (str(resource.spec.get("host", "")), str(resource.spec.get("name", "")))
+            for resource in enabled_resources()
+            if resource.kind == CONTAINER_KIND and resource.spec.get("holds_docker_socket")
+        )
+
+    return read_once("containers.socket_holders", load)
+
+
 def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     """Which declaration watches which container, and whether it is folded away.
 
@@ -512,6 +527,7 @@ def on_machine(machine: Any) -> dict[str, Any]:
         "standings": standings,
         "container_counts": {
             "behind": states.count(BEHIND),
+            "current": states.count(CURRENT),
             "vulnerable": states.count(VULNERABLE),
             "stopped": sum(1 for item in machine.containers if not item.healthy),
         },
@@ -701,9 +717,16 @@ def _mount_users() -> dict[str, dict[str, set[str]]]:
 
 
 def _compose_files() -> dict[tuple[str, str], tuple[str, ...]]:
+    from .container_standard import runtime_path
+
     def load() -> dict[tuple[str, str], tuple[str, ...]]:
         return {
-            (str(record.get("host", "")), str(record.get("name", ""))): tuple(record.get("config_files") or ())
+            # A compose file under a runtime directory was a copy made to start
+            # it (a deploy works from one), gone once it has: not where it is
+            # defined, and not a path anyone can open.
+            (str(record.get("host", "")), str(record.get("name", ""))): tuple(
+                path for path in record.get("config_files") or () if not runtime_path(str(path))
+            )
             for record in _on_machines(STACK_KIND)
         }
 

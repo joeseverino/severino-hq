@@ -420,9 +420,11 @@ identities and read only by openssl, which signs GitHub's JWT; HQ never loads
 it. The connection's probe shows the key's fingerprint as GitHub lists it.
 
 For the pipeline, `scripts/wire-github-app.py` reads the key from 1Password and
-sets `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` on this repository, and on each
-extension creates the `admission` environment (main only) with the same secret
-and variable, through standard input, never a file or a command line. The
+sets the `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` secrets on this repository, and on
+each extension creates the `admission` environment (main only) with the key and
+sets the client ID, through standard input, never a file or a command line. The
+client ID is a secret too: not because it is sensitive, but because a variable
+is state outside the repository that changes what a build does. The
 personal `EXTENSION_ARTIFACTS_TOKEN` can then be deleted and revoked, once a
 composition has read with the app. Each extension's `admit-plugin.yml` caller
 names the environment on its admit job and passes both to the host's action.

@@ -9,7 +9,7 @@ it could read is a lock after the hop's name.
 {% endcomment %}
 <ol class="request-path" aria-label="{{ label }}">
   {% for hop in route.line_hops %}
-    <li class="{% if hop.unread or hop.certificate.unread %}is-unknown{% endif %}{% if hop.check.state == "proven" %} is-proven{% elif hop.check.state == "contradicted" %} is-attention{% endif %}">
+    <li title="{{ hop.label }}: {% if hop.link and hop.link.label %}{{ hop.link.label }}{% elif hop.name %}{{ hop.name }}{% else %}{{ hop.detail }}{% endif %}" class="{% if hop.unread or hop.certificate.unread %}is-unknown{% endif %}{% if hop.check.state == "proven" %} is-proven{% elif hop.check.state == "contradicted" %} is-attention{% endif %}">
       <span class="hop-icon">{% include "partials/_icon.html" with name=hop.icon|default:"page" %}</span>
       <span class="hop-label">{{ hop.label }}</span>
       <strong>{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}</strong>

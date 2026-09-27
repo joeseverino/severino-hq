@@ -23,7 +23,7 @@ anyway, and would go on meaning nothing after it stopped being.
         <tr>
           <td>
             <strong>{% entity machine.link %}</strong>
-            {% if machine.role %}<br><span class="muted">{{ machine.role }}</span>{% endif %}
+            {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role }}</span>{% endif %}
           </td>
           <td>
             {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
@@ -40,7 +40,9 @@ anyway, and would go on meaning nothing after it stopped being.
           <td>
             {% for role in machine.roles %}<span title="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last or machine.runs_hq or machine.hostnames %}<br>{% endif %}{% endfor %}
             {% if machine.runs_hq %}{{ hq_label }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
-            {% for hostname in machine.hostnames %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% if not machine.runs_hq and not machine.roles %}{% empty_value %}{% endif %}{% endfor %}
+            {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
+            {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% if not machine.runs_hq and not machine.roles %}{% empty_value %}{% endif %}{% endfor %}
+            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}">+{{ machine.hostnames|length|add:"-2" }} more</a>{% endif %}
           </td>
           <td>
             {% comment %}

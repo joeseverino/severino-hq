@@ -23,7 +23,7 @@ from application.projects import (
 from application.deletion import delete_project
 from projects.github import github_repository
 from application.security import web_principal
-from application.ui import counted
+from application.ui import counted, moment
 from application.pages import PageAction, PageMixin, record_trail
 from application.tables import (
     TableColumn,
@@ -194,9 +194,18 @@ class ProjectDetailView(PageMixin, LoginRequiredMixin, DetailView):
 
         from django.template.loader import render_to_string
 
+        from application.github_estate import repository_for
+
+        # The work moves where the code does: a push says when it last
+        # changed better than the last edit of this record does.
+        repository = repository_for(self.object.repository_url)
         return render_to_string(
             "projects/_project_meta.html",
-            {"project": self.object, "service_url": service_url_for(self.object.public_url)},
+            {
+                "project": self.object,
+                "service_url": service_url_for(self.object.public_url),
+                "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
+            },
         )
 
     def get_page_trail(self):

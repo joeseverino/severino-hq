@@ -149,6 +149,32 @@ class PageTests(TestCase):
         self.assertContains(response, "GHSA-high")
         self.assertEqual((response.context["pinned"], response.context["matched"]), (2, 1))
 
+    def test_nothing_is_called_current_before_a_registry_answers(self):
+        inventory("portainer.container", [running("web", "example/web:1.0.0")])
+
+        response = self.client.get(reverse("control_plane:containers"))
+
+        self.assertNotContains(response, "All current")
+        self.assertContains(response, "Not known")
+
+    def test_all_current_only_when_every_container_was_read(self):
+        estate(app_tags=("v1.2.0",))
+        inventory("portainer.container", [running("web", "example/web:1.0.0")])
+
+        response = self.client.get(reverse("control_plane:containers"))
+
+        self.assertContains(response, "All current")
+
+    def test_a_compose_file_copied_to_start_it_is_not_where_it_is_defined(self):
+        from .containers import _compose_files
+
+        inventory("portainer.compose_project", [
+            {"host": "example-box", "name": "app", "connection_ref": "example-portainer",
+             "config_files": ["/run/app-compose.X1/next.yml", "/opt/apps/app/docker-compose.yml"]},
+        ])
+
+        self.assertEqual(_compose_files()[("example-box", "app")], ("/opt/apps/app/docker-compose.yml",))
+
     def test_a_declared_container_links_to_its_own_page_and_shows_its_standing(self):
         estate()
         ManagedResource.objects.create(

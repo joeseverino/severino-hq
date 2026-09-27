@@ -134,7 +134,7 @@ standard. Each said once; the band above has its version and standing.
     </ul>
   {% endif %}
   <dl class="github-facts container-facts boxed-facts">
-    {% if item.compose_files %}<div><dt>Defined in</dt><dd>{% if item.running.stack %}{{ item.running.stack }} <span class="muted">·</span> {% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
+    {% if item.compose_files or item.running.stack %}<div><dt>Defined in</dt><dd>{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %} <span class="muted">·</span> {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if item.running.published %}<div><dt>Publishes</dt><dd>{{ item.running.published }}</dd></div>{% endif %}
     {% if item.serves %}<div><dt>Answers for</dt><dd>{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if item.mounts %}{% with shared=item.shared_mounts %}<div><dt>Mounts</dt><dd>{% for mount in item.mounts %}<code>{{ mount.source }}</code> → <code>{{ mount.destination }}</code>{% if mount.read_only %} <span class="muted">read-only</span>{% endif %}{% with others=shared|dictkey:mount.source %}{% if others %} <span class="muted">· also</span> {% for other in others %}<a href="{{ other.url }}">{{ other.running.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% endwith %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endwith %}{% endif %}

@@ -25,11 +25,11 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
         <small>Checked for {{ matched }} of {{ containers|length }}{% if matched < containers|length %}; the rest publish nothing to check{% endif %}</small>
       </div>
     </div>
-    <div class="band-fact{% if behind %} tone-attention{% else %} tone-good{% endif %}">
+    <div class="band-fact{% if behind %} tone-attention{% elif current == containers|length %} tone-good{% endif %}">
       <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
       <div>
         <span class="band-label">Updates</span>
-        <strong>{% if behind %}{{ behind|counted:"image behind,images behind" }}{% else %}All current{% endif %}</strong>
+        <strong>{% if behind %}{{ behind|counted:"image behind,images behind" }}{% elif current == containers|length %}All current{% elif current %}{{ current }} of {{ containers|length }} current{% else %}Not known{% endif %}</strong>
         <small>{% if read_at %}Registries read {{ read_at|ago_short }}{% else %}Registries not read yet{% endif %}</small>
       </div>
     </div>

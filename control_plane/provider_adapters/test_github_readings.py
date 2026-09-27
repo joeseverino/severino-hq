@@ -124,6 +124,37 @@ class RepositoryReadingTests(SimpleTestCase):
         self.assertNotIn("code_scanning", record["alerts"])
         self.assertEqual([(item["part"], item["scope"]) for item in refused], [("code_scanning", REPO)])
 
+    def test_a_403_under_a_token_that_holds_the_permission_is_never_a_missing_permission(self):
+        """GitHub will not mint a token for a permission the installation
+        lacks, so the refusal is the repository's: a feature it does not offer."""
+
+        (_,), refused = self.read(GitHub(refuse=("/code-scanning/", "/rules/branches/")))
+
+        self.assertEqual({item["refusal"] for item in refused}, {""})
+        self.assertTrue(all(item["reason"].startswith("Not offered on this repository") for item in refused))
+
+
+class WorkflowTests(SimpleTestCase):
+    def test_each_workflow_that_exists_now_once_under_its_name_now(self):
+        runs = [
+            {"id": 3, "workflow_id": 1, "name": "CI", "status": "completed", "conclusion": "success"},
+            {"id": 2, "workflow_id": 1, "name": "ci", "status": "completed", "conclusion": "failure"},
+            {"id": 1, "workflow_id": 2, "name": "dependency review", "status": "completed"},
+        ]
+        workflows = [
+            {"id": 1, "name": "CI", "state": "active"},
+            {"id": 2, "name": "dependency review", "state": "deleted"},
+        ]
+
+        found = github_readings._latest_runs(runs, workflows)
+
+        self.assertEqual([(run["name"], run["conclusion"]) for run in found], [("CI", "success")])
+
+    def test_without_a_workflow_list_every_named_workflow_still_shows(self):
+        runs = [{"id": 1, "workflow_id": 1, "name": "CI", "status": "completed"}]
+
+        self.assertEqual([run["name"] for run in github_readings._latest_runs(runs, None)], ["CI"])
+
 
 class ImageTests(SimpleTestCase):
     def test_the_composition_the_controller_runs_is_read_with_its_signatures(self):
