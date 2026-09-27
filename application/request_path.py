@@ -15,6 +15,7 @@ and MCP read.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import socket
 from typing import Any
 
 from control_plane.names import is_hostname, normalized_hostname
@@ -600,7 +601,32 @@ def _access_headers(host: str) -> tuple[str, ...]:
 
 
 def _container(hop: Hop, context: _Context):
-    return (), Check(UNPROVEN, "A request cannot show which container answered it.")
+    """Which container answered, from the one thing a process knows about its
+    own: Docker sets its hostname to the container's short ID."""
+
+    from .connections import machines_once
+
+    known = {
+        running.id
+        for machine in machines_once()
+        for running in machine.containers
+        if running.name == hop.label and running.id
+    }
+    if not known:
+        return (), Check(UNPROVEN, "A request cannot show which container answered it.")
+    here = socket.gethostname()
+    evidence = (
+        Evidence("Answered by", here, "This process's hostname, which Docker sets to its container's ID."),
+    )
+    if here in known:
+        return evidence, Check(
+            PROVEN, f"This request was answered inside {hop.label}: HQ's hostname is its container ID."
+        )
+    return evidence, Check(
+        UNPROVEN,
+        f"HQ answered from a container the last sweep did not list as {hop.label}, "
+        "as after a deploy. The next sweep settles it.",
+    )
 
 
 def _hq(hop: Hop, context: _Context):

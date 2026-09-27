@@ -38,6 +38,21 @@ class ChangeTests(TestCase):
         self.assertEqual(change_between("latest", "2"), "unknown")
 
 
+class DataTests(TestCase):
+    def test_a_runtime_directory_is_never_data_to_keep(self):
+        from .upgrades import data_of
+
+        kept = data_of([
+            {"type": "volume", "source": "app_data", "destination": "/data", "read_only": False},
+            {"type": "bind", "source": "/opt/apps/app/conf", "destination": "/conf", "read_only": False},
+            {"type": "bind", "source": "/run/app", "destination": "/run/app", "read_only": False},
+            {"type": "bind", "source": "/var/run/app.pid", "destination": "/pid", "read_only": False},
+            {"type": "bind", "source": "/tmp/scratch", "destination": "/scratch", "read_only": False},
+        ])
+
+        self.assertEqual([mount["source"] for mount in kept], ["app_data", "/opt/apps/app/conf"])
+
+
 class PlanTests(TestCase):
     def plan(self, name):
         return next(plan for plan in plans() if plan.container.running.name == name)

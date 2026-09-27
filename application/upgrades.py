@@ -106,7 +106,18 @@ def data_of(mounts) -> tuple[Mapping[str, Any], ...]:
         # A socket is a way to talk to something, not something kept.
         and not str(mount.get("source", "")).endswith(".sock")
         and not (mount.get("type") == "bind" and system_path(str(mount.get("source", ""))))
+        # A runtime directory is emptied by every boot: a doorbell or a lock
+        # file there is state for this run, never data to keep.
+        and not (mount.get("type") == "bind" and _runtime_path(str(mount.get("source", ""))))
     )
+
+
+RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")
+
+
+def _runtime_path(source: str) -> bool:
+    path = source.rstrip("/") or "/"
+    return any(path == root or path.startswith(f"{root}/") for root in RUNTIME_ROOTS)
 
 
 def plan_for(item: Container) -> Plan | None:

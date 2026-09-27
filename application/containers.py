@@ -106,6 +106,8 @@ class Running:
     # Folded away on the machine's page. Still watched, still controllable,
     # this is about where it sits, not about whether HQ can act on it.
     hidden: bool = False
+    # Docker's short ID, which is also the hostname inside it.
+    id: str = ""
 
     @classmethod
     def of(
@@ -133,6 +135,7 @@ class Running:
             observed_at=observed_at,
             watcher=(watchers or {}).get((host, name), ("", False))[0],
             hidden=(watchers or {}).get((host, name), ("", False))[1],
+            id=str(record.get("id", "")),
         )
 
     @property

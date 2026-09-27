@@ -60,3 +60,4 @@ CLAUDE.local.md
 
 # Type checker
 .mypy_cache/
+.hypothesis/
