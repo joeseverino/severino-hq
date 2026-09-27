@@ -100,8 +100,10 @@ class CardTests(TestCase):
         LinkedAccount.objects.create(user=user, provider="github", login="example-user")
         record(github_profile.reading_key("example-user"), PROFILE)
 
-        (card,) = watching()
+        cards = watching()
 
+        self.assertEqual(len(cards), 1)
+        card = cards[0]
         self.assertEqual((card["label"], card["value"]), ("New advisories", "1"))
         self.assertNotIn("detail", card)
 

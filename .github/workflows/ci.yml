@@ -367,23 +367,24 @@ jobs:
         with:
           inputs: requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt
 
-  code-scanning:
-    name: code scanning
+  scorecard:
+    name: scorecard
     needs: toolchain
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    # The same scripts/security-scan.sh a local run uses, failing on any alert,
-    # so a pull request cannot merge into an alert that codeql.yml and
-    # scorecard.yml would only raise after the merge.
+    timeout-minutes: 15
+    # Scorecard's action reads only the default branch, so a pull request that
+    # would lower a check is caught here, by the same script a local run uses.
+    # CodeQL is not run again: codeql.yml analyses every pull request, and the
+    # ruleset's code scanning rule holds a merge until it has no alert.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ needs.toolchain.outputs.oldest-python }}
-      - name: CodeQL and Scorecard, failing on any alert
+      - name: Every file-based check at 10
         env:
           CHECK_PYTHON: python
-        run: scripts/security-scan.sh
+        run: scripts/security-scan.sh scorecard
 
   structural:
     name: structural bar

@@ -23,7 +23,6 @@ from datetime import timedelta
 from typing import Any
 
 from .github_public import TIMEOUT_SECONDS, get as _get
-from .github_public import GitHubReadError as GitHubReadError  # the error callers catch
 from .readings import refresh as refresh_reading
 from .readings import stored
 from .security import Capability, Principal

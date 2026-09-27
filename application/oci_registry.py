@@ -221,7 +221,8 @@ def _get(
     limit: int = MAX_RESPONSE_BYTES,
 ) -> tuple[dict[str, Any], Any, str]:
     try:
-        return (*_request(f"https://{host}{path}", token, accept, method, limit), token)
+        body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
+        return body, headers, token
     except urllib.error.HTTPError as exc:
         challenge = exc.headers.get("WWW-Authenticate", "") or ""
         exc.close()
@@ -229,7 +230,8 @@ def _get(
             raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc
     token = _anonymous_token(challenge, image)
     try:
-        return (*_request(f"https://{host}{path}", token, accept, method, limit), token)
+        body, headers = _request(f"https://{host}{path}", token, accept, method, limit)
+        return body, headers, token
     except urllib.error.HTTPError as exc:
         exc.close()
         raise RegistryReadError(f"{image.name}: the registry returned HTTP {exc.code}.") from exc

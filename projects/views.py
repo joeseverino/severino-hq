@@ -325,7 +325,8 @@ class WatchingView(PageMixin, LoginRequiredMixin, TemplateView):
 
 class WatchingRefreshView(LoginRequiredMixin, View):
     def post(self, request):
-        from application.github_profile import GitHubReadError, refresh
+        from application.github_profile import refresh
+        from application.github_public import GitHubReadError
         from application.linked_accounts import GITHUB, linked_login
         from application.security import AuthorizationError
 

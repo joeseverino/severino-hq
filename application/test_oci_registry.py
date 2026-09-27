@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.parse
 from email.message import Message
 from unittest import mock
 from urllib.error import HTTPError
@@ -84,7 +85,7 @@ class RegistryTests(SimpleTestCase):
             found = tags(self.image)
 
         self.assertEqual(found, ["1.0.0", "1.1.0", "2.0.0"])
-        token_url = next(call for call in fake.calls if call.startswith("https://auth.example"))
+        token_url = next(call for call in fake.calls if urllib.parse.urlsplit(call).hostname == "auth.example")
         self.assertIn("scope=repository%3Ateam%2Fapp%3Apull", token_url)
 
     def test_labels_come_from_the_platform_the_machines_run(self):
@@ -100,7 +101,7 @@ class RegistryTests(SimpleTestCase):
         def head(request, timeout=None):
             seen.append(request.get_method())
             if request.headers.get("Authorization") != "Bearer anonymous":
-                if request.full_url.startswith("https://auth.example"):
+                if urllib.parse.urlsplit(request.full_url).hostname == "auth.example":
                     return _Response({"token": "anonymous"})
                 raise _challenge(request.full_url)
             return _Response({}, {"Docker-Content-Digest": digest})

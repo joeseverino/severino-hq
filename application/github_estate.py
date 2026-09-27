@@ -251,10 +251,12 @@ def build_of(image: str) -> dict[str, Any] | None:
     None for an image not pinned by digest or not read through the App.
     """
 
-    reference, marker, digest = image.partition("@sha256:")
-    if not marker or not reference.startswith("ghcr.io/"):
+    from .images import GHCR, ImageRef
+
+    parsed = ImageRef.parse(image)
+    if parsed is None or parsed.registry != GHCR or not parsed.digest:
         return None
-    name = reference.removeprefix("ghcr.io/").lower()
+    name, digest = parsed.repository.lower(), parsed.digest.removeprefix("sha256:")
     for repo in repositories().values():
         for item in repo.images or ():
             if item.get("name") == name:

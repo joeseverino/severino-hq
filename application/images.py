@@ -15,6 +15,7 @@ from dataclasses import dataclass
 # Docker's rule: the first path component is a registry when it looks like a
 # host, and Docker Hub's official images live under ``library/``.
 DOCKER_HUB = "docker.io"
+GHCR = "ghcr.io"
 _DIGITS = re.compile(r"\d+")
 _COMPARATOR = re.compile(r"^\s*(<=|>=|<|>|=)?\s*v?([0-9][0-9A-Za-z.\-+]*)\s*$")
 
@@ -65,7 +66,7 @@ class ImageRef:
     def github(self) -> str:
         """``owner/repository`` when the registry is GitHub's own, else ""."""
 
-        if self.registry != "ghcr.io":
+        if self.registry != GHCR:
             return ""
         parts = self.repository.split("/")
         return "/".join(parts[:2]) if len(parts) >= 2 else ""

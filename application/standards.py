@@ -16,10 +16,6 @@ UNMET = "unmet"
 UNAVAILABLE = "unavailable"
 
 
-def _always(_subject: Any) -> bool:
-    return True
-
-
 @dataclass(frozen=True)
 class Check:
     id: str
@@ -31,7 +27,8 @@ class Check:
     serious: bool = False
     # Which group of a standard it belongs to, for a page that groups them.
     scope: str = ""
-    applies: Callable[[Any], bool] = _always
+    # Whether it applies to a given subject; every subject when None.
+    applies: Callable[[Any], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +73,7 @@ def measure(subject: Any, standard: tuple[Check, ...]) -> Posture:
 
     results = []
     for check in standard:
-        if not check.applies(subject):
+        if check.applies is not None and not check.applies(subject):
             continue
         outcome = check.test(subject)
         results.append(Result(check, UNAVAILABLE if outcome is None else MET if outcome else UNMET))

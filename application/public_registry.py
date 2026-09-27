@@ -364,6 +364,12 @@ def vulnerability_reader(
     return read
 
 
+def read_vulnerabilities(key: str) -> dict[str, Any]:
+    """One digest's packages checked against OSV, every detail read afresh."""
+
+    return vulnerability_reader({})(key)
+
+
 def _github_link(value: Any) -> str:
     """A link GitHub gave, kept only when it is a GitHub page: it becomes an href."""
 
@@ -617,5 +623,5 @@ READERS: dict[str, Callable[..., dict[str, Any]]] = {
     IMAGE_KIND: read_image,
     UPSTREAM_KIND: read_upstream,
     DIGEST_KIND: read_digest,
-    VULNERABILITY_KIND: lambda key: vulnerability_reader({})(key),
+    VULNERABILITY_KIND: read_vulnerabilities,
 }

@@ -37,11 +37,7 @@ def _public(repo: Repository) -> bool:
 def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, serious: bool = False) -> _Check:
     """A repository check: every repository's, or a public one's besides."""
 
-    return _Check(id, label, test, why, fix, serious=serious, scope=scope, applies=_public if scope == PUBLIC else _always)
-
-
-def _always(_repo: Repository) -> bool:
-    return True
+    return _Check(id, label, test, why, fix, serious=serious, scope=scope, applies=_public if scope == PUBLIC else None)
 
 
 def _access(repo: Repository) -> dict[str, Any] | None:
