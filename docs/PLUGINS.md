@@ -152,7 +152,7 @@ happened, so nothing is missed silently and no schedule backs it up.
 merge a plugin → its CI admits the wheel and publishes the bundle
                → the admission dispatches the host's composition
                → build → verify → scan → publish → approve → deploy
-               → HQ boots on the new image and reports delivery on the plugin's commit
+               → HQ marks the plugin's commit live and comments on its pull request
 ```
 
 What a composition is made of (host image digest, plugin wheel digests, and the

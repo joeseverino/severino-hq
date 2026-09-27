@@ -224,3 +224,29 @@ runs:
         gh workflow run compose.yml --repo "$HOST_REPOSITORY" --ref main \
           -f reason="extension admitted" -f force=false
         echo "Composition started; its deploy waits for approval in severino-hq."
+
+    # HQ's check on this commit, in this (private) repository: the same check
+    # the host's commits carry. HQ's controller marks it live once production
+    # runs this commit, and comments once on its merged pull request.
+    - name: Mint a token for HQ's check on this commit
+      id: report
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        client-id: ${{ inputs.app-client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-checks: write
+
+    - name: Say on this commit that production waits for it
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.report.outputs.token }}
+        COMPOSE_RUNS: ${{ github.server_url }}/${{ steps.host.outputs.repository }}/actions/workflows/compose.yml
+      run: |
+        set -euo pipefail
+        gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
+          -f name="Severino HQ · production" -f head_sha="$GITHUB_SHA" \
+          -f status=queued -f details_url="$COMPOSE_RUNS" \
+          -f "output[title]=Waiting for its composition and approval" \
+          -f "output[summary]=Admitted and signed. The host is composing it; the deploy waits for approval." >/dev/null
