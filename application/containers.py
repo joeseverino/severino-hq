@@ -202,6 +202,21 @@ class Running:
         return f"{repository}@{hexadecimal[:12]}"
 
 
+def socket_holders() -> frozenset[tuple[str, str]]:
+    """``(machine, container)`` for each container declared to hold the Docker socket."""
+
+    from .infrastructure import enabled_resources
+
+    def load() -> frozenset[tuple[str, str]]:
+        return frozenset(
+            (str(resource.spec.get("host", "")), str(resource.spec.get("name", "")))
+            for resource in enabled_resources()
+            if resource.kind == CONTAINER_KIND and resource.spec.get("holds_docker_socket")
+        )
+
+    return read_once("containers.socket_holders", load)
+
+
 def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     """Which declaration watches which container, and whether it is folded away.
 

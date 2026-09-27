@@ -68,6 +68,25 @@ def system_path(source: str) -> bool:
     return path in SYSTEM_ROOTS or any(path == root or path.startswith(f"{root}/") for root in SYSTEM_PATHS)
 
 
+def _socket_held(container: Any) -> bool | None:
+    """No Docker socket, or one its declaration says it exists to hold.
+
+    A socket proxy or a management agent cannot do its job without the
+    socket, so flagging it would raise an action item nobody can clear. The
+    operator says so once, on the container, and anything else that mounts
+    the socket is still flagged.
+    """
+
+    mounts = container.mounts
+    if mounts is None:
+        return None
+    if _no_socket([mount for mount in mounts if mount.get("type") == "bind"]):
+        return True
+    from .containers import socket_holders
+
+    return (container.machine.name, container.running.name) in socket_holders()
+
+
 def _no_socket(binds) -> bool:
     return not any(mount.get("source") in DOCKER_SOCKETS for mount in binds)
 
@@ -96,7 +115,7 @@ STANDARD: tuple[Check, ...] = (
     Check("not-privileged", "Not privileged", _on(lambda runtime: not runtime.get("privileged")),
           "A privileged container is root on its machine: every device and every kernel capability.",
           "Remove privileged mode and add only the capability it needs.", serious=True),
-    Check("no-docker-socket", "No Docker socket", _mounted(_no_socket),
+    Check("no-docker-socket", "No Docker socket", _socket_held,
           "The Docker socket starts any container, mounting anything, as root: read-only or not.",
           "Put a socket proxy that allows only the calls it needs between it and the socket.", serious=True),
     Check("own-process-namespace", "Its own processes only", _on(lambda runtime: runtime.get("pid_mode") != "host"),

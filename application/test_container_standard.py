@@ -47,6 +47,22 @@ class StandardTests(TestCase):
             "no-system-path-writable", "no-powerful-capability",
         })
 
+    def test_a_container_declared_to_hold_the_socket_is_not_flagged_for_it(self):
+        from control_plane.models import ManagedResource
+
+        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
+        ManagedResource.objects.create(
+            key="example-box-web", kind="portainer.container",
+            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web", "holds_docker_socket": True},
+        )
+
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), MET)
+
+    def test_a_container_not_declared_to_hold_the_socket_still_is(self):
+        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
+
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), UNMET)
+
     def test_a_read_only_system_mount_and_a_data_bind_are_not_reach(self):
         found = self.posture(**{**KEPT, "mounts": [
             {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},

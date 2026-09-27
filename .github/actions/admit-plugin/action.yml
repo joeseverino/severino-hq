@@ -40,7 +40,7 @@ inputs:
     required: false
     default: .github/workflows/admit-plugin.yml
   app-client-id:
-    description: Client ID of HQ's app, the caller's HQ_APP_CLIENT_ID variable.
+    description: Client ID of HQ's app, the caller's HQ_APP_CLIENT_ID secret.
     required: true
   app-private-key:
     description: >-

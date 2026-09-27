@@ -482,6 +482,14 @@ class PortainerContainerSpec(ProviderModel):
             "finding."
         ),
     )
+    holds_docker_socket: bool = Field(
+        default=False,
+        title="Holds the Docker socket",
+        description=(
+            "Its job is the socket: a socket proxy or a management agent. The "
+            "socket stays on its page but is never an action item."
+        ),
+    )
     hidden: bool = Field(
         default=False,
         title="Collapse on machine page",
@@ -2373,14 +2381,14 @@ _PROVIDERS = (
         # Ports are behind the disclosure because the answer is usually none:
         # Docker reports them, and only a container sharing the machine's
         # network has to be told.
-        advanced_fields=("hidden", "on_demand", "serves_ports", "source"),
+        advanced_fields=("hidden", "on_demand", "holds_docker_socket", "serves_ports", "source"),
         # So a sweep can never confirm it: the field exists for the case Docker
         # publishes nothing.
         #
         # ``hidden`` is HQ's own bookkeeping (whether the machine page folds the
         # row away); Portainer and Docker have nowhere to keep it. ``source``
         # is the operator's word for an image that names no repository.
-        unobservable_fields=("serves_ports", "hidden", "on_demand", "source"),
+        unobservable_fields=("serves_ports", "hidden", "on_demand", "holds_docker_socket", "source"),
         declaration_only=True,
         choices="application.provider_choices:container_stack",
     ),
