@@ -1,13 +1,11 @@
 [Unit]
-Description=Check that root-run Severino HQ scripts and units match the deployed image
+Description=Check that root-run Severino HQ scripts, units and checkout ownership match the deployed image
 Documentation=file:///usr/local/lib/severino-hq/scripts/severino-hq-check-scripts
 
 [Service]
 Type=oneshot
-# From the root-owned tree every deploy refreshes, not from a copy put into
-# /usr/local/sbin by hand. A checker installed once is itself a file that never
-# receives the repository's changes -- the drift it exists to report. Through
-# /bin/sh because the sync leaves only *.sh executable.
+# From the root-owned tree every deploy refreshes. Through /bin/sh because the
+# sync leaves only *.sh executable.
 ExecStart=/bin/sh /usr/local/lib/severino-hq/scripts/severino-hq-check-scripts
 NoNewPrivileges=yes
 ProtectHome=yes

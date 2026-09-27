@@ -1,12 +1,11 @@
 name: Compose and deploy extensions
 
 # Builds the one image production runs: this host plus every admitted
-# extension. Extensions verify and admit themselves, then trigger this; they no
-# longer build or deploy an image of their own. That is the point, when each
-# extension shipped its own image, deploying one replaced the others.
+# extension. Extensions verify and admit themselves and build no image of their
+# own, so deploying one never replaces the others.
 #
-# Triggered by an extension after a successful admission, or by hand to
-# rebuild the current set (for example after a host release).
+# Triggered by the host build, by a schedule that picks up new admissions, or
+# by hand to rebuild the current set.
 
 on:
   # After the host image exists, never in parallel with it being built.
@@ -28,11 +27,9 @@ on:
   # workflows agree on.
   pull_request:
     branches: [main]
-  # Kept for an extension that is given a credential to announce itself, and
-  # for a hand-sent signal. Nothing sends this today, which is exactly why
-  # the schedule below exists, and why this listener alone was worse than
-  # useless: it made the pipeline look wired while an extension merge quietly
-  # reached nothing.
+  # For an extension given a credential to announce itself, and for a
+  # hand-sent signal. Nothing is required to send it: the schedule below is
+  # what picks up an extension merge.
   repository_dispatch:
     types: [extension-admitted]
   # An extension's own merge cannot trigger this: sending a signal from one
@@ -54,12 +51,9 @@ on:
         required: false
         default: manual rebuild
 
+# Read-only by default; each job declares what it needs beyond this.
 permissions:
   contents: read
-  packages: write
-  # Read-only, and only so "Resolve the host image" can ask whether the host
-  # build it is waiting for has already failed.
-  actions: read
 
 concurrency:
   # Never two compositions at once *for the same target*: they would race for
@@ -98,6 +92,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Read-only, and only so "Resolve the host image" can ask whether the host
+      # build it is waiting for has already failed.
       actions: read
       # Keyless signing of the published composition. Granted to this job
       # alone: the deploy job verifies signatures and never makes one, and a
@@ -131,16 +127,11 @@ jobs:
           jq -r '.extensions | length as $n | "composing \($n) extension(s)"' composition-set.json
 
       - name: Mask the extension names for the rest of the job
-        # This step prints a count and nothing else, which was enough while it
-        # was the only step that mentioned them. It is not: later steps shell
-        # out to gh, pip, and Django, and those echo repository names, wheel
-        # filenames, app labels and (when a test fails) table and column
-        # names. This repository is public and so are its logs.
-        #
-        # Masking once here covers every later step, including output from
-        # commands nobody has written yet. Auditing each one forever is the
-        # alternative, and it already failed: a query-budget assertion printed
-        # the composed schema into a world-readable log.
+        # Later steps shell out to gh, pip, and Django, and those echo
+        # repository names, wheel filenames, app labels and (when a test fails)
+        # table and column names. This repository is public and so are its
+        # logs. Masking once here covers every later step, including output
+        # from commands not yet written.
         #
         # Every spelling, because the same extension appears as a repository
         # path, a bare name, a Python package, a table prefix and the path it
@@ -195,10 +186,9 @@ jobs:
           # available. 20 minutes is well past a host build and well short of
           # the job timeout.
           digest=""
-          # Five seconds, not twenty. On a pull request this is waiting for a
-          # build that started at the same moment, so the granularity of the
-          # poll is pure overshoot: on average half the interval, spent after
-          # the image is already there.
+          # Polled every five seconds: on a pull request this waits for a build
+          # that started at the same moment, and any longer interval is time
+          # spent after the image is already there.
           for attempt in $(seq 1 240); do
             if digest=$(docker buildx imagetools inspect "$image" \
                           --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
@@ -245,9 +235,8 @@ jobs:
 
       - name: Verify the host image was built by this repository
         # Every extension wheel is verified against a declared signer before it
-        # is installed. Until this step the image it was installed *into* was
-        # taken on trust: resolved by a tag derived from a commit, which says
-        # who *should* have built it and proves nothing about who did.
+        # is installed, and so is the image it is installed into: a tag derived
+        # from a commit says who should have built it, not who did.
         #
         # The identity is pinned to this repository's own `ci` workflow, so an
         # image pushed to the same name by anything else fails here rather than
@@ -318,6 +307,39 @@ jobs:
           done < <(jq -r '.extensions[].repository' composition-set.json | sort)
           wc -l < admissions.txt | xargs printf 'resolved %s admission(s)\n'
 
+      - name: Find coordinated extension branches
+        # A pull request whose branch name an extension also carries is a
+        # coordinated change: the two must be verified together, so that
+        # extension is built from its branch instead of reusing its admission.
+        # Verify only. The resulting image is local to this job, carries no
+        # lock, and no step that publishes can reach it.
+        id: coordinated
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.EXTENSION_ARTIFACTS_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::The pull request branch name has characters this step does not accept."
+            exit 1
+          fi
+          : > coordinated.txt
+          while read -r repo; do
+            if sha=$(gh api "repos/$repo/branches/$BRANCH" --jq .commit.sha 2>api-error.txt); then
+              printf '%s=%s\n' "$repo" "$sha" >> coordinated.txt
+            elif ! grep -q 'HTTP 404' api-error.txt; then
+              # Not "no such branch": the answer is unknown, and guessing
+              # either way would verify the wrong composition.
+              echo "::error::Could not ask an extension repository for branch $BRANCH."
+              exit 1
+            fi
+          done < <(jq -r '.extensions[].repository' composition-set.json | sort)
+          rm -f api-error.txt
+          count=$(grep -c . coordinated.txt || true)
+          echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "coordinated extension branches named $BRANCH: $count"
+
       - name: Decide whether anything changed
         id: fingerprint
         run: |
@@ -326,12 +348,9 @@ jobs:
           # policy. Two runs agreeing on all three produce the same image, so
           # there is nothing to build and nothing to deploy.
           #
-          # Asked here, before anything is downloaded or verified, because the
-          # answer is almost always "nothing". Asked after, an idle tick still
-          # fetched three wheels, installed a verifier and checked three
-          # signatures against Sigstore: tens of times a day, to learn that.
-          # The cost was not the minutes; it was that every one of those was a
-          # chance to fail at something nobody was waiting for.
+          # Asked before anything is downloaded or verified, because the answer
+          # is almost always "nothing", and an idle tick that downloads and
+          # verifies is a chance to fail at something nobody is waiting for.
           fingerprint=$(printf '%s\n%s\n%s\n' \
             "${{ steps.host.outputs.image }}" \
             "$(sha256sum admissions.txt | cut -d' ' -f1)" \
@@ -413,15 +432,32 @@ jobs:
         # an extension produced. The identity checked is the one declared in
         # composition-set.json, so an extension cannot widen who is
         # allowed to sign for it by editing its own repository.
+        #
+        # With coordinated branches, an extension on one is built from it
+        # instead, and every other admission was signed under the base
+        # branch's policy, so that is the policy it is verified against.
+        env:
+          CANDIDATE: ${{ steps.coordinated.outputs.found == 'true' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           policy_sha=$(openssl dgst -sha256 policy/plugin-admission-v1.json | awk '{print $NF}')
+          if [ "$CANDIDATE" = true ]; then
+            git fetch --quiet --depth 1 origin "$BASE_SHA"
+            policy_sha=$(git show FETCH_HEAD:policy/plugin-admission-v1.json \
+                           | openssl dgst -sha256 | awk '{print $NF}')
+            mkdir -p candidate-wheels
+          fi
           args=""
           count=$(jq '.extensions | length' composition-set.json)
           for index in $(seq 0 $((count - 1))); do
             repo=$(jq -r ".extensions[$index].repository" composition-set.json)
             workflow=$(jq -r ".extensions[$index].workflow" composition-set.json)
             plugin_id=$(jq -r ".extensions[$index].id" composition-set.json)
+            if [ "$CANDIDATE" = true ] \
+               && awk -F= -v r="$repo" '$1 == r { found = 1 } END { exit !found }' coordinated.txt; then
+              continue
+            fi
             dir="artifacts/$(basename "$repo")"
             statement=$(find "$dir" -name admission.json -print -quit)
             bundle=$(find "$dir" -name admission.sigstore.json -print -quit)
@@ -442,23 +478,27 @@ jobs:
               --plugin-id "$plugin_id" \
               --policy-sha "$policy_sha" > "$entry"
             args="$args --entry $entry --wheel $wheel"
+            if [ "$CANDIDATE" = true ]; then cp "$wheel" candidate-wheels/; fi
           done
           echo "args=$args" >> "$GITHUB_OUTPUT"
 
       - name: Merge locks and stage the build context
         id: compose
         if: >-
-          github.event_name != 'schedule' ||
-          steps.fingerprint.outputs.changed == 'true'
+          steps.coordinated.outputs.found != 'true' &&
+          (github.event_name != 'schedule' ||
+           steps.fingerprint.outputs.changed == 'true')
         env:
           CORDON_LOCK: ./cordon/admission/lock.mjs
         run: python scripts/compose-plugins.py ${{ steps.collect.outputs.args }} --out build/composition
 
       - name: Build composed image
-        # Skipped only by a scheduled run that found nothing to do.
+        # Skipped by a scheduled run that found nothing to do, and by a
+        # coordinated change, which builds the candidate below instead.
         if: >-
-          github.event_name != 'schedule' ||
-          steps.fingerprint.outputs.changed == 'true'
+          steps.coordinated.outputs.found != 'true' &&
+          (github.event_name != 'schedule' ||
+           steps.fingerprint.outputs.changed == 'true')
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
@@ -468,6 +508,71 @@ jobs:
             --build-arg PLUGIN_POLICY_SHA256="${{ steps.compose.outputs.policy_sha256 }}" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="${{ steps.compose.outputs.references }}" \
             -t ghcr.io/${{ github.repository }}/composition:${{ github.sha }} .
+
+      - name: Build coordinated extension branches
+        # Branch code is unreviewed, and this job holds a registry credential
+        # and an OIDC identity. So it builds inside the verified host image,
+        # with no token, credential file or docker socket, from a copy with no
+        # .git.
+        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.EXTENSION_ARTIFACTS_TOKEN }}
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate-wheels candidates
+          chmod 0777 candidate-wheels
+          while IFS='=' read -r repo sha; do
+            [ -n "$repo" ] || continue
+            dir="candidates/$(basename "$repo")"
+            gh repo clone "$repo" "$dir" -- --quiet
+            git -C "$dir" checkout --quiet --detach "$sha"
+            rm -rf "$dir/.git"
+            chmod -R a+rwX "$dir"
+            docker run --rm --network bridge --user 10001:10001 --env HOME=/tmp \
+              --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
+              --entrypoint python "$HQ_IMAGE" \
+              -m pip wheel --no-deps --no-cache-dir --wheel-dir /out /src
+          done < coordinated.txt
+
+      - name: Stage the candidate
+        id: candidate
+        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          args=()
+          for wheel in candidate-wheels/*.whl; do args+=(--wheel "$wheel"); done
+          python scripts/compose-plugins.py --candidate "${args[@]}" --out build/candidate
+
+      - name: Build the candidate image
+        # Admission off: these wheels are unsigned branch builds. The tag has no
+        # registry, so no push in this workflow can publish it.
+        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
+        env:
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
+          DIGESTS: ${{ steps.candidate.outputs.digests }}
+          REFERENCES: ${{ steps.candidate.outputs.references }}
+        run: |
+          set -euo pipefail
+          docker build -f - -t "severino-hq-candidate:$GITHUB_SHA" \
+            --build-arg HQ_IMAGE="$HQ_IMAGE" \
+            --build-arg PLUGIN_WHEEL_DIGESTS="$DIGESTS" \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$REFERENCES" . <<'DOCKERFILE'
+          ARG HQ_IMAGE
+          FROM ${HQ_IMAGE}
+          ARG PLUGIN_WHEEL_DIGESTS
+          ARG SEVERINO_HQ_PLUGIN_REFERENCES
+          USER root
+          COPY build/candidate/*.whl /tmp/plugin/
+          RUN set -eu; \
+              printf '%s\n' "${PLUGIN_WHEEL_DIGESTS}" | awk 'NF { print "/tmp/plugin/" $2 " --hash=sha256:" $1 }' \
+                > /tmp/plugin/requirements.txt; \
+              pip install --no-cache-dir --no-deps --require-hashes -r /tmp/plugin/requirements.txt; \
+              rm -rf /tmp/plugin
+          ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
+              SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
+          USER severino
+          DOCKERFILE
 
       - name: Verify the composition as one application
         # Skipped only by a scheduled run that found nothing to do.
@@ -483,10 +588,11 @@ jobs:
         # Log level raised for the run. At INFO the application writes a line
         # per request, which a suite exercising every composed page turns into
         # a list of everything the composition serves. Masking is the backstop.
-        # Failures are unaffected: the test runner
-        # reports those itself.
+        # Failures are unaffected: the test runner reports those itself.
+        env:
+          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, github.sha) }}
         run: |
-          image=ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
+          image="$IMAGE"
           docker run --rm --entrypoint python \
             --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
             --env DJANGO_ALLOWED_HOSTS=localhost \
@@ -505,7 +611,7 @@ jobs:
           steps.fingerprint.outputs.changed == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}/composition:${{ github.sha }}
+          image-ref: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, github.sha) }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -635,6 +741,20 @@ jobs:
               "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
             "$IMAGE" > /dev/null
           echo "composition signature verified"
+      - name: Refuse a checkout the runner cannot pull
+        # The pull below runs as this account, so everything under the
+        # checkout's .git must be its own. severino-hq-check-scripts asks the
+        # same question daily (scripts/lib/checkout.sh).
+        run: |
+          set -euo pipefail
+          checkout=/opt/apps/severino-hq
+          runner="$(id -un)"
+          foreign="$(find "$checkout/.git" ! -user "$runner" -print)"
+          if [ -n "$foreign" ]; then
+            count="$(printf '%s\n' "$foreign" | wc -l | tr -d ' ')"
+            echo "::error title=Checkout not owned by the runner::$count path(s) under $checkout/.git are not owned by $runner, so git pull fails. Fix on the host: sudo chown -R $runner: $checkout/.git </dev/null"
+            exit 1
+          fi
       - name: Sync deploy checkout
         run: git -C /opt/apps/severino-hq pull --ff-only
       - name: Deploy exact image with health rollback

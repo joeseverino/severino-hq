@@ -12,7 +12,10 @@
 # prints the scopes, which are also what to tick when creating the client in
 # the admin console instead, and creates nothing: the secret is shown once.
 # With --print-secret it creates the client, reports its id on stderr, and
-# writes only the secret to stdout for piping into a store.
+# writes only the secret to stdout for piping into a store. With --store and
+# --store-id (op://<vault>/<item>/<field> each, one item) it checks the item
+# carries both fields, creates the client, and writes its secret and id there
+# through `op`; the secret reaches no argument, file or output.
 
 set -eu
 
@@ -25,6 +28,8 @@ usage: mint-tailscale-client.sh [options]
   --tag TAG           tag the client; repeatable
   --scopes FILE       scope list (default: beside this script)
   --print-secret      create the client and write its secret to stdout
+  --store REF         create the client and store its secret at REF
+  --store-id REF      with --store, store the client id at REF (same item)
 
 environment:
   TAILSCALE_BOOTSTRAP_TOKEN          API access token with oauth_keys, or
@@ -44,6 +49,8 @@ description="hq-observer"
 tags=""
 scopes="${script_dir}/tailscale-observer-scopes.txt"
 print_secret=0
+store=""
+store_id=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -53,6 +60,8 @@ while [ "$#" -gt 0 ]; do
 "; shift 2 ;;
         --scopes) [ "$#" -ge 2 ] || usage; scopes="$2"; shift 2 ;;
         --print-secret) print_secret=1; shift ;;
+        --store) [ "$#" -ge 2 ] || usage; store="$2"; shift 2 ;;
+        --store-id) [ "$#" -ge 2 ] || usage; store_id="$2"; shift 2 ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
@@ -60,6 +69,18 @@ done
 
 command -v jq >/dev/null || die "jq is required."
 command -v curl >/dev/null || die "curl is required."
+if [ -n "${store}" ] || [ -n "${store_id}" ]; then
+    [ -n "${store}" ] && [ -n "${store_id}" ] \
+        || die "--store and --store-id go together: the client id and its secret."
+    [ "${print_secret}" -eq 0 ] || die "--store and --print-secret are exclusive."
+    # shellcheck source=scripts/lib/op-store.sh
+    . "${script_dir}/lib/op-store.sh"
+    op_store_parse "${store_id}"
+    id_vault="${op_vault}"; id_item="${op_item}"; id_field="${op_field}"
+    op_store_parse "${store}"
+    [ "${id_vault}/${id_item}" = "${op_vault}/${op_item}" ] \
+        || die "--store and --store-id name one item."
+fi
 [ -f "${scopes}" ] || die "Scope list not found: ${scopes}"
 case "${tailnet}" in ''|*[!A-Za-z0-9._@-]*) die "The tailnet name is malformed." ;; esac
 # Tailscale's own limit: 50 characters, alphanumerics, hyphens and spaces.
@@ -84,7 +105,9 @@ jq -n --slurpfile scopes "${work}/scopes" --slurpfile tags "${work}/tags" \
     + (if ($tags[0] | length) > 0 then {tags: $tags[0]} else {} end)
 ' >"${work}/body"
 
-if [ "${print_secret}" -eq 0 ]; then
+if [ -n "${store}" ]; then
+    op_store_check "${op_vault}" "${op_item}" "${op_field}" "${id_field}"
+elif [ "${print_secret}" -eq 0 ]; then
     echo "Would create OAuth client ${description} with scopes:" >&2
     jq -r '.[] | "  " + .' <"${work}/scopes" >&2
     echo "Nothing created. Rerun with --print-secret and pipe stdout into the" >&2
@@ -97,31 +120,40 @@ if [ -n "${TAILSCALE_BOOTSTRAP_TOKEN:-}" ]; then
     token="${TAILSCALE_BOOTSTRAP_TOKEN}"
 elif [ -n "${TAILSCALE_BOOTSTRAP_CLIENT_ID:-}" ] && [ -n "${TAILSCALE_BOOTSTRAP_CLIENT_SECRET:-}" ]; then
     # The form body carries the secret, so it travels over stdin.
-    printf 'client_id=%s&client_secret=%s&scope=oauth_keys' \
+    exchanged="$(printf 'client_id=%s&client_secret=%s&scope=oauth_keys' \
         "${TAILSCALE_BOOTSTRAP_CLIENT_ID}" "${TAILSCALE_BOOTSTRAP_CLIENT_SECRET}" |
         curl -q --silent --show-error --proto '=https' --max-time 30 \
             --request POST --data-binary @- \
             --header 'Content-Type: application/x-www-form-urlencoded' \
-            "${api}/oauth/token" >"${work}/response"
-    token="$(jq -r '.access_token // empty' <"${work}/response" 2>/dev/null || true)"
+            "${api}/oauth/token")"
+    token="$(printf '%s' "${exchanged}" | jq -r '.access_token // empty' 2>/dev/null || true)"
     [ -n "${token}" ] || die "Tailscale did not exchange the bootstrap client for a token."
 else
     die "Set TAILSCALE_BOOTSTRAP_TOKEN, or TAILSCALE_BOOTSTRAP_CLIENT_ID and TAILSCALE_BOOTSTRAP_CLIENT_SECRET."
 fi
 
-# The bearer header travels over stdin, not argv.
-printf 'Authorization: Bearer %s\n' "${token}" |
+# The bearer header travels over stdin, not argv. The answer carries the
+# secret, so it stays in memory rather than in ${work}.
+created="$(printf 'Authorization: Bearer %s\n' "${token}" |
     curl -q --silent --show-error --proto '=https' --max-time 30 \
         --request POST --header @- \
         --header 'Content-Type: application/json' \
         --data-binary "@${work}/body" \
-        "${api}/tailnet/${tailnet}/keys" >"${work}/response"
+        "${api}/tailnet/${tailnet}/keys")"
 
-id="$(jq -r 'if type == "object" then .id // empty else empty end' <"${work}/response" 2>/dev/null || true)"
+id="$(printf '%s' "${created}" | jq -r 'if type == "object" then .id // empty else empty end' 2>/dev/null || true)"
 if [ -z "${id}" ]; then
-    reason="$(jq -r '.message // empty' <"${work}/response" 2>/dev/null || true)"
+    reason="$(printf '%s' "${created}" | jq -r '.message // empty' 2>/dev/null || true)"
     die "Tailscale refused the new client: ${reason:-unreadable response}"
 fi
 echo "Client id: ${id}" >&2
 echo "Expires: never; OAuth clients stay valid until revoked." >&2
-jq -er '.key' <"${work}/response"
+if [ -n "${store}" ]; then
+    printf '%s' "${created}" | jq -e --arg secret "${op_field}" --arg id "${id_field}" \
+        '{($secret): .key, ($id): .id} | select(.[$secret] | type == "string" and length > 0)' \
+        | op_store_write "${op_vault}" "${op_item}" \
+        || die "Client ${id} was created but not stored. Revoke it under Trust credentials and run this again."
+    echo "Stored in ${op_item} (${op_vault}); the controller reads it on its next render." >&2
+    exit 0
+fi
+printf '%s' "${created}" | jq -er '.key'

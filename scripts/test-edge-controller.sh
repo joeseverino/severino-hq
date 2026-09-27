@@ -28,8 +28,8 @@ test "$(openssl x509 -in "${cert_dir}/fullchain.pem" -noout -fingerprint -sha256
     "${expected_fingerprint}"
 
 # A deploy that should be refused, and must leave the installed pair alone.
-# Only matched pairs were ever exercised here, so the guard that rejects an
-# unmatched one was never run by a test.
+# Unmatched pairs are exercised as well as matched ones, so the guard that
+# rejects them runs under test.
 refuse() { # refuse <name> <dir>
     # Existence, not size: one case is deliberately zero bytes. A fixture that
     # failed to generate would otherwise tar nothing, and `set -e` would end the
@@ -82,7 +82,7 @@ refuse "empty input is refused" "${empty_dir}"
 # the point of this suite is that a check which cannot run must not look like
 # one that passed.
 old_dir="${root}/expired"; mkdir -p "${old_dir}"
-if openssl req -x509 -help 2>&1 | grep -q: '-not_before'; then
+if openssl req -x509 -help 2>&1 | grep -q -- '-not_before'; then
     openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=expired.example.test \
         -keyout "${old_dir}/privkey.pem" -out "${old_dir}/fullchain.pem" \
         -not_before 20200101000000Z -not_after 20200102000000Z >/dev/null 2>&1
@@ -105,6 +105,17 @@ routes="$(env PATH="${bin_dir}:${PATH}" \
     deploy/targets/severino-hq-edge-controller routes)"
 test "${routes}" = '{"apps":{"http":{"servers":{"srv0":{"routes":[]}}}}}'
 
+# The certificate arm hands over the served leaf and nothing else: no key.
+leaf="$(env SEVERINO_HQ_CADDY_CERT_DIR="${cert_dir}" \
+    deploy/targets/severino-hq-edge-controller certificate)"
+test "$(printf '%s\n' "${leaf}" | openssl x509 -noout -fingerprint -sha256)" = \
+    "${expected_fingerprint}"
+if printf '%s\n' "${leaf}" | grep -q "PRIVATE KEY"; then
+    echo "the certificate operation returned key material" >&2
+    exit 1
+fi
+test "$(printf '%s\n' "${leaf}" | grep -c "BEGIN CERTIFICATE")" = 1
+
 # And anything not named is still refused.
 if env PATH="${bin_dir}:${PATH}" \
     deploy/targets/severino-hq-edge-controller rm-rf >/dev/null 2>&1; then
@@ -112,7 +123,7 @@ if env PATH="${bin_dir}:${PATH}" \
     exit 1
 fi
 
-echo "Edge controller deploy, routes, and refusal all behave."
+echo "Edge controller deploy, routes, certificate, and refusal all behave."
 
 # The write arm, stubbed at `docker` again. What is checked here is the
 # transaction: a good file is installed, and a reload that fails puts the

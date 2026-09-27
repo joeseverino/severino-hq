@@ -2,8 +2,9 @@
 # Run the CI gates that can run on a development machine, before pushing.
 #
 # `scripts/check.sh` answers "do my changes work?". This answers "will the
-# pipeline accept them?": ruff at the pinned version, the shell gates, the
-# deployment check, the image build, and the suite inside that image.
+# pipeline accept them?": ruff and mypy at the pinned versions, the shell gates, the
+# deployment check, the browser layout gate, CodeQL and Scorecard as code
+# scanning runs them, the image build, and the suite inside that image.
 #
 # The tools come from scripts/toolchain.env, the same file CI reads. The list of
 # gates does not: keep it in step with .github/workflows/ci.yml by hand. What
@@ -11,6 +12,7 @@
 #
 # Usage:
 #   scripts/ci-local.sh
+#   CI_LOCAL_REQUIRE_ALL=1 scripts/ci-local.sh   # a gate that cannot run fails
 #   PY=/path/to/python scripts/ci-local.sh
 #   SEVERINO_CI_PYTHONS="/a/bin/python /b/bin/python" scripts/ci-local.sh
 #
@@ -75,6 +77,15 @@ else
   skip "ruff is not installed"
 fi
 
+# The typed seams (mypy.ini). Run on the interpreter with the requirements
+# installed, because django-stubs loads the host's settings.
+if "$PY" -c "import mypy, mypy_django_plugin" 2>/dev/null; then
+  pinned mypy "$MYPY_VERSION" "'$PY' -m mypy --version | awk '{print \$2}'"
+  run "mypy (the typed seams in mypy.ini)" "$PY" -m mypy
+else
+  skip "mypy is not installed on $PY (run: $PY -m pip install --require-hashes --no-deps -r requirements-tools.txt)"
+fi
+
 # shellcheck disable=SC2086  # both lists are meant to split
 set -- $SHELL_SOURCES
 if command -v shellcheck >/dev/null; then
@@ -101,6 +112,10 @@ else
 fi
 
 # ---------------------------------------------------------------- test job
+# The badge quotes the oldest interpreter's coverage, so it is compared on that
+# run and reported as not run only when no interpreter here is that version.
+badge_python="${PYTHON_VERSIONS%% *}"
+badge_checked=0
 for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
   if [ ! -x "$python_bin" ]; then
     skip "$python_bin is not an executable interpreter"; continue
@@ -119,20 +134,39 @@ for python_bin in ${SEVERINO_CI_PYTHONS:-$PY}; do
     run "tests with coverage gate" sh -c \
       "SEVERINO_HQ_PLUGINS= '$python_bin' -m coverage run manage.py test --parallel auto >/dev/null 2>&1 && '$python_bin' -m coverage combine --quiet && '$python_bin' -m coverage report --fail-under=$COVERAGE_FLOOR >/dev/null"
     python_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-    badge_python="${PYTHON_VERSIONS%% *}"
-    if [ "$python_version" != "$badge_python" ]; then
-      # Not ok: nothing was compared. The badge quotes one interpreter, and
-      # reporting green for a check that did not run is how the default
-      # invocation silently stopped covering this.
-      skip "coverage badge not checked (measured on ${python_version}, badge quotes ${badge_python})"
-    else
+    if [ "$python_version" = "$badge_python" ]; then
       run "README coverage badge (scripts/coverage-badge.sh)" scripts/coverage-badge.sh "$python_bin"
+      badge_checked=1
     fi
   else
     run "tests" "$python_bin" manage.py test
-    skip "coverage is not installed: gate and badge not checked"
+    skip "coverage is not installed on $python_bin: gate not checked"
   fi
 done
+if [ "$badge_checked" -eq 0 ]; then
+  # Not ok: nothing was compared, and a check that did not run is reported as
+  # not run, never as green.
+  skip "coverage badge not checked (no Python ${badge_python} interpreter with coverage)"
+fi
+
+# ------------------------------------------------------------- browser job
+# Real-browser layout invariants over synthetic pages (core/browser_tests.py).
+# Optional for check.sh, required here: a gate nobody runs is how it rotted.
+step "browser"
+browser_pin="$(sed -n 's/^playwright==\([^ ]*\).*/\1/p' requirements-browser.txt)"
+browser_install="$PY -m pip install --require-hashes -r requirements-browser.txt && $PY -m playwright install chromium"
+if ! "$PY" -c "import playwright" 2>/dev/null; then
+  skip "playwright is not installed on $PY (run: $browser_install)"
+elif ! "$PY" -c "from playwright.sync_api import sync_playwright as p
+with p() as run: run.chromium.launch().close()" >/dev/null 2>&1; then
+  skip "Chromium for playwright is not installed (run: $PY -m playwright install chromium)"
+else
+  pinned playwright "$browser_pin" "'$PY' -c 'import importlib.metadata as m; print(m.version(\"playwright\"))'"
+  run "browser layout gate (core.browser_tests)" env \
+    DJANGO_DEBUG=1 DJANGO_SECRET_KEY=ci-only-secret-key-not-for-production \
+    DJANGO_ALLOWED_HOSTS="127.0.0.1,testserver" SEVERINO_LOG_LEVEL=CRITICAL \
+    "$PY" manage.py test core.browser_tests --noinput --parallel 1
+fi
 
 # ------------------------------------------------------------ security job
 step "security"
@@ -146,9 +180,29 @@ run "manage.py check --deploy --fail-level WARNING" env \
   "$PY" manage.py check --deploy --fail-level WARNING
 if command -v pip-audit >/dev/null; then
   pinned pip-audit "$PIP_AUDIT_VERSION" "pip-audit --version | awk '{print \$2}'"
-  run "pip-audit" pip-audit -r requirements.txt
+  run "pip-audit" pip-audit -r requirements.txt -r requirements-tools.txt -r requirements-browser.txt -r requirements-dev.txt
 else
   skip "pip-audit is not installed"
+fi
+
+# ------------------------------------------------------- code scanning
+# What GitHub code scanning reports after a push, reported here before it. The
+# pinned CLIs are fetched on first use (scripts/install-scan-tools.sh).
+step "code scanning"
+run "CodeQL $CODEQL_VERSION, security-and-quality: no alerts" \
+  env CHECK_PYTHON="$PY" scripts/security-scan.sh codeql
+run "Scorecard $SCORECARD_VERSION, file-based checks at 10" \
+  env CHECK_PYTHON="$PY" scripts/security-scan.sh scorecard
+
+# ------------------------------------------------------- structural bar
+# AGENTS.md's structural bar: no new near-duplicate outside tests, and the
+# largest files only shrink (scripts/structural-baseline.txt).
+step "structural bar"
+if command -v codebase-memory-mcp >/dev/null 2>&1; then
+  pinned codebase-memory-mcp "$CODEBASE_MEMORY_MCP_VERSION" "codebase-memory-mcp --version | awk '{print \$2}'"
+  run "no new duplicate; the largest files did not grow" scripts/structural-bar.sh
+else
+  skip "structural bar: install codebase-memory-mcp to run it"
 fi
 
 # ------------------------------------------------- container + composition
@@ -158,6 +212,10 @@ if docker info >/dev/null 2>&1; then
   run "image: manage.py check" docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py check
+  # requirements-dev.txt is never installed in the image.
+  run "image: no development layer (debug_toolbar) is importable" docker run --rm \
+    --entrypoint python severino-hq:ci-local -c \
+    "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
   run "image: manage.py test" docker run --rm --entrypoint python \
     --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
     --env DJANGO_ALLOWED_HOSTS=localhost severino-hq:ci-local manage.py test --verbosity 0
@@ -172,10 +230,16 @@ if [ "${#skipped[@]}" -gt 0 ]; then
   printf '\033[2m  - %s\033[0m\n' "${skipped[@]}"
 fi
 cat <<'NOTE'
-[ci-local] never covered here: CodeQL, image signing and registry push, the
-  Trivy scan, and composition against the real private extension set. Those
-  need credentials or a registry and only run in the pipeline.
+[ci-local] never covered here: image signing and registry push, the Trivy
+  scan, composition against the real private extension set, and Scorecard's
+  project-level checks (branch protection, code review, fuzzing, CII badge).
+  Those need credentials, a registry or GitHub's view of the project.
 NOTE
+# scripts/preflight.sh requires every gate: one that could not run is a failure.
+if [ "${CI_LOCAL_REQUIRE_ALL:-0}" = 1 ] && [ "${#skipped[@]}" -gt 0 ]; then
+  printf '\033[31m[ci-local] %s gate(s) not run, and every gate is required\033[0m\n' "${#skipped[@]}"
+  failed=1
+fi
 if [ "$failed" -ne 0 ]; then
   printf '\033[31m[ci-local] FAILED\033[0m\n'; exit 1
 fi

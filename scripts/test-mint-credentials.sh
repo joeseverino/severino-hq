@@ -66,6 +66,27 @@ esac
 SH
 chmod 0700 "${fixture_dir}/curl"
 
+# A stub op: `item get` answers the fixture item, `item edit` records the
+# template it is piped. Arguments are recorded beside curl's.
+cat >"${fixture_dir}/item.json" <<'JSON'
+{"id": "item-1", "fields": [
+  {"id": "username", "label": "username", "value": "old-id"},
+  {"id": "credential", "label": "credential", "value": "old-secret"},
+  {"id": "c", "label": "connection_ref", "value": "example-api"}
+]}
+JSON
+cat >"${fixture_dir}/op" <<SH
+#!/bin/sh
+set -eu
+printf '%s\n' "\$*" >>"${fixture_dir}/log.argv"
+case "\$1 \$2" in
+    "item get") cat "${fixture_dir}/item.json" ;;
+    "item edit") cat >"${fixture_dir}/log.edit" ;;
+    *) exit 1 ;;
+esac
+SH
+chmod 0700 "${fixture_dir}/op"
+
 reset_log() { rm -f "${fixture_dir}"/log.*; touch "${fixture_dir}/log.argv" "${fixture_dir}/log.stdin" "${fixture_dir}/log.body"; }
 
 CF="${script_dir}/mint-cloudflare-token.sh"
@@ -157,6 +178,40 @@ else
     fail "cloudflare: unknown group (status ${status}): ${err}"
 fi
 
+run CLOUDFLARE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${CF}" --account abc123 \
+    --permissions "${fixture_dir}/known.txt" --store "op://Example Vault/item-1/credential"
+if [ "${status}" -eq 0 ] && [ -z "${out}" ] \
+    && jq -e --arg minted "${MINTED}" '
+        ([.fields[] | select(.id == "credential") | .value] == [$minted])
+        and ([.fields[] | select(.id == "username") | .value] == ["old-id"])
+    ' <"${fixture_dir}/log.edit" >/dev/null; then
+    pass "cloudflare: --store writes the secret into the item's field only"
+else
+    fail "cloudflare: store (status ${status}): ${err}"
+fi
+never_in_argv cloudflare-store "${MINTED}"
+never_in_argv cloudflare-store "${BOOTSTRAP}"
+if printf '%s' "${out}${err}" | grep -q "${MINTED}"; then
+    fail "cloudflare-store: the secret reached the output"
+fi
+
+run CLOUDFLARE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${CF}" --account abc123 \
+    --permissions "${fixture_dir}/known.txt" --store "op://Example Vault/item-1/missing"
+if [ "${status}" -ne 0 ] && ! grep -q "POST" "${fixture_dir}/log.argv" \
+    && [ ! -e "${fixture_dir}/log.edit" ]; then
+    pass "cloudflare: a store field the item lacks stops before anything is created"
+else
+    fail "cloudflare: missing store field (status ${status}): ${err}"
+fi
+
+run CLOUDFLARE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${CF}" --account abc123 \
+    --store "op://Example Vault/item-1/section/credential"
+if [ "${status}" -ne 0 ] && [ ! -s "${fixture_dir}/log.argv" ]; then
+    pass "cloudflare: a malformed store reference is refused before any call"
+else
+    fail "cloudflare: malformed store (status ${status}): ${err}"
+fi
+
 # --- Tailscale ------------------------------------------------------------
 
 run "${TS}"
@@ -193,6 +248,28 @@ else
 fi
 never_in_argv tailscale-exchange "${BOOTSTRAP}"
 never_in_argv tailscale-exchange "exchanged-token-555"
+
+run TAILSCALE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${TS}" \
+    --store "op://Example Vault/item-1/credential" --store-id "op://Example Vault/item-1/username"
+if [ "${status}" -eq 0 ] && [ -z "${out}" ] \
+    && jq -e --arg minted "${MINTED}" '
+        ([.fields[] | select(.id == "credential") | .value] == [$minted])
+        and ([.fields[] | select(.id == "username") | .value] == ["client-1"])
+    ' <"${fixture_dir}/log.edit" >/dev/null; then
+    pass "tailscale: --store writes the secret and the client id into the item"
+else
+    fail "tailscale: store (status ${status}): ${err}"
+fi
+never_in_argv tailscale-store "${MINTED}"
+never_in_argv tailscale-store "${BOOTSTRAP}"
+
+run TAILSCALE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${TS}" \
+    --store "op://Example Vault/item-1/credential" --store-id "op://Other/item-2/username"
+if [ "${status}" -ne 0 ] && [ ! -s "${fixture_dir}/log.argv" ]; then
+    pass "tailscale: the id and secret must go to one item"
+else
+    fail "tailscale: split store (status ${status}): ${err}"
+fi
 
 printf '%s\n' "devices:core:read" "policy_file" >"${fixture_dir}/scopes.txt"
 run TAILSCALE_BOOTSTRAP_TOKEN="${BOOTSTRAP}" "${TS}" \

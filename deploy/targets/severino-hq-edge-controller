@@ -6,7 +6,7 @@ readonly operation="${1:-}"
 # Bumped whenever an operation is added. The controller asks for this, so a
 # target older than the controller says so plainly instead of refusing an
 # operation it has simply never heard of.
-readonly target_version=2
+readonly target_version=3
 readonly cert_dir="${SEVERINO_HQ_CADDY_CERT_DIR:-/opt/apps/caddy/certs}"
 readonly routes_file="${SEVERINO_HQ_CADDY_ROUTES:-/opt/apps/caddy/config/hq-routes.caddy}"
 readonly cert_owner="${SEVERINO_HQ_CERT_OWNER:-root}"
@@ -34,7 +34,7 @@ case "${operation}" in
         #
         # Unprivileged on purpose. Reading the container chain needs root and
         # this account does not have it, so that half is answered by whether
-        # the ports actually answer, from somewhere outside -- a question about
+        # the ports actually answer, from somewhere outside: a question about
         # the property rather than about the configuration behind it.
         nftables="$(systemctl is-active nftables 2>/dev/null || true)"
         # Its own public face, so the half that needs root is answered from
@@ -51,11 +51,8 @@ case "${operation}" in
             "${nftables:-unknown}" "${public}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         ;;
     routes)
-        # What this edge actually serves, so HQ stops having to be told. The
-        # names here answer over TLS from a box HQ sweeps, holds a credential
-        # for and installs certificates on -- and every service page for one of
-        # them read "nothing supplies this", because the only ingress HQ could
-        # describe was a proxy this box does not run.
+        # What this edge serves, so HQ reads it rather than being told: names
+        # that answer over TLS from a box HQ sweeps and installs certificates on.
         #
         # Adapted rather than read: a Caddyfile is a syntax, and the JSON it
         # adapts to is the structure Caddy itself works from. Deploy reloads
@@ -65,6 +62,11 @@ case "${operation}" in
         # of this likely to need changing on a host that takes a root install to
         # update, while the repository keeps the half that never moves.
         exec docker exec caddy caddy adapt --config /etc/caddy/Caddyfile
+        ;;
+    certificate)
+        # The certificate Caddy serves from the directory deploy installs
+        # into: the leaf alone, which is public. `snapshot` would carry the key.
+        exec openssl x509 -in "${cert_dir}/fullchain.pem"
         ;;
     routes:write)
         # The routes HQ declares, and only those. They go in a file of their
@@ -82,7 +84,7 @@ case "${operation}" in
         test -s "${work}/hq-routes.caddy"
         # Parsed on its own first. This catches a malformed route while the
         # running config is still the old one, which is the only moment it can
-        # be caught cheaply -- a Caddyfile that does not parse takes every name
+        # be caught cheaply; a Caddyfile that does not parse takes every name
         # on this box down. It cannot catch a *conflict* with the operator's own
         # file, because the two are only one config once installed; the reload
         # below is what catches that, and it rolls back when it does.
@@ -143,10 +145,8 @@ privkey.pem"
         fi
         ;;
     *)
-        # Name the operation and the version. This refusal is indistinguishable
-        # from a stale target otherwise, and a target that has not been
-        # reinstalled for weeks fails every deploy while reporting only a
-        # number -- which is how one sat three versions behind unnoticed.
+        # Name the operation and the version, so a stale target reads as one
+        # rather than as a bare refusal.
         echo "Severino HQ edge target v${target_version} does not implement '${operation}'." >&2
         echo "If the controller expects it, this target is older than the controller." >&2
         exit 126

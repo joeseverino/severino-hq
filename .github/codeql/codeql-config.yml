@@ -18,3 +18,9 @@ query-filters:
   # stops recurring, rather than being triaged forever.
   - exclude:
       id: py/cyclic-import
+
+# The type checker's settings shim. django-stubs reads a settings module's
+# names statically, so it re-exports the host's settings with `import *`; the
+# file never runs inside HQ.
+paths-ignore:
+  - config/settings_typecheck.py

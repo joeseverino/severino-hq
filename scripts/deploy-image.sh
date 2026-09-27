@@ -16,6 +16,7 @@ set -eu
 readonly image="${1:?usage: deploy-image.sh IMAGE}"
 readonly app_dir="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 readonly lib_dir="${SEVERINO_HQ_LIB_DIR:-/usr/local/lib/severino-hq}"
+readonly sync_program="${SEVERINO_HQ_SBIN_DIR:-/usr/local/sbin}/severino-hq-sync-scripts"
 readonly controller_timer="severino-hq-controller.timer"
 readonly content_timer="severino-hq-content-sync.timer"
 
@@ -122,15 +123,11 @@ fi
 
 # The compose file the *running* release was deployed with. Falls back to the
 # checkout only when the root-owned tree has not been populated yet (a first
-# bring-up, before severino-hq-sync-scripts has run) and says so, because that
-# path is the one this script exists to stop using silently.
+# bring-up, before severino-hq-sync-scripts has run), and says so.
 #
 # It pulls the new image and, snapshotted, puts the old one back on rollback. It
-# does not start the new release: the lib tree is refreshed from the running
-# image only after the health check, so recreating the container with it would
-# apply the previous release's compose file and every compose change would land
-# one deploy late. The new release runs under the file its own image carries,
-# staged below once that image has been pulled.
+# does not start the new release, which runs under the file its own image
+# carries, staged below once that image has been pulled.
 if [ -f "${lib_dir}/docker-compose.yml" ]; then
     compose_file="${lib_dir}/docker-compose.yml"
 else
@@ -187,6 +184,20 @@ restore_timers() {
 }
 
 controller_backup=""
+sync_backup=""
+# The root tree and the sync program exactly as they were: the new release's
+# files are removed, not merely overwritten.
+restore_root_tree() {
+    [ -n "${controller_backup}" ] || return 0
+    rm -rf "${lib_dir}"
+    cp -Rp "${controller_backup}" "${lib_dir}"
+    chmod 0755 "${lib_dir}"
+    rm -rf "${controller_backup}"
+    controller_backup=""
+    if [ -n "${sync_backup}" ]; then
+        install -o root -g root -m 0755 "${sync_backup}" "${sync_program}"
+    fi
+}
 rollback() {
     if [ -z "${previous_image}" ]; then
         echo "No previous image is available for automatic rollback." >&2
@@ -195,11 +206,7 @@ rollback() {
     echo "Restoring previous image ${previous_image}." >&2
     compose_file="${previous_compose}"
     SEVERINO_IMAGE="${previous_image}" compose up -d --no-build app
-    if [ -n "${controller_backup}" ]; then
-        cp -Rp "${controller_backup}/." "${lib_dir}/"
-        rm -rf "${controller_backup}"
-        controller_backup=""
-    fi
+    restore_root_tree
     restore_timers
     echo "Previous image and prior controller timer state restored." >&2
 }
@@ -219,12 +226,14 @@ fi
 
 # Out of the image that was verified and pulled above, by its digest, and never
 # pulled again: `--pull never` makes a missing local copy an error rather than a
-# second fetch, so the file cannot come from anything cosign did not check. No
-# fallback to the previous file: that is the one-deploy-late behaviour this
-# replaces, and it would be silent.
+# second fetch, so neither file can come from anything cosign did not check.
+# The compose file the new release runs under, and the sync program that
+# installs its root tree. No fallback to the host's copies: each is the release's
+# own or the deploy stops.
 if ! compose_cid="$(docker create --pull never "${image}" true)" \
-    || ! docker cp "${compose_cid}:/app/docker-compose.yml" "${compose_stage}/next.yml"; then
-    echo "Could not read docker-compose.yml from ${image}; restoring prior controller timer state." >&2
+    || ! docker cp "${compose_cid}:/app/docker-compose.yml" "${compose_stage}/next.yml" \
+    || ! docker cp "${compose_cid}:/app/scripts/severino-hq-sync-scripts" "${compose_stage}/sync"; then
+    echo "Could not read the release's files from ${image}; restoring prior controller timer state." >&2
     restore_timers
     exit 1
 fi
@@ -247,7 +256,16 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
     if [ "${status}" = "healthy" ]; then
         controller_backup="$(mktemp -d "${SEVERINO_HQ_RUN_DIR:-/run}/severino-hq-scripts.XXXXXX")"
         cp -Rp "${lib_dir}/." "${controller_backup}/"
-        if "${lib_dir}/scripts/install-controller.sh"; then
+        if [ -f "${sync_program}" ]; then
+            sync_backup="${compose_stage}/sync.previous"
+            cp -p "${sync_program}" "${sync_backup}"
+        fi
+        # The release installs itself: the image's own sync program refreshes
+        # the root tree from the image now running and is installed as the
+        # host's, and the installer that runs is the one it just synced.
+        if sh "${compose_stage}/sync" \
+            && install -o root -g root -m 0755 "${compose_stage}/sync" "${sync_program}" \
+            && SEVERINO_HQ_INSTALLER_SYNCED=1 sh "${lib_dir}/scripts/install-controller.sh"; then
             rm -rf "${controller_backup}"
             controller_backup=""
             echo "Deployed healthy image ${image} with an active controller."

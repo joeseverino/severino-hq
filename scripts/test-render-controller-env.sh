@@ -163,6 +163,37 @@ write_op '[{"id":"item-1"}]' '{"fields":[
 check "an absent optional field is not fatal" "${fixture_dir}/projections-only.json" 0 \
     "EXAMPLE_API_TOKEN='test-token'"
 
+# 7b. Where the credential is kept: the vault and item it was rendered from.
+check "the store vault is rendered" "${fixture_dir}/projections-only.json" 0 \
+    "EXAMPLE_STORE_VAULT='test-vault'"
+check "the store item is rendered" "${fixture_dir}/projections-only.json" 0 \
+    "EXAMPLE_STORE_ITEM='item-1'"
+
+# 7c. A bootstrap reference in another vault is rendered; one in the vault the
+#     controller reads is refused, because the renderer could read it.
+bootstrap_item() { # bootstrap_item REFERENCE
+    write_op '[{"id":"item-1"}]' '{"fields":[
+  {"id":"a","label":"connection_ref","value":"example"},
+  {"id":"b","label":"projection","value":"api_token"},
+  {"id":"c","label":"env_prefix","value":"EXAMPLE"},
+  {"id":"f","label":"bootstrap","value":"'"$1"'"},
+  {"id":"credential","label":"credential","value":"test-token"},
+  {"id":"d","label":"website","value":"https://api.example.test"}
+]}'
+}
+bootstrap_item "op://Operator Vault/Example bootstrap"
+check "a bootstrap reference elsewhere is rendered" "${fixture_dir}/projections-only.json" 0 \
+    "EXAMPLE_BOOTSTRAP='op://Operator Vault/Example bootstrap'"
+bootstrap_item "op://test-vault/Example bootstrap"
+check "a bootstrap in the rendered vault fails" "${fixture_dir}/projections-only.json" 1 \
+    "keeps its bootstrap credential in the vault the controller reads"
+bootstrap_item "op://Operator Vault/Example bootstrap/credential"
+check "a bootstrap field reference fails" "${fixture_dir}/projections-only.json" 1 \
+    "name the item"
+bootstrap_item "not-a-reference"
+check "a malformed bootstrap reference fails" "${fixture_dir}/projections-only.json" 1 \
+    "invalid bootstrap reference"
+
 # 8. Items that are not provider connections are ignored, not fatal.
 write_op '[{"id":"item-1"}]' '{"fields":[
   {"id":"a","label":"username","value":"someone"}

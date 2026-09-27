@@ -1,21 +1,25 @@
 #!/bin/sh
-# Fails when the root-owned script tree no longer matches the image production
-# is running, or when an installed systemd file no longer matches the one that
-# tree ships.
+# Fails when the root-owned tree is not the image production runs, when it no
+# longer reproduces the manifest that image shipped, when the host's sync
+# program is not the tree's, when an installed systemd file no longer matches
+# the one the tree ships, or when the deploy checkout's git metadata is not
+# owned by the account that pulls it.
 set -eu
 LIB=/usr/local/lib/severino-hq
 SYSTEMD_DIR=/etc/systemd/system
+SYNC_PROGRAM=/usr/local/sbin/severino-hq-sync-scripts
+APP_DIR=/opt/apps/severino-hq
+MANIFEST=root-tree.sha256
 rc=0
 
 if [ ! -f "$LIB/.source" ]; then
-    echo "drift: $LIB/.source missing -- the root tree was never synced" >&2
+    echo "drift: $LIB/.source missing; the root tree was never synced" >&2
     exit 1
 fi
 recorded="$(sed -n 's/^image //p' "$LIB/.source")"
 current="$(docker inspect --format '{{.Image}}' severino-hq 2>/dev/null || echo '')"
-# Not being able to read the running image is not agreement. This used to fall
-# through to "current" whenever docker was unreachable or the container was
-# absent -- the two situations in which a drift check matters most.
+# Not being able to read the running image is not agreement: docker being
+# unreachable or the container absent are when drift matters most.
 if [ -z "$current" ]; then
     echo "drift: could not read the running image; cannot confirm the root tree" >&2
     rc=1
@@ -25,15 +29,26 @@ elif [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
     rc=1
 fi
 
+# The tree as the image shipped it: every file byte for byte, nothing added.
+if [ ! -s "$LIB/$MANIFEST" ]; then
+    echo "drift: $LIB/$MANIFEST missing; the tree cannot be verified" >&2
+    rc=1
+elif ! sh "$LIB/scripts/root-tree-manifest.sh" "$LIB" | cmp -s - "$LIB/$MANIFEST"; then
+    echo "drift: $LIB no longer reproduces $MANIFEST; run 'severino-hq-sync-scripts' as root" >&2
+    rc=1
+fi
+
+# The program the next sync runs is the one this tree shipped.
+if ! cmp -s "$SYNC_PROGRAM" "$LIB/scripts/severino-hq-sync-scripts"; then
+    echo "drift: $SYNC_PROGRAM does not match $LIB/scripts/severino-hq-sync-scripts" >&2
+    echo "drift: the next deploy installs it; fix-root-ownership.sh installs it now" >&2
+    rc=1
+fi
+
 # Every unit and drop-in the tree ships, byte for byte against its installed
-# copy. This compared the ExecStart basename of three units and nothing else, so
-# a unit the installer never installed, or installed once and never again, was
-# drift nobody could see: the host ran stale copies of five shipped files with
-# this check green. The set is the installer's own, from the same library, so
-# the two cannot disagree about what "shipped" means.
-#
-# Read from the root tree, which the check above has just tied to the running
-# image, rather than from the deploy checkout anyone who deploys can write.
+# copy. The set is the installer's own, from the same library, and it is read
+# from the root tree, which the checks above tie to the running image, rather
+# than from the deploy checkout anyone who deploys can write.
 # shellcheck source=scripts/lib/systemd-units.sh
 . "$LIB/scripts/lib/systemd-units.sh"
 if ! drifted="$(units_drifted "$LIB/deploy/systemd" "$SYSTEMD_DIR")"; then
@@ -47,5 +62,19 @@ elif [ -n "$drifted" ]; then
     rc=1
 fi
 
-[ "$rc" -eq 0 ] && echo "root-owned script tree and systemd units are current"
+# The deploy pulls the checkout as the Actions runner's account.
+# shellcheck source=scripts/lib/checkout.sh
+. "$LIB/scripts/lib/checkout.sh"
+if ! owner="$(checkout_deploy_account 2>&1)"; then
+    echo "drift: $owner" >&2
+    rc=1
+elif ! foreign="$(checkout_foreign_owned "$APP_DIR" "$owner")"; then
+    rc=1
+elif [ -n "$foreign" ]; then
+    printf 'drift: not owned by %s: %s\n' "$owner" "$foreign" >&2
+    echo "drift: the next deploy's git pull fails; fix: $(checkout_ownership_fix "$APP_DIR" "$owner")" >&2
+    rc=1
+fi
+
+[ "$rc" -eq 0 ] && echo "root-owned tree, sync program, systemd units and checkout ownership are current"
 exit "$rc"

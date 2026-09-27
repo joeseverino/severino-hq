@@ -2,20 +2,22 @@
 # Point root-run units at a root-owned copy of the scripts they execute.
 #
 # The deploy checkout at /opt/apps/severino-hq is writable by an unprivileged
-# account. Three units run out of it as root, so anything able to write that
-# tree chooses what root runs on the next timer tick: privilege escalation by
-# file write, with no exploit needed.
+# account, so a unit that ran out of it as root would let anything able to
+# write that tree choose what root runs.
 #
-# The fix is two halves and this installs the second. `severino-hq-sync-scripts`
-# copies the scripts out of the verified image into /usr/local/lib/severino-hq,
-# which only root can write; this drops an override on each unit so its
-# ExecStart names that copy instead. `severino-hq-check-scripts`, on a daily
-# timer, fails when the two drift apart.
+# `severino-hq-sync-scripts` copies the scripts out of the verified image into
+# /usr/local/lib/severino-hq, which only root can write, and verifies them
+# against the manifest the image shipped. This script is the first bring-up
+# before any deploy has run: it verifies that tree, installs the tree's sync
+# program at /usr/local/sbin, and drops the `10-root-owned-exec.conf` override
+# shipped in deploy/systemd on each unit so its ExecStart names the root-owned
+# copy. Every deploy then installs the image's own sync program and the shipped
+# drop-ins itself. `severino-hq-check-scripts`, on a daily timer, fails when any
+# of it drifts.
 #
-# Idempotent: it installs the same files every time and reloads once. Those
-# files are the `10-root-owned-exec.conf` drop-ins shipped in deploy/systemd,
-# which install-controller.sh also installs on every deploy: this is the first
-# bring-up, before any deploy has run.
+# First bring-up, as root, from the checkout:
+#   sh scripts/severino-hq-sync-scripts --from-checkout
+#   sh /usr/local/lib/severino-hq/scripts/fix-root-ownership.sh
 #
 #   scripts/fix-root-ownership.sh            # install
 #   scripts/fix-root-ownership.sh --remove   # undo, until the next deploy
@@ -29,13 +31,14 @@ LIB=/usr/local/lib/severino-hq
 SHIPPED="${LIB}/deploy/systemd"
 UNIT_DIR=/etc/systemd/system
 DROPIN=10-root-owned-exec.conf
+SYNC_PROGRAM=/usr/local/sbin/severino-hq-sync-scripts
 script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=scripts/lib/systemd-units.sh
 . "${script_dir}/lib/systemd-units.sh"
 
 [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
 [ -d "${LIB}" ] || {
-    echo "${LIB} does not exist: run severino-hq-sync-scripts first" >&2
+    echo "${LIB} does not exist: run 'sh scripts/severino-hq-sync-scripts --from-checkout' first" >&2
     exit 1
 }
 
@@ -72,6 +75,14 @@ if [ -n "$(find "${LIB}" \( -perm -0020 -o -perm -0002 \) -print -quit)" ]; then
     echo "${LIB} contains a group- or world-writable path" >&2
     exit 1
 fi
+
+# The tree root is about to run is the one its manifest describes.
+if ! sh "${LIB}/scripts/root-tree-manifest.sh" "${LIB}" | cmp -s - "${LIB}/root-tree.sha256"; then
+    echo "${LIB} does not reproduce its root-tree.sha256; resync it first" >&2
+    exit 1
+fi
+install -o root -g root -m 0755 "${LIB}/scripts/severino-hq-sync-scripts" "${SYNC_PROGRAM}"
+echo "installed ${SYNC_PROGRAM} from ${LIB}"
 
 for f in ${dropins}; do
     # The last assignment is the command; the empty one before it clears the

@@ -192,7 +192,9 @@ async (page) => {
       if (scrolls(style.overflowY) && vertical > SCROLL_SLOP) {
         axes.push({ axis: 'y', overflow: round(vertical) });
       }
-      if (!axes.length) return;
+      // A scroller drawn without a scrollbar offers none: a one-row strip of
+      // links that pans sideways is a choice, not an accident.
+      if (!axes.length || style.scrollbarWidth === 'none') return;
       // A box the stylesheet has explicitly capped is one whose author chose
       // to scroll it: a filter menu held to 280px so a long list of options
       // does not run off the page, a wide table held to its card so it scrolls

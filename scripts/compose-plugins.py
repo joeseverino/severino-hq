@@ -4,6 +4,7 @@
     compose-plugins.py --entry a.json --wheel a.whl \
                        --entry b.json --wheel b.whl \
                        --out build/composition
+    compose-plugins.py --candidate --wheel a.whl --wheel b.whl --out build/candidate
 
 Each plugin is verified and admitted independently, producing a canonical
 verified entry. Merging those entries into one lock is Cordon's job (its lock
@@ -44,18 +45,37 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--entry", action="append", required=True, type=Path)
-    parser.add_argument("--wheel", action="append", required=True, type=Path)
-    parser.add_argument("--out", required=True, type=Path)
-    args = parser.parse_args()
+def distribution_of(wheel: Path) -> str:
+    return wheel.name.split("-")[0].replace("_", "-")
 
-    if len(args.entry) != len(args.wheel):
-        parser.error("each --entry needs exactly one matching --wheel")
 
+def reference_of(distribution: str) -> str:
+    """The manifest reference an extension's distribution declares."""
+    return f"{distribution.replace('-', '_')}.plugin:plugin"
+
+
+def stage(wheels: list[Path], out: Path) -> list[str]:
+    """Copy the wheels into the build context; their ``<sha256>  <name>`` lines."""
+    out.mkdir(parents=True, exist_ok=True)
+    for stale in out.glob("*.whl"):
+        stale.unlink()
+    for wheel in wheels:
+        shutil.copy2(wheel, out / wheel.name)
+    return [f"{sha256(wheel)}  {wheel.name}" for wheel in wheels]
+
+
+def emit(references: str, digests: list[str], policy_sha256: str | None = None) -> None:
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"references={references}\n")
+            if policy_sha256:
+                handle.write(f"policy_sha256={policy_sha256}\n")
+            handle.write("digests<<EOF\n" + "\n".join(digests) + "\nEOF\n")
+
+
+def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
     command = [CORDON_LOCK, "--host", HOST]
-    for entry in args.entry:
+    for entry in entries:
         command += ["--entry", str(entry)]
     merged = subprocess.run(command, capture_output=True, text=True)  # noqa: S603
     if merged.returncode != 0:
@@ -64,10 +84,8 @@ def main() -> int:
     lock = json.loads(merged.stdout)
 
     by_distribution = {entry["distribution"]: entry for entry in lock["plugins"]}
-    digests: list[str] = []
-    for wheel in args.wheel:
-        distribution = wheel.name.split("-")[0].replace("_", "-")
-        approved = by_distribution.get(distribution)
+    for wheel in wheels:
+        approved = by_distribution.get(distribution_of(wheel))
         if approved is None:
             print(f"{wheel.name} has no entry in this composition", file=sys.stderr)
             return 1
@@ -79,7 +97,6 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        digests.append(f"{actual}  {wheel.name}")
 
     policies = {entry["policy_sha256"] for entry in lock["plugins"]}
     if len(policies) > 1:
@@ -88,25 +105,50 @@ def main() -> int:
         print(f"plugins were admitted under {len(policies)} policies", file=sys.stderr)
         return 1
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    for stale in args.out.glob("*.whl"):
-        stale.unlink()
-    for wheel in args.wheel:
-        shutil.copy2(wheel, args.out / wheel.name)
-    (args.out / "plugin-lock.json").write_text(json.dumps(lock) + "\n")
+    digests = stage(wheels, out)
+    (out / "plugin-lock.json").write_text(json.dumps(lock) + "\n")
 
     # Derived from the lock, never configured separately.
-    references = ",".join(
-        f"{entry['distribution'].replace('-', '_')}.plugin:plugin"
-        for entry in lock["plugins"]
-    )
+    references = ",".join(reference_of(entry["distribution"]) for entry in lock["plugins"])
     print(f"composed {counted(len(lock['plugins']), 'plugin')}: {references}")
-    if output := os.environ.get("GITHUB_OUTPUT"):
-        with open(output, "a", encoding="utf-8") as handle:
-            handle.write(f"references={references}\n")
-            handle.write(f"policy_sha256={policies.pop()}\n")
-            handle.write("digests<<EOF\n" + "\n".join(digests) + "\nEOF\n")
+    emit(references, digests, policies.pop())
     return 0
+
+
+def compose_candidate(wheels: list[Path], out: Path) -> int:
+    """Stage wheels for a verify-only image: no lock, so it can never be admitted."""
+    distributions = sorted(distribution_of(wheel) for wheel in wheels)
+    if len(set(distributions)) != len(distributions):
+        print("a distribution appears more than once in the candidate", file=sys.stderr)
+        return 1
+    if (out / "plugin-lock.json").exists():
+        (out / "plugin-lock.json").unlink()
+    digests = stage(wheels, out)
+    references = ",".join(reference_of(distribution) for distribution in distributions)
+    print(f"candidate {counted(len(wheels), 'plugin')}: {references}")
+    emit(references, digests)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--entry", action="append", default=[], type=Path)
+    parser.add_argument("--wheel", action="append", required=True, type=Path)
+    parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument(
+        "--candidate",
+        action="store_true",
+        help="stage unadmitted wheels for a verify-only image; writes no lock",
+    )
+    args = parser.parse_args(argv)
+
+    if args.candidate:
+        if args.entry:
+            parser.error("--candidate takes wheels only")
+        return compose_candidate(args.wheel, args.out)
+    if len(args.entry) != len(args.wheel):
+        parser.error("each --entry needs exactly one matching --wheel")
+    return compose_admitted(args.entry, args.wheel, args.out)
 
 
 if __name__ == "__main__":

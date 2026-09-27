@@ -15,11 +15,13 @@ on:
     inputs:
       hq-ref:
         description: >-
-          Host ref the contract check runs against. Callers normally pass their
-          HQ_COMMIT variable falling back to main.
+          Host ref the contract check runs against. Empty (the default)
+          resolves to the host branch named like the calling branch when the
+          host has one, so a coordinated change checks against its host half,
+          and to main otherwise.
         required: false
         type: string
-        default: main
+        default: ""
       python-versions:
         description: >-
           JSON array of Python versions to test against. Overridable so an
@@ -42,6 +44,9 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 env:
   HOST_REPOSITORY: joeseverino/severino-hq
   PYTHONUNBUFFERED: "1"
@@ -60,37 +65,61 @@ jobs:
     steps:
       - name: Check out the plugin
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the host ref
+        id: hq
+        # An explicit hq-ref wins. Otherwise a host branch with this branch's
+        # name is the other half of a coordinated change, and main is the rest.
+        # An unanswered lookup fails rather than falling back to main, which
+        # would check a coordinated change against the wrong host.
+        env:
+          REQUESTED: ${{ inputs.hq-ref }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          ref="$REQUESTED"
+          if [ -z "$ref" ]; then
+            ref=main
+            if [ "$BRANCH" != main ] && [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              status=0
+              git ls-remote --exit-code --heads "https://github.com/$HOST_REPOSITORY.git" \
+                "refs/heads/$BRANCH" >/dev/null || status=$?
+              case "$status" in
+                0) ref="$BRANCH"
+                   echo "::notice title=Coordinated host branch::Checking against host branch $BRANCH." ;;
+                2) ;;
+                *) echo "::error::Could not ask the host repository for branch $BRANCH."; exit 1 ;;
+              esac
+            fi
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - name: Check out HQ contract
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.HOST_REPOSITORY }}
-          ref: ${{ inputs.hq-ref }}
+          ref: ${{ steps.hq.outputs.ref }}
           path: host
       - name: Report whether the host pin is current
         id: pin
-        # A stale pin does not fail here: pinning behind the host is a
-        # legitimate state. It surfaces as an ImportError for a name the pinned
-        # contract has not got yet, which reads like a bug in the extension and
-        # sends you debugging the wrong repository. Saying so up front turns
-        # that into one line.
-        #
-        # A warning rather than a notice, because a notice is not shown on the
-        # checks list or the job summary: it is a line in a log nobody opens
-        # when the tests are green, and by the time they are not, the pin is the
-        # last thing suspected. This one was three commits and several hours
-        # behind while the failure read `ModuleNotFoundError: No module named
-        # 'hq_sdk'`, which points at the extension and not at the pin.
+        # A pin behind the host is legitimate, so it does not fail here. It
+        # surfaces as an ImportError for a name the pinned contract lacks,
+        # which reads like a bug in the extension. A warning, unlike a notice,
+        # shows on the checks list and the job summary.
+        env:
+          REF: ${{ steps.hq.outputs.ref }}
         run: |
           set -euo pipefail
           pinned="$(git -C host rev-parse HEAD)"
-          current="$(git -C host ls-remote origin refs/heads/main | cut -f1)"
+          current="$(git -C host ls-remote origin "refs/heads/$REF" | cut -f1)"
+          if [ -z "$current" ]; then
+            current="$(git -C host ls-remote origin refs/heads/main | cut -f1)"
+          fi
           behind=0
           if [ "$pinned" != "$current" ]; then
             behind="$(git -C host rev-list --count "$pinned..$current" 2>/dev/null || echo '?')"
             echo "::warning title=Host pin is behind::Testing against ${pinned:0:7}; \
-          main is ${current:0:7} ($behind commits ahead). If a name is missing \
-          from the host contract, bump HQ_COMMIT before debugging this repo: \
-          hq pin --rerun"
+          the branch head is ${current:0:7} ($behind commits ahead). If a name is \
+          missing from the host contract, run against the default hq-ref before \
+          debugging this repo."
           fi
           {
             echo "pinned=$pinned"
@@ -125,21 +154,17 @@ jobs:
             exit 2
           fi
 
-      # The one line that turns this into a two-minute fix. A host pin behind
-      # main fails as a missing name: `ModuleNotFoundError: No module named
-      # 'hq_sdk'`, which reads as a broken extension and sends you into the
-      # wrong repository. It is nearly always the pin, and the pin already
-      # knows. Said here, at the failure, rather than as a notice further up
-      # that nobody scrolls back to.
+      # A host pin behind its branch fails as a missing name, which reads as a
+      # broken extension. Said at the failure, where it is read.
       - name: Explain a failure against a stale host pin
         if: failure() && steps.pin.outputs.behind != '0'
         run: |
           echo "::error title=Host pin is ${{ steps.pin.outputs.behind }} commits behind::\
-          These checks ran against host ${{ steps.pin.outputs.pinned }}, not main \
-          (${{ steps.pin.outputs.current }}). An ImportError or ModuleNotFoundError \
-          for something the host has since gained is this, not a fault in this \
-          repository. Bump HQ_COMMIT and \
-          re-run before debugging further: hq pin --rerun"
+          These checks ran against host ${{ steps.pin.outputs.pinned }}, not the \
+          branch head (${{ steps.pin.outputs.current }}). An ImportError or \
+          ModuleNotFoundError for something the host has since gained is this, \
+          not a fault in this repository. Re-run against the default hq-ref \
+          before debugging further."
 
   secret-scan:
     name: Secret scan

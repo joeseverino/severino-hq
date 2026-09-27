@@ -40,7 +40,7 @@ htmlcov/
 coverage.xml
 
 # Agent worktrees. An isolated checkout an agent works in, which git already
-# tracks as a worktree -- so it needs no second record here, and being
+# tracks as a worktree, so it needs no second record here, and being
 # untracked rather than ignored is a trap: a `git add -A` commits an entire
 # nested copy of the repository into the repository. Scoped to this one
 # directory because the settings file beside it is committed on purpose.
@@ -57,3 +57,6 @@ coverage.xml
 # Personal agent settings and guidance; never published.
 .claude/*.local.json
 CLAUDE.local.md
+
+# Type checker
+.mypy_cache/

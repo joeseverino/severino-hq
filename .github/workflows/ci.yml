@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Reads scripts/toolchain.env and re-emits it as job outputs, so the matrix,
-  # the ruff pin and the coverage floor are declared in one file that
-  # scripts/ci-local.sh reads directly.
+  # Reads scripts/toolchain.env and re-emits it as job outputs, so the matrix
+  # and the coverage floor are declared in one file that scripts/ci-local.sh
+  # reads directly. ruff, uv and coverage install from requirements-tools.txt.
   toolchain:
     name: toolchain
     runs-on: ubuntu-24.04
@@ -27,11 +27,8 @@ jobs:
     outputs:
       python-versions: ${{ steps.read.outputs.python-versions }}
       oldest-python: ${{ steps.read.outputs.oldest-python }}
-      ruff-version: ${{ steps.read.outputs.ruff-version }}
       shellcheck-version: ${{ steps.read.outputs.shellcheck-version }}
       coverage-floor: ${{ steps.read.outputs.coverage-floor }}
-      coverage-version: ${{ steps.read.outputs.coverage-version }}
-      uv-version: ${{ steps.read.outputs.uv-version }}
       actionlint-version: ${{ steps.read.outputs.actionlint-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,11 +42,8 @@ jobs:
             echo "python-versions=$versions"
             # shellcheck disable=SC2086
             echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
-            echo "ruff-version=$RUFF_VERSION"
             echo "shellcheck-version=$SHELLCHECK_VERSION"
             echo "coverage-floor=$COVERAGE_FLOOR"
-            echo "coverage-version=$COVERAGE_VERSION"
-            echo "uv-version=$UV_VERSION"
             echo "actionlint-version=$ACTIONLINT_VERSION"
           } >> "$GITHUB_OUTPUT"
           echo "matrix: $versions"
@@ -64,10 +58,14 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ needs.toolchain.outputs.oldest-python }}
-      - run: pip install ruff==${{ needs.toolchain.outputs.ruff-version }}
+      # The runtime pins too: django-stubs loads the host's settings for mypy.
+      - name: Install the hashed runtime and tool pins
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes --no-deps -r requirements-tools.txt
       - name: Install the pinned shellcheck
-        # The runner image ships its own, which is how the local gate and this
-        # one came to disagree about the same file.
+        # The runner image ships its own, at a version the local gate does
+        # not run.
         run: |
           set -euo pipefail
           version="${{ needs.toolchain.outputs.shellcheck-version }}"
@@ -76,7 +74,12 @@ jobs:
           shellcheck --version
       - name: ruff
         id: ruff
-        run: ruff check . && echo "no findings under ruff ${{ needs.toolchain.outputs.ruff-version }}" | tee "$RUNNER_TEMP/gate-ruff"
+        run: ruff check . && echo "no findings under $(ruff --version)" | tee "$RUNNER_TEMP/gate-ruff"
+      - name: mypy
+        id: mypy
+        # The architectural seams, typed strictly. mypy.ini names them and says
+        # how to widen the set.
+        run: python -m mypy && echo "the typed seams pass $(python -m mypy --version)" | tee "$RUNNER_TEMP/gate-mypy"
       - name: The README badges state what is actually tested
         id: badges
         # Static markdown cannot be generated, so it is verified: the Python
@@ -93,34 +96,37 @@ jobs:
             exit 1
           fi
           echo "the python badge states the matrix: ${expected//|/, }" | tee "$RUNNER_TEMP/gate-badges"
-      - name: requirements.txt is what requirements.in compiles to
+      - name: Each lockfile is what its .in file compiles to
         id: lockfile
-        # The header names the command that produces the lockfile, and the file
-        # had drifted from it. Regenerated here with the pinned uv and compared,
-        # so the committed pins are always the command's output and nothing else.
+        # Each header names the command that produces its lockfile. Regenerated
+        # here with the pinned uv and compared, so the committed pins are always
+        # the command's output and nothing else.
         run: |
           set -euo pipefail
-          pip install uv==${{ needs.toolchain.outputs.uv-version }}
-          command="$(sed -n 's/^#    uv pip compile /uv pip compile /p' requirements.txt)"
-          [ -n "$command" ] || { echo "::error::requirements.txt does not name its command"; exit 1; }
-          # Compiled on top of a copy, so uv keeps the committed pins: this asks
-          # whether the file is the command's output, not whether newer
-          # releases exist: that is Dependabot's job, not a red build's.
-          fresh="$(mktemp)"
-          cp requirements.txt "$fresh"
-          # shellcheck disable=SC2086  # the recorded command is meant to split
-          ${command/--output-file requirements.txt/--output-file $fresh} --quiet
-          if ! diff -u <(grep -v '^#' requirements.txt) <(grep -v '^#' "$fresh"); then
-            echo "::error::requirements.txt differs from what its header command produces. Rerun: $command"
-            exit 1
-          fi
-          echo "requirements.txt is the output of its header command" | tee "$RUNNER_TEMP/gate-lockfile"
+          for lock in requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt; do
+            command="$(sed -n 's/^#    uv pip compile /uv pip compile /p' "$lock")"
+            case "$command" in
+              *"--output-file $lock "*) ;;
+              *) echo "::error::$lock does not name a command that writes it"; exit 1 ;;
+            esac
+            # Compiled on top of a copy, so uv keeps the committed pins: this
+            # asks whether the file is the command's output, not whether newer
+            # releases exist. That is Dependabot's job, not a red build's.
+            fresh="$(mktemp)"
+            cp "$lock" "$fresh"
+            # shellcheck disable=SC2086  # the recorded command is meant to split
+            ${command/--output-file $lock /--output-file $fresh } --quiet
+            if ! diff -u <(grep -v '^#' "$lock") <(grep -v '^#' "$fresh"); then
+              echo "::error::$lock differs from what its header command produces. Rerun: $command"
+              exit 1
+            fi
+          done
+          echo "every requirements lockfile is the output of its header command" | tee "$RUNNER_TEMP/gate-lockfile"
       - name: The workflows are valid
         id: workflows
-        # actionlint was pinned in toolchain.env and run only by
-        # scripts/check.sh when it happened to be installed, so nothing held CI
-        # to it. With shellcheck on the PATH (installed above) it also checks
-        # every run: block as shell.
+        # The version toolchain.env pins, so CI and the local gate agree. With
+        # shellcheck on the PATH (installed above) it also checks every run:
+        # block as shell.
         run: |
           set -euo pipefail
           version="${{ needs.toolchain.outputs.actionlint-version }}"
@@ -250,7 +256,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
       - run: pip install --require-hashes -r requirements.txt
-      - run: pip install coverage==${{ needs.toolchain.outputs.coverage-version }}
+      - run: pip install --require-hashes --no-deps -r requirements-tools.txt
       - run: python manage.py check
       - name: Public plugin contract
         env:
@@ -262,7 +268,7 @@ jobs:
       - name: Tests with coverage gate
         env:
           COVERAGE_FLOOR: ${{ needs.toolchain.outputs.coverage-floor }}
-        # Parallel across the runner's cores, as scripts/check.sh already runs it
+        # Parallel across the runner's cores, as scripts/check.sh runs it
         # locally; core/test_runner.py is what makes workers safe on the WAL
         # database. Coverage follows the workers (.coveragerc) and is combined
         # before it is judged. Each test's logs are shown only if it fails, and
@@ -294,6 +300,38 @@ jobs:
         # generated. The same script runs in scripts/ci-local.sh.
         if: matrix.python-version == needs.toolchain.outputs.oldest-python
         run: scripts/coverage-badge.sh
+
+  # Real-browser layout invariants over synthetic example.* pages
+  # (core/browser_tests.py). Every request the page makes is answered in
+  # process; the browser reaches nothing. scripts/ci-local.sh runs the same.
+  browser:
+    name: browser
+    needs: toolchain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production
+      DJANGO_ALLOWED_HOSTS: "127.0.0.1,testserver"
+      SEVERINO_LOG_LEVEL: CRITICAL
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ needs.toolchain.outputs.oldest-python }}
+          cache: "pip"
+      - run: pip install --require-hashes -r requirements.txt
+      - run: pip install --require-hashes -r requirements-browser.txt
+      # Keyed on the hashed lock: Playwright pins its Chromium build, so a new
+      # pin is a new browser and a new cache entry.
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-browser.txt') }}
+      - name: Install Chromium and its system libraries
+        run: python -m playwright install --with-deps --only-shell chromium
+      - name: Browser layout gate
+        run: python manage.py test core.browser_tests --noinput --parallel 1
 
   security:
     name: security
@@ -327,11 +365,11 @@ jobs:
       - name: pip-audit
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
         with:
-          inputs: requirements.txt
+          inputs: requirements.txt requirements-tools.txt requirements-browser.txt requirements-dev.txt
 
   container-pr:
     name: container
-    needs: [lint, test, security]
+    needs: [lint, test, browser, security]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -369,6 +407,14 @@ jobs:
             docker logs severino-hq-pr
             exit 1
           fi
+      - name: The image cannot import development layers
+        # requirements-dev.txt is never installed in the image; this proves it.
+        env:
+          IMAGE: severino-hq:pr-${{ github.sha }}
+        run: |
+          docker run --rm --entrypoint python "$IMAGE" -c \
+            "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
+          echo "the image does not contain debug_toolbar"
       - name: Scan production image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -380,15 +426,11 @@ jobs:
 
   build:
     name: build
-    needs: [lint, test, security]
-    # Also on pull requests, and that is the point. The composition (the only
-    # environment that runs this application the way production does, with
-    # DEBUG off and the extensions loaded) can only be built on top of a host
-    # image. While this job ran on main alone, there was no host image for a
-    # pull request, so the composition could not be checked until after the
-    # merge that created it. Three separate failures reached main that way, each
-    # costing a merge and a rebuild to find something a pull request could have
-    # told us.
+    needs: [lint, test, browser, security]
+    # Also on pull requests. The composition (the only environment that runs
+    # this application the way production does, with DEBUG off and the
+    # extensions loaded) is built on top of a host image, so a pull request
+    # needs one to be composed and checked before it merges.
     #
     # Same-repository pull requests only: a fork's token cannot write packages,
     # and handing one the ability to push an image under this name is not a
@@ -446,11 +488,10 @@ jobs:
           digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" \
             --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
-      # An admitted extension wheel already carries a signature naming the
-      # workflow that produced it, and the composition refuses to install one
-      # that does not. The image those wheels are installed *into* carried
-      # nothing, so the part of the system that runs everything was the one
-      # part taken on trust. This is the other half of that check.
+      # An admitted extension wheel carries a signature naming the workflow
+      # that produced it, and the composition refuses to install one that does
+      # not. This signs the image those wheels are installed into, the other
+      # half of that check.
       #
       # Signed by digest, not by tag: a tag is a pointer somebody can move, and
       # a signature over a pointer proves nothing about what it points at now.

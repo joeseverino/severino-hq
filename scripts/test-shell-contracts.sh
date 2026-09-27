@@ -1,9 +1,6 @@
 #!/bin/sh
-# Properties every shell file in this repository must hold.
-#
-# Each one exists because a specific defect shipped, and each is written to
-# catch the *class* rather than the instance: a fix for one occurrence is
-# worth much less than a gate that refuses the next one.
+# Properties every shell file in this repository must hold. Each catches a
+# class of defect rather than one instance of it.
 
 set -eu
 
@@ -35,16 +32,11 @@ done
 
 # 2. Every shell file in the repository must be in SHELL_SOURCES.
 #
-# A file outside the list is neither syntax-checked nor shellchecked, and the
-# ones that drift out are the ones nobody is thinking about, which included a
-# script executed as root on every deploy.
+# A file outside the list is neither syntax-checked nor shellchecked.
 #
-# Membership is decided by a file's interpreter, not by its name. Asking for
-# `*.sh` plus one directory was a list of the examples that existed the day it
-# was written: it cannot see `scripts/severino-hq-sync-scripts`, which runs as
-# root and carries no extension, and it could never have seen a file whose
-# author simply did not use one. The shebang is the thing that actually decides
-# whether a file is shell, so that is what this asks.
+# Membership is decided by a file's interpreter, not by its name: a script such
+# as `scripts/severino-hq-sync-scripts` runs as root and carries no extension.
+# The shebang decides whether a file is shell, so that is what this asks.
 # SHELL_SOURCES is newline-separated; normalise before matching.
 listed=" $(printf '%s' "${SHELL_SOURCES}" | tr '\n' ' ') "
 for f in $(git ls-files 2>/dev/null); do
@@ -76,9 +68,7 @@ failures=$((failures + $(wc -l <"${failure_marker}" | tr -d ' ')))
 # 4. Every external tool the gate depends on must have a pinned version.
 #
 # An unpinned linter means the local gate and the pipeline run different
-# software against the same files, and the local one is the one that gets
-# trusted. Pinning one tool when it bites is not a fix; this refuses the next
-# unpinned one.
+# software against the same files. This refuses any unpinned one.
 grep -hoE 'command -v [a-z0-9_-]+' scripts/ci-local.sh scripts/check.sh 2>/dev/null \
     | awk '{print $3}' | sort -u | while IFS= read -r tool; do
     # Interpreters are pinned by PYTHON_VERSIONS, not by a tool version.

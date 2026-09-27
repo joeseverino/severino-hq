@@ -188,6 +188,30 @@ for item_id in ${item_ids}; do
         rendered="${rendered}${prefix}_${env_name}=${value}
 "
     done
+
+    # Where the credential is kept, so HQ can name the item a replacement is
+    # stored into. `bootstrap` optionally names the item (op://<vault>/<item>)
+    # holding a credential that may mint one, shaped like this connection's
+    # own; it must live in a vault this renderer does not read.
+    rendered="${rendered}${prefix}_STORE_VAULT=$(printf %s "${vault}" | jq -Rr '@sh')
+${prefix}_STORE_ITEM=$(printf %s "${item_id}" | jq -Rr '@sh')
+"
+    bootstrap="$(item_field "${item}" bootstrap)"
+    if [ -n "${bootstrap}" ]; then
+        case "${bootstrap}" in
+            "op://${vault}/"*)
+                echo "Connection ${connection_ref} keeps its bootstrap credential in the vault the controller reads." >&2
+                exit 1 ;;
+            op://*/*/*) echo "Connection ${connection_ref} names a bootstrap field; name the item: op://<vault>/<item>." >&2
+                exit 1 ;;
+            op://?*/?*) ;;
+            *)
+                echo "Connection ${connection_ref} has an invalid bootstrap reference." >&2
+                exit 1 ;;
+        esac
+        rendered="${rendered}${prefix}_BOOTSTRAP=$(printf %s "${bootstrap}" | jq -Rr '@sh')
+"
+    fi
 done
 
 # Item IDs and projection keys are sorted before rendering. Sorting physical
