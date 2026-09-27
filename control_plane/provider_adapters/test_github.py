@@ -304,6 +304,12 @@ class PipelineReportTests(SimpleTestCase):
                      self.read("scripts", "hq-report.sh")):
             self.assertIn(github.CHECK_NAME, text)
 
+    def test_the_review_is_one_check_by_one_name(self):
+        name = '"Severino HQ · Review"'
+
+        self.assertIn(name, self.read(".github", "workflows", "ci.yml"))
+        self.assertIn(f"check_name={name}", self.read("scripts", "hq-verdict.sh"))
+
     def test_the_host_comment_carries_hqs_marker(self):
         marker = github._MARKER.split("{sha}")[0]
 

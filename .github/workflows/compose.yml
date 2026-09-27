@@ -1,4 +1,4 @@
-name: HQ
+name: Compose
 
 # Builds HQ, the one image production runs: this host plus every admitted
 # extension, verified as one application. Extensions verify and admit
@@ -76,7 +76,7 @@ env:
 
 jobs:
   compose:
-    name: Compose
+    name: Build HQ
     # A failed host build must not be composed onto. And a fork's pull request
     # is not composed at all: reading the extensions' admission artifacts needs
     # a secret a fork cannot have, so it would fail on the download step with a
@@ -418,6 +418,29 @@ jobs:
             echo "Nothing was built and nothing was deployed."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # On main, HQ's production row opens here: the one row on the commit that
+      # says where it is, moved on by Deploy and closed by its Report.
+      - name: Mint a token for HQ's production row
+        id: production
+        if: env.IS_RELEASE == 'true' && steps.fingerprint.outputs.build == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+
+      - name: Say on the commit that HQ is being built
+        if: steps.production.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.production.outputs.token }}
+          HEAD_SHA: ${{ steps.host.outputs.sha }}
+          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" in_progress "Building HQ"
+          "The host and every admitted extension are being built and tested as one application."
+
       - name: Download admitted artifacts
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
@@ -677,3 +700,14 @@ jobs:
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
         run: cosign sign --yes "$IMAGE"
+
+      - name: Say on the commit that HQ could not be built
+        if: failure() && steps.production.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.production.outputs.token }}
+          HEAD_SHA: ${{ steps.host.outputs.sha }}
+          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: HQ could not be built"
+          "A step of the build failed, so nothing was published and production still runs the previous image. Open the run for the step that failed."
+          failure

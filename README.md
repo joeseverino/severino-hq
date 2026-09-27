@@ -268,8 +268,8 @@ request and push: Checks (lint, types, lockfiles, workflows, shell, a
 `check --deploy` posture gate, `pip-audit`, dependency review, the structural
 bar and Scorecard), Tests on Python 3.12/3.13/3.14, Browser, and Image (a
 production image that must boot healthy and pass Trivy, then published and
-signed), and **Ready**, the one required check. **CodeQL** runs GitHub's code
-scanning beside it. **HQ**
+signed), and **Ready**, which writes HQ's review, the one required check. **CodeQL** runs GitHub's code
+scanning beside it. **Compose**
 ([`.github/workflows/compose.yml`](.github/workflows/compose.yml)) builds HQ
 itself: that host with every admitted extension, verified as one application.
 **Deploy** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))

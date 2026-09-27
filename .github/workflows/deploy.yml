@@ -1,6 +1,6 @@
 name: Deploy
 
-# Production, and nothing else. Runs when HQ has published a composition
+# Production, and nothing else. Runs when Compose has published HQ
 # for a commit on main, or by hand to redeploy or roll back to an exact commit:
 # choose "Run workflow" and give it the commit.
 #
@@ -16,13 +16,13 @@ name: Deploy
 # skipped deploy.
 on:
   workflow_run:
-    workflows: [HQ]
+    workflows: [Compose]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       commit:
-        description: The commit on main to deploy. Blank deploys the newest one HQ published.
+        description: The commit on main to deploy. Blank deploys the newest one Compose published.
         required: false
         default: ""
 
@@ -98,20 +98,17 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-checks: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.app.outputs.token != ''
       - name: Say on the commit that it waits for approval
         if: steps.app.outputs.token != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           COMMIT: ${{ steps.find.outputs.commit }}
-          IMAGE: ${{ steps.find.outputs.image }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          jq -n --arg sha "$COMMIT" --arg url "$RUN_URL" --arg image "$IMAGE" '{
-            name: "Severino HQ · Production", head_sha: $sha, details_url: $url, status: "in_progress",
-            output: {title: "Waiting for approval",
-                     summary: "Composed as `\($image)`. The deploy waits for approval in the production environment; open the run to review it."}}' \
-            | gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" --input - >/dev/null
+          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          scripts/hq-check.sh "Severino HQ · Production" "$COMMIT" in_progress "Waiting for approval"
+          "HQ is built, signed and ready. Open the run and review the deployment to put it in production."
 
   deploy:
     name: Deploy

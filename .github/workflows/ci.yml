@@ -1,8 +1,9 @@
 name: CI
 
 # Everything a change has to pass, on every pull request and every push to
-# main: Checks, Tests, Browser and Image, and Ready, the one check the ruleset
-# requires. CodeQL runs in its own workflow (codeql.yml), a pull request's
+# main: Checks, Tests, Browser and Image, and Ready, which writes HQ's review:
+# the one check the ruleset requires, from HQ's app alone. CodeQL runs in its
+# own workflow (codeql.yml), a pull request's
 # composition with the extensions in Compose (compose.yml), and production is
 # Deploy's (deploy.yml), which a pull request never reaches.
 #
@@ -32,6 +33,30 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # HQ's review opens the moment a pull request's checks start, so the one
+      # row the merge box waits on is HQ's from the first second. Ready moves
+      # it to its verdict. A fork's pull request has no secrets, and no review.
+      - name: Mint a token for HQ's review
+        id: app
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Open HQ's review
+        if: steps.app.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          scripts/hq-check.sh "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
+          "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
       - id: toolchain
         uses: ./.github/actions/toolchain
       # The runtime pins too: django-stubs loads the host's settings for mypy.
@@ -180,7 +205,7 @@ jobs:
           set -- $SHELL_SOURCES
           for f; do
             case "$f" in
-              *backup.sh|*ci-local.sh|*hq-verdict.sh|*hq-report.sh) bash -n "$f" ;;
+              *backup.sh|*ci-local.sh|*hq-*.sh) bash -n "$f" ;;
               *) sh -n "$f" ;;
             esac
           done
@@ -251,7 +276,7 @@ jobs:
           STEPS: ${{ toJSON(steps) }}
         run: |
           set -euo pipefail
-          rows="$(printf '%s' "$STEPS" | jq -r 'to_entries[] | select(.key != "toolchain") | "\(.key)\t\(.value.outcome)"')"
+          rows="$(printf '%s' "$STEPS" | jq -r 'to_entries[] | select(.key != "toolchain" and .key != "app") | "\(.key)\t\(.value.outcome)"')"
           total="$(printf '%s\n' "$rows" | grep -c . || true)"
           failed="$(printf '%s\n' "$rows" | grep -c $'\tfailure' || true)"
           {
@@ -518,16 +543,17 @@ jobs:
   ready:
     name: Ready
     needs: [checks, tests, browser, image]
-    # The one check the ruleset requires. On a pull request it waits for the
-    # same commit's HQ composition and CodeQL too, then HQ's app says in one line
-    # whether it is ready to merge, or held, why, and what fixes it. A gate
-    # added or removed here never touches the repository's settings.
+    # Waits for every gate, and on a pull request for the same commit's Compose
+    # and CodeQL too, then moves HQ's review to its verdict: ready to merge, or
+    # held, why and what fixes it. That review is the one check the ruleset
+    # requires, accepted only from HQ's app, so a gate added or removed here
+    # never touches the repository's settings.
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
-      # To read this run's, HQ's and CodeQL's jobs, and a failed job's log.
+      # To read this run's, Compose's and CodeQL's jobs, and a failed job's log.
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -67,7 +67,7 @@ class Extension:
         run = self.run
         if run is None:
             return "no composition has started"
-        which = f"{run.get('name') or 'HQ'} run {run.get('id')}"
+        which = f"{run.get('name') or 'Compose'} run {run.get('id')}"
         status = str(run.get("status", ""))
         if status == "waiting":
             return f"{which} is waiting for deploy approval"

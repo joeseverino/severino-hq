@@ -361,10 +361,10 @@ a schedule or a person running commands:
 
 | Workflow | On | Does |
 |---|---|---|
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, the one check the ruleset requires |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, which writes HQ's review |
 | **CodeQL** (`codeql.yml`) | every pull request and push to `main`, and weekly | GitHub's code scanning; the ruleset holds a merge while it has an alert |
-| **HQ** (`compose.yml`) | CI finishing on a commit, an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
-| **Deploy** (`deploy.yml`) | HQ publishing on `main`, or by hand with a commit | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
+| **Compose** (`compose.yml`) | CI finishing on a commit, an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
+| **Deploy** (`deploy.yml`) | Compose publishing HQ on `main`, or by hand with a commit | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
 
 Production runs the composed image (`…/composition:…`), never the host image
 on its own. Migrations and `collectstatic` run on container boot via
@@ -375,11 +375,14 @@ the commit to put back.
 HQ's app says where every change is, in one check posted by whatever just did
 the work, whose details link to the run behind it:
 
-- **Severino HQ · Review** on a pull request, from CI's Ready once CodeQL and
-  the pull request's composition have finished too: *Ready to merge*, or *Held*, why
-  and what fixes it, with every gate's result below.
-- **Severino HQ · Production** on a commit to `main`: *Waiting for approval*
-  once Deploy has found HQ's signed composition, then *Live in production*, or
+- **Severino HQ · Review** on a pull request: *Checking* from CI's first
+  seconds, then, once every gate, CodeQL and the build of HQ have finished,
+  *Ready to merge*, or *Held*, why and what fixes it, with every gate's
+  result, time and link below. It is the one check the ruleset requires, and
+  only HQ's app can post it.
+- **Severino HQ · Production** on a commit to `main`: *Building HQ* while
+  Compose builds it, *Waiting for approval* once Deploy has found the signed
+  image, then *Live in production*, or
   *Not deployed*, why and what fixes it, and one comment on the merged pull
   request. Report runs on a hosted runner, so HQ's key never reaches the
   homelab one.
@@ -434,7 +437,7 @@ set `manages` to `1` and adopt the `github.delivery` record.
 
 > **`hq deploy` is legacy: do not run it.** It predates composition and
 > deploys the *host-only* image, which takes every extension off production
-> until the next composition. To rebuild by hand, run **HQ**; to redeploy
+> until the next composition. To rebuild by hand, run **Compose**; to redeploy
 > or roll back, run **Deploy** with the commit you want.
 
 The equivalent **manual** steps, for a standalone or first-time deploy, are:

@@ -64,7 +64,7 @@ ci_url="$(gh api "repos/${repo}/actions/runs?head_sha=${COMMIT}&per_page=30" \
 digest="${IMAGE##*@}"
 image_name="${IMAGE%@*}"
 pipeline="[Deploy](${RUN_URL})"
-[ -n "${COMPOSE_URL:-}" ] && pipeline="[HQ](${COMPOSE_URL}) → ${pipeline}"
+[ -n "${COMPOSE_URL:-}" ] && pipeline="[Compose](${COMPOSE_URL}) → ${pipeline}"
 [ -n "${ci_url}" ] && pipeline="[CI](${ci_url}) → ${pipeline}"
 case "${conclusion}" in
   success) outcome="Healthy${took:+ in ${took}}" ;;
@@ -89,24 +89,15 @@ ${IMAGE}
 TABLE
 )"
 
-# The check Resolve opened on this commit; a new one if it could not.
-as_app() { GH_TOKEN="${APP_TOKEN:?}" gh api "$@"; }
-check="$(as_app "repos/${repo}/commits/${COMMIT}/check-runs?check_name=$(jq -rn --arg n "${check_name}" '$n|@uri')&filter=latest" \
-  --jq '.check_runs | first | .id // empty')"
-body="$(jq -n --arg name "${check_name}" --arg sha "${COMMIT}" --arg url "${RUN_URL}" \
-  --arg conclusion "${conclusion}" --arg title "${title}" --arg summary "${summary}" --arg text "${text}" \
-  '{name: $name, head_sha: $sha, details_url: $url, status: "completed", conclusion: $conclusion,
-    output: {title: $title, summary: $summary, text: $text}}')"
-if [ -n "${check}" ]; then
-  printf '%s' "${body}" | as_app -X PATCH "repos/${repo}/check-runs/${check}" --input - >/dev/null
-else
-  printf '%s' "${body}" | as_app -X POST "repos/${repo}/check-runs" --input - >/dev/null
-fi
+# The check this delivery opened on the commit, moved to where it ended up.
+CHECK_TEXT="${text}" CHECK_URL="${RUN_URL}" GH_TOKEN="${APP_TOKEN}" \
+  scripts/hq-check.sh "${check_name}" "${COMMIT}" completed "${title}" "${summary}" "${conclusion}"
 echo "${title}"
 
 [ "${conclusion}" = success ] || exit 0
 # One comment on the merged pull request, the first time its commit is live;
 # the marker is the one HQ's controller uses on an extension's.
+as_app() { GH_TOKEN="${APP_TOKEN:?}" gh api "$@"; }
 pull="$(as_app "repos/${repo}/commits/${COMMIT}/pulls" --jq '[.[] | select(.merged_at)] | first | .number // empty')"
 [ -n "${pull}" ] || exit 0
 if as_app "repos/${repo}/issues/${pull}/comments?per_page=100" --jq '.[].body' | grep -qF "${marker}"; then
