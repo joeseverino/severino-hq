@@ -56,6 +56,15 @@ class DeviceApprovalTests(TestCase):
         policy(settings={})
         self.assertEqual(raised("devices-join-without-approval"), [])
 
+    def test_tailnet_lock_is_approval_by_signature_so_it_says_nothing(self):
+        """Under lock a new node is filtered out until a signing key vouches
+        for it, and Tailscale will not turn device approval on beside it."""
+
+        policy(settings={"devicesApprovalOn": False}, lock={"enabled": True, "trusted_keys": 2})
+        self.assertEqual(raised("devices-join-without-approval"), [])
+        policy(settings={"devicesApprovalOn": False}, lock={"enabled": False})
+        self.assertEqual(len(raised("devices-join-without-approval")), 1)
+
     def test_it_reaches_the_action_items(self):
         from .attention import infrastructure
 
