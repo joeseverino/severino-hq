@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import json
+import sys
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
@@ -52,6 +53,8 @@ FLAGS: dict[str, Callable[[Any], None]] = {
         "--capability", action="append", default=[]
     ),
     "resource": lambda parser: parser.add_argument("--resource", required=True),
+    # "-" reads it from standard input, which is how the controller sends it:
+    # one argument is capped at 128 KiB, and a whole sweep is larger.
     "payload": lambda parser: parser.add_argument("--payload", required=True),
     "operation": lambda parser: parser.add_argument("--operation", required=True),
 }
@@ -201,6 +204,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # No fallback branch. argparse only admits a name that is in ACTIONS,
         # and ACTIONS is what built the parser, so the two cannot drift apart.
+        if options.get("payload") == "-":
+            options["payload"] = sys.stdin.read()
         try:
             result = BY_NAME[options["action"]].run(options)
         except (ValueError, ValidationError, json.JSONDecodeError) as exc:

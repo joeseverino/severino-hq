@@ -357,3 +357,37 @@ class ReadParityTests(TestCase):
         # The link's facts come from the caller's presence, and still show.
         self.assertContains(response, "198.51.100.7:41641")
         self.assertContains(response, "Last handshake")
+
+
+class ContainerHopTests(TestCase):
+    """HQ can say which container answered: Docker sets a container's
+    hostname to its short ID, and the sweep reads that ID."""
+
+    def check(self, *, here, listed):
+        from types import SimpleNamespace
+
+        from . import request_path as module
+
+        machine = SimpleNamespace(
+            containers=[SimpleNamespace(name="example-hq", id=listed)] if listed is not None else []
+        )
+        with mock.patch("application.connections.machines_once", return_value=(machine,)), \
+                mock.patch("application.request_path.socket.gethostname", return_value=here):
+            return module._container(Hop("container", "example-hq"), None)
+
+    def test_its_own_container_is_proven(self):
+        evidence, check = self.check(here="0123456789ab", listed="0123456789ab")
+
+        self.assertEqual(check.state, PROVEN)
+        self.assertEqual(evidence[0].value, "0123456789ab")
+
+    def test_a_container_the_sweep_has_not_seen_yet_is_unproven_not_wrong(self):
+        _, check = self.check(here="ffffffffffff", listed="0123456789ab")
+
+        self.assertEqual(check.state, UNPROVEN)
+        self.assertIn("next sweep", check.detail)
+
+    def test_a_sweep_that_read_no_id_says_it_cannot_show(self):
+        _, check = self.check(here="0123456789ab", listed="")
+
+        self.assertIn("cannot show", check.detail)

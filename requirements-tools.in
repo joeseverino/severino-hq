@@ -8,3 +8,7 @@ coverage==7.16.1
 # Django, so this file compiles against requirements.txt and keeps its pins.
 mypy==2.3.1
 django-stubs==6.1.1
+# Property-based tests of the parsers that read outside input (image
+# references, package URLs, provenance, failure logs): thousands of generated
+# inputs each, which is also what OpenSSF Scorecard's Fuzzing check looks for.
+hypothesis==6.168.2

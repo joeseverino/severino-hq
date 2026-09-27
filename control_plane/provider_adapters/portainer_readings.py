@@ -234,6 +234,9 @@ def container_record(
         # ask Portainer to stand up a second copy of something already serving.
         "portainer_managed": bool(stack) and stack in portainer_stacks,
         "name": (container.get("Names") or ["/"])[0].lstrip("/"),
+        # The short ID, which Docker also makes the container's hostname: how
+        # a process inside one can say which container it is.
+        "id": str(container.get("Id", ""))[:12],
         "stack": stack,
         "working_dir": labels.get("com.docker.compose.project.working_dir", ""),
         "image": container.get("Image", ""),
