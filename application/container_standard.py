@@ -54,6 +54,15 @@ def _mounted(test):
     return check
 
 
+# Emptied by every boot: state for this run of something, never kept.
+RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")
+
+
+def runtime_path(source: str) -> bool:
+    path = source.rstrip("/") or "/"
+    return any(path == root or path.startswith(f"{root}/") for root in RUNTIME_ROOTS)
+
+
 def system_path(source: str) -> bool:
     path = source.rstrip("/") or "/"
     return path in SYSTEM_ROOTS or any(path == root or path.startswith(f"{root}/") for root in SYSTEM_PATHS)

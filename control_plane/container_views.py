@@ -54,7 +54,7 @@ class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
     page_lede = "Every container running on your machines, and whether what it runs is current and safe."
 
     def get_context_data(self, **kwargs):
-        from application.containers import BEHIND, VULNERABLE, containers
+        from application.containers import BEHIND, CURRENT, VULNERABLE, containers
         from application.upgrades import plan_for
 
         context = super().get_context_data(**kwargs)
@@ -72,6 +72,8 @@ class ContainerListView(PageMixin, LoginRequiredMixin, TemplateView):
             machines=len({item.machine.name for item in found}),
             vulnerable=sum(1 for group in groups.values() if group["standing"].state == VULNERABLE),
             behind=sum(1 for group in groups.values() if group["standing"].state == BEHIND),
+            # Only what a registry answered for is current; silence is not.
+            current=sum(1 for item in found if item.standing.state == CURRENT),
             pinned=sum(1 for item in found if item.standing.pinned),
             # Checked against its source's advisories or its packages against OSV.
             matched=sum(1 for item in found if item.standing.source or item.standing.checked),

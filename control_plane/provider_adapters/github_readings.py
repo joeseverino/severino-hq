@@ -24,7 +24,7 @@ from ..observations.github import (
     RUNNERS,
 )
 from . import github_app
-from .contracts import ProviderError, ProviderRuntime
+from .contracts import PERMISSION_REFUSAL, ProviderError, ProviderRuntime
 from .parts import refuse_part
 
 READ = {
@@ -74,7 +74,7 @@ def _repository(runtime: ProviderRuntime, name: str, ref: str) -> dict[str, Any]
         "pull_request_checks": (
             _checks(get(f"/commits/{pulls[0]['head']}/check-runs?per_page=100"))["names"] if pulls and pulls[0]["head"] else []
         ),
-        "runs": _latest_runs(runs),
+        "runs": _latest_runs(runs, (get("/actions/workflows?per_page=100") or {}).get("workflows")),
         "waiting": _waiting(runs, get),
         "release": _release(get("/releases?per_page=1") or []),
         "deployments": _deployments(get("/deployments?per_page=20") or [], get),
@@ -95,8 +95,26 @@ def _part(part, name: str, ref: str, read, empty: Any = None) -> Any:
     try:
         return read()
     except ProviderError as exc:
-        refuse_part(part.name, exc, scope=name, connection_ref=ref)
+        refuse_part(part.name, _as_repository_refusal(exc), scope=name, connection_ref=ref)
         return empty
+
+
+def _as_repository_refusal(exc: ProviderError) -> ProviderError:
+    """A refusal under a token that carries the permission is the repository's.
+
+    Every read here runs under a token minted with all of ``READ``, and GitHub
+    will not mint one for a permission the installation lacks. So a 403 is a
+    feature the repository does not offer (code scanning or rulesets on a free
+    private repository, Dependabot alerts turned off), never a permission to
+    grant. Reporting it as one sends the operator to re-mint a key that
+    already has everything.
+    """
+
+    if getattr(exc, "refusal", "") != PERMISSION_REFUSAL:
+        return exc
+    return ProviderError(
+        "Not offered on this repository: its plan or its settings leave it off."
+    )
 
 
 def _access(repo: Mapping[str, Any], get) -> dict[str, Any]:
@@ -279,18 +297,31 @@ def _run(run: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _latest_runs(runs: list[Any]) -> list[dict[str, Any]]:
-    """The newest run of each workflow: GitHub lists newest first."""
+def _latest_runs(runs: list[Any], workflows: list[Any] | None = None) -> list[dict[str, Any]]:
+    """The newest run of each workflow that exists now, under its name now.
 
-    seen: dict[str, dict[str, Any]] = {}
+    A run keeps the name its workflow had when it ran, so grouping by that
+    name makes every rename a workflow of its own, and a deleted workflow
+    lives on in the history. Grouped by the workflow's ID instead, and named
+    and filtered by the repository's active workflows when GitHub lists them.
+    """
+
+    current = {
+        item.get("id"): str(item.get("name") or "")
+        for item in workflows or ()
+        if isinstance(item, Mapping) and item.get("state") == "active"
+    }
+    seen: dict[Any, dict[str, Any]] = {}
     for run in runs:
         # GitHub's own dynamic runs (Dependabot's graph updates) are named per
         # run, so each would read as a workflow of its own. They are not the
         # repository's workflows.
-        if isinstance(run, Mapping) and run.get("event") == "dynamic":
+        if not isinstance(run, Mapping) or run.get("event") == "dynamic":
             continue
-        if isinstance(run, Mapping) and str(run.get("name") or "") not in seen:
-            seen[str(run.get("name") or "")] = _run(run)
+        key = run.get("workflow_id") or str(run.get("name") or "")
+        if key in seen or (current and key not in current):
+            continue
+        seen[key] = {**_run(run), **({"name": current[key]} if key in current else {})}
     return list(seen.values())
 
 
@@ -387,7 +418,7 @@ def _alerts(get, name: str, ref: str) -> dict[str, Any]:
         try:
             found[part.name] = _severities(get(path) or [], severity)
         except ProviderError as exc:
-            refuse_part(part.name, exc, scope=name, connection_ref=ref)
+            refuse_part(part.name, _as_repository_refusal(exc), scope=name, connection_ref=ref)
     return found
 
 

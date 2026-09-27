@@ -786,7 +786,9 @@ class ADeletedContainerIsForgottenTests(TestCase):
         self.assertNotIn("a-web", self.names())
         self.assertEqual(len(result["retired"]), 1)
         self.assertTrue(
-            AuditLog.objects.filter(action=AuditLog.Action.DELETED).exists()
+            AuditLog.objects.filter(
+                action=AuditLog.Action.DELETED, message__contains="no longer on its machine"
+            ).exists()
         )
 
     def test_a_machine_the_sweep_did_not_list_keeps_its_containers(self):

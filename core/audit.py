@@ -232,10 +232,13 @@ def register_audit(
 
     @receiver(post_delete, sender=model, weak=False)
     def _on_delete(sender, instance, **kwargs):
+        # What going away meant, when the one removing it knows: a read request
+        # answered, a declaration forgotten. "Deleted" otherwise.
         record_event(
             action=AuditLog.Action.DELETED,
             obj=instance,
             type_label=type_label,
+            message=str(getattr(instance, "audit_gone", "") or ""),
             connection=_connection_of(connection, instance),
         )
 

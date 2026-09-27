@@ -324,11 +324,13 @@ def settle_read_requests() -> int:
 
     pending = {(read.connection_ref, read.kind) for read in forced_reads()}
     settled = [
-        request.pk
+        request
         for request in ReadRequest.objects.all()
         if (request.connection_ref, request.kind) not in pending
     ]
-    ReadRequest.objects.filter(pk__in=settled).delete()
+    for request in settled:
+        request.audit_gone = f"Read of {request.connection_ref or request.kind or 'every connection'} answered"
+        request.delete()
     return len(settled)
 
 

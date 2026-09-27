@@ -95,7 +95,7 @@ def change_between(running: str, target: str) -> str:
 def data_of(mounts) -> tuple[Mapping[str, Any], ...]:
     """The writable mounts that hold what the container keeps."""
 
-    from .container_standard import DOCKER_SOCKETS, system_path
+    from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 
     return tuple(
         mount
@@ -108,16 +108,8 @@ def data_of(mounts) -> tuple[Mapping[str, Any], ...]:
         and not (mount.get("type") == "bind" and system_path(str(mount.get("source", ""))))
         # A runtime directory is emptied by every boot: a doorbell or a lock
         # file there is state for this run, never data to keep.
-        and not (mount.get("type") == "bind" and _runtime_path(str(mount.get("source", ""))))
+        and not (mount.get("type") == "bind" and runtime_path(str(mount.get("source", ""))))
     )
-
-
-RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")
-
-
-def _runtime_path(source: str) -> bool:
-    path = source.rstrip("/") or "/"
-    return any(path == root or path.startswith(f"{root}/") for root in RUNTIME_ROOTS)
 
 
 def plan_for(item: Container) -> Plan | None:

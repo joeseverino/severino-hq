@@ -50,7 +50,7 @@ for: each once, the detail below. Whatever it is also declared as is the
       <span class="band-label">Containers</span>
       {% if machine.containers %}
         <strong>{{ machine.running }} of {{ machine.containers|length }} running</strong>
-        <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known advisories,have known advisories" }} · {% endif %}{% if container_counts.behind %}{{ container_counts.behind }} behind a newer release{% else %}Each on its newest release{% endif %}</small>
+        <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known advisories,have known advisories" }} · {% endif %}{% if container_counts.behind %}{{ container_counts.behind }} behind a newer release{% elif container_counts.current and container_counts.current == standings|length %}Each on its newest release{% elif container_counts.current %}{{ container_counts.current }} on its newest release{% else %}Releases not read yet{% endif %}</small>
       {% elif machine.containers_visible %}<strong>None</strong>
       {% else %}<strong>Not visible</strong><small>No connection reads containers. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></small>{% endif %}
     </div>
