@@ -356,15 +356,16 @@ Either pattern, the app itself never binds to a public interface.
 
 ### A.6 Updates
 
-The live homelab updates through workflows each started by an event, never by
-a schedule or a person running commands:
+The live homelab updates through workflows that each start the next, naming
+the commit, so nothing waits on a schedule and no run of one workflow can be
+mistaken for another's:
 
 | Workflow | On | Does |
 |---|---|---|
 | **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, which writes HQ's review |
 | **CodeQL** (`codeql.yml`) | every pull request and push to `main`, and weekly | GitHub's code scanning; the ruleset holds a merge while it has an alert |
-| **Compose** (`compose.yml`) | CI finishing on a commit, an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
-| **Deploy** (`deploy.yml`) | Compose publishing HQ on `main`, or by hand with a commit | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
+| **Compose** (`compose.yml`) | a pull request (to verify it); started with a commit by CI once a push to `main` passes, by an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
+| **Deploy** (`deploy.yml`) | started with a commit by Compose once it has published HQ, or by hand to redeploy or roll back | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
 
 Production runs the composed image (`…/composition:…`), never the host image
 on its own. Migrations and `collectstatic` run on container boot via

@@ -55,16 +55,17 @@ for workflow in ${others}; do
 done
 
 failed="$(printf '%s\n' "${rows}" | awk -F'\t' '$3 != "success" && $3 != "skipped" && $3 != ""')"
-# In the order the pipeline runs: CI's jobs as it lists them, then Compose,
-# then CodeQL. A gate links to its job and says how long it took.
+# In the order the pipeline runs: CI's Checks, Tests, Browser and Image, then
+# Compose, then CodeQL. A gate links to its job and says how long it took.
 table="$(printf '%s\n' "${rows}" | awk -F'\t' 'NF >= 3 {
   order = ($6 == "CI") ? 1 : ($6 == "Compose") ? 2 : 3
+  rank = ($2 ~ /^Checks/) ? 1 : ($2 ~ /^Tests/) ? 2 : ($2 ~ /^Browser/) ? 3 : ($2 ~ /^Image/) ? 4 : 5
   mark = ($3 == "success") ? "✓ Passed" : ($3 == "skipped") ? "– Skipped" : ($3 == "failure") ? "✗ Failed" \
        : ($3 == "cancelled") ? "✗ Cancelled" : ($3 == "timed_out") ? "✗ Timed out" : "✗ " $3
   took = ($4 == "") ? "" : ($4 >= 60 ? int($4/60) "m " $4%60 "s" : $4 "s")
   name = ($5 == "") ? $2 : "[" $2 "](" $5 ")"
-  printf "%d\t%05d\t| %s | %s | %s | %s |\n", order, NR, $6, name, mark, took }' \
-  | sort -t$'\t' -k1,1n -k2,2n | cut -f3-)"
+  printf "%d\t%d\t%s\t| %s | %s | %s | %s |\n", order, rank, $2, $6, name, mark, took }' \
+  | sort -t$'\t' -k1,1n -k2,2n -k3,3 | cut -f4-)"
 
 if [ -z "${failed}" ]; then
   conclusion=success

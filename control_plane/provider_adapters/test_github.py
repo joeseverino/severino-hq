@@ -339,6 +339,18 @@ class PipelineReportTests(SimpleTestCase):
         self.assertEqual(hosting, ["deploy.yml"])
         self.assertNotIn("pull_request", triggers)
 
+    def test_each_step_starts_the_next_and_names_the_commit(self):
+        from pathlib import Path
+
+        workflows = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+        # workflow_run fires for any run of the workflow it watches, a pull
+        # request's included, which once started a deploy of the wrong commit.
+        self.assertEqual([path.name for path in workflows.glob("*.yml") if "workflow_run:" in path.read_text()], [])
+        self.assertIn('gh workflow run compose.yml', self.read(".github", "workflows", "ci.yml"))
+        self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "ci.yml"))
+        self.assertIn('gh workflow run deploy.yml', self.read(".github", "workflows", "compose.yml"))
+        self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "compose.yml"))
+
     def test_a_stage_names_the_workflow_it_is_in(self):
         waiting = {**run("waiting"), "name": "Deploy"}
 

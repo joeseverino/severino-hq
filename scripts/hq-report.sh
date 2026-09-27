@@ -14,7 +14,7 @@
 #   RESULT        the Deploy job's result
 #   THIS_RUN      this run's id
 #   RUN_URL       this run's page
-#   COMPOSE_URL   the Compose run that published it, when one did
+#   COMPOSE_RUN   the Compose run that published it, when it started this
 set -euo pipefail
 
 readonly check_name="Severino HQ · Production"
@@ -64,7 +64,7 @@ ci_url="$(gh api "repos/${repo}/actions/runs?head_sha=${COMMIT}&per_page=30" \
 digest="${IMAGE##*@}"
 image_name="${IMAGE%@*}"
 pipeline="[Deploy](${RUN_URL})"
-[ -n "${COMPOSE_URL:-}" ] && pipeline="[Compose](${COMPOSE_URL}) → ${pipeline}"
+[[ "${COMPOSE_RUN:-}" =~ ^[0-9]+$ ]] && pipeline="[Compose](${server}/${repo}/actions/runs/${COMPOSE_RUN}) → ${pipeline}"
 [ -n "${ci_url}" ] && pipeline="[CI](${ci_url}) → ${pipeline}"
 case "${conclusion}" in
   success) outcome="Healthy${took:+ in ${took}}" ;;

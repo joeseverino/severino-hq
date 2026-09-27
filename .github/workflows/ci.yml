@@ -427,11 +427,11 @@ jobs:
       id-token: write
     env:
       # The commit the composition will look for. On a pull request
-      # `GITHUB_SHA` is the merge commit, while the `workflow_run` event that
-      # starts the composition reports `head_sha`: the branch tip. Tagging by
-      # the merge commit would publish an image the composition then could not
-      # find, and the failure would read as "no such image" rather than "these
-      # two disagree about which commit this is".
+      # `GITHUB_SHA` is the merge commit, while Compose composes the pull
+      # request's head: the branch tip. Tagging by the merge commit would
+      # publish an image the composition then could not find, and the failure
+      # would read as "no such image" rather than "these two disagree about
+      # which commit this is".
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -595,3 +595,25 @@ jobs:
             exit 1
           fi
           echo "Every gate passed."
+      # On main, CI starts the build of HQ for this commit once every gate has
+      # passed, and names the commit, so what Compose builds is exactly what
+      # CI checked. Nothing else about a push starts it.
+      - name: Mint a token to start Compose
+        id: compose
+        if: github.event_name == 'push'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+      - name: Start Compose for this commit
+        if: steps.compose.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.compose.outputs.token }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run compose.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f commit="$COMMIT" -f reason="CI passed on main" -f force=true
