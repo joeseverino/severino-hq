@@ -160,7 +160,7 @@ complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
 
 The architectural seams are type checked. `python -m mypy` (a gate in
-`ci-local.sh` and CI's lint job) runs mypy with django-stubs over the modules
+`ci-local.sh` and CI's Checks job) runs mypy with django-stubs over the modules
 `mypy.ini` names: the security, capability, plugin, resource and
 integration-spec contracts, `hq_sdk`, `hq_api` and `hq_mcp`, with every
 function in them fully annotated. It loads `config/settings_typecheck.py`, the

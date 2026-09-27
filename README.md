@@ -1,6 +1,6 @@
 # Severino HQ
 
-[![ci](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
+[![CI](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
 &nbsp;![coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 
@@ -261,22 +261,30 @@ contract single-sourced from the MCP and committed here, so HQ can never accept
 a value the MCP wouldn't emit, and vice-versa. Records upsert by `doc_id`;
 runbook bodies and secrets never enter HQ.
 
-**Code: `git push` / [`hq ship`](https://github.com/joeseverino/tools).** A push to `main` runs the gated pipeline in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml): lint, tests on Python
-3.12/3.13/3.14, a `check --deploy` posture gate plus `pip-audit`, and a booted
-production-image readiness check that Trivy scans. On `main`, the same gated
-image is published to GHCR. Only on green does a **self-hosted runner on the
-homelab** deploy it: the runner dials out to GitHub, so nothing inbound is ever
-opened. A red commit physically cannot reach the box.
+**Code: `git push` / [`hq ship`](https://github.com/joeseverino/tools).** Every
+workflow is started by an event. **CI**
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every pull
+request and push: Checks (lint, types, lockfiles, workflows, shell, a
+`check --deploy` posture gate, `pip-audit`, dependency review, the structural
+bar and Scorecard), Tests on Python 3.12/3.13/3.14, Browser, and Image (a
+production image that must boot healthy and pass Trivy, then published and
+signed), and **Ready**, which writes HQ's review, the one required check. **CodeQL** runs GitHub's code
+scanning beside it. **Compose**
+([`.github/workflows/compose.yml`](.github/workflows/compose.yml)) builds HQ
+itself: that host with every admitted extension, verified as one application.
+**Deploy** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
+runs only for `main`: it waits for a person's approval, then a **self-hosted
+runner on the homelab** deploys the signed composition with health rollback.
+The runner dials out to GitHub, so nothing inbound is ever opened, and a pull
+request never reaches it.
 
-What the box actually runs is one **composed** image: that scanned host plus
-every admitted extension, assembled and verified as a single application by
-[`.github/workflows/compose.yml`](.github/workflows/compose.yml). Extensions
-verify and admit themselves in their own repositories and publish signed
-bundles; they never build or deploy an image. An admission starts the
-composition itself, through an app whose only permission is to start a workflow
-here, so an extension release reaches production with nothing polling for it,
-and still only after a person approves the deploy. See
+Extensions verify and admit themselves in their own repositories and publish
+signed bundles; they never build or deploy an image. An admission starts the
+composition itself, through HQ's GitHub App, so an extension release reaches
+production with nothing polling for it. HQ's app says on every change where it
+stands (**Severino HQ · Review** on a pull request, **Severino HQ ·
+Production** on `main`) and, when something fails, why and what fixes it. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and
 [`docs/PLUGINS.md`](docs/PLUGINS.md#composition).
 
 ---

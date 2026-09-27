@@ -356,33 +356,47 @@ Either pattern, the app itself never binds to a public interface.
 
 ### A.6 Updates
 
-The live homelab updates through the gated CI/CD pipeline. A push to `main`
-builds and scans the **host** image; the **Compose and deploy extensions**
-workflow then builds one image from that host plus every admitted extension, and
-a self-hosted runner deploys it health-gated with rollback. Production runs the
-composed image (`…/composition:…`), never the host image on its own. Migrations
-and `collectstatic` run on container boot via `entrypoint.sh`.
+The live homelab updates through workflows each started by an event, never by
+a schedule or a person running commands:
 
-An extension merge deploys too, without anything being run by hand or anything
-polling. Its admission dispatches the composition (see
-[`PLUGINS.md`](PLUGINS.md#composition)), the deploy waits for your approval, and
-when HQ boots on the new image it asks the controller to read `github.delivery`.
-Every change carries one **Severino HQ · production** check, posted as HQ's app
-by whatever just did the work, and the check's details link to the run that
-holds the deployment and your approval:
+| Workflow | On | Does |
+|---|---|---|
+| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser and Image (build, prove healthy, scan, publish and sign the host image), and **Ready**, which writes HQ's review |
+| **CodeQL** (`codeql.yml`) | every pull request and push to `main`, and weekly | GitHub's code scanning; the ruleset holds a merge while it has an alert |
+| **Compose** (`compose.yml`) | CI finishing on a commit, an extension's admission, or by hand | the host plus every admitted extension, verified as one application; on `main`, published and signed |
+| **Deploy** (`deploy.yml`) | Compose publishing HQ on `main`, or by hand with a commit | waits for approval in `production`, then deploys on the self-hosted runner with health rollback |
 
-- a host commit: Compose posts *Waiting for approval* once it has published the
-  image, and a last job posts *Live in production* or *Not deployed* (not
-  approved, cancelled, or rolled back) whatever the deploy did, then comments
-  once on the merged pull request. That job runs on a hosted runner, so HQ's
-  key never reaches the homelab one.
-- an extension commit: its admission posts *Waiting for its composition and
-  approval* in its own repository, and HQ's controller marks it live once
-  production runs that commit, when its connection manages `github.delivery`,
-  with one comment on the merged pull request.
+Production runs the composed image (`…/composition:…`), never the host image
+on its own. Migrations and `collectstatic` run on container boot via
+`entrypoint.sh`. A pull request never starts Deploy, so no pull request's code
+reaches the self-hosted runner. To redeploy or roll back, run **Deploy** with
+the commit to put back.
 
-What they say is public: the commit, the stage, the published image and the
-run. No machine and no extension is named in this repository.
+HQ's app says where every change is, in one check posted by whatever just did
+the work, whose details link to the run behind it:
+
+- **Severino HQ · Review** on a pull request: *Checking* from CI's first
+  seconds, then, once every gate, CodeQL and the build of HQ have finished,
+  *Ready to merge*, or *Held*, why and what fixes it, with every gate's
+  result, time and link below. It is the one check the ruleset requires, and
+  only HQ's app can post it.
+- **Severino HQ · Production** on a commit to `main`: *Building HQ* while
+  Compose builds it, *Waiting for approval* once Deploy has found the signed
+  image, then *Live in production*, or
+  *Not deployed*, why and what fixes it, and one comment on the merged pull
+  request. Report runs on a hosted runner, so HQ's key never reaches the
+  homelab one.
+- **Severino HQ · Production** on an extension's commit: its admission posts
+  *Waiting for its composition and approval* in its own repository, and HQ's
+  controller marks it live once production runs that commit, when its
+  connection manages `github.delivery`.
+
+Why a run failed comes from `deploy/diagnoses.json`: `scripts/diagnose.py`
+matches the failed job's log against it and prints only the catalog's own
+words, never a line of the log. The first time a failure needs investigating,
+add it there, and it is named, with its fix, every time after. What any of
+these checks says is public: the commit, the stage, the image and the run. No
+machine and no extension is named in this repository.
 
 #### Continuous delivery through HQ's GitHub App
 
@@ -423,8 +437,8 @@ set `manages` to `1` and adopt the `github.delivery` record.
 
 > **`hq deploy` is legacy: do not run it.** It predates composition and
 > deploys the *host-only* image, which takes every extension off production
-> until the next composition. To rebuild by hand, run **Compose and deploy
-> extensions**; to roll back, re-run it at the commit you want.
+> until the next composition. To rebuild by hand, run **Compose**; to redeploy
+> or roll back, run **Deploy** with the commit you want.
 
 The equivalent **manual** steps, for a standalone or first-time deploy, are:
 

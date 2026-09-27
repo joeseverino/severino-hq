@@ -1,13 +1,15 @@
-name: scorecard
+name: Scorecard
 
 # OpenSSF Scorecard: an outside, repeatable measure of this repository's
 # supply-chain practices: pinned actions, token permissions, branch
 # protection, signed releases and the rest. Findings land in code scanning,
 # and the published result backs the README badge.
+#
+# Weekly, and when branch protection changes: a pull request that would lower
+# a check is already held by CI's Checks, which runs the same checks, so a run
+# on every push would only add a second row to each commit.
 on:
   branch_protection_rule:
-  push:
-    branches: [main]
   schedule:
     - cron: "23 7 * * 2"
   workflow_dispatch:
@@ -16,7 +18,7 @@ permissions: read-all
 
 jobs:
   analysis:
-    name: scorecard
+    name: Publish
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

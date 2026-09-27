@@ -1,0 +1,246 @@
+name: Deploy
+
+# Production, and nothing else. Runs when Compose has published HQ
+# for a commit on main, or by hand to redeploy or roll back to an exact commit:
+# choose "Run workflow" and give it the commit.
+#
+#   Resolve  finds the signed composition for the commit, and says on it, as
+#            HQ's app, that it waits for approval
+#   Deploy   on the self-hosted runner, after a person approves: verify the
+#            signature, recreate, wait for health, roll back if it fails
+#   Report   says on the commit whether it is live, or why not and what fixes
+#            it, and comments once on the merged pull request
+#
+# A pull request never starts this workflow, so no pull request's code ever
+# reaches the self-hosted runner, and a pull request's checks never show a
+# skipped deploy.
+on:
+  workflow_run:
+    workflows: [Compose]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: The commit on main to deploy. Blank deploys the newest one Compose published.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve
+    # Only a composition of main: a run Compose made for a pull request, or
+    # one that failed, has nothing to deploy.
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      image: ${{ steps.find.outputs.image }}
+      commit: ${{ steps.find.outputs.commit }}
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find the signed composition for the commit
+        id: find
+        env:
+          # A hand-given commit is input: passed as data, never interpolated.
+          ASKED: ${{ inputs.commit }}
+          COMPOSED: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          commit="${ASKED:-$COMPOSED}"
+          if ! [[ "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Not a commit::Give the full 40-character commit to deploy."
+            exit 1
+          fi
+          tag="ghcr.io/${GITHUB_REPOSITORY}/composition:${commit}"
+          if ! digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"') \
+             || [ -z "$digest" ]; then
+            # Compose publishes nothing when an admission changed nothing, so
+            # there is nothing new to deploy. By hand, a missing image is an
+            # error: that commit was never composed.
+            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              echo "::error title=Never composed::No composition was published for ${commit:0:12}. Run Compose for it first."
+              exit 1
+            fi
+            echo "Nothing new was published for ${commit:0:12}; nothing to deploy." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "image=${tag%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "deploying ${tag%:*}@$digest, composed from ${commit:0:12}"
+      - name: Mint a token for HQ's check
+        id: app
+        if: steps.find.outputs.image != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.app.outputs.token != ''
+      - name: Say on the commit that it waits for approval
+        if: steps.app.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          COMMIT: ${{ steps.find.outputs.commit }}
+          CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          scripts/hq-check.sh "Severino HQ · Production" "$COMMIT" in_progress "Waiting for approval"
+          "HQ is built, signed and ready. Open the run and review the deployment to put it in production."
+
+  deploy:
+    name: Deploy
+    needs: resolve
+    if: needs.resolve.outputs.image != ''
+    # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
+    # connects in. Only this job runs there, only for main, and it holds no
+    # key of HQ's app.
+    runs-on: [self-hosted, severino-hq]
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Authorize the registry for signature verification
+        # Written directly rather than through `docker login`, which reaches the
+        # daemon: this runner deliberately holds no Docker access, so the only
+        # thing that needs registry credentials here is cosign, and cosign reads
+        # this file. The deploy itself authenticates separately, inside the
+        # root-owned script, from a token handed over on stdin.
+        #
+        # Removed again by the cleanup step below. This runner is a machine in
+        # the house, not a container thrown away afterwards, so a credential
+        # left in its home directory is one that outlives the job.
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.docker"
+          auth="$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 -w0)"
+          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HOME/.docker/config.json"
+          chmod 600 "$HOME/.docker/config.json"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Verify the image was composed by Compose
+        # The last point at which anything can be checked: everything upstream
+        # happens on GitHub's runners, and this is the host about to run it.
+        #
+        # Verified against the identity of Compose in this repository, so
+        # a digest pushed to the composition name by any other means (another
+        # workflow, a stolen registry token, a hand `docker push`) stops here
+        # instead of becoming production. Output is discarded: the certificate
+        # payload names the image, and the interesting part is whether this
+        # step exits zero.
+        env:
+          IMAGE: ${{ needs.resolve.outputs.image }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp \
+              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
+            "$IMAGE" > /dev/null
+          echo "composition signature verified"
+      - name: Refuse a checkout the runner cannot pull
+        # The pull below runs as this account, so everything under the
+        # checkout's .git must be its own. severino-hq-check-scripts asks the
+        # same question daily (scripts/lib/checkout.sh).
+        run: |
+          set -euo pipefail
+          checkout=/opt/apps/severino-hq
+          runner="$(id -un)"
+          foreign="$(find "$checkout/.git" ! -user "$runner" -print)"
+          if [ -n "$foreign" ]; then
+            count="$(printf '%s\n' "$foreign" | wc -l | tr -d ' ')"
+            echo "::error title=Checkout not owned by the runner::$count path(s) under $checkout/.git are not owned by $runner, so git pull fails. Fix on the host: sudo chown -R $runner: $checkout/.git </dev/null"
+            exit 1
+          fi
+      - name: Sync deploy checkout
+        run: git -C /opt/apps/severino-hq pull --ff-only
+      - name: Deploy exact image with health rollback
+        # Same deploy path and rollback as a host release: it pulls, recreates,
+        # waits for health, activates the controller, and restores the previous
+        # image if any step fails.
+        #
+        # Run through sudo against the root-owned copy, not the checkout. That
+        # is what lets this runner hold no docker access and no general sudo:
+        # everything privileged happens inside a script the runner cannot edit,
+        # and the only thing crossing the boundary is one image reference that
+        # the preceding step has already verified.
+        #
+        # The registry token goes over stdin, not as an argument: arguments are
+        # readable in the process table while the command runs.
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          IMAGE: ${{ needs.resolve.outputs.image }}
+        run: |
+          set -euo pipefail
+          printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
+            | sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh "$IMAGE"
+      - name: Remove the registry credential
+        if: always()
+        run: rm -f "$HOME/.docker/config.json"
+
+
+  report:
+    name: Report
+    needs: [resolve, deploy]
+    # Whatever the deploy did, the commit says so: live, or not deployed, why
+    # and what fixes it. On a hosted runner, so HQ's key never reaches the
+    # homelab one.
+    if: always() && needs.resolve.outputs.image != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # To read the deploy job's log, only to match it against the catalog.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Mint a token for HQ's check and comment
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-pull-requests: write
+      - name: Say where the commit ended up
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          IMAGE: ${{ needs.resolve.outputs.image }}
+          RESULT: ${{ needs.deploy.result }}
+          THIS_RUN: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMPOSE_URL: ${{ github.event.workflow_run.html_url }}
+        run: scripts/hq-report.sh

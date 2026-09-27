@@ -1,0 +1,59 @@
+name: Toolchain
+description: >-
+  Read scripts/toolchain.env and set up Python: the oldest version the test
+  matrix runs, unless a job names its own.
+
+# A step, not a job: every job that needs the toolchain reads the same file
+# itself, so a pull request's checks list carries no row that only passes
+# values along. scripts/ci-local.sh reads the same file directly.
+
+inputs:
+  python:
+    description: The Python version to set up. Blank sets up the oldest the matrix runs.
+    required: false
+    default: ""
+  cache:
+    description: Passed to setup-python's cache, e.g. pip. Blank caches nothing.
+    required: false
+    default: ""
+
+outputs:
+  python-versions:
+    description: The test matrix, as a JSON list.
+    value: ${{ steps.read.outputs.python-versions }}
+  oldest-python:
+    description: The oldest version the matrix runs.
+    value: ${{ steps.read.outputs.oldest-python }}
+  shellcheck-version:
+    description: The shellcheck the gate runs.
+    value: ${{ steps.read.outputs.shellcheck-version }}
+  coverage-floor:
+    description: The coverage the suite must reach.
+    value: ${{ steps.read.outputs.coverage-floor }}
+  actionlint-version:
+    description: The actionlint the gate runs.
+    value: ${{ steps.read.outputs.actionlint-version }}
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      run: |
+        set -euo pipefail
+        . ./scripts/toolchain.env
+        # shellcheck disable=SC2086  # the version list is meant to split
+        versions="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rrc '[.]' | jq -sc 'add')"
+        {
+          echo "python-versions=$versions"
+          # shellcheck disable=SC2086
+          echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
+          echo "shellcheck-version=$SHELLCHECK_VERSION"
+          echo "coverage-floor=$COVERAGE_FLOOR"
+          echo "actionlint-version=$ACTIONLINT_VERSION"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: ${{ inputs.python || steps.read.outputs.oldest-python }}
+        cache: ${{ inputs.cache }}
