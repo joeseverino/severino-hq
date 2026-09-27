@@ -36,9 +36,11 @@ KIND = "github.delivery"
 # admission's Actions write, this is every permission HQ's app is registered
 # with (``deploy/github-apps.json``).
 REPORTS = {"checks": "write", "pull_requests": "write"}
-CHECK_NAME = "Severino HQ · production"
+CHECK_NAME = "Severino HQ · Production"
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
+# Where a composition goes after Compose publishes it: approval, then the host.
+DEPLOY_WORKFLOW = ".github/workflows/deploy.yml"
 _MARKER = "<!-- severino-hq-delivery:{sha} -->"
 _RUNNING = frozenset({"queued", "in_progress", "requested", "pending"})
 
@@ -51,7 +53,7 @@ class Extension:
     running: str
     admitted: str = ""
     admitted_at: str = ""
-    # The composition run that started after the admission, when one has.
+    # The newest Compose or Deploy run that started after the admission.
     run: Mapping[str, Any] | None = None
     # HQ's check run on the running commit, when one is still open.
     unreported: Mapping[str, Any] | None = None
@@ -65,16 +67,16 @@ class Extension:
         run = self.run
         if run is None:
             return "no composition has started"
-        number = run.get("id")
+        which = f"{run.get('name') or 'Compose'} run {run.get('id')}"
         status = str(run.get("status", ""))
         if status == "waiting":
-            return f"composition run {number} is waiting for deploy approval"
+            return f"{which} is waiting for deploy approval"
         if status in _RUNNING:
-            return f"composition run {number} is running"
+            return f"{which} is running"
         conclusion = str(run.get("conclusion") or "ended")
         if conclusion == "success":
-            return f"composition run {number} finished without deploying it"
-        return f"composition run {number} {'failed' if conclusion == 'failure' else conclusion}"
+            return f"{which} finished without deploying it"
+        return f"{which} {'failed' if conclusion == 'failure' else conclusion}"
 
     def says(self) -> str:
         if self.behind:
@@ -109,20 +111,26 @@ def _latest_admission(runtime: ProviderRuntime, extension: Extension, every: tup
     return runs[0] if runs else None
 
 
-def _compose_runs(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _pipeline_runs(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Compose's and Deploy's recent runs on the branch: a composition is one
+    until it publishes, then the other until it is live."""
+
     owner, repo = github_app.repository(spec["repository"])
-    answer = github_app.call(
-        runtime,
-        f"/repos/{owner}/{repo}/actions/workflows/{_basename(spec['workflow'])}/runs"
-        f"?branch={spec['branch']}&per_page=20",
-        repositories=(spec["repository"],),
-        permissions={"actions": "read"},
-    )
-    return list((answer or {}).get("workflow_runs") or [])
+    found: list[Mapping[str, Any]] = []
+    for workflow in (spec["workflow"], DEPLOY_WORKFLOW):
+        answer = github_app.call(
+            runtime,
+            f"/repos/{owner}/{repo}/actions/workflows/{_basename(workflow)}/runs"
+            f"?branch={spec['branch']}&per_page=20",
+            repositories=(spec["repository"],),
+            permissions={"actions": "read"},
+        )
+        found.extend((answer or {}).get("workflow_runs") or [])
+    return found
 
 
 def _run_after(runs: list[Mapping[str, Any]], since: str) -> Mapping[str, Any] | None:
-    """The newest composition run created at or after ``since``."""
+    """The newest run created at or after ``since``."""
 
     start = _when(since)
     if start is None:
@@ -167,7 +175,7 @@ def delivery(runtime: ProviderRuntime, spec: Mapping[str, Any]) -> tuple[Extensi
         admitted_at = str((admission or {}).get("updated_at", ""))
         if admitted and admitted != extension.running:
             if runs is None:
-                runs = _compose_runs(runtime, spec)
+                runs = _pipeline_runs(runtime, spec)
             settled.append(
                 replace(
                     extension,

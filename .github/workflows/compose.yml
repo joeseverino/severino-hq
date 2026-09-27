@@ -1,12 +1,17 @@
-name: Compose and deploy extensions
+name: Compose
 
 # Builds the one image production runs: this host plus every admitted
-# extension. Extensions verify and admit themselves and build no image of their
-# own, so deploying one never replaces the others.
+# extension, verified as one application. Extensions verify and admit
+# themselves and build no image of their own, so deploying one never replaces
+# the others.
 #
-# Triggered only by events: the host build, an extension's admission (which
-# dispatches this workflow the moment it has signed a wheel), a pull request,
-# or by hand to rebuild the current set. Nothing polls for work.
+# Started by events only: CI finishing on a commit (ci.yml), an extension's
+# admission, or by hand. On a pull request it composes and verifies, and CI's
+# Ready waits for it. On main it publishes and signs, and Deploy (deploy.yml)
+# takes it from there.
+#
+# The file keeps its name: the composition is signed by it, and the deploy
+# script on the host pins this path.
 
 on:
   # After the host image exists, never in parallel with it being built.
@@ -15,7 +20,7 @@ on:
   # extensions loaded, as production assembles it) before merge. It does not
   # publish and it does not deploy.
   workflow_run:
-    workflows: [ci]
+    workflows: [CI]
     types: [completed]
   # `workflow_run` does not fire for a run that was itself triggered by
   # `pull_request`: GitHub declines to let pull-request code start a
@@ -71,7 +76,7 @@ env:
 
 jobs:
   compose:
-    name: Compose admitted extensions
+    name: Composition
     # A failed host build must not be composed onto. And a fork's pull request
     # is not composed at all: reading the extensions' admission artifacts needs
     # a secret a fork cannot have, so it would fail on the download step with a
@@ -96,10 +101,6 @@ jobs:
       id-token: write
     outputs:
       image: ${{ steps.publish.outputs.image }}
-      # HQ's check on the host commit, when this composition will deploy, and
-      # that commit.
-      check: ${{ steps.check.outputs.id }}
-      commit: ${{ steps.host.outputs.sha }}
     steps:
       - name: Check out host
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -202,12 +203,19 @@ jobs:
             # that caused it, and holds this branch's composition slot while
             # the corrected commit queues behind it.
             if [ $((attempt % 24)) -eq 0 ]; then
-              host_ci=$(gh api \
+              # The Image job, not the run: CI's Ready waits for this
+              # composition, so the run as a whole cannot conclude first.
+              ci_run=$(gh api \
                 "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$ref&per_page=30" \
-                --jq '[.workflow_runs[] | select(.name == "ci") | .conclusion]
-                      | map(select(. != null)) | first' 2>/dev/null || true)
+                --jq '[.workflow_runs[] | select(.name == "CI") | .id] | first' 2>/dev/null || true)
+              host_ci=""
+              if [ -n "$ci_run" ]; then
+                host_ci=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
+                  --jq '[.jobs[] | select(.name == "Image") | .conclusion] | map(select(. != null)) | first' \
+                  2>/dev/null || true)
+              fi
               case "$host_ci" in
-                failure|cancelled|timed_out)
+                failure|cancelled|timed_out|skipped)
                   echo "::error title=Host build $host_ci::The host build for \
           ${ref:0:12} concluded '$host_ci', so $image will never be published. \
           Fix the host build; the composition has nothing to compose onto."
@@ -669,213 +677,3 @@ jobs:
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
         run: cosign sign --yes "$IMAGE"
-
-      # HQ's check on the commit this composes, as HQ's app: the same check
-      # an extension's commit carries, so every change says where it is on
-      # its way to production. It names only public things (the commit, the
-      # published image, this run), never a machine or an extension.
-      - name: Mint a token for HQ's check on this commit
-        id: report
-        if: env.IS_RELEASE == 'true' && steps.publish.outputs.image != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-checks: write
-
-      - name: Say on the commit that it waits for approval
-        id: check
-        if: steps.report.outputs.token != ''
-        env:
-          GH_TOKEN: ${{ steps.report.outputs.token }}
-          HEAD_SHA: ${{ steps.host.outputs.sha }}
-          IMAGE: ${{ steps.publish.outputs.image }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
-            -f name="Severino HQ · production" -f head_sha="$HEAD_SHA" \
-            -f status=queued -f details_url="$RUN_URL" \
-            -f "output[title]=Waiting for approval" \
-            -f "output[summary]=Composed as \`$IMAGE\`. The deploy waits for approval in the production environment." \
-            --jq .id)
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-
-  deploy:
-    name: Deploy composition
-    needs: compose
-    # Belt and braces with the publish step above: that one produces nothing
-    # for a pull request, and this one refuses to run for it at all. Either
-    # alone would do; both, because a self-hosted runner executing code from an
-    # unmerged branch is the failure you do not get to fix afterwards.
-    # Spelled out rather than reading the IS_RELEASE env above: a job-level
-    # `if` cannot see the `env` context. Same condition, and the pair are kept
-    # adjacent in review by both carrying this note.
-    # `needs.compose.outputs.image` carries the whole answer to "was anything
-    # published?": it is empty for a pull request, and empty for an admission's
-    # dispatch that found the composition already current. Requiring it here means
-    # this job cannot be handed an empty image to deploy, whatever the trigger.
-    if: >-
-      needs.compose.result == 'success' &&
-      needs.compose.outputs.image != '' &&
-      ((github.event_name == 'workflow_run' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.head_branch == 'main') ||
-       (github.event_name == 'workflow_dispatch' &&
-        github.ref == 'refs/heads/main'))
-    # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
-    # connects in. NEVER trigger a self-hosted job from pull_request.
-    runs-on: [self-hosted, severino-hq]
-    timeout-minutes: 30
-    environment: production
-    permissions:
-      contents: read
-      packages: read
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
-    steps:
-      - name: Authorize the registry for signature verification
-        # Written directly rather than through `docker login`, which reaches the
-        # daemon: this runner deliberately holds no Docker access, so the only
-        # thing that needs registry credentials here is cosign, and cosign reads
-        # this file. The deploy itself authenticates separately, inside the
-        # root-owned script, from a token handed over on stdin.
-        #
-        # Removed again by the cleanup step below. This runner is a machine in
-        # the house, not a container thrown away afterwards, so a credential
-        # left in its home directory is one that outlives the job.
-        env:
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_USER: ${{ github.actor }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.docker"
-          auth="$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 -w0)"
-          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HOME/.docker/config.json"
-          chmod 600 "$HOME/.docker/config.json"
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: Verify the image was composed by this workflow
-        # The last point at which anything can be checked: everything upstream
-        # happens on GitHub's runners, and this is the host about to run it.
-        #
-        # Verified against the identity of this workflow in this repository, so
-        # a digest pushed to the composition name by any other means (another
-        # workflow, a stolen registry token, a hand `docker push`) stops here
-        # instead of becoming production. Output is discarded: the certificate
-        # payload names the image, and the interesting part is whether this
-        # step exits zero.
-        env:
-          IMAGE: ${{ needs.compose.outputs.image }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          cosign verify \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp \
-              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
-            "$IMAGE" > /dev/null
-          echo "composition signature verified"
-      - name: Refuse a checkout the runner cannot pull
-        # The pull below runs as this account, so everything under the
-        # checkout's .git must be its own. severino-hq-check-scripts asks the
-        # same question daily (scripts/lib/checkout.sh).
-        run: |
-          set -euo pipefail
-          checkout=/opt/apps/severino-hq
-          runner="$(id -un)"
-          foreign="$(find "$checkout/.git" ! -user "$runner" -print)"
-          if [ -n "$foreign" ]; then
-            count="$(printf '%s\n' "$foreign" | wc -l | tr -d ' ')"
-            echo "::error title=Checkout not owned by the runner::$count path(s) under $checkout/.git are not owned by $runner, so git pull fails. Fix on the host: sudo chown -R $runner: $checkout/.git </dev/null"
-            exit 1
-          fi
-      - name: Sync deploy checkout
-        run: git -C /opt/apps/severino-hq pull --ff-only
-      - name: Deploy exact image with health rollback
-        # Same deploy path and rollback as a host release: it pulls, recreates,
-        # waits for health, activates the controller, and restores the previous
-        # image if any step fails.
-        #
-        # Run through sudo against the root-owned copy, not the checkout. That
-        # is what lets this runner hold no docker access and no general sudo:
-        # everything privileged happens inside a script the runner cannot edit,
-        # and the only thing crossing the boundary is one image reference that
-        # the preceding step has already verified.
-        #
-        # The registry token goes over stdin, not as an argument: arguments are
-        # readable in the process table while the command runs.
-        env:
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_USER: ${{ github.actor }}
-          IMAGE: ${{ needs.compose.outputs.image }}
-        run: |
-          set -euo pipefail
-          printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
-            | sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh "$IMAGE"
-      - name: Remove the registry credential
-        if: always()
-        run: rm -f "$HOME/.docker/config.json"
-
-  report:
-    name: Report on the commit
-    needs: [compose, deploy]
-    # Whatever the deploy did, the check says so: live, or not deployed and
-    # why. On a hosted runner, so HQ's key never reaches the homelab one.
-    if: always() && needs.compose.outputs.check != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Mint a token for HQ's check and comment
-        id: report
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          permission-checks: write
-          permission-pull-requests: write
-
-      - name: Say where the commit ended up
-        env:
-          GH_TOKEN: ${{ steps.report.outputs.token }}
-          CHECK: ${{ needs.compose.outputs.check }}
-          COMMIT: ${{ needs.compose.outputs.commit }}
-          IMAGE: ${{ needs.compose.outputs.image }}
-          RESULT: ${{ needs.deploy.result }}
-        run: |
-          set -euo pipefail
-          case "$RESULT" in
-            success)
-              conclusion=success title="Live in production"
-              summary="Production runs \`$IMAGE\`, and it passed its health check." ;;
-            cancelled)
-              conclusion=cancelled title="Not deployed"
-              summary="The deploy was cancelled. Production still runs the previous image." ;;
-            *)
-              conclusion=failure title="Not deployed"
-              summary="The deploy was not approved, or failed its health check and was rolled back. Production still runs the previous image. See the run." ;;
-          esac
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$CHECK" \
-            -f status=completed -f conclusion="$conclusion" \
-            -f "output[title]=$title" -f "output[summary]=$summary" >/dev/null
-          [ "$RESULT" = success ] || exit 0
-          # One comment on the merged pull request, the first time its commit
-          # is live; the marker is the one HQ uses on an extension's.
-          pull=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/pulls" \
-                   --jq '[.[] | select(.merged_at)][0].number // empty')
-          [ -n "$pull" ] || exit 0
-          marker="<!-- severino-hq-delivery:$COMMIT -->"
-          if gh api "repos/$GITHUB_REPOSITORY/issues/$pull/comments?per_page=100" \
-               --jq '.[].body' | grep -qF "$marker"; then
-            exit 0
-          fi
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$pull/comments" \
-            -f body="$marker
-          Live in production: \`$IMAGE\`." >/dev/null

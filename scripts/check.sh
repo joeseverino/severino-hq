@@ -143,7 +143,7 @@ echo "[check] Shell syntax"
 set -- $SHELL_SOURCES
 for shell_source; do
     case "$shell_source" in
-        *backup.sh | *ci-local.sh) bash -n "$shell_source" ;;
+        *backup.sh | *ci-local.sh | *hq-verdict.sh | *hq-report.sh) bash -n "$shell_source" ;;
         *) sh -n "$shell_source" ;;
     esac
 done

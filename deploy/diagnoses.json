@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "_comment": "Why a pipeline run failed, in plain words, and what fixes it. scripts/diagnose.py matches a failed run's log against these, first match wins, and prints only this text: never a line of the log, so a check or comment on this public repository cannot repeat anything private. Add an entry the first time a failure needs investigating, so it never needs investigating twice.",
+  "diagnoses": [
+    {
+      "id": "package-write",
+      "match": "permission_denied: write_package",
+      "title": "The registry refused the push",
+      "fix": "This repository cannot write the image package. In the package's settings on GitHub, under Manage Actions access, give this repository the Write role, then re-run."
+    },
+    {
+      "id": "app-permission",
+      "match": "Resource not accessible by integration",
+      "title": "HQ's app is missing a permission",
+      "fix": "The app's installation lacks a permission this step needs. Compare the app's permissions with deploy/github-apps.json, accept the change on the installation, then re-run."
+    },
+    {
+      "id": "app-key",
+      "match": "(A JSON web token could not be decoded|Bad credentials|Integration not found|could not create installation access token)",
+      "title": "HQ's app key was refused",
+      "fix": "The app's key or client ID in this repository's Actions secrets does not match the app. Run scripts/wire-github-app.py again with the current key."
+    },
+    {
+      "id": "composition-set",
+      "match": "COMPOSITION_EXTENSIONS must",
+      "title": "The composition set is missing",
+      "fix": "The COMPOSITION_EXTENSIONS secret is unset or empty. Restore it in this repository's Actions secrets."
+    },
+    {
+      "id": "no-admission",
+      "match": "an extension has no successful admission on main",
+      "title": "An extension has not been admitted",
+      "fix": "One extension has no successful admission on its main branch. Open its repository's Verify and admit plugin runs and fix or re-run the latest."
+    },
+    {
+      "id": "host-unsigned",
+      "match": "(Host image is not signed|Host image never appeared|Host build (failure|cancelled|timed_out))",
+      "title": "There was no signed host image to compose onto",
+      "fix": "The HQ run for this commit did not publish a signed host image. Fix that run's failing job; the composition follows it."
+    },
+    {
+      "id": "admission-signature",
+      "match": "(admission|signature|certificate).*(does not match|mismatch|not verified|verification failed)",
+      "title": "An admission's signature did not verify",
+      "fix": "An extension's signed admission does not match the signer this repository declares for it. Re-run that extension's admission from main; if its workflow moved, update the composition set."
+    },
+    {
+      "id": "vulnerable-image",
+      "match": "Total: [1-9][0-9]* \\(",
+      "title": "The image has a fixable serious vulnerability",
+      "fix": "A HIGH or CRITICAL vulnerability with a published fix is in the image. Update the package or base image it names in the scan step, then re-run."
+    },
+    {
+      "id": "composition-tests",
+      "match": "FAILED \\((failures|errors)=",
+      "title": "The composed application failed its tests",
+      "fix": "The suite failed inside the composed image. Its test output is in the failing step; the fix belongs in the host or the extension it names."
+    },
+    {
+      "id": "unsigned-composition",
+      "match": "not signed by this repository's compose workflow",
+      "title": "The image to deploy is not signed by this repository",
+      "fix": "Production only runs a composition this repository's Compose workflow signed. Run Compose for this commit instead of deploying an image published some other way."
+    },
+    {
+      "id": "unhealthy",
+      "match": "(New image did not become healthy|Application replacement failed|Controller activation failed)",
+      "title": "The new version did not come up healthy, and was rolled back",
+      "fix": "Production still runs the previous image. The health failure is in the deploy step's log and in HQ's own logs; fix it and merge again."
+    },
+    {
+      "id": "disk",
+      "match": "Deployment requires at least 512 MiB",
+      "title": "The deploy host is short on disk",
+      "fix": "The machine needs at least 512 MiB free to deploy. Prune unused images on it, then re-run the deploy."
+    },
+    {
+      "id": "pull",
+      "match": "Image pull failed",
+      "title": "The deploy host could not pull the image",
+      "fix": "Production still runs the previous image. The registry was unreachable from the machine or refused it; re-run the deploy."
+    },
+    {
+      "id": "outage",
+      "match": "(TLS handshake timeout|Could not resolve host|connection reset by peer|502 Bad Gateway|503 Service Unavailable|i/o timeout)",
+      "title": "A service did not answer",
+      "fix": "GitHub, the registry or a download host was briefly unreachable. Nothing is wrong with the change; re-run the failed job."
+    }
+  ]
+}

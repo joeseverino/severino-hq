@@ -69,7 +69,7 @@ def named(steps_: list[str], name: str) -> int:
 
 class DeployCheckoutOwnershipTests(SimpleTestCase):
     def test_the_deploy_refuses_a_foreign_owned_checkout_before_it_pulls(self):
-        deploy = steps(jobs((WORKFLOWS / "compose.yml").read_text())["deploy"])
+        deploy = steps(jobs((WORKFLOWS / "deploy.yml").read_text())["deploy"])
         refuse = named(deploy, "Refuse a checkout the runner cannot pull")
         pull = named(deploy, "Sync deploy checkout")
         self.assertLess(refuse, pull)
@@ -82,9 +82,8 @@ class CoordinatedBranchTests(SimpleTestCase):
     """A coordinated change is verified together and can never be published."""
 
     def setUp(self):
-        workflow = jobs((WORKFLOWS / "compose.yml").read_text())
-        self.compose_job = workflow["compose"]
-        self.deploy_job = workflow["deploy"]
+        self.compose_job = jobs((WORKFLOWS / "compose.yml").read_text())["compose"]
+        self.deploy_job = jobs((WORKFLOWS / "deploy.yml").read_text())["deploy"]
         self.steps = steps(self.compose_job)
 
     def test_every_candidate_step_runs_for_a_pull_request_only(self):

@@ -29,6 +29,7 @@ class GitHub:
         *,
         admitted=RUNNING,
         compose_runs=(),
+        deploy_runs=(),
         dispatched=None,
         checks=None,
         pulls=(),
@@ -36,6 +37,7 @@ class GitHub:
     ):
         self.admitted = admitted
         self.compose_runs = list(compose_runs)
+        self.deploy_runs = list(deploy_runs)
         self.dispatched = dispatched
         self.checks = dict(checks or {})
         self.pulls = list(pulls)
@@ -91,6 +93,8 @@ class GitHub:
             return {"workflow_runs": [{"head_sha": self.admitted, "updated_at": "2026-09-26T10:00:00Z"}]}
         if "/actions/workflows/compose.yml/runs" in path:
             return {"workflow_runs": self.compose_runs}
+        if "/actions/workflows/deploy.yml/runs" in path:
+            return {"workflow_runs": self.deploy_runs}
         if "/check-runs?" in path:
             sha = path.split("/commits/")[1].split("/")[0]
             found = self.checks.get(sha)
@@ -287,27 +291,51 @@ class RegistrationTests(SimpleTestCase):
 
 
 class PipelineReportTests(SimpleTestCase):
-    """The workflows post the same check, and mark the same comment, as HQ."""
+    """The workflows say what HQ's code says, and keep what they must apart."""
 
     def read(self, *parts):
         from pathlib import Path
 
         return Path(__file__).resolve().parents[2].joinpath(*parts).read_text()
 
-    def test_every_stage_is_one_check_by_one_name(self):
-        for text in (self.read(".github", "workflows", "compose.yml"),
-                     self.read(".github", "actions", "admit-plugin", "action.yml")):
-            self.assertIn(f'name="{github.CHECK_NAME}"', text)
+    def test_production_is_one_check_by_one_name(self):
+        for text in (self.read(".github", "workflows", "deploy.yml"),
+                     self.read(".github", "actions", "admit-plugin", "action.yml"),
+                     self.read("scripts", "hq-report.sh")):
+            self.assertIn(github.CHECK_NAME, text)
 
     def test_the_host_comment_carries_hqs_marker(self):
         marker = github._MARKER.split("{sha}")[0]
 
-        self.assertIn(f'marker="{marker}$COMMIT', self.read(".github", "workflows", "compose.yml"))
+        self.assertIn(f'marker="{marker}${{COMMIT', self.read("scripts", "hq-report.sh"))
 
     def test_hqs_key_never_reaches_the_homelab_runner(self):
         import re
 
-        compose = self.read(".github", "workflows", "compose.yml")
-        deploy = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", compose, re.S).group(1)
+        deploy = self.read(".github", "workflows", "deploy.yml")
+        job = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", deploy, re.S).group(1)
 
-        self.assertNotIn("HQ_APP_KEY", deploy)
+        self.assertIn("self-hosted", job)
+        self.assertNotIn("HQ_APP_KEY", job)
+
+    def test_only_deploy_runs_on_the_homelab_and_no_pull_request_starts_it(self):
+        import re
+        from pathlib import Path
+
+        workflows = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+        hosting = sorted(
+            path.name for path in workflows.glob("*.yml")
+            if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.M)
+        )
+        deploy = self.read(".github", "workflows", "deploy.yml")
+        triggers = deploy.split("\non:\n", 1)[1].split("\n\n", 1)[0]
+
+        self.assertEqual(hosting, ["deploy.yml"])
+        self.assertNotIn("pull_request", triggers)
+
+    def test_a_stage_names_the_workflow_it_is_in(self):
+        waiting = {**run("waiting"), "name": "Deploy"}
+
+        stage = github.production(github.delivery(GitHub(admitted=ADMITTED, deploy_runs=[waiting]), SPEC))
+
+        self.assertIn("Deploy run 99 is waiting for deploy approval", stage)
